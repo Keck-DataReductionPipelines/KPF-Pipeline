@@ -40,17 +40,17 @@ class Orderlet1(object):
         self.flux = # flux from the spectrum
         self.flux_err # flux uncertainty
         self.wav # wavelenth solution
-        self.id # 
+        self.id # [1,2,3,4,5]
 
 class KPF2(object):
     def __init__(self):
         self.orderlets # collection of level2 orderlet code
-        self.rv
+        self.rv # final radial-velocity 
 
         # collection of different activity mectrics like svalue,
         # bisector span, halpha, etc
-
         self.activity 
+
     def to_fits(self):
         """
         Collect all the level 2 data into a monolithic fits file
@@ -63,15 +63,8 @@ class Orderlet2(object):
     per orderlet
     """
     def __init__(self):
-        self.ccf
-        self.mask
-        self.rv
-        self.bc
-        self.expmeter
-        
-
-    
-        
-
-        
-
+        self.ccf # array cross-correlation function
+        self.dv # displacement in velocity space
+        self.mask # binary mask
+        self.rv # per orderlet rv
+        self.bc # per orderlet bary-centric correction
