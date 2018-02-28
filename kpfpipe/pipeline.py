@@ -4,11 +4,11 @@ class KPF0(object):
     """
     def __init__(self):
         self.header # meta data from the telesceope (dict)
-        self.red # 2 spectrum from KPF red chip (row, col)
-        self.green # 2 spectrum from KPF red chip (row, col)
-        self.hk # 2 spectrum from HK spectrometer (wav, intensity)
-        self.expmeter # (time, wavelength, intensity)
-        self.guidecam # guidecam sequence (row, col, intensity)
+        self.red # Echellogram red chip; 2D arrray (row, col)
+        self.green # Echellogram from green chip; 2D array(row, col)
+        self.hk # Echellogram from HK spectrometer (wav, intensity)
+        self.expmeter # exposure meter sequence; 2D array (time, wavelength)
+        self.guidecam # guidecame sequence;  3D array (time, row, col)
 
     def to_fits(self, fn):
         """
@@ -22,7 +22,7 @@ class KPF1(object):
     """
 
     def __init__(self):
-        self.orderlets # collection orderlet objects
+        self.orderlets # collection Orderlet1 objectz
         self.hk # 1D CaII-HK spectrum 
 
     def to_fits(self, fn):
@@ -44,12 +44,9 @@ class Orderlet1(object):
 
 class KPF2(object):
     def __init__(self):
-        self.orderlets # collection of level2 orderlet code
-        self.rv # final radial-velocity 
-
-        # collection of different activity mectrics like svalue,
-        # bisector span, halpha, etc
-        self.activity 
+        self.orderlets # collection of Orderlet2
+        self.rv # final radial-velocity (float)
+        self.activity # collection of different activity mectrics like svalue, bspan, halpha (dict)
 
     def to_fits(self):
         """
@@ -63,8 +60,8 @@ class Orderlet2(object):
     per orderlet
     """
     def __init__(self):
-        self.ccf # array cross-correlation function
-        self.dv # displacement in velocity space
-        self.mask # binary mask
-        self.rv # per orderlet rv
-        self.bc # per orderlet bary-centric correction
+        self.ccf # cross-correlation function (1D array)
+        self.dv # displacement in velocity space (1D array)
+        self.mask # binary mask (1D array)
+        self.rv # per orderlet rv (float)
+        self.bc # per orderlet bary-centric correction (float)
