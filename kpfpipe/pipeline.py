@@ -77,4 +77,4 @@ class Orderlet2(object):
         self.rv # per orderlet rv (float)
         self.bc # per orderlet bary-centric correction (float)
         self.fiberid # [1,2,3,4,5]
-        self.cameraid # ['green','red']
+        self.ordernum # [71-137]; 103-137 = green, 71-102 = red
