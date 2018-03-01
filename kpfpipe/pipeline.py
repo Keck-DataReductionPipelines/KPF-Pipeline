@@ -20,7 +20,6 @@ class KPF1(object):
     """
     Container object for level one data
     """
-
     def __init__(self):
         self.orderlets # collection of Orderlet1 objects
         self.hk # 1D CaII-HK spectrum 
@@ -43,6 +42,16 @@ class Orderlet1(object):
         self.wav # wavelenth solution
         self.fiberid # [1,2,3,4,5]
         self.ordernum # [71-137]; 103-137 = green, 71-102 = red
+
+class HK1(object):
+    """
+    Contanier for data associated with level one data products from the HK spectrometer
+    """
+    def __init__(self):
+        self.source # 'sky', 'sci', `cal`
+        self.flux = # flux from the spectrum
+        self.flux_err # flux uncertainty
+        self.wav # wavelenth solution
 
 class KPF2(object):
     def __init__(self):
