@@ -1,14 +1,14 @@
 class KPF0(object):
     """
-    Container object for level zero 
+    Container object for level zero data
     """
     def __init__(self):
-        self.header # meta data from the telesceope (dict)
-        self.red # Echellogram red chip; 2D arrray (row, col)
-        self.green # Echellogram from green chip; 2D array(row, col)
-        self.hk # Echellogram from HK spectrometer (wav, intensity)
-        self.expmeter # exposure meter sequence; 2D array (time, wavelength)
-        self.guidecam # guidecame sequence;  3D array (time, row, col)
+        self.header # meta data from KPF, telesceope, and observatory (dict)
+        self.red # Echellogram (image) from red CCD; 2D array (row, col)
+        self.green # Echellogram (image) from green CCD; 2D array (row, col)
+        self.hk # Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
+        self.expmeter # exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
+        self.guidecam # guidecam sequence; 3D array = time series of 2D CCD images (time, row, col) [consider whether guidecam should be included;  will it be analyzed?]
 
     def to_fits(self, fn):
         """
@@ -22,8 +22,9 @@ class KPF1(object):
     """
 
     def __init__(self):
-        self.orderlets # collection Orderlet1 objectz
+        self.orderlets # collection of Orderlet1 objects
         self.hk # 1D CaII-HK spectrum 
+        self.expmeter # time series of 1D exposure meter spectra
 
     def to_fits(self, fn):
         """
@@ -40,7 +41,8 @@ class Orderlet1(object):
         self.flux = # flux from the spectrum
         self.flux_err # flux uncertainty
         self.wav # wavelenth solution
-        self.id # [1,2,3,4,5]
+        self.fiberid # [1,2,3,4,5]
+        self.ordernum # [71-137]; 103-137 = green, 71-102 = red
 
 class KPF2(object):
     def __init__(self):
@@ -65,3 +67,5 @@ class Orderlet2(object):
         self.mask # binary mask (1D array)
         self.rv # per orderlet rv (float)
         self.bc # per orderlet bary-centric correction (float)
+        self.fiberid # [1,2,3,4,5]
+        self.cameraid # ['green','red']
