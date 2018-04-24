@@ -48,7 +48,7 @@ def spectral_extraction(sci, bias, flat, trace, badpixel, order, orderlet, confi
         trace (array): a kpfpipe.Trace object
         order (int): index of order
         orderlet (int): index of orderlet
-        config (kpfpipe.config): configuration object
+        config (kpfpipe.config): configuration object with different setting for pipeline
 
     Returns:
         array: a 1D extracted spectrum        
