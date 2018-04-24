@@ -1,6 +1,8 @@
 class KPF0(object):
     """
     Container object for level zero data
+    
+    To Do: Consider making an abstract base class...
     """
     def __init__(self):
         self.header # meta data from KPF, telesceope, and observatory (dict)
@@ -15,7 +17,17 @@ class KPF0(object):
         Optional: collect all the level 0 data into a monolithic fits file
         """
         pass
+    
+class MasterFlat(KFP0):
+    """
+    Flat field derived from a stack of master flats
+    """
 
+class MasterBias(KPF0):
+    """
+    Bias frame derived from a stack of bias observations
+    """
+    
 class KPF1(object):
     """
     Container object for level one data
