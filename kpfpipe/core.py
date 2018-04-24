@@ -32,9 +32,6 @@ class Trace(object):
             float: widht of the orderlet (sub-pixel)
             
         """
-        
-        
-
 
 def spectral_extraction(sci, bias, flat, trace, badpixel, order, orderlet, config):
     """
@@ -57,10 +54,26 @@ def spectral_extraction(sci, bias, flat, trace, badpixel, order, orderlet, confi
     pass
     
     
-    
-    
-    
 
 
+
+def make_master_flat(fitsfiles):
+    """Make master flat field frame
+     
+    Args:
+        fitsfiles (list): a list of fits files corresponding to the flat observations
+        
+    Returns:
+        kpfpipe.MasterFlat
+    """
+
+def make_master_bias():
+    """Make master bias frame
+    
+    Args:
+        fitsfiles (list): a list of 
+    
+    """
+    
 
 
