@@ -71,6 +71,6 @@ class Trace(object):
             orderlet (int): index of orderlet
             
         Returns:
-            float: widht of the orderlet (sub-pixel)
+            float: width of the orderlet (sub-pixel)
             
         """
