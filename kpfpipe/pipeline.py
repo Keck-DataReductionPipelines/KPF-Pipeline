@@ -1,7 +1,7 @@
 """
 Routines for the KPF pipeline
 
-Will probably organize in the future into seperate modules
+Will probably organize in the future into separate modules
 """
 
 def spectral_extraction(sci, bias, flat, trace, badpixel, order, orderlet, config):
