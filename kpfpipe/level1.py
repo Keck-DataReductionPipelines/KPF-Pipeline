@@ -1,3 +1,6 @@
+"""
+Define objects used in level one data processing
+"""
 
 class KPF1(object):
     """
