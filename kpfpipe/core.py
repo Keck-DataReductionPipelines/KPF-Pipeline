@@ -33,47 +33,23 @@ class Trace(object):
             
         """
 
-def spectral_extraction(sci, bias, flat, trace, badpixel, order, orderlet, config):
-    """
-    Extract spectrum from a single orderlet
-    
-    Args:
-        sci (array): science frame e.g. kpf0.redspec
-        bias (array): bias frame e.g. kpf0.redspec
-        flat (array): flat field frame e.g. kpf0.redspec
-        badpixel (array): bad pixel mask  
-        trace (array): a kpfpipe.Trace object
-        order (int): index of order
-        orderlet (int): index of orderlet
-        config (kpfpipe.config): configuration object with different setting for pipeline
 
-    Returns:
-        array: a 1D extracted spectrum        
-    """
-    
-    pass
-    
-    
-
-
-
-def make_master_flat(fitsfiles):
+def make_master_flat(flatfns, masterflatfn):
     """Make master flat field frame
      
     Args:
-        fitsfiles (list): a list of fits files corresponding to the flat observations
+        flatfns (list of str): paths to flat observations
+        masterflatfn (str): output file path to master flat 
         
     Returns:
-        kpfpipe.MasterFlat
+        None
     """
 
-def make_master_bias():
+def make_master_bias(baisfns, masterbaisfn):
     """Make master bias frame
     
     Args:
-        fitsfiles (list): a list of 
-    
+        baisfns (list): paths to bias observations 
+        masterbaisfn (list): utput file path to master bias
     """
     
-
-
