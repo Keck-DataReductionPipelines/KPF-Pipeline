@@ -24,32 +24,40 @@ class KPF0(object):
         """
         pass
     
-    
-    def extract_spectra(self):
-        """
-        Extract spectra from red and green chips
-        """
-        
-        for chip in chips:
-            for order in orders:
-                for orderlet in orderlet:
-                    pass
+   
+Pipeline()
+pipeline.create_level0('directory')
 
-        self.orderlets = # fill in result
-        
-    
+# Architecture A
+def Pipeline_Master(directory):
+    level0_processed = level0_pipe(directory)
+    level1_processed = level1_pipe(level0_processed)
+    level2_processed = level2_pipe(level1_processed)
+    return level2_processed
+def level0_pipe(level0_object):
+    l = level0_object
+    l.level0_method()
+    l.level0_method()
+    return l
 
-level1 = level0_to_level1(level0)
+# Architecture B
+def Pipeline_Recipe(Pipeline_object):
+    p = Pipeline_object
+    p.level0_method()
+    p.level0_method()
+    # enforce in p that level 0 exists before running level1
+    p.level1_method()
+    p.level2_method()
 
-def level0_to_level1(level0):
-    
+   
 class Pipeline(object):
     def __init__(self, level0=None, level1=None):
+        
         pass # no op
     
-    def create_level0(self):
-        level0 = kpfpipe.level0.KPF0()
-        # do stuff... reading fits files
+    def create_level0(self, directory):
+        level0 = KPF0()
+        # read in raw fits files from instrument and populate attributes, knows about file structure
         self.level0
         self.green = self.level0.green.copy()
         
@@ -57,6 +65,7 @@ class Pipeline(object):
         self.level0.to_fits() # maybe not necessary
         
     def subtract_bias_2d(self):
+        # check that self.green is not None
         # check if master bias exists
         # subtract bias off red and green chips
         self.bias_removed = subtract_bias(self.green.current) # (2D array)
@@ -75,13 +84,6 @@ class Pipeline(object):
     def correct_brighter_fatter(self):
         # maybe needed
         
-        
-    def create_level1(self):
-        level1 = kpfpipe.level0.KPF1()
-        # do stuff... reading fits files
-        
-        self.level1
-
     def to_fits(self):
         # save current configuration of Pipeline w/ astrodata
         
