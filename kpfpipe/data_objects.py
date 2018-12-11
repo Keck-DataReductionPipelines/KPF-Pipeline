@@ -56,25 +56,25 @@ class MasterBias(KPF0):
 # We won't do this since we will define Methods as functions in the Pipeline class
 #
 #class Level0Method(object):
-#		"""
-#		Check if the correct level exists
-#		"""
-#		def __init__(self):
-#				self.
-#		class __Level0Method__():
-#				def __init__(self):
-#						self.level0 = level0
+#    """
+#    Check if the correct level exists
+#    """
+#    def __init__(self):
+#        self.
+#    class __Level0Method__():
+#        def __init__(self):
+#            self.level0 = level0
 #            if level0 is None:
-#								raise     
-#		class __Level1Method__():
-#				def __init__(self):
-#						self.level0 = level0
+#                raise     
+#    class __Level1Method__():
+#        def __init__(self):
+#            self.level0 = level0
 #            if level1 is None:
-#								raise     
-#		class __Level2Method__():
-#				def __init__(self):
-#						self.level0 = level0
+#                raise     
+#    class __Level2Method__():
+#        def __init__(self):
+#            self.level0 = level0
 #            if level2 is None:
-#								raise     
+#                raise     
 #
 
