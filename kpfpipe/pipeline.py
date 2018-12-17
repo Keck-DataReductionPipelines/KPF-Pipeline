@@ -27,6 +27,38 @@ def Pipeline_Recipe(Pipeline_object):
 
    
 class Pipeline(object):
+    """
+    Pipeline must
+    - record the receipt (multiple interfaces)
+       - string-based receipt, 
+          - everything needed to reproduce
+       - database receipt
+          - (not required for running/development)
+          - file locations
+          - levelX produced?
+
+    - know how to talk to a database 
+    - record git SHA
+    - record running diagnostics (time, runtime)
+    - vertical organization
+       - pipe.level0.method()
+       - pipe.level1.method()
+       
+    - each method must 
+       - perform checks on input data (existence, quality, format of data)
+       - quality control (assertions that would log errors)
+       - input/output quality functions may re-use code.
+       
+    - logging
+      - capture STDOUT/STDERR (prepend with function that produced the output)
+      - logging.py
+      
+
+    """
+    
+    
+    
+    
     def __init__(self, level0=None, level1=None, level2=None):
         if level0 is not None:
             level0 = self.create_level0(level0)
