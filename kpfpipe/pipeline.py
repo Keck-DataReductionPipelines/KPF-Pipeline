@@ -127,11 +127,13 @@ class Pipeline(object):
 
     @level0_method
     def subtract_bias(self):
+        # log basic facts, like RMS, median bias, no nans, etc. to logging.py for example 
         self.level0.green -= self.level0.bias_green
         self.level0.red -= self.level0.bias_red
 
     @level0_method
-    def divide_flat(self):
+    def divide_flat(self):#, color=(green, red)):
+        #for c in color:  # we may want some flexibility in picking what chips to operate on
         self.level0.green /= self.level0.flat_green
         self.level0.red /= self.level0.flat_red
 
