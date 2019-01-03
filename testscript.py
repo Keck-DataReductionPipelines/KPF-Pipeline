@@ -32,14 +32,24 @@ def MyRecipe(kpf0):
     p.extract_spectrum()
     p.calibrate_wavelengths()
     print(p)
+    p.correct_wavelength_dependent_barycentric_velocity()
+    print(p)
+    p.remove_emission_line_regions()
+    p.remove_solar_regions()
+    print(p)
+    p.correct_telluric_lines()
+    print(p)
+    p.calculate_RV_from_spectrum()
+    print(p)
 
 MyRecipe(kpf0)
 
 ## To dos:
-# - Implement logging.py to keep track of information/errors in each method
+# x Implement logging.py to keep track of information/errors in each method
 # - Discuss creating level1 object as independent mandatory pipeline method
-# - Think about how to make the methods more flexible (e.g. bias subtract green only)
-# - Create level 1 + 2 skeletons
+# x Think about how to make the methods more flexible (e.g. bias subtract green only)
+# x Create level 1 skeletons
+# - Create level 2 skeletons
 # - Think about what attributes each KPF Level objects need
 #    - including vertical structure (e.g., orders, orderlets, etc.)
 #    - pass around fits header (keeping some attributes/info from previous levels on creation of higher level object)
