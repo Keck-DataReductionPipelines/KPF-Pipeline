@@ -9,10 +9,13 @@ class KPF1(object):
     
 
     def __init__(self):
-        self.Norderlets_red = 10
-        self.Norderlets_green = 10
-        self.Norderlets = self.Norderlets_red + self.Norderlets_green
-        self.orderlets = [Orderlet1() for i in range(self.Norderlets)] # collection of Orderlet1 objects
+        self.Norderlets = {'red': 10, 'green': 10}
+        self.Norderlets_total = 0
+        for key in self.Norderlets.keys():
+             self.Norderlets_total += self.Norderlets[key] 
+        self.orderlets = {}
+        for key in self.Norderlets.keys():
+            self.orderlets[key] = [Orderlet1() for i in range(self.Norderlets[key])] # collection of Orderlet1 objects
         self.hk = None # 1D CaII-HK spectrum 
         self.expmeter = None # time series of 1D exposure meter spectra
         self.wavelength_solution = None #
