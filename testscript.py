@@ -4,21 +4,23 @@ from kpfpipe.level1 import KPF1
 from kpfpipe.level2 import KPF2
 import numpy as np
 
-# Set up:
-
-kpf0 = KPF0()
-kpf0.green = np.ones((32,32), dtype=np.float) 
-kpf0.red = np.ones((32,32), dtype=np.float) 
-kpf0.bias_green = np.ones((32,32), dtype=np.float)*0.4
-kpf0.bias_red = np.ones((32,32), dtype=np.float)*0.5 
-kpf0.flat_green = np.ones((32,32), dtype=np.float)*0.2
-kpf0.flat_red = np.ones((32,32), dtype=np.float)*0.1
-
-# We might want to avoid requiring both red and green, for instance. 
+# This dictionary-style storage of the data allows more flexibility for which data are present
+# During testing, we may only have one chip online so we don't want to hard code 'red' and 'green' into everything
+# This allows allows adding additional data groups in the future.  
+# In this paradigm:
 #  - Could either have green/red subtract_bias functions individually
 #  - Check which data is available in this KPF0 object and subtract_bias only the available data
 #
+
 # We don't want to enforce dimensionality a priori, allow more flexible input
+
+kpf0 = KPF0()
+kpf0.data['green'] = np.ones((32,32), dtype=np.float) 
+kpf0.data['red'] = np.ones((32,32), dtype=np.float) 
+kpf0.bias['green'] = np.ones((32,32), dtype=np.float)*0.4
+kpf0.bias['red'] = np.ones((32,32), dtype=np.float)*0.5 
+kpf0.flat['green'] = np.ones((32,32), dtype=np.float)*0.2
+kpf0.flat['red'] = np.ones((32,32), dtype=np.float)*0.1
 
 # Recipe:
 def MyRecipe(kpf0):

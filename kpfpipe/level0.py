@@ -9,14 +9,16 @@ class KPF0(object):
     To Do: Consider making an abstract base class...
     """
     def __init__(self):
+        self.data = {} # Doing it this way allows flexibility in the structure of the input data 
+                       #   e.g., it is not required to have both red and green chips for testing. 
+        self.flat = {} # Master flats
+        self.bias = {} # Master biases
+        #self.red = None #Echellogram (image) from red CCD; 2D array (row, col)
+        #self.green = None #Echellogram (image) from green CCD; 2D array (row, col)
         self.header = None# meta data from KPF, telesceope, and observatory (dict)
-        self.red = None #Echellogram (image) from red CCD; 2D array (row, col)
-        self.green = None #Echellogram (image) from green CCD; 2D array (row, col)
         self.hk = None #Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
         self.expmeter = None #exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
         self.guidecam = None #guidecam sequence; 3D array = time series of 2D CCD images (time, row, col) [consider whether guidecam should be included;  will it be analyzed?]
-        self.bias = None #(2D array) master bias frame for that exposure 
-        self.flat = None #(2D array) master flat frame
         
     def to_fits(self, fn):
         """

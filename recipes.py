@@ -1,6 +1,8 @@
+# Recipe skeletons 
+# These are just notes and don't actually run
+# See testscript.py for a working example
 
-
-
+from kpfpipe.pipeline import Pipeline
 
 # Example recipe
 def Recipe(path):
