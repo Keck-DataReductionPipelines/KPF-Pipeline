@@ -9,7 +9,7 @@ class KPF1(object):
     
 
     def __init__(self):
-        self.Norderlets = {'red': 10, 'green': 10}
+        self.Norderlets = {'red': 10, 'green': 10} # These can also be passed as arguments to KPF1 instead of being statically defined
         self.Norderlets_total = 0
         for key in self.Norderlets.keys():
              self.Norderlets_total += self.Norderlets[key] 
