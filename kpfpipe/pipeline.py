@@ -13,7 +13,7 @@
 import numpy as np
 from kpfpipe.level0 import KPF0
 from kpfpipe.level1 import KPF1
-
+import logging
    
 class Pipeline(object):
     """
@@ -56,9 +56,19 @@ class Pipeline(object):
         self.level1 = level1
         self.level2 = level2
         self.method_list = []
+        # Set up logging when a Pipeline object is instantiated
+        #   - Do we actually want to do this elsewhere? This doesn't log the initialization of the levelX objects, but that's probably fine? 
+        # Probably want to have Pipeline take a logging level as an optional argument, but for now we we'll just set it to debug
+        # We also specify the format of all of the logging messages here 
+        logging.basicConfig(filename='log.txt', 
+              format='%(asctime)s || %(levelname)s || %(name)s : %(message)s',
+              datefmt='%m/%d/%Y %I:%M:%S %p',
+              level=logging.DEBUG)
+
 
     # Define how to dump a Pipeline object to a string with print
     def __str__(self):
+        logging.debug('Entered Pipeline.__str__')
         s = 'Methods completed:\n'
         s += str(self.method_list)
         s += '\n'
@@ -141,9 +151,14 @@ class Pipeline(object):
     #     - Check that the level0 object + data still exists after method execution 
     def level0_method(level0_method_function):
         def level0_method_wrapper(self, *args, **kwargs):
+            logging.info('Running level0 method %s' % str(level0_method_function))
+            logging.debug('Appending method to method list')
             self.method_list.append(str(level0_method_function.__name__))
+            logging.debug('Checking level0 before method')
             self.checklevel(0)
+            logging.debug('Executing method')
             level0_method_function(self, *args, **kwargs)
+            logging.debug('Checking level0 after method')
             self.checklevel(0)
         return level0_method_wrapper
 
@@ -152,16 +167,24 @@ class Pipeline(object):
 
     @level0_method
     def subtract_bias(self, chips=True):
+        logging.debug('Entered subtract_bias')
         if chips is True:
+            logging.warning('Chips have not been explicitly set in subtract_bias method')
+            logging.warning('Setting chips to self.level0.data.keys()')
             chips = self.level0.data.keys()
         for chip in chips:
+            logging.debug('Subtracting bias from chip: ' + chip)
             try:
                 self.level0.data[chip] -= self.level0.bias[chip]
+                rms = np.sqrt(np.mean(np.square(self.level0.data[chip])))
+                med = np.median(self.level0.data[chip])
+                logging.info('After bias subtraction on chip ' + chip + ', RMS = %f, median = %f' % (rms, med))
             except AttributeError:
-                # log error
-                raise 
-        # log basic facts, like RMS, median bias, no nans, etc. to logging.py for example 
+                logging.error('There is no bias for chip ' + chip + ' so bias subtraction failed')
+                pass # maybe we don't want this to crash the program, but we record an ERROR in the log 
+        logging.debug('Finished subtract_bias method')
 
+    
     @level0_method
     def divide_flat(self, chips=True):#, color=(green, red)):
         if chips is True:
@@ -169,10 +192,13 @@ class Pipeline(object):
         for chip in chips:
             try:
                 self.level0.data[chip] -= self.level0.flat[chip]
+                rms = np.sqrt(np.mean(np.square(self.level0.data[chip])))
+                med = np.median(self.level0.data[chip])
+                logging.info('After dividing flat on chip ' + chip + ', RMS = %f, median = %f' % (rms, med))
             except AttributeError:
-                # log error
-                raise 
-        # log basic facts, like RMS, flat info, no nans, etc. to logging.py for example 
+                logging.error('There is no bias for chip ' + chip + ' so dividing flat failed')
+                pass # maybe we don't want this to crash the program, but we record an ERROR in the log 
+        # Perhaps log some additional data if desired
 
 
     # This level0 method creates a level1 data object
