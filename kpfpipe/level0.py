@@ -15,7 +15,7 @@ class KPF0(object):
         self.bias = {} # Master biases
         #self.red = None #Echellogram (image) from red CCD; 2D array (row, col)
         #self.green = None #Echellogram (image) from green CCD; 2D array (row, col)
-        self.header = None# meta data from KPF, telesceope, and observatory (dict)
+        self.header = {}#None# meta data from KPF, telesceope, and observatory (dict)
         self.hk = None #Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
         self.expmeter = None #exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
         self.guidecam = None #guidecam sequence; 3D array = time series of 2D CCD images (time, row, col) [consider whether guidecam should be included;  will it be analyzed?]

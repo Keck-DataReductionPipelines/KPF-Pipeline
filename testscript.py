@@ -25,6 +25,11 @@ kpf0.flat['red'] = np.ones((32,32), dtype=np.float)*0.1
 # Recipe:
 def MyRecipe(kpf0):
     p = Pipeline(level0=kpf0)
+    # Create configuration object, this is passed to methods as arguments
+    # This will contain all arguments used by all methods
+    # c = Configuration(params=params) # can be defined above
+    #                                  # or be passed a file path where a config file is read in
+    #                                  # should probably have some hierarchy: c.level0.variable_name
     print(p)
     p.subtract_bias()
     p.divide_flat()
@@ -55,7 +60,14 @@ MyRecipe(kpf0)
 #    - pass around fits header (keeping some attributes/info from previous levels on creation of higher level object)
 # 
 #
+# 1/11:
+# - Arpita will make more detailed diagram
+# - Erik will look at Airflow (might be better than Luigi)
+# - Look at ESO pipeline
 #
+#
+
+
 
 
 

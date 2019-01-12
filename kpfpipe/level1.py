@@ -15,7 +15,8 @@ class KPF1(object):
              self.Norderlets_total += self.Norderlets[key] 
         self.orderlets = {}
         for key in self.Norderlets.keys():
-            self.orderlets[key] = [Orderlet1() for i in range(self.Norderlets[key])] # collection of Orderlet1 objects
+            # This should not be a list
+            self.orderlets[key] = [Spectrum() for i in range(self.Norderlets[key])] # collection of Orderlet1 objects
         self.hk = None # 1D CaII-HK spectrum 
         self.expmeter = None # time series of 1D exposure meter spectra
         self.wavelength_solution = None #
@@ -26,7 +27,7 @@ class KPF1(object):
         """
         pass
 
-class Orderlet1(object):
+class Spectrum(object):
     """
     Contanier for data that's associated with level one data products per orderlet
     """
