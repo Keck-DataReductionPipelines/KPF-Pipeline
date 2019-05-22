@@ -6,7 +6,7 @@ from kpfpipe.pipeline import Pipeline
 
 # Example recipe
 def Recipe(path):
-    pipe = Pipeline()  # instantiate the pipeline object
+    pipe = Pipeline(config='config/default.cfg')  # instantiate the pipeline object
     pipe.create_level0(path)  # Load the raw data
     pipe.subtract_bias_2d()  # perform some processing of level0 data
     pipe.extract_spectra()  # convert to level 1 data
