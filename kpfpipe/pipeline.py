@@ -9,12 +9,15 @@
 #    p.level1_method()
 #    p.level2_method()
 
-#import functools
+import logging
+import configparser
+
 import numpy as np
+
 from kpfpipe.level0 import KPF0
 from kpfpipe.level1 import KPF1
 from kpfpipe.level2 import KPF2
-import logging
+
    
 class Pipeline(object):
     """
@@ -46,7 +49,7 @@ class Pipeline(object):
 
     """
     
-    def __init__(self, level0=None, level1=None, level2=None):
+    def __init__(self, level0=None, level1=None, level2=None, config=None):
         if type(level0) is str:
             level0 = KPF0(level0) # Construct KPFlevel0 object from file "level0" 
         if type(level1) is str:
@@ -57,6 +60,7 @@ class Pipeline(object):
         self.level1 = level1
         self.level2 = level2
         self.method_list = []
+        self.config = config
         # Set up logging when a Pipeline object is instantiated
         #   - Do we actually want to do this elsewhere? This doesn't log the initialization of the levelX objects, but that's probably fine? 
         # Probably want to have Pipeline take a logging level as an optional argument, but for now we we'll just set it to debug
@@ -66,6 +70,26 @@ class Pipeline(object):
               datefmt='%m/%d/%Y %I:%M:%S %p',
               level=logging.DEBUG)
 
+        if config is None:
+            self.config = self.load_config(config)
+
+
+    def load_config(self, filename):
+        """
+        Load a configuration file and return ConfigParser object
+
+        Args:
+            filename (string): full path to config file
+
+        Returns:
+            ConfigParser
+        """
+
+        config = configparser.ConfigParser()
+
+        config.read(filename)
+
+        return config
 
     # Define how to dump a Pipeline object to a string with print
     def __str__(self):
@@ -245,6 +269,9 @@ class Pipeline(object):
             chips = self.level0.data.keys()
         for chip in chips:
             for i in range(self.level1.Norderlets[chip]):
+                # grab some parameter from the config objects embedded in self
+                max_extraction_width = self.config['level1']['max_extraction_width']
+                
                 # This is where the extraction algorithm is called. For now we just use np.mean
                 self.level1.orderlets[chip][i].flux = np.mean(self.level0.data[chip], axis=1)
                 self.level1.orderlets[chip][i].flux_err = np.mean(self.level0.data[chip], axis=1)
