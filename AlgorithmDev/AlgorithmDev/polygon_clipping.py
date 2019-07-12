@@ -51,7 +51,7 @@ class PolygonClipping:
         for k in header_keys:
             if k in header_key_map.keys():
                 spectral_info[header_key_map.get(k)] = int(header[k])
- 
+
         return spectral_info
 
     def load_csv_file(self, filename, delimit=','):
@@ -97,6 +97,56 @@ class PolygonClipping:
 
         return spectral_info
 
+
+    def get_data_around_trace(self, coeffs, in_data, s_rate=[1, 1], verbose=False):
+        """Get the data around the trace"""
+        s = np.shape(in_data)
+        input_xdim = s[1]
+        input_ydim = s[0]
+        sampling_rate = []
+        if type(s_rate).__name__ == 'list':
+            sampling_rate.extend(s_rate)
+        else:
+            sampling_rate.append([s_rate, s_rate])
+
+        output_xdim = input_xdim * sampling_rate[X]
+        output_ydim = input_ydim * sampling_rate[Y]
+
+        if verbose is True:
+            print('output_xdim: ', output_xdim, 'sampling_rate: ', sampling_rate)
+
+        # construct corners map between input and output
+        y_mid = []                                              # spectral trace value at mid point
+        x_step = []                                             # x step in input domain
+        x_output_step = list(range(0, output_xdim+1))           # x step in output domain, both ends are included
+
+        for o_x in x_output_step:
+            crt_x = self.get_input_pos(o_x, sampling_rate[X])
+            x_step.insert(o_x, crt_x)
+            y_mid.insert(o_x, polyval(crt_x, coeffs))
+
+        v_border = [max(y_mid), min(y_mid)]
+        if verbose is True:
+            print('v_border: ', v_border)
+
+        # the vertical position to locate the output spectral
+        v_mid = self.get_output_pos(math.floor((v_border[0]+v_border[1])/2), sampling_rate[Y])
+        if verbose is True:
+            print('v_mid: ', v_mid)
+
+        # import pdb; pdb.set_trace()
+        y_upper = min(math.ceil(max(y_mid) + self.order_width), input_ydim)
+        y_lower = max(math.floor(min(y_mid) - self.order_width), 0)
+        y_width = y_upper - y_lower;
+
+        out_data = np.zeros((y_width, input_xdim))
+
+        for o_y in range(y_lower, y_upper):
+            loc_y = o_y - y_lower
+            for o_x in range(0, input_xdim):
+                out_data[loc_y, o_x] = in_data[o_y, o_x]
+
+        return out_data
 
     def rectify_spectral_curve(self, coeffs, in_data, s_rate=[1, 1], sum_extraction=True, verbose=False):
         """Straighten the spectral trace
@@ -156,7 +206,7 @@ class PolygonClipping:
         input_upper_corners = []   # corners above the curve, row based list
         input_lower_corners = []   # corners below the curve, row based list
 
-        output_width = int(self.get_input_pos(self.order_width, sampling_rate[Y]))  # width of output
+        output_width = int(self.get_output_pos(self.order_width, sampling_rate[Y]))  # width of output
         upper_width = min(output_width, output_ydim - v_mid)
         lower_width = min(output_width, v_mid)
         if verbose is True:
@@ -203,6 +253,8 @@ class PolygonClipping:
                 else:
                     out_data[lower_width-o_y-1, o_x] = flux
 
+            #print('o_x: ', o_x, out_data[:, o_x])
+            #import pdb; pdb.set_trace()
             if verbose is True:
                 print('[%d %.2f]' % (o_x, out_data[0, o_x]), end=' ')
 
@@ -228,7 +280,7 @@ class PolygonClipping:
 
         for x in range(0, width):
             w_sum = sum(f_data[:, x])
-            w_data_tmp = [ s_data[y, x] * f_data[y, x]/w_sum for y in range(0, height)]
+            #w_data_tmp = [ s_data[y, x] * f_data[y, x]/w_sum for y in range(0, height)]
             w_data[0, x] = sum([ s_data[y, x] * f_data[y, x]/w_sum for y in range(0, height)])
 
         result_data = {'y_center': s_result.get('y_center'),
@@ -238,6 +290,40 @@ class PolygonClipping:
 
         return result_data
 
+    def rectify_spectral_curve_by_optimal2(self, coeffs, in_data, flat_data, s_rate=[1, 1], verbose=False):
+            s_result = self.rectify_spectral_curve(coeffs, in_data, s_rate, sum_extraction=False)
+            f_result = self.rectify_spectral_curve(coeffs, flat_data, s_rate, sum_extraction=False)
+
+            height = sum(s_result.get('width'))
+            width = s_result.get('dim')[1]
+            w_data = np.zeros((1, width))
+
+            s_data = s_result.get('out_data')
+            f_data = f_result.get('out_data')
+
+            max_data = np.amax(s_data)
+            min_data = np.amin(s_data)
+            print('max_data: ', max_data, "min_data: ", min_data)
+
+            for x in range(0, width):
+                #v = [ math.sqrt(s_data[y, x]) for y in range(0, height)]
+                w_sum = sum(f_data[:, x])
+                #d_var = [ math.sqrt(s_data[y, x] - min_data) for y in range(0, height)]
+                d_var = [1.0 for y in range(0, height)]
+                p_data = [ f_data[y, x]/w_sum for y in range(0, height)]
+                num = [ p_data[y] * (s_data[y, x]) /d_var[y] for y in range(0, height)]
+                dem = [ math.pow(p_data[y], 2)/ d_var[y] for y in range(0, height)]
+                w_data[0, x] = sum(num)/sum(dem)
+
+            #import pdb; pdb.set_trace()
+            result_data = {'y_center': s_result.get('y_center'),
+                           'dim': s_result.get('dim'),
+                           'out_data': w_data,
+                           'rectified_trace': s_data,
+                           'rectified_flat': f_data
+                           }
+
+            return result_data
 
     def rectify_spectral_curve_by_sum(self, coeffs, in_data, s_rate=[1,1], verbose=False):
         """Straighten the spectral trace and perform the summation on the rectify trace
@@ -360,6 +446,7 @@ class PolygonClipping:
             flux(number): flux value
 
         """
+
         if verbose is True:
             print('input_corners: ', input_corners)
 
@@ -379,6 +466,7 @@ class PolygonClipping:
             print('x_1:', x_1, ' x2:', x_2, ' y1:', y_1, ' y2:', y_2)
 
         flux = 0.0
+
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
                 if verbose is True:
