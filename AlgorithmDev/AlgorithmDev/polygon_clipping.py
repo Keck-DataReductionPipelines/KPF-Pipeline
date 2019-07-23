@@ -54,6 +54,64 @@ class PolygonClipping:
 
         return spectral_info
 
+    def load_correct_data(self, mask_file=None):
+        """Load mask file"""
+        if mask_file is None:
+            return None
+        mask_header = fits.open(mask_file)
+        mask_data = np.array(mask_header[0].data)
+        return mask_data
+
+    def correct_data_by_sub(self, cure_data, in_data):
+        cure_size = np.shape(cure_data)
+        data_size = np.shape(in_data)
+        if cure_size != data_size:
+           return in_data;
+
+        new_in_data = np.zeros((cure_size[0], cure_size[1]))
+        for y in range(0, cure_size[0]):
+            for x in range(0, cure_size[1]):
+                new_in_data[y, x] = in_data[y, x] - cure_data[y, x]
+
+        return new_in_data
+
+    def correct_data_by_mask(self, mask_data, in_data):
+        mask_size = np.shape(mask_data)
+        data_size = np.shape(in_data)
+        if mask_size != data_size:
+            return;
+
+        new_in_data = np.copy(in_data)
+
+        for r in range(0, mask_size[0]):
+            for c in range(0, mask_size[1]):
+                if mask_data[r, c] != 0:
+                    continue
+                #import pdb; pdb.set_trace()
+                num = 0
+                total = 0.0
+                c1 = max(c-1, 0)
+                c2 = min(c+1, mask_size[1]-1)
+                r1 = max(r-1, 0)
+                r2 = min(r+1, mask_size[0]-1)
+
+                for y in range(r1, r2+1):
+                    for x in range(c1, c2+1):
+                        if mask_data[y, x] == 1:
+                            num = num+1
+                            total += in_data[y, x]
+                            #print("y = ", y, " x = ", x, " data = ", in_data[y, x], " num = ", num, " total =", total)
+                #import pdb; pdb.set_trace()
+                if num != 0:
+                    new_in_data[r, c] = total/num
+                    print("new data at r, c", r, c, " is ", new_in_data[r, c])
+                else:
+                    print("num = ", num)
+
+        return new_in_data
+
+
+
     def load_csv_file(self, filename, delimit=','):
         rows = []
         with open(filename) as csv_file:
@@ -314,6 +372,44 @@ class PolygonClipping:
                 num = [ p_data[y] * (s_data[y, x]) /d_var[y] for y in range(0, height)]
                 dem = [ math.pow(p_data[y], 2)/ d_var[y] for y in range(0, height)]
                 w_data[0, x] = sum(num)/sum(dem)
+
+            #import pdb; pdb.set_trace()
+            result_data = {'y_center': s_result.get('y_center'),
+                           'dim': s_result.get('dim'),
+                           'out_data': w_data,
+                           'rectified_trace': s_data,
+                           'rectified_flat': f_data
+                           }
+
+            return result_data
+
+    def rectify_spectral_curve_by_optimal3(self, coeffs, in_data, flat_data, s_rate=[1, 1], verbose=False):
+            s_result = self.rectify_spectral_curve(coeffs, in_data, s_rate, sum_extraction=False)
+            f_result = self.rectify_spectral_curve(coeffs, flat_data, s_rate, sum_extraction=False)
+
+            height = sum(s_result.get('width'))
+            width = s_result.get('dim')[1]
+            w_data = np.zeros((1, width))
+
+            s_data = s_result.get('out_data')
+            f_data = f_result.get('out_data')
+            s_conv_data = np.zeros((height, 1))
+
+            d_var = [1.0 for y in range(0, height)]
+
+            #import pdb; pdb.set_trace()
+            for x in range(0, width):
+                w_sum = sum(f_data[:, x])
+
+                p_data = [ f_data[y, x]/w_sum for y in range(0, height)]   # weighting along column
+                dem = [ math.pow(p_data[y], 2)/ d_var[y] for y in range(0, height)]
+
+                for y in range(0, height):
+                    conv_d = [s_data[y-t, x] * p_data[t]/d_var[t] if (y-t) >= 0 else 0.0 for t in range(0, height)]
+                    num_d = [ math.pow(p_data[t], 2)/ d_var[t] if (y-t) >= 0 else 0.0 for t in range(0, height)]
+                    s_conv_data[y] = sum(conv_d)/sum(num_d)
+
+                w_data[0, x] = sum(s_conv_data)
 
             #import pdb; pdb.set_trace()
             result_data = {'y_center': s_result.get('y_center'),
