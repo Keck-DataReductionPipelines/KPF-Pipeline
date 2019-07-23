@@ -383,43 +383,6 @@ class PolygonClipping:
 
             return result_data
 
-    def rectify_spectral_curve_by_optimal3(self, coeffs, in_data, flat_data, s_rate=[1, 1], verbose=False):
-            s_result = self.rectify_spectral_curve(coeffs, in_data, s_rate, sum_extraction=False)
-            f_result = self.rectify_spectral_curve(coeffs, flat_data, s_rate, sum_extraction=False)
-
-            height = sum(s_result.get('width'))
-            width = s_result.get('dim')[1]
-            w_data = np.zeros((1, width))
-
-            s_data = s_result.get('out_data')
-            f_data = f_result.get('out_data')
-            s_conv_data = np.zeros((height, 1))
-
-            d_var = [1.0 for y in range(0, height)]
-
-            #import pdb; pdb.set_trace()
-            for x in range(0, width):
-                w_sum = sum(f_data[:, x])
-
-                p_data = [ f_data[y, x]/w_sum for y in range(0, height)]   # weighting along column
-                dem = [ math.pow(p_data[y], 2)/ d_var[y] for y in range(0, height)]
-
-                for y in range(0, height):
-                    conv_d = [s_data[y-t, x] * p_data[t]/d_var[t] if (y-t) >= 0 else 0.0 for t in range(0, height)]
-                    num_d = [ math.pow(p_data[t], 2)/ d_var[t] if (y-t) >= 0 else 0.0 for t in range(0, height)]
-                    s_conv_data[y] = sum(conv_d)/sum(num_d)
-
-                w_data[0, x] = sum(s_conv_data)
-
-            #import pdb; pdb.set_trace()
-            result_data = {'y_center': s_result.get('y_center'),
-                           'dim': s_result.get('dim'),
-                           'out_data': w_data,
-                           'rectified_trace': s_data,
-                           'rectified_flat': f_data
-                           }
-
-            return result_data
 
     def rectify_spectral_curve_by_sum(self, coeffs, in_data, s_rate=[1,1], verbose=False):
         """Straighten the spectral trace and perform the summation on the rectify trace
