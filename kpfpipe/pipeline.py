@@ -271,7 +271,7 @@ class Pipeline(object):
             for i in range(self.level1.Norderlets[chip]):
                 # grab some parameter from the config objects embedded in self
                 max_extraction_width = self.config['level1']['max_extraction_width']
-                
+
                 # This is where the extraction algorithm is called. For now we just use np.mean
                 self.level1.orderlets[chip][i].flux = np.mean(self.level0.data[chip], axis=1)
                 self.level1.orderlets[chip][i].flux_err = np.mean(self.level0.data[chip], axis=1)
