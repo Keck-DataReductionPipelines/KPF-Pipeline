@@ -1,0 +1,9 @@
+# distribution
+dist/
+build/
+*egg-info/
+
+# temporary directory
+tmp/
+
+
