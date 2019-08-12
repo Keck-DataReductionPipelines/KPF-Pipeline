@@ -24,28 +24,30 @@ kpf0.flat['red'] = np.ones((32,32), dtype=np.float)*0.1
 
 # Recipe:
 def MyRecipe(kpf0):
-    p = Pipeline(level0=kpf0)
-    # Create configuration object, this is passed to methods as arguments
-    # This will contain all arguments used by all methods
-    # c = Configuration(params=params) # can be defined above
-    #                                  # or be passed a file path where a config file is read in
-    #                                  # should probably have some hierarchy: c.level0.variable_name
-    print(p)
-    p.subtract_bias()
-    p.divide_flat()
-    print(p)
-    p.extract_spectrum()
-    p.calibrate_wavelengths()
-    print(p)
-    p.correct_wavelength_dependent_barycentric_velocity()
-    print(p)
-    p.remove_emission_line_regions()
-    p.remove_solar_regions()
-    print(p)
-    p.correct_telluric_lines()
-    print(p)
-    p.calculate_RV_from_spectrum()
-    print(p)
+
+    with Pipeline(level0=kpf0, config='configs/default.cfg') as p:
+
+        # Create configuration object, this is passed to methods as arguments
+        # This will contain all arguments used by all methods
+        # c = Configuration(params=params) # can be defined above
+        #                                  # or be passed a file path where a config file is read in
+        #                                  # should probably have some hierarchy: c.level0.variable_name
+        print(p)
+        p.subtract_bias()
+        p.divide_flat()
+        print(p)
+        p.extract_spectrum()
+        p.calibrate_wavelengths()
+        print(p)
+        p.correct_wavelength_dependent_barycentric_velocity()
+        print(p)
+        p.remove_emission_line_regions()
+        p.remove_solar_regions()
+        print(p)
+        p.correct_telluric_lines()
+        print(p)
+        p.calculate_RV_from_spectrum()
+        print(p)
 
 MyRecipe(kpf0)
 

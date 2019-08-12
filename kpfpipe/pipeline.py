@@ -11,14 +11,19 @@
 
 import logging
 import configparser
+import os
 
 import numpy as np
+from datetime import datetime
 
+import kpfpipe
 from kpfpipe.level0 import KPF0
 from kpfpipe.level1 import KPF1
 from kpfpipe.level2 import KPF2
 
-   
+GLOBAL_CONFIG = configparser.ConfigParser(inline_comment_prefixes="#")
+GLOBAL_CONFIG.read(os.path.join(kpfpipe.__path__[0], '../configs/global_settings.cfg'))
+
 class Pipeline(object):
     """
     Pipeline must
@@ -60,19 +65,40 @@ class Pipeline(object):
         self.level1 = level1
         self.level2 = level2
         self.method_list = []
-        self.config = config
         # Set up logging when a Pipeline object is instantiated
         #   - Do we actually want to do this elsewhere? This doesn't log the initialization of the levelX objects, but that's probably fine? 
         # Probably want to have Pipeline take a logging level as an optional argument, but for now we we'll just set it to debug
         # We also specify the format of all of the logging messages here 
-        logging.basicConfig(filename='log.txt', 
+
+        if config is not None:
+            self.config = self.load_config(config)
+        else:
+            self.config = self.load_config(GLOBAL_CONFIG.get('configs', 'default_config'))
+
+    def __enter__(self, *args):
+        """Initialize log file in setup"""
+
+        ds = datetime.strftime(datetime.utcnow(), '%Y%m%d%H%M%S')
+        logfilename = "pipeline_log_{}.log".format(ds)
+        log_dir = os.path.abspath(eval(GLOBAL_CONFIG.get('paths', 'log_path')))
+        logpath = os.path.join(log_dir, logfilename)
+        import pdb; pdb.set_trace()
+
+        logging.basicConfig(filename=logpath,
               format='%(asctime)s || %(levelname)s || %(name)s : %(message)s',
               datefmt='%m/%d/%Y %I:%M:%S %p',
               level=logging.DEBUG)
 
-        if config is None:
-            self.config = self.load_config(config)
+        print("Logfile created at {}".format(logpath))
 
+        return self
+
+    def __exit__(self, *args):
+        """Save receipt on exit"""
+
+        ds = datetime.strftime(datetime.utcnow(), '%Y%m%d%H%M%S')
+        outfile = "pipeline_receipt_{}.txt".format(ds)
+        self.save_receipt(outfile)
 
     def load_config(self, filename):
         """
@@ -85,7 +111,7 @@ class Pipeline(object):
             ConfigParser
         """
 
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(inline_comment_prefixes="#")
 
         config.read(filename)
 
@@ -123,15 +149,15 @@ class Pipeline(object):
     def checklevel0(self):
         if ((self.level0 == None) or 
               (not self.valid_level0_data())):
-            raise
+            raise(TypeError, "Invalid data")
     def checklevel1(self):
         if ((self.level1 == None) or 
               (not self.valid_level1_data())):
-            raise
+            raise(TypeError, "Invalid data")
     def checklevel2(self):
         if ((self.level2 == None) or 
               (not self.valid_level2_data())):
-            raise
+            raise(TypeError, "Invalid data")
     def checklevel(self, level):
         if level == 0:
             self.checklevel0()
@@ -140,7 +166,7 @@ class Pipeline(object):
         elif level == 2:
             self.checklevel2()
         else:
-            raise
+            raise(TypeError, "Failed data validation check.")
 #    def checkhk(self, levelX):
 #        checklevel(levelX)
 #        if not hasattr(self, hklevelX):
@@ -270,7 +296,7 @@ class Pipeline(object):
         for chip in chips:
             for i in range(self.level1.Norderlets[chip]):
                 # grab some parameter from the config objects embedded in self
-                max_extraction_width = self.config['level1']['max_extraction_width']
+                max_extraction_width = self.config.getint('level1', 'max_extraction_width')
 
                 # This is where the extraction algorithm is called. For now we just use np.mean
                 self.level1.orderlets[chip][i].flux = np.mean(self.level0.data[chip], axis=1)
@@ -464,7 +490,23 @@ class Pipeline(object):
         pass
         # write out current state of pipe object regardless of progress of data levels 
 
+    def save_receipt(self, outfile):
+        """
+        Save receipt to output file
 
+        Args:
+            outfile (string): path to output file
+
+        """
+        ds = datetime.strftime(datetime.utcnow(), '%Y%m%d%H%M%S')
+        receipt_path = eval(GLOBAL_CONFIG.get('paths', 'receipt_path'))
+        receiptfile = os.path.join(receipt_path,
+                                   'pipeline_receipt_{}.txt'.format(ds))
+
+        with open(receiptfile, 'w') as of:
+            print("Methods run as of UTC {:s}".format(datetime.utcnow()), file=of)
+            for m in self.method_list:
+                print(m, file=of)
 #######
 
 
