@@ -1,0 +1,60 @@
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__
+08/12/2019 05:47:24 PM || INFO || root : Running method <function KPFPipe.subtract_bias at 0x7ff5a81058c8>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method subtract_bias(chips=True)
+08/12/2019 05:47:24 PM || DEBUG || root : Entered subtract_bias
+08/12/2019 05:47:24 PM || WARNING || root : Chips have not been explicitly set in subtract_bias method
+08/12/2019 05:47:24 PM || WARNING || root : Setting chips to self.level0.data.keys()
+08/12/2019 05:47:24 PM || DEBUG || root : Subtracting bias from chip: green
+08/12/2019 05:47:24 PM || INFO || root : After bias subtraction on chip green, RMS = 0.600000, median = 0.600000
+08/12/2019 05:47:24 PM || DEBUG || root : Subtracting bias from chip: red
+08/12/2019 05:47:24 PM || INFO || root : After bias subtraction on chip red, RMS = 0.500000, median = 0.500000
+08/12/2019 05:47:24 PM || DEBUG || root : Finished subtract_bias method
+08/12/2019 05:47:24 PM || INFO || root : Running method <function KPFPipe.divide_flat at 0x7ff5a81059d8>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method divide_flat()
+08/12/2019 05:47:24 PM || INFO || root : After dividing flat on chip green, RMS = 0.400000, median = 0.400000
+08/12/2019 05:47:24 PM || INFO || root : After dividing flat on chip red, RMS = 0.400000, median = 0.400000
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__
+08/12/2019 05:47:24 PM || INFO || root : Running method <function KPFPipe.extract_spectrum at 0x7ff5a8105ae8>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method extract_spectrum(True,orders=[10, 11])
+08/12/2019 05:47:24 PM || INFO || root : Running method <function KPFPipe.calibrate_wavelengths at 0x7ff5a8105bf8>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method calibrate_wavelengths()
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__
+08/12/2019 05:47:24 PM || INFO || root : Running level1 method <function KPFPipe.correct_wavelength_dependent_barycentric_velocity at 0x7ff5a8106158>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 before method
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 after method
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__
+08/12/2019 05:47:24 PM || INFO || root : Running level1 method <function KPFPipe.remove_emission_line_regions at 0x7ff5a8105d90>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 before method
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method
+08/12/2019 05:47:24 PM || WARNING || root : Using default emission line region mask
+08/12/2019 05:47:24 PM || INFO || root : removing emission line regions: {'green': {0: [1, 2, 3], 3: [4, 5]}, 'red': {1: [1, 2, 3], 2: [1, 5]}}
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 after method
+08/12/2019 05:47:24 PM || INFO || root : Running level1 method <function KPFPipe.remove_solar_regions at 0x7ff5a8105ea0>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 before method
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method
+08/12/2019 05:47:24 PM || WARNING || root : Using default emission line region mask
+08/12/2019 05:47:24 PM || INFO || root : removing solar line regions: {'green': {0: [7], 2: [1, 5]}, 'red': {3: [1, 2, 3], 4: [0, 1, 2, 3, 4]}}
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 after method
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__
+08/12/2019 05:47:24 PM || INFO || root : Running level1 method <function KPFPipe.correct_telluric_lines at 0x7ff5a8106048>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 before method
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method
+08/12/2019 05:47:24 PM || WARNING || root : Using default emission line region mask
+08/12/2019 05:47:24 PM || INFO || root : correcting tellurics with correction_mask: {'green': {0: [[0, 0.1], [1, 0.5], [7, 0.1]], 2: [[1, 0.5]]}}
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 after method
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__
+08/12/2019 05:47:24 PM || INFO || root : Running level1 method <function KPFPipe.calculate_RV_from_spectrum at 0x7ff5a8106268>
+08/12/2019 05:47:24 PM || DEBUG || root : Appending method to method list
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 before method
+08/12/2019 05:47:24 PM || DEBUG || root : Executing method
+08/12/2019 05:47:24 PM || DEBUG || root : Checking level1 after method
+08/12/2019 05:47:24 PM || DEBUG || root : Entered Pipeline.__str__

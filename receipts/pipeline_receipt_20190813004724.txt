@@ -1,0 +1,10 @@
+Methods run as of UTC 2019-08-13 00:47:24.568609
+subtract_bias(chips=True)
+divide_flat()
+extract_spectrum(True,orders=[10, 11])
+calibrate_wavelengths()
+correct_wavelength_dependent_barycentric_velocity
+remove_emission_line_regions
+remove_solar_regions
+correct_telluric_lines
+calculate_RV_from_spectrum
