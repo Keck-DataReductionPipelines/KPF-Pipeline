@@ -252,6 +252,7 @@ class PolygonClipping:
             y_mid.insert(o_x, polyval(crt_x, coeffs))
             y_norm_step.insert(o_x, self.poly_normal(crt_x, coeffs, sampling_rate[Y]))
 
+        #print('y_mid: ', y_mid)
         v_border = [max(y_mid), min(y_mid)]
         if verbose is True:
             print('v_border: ', v_border)
