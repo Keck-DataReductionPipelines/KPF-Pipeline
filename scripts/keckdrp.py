@@ -37,15 +37,15 @@ def _parseArguments(in_args):
     parser.add_argument(dest="config_file", type=str, help="Configuration file")
     # parser.add_argument(dest="infiles", help="Input files", nargs="*")
 
-    # parser.add_argument("-w", "--wait_for_event", dest="wait_for_event", action='store_true', help="Wait for events")
-    # parser.add_argument("-W", "--continue", dest="continuous", action='store_true',
-    #                     help="Continue processing, wait for ever")
-    #
+    parser.add_argument("-w", "--wait_for_event", dest="wait_for_event", action='store_true', help="Wait for events")
+    parser.add_argument("-W", "--continue", dest="continuous", action='store_true',
+                        help="Continue processing, wait for ever")
+
     parser.add_argument("-s", "--start_queue_manager_only", dest="queue_manager_only", action='store_true',
                         help="Starts queue manager only, no processing")
-    #
-    # parser.add_argument("-i", "--ingest_data_only", dest="ingest_data_only", action='store_true',
-    #                     help="Ingest data and terminate")
+
+    parser.add_argument("-i", "--ingest_data_only", dest="ingest_data_only", action='store_true',
+                        help="Ingest data and terminate")
     #
     # parser.add_argument("-d", "--directory", dest="dirname", type=str, help="Input directory")
 
@@ -86,10 +86,12 @@ if __name__ == "__main__":
     #
         # framework.start(args.queue_manager_only, args.ingest_data_only, args.wait_for_event, args.continuous)
 
-    # run on the test data
-    arg = Arguments(level0=kpf0, level1=kpf1, level2=kpf2, chips=True, orders=[10,11])
-    # framework.logger.info("Processing file {:d}".format(i))
-    framework.append_event('process_level0', arg)
+    # run on the test arrays
+    arg = Arguments(level0=kpf0, level1=kpf1, level2=kpf2,
+                    chips=True, orders=[10,11], regions=True)
 
-    framework.start()
-    # framework.start(args.queue_manager_only, args.ingest_data_only, args.wait_for_event, args.continuous)
+    framework.append_event('reduce_level0', arg)
+    framework.append_event('reduce_level1', arg)
+    framework.append_event('exit', arg)
+
+    framework.start(args.queue_manager_only, args.ingest_data_only, args.wait_for_event, args.continuous)
