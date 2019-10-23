@@ -1,26 +1,28 @@
 """
-Define primitives that operate on level0 data
+Define primitives that operate on KPF data
 """
 
 import numpy as np
 
 from keckdrpframework.primitives.base_primitive import Base_primitive
 from keckdrpframework.models.arguments import Arguments
+
+from kpfpipe.primitives.core import KPF_Primitive
 from kpfpipe.level0 import KPF0
 from kpfpipe.level1 import KPF1
 from kpfpipe.level2 import KPF2
 
 
-class KPF0_Primitive(Base_primitive):
+class KPF0_Primitive(KPF_Primitive):
     """
-    Base primitive for orther KPF0 primitives. All KPF0 primitives should inherit from this one.
+    Base primitive for other KPF0 primitives.
+    All KPF0 primitives should inherit from this one.
     
     """
     def __init__(self, action, context):
         Base_primitive.__init__(self, action, context)
 
         self.level0 = action.args.level0
-        self.action_list = []
 
     def checklevel0(self):
         if ((self.level0 == None) or
@@ -50,7 +52,7 @@ class KPF0_Primitive(Base_primitive):
 
     def _pre_condition(self):
         if (self.action.args.level0 is None) or (not self.valid_level0_data()):
-            self.logger.error("Invalid data")
+            self.logger.error("Invalid level 0 data")
             return False
         else:
             return True
@@ -111,6 +113,7 @@ class divide_flat(KPF0_Primitive):
 
         return self.action.args
 
+
 class extract_spectrum(KPF0_Primitive):
 
     def __init__(self, action, context):
@@ -129,27 +132,13 @@ class extract_spectrum(KPF0_Primitive):
                 max_extraction_width = self.config.max_extraction_width
 
                 # This is where the extraction algorithm is called. For now we just use np.mean
+                self.logger.info('Extracting order {} on the {} chip'.format(i, chip))
                 self.level1.orderlets[chip][i].flux = np.mean(self.level0.data[chip], axis=1)
                 self.level1.orderlets[chip][i].flux_err = np.mean(self.level0.data[chip], axis=1)
+                rms = np.sqrt(np.mean(np.square(self.level0.data[chip])))
+                med = np.median(self.level0.data[chip])
 
         self.action.args.level1 = self.level1
 
         return self.action.args
 
-
-class calibrate_wavelengths(KPF0_Primitive):
-
-    def __init__(self, action, context):
-        KPF0_Primitive.__init__(self, action, context)
-
-        self.chips = self.action.args.chips
-        self.orders = self.action.args.orders
-        self.level1 = self.action.args.level1
-
-    if self.level1 is None:
-        self.level1 = KPF1()
-    if chips is True:
-        chips = self.level0.data.keys()
-    for chip in chips:
-        for i in range(self.level1.Norderlets[chip]):
-            self.level1.orderlets[chip][i].wav = np.mean(self.level0.data[chip], axis=1)
