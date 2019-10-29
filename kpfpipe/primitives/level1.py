@@ -85,7 +85,7 @@ class KPF1_Primitive(KPF_Primitive):
 class calibrate_wavelengths(KPF1_Primitive):
     """Calibrate wavelengths and append wavelength solution"""
     def __init__(self, action, context):
-        """"
+        """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
@@ -106,7 +106,7 @@ class remove_emission_line_regions(KPF1_Primitive):
     """Remove emission lines"""
 
     def __init__(self, action, context):
-        """"
+        """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
@@ -133,7 +133,7 @@ class remove_solar_regions(KPF1_Primitive):
     """Remove solar regions"""
 
     def __init__(self, action, context):
-        """"
+        """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
@@ -160,7 +160,7 @@ class correct_telluric_lines(KPF1_Primitive):
     """Remove telluric lines"""
 
     def __init__(self, action, context):
-        """"
+        """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
@@ -187,7 +187,7 @@ class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
     """Correct for barycentric velocity"""
 
     def __init__(self, action, context):
-        """"
+        """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
@@ -206,7 +206,7 @@ class calculate_RV_from_spectrum(KPF1_Primitive):
     """Calculate CCF RV"""
 
     def __init__(self, action, context):
-        """"
+        """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
