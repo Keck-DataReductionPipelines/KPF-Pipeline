@@ -5,12 +5,9 @@ Define primitives that operate on KPF data
 import numpy as np
 
 from keckdrpframework.primitives.base_primitive import Base_primitive
-from keckdrpframework.models.arguments import Arguments
 
 from kpfpipe.primitives.core import KPF_Primitive
-from kpfpipe.level0 import KPF0
 from kpfpipe.level1 import KPF1
-from kpfpipe.level2 import KPF2
 
 
 class KPF0_Primitive(KPF_Primitive):
@@ -18,6 +15,10 @@ class KPF0_Primitive(KPF_Primitive):
     Base primitive for other KPF0 primitives.
     All KPF0 primitives should inherit from this one.
     
+    Args:
+        action (keckdrpframework.models.action.Action): Keck DRPF Action object
+        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+
     """
     def __init__(self, action, context):
         Base_primitive.__init__(self, action, context)
@@ -30,6 +31,13 @@ class KPF0_Primitive(KPF_Primitive):
             raise (TypeError, "Invalid data")
 
     def valid_level0_data(self):
+        """
+        Confirms that KPF0 object has necessary data/structure to operate on (after checking for its existence)
+
+        Returns:
+            bool
+        """
+
         # The absolutely necessary data in a level0 array is in the self.data dictionary.
         # Check that it has not been corrupted
         if type(self.level0.data) is not dict:
@@ -59,13 +67,25 @@ class KPF0_Primitive(KPF_Primitive):
 
 
 class subtract_bias(KPF0_Primitive):
+    """Subtract bias from a KPF level 0 object"""
+
 
     def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+
+        Attributes:
+            chips (list): list of chips to process (e.g. ['red', 'green'])
+        """
         KPF0_Primitive.__init__(self, action, context)
 
         self.chips = self.action.args.chips
 
     def _perform(self):
+        """Execute the primitive"""
+
         self.logger.debug('Entered subtract_bias')
         if self.chips is True:
             self.logger.warning('Chips have not been explicitly set in subtract_bias method')
@@ -89,13 +109,25 @@ class subtract_bias(KPF0_Primitive):
 
 
 class divide_flat(KPF0_Primitive):
+    """Divide by flat"""
 
     def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+
+        Attributes:
+            chips (list): list of chips to process (e.g. ['red', 'green'])
+        """
+
         KPF0_Primitive.__init__(self, action, context)
 
         self.chips = self.action.args.chips
 
     def _perform(self):
+        """Execute the primitive"""
+
         if self.chips is True:
             self.chips = self.level0.data.keys()
         for chip in self.chips:
@@ -117,6 +149,17 @@ class divide_flat(KPF0_Primitive):
 class extract_spectrum(KPF0_Primitive):
 
     def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+
+        Attributes:
+            chips (list): list of chips to extract (e.g. ['red', 'green'])
+            orders (list): list of orders to extract
+            level1 (KPF1): KPF level 1 object
+        """
+
         KPF0_Primitive.__init__(self, action, context)
 
         self.chips = self.action.args.chips
@@ -124,6 +167,8 @@ class extract_spectrum(KPF0_Primitive):
         self.level1 = self.action.args.level1
 
     def _perform(self):
+        """Execute the primitive"""
+
         if self.chips is True:
             self.chips = self.level0.data.keys()
         for chip in self.chips:

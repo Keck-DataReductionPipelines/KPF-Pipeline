@@ -147,7 +147,11 @@
            <div itemprop="articleBody">
             
   <h1>Source code for kpfpipe.pipelines.KPF_pipeline</h1><div class="highlight"><pre>
-<span></span>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Pipeline to run under the Keck DRP Framework</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
 <span class="kn">import</span> <span class="nn">os</span>
 
 <span class="kn">from</span> <span class="nn">keckdrpframework.pipelines.base_pipeline</span> <span class="k">import</span> <span class="n">Base_pipeline</span>
@@ -158,7 +162,10 @@
 
 <div class="viewcode-block" id="KPF_pipeline"><a class="viewcode-back" href="../../../pipelines.html#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline">[docs]</a><span class="k">class</span> <span class="nc">KPF_pipeline</span><span class="p">(</span><span class="n">Base_pipeline</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Pipeline to Process KPF data</span>
+<span class="sd">    Pipeline to Process KPF data using the KeckDRPFramework</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        event_table (dictionary): table of actions known to framework. All primitives must be registered here.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">event_table</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;reduce_level0&quot;</span><span class="p">:</span>
@@ -192,25 +199,17 @@
                        <span class="p">(</span><span class="s2">&quot;exit_loop&quot;</span><span class="p">,</span> <span class="s2">&quot;killing framework&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                    <span class="p">}</span>
 
-
 <div class="viewcode-block" id="KPF_pipeline.__init__"><a class="viewcode-back" href="../../../pipelines.html#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Constructor</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">Base_pipeline</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
-
-    <span class="k">def</span> <span class="nf">level1to2</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;calibrate_wavelengths&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;remove_emission_line_regions&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;remove_solar_regions&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;correct_telluric_lines&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;correct_wavelength_dependent_barycentric_velocity&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;calculate_RV_from_spectrum&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
 
 <div class="viewcode-block" id="KPF_pipeline.execute_recipe"><a class="viewcode-back" href="../../../pipelines.html#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.execute_recipe">[docs]</a>    <span class="k">def</span> <span class="nf">execute_recipe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Executes the recipe file (list of actions) specified in context.config.run.recipe.</span>
-<span class="sd">        All actions are executed consecutive in the high priority queue</span>
+<span class="sd">        All actions are executed consecutively in the high priority queue</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="n">recipe_file</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">recipe</span>
@@ -222,9 +221,16 @@
             <span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
         <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
-    <span class="k">def</span> <span class="nf">exit_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+<div class="viewcode-block" id="KPF_pipeline.exit_loop"><a class="viewcode-back" href="../../../pipelines.html#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.exit_loop">[docs]</a>    <span class="k">def</span> <span class="nf">exit_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Force the Keck DRP Framework to exit the infinite loop</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">context</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Goodbye&quot;</span><span class="p">)</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">_exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+        <span class="n">os</span><span class="o">.</span><span class="n">_exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div></div>
 </pre></div>
 
            </div>

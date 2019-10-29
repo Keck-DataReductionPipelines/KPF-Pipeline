@@ -5,14 +5,9 @@ Define primitives that operate on KPF data
 import numpy as np
 
 from keckdrpframework.primitives.base_primitive import Base_primitive
-from keckdrpframework.models.arguments import Arguments
 
 from kpfpipe.primitives.core import KPF_Primitive
-from kpfpipe.level0 import KPF0
-from kpfpipe.level1 import KPF1
 from kpfpipe.level2 import KPF2
-
-
 
 
 class KPF1_Primitive(KPF_Primitive):
@@ -20,6 +15,10 @@ class KPF1_Primitive(KPF_Primitive):
     Base primitive for other KPF1 primitives.
     All KPF1 primitives should inherit from this one.
     
+    Args:
+        action (keckdrpframework.models.action.Action): Keck DRPF Action object
+        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+
     """
     def __init__(self, action, context):
         Base_primitive.__init__(self, action, context)
@@ -70,6 +69,7 @@ class KPF1_Primitive(KPF_Primitive):
         return True
 
     def _pre_condition(self):
+        """execute before any _perform method"""
         self.logger.debug('Running level1 primitive %s' % self.action.name)
         # self.logger.debug('Appending method to method list')
         # self.method_list.append(str(level1_method_function.__name__))
@@ -83,11 +83,17 @@ class KPF1_Primitive(KPF_Primitive):
 
 
 class calibrate_wavelengths(KPF1_Primitive):
-
+    """Calibrate wavelengths and append wavelength solution"""
     def __init__(self, action, context):
+        """"
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         KPF1_Primitive.__init__(self, action, context)
 
     def _perform(self):
+        """execute primitive"""
         if self.chips is True:
             self.chips = self.level0.data.keys()
         for chip in self.chips:
@@ -97,10 +103,18 @@ class calibrate_wavelengths(KPF1_Primitive):
 
 
 class remove_emission_line_regions(KPF1_Primitive):
+    """Remove emission lines"""
+
     def __init__(self, action, context):
+        """"
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         KPF1_Primitive.__init__(self, action, context)
 
     def _perform(self):
+        """execute primitive"""
         if self.regions is True:
             self.logger.warning('Using default emission line region mask')
             self.regions = {'green': {0: [1, 2, 3], 3: [4, 5]}, 'red': {1: [1, 2, 3], 2: [1, 5]}}
@@ -116,11 +130,18 @@ class remove_emission_line_regions(KPF1_Primitive):
 
 
 class remove_solar_regions(KPF1_Primitive):
+    """Remove solar regions"""
 
     def __init__(self, action, context):
+        """"
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         KPF1_Primitive.__init__(self, action, context)
 
     def _perform(self):
+        """execute primitive"""
         if self.regions is True:
             self.logger.warning('Using default emission line region mask')
             self.regions = {'green': {0: [7], 2: [1, 5]}, 'red': {3: [1, 2, 3], 4: [0, 1, 2, 3, 4]}}
@@ -136,11 +157,18 @@ class remove_solar_regions(KPF1_Primitive):
 
 
 class correct_telluric_lines(KPF1_Primitive):
+    """Remove telluric lines"""
 
     def __init__(self, action, context):
+        """"
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         KPF1_Primitive.__init__(self, action, context)
 
     def _perform(self):
+        """execute primitive"""
         if self.correction_mask is True:
             self.logger.warning('Using default emission line region mask')
             self.correction_mask = {'green': {0: [[0, 0.1], [1, 0.5], [7, 0.1]], 2: [[1, 0.5]]}}  # no corrections in red
@@ -156,11 +184,18 @@ class correct_telluric_lines(KPF1_Primitive):
 
 
 class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
+    """Correct for barycentric velocity"""
 
     def __init__(self, action, context):
+        """"
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         KPF1_Primitive.__init__(self, action, context)
 
     def _perform(self):
+        """execute primitive"""
         for key in self.level1.orderlets.keys():
             for orderlet in self.level1.orderlets[key]:
                 for i in range(len(orderlet.flux)):
@@ -168,13 +203,20 @@ class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
 
 
 class calculate_RV_from_spectrum(KPF1_Primitive):
+    """Calculate CCF RV"""
 
     def __init__(self, action, context):
+        """"
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         KPF1_Primitive.__init__(self, action, context)
 
     # Get the RV
     # Again, should we initialize the level2 object in this function, or have it separately
     def _perform(self):
+        """execute primitive"""
         self.action.args.level2 = KPF2()
         if self.chips is True:
             self.chips = self.level1.orderlets.keys()

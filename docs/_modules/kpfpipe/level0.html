@@ -148,106 +148,62 @@
             
   <h1>Source code for kpfpipe.level0</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Define objects used in data processing</span>
+<span class="sd">Data models for KPF data</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
+
 <div class="viewcode-block" id="KPF0"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF0">[docs]</a><span class="k">class</span> <span class="nc">KPF0</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Container object for level zero data</span>
-<span class="sd">    </span>
-<span class="sd">    To Do: Consider making an abstract base class...</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-<div class="viewcode-block" id="KPF0.__init__"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF0.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">{}</span> <span class="c1"># Doing it this way allows flexibility in the structure of the input data </span>
-                       <span class="c1">#   e.g., it is not required to have both red and green chips for testing. </span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">flat</span> <span class="o">=</span> <span class="p">{}</span> <span class="c1"># Master flats</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="p">{}</span> <span class="c1"># Master biases</span>
-        <span class="c1">#self.red = None #Echellogram (image) from red CCD; 2D array (row, col)</span>
-        <span class="c1">#self.green = None #Echellogram (image) from green CCD; 2D array (row, col)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">header</span> <span class="o">=</span> <span class="p">{}</span><span class="c1">#None# meta data from KPF, telesceope, and observatory (dict)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">hk</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#Echellogram (image) from HK spectrometer CCD; 2D array (row, col)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">expmeter</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">guidecam</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#guidecam sequence; 3D array = time series of 2D CCD images (time, row, col) [consider whether guidecam should be included;  will it be analyzed?]</span></div>
-        
-<div class="viewcode-block" id="KPF0.to_fits"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF0.to_fits">[docs]</a>    <span class="k">def</span> <span class="nf">to_fits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Container object for level zero data&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Optional: collect all the level 0 data into a monolithic fits file</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            data (dictionary): Keys correspond to chips (e.g. green, red). Values contain the 2D flux arrays</span>
+<span class="sd">            flat (dictionary): Master flat files</span>
+<span class="sd">            bias (dictionary): Master bias files</span>
+<span class="sd">            header (dictionary): FITS header as dictionary</span>
+<span class="sd">            hk (array): (optional) Echellogram (image) from HK spectrometer CCD; 2D array (row, col)</span>
+<span class="sd">            expmeter (array): (optional) Exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)</span>
+<span class="sd">            guidecam (array): (optional) Guidecam sequence; 3D array = time series of 2D CCD images (time, row, col)</span>
+
+<span class="sd">        Todo:</span>
+<span class="sd">            * implement `to_fits` and `from_fits` methods</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># Doing it this way allows flexibility in the structure of the input data</span>
+                        <span class="c1"># e.g., it is not required to have both red and green chips for testing.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flat</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">header</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># meta data from KPF, telesceope, and observatory (dict)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hk</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expmeter</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">guidecam</span> <span class="o">=</span> <span class="kc">None</span>
+        
+<div class="viewcode-block" id="KPF0.from_fits"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF0.from_fits">[docs]</a>    <span class="k">def</span> <span class="nf">from_fits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Contruct KPF0 object from a raw FITS file.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            fn (string): Path to FITS file</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">pass</span></div></div>
 
-<div class="viewcode-block" id="KPF1"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF1">[docs]</a><span class="k">class</span> <span class="nc">KPF1</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+
+<div class="viewcode-block" id="MasterFlat"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.MasterFlat">[docs]</a><span class="k">class</span> <span class="nc">MasterFlat</span><span class="p">(</span><span class="n">KPF0</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Container object for level zero data</span>
-<span class="sd">    </span>
-<span class="sd">    To Do: Consider making an abstract base class...</span>
+<span class="sd">    Flat field derived from a stack of master flats</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-<div class="viewcode-block" id="KPF1.__init__"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF1.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">header</span> <span class="o">=</span> <span class="kc">None</span><span class="c1"># meta data from KPF, telesceope, and observatory (dict)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">red</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#Echellogram (image) from red CCD; 2D array (row, col)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">green</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#Echellogram (image) from green CCD; 2D array (row, col)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">hk</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#Echellogram (image) from HK spectrometer CCD; 2D array (row, col)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">expmeter</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)</span></div>
-        
-<div class="viewcode-block" id="KPF1.to_fits"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.KPF1.to_fits">[docs]</a>    <span class="k">def</span> <span class="nf">to_fits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Optional: collect all the level 0 data into a monolithic fits file</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">pass</span></div></div>
-
-<span class="c1"># Decided to just have HK be a part of KPF objects as above</span>
-<span class="c1">#class HK0(object):</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#    Container object for level zero data</span>
-<span class="c1">#    </span>
-<span class="c1">#    To Do: Consider making an abstract base class...</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#    def __init__(self):</span>
-<span class="c1">#        self.header # meta data from KPF, telesceope, and observatory (dict)</span>
-<span class="c1">#        self.hk # Echellogram (image) from HK spectrometer CCD; 2D array (row, col)</span>
-<span class="c1">#        </span>
-<span class="c1">#    def to_fits(self, fn):</span>
-<span class="c1">#        &quot;&quot;&quot;</span>
-<span class="c1">#        Optional: collect all the level 0 data into a monolithic fits file</span>
-<span class="c1">#        &quot;&quot;&quot;</span>
-<span class="c1">#        pass</span>
-   
-
-<span class="c1">#class MasterFlat(KPF0):</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#    Flat field derived from a stack of master flats</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#</span>
-<span class="c1">#class MasterBias(KPF0):</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#    Bias frame derived from a stack of bias observations</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span></div>
 
 
-<span class="c1"># We won&#39;t do this since we will define Methods as functions in the Pipeline class</span>
-<span class="c1">#</span>
-<span class="c1">#class Level0Method(object):</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#    Check if the correct level exists</span>
-<span class="c1">#    &quot;&quot;&quot;</span>
-<span class="c1">#    def __init__(self):</span>
-<span class="c1">#        self.</span>
-<span class="c1">#    class __Level0Method__():</span>
-<span class="c1">#        def __init__(self):</span>
-<span class="c1">#            self.level0 = level0</span>
-<span class="c1">#            if level0 is None:</span>
-<span class="c1">#                raise     </span>
-<span class="c1">#    class __Level1Method__():</span>
-<span class="c1">#        def __init__(self):</span>
-<span class="c1">#            self.level0 = level0</span>
-<span class="c1">#            if level1 is None:</span>
-<span class="c1">#                raise     </span>
-<span class="c1">#    class __Level2Method__():</span>
-<span class="c1">#        def __init__(self):</span>
-<span class="c1">#            self.level0 = level0</span>
-<span class="c1">#            if level2 is None:</span>
-<span class="c1">#                raise     </span>
-<span class="c1">#</span>
-
+<div class="viewcode-block" id="MasterBias"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level0.MasterBias">[docs]</a><span class="k">class</span> <span class="nc">MasterBias</span><span class="p">(</span><span class="n">KPF0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Bias frame derived from a stack of bias observations</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span></div>
 </pre></div>
 
            </div>

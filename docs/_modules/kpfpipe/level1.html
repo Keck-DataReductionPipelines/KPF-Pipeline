@@ -153,13 +153,24 @@
 
 <span class="kn">from</span> <span class="nn">astropy.io</span> <span class="k">import</span> <span class="n">fits</span>
 
+
 <div class="viewcode-block" id="KPF1"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.KPF1">[docs]</a><span class="k">class</span> <span class="nc">KPF1</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Container object for level one data</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        Norderlets (dictionary): Number of orderlets per chip</span>
+<span class="sd">        Norderlets_total (int): Total number of orderlets</span>
+<span class="sd">        orderlets (dictionary): Collection of Spectrum objects for each chip, order, and orderlet</span>
+<span class="sd">        hk (array): Extracted spectrum from HK spectrometer CCD; 2D array (order, col)</span>
+<span class="sd">        expmeter (array): exposure meter sequence; 3D array (time, order, col)</span>
+
+<span class="sd">    Todo:</span>
+<span class="sd">        * implement `to_fits` and `from_fits` methods</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="KPF1.__init__"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.KPF1.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">Norderlets</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;red&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">}</span> <span class="c1"># These can also be passed as arguments to KPF1 instead of being statically defined</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Norderlets</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;red&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">Norderlets_total</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">Norderlets</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
              <span class="bp">self</span><span class="o">.</span><span class="n">Norderlets_total</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Norderlets</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> 
@@ -169,11 +180,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">Spectrum</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Norderlets</span><span class="p">[</span><span class="n">key</span><span class="p">])]</span> <span class="c1"># collection of Orderlet1 objects</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">hk</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># 1D CaII-HK spectrum </span>
         <span class="bp">self</span><span class="o">.</span><span class="n">expmeter</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># time series of 1D exposure meter spectra</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">wavelength_solution</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#</span></div>
 
 <div class="viewcode-block" id="KPF1.to_fits"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.KPF1.to_fits">[docs]</a>    <span class="k">def</span> <span class="nf">to_fits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Optional: collect all the level 0 data into a monolithic fits file</span>
+<span class="sd">        Optional: collect all the level 1 data into a monolithic fits file</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">pass</span></div>
 
@@ -195,27 +205,44 @@
 
         <span class="k">return</span> <span class="n">lvl0</span></div></div>
 
+
 <div class="viewcode-block" id="Spectrum"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.Spectrum">[docs]</a><span class="k">class</span> <span class="nc">Spectrum</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Contanier for data that&#39;s associated with level one data products per orderlet</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        source (string): e.g. &#39;sky&#39;, &#39;sci&#39;, `cal`</span>
+<span class="sd">        flux (array): flux values</span>
+<span class="sd">        flux_err (array): flux uncertainties</span>
+<span class="sd">        wav (array): wavelengths</span>
+<span class="sd">        fiberid (int): fiber identifier</span>
+<span class="sd">        ordernum (int): order identifier</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
-<div class="viewcode-block" id="Spectrum.__init__"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.Spectrum.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#&#39;sky&#39;, &#39;sci&#39;, `cal`</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">flux</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#flux from the spectrum</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">flux_err</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#flux uncertainty</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">wav</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#wavelenth solution</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">fiberid</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#[1,2,3,4,5]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">ordernum</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1">#[71-137]; 103-137 = green, 71-102 = red</span></div></div>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flux</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flux_err</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wav</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fiberid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ordernum</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># [71-137]; 103-137 = green, 71-102 = red</span></div>
+
 
 <div class="viewcode-block" id="HK1"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.HK1">[docs]</a><span class="k">class</span> <span class="nc">HK1</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Contanier for data associated with level one data products from the HK spectrometer</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">        source (string): e.g. &#39;sky&#39;, &#39;sci&#39;, `cal`</span>
+<span class="sd">        flux (array): flux values</span>
+<span class="sd">        flux_err (array): flux uncertainties</span>
+<span class="sd">        wav (array): wavelengths</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-<div class="viewcode-block" id="HK1.__init__"><a class="viewcode-back" href="../../data_models.html#kpfpipe.level1.HK1.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="c1"># &#39;sky&#39;, &#39;sci&#39;, `cal`</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">flux</span> <span class="c1"># flux from the spectrum</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">flux_err</span> <span class="c1"># flux uncertainty</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">wav</span> <span class="c1"># wavelenth solution</span></div></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wav</span> <span class="c1"># wavelenth solution</span></div>
 </pre></div>
 
            </div>
