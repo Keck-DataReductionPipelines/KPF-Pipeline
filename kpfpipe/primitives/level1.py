@@ -28,12 +28,12 @@ class KPF1_Primitive(KPF_Primitive):
         self.level1 = self.action.args.level1
 
         # get some config from args
-        self.orders = self.action.args.orders
-        self.chips = self.action.args.chips
-        self.regions = self.action.args.regions
+        self.orders = self.context.config.run.orders
+        self.chips = self.context.config.instrument.chips
+        self.regions = self.context.config.run.regions
 
         # get some config from file
-        self.correction_mask = self.context.config.correction_mask
+        self.correction_mask = self.context.config.instrument.correction_mask
 
     def checklevel1(self):
         if (self.level1 is None) or (not self.valid_level1_data()):
