@@ -154,12 +154,9 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 
 <span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitive</span> <span class="k">import</span> <span class="n">Base_primitive</span>
-<span class="kn">from</span> <span class="nn">keckdrpframework.models.arguments</span> <span class="k">import</span> <span class="n">Arguments</span>
 
 <span class="kn">from</span> <span class="nn">kpfpipe.primitives.core</span> <span class="k">import</span> <span class="n">KPF_Primitive</span>
-<span class="kn">from</span> <span class="nn">kpfpipe.level0</span> <span class="k">import</span> <span class="n">KPF0</span>
 <span class="kn">from</span> <span class="nn">kpfpipe.level1</span> <span class="k">import</span> <span class="n">KPF1</span>
-<span class="kn">from</span> <span class="nn">kpfpipe.level2</span> <span class="k">import</span> <span class="n">KPF2</span>
 
 
 <div class="viewcode-block" id="KPF0_Primitive"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.KPF0_Primitive">[docs]</a><span class="k">class</span> <span class="nc">KPF0_Primitive</span><span class="p">(</span><span class="n">KPF_Primitive</span><span class="p">):</span>
@@ -167,6 +164,10 @@
 <span class="sd">    Base primitive for other KPF0 primitives.</span>
 <span class="sd">    All KPF0 primitives should inherit from this one.</span>
 <span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 <div class="viewcode-block" id="KPF0_Primitive.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.KPF0_Primitive.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
         <span class="n">Base_primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
@@ -178,7 +179,14 @@
                 <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_level0_data</span><span class="p">())):</span>
             <span class="k">raise</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="s2">&quot;Invalid data&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">valid_level0_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="KPF0_Primitive.valid_level0_data"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.KPF0_Primitive.valid_level0_data">[docs]</a>    <span class="k">def</span> <span class="nf">valid_level0_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Confirms that KPF0 object has necessary data/structure to operate on (after checking for its existence)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
         <span class="c1"># The absolutely necessary data in a level0 array is in the self.data dictionary.</span>
         <span class="c1"># Check that it has not been corrupted</span>
         <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level0</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">dict</span><span class="p">:</span>
@@ -197,7 +205,7 @@
         <span class="c1"># We will also want to check some other things eventually</span>
         <span class="c1"># if self.level0.header is None:</span>
         <span class="c1">#    return False</span>
-        <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 
     <span class="k">def</span> <span class="nf">_pre_condition</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level0</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_level0_data</span><span class="p">()):</span>
@@ -208,13 +216,25 @@
 
 
 <div class="viewcode-block" id="subtract_bias"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.subtract_bias">[docs]</a><span class="k">class</span> <span class="nc">subtract_bias</span><span class="p">(</span><span class="n">KPF0_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Subtract bias from a KPF level 0 object&quot;&quot;&quot;</span>
+
 
 <div class="viewcode-block" id="subtract_bias.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.subtract_bias.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            chips (list): list of chips to process (e.g. [&#39;red&#39;, &#39;green&#39;])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF0_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">chips</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Execute the primitive&quot;&quot;&quot;</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Entered subtract_bias&#39;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Chips have not been explicitly set in subtract_bias method&#39;</span><span class="p">)</span>
@@ -238,13 +258,25 @@
 
 
 <div class="viewcode-block" id="divide_flat"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.divide_flat">[docs]</a><span class="k">class</span> <span class="nc">divide_flat</span><span class="p">(</span><span class="n">KPF0_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Divide by flat&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="divide_flat.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.divide_flat.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            chips (list): list of chips to process (e.g. [&#39;red&#39;, &#39;green&#39;])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
         <span class="n">KPF0_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">chips</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Execute the primitive&quot;&quot;&quot;</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">level0</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">chip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span><span class="p">:</span>
@@ -266,6 +298,17 @@
 <div class="viewcode-block" id="extract_spectrum"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.extract_spectrum">[docs]</a><span class="k">class</span> <span class="nc">extract_spectrum</span><span class="p">(</span><span class="n">KPF0_Primitive</span><span class="p">):</span>
 
 <div class="viewcode-block" id="extract_spectrum.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level0.extract_spectrum.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            chips (list): list of chips to extract (e.g. [&#39;red&#39;, &#39;green&#39;])</span>
+<span class="sd">            orders (list): list of orders to extract</span>
+<span class="sd">            level1 (KPF1): KPF level 1 object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
         <span class="n">KPF0_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">chips</span>
@@ -273,6 +316,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">level1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level1</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Execute the primitive&quot;&quot;&quot;</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">level0</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">chip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span><span class="p">:</span>

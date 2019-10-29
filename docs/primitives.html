@@ -162,6 +162,14 @@
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.core.</code><code class="sig-name descname">KPF_Primitive</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/core.html#KPF_Primitive"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.core.KPF_Primitive" title="Permalink to this definition">¶</a></dt>
 <dd><p>Base primitive for orther KPF primitives.
 All KPF primitive classes should ultimately inherit from this one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
 <p>Constructor</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.core.KPF_Primitive.__init__">
@@ -179,6 +187,14 @@ All KPF primitive classes should ultimately inherit from this one.</p>
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level0.</code><code class="sig-name descname">KPF0_Primitive</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#KPF0_Primitive"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.KPF0_Primitive" title="Permalink to this definition">¶</a></dt>
 <dd><p>Base primitive for other KPF0 primitives.
 All KPF0 primitives should inherit from this one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
 <p>Constructor</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level0.KPF0_Primitive.__init__">
@@ -186,16 +202,64 @@ All KPF0 primitives should inherit from this one.</p>
 <dd><p>Constructor</p>
 </dd></dl>
 
+<dl class="method">
+<dt id="kpfpipe.primitives.level0.KPF0_Primitive.valid_level0_data">
+<code class="sig-name descname">valid_level0_data</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#KPF0_Primitive.valid_level0_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.KPF0_Primitive.valid_level0_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Confirms that KPF0 object has necessary data/structure to operate on (after checking for its existence)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="class">
 <dt id="kpfpipe.primitives.level0.divide_flat">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level0.</code><code class="sig-name descname">divide_flat</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#divide_flat"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.divide_flat" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Divide by flat</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="attribute">
+<dt id="kpfpipe.primitives.level0.divide_flat.chips">
+<code class="sig-name descname">chips</code><a class="headerlink" href="#kpfpipe.primitives.level0.divide_flat.chips" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of chips to process (e.g. [‘red’, ‘green’])</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="method">
 <dt id="kpfpipe.primitives.level0.divide_flat.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#divide_flat.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.divide_flat.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="attribute">
+<dt>
+<code class="sig-name descname">chips</code></dt>
+<dd><p>list of chips to process (e.g. [‘red’, ‘green’])</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </dd></dl>
@@ -203,11 +267,91 @@ All KPF0 primitives should inherit from this one.</p>
 <dl class="class">
 <dt id="kpfpipe.primitives.level0.extract_spectrum">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level0.</code><code class="sig-name descname">extract_spectrum</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#extract_spectrum"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.extract_spectrum" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="attribute">
+<dt id="kpfpipe.primitives.level0.extract_spectrum.chips">
+<code class="sig-name descname">chips</code><a class="headerlink" href="#kpfpipe.primitives.level0.extract_spectrum.chips" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of chips to extract (e.g. [‘red’, ‘green’])</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="kpfpipe.primitives.level0.extract_spectrum.orders">
+<code class="sig-name descname">orders</code><a class="headerlink" href="#kpfpipe.primitives.level0.extract_spectrum.orders" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of orders to extract</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="kpfpipe.primitives.level0.extract_spectrum.level1">
+<code class="sig-name descname">level1</code><a class="headerlink" href="#kpfpipe.primitives.level0.extract_spectrum.level1" title="Permalink to this definition">¶</a></dt>
+<dd><p>KPF level 1 object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="data_models.html#kpfpipe.level1.KPF1" title="kpfpipe.level1.KPF1">KPF1</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="method">
 <dt id="kpfpipe.primitives.level0.extract_spectrum.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#extract_spectrum.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.extract_spectrum.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="attribute">
+<dt>
+<code class="sig-name descname">chips</code></dt>
+<dd><p>list of chips to extract (e.g. [‘red’, ‘green’])</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt>
+<code class="sig-name descname">orders</code></dt>
+<dd><p>list of orders to extract</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="attribute">
+<dt>
+<code class="sig-name descname">level1</code></dt>
+<dd><p>KPF level 1 object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="data_models.html#kpfpipe.level1.KPF1" title="kpfpipe.level1.KPF1">KPF1</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </dd></dl>
@@ -215,11 +359,48 @@ All KPF0 primitives should inherit from this one.</p>
 <dl class="class">
 <dt id="kpfpipe.primitives.level0.subtract_bias">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level0.</code><code class="sig-name descname">subtract_bias</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#subtract_bias"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.subtract_bias" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Subtract bias from a KPF level 0 object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="attribute">
+<dt id="kpfpipe.primitives.level0.subtract_bias.chips">
+<code class="sig-name descname">chips</code><a class="headerlink" href="#kpfpipe.primitives.level0.subtract_bias.chips" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of chips to process (e.g. [‘red’, ‘green’])</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="method">
 <dt id="kpfpipe.primitives.level0.subtract_bias.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level0.html#subtract_bias.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level0.subtract_bias.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="attribute">
+<dt>
+<code class="sig-name descname">chips</code></dt>
+<dd><p>list of chips to process (e.g. [‘red’, ‘green’])</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </dd></dl>
@@ -233,6 +414,14 @@ All KPF0 primitives should inherit from this one.</p>
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">KPF1_Primitive</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#KPF1_Primitive"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.KPF1_Primitive" title="Permalink to this definition">¶</a></dt>
 <dd><p>Base primitive for other KPF1 primitives.
 All KPF1 primitives should inherit from this one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
 <p>Constructor</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.KPF1_Primitive.__init__">
@@ -258,11 +447,20 @@ necessary e.g., checking that we only have 1-d spectra for each chip now, the co
 <dl class="class">
 <dt id="kpfpipe.primitives.level1.calculate_RV_from_spectrum">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">calculate_RV_from_spectrum</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#calculate_RV_from_spectrum"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.calculate_RV_from_spectrum" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Calculate CCF RV</p>
+<p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.calculate_RV_from_spectrum.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#calculate_RV_from_spectrum.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.calculate_RV_from_spectrum.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 </dd></dl>
 
 </dd></dl>
@@ -270,11 +468,20 @@ necessary e.g., checking that we only have 1-d spectra for each chip now, the co
 <dl class="class">
 <dt id="kpfpipe.primitives.level1.calibrate_wavelengths">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">calibrate_wavelengths</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#calibrate_wavelengths"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.calibrate_wavelengths" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Calibrate wavelengths and append wavelength solution</p>
+<p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.calibrate_wavelengths.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#calibrate_wavelengths.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.calibrate_wavelengths.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 </dd></dl>
 
 </dd></dl>
@@ -282,11 +489,20 @@ necessary e.g., checking that we only have 1-d spectra for each chip now, the co
 <dl class="class">
 <dt id="kpfpipe.primitives.level1.correct_telluric_lines">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">correct_telluric_lines</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#correct_telluric_lines"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.correct_telluric_lines" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Remove telluric lines</p>
+<p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.correct_telluric_lines.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#correct_telluric_lines.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.correct_telluric_lines.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 </dd></dl>
 
 </dd></dl>
@@ -294,11 +510,20 @@ necessary e.g., checking that we only have 1-d spectra for each chip now, the co
 <dl class="class">
 <dt id="kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">correct_wavelength_dependent_barycentric_velocity</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#correct_wavelength_dependent_barycentric_velocity"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Correct for barycentric velocity</p>
+<p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#correct_wavelength_dependent_barycentric_velocity.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 </dd></dl>
 
 </dd></dl>
@@ -306,11 +531,20 @@ necessary e.g., checking that we only have 1-d spectra for each chip now, the co
 <dl class="class">
 <dt id="kpfpipe.primitives.level1.remove_emission_line_regions">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">remove_emission_line_regions</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#remove_emission_line_regions"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.remove_emission_line_regions" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Remove emission lines</p>
+<p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.remove_emission_line_regions.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#remove_emission_line_regions.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.remove_emission_line_regions.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 </dd></dl>
 
 </dd></dl>
@@ -318,11 +552,20 @@ necessary e.g., checking that we only have 1-d spectra for each chip now, the co
 <dl class="class">
 <dt id="kpfpipe.primitives.level1.remove_solar_regions">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.primitives.level1.</code><code class="sig-name descname">remove_solar_regions</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#remove_solar_regions"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.remove_solar_regions" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>Remove solar regions</p>
+<p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 <dl class="method">
 <dt id="kpfpipe.primitives.level1.remove_solar_regions.__init__">
 <code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/primitives/level1.html#remove_solar_regions.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.primitives.level1.remove_solar_regions.__init__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructor</p>
+<dd><p>”
+:param action: Keck DRPF Action object
+:type action: keckdrpframework.models.action.Action
+:param context: Keck DRPF Processing_context object
+:type context: keckdrpframework.models.processing_context.Processing_context</p>
 </dd></dl>
 
 </dd></dl>
