@@ -10,9 +10,18 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+
+import os
+import sys
+import datetime
+import kpfpipe
+from importlib import import_module
+
+try:
+    from sphinx_astropy.conf.v1 import *  # noqa
+except ImportError:
+    print('ERROR: the documentation requires the sphinx-astropy package to be installed')
+    sys.exit(1)
 
 
 # -- Project information -----------------------------------------------------
@@ -22,7 +31,7 @@ copyright = '2019, BJ Fulton, Arpita Roy, Andrew Howard'
 author = 'BJ Fulton, Arpita Roy, Andrew Howard'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = kpfpipe.__version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -31,6 +40,11 @@ release = '0.0.1'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.doctest',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -47,7 +61,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
