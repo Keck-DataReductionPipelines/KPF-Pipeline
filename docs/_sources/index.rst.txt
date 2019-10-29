@@ -10,8 +10,8 @@ Documentation for the KPF Data Reduction Pipeline
 Installation
 ++++++++++++
 
-Install ``rvsearch`` directly from the
-`GitHub repository <https://github.com/California-Planet-Search/rvsearch>`_
+Install ``kpfpipe`` directly from the
+`GitHub repository <https://github.com/California-Planet-Search/KPF-Pipeline>`_
 using pip:
 
 .. code-block:: bash
