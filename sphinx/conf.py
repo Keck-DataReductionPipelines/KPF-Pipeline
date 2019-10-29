@@ -44,8 +44,13 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'sphinx.ext.todo'
 ]
+
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = False
+todo_include_todos = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
