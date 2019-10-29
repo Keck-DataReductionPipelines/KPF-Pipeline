@@ -2,11 +2,12 @@
 Define objects used in level one data processing
 """
 
+from astropy.io import fits
+
 class KPF1(object):
     """
     Container object for level one data
     """
-    
 
     def __init__(self):
         self.Norderlets = {'red': 10, 'green': 10} # These can also be passed as arguments to KPF1 instead of being statically defined
@@ -26,6 +27,24 @@ class KPF1(object):
         Optional: collect all the level 0 data into a monolithic fits file
         """
         pass
+
+    @classmethod
+    def from_fits(cls, fn):
+        """
+        Construct a KPF1 object from a FITS file
+
+        Args:
+            fn (string): file name
+
+        Returns:
+            KPF1 object
+        """
+        hdu = fits.open(fn)
+        data = hdu[0].data
+
+        lvl0 = cls()
+
+        return lvl0
 
 class Spectrum(object):
     """
