@@ -17,6 +17,8 @@ class KPF_pipeline(Base_pipeline):
 
     event_table = {"reduce_level0":
                        ("subtract_bias", "removing bias", 'divide_flat'),
+                   "subtract_bias":
+                       ("subtract_bias", "removing bias", None),
                    "divide_flat":
                        ("divide_flat", "dividing by flat", 'extract_spectrum'),
                    "extract_spectrum":
@@ -37,6 +39,9 @@ class KPF_pipeline(Base_pipeline):
                    "calculate_RV_from_spectrum":
                        ("calculate_RV_from_spectrum", "calculating RV", None),
 
+                   "execute_recipe":
+                       ("execute_recipe", "executing recipe", None),
+
                    "exit":
                        ("exit_loop", "killing framework", None)
                    }
@@ -55,6 +60,21 @@ class KPF_pipeline(Base_pipeline):
         context.push_event('correct_telluric_lines', action.args)
         context.push_event('correct_wavelength_dependent_barycentric_velocity', action.args)
         context.push_event('calculate_RV_from_spectrum', action.args)
+
+    def execute_recipe(self, action, context):
+        """
+        Executes the recipe file (list of actions) specified in context.config.run.recipe.
+        All actions are executed consecutive in the high priority queue
+        """
+
+        recipe_file = action.args.recipe
+        context.logger.info('Executing recipe file {}'.format(recipe_file))
+        f = open(recipe_file)
+        for event in f.readlines():
+            event = event.strip()
+            context.logger.info(event)
+            context.push_event(event, action.args)
+        f.close()
 
     def exit_loop(self, action, context):
         context.logger.info("Goodbye")
