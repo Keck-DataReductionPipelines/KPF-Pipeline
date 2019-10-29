@@ -1,0 +1,4 @@
+astropy==3.2.2
+sphinx==2.2.0
+sphinx-astropy==1.1.1
+
