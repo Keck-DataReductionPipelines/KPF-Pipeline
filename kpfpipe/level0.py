@@ -1,101 +1,57 @@
 """
-Define objects used in data processing
+Data models for KPF data
 """
 
+
 class KPF0(object):
-    """
-    Container object for level zero data
-    
-    To Do: Consider making an abstract base class...
-    """
+    """Container object for level zero data"""
     def __init__(self):
-        self.data = {} # Doing it this way allows flexibility in the structure of the input data 
-                       #   e.g., it is not required to have both red and green chips for testing. 
-        self.flat = {} # Master flats
-        self.bias = {} # Master biases
-        #self.red = None #Echellogram (image) from red CCD; 2D array (row, col)
-        #self.green = None #Echellogram (image) from green CCD; 2D array (row, col)
-        self.header = {}#None# meta data from KPF, telesceope, and observatory (dict)
-        self.hk = None #Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
-        self.expmeter = None #exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
-        self.guidecam = None #guidecam sequence; 3D array = time series of 2D CCD images (time, row, col) [consider whether guidecam should be included;  will it be analyzed?]
-        
-    def to_fits(self, fn):
         """
-        Optional: collect all the level 0 data into a monolithic fits file
+
+        Attributes:
+            data (dictionary): Keys correspond to chips (e.g. green, red). Values contain the 2D flux arrays
+            flat (dictionary): Master flat files
+            bias (dictionary): Master bias files
+            header (dictionary): FITS header as dictionary
+            hk (array): (optional) Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
+            expmeter (array): (optional) Exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
+            guidecam (array): (optional) Guidecam sequence; 3D array = time series of 2D CCD images (time, row, col)
+
+        Todo:
+            * implement `to_fits` and `from_fits` methods
+
+        """
+
+        self.data = {}  # Doing it this way allows flexibility in the structure of the input data
+                        # e.g., it is not required to have both red and green chips for testing.
+        self.flat = {}
+        self.bias = {}
+        self.header = {}  # meta data from KPF, telesceope, and observatory (dict)
+        self.hk = None
+        self.expmeter = None
+        self.guidecam = None
+        
+    def from_fits(self, fn):
+        """
+        Contruct KPF0 object from a raw FITS file.
+
+        Args:
+            fn (string): Path to FITS file
         """
         pass
 
-class KPF1(object):
+
+class MasterFlat(KPF0):
     """
-    Container object for level zero data
-    
-    To Do: Consider making an abstract base class...
+    Flat field derived from a stack of master flats
     """
     def __init__(self):
-        self.header = None# meta data from KPF, telesceope, and observatory (dict)
-        self.red = None #Echellogram (image) from red CCD; 2D array (row, col)
-        self.green = None #Echellogram (image) from green CCD; 2D array (row, col)
-        self.hk = None #Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
-        self.expmeter = None #exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
-        
-    def to_fits(self, fn):
-        """
-        Optional: collect all the level 0 data into a monolithic fits file
-        """
         pass
 
-# Decided to just have HK be a part of KPF objects as above
-#class HK0(object):
-#    """
-#    Container object for level zero data
-#    
-#    To Do: Consider making an abstract base class...
-#    """
-#    def __init__(self):
-#        self.header # meta data from KPF, telesceope, and observatory (dict)
-#        self.hk # Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
-#        
-#    def to_fits(self, fn):
-#        """
-#        Optional: collect all the level 0 data into a monolithic fits file
-#        """
-#        pass
-   
 
-#class MasterFlat(KPF0):
-#    """
-#    Flat field derived from a stack of master flats
-#    """
-#
-#class MasterBias(KPF0):
-#    """
-#    Bias frame derived from a stack of bias observations
-#    """
-
-
-# We won't do this since we will define Methods as functions in the Pipeline class
-#
-#class Level0Method(object):
-#    """
-#    Check if the correct level exists
-#    """
-#    def __init__(self):
-#        self.
-#    class __Level0Method__():
-#        def __init__(self):
-#            self.level0 = level0
-#            if level0 is None:
-#                raise     
-#    class __Level1Method__():
-#        def __init__(self):
-#            self.level0 = level0
-#            if level1 is None:
-#                raise     
-#    class __Level2Method__():
-#        def __init__(self):
-#            self.level0 = level0
-#            if level2 is None:
-#                raise     
-#
-
+class MasterBias(KPF0):
+    """
+    Bias frame derived from a stack of bias observations
+    """
+    def __init__(self):
+        pass

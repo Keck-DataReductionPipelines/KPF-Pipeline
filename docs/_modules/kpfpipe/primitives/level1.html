@@ -154,14 +154,9 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 
 <span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitive</span> <span class="k">import</span> <span class="n">Base_primitive</span>
-<span class="kn">from</span> <span class="nn">keckdrpframework.models.arguments</span> <span class="k">import</span> <span class="n">Arguments</span>
 
 <span class="kn">from</span> <span class="nn">kpfpipe.primitives.core</span> <span class="k">import</span> <span class="n">KPF_Primitive</span>
-<span class="kn">from</span> <span class="nn">kpfpipe.level0</span> <span class="k">import</span> <span class="n">KPF0</span>
-<span class="kn">from</span> <span class="nn">kpfpipe.level1</span> <span class="k">import</span> <span class="n">KPF1</span>
 <span class="kn">from</span> <span class="nn">kpfpipe.level2</span> <span class="k">import</span> <span class="n">KPF2</span>
-
-
 
 
 <div class="viewcode-block" id="KPF1_Primitive"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.KPF1_Primitive">[docs]</a><span class="k">class</span> <span class="nc">KPF1_Primitive</span><span class="p">(</span><span class="n">KPF_Primitive</span><span class="p">):</span>
@@ -169,6 +164,10 @@
 <span class="sd">    Base primitive for other KPF1 primitives.</span>
 <span class="sd">    All KPF1 primitives should inherit from this one.</span>
 <span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 <div class="viewcode-block" id="KPF1_Primitive.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.KPF1_Primitive.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
         <span class="n">Base_primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
@@ -219,6 +218,7 @@
         <span class="k">return</span> <span class="kc">True</span></div>
 
     <span class="k">def</span> <span class="nf">_pre_condition</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute before any _perform method&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Running level1 primitive </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="c1"># self.logger.debug(&#39;Appending method to method list&#39;)</span>
         <span class="c1"># self.method_list.append(str(level1_method_function.__name__))</span>
@@ -232,11 +232,17 @@
 
 
 <div class="viewcode-block" id="calibrate_wavelengths"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calibrate_wavelengths">[docs]</a><span class="k">class</span> <span class="nc">calibrate_wavelengths</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
-
+    <span class="sd">&quot;&quot;&quot;Calibrate wavelengths and append wavelength solution&quot;&quot;&quot;</span>
 <div class="viewcode-block" id="calibrate_wavelengths.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calibrate_wavelengths.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute primitive&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">level0</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">chip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span><span class="p">:</span>
@@ -246,10 +252,18 @@
 
 
 <div class="viewcode-block" id="remove_emission_line_regions"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_emission_line_regions">[docs]</a><span class="k">class</span> <span class="nc">remove_emission_line_regions</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Remove emission lines&quot;&quot;&quot;</span>
+
 <div class="viewcode-block" id="remove_emission_line_regions.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_emission_line_regions.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute primitive&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Using default emission line region mask&#39;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">3</span><span class="p">:</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]},</span> <span class="s1">&#39;red&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]}}</span>
@@ -265,11 +279,18 @@
 
 
 <div class="viewcode-block" id="remove_solar_regions"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_solar_regions">[docs]</a><span class="k">class</span> <span class="nc">remove_solar_regions</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Remove solar regions&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="remove_solar_regions.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_solar_regions.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute primitive&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Using default emission line region mask&#39;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">],</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]},</span> <span class="s1">&#39;red&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">3</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">4</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]}}</span>
@@ -285,11 +306,18 @@
 
 
 <div class="viewcode-block" id="correct_telluric_lines"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_telluric_lines">[docs]</a><span class="k">class</span> <span class="nc">correct_telluric_lines</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Remove telluric lines&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="correct_telluric_lines.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_telluric_lines.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute primitive&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Using default emission line region mask&#39;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]],</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]]}}</span>  <span class="c1"># no corrections in red</span>
@@ -305,11 +333,18 @@
 
 
 <div class="viewcode-block" id="correct_wavelength_dependent_barycentric_velocity"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity">[docs]</a><span class="k">class</span> <span class="nc">correct_wavelength_dependent_barycentric_velocity</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Correct for barycentric velocity&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="correct_wavelength_dependent_barycentric_velocity.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute primitive&quot;&quot;&quot;</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">orderlet</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">]:</span>
                 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">orderlet</span><span class="o">.</span><span class="n">flux</span><span class="p">)):</span>
@@ -317,13 +352,20 @@
 
 
 <div class="viewcode-block" id="calculate_RV_from_spectrum"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calculate_RV_from_spectrum">[docs]</a><span class="k">class</span> <span class="nc">calculate_RV_from_spectrum</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate CCF RV&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="calculate_RV_from_spectrum.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calculate_RV_from_spectrum.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
+<span class="sd">            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
 
     <span class="c1"># Get the RV</span>
     <span class="c1"># Again, should we initialize the level2 object in this function, or have it separately</span>
     <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;execute primitive&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level2</span> <span class="o">=</span> <span class="n">KPF2</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>

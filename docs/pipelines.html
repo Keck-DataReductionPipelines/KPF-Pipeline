@@ -154,10 +154,22 @@
             
   <div class="section" id="module-kpfpipe.pipelines.KPF_pipeline">
 <span id="pipeline"></span><span id="pipelines"></span><h1>Pipeline<a class="headerlink" href="#module-kpfpipe.pipelines.KPF_pipeline" title="Permalink to this headline">¶</a></h1>
+<p>Pipeline to run under the Keck DRP Framework</p>
 <dl class="class">
 <dt id="kpfpipe.pipelines.KPF_pipeline.KPF_pipeline">
 <em class="property">class </em><code class="sig-prename descclassname">kpfpipe.pipelines.KPF_pipeline.</code><code class="sig-name descname">KPF_pipeline</code><a class="reference internal" href="_modules/kpfpipe/pipelines/KPF_pipeline.html#KPF_pipeline"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline" title="Permalink to this definition">¶</a></dt>
-<dd><p>Pipeline to Process KPF data</p>
+<dd><p>Pipeline to Process KPF data using the KeckDRPFramework</p>
+<dl class="attribute">
+<dt id="kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.event_table">
+<code class="sig-name descname">event_table</code><a class="headerlink" href="#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.event_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>table of actions known to framework. All primitives must be registered here.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>dictionary</p>
+</dd>
+</dl>
+</dd></dl>
+
 <p>Constructor</p>
 <dl class="method">
 <dt id="kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.__init__">
@@ -169,7 +181,29 @@
 <dt id="kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.execute_recipe">
 <code class="sig-name descname">execute_recipe</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/pipelines/KPF_pipeline.html#KPF_pipeline.execute_recipe"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.execute_recipe" title="Permalink to this definition">¶</a></dt>
 <dd><p>Executes the recipe file (list of actions) specified in context.config.run.recipe.
-All actions are executed consecutive in the high priority queue</p>
+All actions are executed consecutively in the high priority queue</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.exit_loop">
+<code class="sig-name descname">exit_loop</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kpfpipe/pipelines/KPF_pipeline.html#KPF_pipeline.exit_loop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.KPF_pipeline.KPF_pipeline.exit_loop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Force the Keck DRP Framework to exit the infinite loop</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>keckdrpframework.models.action.Action</em>) – Keck DRPF Action object</p></li>
+<li><p><strong>context</strong> (<em>keckdrpframework.models.processing_context.Processing_context</em>) – Keck DRPF Processing_context object</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

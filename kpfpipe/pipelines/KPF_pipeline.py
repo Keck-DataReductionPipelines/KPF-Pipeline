@@ -1,3 +1,7 @@
+"""
+Pipeline to run under the Keck DRP Framework
+"""
+
 
 import os
 
@@ -9,7 +13,10 @@ from kpfpipe.primitives.level1 import *
 
 class KPF_pipeline(Base_pipeline):
     """
-    Pipeline to Process KPF data
+    Pipeline to Process KPF data using the KeckDRPFramework
+
+    Attributes:
+        event_table (dictionary): table of actions known to framework. All primitives must be registered here.
     """
 
     event_table = {"reduce_level0":
@@ -43,25 +50,17 @@ class KPF_pipeline(Base_pipeline):
                        ("exit_loop", "killing framework", None)
                    }
 
-
     def __init__(self):
-        """
-        Constructor
-        """
         Base_pipeline.__init__(self)
-
-    def level1to2(self, action, context):
-        context.push_event('calibrate_wavelengths', action.args)
-        context.push_event('remove_emission_line_regions', action.args)
-        context.push_event('remove_solar_regions', action.args)
-        context.push_event('correct_telluric_lines', action.args)
-        context.push_event('correct_wavelength_dependent_barycentric_velocity', action.args)
-        context.push_event('calculate_RV_from_spectrum', action.args)
 
     def execute_recipe(self, action, context):
         """
         Executes the recipe file (list of actions) specified in context.config.run.recipe.
-        All actions are executed consecutive in the high priority queue
+        All actions are executed consecutively in the high priority queue
+
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
         """
 
         recipe_file = action.args.recipe
@@ -74,5 +73,12 @@ class KPF_pipeline(Base_pipeline):
         f.close()
 
     def exit_loop(self, action, context):
+        """
+        Force the Keck DRP Framework to exit the infinite loop
+
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
         context.logger.info("Goodbye")
         os._exit(0)
