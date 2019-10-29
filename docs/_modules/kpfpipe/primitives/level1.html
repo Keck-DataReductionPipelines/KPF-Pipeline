@@ -1,0 +1,379 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>kpfpipe.primitives.level1 &mdash; KPFpipe 0.0.1 documentation</title>
+  
+
+  
+  
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> KPFpipe
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../data_models.html">Data Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../pipelines.html">Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../primitives.html">Primitives</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">KPFpipe</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>kpfpipe.primitives.level1</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for kpfpipe.primitives.level1</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Define primitives that operate on KPF data</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitive</span> <span class="k">import</span> <span class="n">Base_primitive</span>
+<span class="kn">from</span> <span class="nn">keckdrpframework.models.arguments</span> <span class="k">import</span> <span class="n">Arguments</span>
+
+<span class="kn">from</span> <span class="nn">kpfpipe.primitives.core</span> <span class="k">import</span> <span class="n">KPF_Primitive</span>
+<span class="kn">from</span> <span class="nn">kpfpipe.level0</span> <span class="k">import</span> <span class="n">KPF0</span>
+<span class="kn">from</span> <span class="nn">kpfpipe.level1</span> <span class="k">import</span> <span class="n">KPF1</span>
+<span class="kn">from</span> <span class="nn">kpfpipe.level2</span> <span class="k">import</span> <span class="n">KPF2</span>
+
+
+
+
+<div class="viewcode-block" id="KPF1_Primitive"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.KPF1_Primitive">[docs]</a><span class="k">class</span> <span class="nc">KPF1_Primitive</span><span class="p">(</span><span class="n">KPF_Primitive</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Base primitive for other KPF1 primitives.</span>
+<span class="sd">    All KPF1 primitives should inherit from this one.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="KPF1_Primitive.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.KPF1_Primitive.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">Base_primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">level0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">level1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level1</span>
+
+        <span class="c1"># get some config from args</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">orders</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">run</span><span class="o">.</span><span class="n">orders</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">instrument</span><span class="o">.</span><span class="n">chips</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">run</span><span class="o">.</span><span class="n">regions</span>
+
+        <span class="c1"># get some config from file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">instrument</span><span class="o">.</span><span class="n">correction_mask</span></div>
+
+    <span class="k">def</span> <span class="nf">checklevel1</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level1</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_level1_data</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="s2">&quot;Invalid data&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="KPF1_Primitive.valid_level1_data"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.KPF1_Primitive.valid_level1_data">[docs]</a>    <span class="k">def</span> <span class="nf">valid_level1_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Confirms that KPF1 object has necessary data/structure to operate on (after checking for its existence)</span>
+<span class="sd">        The first checks are similar to valid_level0_data(), but we keep them separated because different checks may be</span>
+<span class="sd">        necessary e.g., checking that we only have 1-d spectra for each chip now, the correct number of orderlets, etc.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># The absolutely necessary data in a level1 array is in the self.data dictionary.</span>
+        <span class="c1"># Check that it has not been corrupted</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">dict</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># Check that it contains some data</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># And that the data is appropriate</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">if</span> <span class="p">((</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">flux</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">))</span> <span class="ow">or</span>
+                    <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">flux</span><span class="p">))):</span>
+                <span class="k">return</span> <span class="kc">False</span>
+            <span class="c1"># Could check for dimensionality, but we won&#39;t do this for flexibility</span>
+            <span class="c1"># if self.data[key].shape == shape:</span>
+            <span class="c1">#    return False</span>
+        <span class="c1"># We will also want to check some other things eventually</span>
+        <span class="c1"># if self.level1.header is None:</span>
+        <span class="c1">#    return False</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+    <span class="k">def</span> <span class="nf">_pre_condition</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Running level1 primitive </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># self.logger.debug(&#39;Appending method to method list&#39;)</span>
+        <span class="c1"># self.method_list.append(str(level1_method_function.__name__))</span>
+        <span class="c1"># self.logger.debug(&#39;Checking level1 before method&#39;)</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level1</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_level1_data</span><span class="p">()):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid level 1 data&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="calibrate_wavelengths"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calibrate_wavelengths">[docs]</a><span class="k">class</span> <span class="nc">calibrate_wavelengths</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+
+<div class="viewcode-block" id="calibrate_wavelengths.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calibrate_wavelengths.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">level0</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">chip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">Norderlets</span><span class="p">[</span><span class="n">chip</span><span class="p">]):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Calibrating wavelengths for order </span><span class="si">{}</span><span class="s1"> on the </span><span class="si">{}</span><span class="s1"> chip&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">chip</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">chip</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">wav</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">level0</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">chip</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="remove_emission_line_regions"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_emission_line_regions">[docs]</a><span class="k">class</span> <span class="nc">remove_emission_line_regions</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+<div class="viewcode-block" id="remove_emission_line_regions.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_emission_line_regions.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Using default emission line region mask&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">3</span><span class="p">:</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]},</span> <span class="s1">&#39;red&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]}}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;removing emission line regions: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">))</span>
+        <span class="c1"># I don&#39;t know how this will work so I&#39;m just zero masking some random points</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">orderlet_index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">wavelength_index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">orderlet_index</span><span class="p">]:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">orderlet_index</span><span class="p">]</span><span class="o">.</span><span class="n">flux</span><span class="p">[</span><span class="n">wavelength_index</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.</span>
+                    <span class="k">except</span><span class="p">:</span>
+                        <span class="k">pass</span>  <span class="c1"># log errors, etc.</span></div>
+
+
+<div class="viewcode-block" id="remove_solar_regions"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_solar_regions">[docs]</a><span class="k">class</span> <span class="nc">remove_solar_regions</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+
+<div class="viewcode-block" id="remove_solar_regions.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.remove_solar_regions.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Using default emission line region mask&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">regions</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">],</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]},</span> <span class="s1">&#39;red&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">3</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="mi">4</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]}}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;removing solar line regions: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">)</span>
+        <span class="c1"># I don&#39;t know how this will work so I&#39;m just zero masking some random points</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">orderlet_index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">wavelength_index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">orderlet_index</span><span class="p">]:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">orderlet_index</span><span class="p">]</span><span class="o">.</span><span class="n">flux</span><span class="p">[</span><span class="n">wavelength_index</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.</span>
+                    <span class="k">except</span><span class="p">:</span>
+                        <span class="k">pass</span>  <span class="c1"># log errors, etc.</span></div>
+
+
+<div class="viewcode-block" id="correct_telluric_lines"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_telluric_lines">[docs]</a><span class="k">class</span> <span class="nc">correct_telluric_lines</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+
+<div class="viewcode-block" id="correct_telluric_lines.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_telluric_lines.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;Using default emission line region mask&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;green&#39;</span><span class="p">:</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]],</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]]}}</span>  <span class="c1"># no corrections in red</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;correcting tellurics with correction_mask: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span><span class="p">)</span>
+        <span class="c1"># Here I&#39;m just adding some random values to random positions in random orderlets</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">orderlet_index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">index_correction</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">correction_mask</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">orderlet_index</span><span class="p">]:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">orderlet_index</span><span class="p">]</span><span class="o">.</span><span class="n">flux</span><span class="p">[</span><span class="n">index_correction</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">+=</span> <span class="n">index_correction</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="k">except</span><span class="p">:</span>
+                        <span class="k">pass</span>  <span class="c1"># log errors, etc.</span></div>
+
+
+<div class="viewcode-block" id="correct_wavelength_dependent_barycentric_velocity"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity">[docs]</a><span class="k">class</span> <span class="nc">correct_wavelength_dependent_barycentric_velocity</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+
+<div class="viewcode-block" id="correct_wavelength_dependent_barycentric_velocity.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.correct_wavelength_dependent_barycentric_velocity.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">orderlet</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="p">[</span><span class="n">key</span><span class="p">]:</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">orderlet</span><span class="o">.</span><span class="n">flux</span><span class="p">)):</span>
+                    <span class="n">orderlet</span><span class="o">.</span><span class="n">flux</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="mf">0.02</span> <span class="o">*</span> <span class="n">i</span></div>
+
+
+<div class="viewcode-block" id="calculate_RV_from_spectrum"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calculate_RV_from_spectrum">[docs]</a><span class="k">class</span> <span class="nc">calculate_RV_from_spectrum</span><span class="p">(</span><span class="n">KPF1_Primitive</span><span class="p">):</span>
+
+<div class="viewcode-block" id="calculate_RV_from_spectrum.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.level1.calculate_RV_from_spectrum.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">KPF1_Primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+    <span class="c1"># Get the RV</span>
+    <span class="c1"># Again, should we initialize the level2 object in this function, or have it separately</span>
+    <span class="k">def</span> <span class="nf">_perform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">level2</span> <span class="o">=</span> <span class="n">KPF2</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">chips</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">level1</span><span class="o">.</span><span class="n">orderlets</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">chip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chips</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">level2</span><span class="o">.</span><span class="n">rv</span><span class="p">[</span><span class="n">chip</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="k">pass</span>  <span class="c1"># log Error</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, BJ Fulton, Arpita Roy, Andrew Howard
+      <span class="lastupdated">
+        Last updated on 29 Oct 2019.
+      </span>
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
