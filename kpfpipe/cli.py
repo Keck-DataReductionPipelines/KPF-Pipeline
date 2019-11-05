@@ -9,7 +9,8 @@ from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.config.framework_config import ConfigClass
 
-sys.path.append('..')
+import kpfpipe
+from kpfpipe.pipelines.KPF_pipeline import KPF_pipeline
 from kpfpipe.level0 import KPF0
 from kpfpipe.level1 import KPF1
 from kpfpipe.level2 import KPF2
@@ -23,9 +24,6 @@ def _parseArguments(in_args):
     parser.add_argument('-c', dest="config_file", type=str, help="Run Configuration file")
     parser.add_argument("-o", "--output_dir", dest="dirname", type=str, default='./', help="Output directory")
 
-    parser.add_argument('--pipeline', dest="pipeline_name", type=str,
-                        default="KPF_pipeline", help="Name of the pipeline class")
-
     args = parser.parse_args(in_args[1:])
 
     return args
@@ -35,7 +33,7 @@ def main():
     args = _parseArguments(sys.argv)
 
     try:
-        pipeline_name = args.pipeline_name
+        pipeline = KPF_pipeline
         config = ConfigClass(args.config_file)
     except Exception as e:
         print(e)
@@ -43,7 +41,7 @@ def main():
         sys.exit(1)
 
     try:
-        framework = Framework(pipeline_name, config.framework_config)
+        framework = Framework(pipeline, config.framework_config)
     except Exception as e:
         print("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()
@@ -79,7 +77,11 @@ def main():
 
         arg = Arguments(recipe=args.recipe_file, level0=kpf0, level1=kpf1, level2=kpf2)
 
-        framework.append_event('execute_recipe', arg)
+        # for flat text file list of actions
+        # framework.append_event('execute_recipe', arg)
+
+        # python code
+        framework.append_event('evaluate_recipe', arg)
 
     framework.append_event('exit', arg)
     framework.start()
