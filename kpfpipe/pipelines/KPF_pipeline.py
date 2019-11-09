@@ -45,6 +45,8 @@ class KPF_pipeline(Base_pipeline):
 
                    "execute_recipe":
                        ("execute_recipe", "executing recipe", None),
+                   "evaluate_recipe":
+                       ("evaluate_recipe", "executing recipe", None),
 
                    "exit":
                        ("exit_loop", "killing framework", None)
@@ -70,6 +72,23 @@ class KPF_pipeline(Base_pipeline):
             event = event.strip()
             context.logger.info(event)
             context.push_event(event, action.args)
+        f.close()
+
+    def evaluate_recipe(self, action, context):
+        """
+        Evaluates the recipe file (Python file) specified in context.config.run.recipe.
+        All actions are executed consecutively in the high priority queue
+
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        """
+
+        recipe_file = action.args.recipe
+        context.logger.info('Executing recipe file {}'.format(recipe_file))
+        f = open(recipe_file)
+        fstr = f.read()
+        exec(fstr)
         f.close()
 
     def exit_loop(self, action, context):
