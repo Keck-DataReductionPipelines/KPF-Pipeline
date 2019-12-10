@@ -1,9 +1,15 @@
 #!/usr/bin/env python
 
+
 import sys
 import os
 import argparse
 import traceback
+
+# When KeckDRPFramework and KPF are not installed globally, but exist in 
+# a virtual enviroment, add this line so that python can find the 
+# framework package
+sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
 
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
