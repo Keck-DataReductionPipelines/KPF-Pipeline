@@ -1,0 +1,10 @@
+1. Better error handling: 
+	- when reading the config file, make sure that the manditory 
+	variables are actually there before proceeding with the framework
+	- have default configuration such that when no entry was detected 
+	in the config file, the default is used and a warning is logged 
+2. Better inline documentation: 
+	- in try/except statements, explain what some of the errors
+	it's catchig and why these errors might happen, and why they 
+	are handled like that.
+
