@@ -1,0 +1,9 @@
+Modifications
+
+Suggestions:
+1. use typing when defining python functions (PEP-484)
+2. make recipe and config files mandatory input argument for command lines
+3. now that we are using git flow, keep a release branch to keep track of all
+our working, bug-free, demo-worthy commits
+4. install from source into virtual enviroment (if not cloning from release branch)
+
