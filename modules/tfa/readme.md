@@ -23,7 +23,8 @@ KPF-Pipe
 |   |   ├── primitives.py
 |   |   └── readme.md
 |   └── ... (other non-related modules)
-├── makefile
+├── makefile (for repo management)
+├── requirement.txt (contains dependencies of entire pipeline, including this module
 ├── logs
 |   └── ... (.log files go here)
 ├── config
@@ -32,7 +33,7 @@ KPF-Pipe
 |   └── ... (example recipes go here)
 ├── receipts
 |   └── ... (any receipts go here)
-└── ... (other non-related folders in KPF pipeline)
+└── ... (other non-related folders an files in KPF pipeline)
 ```
 
 
