@@ -67,7 +67,7 @@ There are two possible ways to run the module: the quick **normal** mode for reg
 The logger adheres to the standard python `logging` convention. A .log file is generated during each run, and all settings relevant to the logger is specified under the **logging** section of the config files. Typically, an entry in the log file correspond to a non-trivial event in the module (like when a file is processed or a error has occured). Each entry also has a corresponding level. I am using the default `logging` levels: 
 
 | Level    | Usage           |
-| -------- |:-------------|
+| -------- |:----------------|
 | DEBUG    | For nitty-gritty stuff useful for catching bugs |
 | INFO     | For signalling beginning or end of a process      |
 | WARNING  | For when something unexpected happened      |

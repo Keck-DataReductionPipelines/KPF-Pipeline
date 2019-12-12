@@ -1,4 +1,16 @@
+Thoughts: 
+1. framework provides some good guideline for how our modules should be 
+implemented, but since our pipeline require alot more complexity than the 
+framework allows (recipes and more complicated primitives), we might have 
+to overwrite parts of the framework (like event tables)
+2. Kinda ambiguous on how parallelization can be achieved. 
+3. 
+
+
+
 Modifications
+1. added a makefile for project management conveniences 
+2. added a folder "modules" which hopefully contains all modules
 
 Suggestions:
 1. use typing when defining python functions (PEP-484)
@@ -6,4 +18,6 @@ Suggestions:
 3. now that we are using git flow, keep a release branch to keep track of all
 our working, bug-free, demo-worthy commits
 4. install from source into virtual enviroment (if not cloning from release branch)
+
+
 

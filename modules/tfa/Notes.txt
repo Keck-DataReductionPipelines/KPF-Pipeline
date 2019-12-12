@@ -5,6 +5,6 @@
 	in the config file, the default is used and a warning is logged 
 2. Better inline documentation: 
 	- in try/except statements, explain what some of the errors
-	it's catchig and why these errors might happen, and why they 
+	it's catching and why these errors might happen, and why they 
 	are handled like that.
 
