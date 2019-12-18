@@ -15,7 +15,7 @@ setup(
     version=get_property('__version__', 'kpfpipe'),
     author="BJ Fulton, Arpita Roy, Andrew Howard",
     packages=find_packages(),
-    entry_points={'console_scripts': ['kpf=kpfpipe.cli:main']},
+    entry_points={'console_scripts': ['kpf=kpfpipe.tfacli:main']},
     install_requires=reqs,
     # data_files=[
     #     (
