@@ -1,10 +1,7 @@
-1. Better error handling: 
-	- when reading the config file, make sure that the manditory 
-	variables are actually there before proceeding with the framework
-	- have default configuration such that when no entry was detected 
-	in the config file, the default is used and a warning is logged 
-2. Better inline documentation: 
-	- in try/except statements, explain what some of the errors
-	it's catching and why these errors might happen, and why they 
-	are handled like that.
-
+--TODO--
+1. implement main.py 
+2. try to run the module with actual data
+3. change module to use KPF data type
+4. move commonly used methods to top KPF data
+5. work on documentation 
+6. setup travis & docker (?)
