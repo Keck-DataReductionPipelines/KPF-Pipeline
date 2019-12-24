@@ -1,9 +1,9 @@
 
 
 # External dependencies
-from KeckDRPFramework.keckdrpframework.primitives.base_primitive import Base_primitive
+from keckdrpframework.primitives.base_primitive import Base_primitive
 
-class TFAModule(Base_primitive)
+class TFAMain(Base_primitive):
 
     def __init__(self, action, context):
 
