@@ -1,10 +1,10 @@
 # An example pipeline that is used to test the template fitting 
 # algorithm module. 
-
+import os
 
 from keckdrpframework.pipelines.base_pipeline import Base_pipeline
 
-class TFAPipeline(Base_pipeline):
+class TestPipeline(Base_pipeline):
     """
     Pipeline to Process KPF data using the KeckDRPFramework
 
@@ -13,10 +13,12 @@ class TFAPipeline(Base_pipeline):
     """
     name = 'KPF-Pipe'
     event_table = {
-                "execute_recipe":
-                    ("execute_recipe", "executing recipe", None),
+                "read_recipe":
+                    ("read_recipe", "executing recipe", None),
                 "evaluate_recipe":
                     ("evaluate_recipe", "executing recipe", None),
+                "TFAMain":
+                    ("TFAMain", "Calculating RV", None),
 
                 "exit":
                     ("exit_loop", "killing framework", None)
@@ -25,9 +27,9 @@ class TFAPipeline(Base_pipeline):
     def __init__(self):
         Base_pipeline.__init__(self)
 
-    def execute_recipe(self, action, context):
+    def read_recipe(self, action, context):
         """
-        Executes the recipe file (list of actions) specified in context.config.run.recipe.
+        Read the recipe file (list of actions) specified in context.config.run.recipe.
         All actions are executed consecutively in the high priority queue
 
         Args:
