@@ -1,0 +1,25 @@
+--TODO--
+1. move start_logger to module common
+
+
+--Observations--
+1. use the different log levels:
+    - log 'noop', 'exit_loop events' only on debug
+    - log ERROR when a module is not found
+2. import all required mod before execution.
+
+--Concerns--
+1. would it be better for the importation of modules be handled
+by individual pipelines? Since different pipelines may store 
+their implementations of modules differently 
+    - in KPF, all modules are stored in a seperate folder. This 
+    makes importing quite a hassle
+
+    - Proposal: let pipeline developers implement 'get_action'
+    restrain the output to be a function handle that the framework 
+    may use
+
+2. the flexibility issue of the framework is showing: 
+    - 
+
+

@@ -1,7 +1,0 @@
---TODO--
-1. implement main.py 
-2. try to run the module with actual data
-3. change module to use KPF data type
-4. move commonly used methods to top KPF data
-5. work on documentation 
-6. setup travis & docker (?)

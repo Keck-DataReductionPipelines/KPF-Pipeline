@@ -7,6 +7,7 @@ import argparse
 import traceback
 import configparser
 import logging
+import copy
 
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
@@ -30,12 +31,11 @@ def start_logger(pipe_name: str, log_config: dict) -> logging.Logger:
     log_path = log_config.get('log_path')
     log_lvl = log_config.get('level')
     log_verbose = log_config.getboolean('verbose')
-
     # basic logger instance
     logger = logging.getLogger(pipe_name)
     logger.setLevel(get_level(log_lvl))
 
-    formatter = logging.Formatter('[%(name)s] - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('[%(name)s]%(levelname)s: %(message)s')
     f_handle = logging.FileHandler(log_path, mode='w') # logging to file
     f_handle.setLevel(get_level(log_lvl))
     f_handle.setFormatter(formatter)
@@ -80,27 +80,29 @@ def main():
 
     # Setup a pipeline logger
     # This is to differentiate between the loggers of framework and pipeline
+    # and individual modules.
     # The configs related to the logger is under the section [LOGGER]
-    pipe_logger = start_logger(pipe.name, pipe_config['LOGGER'])
 
     # Try to initialize the framework 
     try:
         framework_config  = pipe_config.get('FRAMEWORK', 'config_path')
         framework = Framework(pipe, framework_config)
+        framework.pipeline.start(pipe_config['PIPELINE'])
     except Exception as e:
         print("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()
         sys.exit(1)
+    pipe_logger = start_logger(framework.pipe.name, pipe_config['LOGGER'])
 
     ## Set up argument
-    # To begin, argument is set to be the absolute path of a folder
-    # containing all the files that requires prcessing.
+    # To begin, argument is set to be null. A module is required to 
+    # populate it with files --TODO-- implement this
+
     # Note that the member of Argument() changes dynamically (UGH WHY) so 
     # as the data progress in the pipe, arg will contain different types of data
     arg = Arguments()
     # Adding a few members that keeps track of where the argument is in the pipeline. 
-    arg.name = 'KPF Test run ' # --TODO-- change this accordingly
-    arg.state = 'Initialized'  # This keeps track of the previous action 
+    arg.name = 'KPF Test run ' 
     arg.recipe = recipe
     # This is the actial input to the pipeline
     # this should be a folder path 
@@ -114,13 +116,12 @@ def main():
     # see KeckDRPFramework/keckrpframework/core/framework.py line 89
     # Overwrite the logger member to seperate framework and pipeline logger
     # Overwrite the config member to use configparser
-    framework.pipeline.logger = pipe_logger
+    
+    framework.pipeline.set_logger(pipe_logger)
     framework.pipeline.context.module_config = pipe_config['MODULES']
     
-
     # python code
     framework.append_event('evaluate_recipe', arg)
-
     framework.append_event('exit', arg)
     framework.start()
 

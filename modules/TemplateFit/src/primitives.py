@@ -9,9 +9,9 @@ import scipy.ndimage as img
 import matplotlib.pyplot as plt
 
 # Local dependencies
-from common import macro as mc
-from common.argument import spec as sp
-from common.primitive import rm_outlier as rmo
+from modules.TemplateFit.src import macro as mc
+from modules.TemplateFit.src import arg as sp
+from modules.TemplateFit.src import rm_outlier as rmo
 
 class ProcessSpec:
     '''
@@ -27,7 +27,7 @@ class ProcessSpec:
 
         '''
         berv = spec.header['eso drs berv']
-        dlamb = np.sqrt((1+berv/mc.C_SPEED)/(1-berv/mc.C_SPEED# README Template
+        dlamb = np.sqrt((1+berv/mc.C_SPEED)/(1-berv/mc.C_SPEED))
 
         for order in range(spec.NOrder): 
             spec.shift_wave(dlamb, order)
