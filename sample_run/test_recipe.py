@@ -1,2 +1,1 @@
-context.push_event('TFAMain', action.args)
-print('hello!')
+context.push_event('KPFModule_TFA', action.args)

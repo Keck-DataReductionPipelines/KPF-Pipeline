@@ -15,10 +15,10 @@ import pandas as pd
 
 
 # import local template fitting modules 
-import macro as mc
-import primitives as prim
-from argument import spec as arg
-from argument import tfa_res as tr
+import modules.TemplateFit.src.macro as mc
+import modules.TemplateFit.src.primitives as prim
+from modules.TemplateFit.src.argument import spec as arg
+from modules.TemplateFit.src.argument import tfa_res as tr
 
 # Opterations necessary for the entire template fitting algorithm
 def prob_for_prelim(flist: list) -> str:

@@ -4,7 +4,7 @@
 # algorithm. This include input arguments, output arguments, and 
 # debugging results. 
 
-import macro as mc
+from modules.TemplateFit.src import macro as mc
 
 import copy
 import typing as tp
