@@ -5,10 +5,10 @@ import configparser as cp
 import logging
 
 # External dependencies
-from keckdrpframework.primitives.base_primitive import Base_primitive
+from keckdrpframework.primitives.base_primitive import BasePrimitive
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
-from keckdrpframework.models.processing_context import Processing_context
+from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 import modules.TemplateFit.src.macro as mc
@@ -51,13 +51,13 @@ def start_logger(logger_name: str, log_config: dict) -> logging.Logger:
         logger.addHandler(s_handle)
     return logger
 
-class KPFModule_TFA(Base_primitive):
+class KPFModule_TFA(BasePrimitive):
     '''
     The template fitting module
     '''
     def __init__(self, 
             action: Action, 
-            context: Processing_context) -> None:
+            context: ProcessingContext) -> None:
         '''
         Initializer
         args: 
@@ -67,7 +67,7 @@ class KPFModule_TFA(Base_primitive):
 
         # --TODO-- Implement in precondition check
         # we assume that a ConfigParser class is included in the argument
-        Base_primitive.__init__(self, action, context)
+        BasePrimitive.__init__(self, action, context)
 
         log_config = arg.config
         # The logger has the same name as the class

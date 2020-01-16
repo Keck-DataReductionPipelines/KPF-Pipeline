@@ -148,23 +148,23 @@
             
   <h1>Source code for kpfpipe.primitives.core</h1><div class="highlight"><pre>
 <span></span>
-<span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitive</span> <span class="k">import</span> <span class="n">Base_primitive</span>
+<span class="kn">from</span> <span class="nn">keckdrpframework.primitives.BasePrimitive</span> <span class="k">import</span> <span class="n">BasePrimitive</span>
 <span class="kn">from</span> <span class="nn">keckdrpframework.models.arguments</span> <span class="k">import</span> <span class="n">Arguments</span>
 
 
-<div class="viewcode-block" id="KPF_Primitive"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.core.KPF_Primitive">[docs]</a><span class="k">class</span> <span class="nc">KPF_Primitive</span><span class="p">(</span><span class="n">Base_primitive</span><span class="p">):</span>
+<div class="viewcode-block" id="KPF_Primitive"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.core.KPF_Primitive">[docs]</a><span class="k">class</span> <span class="nc">KPF_Primitive</span><span class="p">(</span><span class="n">BasePrimitive</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Base primitive for orther KPF primitives.</span>
 <span class="sd">    All KPF primitive classes should ultimately inherit from this one.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        action (keckdrpframework.models.action.Action): Keck DRPF Action object</span>
-<span class="sd">        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object</span>
+<span class="sd">        context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="KPF_Primitive.__init__"><a class="viewcode-back" href="../../../primitives.html#kpfpipe.primitives.core.KPF_Primitive.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-        <span class="n">Base_primitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="n">BasePrimitive</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">=</span> <span class="n">action</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span></div></div>
