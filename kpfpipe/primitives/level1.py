@@ -4,7 +4,7 @@ Define primitives that operate on KPF data
 
 import numpy as np
 
-from keckdrpframework.primitives.base_primitive import Base_primitive
+from keckdrpframework.primitives.base_primitive import BasePrimitive
 
 from kpfpipe.primitives.core import KPF_Primitive
 from kpfpipe.level2 import KPF2
@@ -17,11 +17,11 @@ class KPF1_Primitive(KPF_Primitive):
     
     Args:
         action (keckdrpframework.models.action.Action): Keck DRPF Action object
-        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
 
     """
     def __init__(self, action, context):
-        Base_primitive.__init__(self, action, context)
+        BasePrimitive.__init__(self, action, context)
 
         self.level0 = self.action.args.level0
         self.level1 = self.action.args.level1
@@ -88,7 +88,7 @@ class calibrate_wavelengths(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -109,7 +109,7 @@ class remove_emission_line_regions(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -136,7 +136,7 @@ class remove_solar_regions(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -163,7 +163,7 @@ class correct_telluric_lines(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -190,7 +190,7 @@ class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -209,7 +209,7 @@ class calculate_RV_from_spectrum(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 

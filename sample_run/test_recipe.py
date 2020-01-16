@@ -1,1 +1,1 @@
-context.push_event('KPFModule_TFA', action.args)
+context.push_event('KPFModule_dummy', action.args)

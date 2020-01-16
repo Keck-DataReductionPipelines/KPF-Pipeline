@@ -5,13 +5,13 @@ Pipeline to run under the Keck DRP Framework
 
 import os
 
-from keckdrpframework.pipelines.base_pipeline import Base_pipeline
+from keckdrpframework.pipelines.base_pipeline import BasePipeline
 
 from kpfpipe.primitives.level0 import *
 from kpfpipe.primitives.level1 import *
 
 
-class KPF_pipeline(Base_pipeline):
+class KPF_pipeline(BasePipeline):
     """
     Pipeline to Process KPF data using the KeckDRPFramework
 
@@ -53,7 +53,7 @@ class KPF_pipeline(Base_pipeline):
                    }
 
     def __init__(self):
-        Base_pipeline.__init__(self)
+        BasePipeline.__init__(self)
 
     def execute_recipe(self, action, context):
         """
@@ -62,7 +62,7 @@ class KPF_pipeline(Base_pipeline):
 
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.processing_context.ProcessingContext): Keck DRPF ProcessingContext object
         """
 
         recipe_file = action.args.recipe
@@ -81,7 +81,7 @@ class KPF_pipeline(Base_pipeline):
 
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
 
         recipe_file = action.args.recipe
@@ -97,7 +97,7 @@ class KPF_pipeline(Base_pipeline):
 
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.Processing_context): Keck DRPF ProcessingContext object
         """
         context.logger.info("Goodbye")
         os._exit(0)
