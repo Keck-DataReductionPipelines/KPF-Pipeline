@@ -1,1 +1,0 @@
-context.push_event('KPFModule_dummy', action.args)

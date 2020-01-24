@@ -4,3 +4,5 @@ matplotlib
 scipy
 
 file:../KeckDRPFramework/#egg=keckdrpframework
+
+pytest
