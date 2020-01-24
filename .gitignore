@@ -106,3 +106,5 @@ ENV/
 
 # IDE related settings
 .vscode
+
+.pytest_cache
