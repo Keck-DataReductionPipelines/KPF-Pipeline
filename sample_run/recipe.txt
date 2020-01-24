@@ -1,6 +1,0 @@
-calibrate_wavelengths
-remove_emission_line_regions
-remove_solar_regions
-correct_telluric_lines
-correct_wavelength_dependent_barycentric_velocity
-calculate_RV_from_spectrum

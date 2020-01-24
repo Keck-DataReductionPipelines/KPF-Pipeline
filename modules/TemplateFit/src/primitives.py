@@ -10,36 +10,8 @@ import matplotlib.pyplot as plt
 
 # Local dependencies
 from modules.TemplateFit.src import macro as mc
-from modules.TemplateFit.src import arg as sp
-from modules.TemplateFit.src import rm_outlier as rmo
+from modules.TemplateFit.src import arg
 
-class ProcessSpec:
-    '''
-    Action Object class that process the input spec
-    '''
-    def __init__(self):
-        '''
-
-        '''
-    
-    def bary_correct(self, spec: sp.Spec) -> sp.Spec: 
-        '''
-
-        '''
-        berv = spec.header['eso drs berv']
-        dlamb = np.sqrt((1+berv/mc.C_SPEED)/(1-berv/mc.C_SPEED))
-
-        for order in range(spec.NOrder): 
-            spec.shift_wave(dlamb, order)
-
-        return spec
-    
-    def run(self, spec: sp.Spec) -> sp.Spec:
-        '''
-        
-        '''
-        spec = self.bary_correct(spec)
-        return spec
 
 class PostProcess:
     '''

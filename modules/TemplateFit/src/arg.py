@@ -4,16 +4,20 @@
 # algorithm. This include input arguments, output arguments, and 
 # debugging results. 
 
-from modules.TemplateFit.src import macro as mc
-
+# Standard dependencies 
 import copy
 import typing as tp
 from astropy.io import fits
 from astropy.time import Time
 import numpy as np
 import scipy.ndimage as img
-
 import matplotlib.pyplot as plt
+import pandas as pd
+
+# Local dependencies
+from modules.TemplateFit.src import macro as mc
+from modules.TemplateFit.src import primitives as prim
+
 
 class TFASpec:
     '''
@@ -36,6 +40,7 @@ class TFASpec:
         self._spec = np.zeros(mc.ECHELLE_SHAPE)
         self.NOrder = mc.ECHELLE_SHAPE[0]
         self.NPixel = mc.ECHELLE_SHAPE[1]
+        self.flag = {'from_file': False, 'from_array': True}
 
         # If the data is generated from a .fits file, 
         # self.filename contains the .fits file destination 
@@ -56,10 +61,10 @@ class TFASpec:
             try: 
                 # Each file must have a julian date 
                 self.julian_day = Time(self.header['eso drs bjd'], format='jd')
+                self.flag['from_file'] = True
             except: 
                 print('what')
                 exit(-1)
-            self.flag['from_file'] = True
         elif data != None:
             # no filename is specified and a set of data is provided
 
@@ -352,7 +357,7 @@ class TFAOrderResult(TFAResult):
         header = [np.array(top), np.array(bottom)]
         TFAResult.__init__(self, header)
 
-        self.rmo = rm.RemoveOutlier()
+        self.rmo = prim.RemoveOutlier()
 
     def append(self, order, inter_res):
         '''

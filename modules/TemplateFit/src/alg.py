@@ -13,12 +13,10 @@ import scipy.interpolate as ip
 import configparser as cp
 import pandas as pd
 
-
 # import local template fitting modules 
 import modules.TemplateFit.src.macro as mc
 import modules.TemplateFit.src.primitives as prim
-from modules.TemplateFit.src.argument import spec as arg
-from modules.TemplateFit.src.argument import tfa_res as tr
+import modules.TemplateFit.src.arg as arg
 
 # Opterations necessary for the entire template fitting algorithm
 def prob_for_prelim(flist: list) -> str:
@@ -29,7 +27,7 @@ def prob_for_prelim(flist: list) -> str:
     best_file = None, 
     best_val = 0
     for f in flist:
-        S = arg.Spec(filename=f)
+        S = arg.TFASpec(filename=f)
         mean = np.mean(S._spec)
         if mean > best_val:
             best_val = mean
@@ -165,7 +163,7 @@ class SingleTFA:
     ''' 
     The template fitting algorithm
     '''
-    def __init__(self, temp: arg.Spec, obs: arf.Spec, 
+    def __init__(self, temp: arg.TFASpec, obs: arg.TFASpec, 
                  cfg: cp.ConfigParser, log:logging.Logger) -> None:
         '''
         Initializer
@@ -216,9 +214,6 @@ class SingleTFA:
                 name = os.path.basename(self.obs.filename)
                 self.debug_path += '/{}'.format(os.path.splitext(name)[0])
                 self.debugger.start(names, self.debug_path, Norder)
-                self.logger.log('debug files saved to {}'.format(
-                    self.debug_path
-                ), 'info')
         except:
             print(sys.exc_info())    
 
@@ -300,7 +295,7 @@ class SingleTFA:
         _, flux = self.temp.get_order(order)
         flux = self.correct(flux)
 
-        # w = np.sqrt(flux)
+        w = np.sqrt(flux)
         w = np.ones_like(w)
         w = self.correct(w)
         # average flux of yje prder
@@ -380,10 +375,8 @@ class SingleTFA:
                 self.debugger.append_result(order, iteration, result)
                 self.debugger.append_weight(order, w)
                 msg = '[{}] finished iteration {} successfully. X2 = {:.1f}'.format(order, iteration, X2)
-                self.logger.log(msg, 'debug')
             else: 
                 self.debugger.log_exit(order, exit_msg)
-                self.logger.log(exit_msg, 'warning')
                 break
 
         # Out of the while loop now
@@ -393,7 +386,6 @@ class SingleTFA:
             self.debugger.append_result(order, 'final', result)
             self.debugger.append_weight(order, w)
             msg = '[{}] finished order {} successfully. Final X2 = {:.1f}'.format(order, order, X2)
-            self.logger.log(msg, 'debug')
         return a, err_v, success, iteration
 
     def run(self) -> arg.TFAOrderResult:
@@ -407,103 +399,6 @@ class SingleTFA:
             inter_res = np.asarray([a, err, s, it])
             self.res.append(order, inter_res)
             self.debugger.record(order, '{}'.format)
-        return self.res
-
-class TFAPrimitive(KPF_Primitive):
-    '''
-    The template fitting module
-    '''
-    def __init__(self, dirpath: str ,config_file: str) -> None:
-        '''
-        Initializer
-        '''
-        self.logger = Logger()
-        # Consider all fits files in the provided folder a candidate
-        self.flist = mc.findfiles(dirpath, '.fits')
-        # Read the config file with config parser
-        self.cfg = cp.ConfigParser(comment_prefixes='#')
-        self.cfg.read(config_file)
-        # Now parse the config 
-        self.parse_config(self.cfg)
-        
-        # Pre and post process
-        self.pre = prim.ProcessSpec()
-        self.post = prim.PostProcess()
-
-        self.res = arg.TFAFinalResult()
-
-        KPF_Primitive.__init__(self)
-
-    def parse_config(self, config: cp.ConfigParser) -> None:
-        '''
-        get all logging related configurations
-        '''
-        try: # logging related configs
-            if config.getboolean('LOGGER', 'log'):
-                log_path = config.get('LOGGER', 'log_path')
-                log_level = config.get('LOGGER', 'log_level')
-                verbose = config.getboolean('LOGGER', 'log_verbose')
-                self.logger.start(log_path, log_level, verbose)
-                # by this point the logger should have started, so we 
-                # can start logging 
-                msg = 'Beginning logger instance. log_path = {}, log_vele = {}'.format(
-                    log_path, log_level
-                )
-                self.logger.log(msg, 'info')
-        except:
-            pass
-
-    def make_template(self, prelim:str, flist:list) -> arg.Spec:
-        # Initialize the preliminary as the template
-
-        name = prelim.split('/')[-1]
-        self.logger.log('beginning to create template', 'info')
-        self.logger.log('preliminary file used: {}'.format(name), 'info')
-        SP = sp.Spec(filename=prelim)
-        SP = self.pre.run(SP) 
-
-        n_files = len(flist)
-        # get the wavelength and specs of the preliminary  
-        # as foundation to the template
-        twave = SP._wave
-        tspec = SP._spec
-
-        # Currently just a average of all spectrum
-        # should also be taking care of the outliers (3-sigma clipping)
-        for i, file in enumerate(flist):
-            name = file.split('/')[-1]
-            self.logger.log('({}/{}) processing {}'.format(i, len(flist), name), 'info')
-            S = sp.Spec(filename=file)
-            SS = self.pre.run(S)
-            T = SingleTFA(SP, SS, None, self.logger)
-            res = T.run()
-            rel = res.res_df[['alpha', 'success']].to_records()
-            for order in rel:
-                if order[2]: #success
-                    flamb, fspec = SS.get_order(order[0])
-                    fspec2 = np.interp(twave[order[0], :], flamb, fspec)
-                    tspec[order[0], :] += fspec2
-                else: 
-                    n_files -= 1
-        tspec = np.divide(tspec, n_files)
-        self.logger.log('finised making templated', 'info')
-        return sp.Spec(data=(twave, tspec), jd=SP.julian_day)
-
-    def calc_velocity(self, temp: str, flist:list) -> arg.TFAFinalResult:
-        '''
-
-        '''
-        self.logger.log('beginning to calculate radial velocity', 'info')
-        for i, file in enumerate(flist):
-            name = file.split('/')[-1]
-            self.logger.log('({}/{}) processing {}'.format(i, len(flist), name), 'info')
-            S = sp.Spec(filename=file)
-            SS = self.pre.run(S)
-
-            T = SingleTFA(temp, SS, self.cfg, self.logger)
-            r = T.run()
-            self.res.append(i, r.write_to_final())
-        self.logger.log('finised calculating velocity', 'info')
         return self.res
 
 if __name__ == '__main__':
