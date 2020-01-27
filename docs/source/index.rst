@@ -25,8 +25,7 @@ Repository Structure
 .. toctree::
     :maxdepth: 1
 
-    intro/install_develop.rst
-    intro/install.rst
+    intro/getting_started.rst
 
 
 Indices and tables
