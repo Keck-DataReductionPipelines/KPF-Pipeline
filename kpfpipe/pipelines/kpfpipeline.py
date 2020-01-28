@@ -65,7 +65,6 @@ class KPFPipeline(BasePipeline):
 
         ## Setup primitive-specific configs:
         self.context.tfa_config = config['MODULES'].get('tfa_config')
-
         self.logger.info('Finished initializting Pipeline')
 
     def evaluate_recipe(self, action, context):

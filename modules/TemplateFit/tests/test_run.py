@@ -18,9 +18,7 @@ def mod():
     context = Arguments()
     context.logger = None
     context.config = None
-    context.tfa_config = cp.ConfigParser()
-    a = context.tfa_config.read('modules/TemplateFit/configs/default.cfg')
-    context.tfa_log_config = context.tfa_config['LOGGER']
+    context.tfa_config = 'modules/TemplateFit/configs/default.cfg'
     context.arg = arg
     context.arg.tfa_out = None
 
