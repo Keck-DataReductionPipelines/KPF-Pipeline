@@ -8,9 +8,10 @@ import sys
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
+from kpfpipe.primitives.level1 import KPF1_Primitive
+from kpfpipe.models.level1 import KPF1
 
 # External dependencies
-from keckdrpframework.primitives.base_primitive import BasePrimitive
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
@@ -35,7 +36,7 @@ def bary_correct(spec: arg.TFASpec) -> arg.TFASpec:
 
 
 
-class TFAMakeTemplate(BasePrimitive):
+class TFAMakeTemplate(KPF1_Primitive):
     '''
     The template fitting module
     '''
@@ -50,15 +51,14 @@ class TFAMakeTemplate(BasePrimitive):
         '''
 
         # we assume that a ConfigParser class is included in the argument
-        BasePrimitive.__init__(self, action, context)
+        KPF1_Primitive.__init__(self, action, context)
         self.abbr = 'TFATemp'
 
         try: 
             config_file = context.tfa_config
             dirpath = context.arg['tfa_input']
         except AttributeError:
-            pass
-            
+            raise IOError('Mandatory input missing')
         # Consider all fits files in the provided folder a candidate
         self.flist = mc.findfiles(dirpath, '.fits')
         # Read the config file with config parser

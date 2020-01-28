@@ -9,11 +9,6 @@ import configparser
 import logging
 import copy
 
-## This is an ugly fix for local package dependencies 
-# --TODO-- find a better way to do this 
-sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
-
-
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
 

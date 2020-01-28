@@ -5,13 +5,18 @@ init:
 update: 
 	pip3 install -r requirements.txt --upgrade
 
-clear:
-	find . -type f -name '*.png' -delete
+clear: 
+	rm -f --recursive *.log
 
-clean:
-	rm -rf *.egg
-	find . -type f -name '*.xlsx' -delete
-	find . -type f -name '*.log' -delete
-	find . | grep -E "(__pycache__)" | xargs rm -rf
+clean: clear
+	rm --force --recursive build/
+	rm --force --recursive dist/
+	rm --force --recursive *.egg-info
+	rm --force --recursive .pytest_cache
+	find . -name '*.pyc' -exec rm --force {} +
+	find . -name '*.pyo' -exec rm --force {} +
+
+test:
+	pytest
 
 .PHONY: init
