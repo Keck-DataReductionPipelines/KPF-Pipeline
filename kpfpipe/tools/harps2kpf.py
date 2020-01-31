@@ -75,6 +75,7 @@ class Converter:
             # First record relevant header information
             header = hdu_list[source].header
             self.opower = header['waveinterp deg']
+            self.berv = header['beryVel']
             NOrder = header['naxis2']
             NPixel = header['naxis1']
             a = np.zeros(self.opower+1)
@@ -96,7 +97,7 @@ class Converter:
                     np.arange(NPixel, dtype=np.float64)
                 )
             self.julian = Time(header['bjd'], format='jd')
-            self.header['HARPS'] = header
+            self.header = header
 
     def from_harps(self, fn:str, source:str='primary') -> None:
         '''
@@ -110,6 +111,7 @@ class Converter:
             header = hdu_list[source].header
             # print(header)
             self.opower = header['eso drs cal th deg ll']
+            self.berv = header['eso drs berv']
             NOrder = header['naxis2']
             NPixel = header['naxis1']
             a = np.zeros(self.opower+1)
@@ -147,7 +149,7 @@ class Converter:
         deg_key = 'hierarch eso drs cal th deg ll'
         hdu_header.set(deg_key, self.opower)
 
-        hdu_header.set('hierarch eso drs berv', 0)
+        hdu_header.set('hierarch eso drs berv', self.berv)
         hdu_header.set('hierarch eso drs bjd', self.julian.jd)
 
         # Record polynomial interpolation results to headers
@@ -170,6 +172,7 @@ class Converter:
         NOrder, NPixel = self.flux.shape
         hdu_header.set('naxis2', NOrder)
         hdu_header.set('naxis1', NPixel)
+        hdu_header.set('beryVel', self.berv)
         hdu_header.set('bjd', self.julian.jd)
         hdu_header.set('hierarch waveinterp deg', self.opower)
 
@@ -194,7 +197,9 @@ if __name__ == '__main__':
         out_name = '.'.join(parts)
         C = Converter()
         C.read(fn, 'HARPS')
-        C.write(out_fpath + out_name, 'KPF1')
+        print(out_name)
+        print(out_fpath)
+        C.write(out_fpath +'/'+ out_name, 'KPF1')
 
 
 

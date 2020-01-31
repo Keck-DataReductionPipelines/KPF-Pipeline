@@ -15,6 +15,11 @@ from keckdrpframework.models.arguments import Arguments
 from kpfpipe.pipelines.kpfpipeline import KPFPipeline
 from kpfpipe.logger import start_logger
 
+# This is the default framework configuration file path
+framework_config = 'configs/framework.cfg'
+framework_logcfg= 'configs/framework_logger.cfg'
+
+
 def _parseArguments(in_args: list) -> argparse.Namespace:
     description = "KPF Pipeline CLI"
 
@@ -34,12 +39,7 @@ def main():
     # Set the pipeline and read the config file.
     # Using configparser for any configuration reading on the pipeline's
     # level and below. 
-    pipe_config = configparser.ConfigParser()
-    res = pipe_config.read(args.config_file)
-    # res is a list containing the name of the configfile
-    # res is empty if config failed to read
-    if len(res) == 0:
-        raise IOError('failed to read config file {}'.format(args.config_file))
+    pipe_config = args.config_file
     pipe = KPFPipeline
     recipe = args.recipe
 
@@ -50,16 +50,10 @@ def main():
 
     # Try to initialize the framework 
     try:
-        framework_config  = pipe_config.get('FRAMEWORK', 'config_path')
-        framework_logcfg = pipe_config.get('FRAMEWORK', 'log_config')
-
         framework = Framework(pipe, framework_config)
         # Overwrite the framework logger with this instance of logger
         # using framework default logger creates some obscure problem
-        log_cfg = configparser.ConfigParser()
-        res = log_cfg.read(framework_logcfg)
-
-        framework.logger = start_logger('DRPFrame', log_cfg['LOGGER'])
+        framework.logger = start_logger('DRPFrame', framework_logcfg)
         framework.pipeline.start(pipe_config)
     except Exception as e:
         print("Failed to initialize framework, exiting ...", e)

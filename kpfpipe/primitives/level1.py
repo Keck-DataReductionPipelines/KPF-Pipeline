@@ -7,7 +7,7 @@ import numpy as np
 from keckdrpframework.primitives.base_primitive import BasePrimitive
 
 from kpfpipe.primitives.core import KPF_Primitive
-
+from kpfpipe.logger import start_logger
 
 class KPF1_Primitive(KPF_Primitive):
     """
@@ -74,146 +74,146 @@ class KPF1_Primitive(KPF_Primitive):
     #         return True
 
 
-# class calibrate_wavelengths(KPF1_Primitive):
-#     """Calibrate wavelengths and append wavelength solution"""
-#     def __init__(self, action, context):
-#         """
-#         Args:
-#             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-#             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-#         """
-#         KPF1_Primitive.__init__(self, action, context)
+class calibrate_wavelengths(KPF1_Primitive):
+    """Calibrate wavelengths and append wavelength solution"""
+    def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        KPF1_Primitive.__init__(self, action, context)
 
-#     def _perform(self):
-#         """execute primitive"""
-#         if self.chips is True:
-#             self.chips = self.level0.data.keys()
-#         for chip in self.chips:
-#             for i in range(self.level1.Norderlets[chip]):
-#                 self.logger.info('Calibrating wavelengths for order {} on the {} chip'.format(i, chip))
-#                 self.level1.orderlets[chip][i].wav = np.mean(self.level0.data[chip], axis=1)
-
-
-# class remove_emission_line_regions(KPF1_Primitive):
-#     """Remove emission lines"""
-
-#     def __init__(self, action, context):
-#         """
-#         Args:
-#             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-#             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-#         """
-#         KPF1_Primitive.__init__(self, action, context)
-
-#     def _perform(self):
-#         """execute primitive"""
-#         if self.regions is True:
-#             self.logger.warning('Using default emission line region mask')
-#             self.regions = {'green': {0: [1, 2, 3], 3: [4, 5]}, 'red': {1: [1, 2, 3], 2: [1, 5]}}
-#         self.logger.info('removing emission line regions: %s' % str(self.regions))
-#         # I don't know how this will work so I'm just zero masking some random points
-#         for key in self.regions.keys():
-#             for orderlet_index in self.regions[key].keys():
-#                 for wavelength_index in self.regions[key][orderlet_index]:
-#                     try:
-#                         self.level1.orderlets[key][orderlet_index].flux[wavelength_index] = 0.
-#                     except:
-#                         pass  # log errors, etc.
+    def _perform(self):
+        """execute primitive"""
+        if self.chips is True:
+            self.chips = self.level0.data.keys()
+        for chip in self.chips:
+            for i in range(self.level1.Norderlets[chip]):
+                self.logger.info('Calibrating wavelengths for order {} on the {} chip'.format(i, chip))
+                self.level1.orderlets[chip][i].wav = np.mean(self.level0.data[chip], axis=1)
 
 
-# class remove_solar_regions(KPF1_Primitive):
-#     """Remove solar regions"""
+class remove_emission_line_regions(KPF1_Primitive):
+    """Remove emission lines"""
 
-#     def __init__(self, action, context):
-#         """
-#         Args:
-#             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-#             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-#         """
-#         KPF1_Primitive.__init__(self, action, context)
+    def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        KPF1_Primitive.__init__(self, action, context)
 
-#     def _perform(self):
-#         """execute primitive"""
-#         if self.regions is True:
-#             self.logger.warning('Using default emission line region mask')
-#             self.regions = {'green': {0: [7], 2: [1, 5]}, 'red': {3: [1, 2, 3], 4: [0, 1, 2, 3, 4]}}
-#         self.logger.info('removing solar line regions: %s' % self.regions)
-#         # I don't know how this will work so I'm just zero masking some random points
-#         for key in self.regions.keys():
-#             for orderlet_index in self.regions[key].keys():
-#                 for wavelength_index in self.regions[key][orderlet_index]:
-#                     try:
-#                         self.level1.orderlets[key][orderlet_index].flux[wavelength_index] = 0.
-#                     except:
-#                         pass  # log errors, etc.
-
-
-# class correct_telluric_lines(KPF1_Primitive):
-#     """Remove telluric lines"""
-
-#     def __init__(self, action, context):
-#         """
-#         Args:
-#             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-#             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-#         """
-#         KPF1_Primitive.__init__(self, action, context)
-
-#     def _perform(self):
-#         """execute primitive"""
-#         if self.correction_mask is True:
-#             self.logger.warning('Using default emission line region mask')
-#             self.correction_mask = {'green': {0: [[0, 0.1], [1, 0.5], [7, 0.1]], 2: [[1, 0.5]]}}  # no corrections in red
-#         self.logger.info('correcting tellurics with correction_mask: %s' % self.correction_mask)
-#         # Here I'm just adding some random values to random positions in random orderlets
-#         for key in self.correction_mask.keys():
-#             for orderlet_index in self.correction_mask[key].keys():
-#                 for index_correction in self.correction_mask[key][orderlet_index]:
-#                     try:
-#                         self.level1.orderlets[key][orderlet_index].flux[index_correction[0]] += index_correction[1]
-#                     except:
-#                         pass  # log errors, etc.
+    def _perform(self):
+        """execute primitive"""
+        if self.regions is True:
+            self.logger.warning('Using default emission line region mask')
+            self.regions = {'green': {0: [1, 2, 3], 3: [4, 5]}, 'red': {1: [1, 2, 3], 2: [1, 5]}}
+        self.logger.info('removing emission line regions: %s' % str(self.regions))
+        # I don't know how this will work so I'm just zero masking some random points
+        for key in self.regions.keys():
+            for orderlet_index in self.regions[key].keys():
+                for wavelength_index in self.regions[key][orderlet_index]:
+                    try:
+                        self.level1.orderlets[key][orderlet_index].flux[wavelength_index] = 0.
+                    except:
+                        pass  # log errors, etc.
 
 
-# class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
-#     """Correct for barycentric velocity"""
+class remove_solar_regions(KPF1_Primitive):
+    """Remove solar regions"""
 
-#     def __init__(self, action, context):
-#         """
-#         Args:
-#             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-#             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-#         """
-#         KPF1_Primitive.__init__(self, action, context)
+    def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        KPF1_Primitive.__init__(self, action, context)
 
-#     def _perform(self):
-#         """execute primitive"""
-#         for key in self.level1.orderlets.keys():
-#             for orderlet in self.level1.orderlets[key]:
-#                 for i in range(len(orderlet.flux)):
-#                     orderlet.flux[i] += 0.02 * i
+    def _perform(self):
+        """execute primitive"""
+        if self.regions is True:
+            self.logger.warning('Using default emission line region mask')
+            self.regions = {'green': {0: [7], 2: [1, 5]}, 'red': {3: [1, 2, 3], 4: [0, 1, 2, 3, 4]}}
+        self.logger.info('removing solar line regions: %s' % self.regions)
+        # I don't know how this will work so I'm just zero masking some random points
+        for key in self.regions.keys():
+            for orderlet_index in self.regions[key].keys():
+                for wavelength_index in self.regions[key][orderlet_index]:
+                    try:
+                        self.level1.orderlets[key][orderlet_index].flux[wavelength_index] = 0.
+                    except:
+                        pass  # log errors, etc.
 
 
-# class calculate_RV_from_spectrum(KPF1_Primitive):
-#     """Calculate CCF RV"""
+class correct_telluric_lines(KPF1_Primitive):
+    """Remove telluric lines"""
 
-#     def __init__(self, action, context):
-#         """
-#         Args:
-#             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-#             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-#         """
-#         KPF1_Primitive.__init__(self, action, context)
+    def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        KPF1_Primitive.__init__(self, action, context)
 
-#     # Get the RV
-#     # Again, should we initialize the level2 object in this function, or have it separately
-#     def _perform(self):
-#         """execute primitive"""
-#         self.action.args.level2 = KPF2()
-#         if self.chips is True:
-#             self.chips = self.level1.orderlets.keys()
-#         for chip in self.chips:
-#             try:
-#                 self.level2.rv[chip] = 1.0
-#             except AttributeError:
-#                 pass  # log Error
+    def _perform(self):
+        """execute primitive"""
+        if self.correction_mask is True:
+            self.logger.warning('Using default emission line region mask')
+            self.correction_mask = {'green': {0: [[0, 0.1], [1, 0.5], [7, 0.1]], 2: [[1, 0.5]]}}  # no corrections in red
+        self.logger.info('correcting tellurics with correction_mask: %s' % self.correction_mask)
+        # Here I'm just adding some random values to random positions in random orderlets
+        for key in self.correction_mask.keys():
+            for orderlet_index in self.correction_mask[key].keys():
+                for index_correction in self.correction_mask[key][orderlet_index]:
+                    try:
+                        self.level1.orderlets[key][orderlet_index].flux[index_correction[0]] += index_correction[1]
+                    except:
+                        pass  # log errors, etc.
+
+
+class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
+    """Correct for barycentric velocity"""
+
+    def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        KPF1_Primitive.__init__(self, action, context)
+
+    def _perform(self):
+        """execute primitive"""
+        for key in self.level1.orderlets.keys():
+            for orderlet in self.level1.orderlets[key]:
+                for i in range(len(orderlet.flux)):
+                    orderlet.flux[i] += 0.02 * i
+
+
+class calculate_RV_from_spectrum(KPF1_Primitive):
+    """Calculate CCF RV"""
+
+    def __init__(self, action, context):
+        """
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        KPF1_Primitive.__init__(self, action, context)
+
+    # Get the RV
+    # Again, should we initialize the level2 object in this function, or have it separately
+    def _perform(self):
+        """execute primitive"""
+        self.action.args.level2 = KPF2()
+        if self.chips is True:
+            self.chips = self.level1.orderlets.keys()
+        for chip in self.chips:
+            try:
+                self.level2.rv[chip] = 1.0
+            except AttributeError:
+                pass  # log Error

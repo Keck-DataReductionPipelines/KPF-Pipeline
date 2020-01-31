@@ -23,8 +23,7 @@ class KPF1(object):
 
     def __init__(self) -> None:
 
-        self.Norderlets = {'red': None, 'green': None}
-        self.orderlets = {}
+        self.spectrums = {}
         self.hk = None       # 1D CaII-HK spectrum 
         self.expmeter = None # time series of 1D exposure meter spectra
 
@@ -58,11 +57,13 @@ class KPF1(object):
                 # the file. Record them here
                 if isinstance(hdu, fits.PrimaryHDU):
                     self.julian = Time(hdu.header['bjd'], format='jd')
+                    self.berv = hdu.header['beryVel']
 
                 header = hdu.header
                 spec = Spectrum(hdu.name, hdu.data, 
                                 header['waveinterp deg'], 
                                 header)
+                self.spectrums[hdu.name] = spec
             
         
     def get_order(self, order: int, source: str) -> np.ndarray:
