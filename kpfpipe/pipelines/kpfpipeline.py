@@ -27,7 +27,8 @@ class KPFPipeline(BasePipeline):
         # action_name: (name_of_callable, current_state, next_event_name)
         'evaluate_recipe': ('evaluate_recipe', 'evaluating_recipe', None), 
         'exit': ('exit_loop', 'exiting...', None),
-        'TFAMakeTemplate': ('TFAMakeTemplate', 'TEST', None)
+        'TFAMakeTemplate': ('TFAMakeTemplate', 'TEST', None),
+        'ReadKPF1': ('ReadKPF1', 'READ', None)
         }
     
 
@@ -42,29 +43,24 @@ class KPFPipeline(BasePipeline):
         Args: 
             config: a ConfigParser object containing pipeline configuration 
         '''
-        ## setup logger
-        try: 
-            self.logger = start_logger(self.name, config['LOGGER'])
-        except KeyError: 
-            raise IOError('cannot find [LOGGER] section in config')
-        self.logger.info('Logger started')
         ## setup pipeline configuration 
         # Technically the pipeline's configuration is stored in self.context as 
         # a ConfigClass() defined by keckDRP. But we will be using configParser
-        try:
-            self.config =  config['PIPELINE']
-        except KeyError:
-            raise IOError('cannot find [PIPELINE] section in config')
+    
 
+        self.logger = start_logger(self.name, config)
+        self.logger.info('Logger started')
         ## Setup argument
         try: 
-            arg = config['ARGUMENT']
+            cfg_obj = cp.ConfigParser()
+            cfg_obj.read(config)
+            arg = cfg_obj._sections['ARGUMENT']
         except KeyError:
             raise IOError('cannot find [ARGUMENT] section in config')
         self.context.arg = arg
 
         ## Setup primitive-specific configs:
-        self.context.tfa_config = config['MODULES'].get('tfa_config')
+        self.context.config_path = cfg_obj._sections['MODULES']
         self.logger.info('Finished initializting Pipeline')
 
     def evaluate_recipe(self, action, context):

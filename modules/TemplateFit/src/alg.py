@@ -13,26 +13,40 @@ import scipy.interpolate as ip
 import configparser as cp
 import pandas as pd
 
+# import pipeline dependencies
+from kpfpipe.models.level1 import KPF1
+
 # import local template fitting modules 
 import modules.TemplateFit.src.macro as mc
 import modules.TemplateFit.src.primitives as prim
 import modules.TemplateFit.src.arg as arg
 
 # Opterations necessary for the entire template fitting algorithm
-def prob_for_prelim(flist: list) -> str:
+def prob_for_prelim(data_list: list, source: str) -> KPF1:
     ''' 
     find the file with the highest mean flux
     this file is used as the preliminary template
     '''
-    best_file = None, 
+    best_data = None, 
     best_val = 0
-    for f in flist:
-        S = arg.TFASpec(filename=f)
-        mean = np.mean(S._spec)
+    for data in data_list:
+        mean = np.mean(data.spec[source])
         if mean > best_val:
             best_val = mean
             best_file = f
     return best_file
+
+def bary_correct(data: KPF1, source: str) -> KPF1: 
+    '''
+
+    '''
+    berv = data.berv # berycentric velocities
+    dlamb = np.sqrt((1+berv/mc.C_SPEED)/(1-berv/mc.C_SPEED))
+
+    for order in range(data.NOrder): 
+        spec.shift_wave(dlamb, order)
+
+    return spec
 
 class Debugger:
     '''
@@ -99,65 +113,6 @@ class Debugger:
         if self.running:
             self.result[order].record(self.xlsx_writer, self.path + '.dat')
 
-class Logger: 
-    '''
-    A class used for logging for the TFA Module
-    '''
-    def __init__(self):
-        '''
-        Initializer
-        '''
-        self.running = False
-    
-    def get_level(self, lvl:str):
-        '''
-        read the logging level (string) from config file and return 
-        the corresponding logging level
-        '''
-        if lvl == 'debug': return logging.DEBUG
-        elif lvl == 'info': return logging.INFO
-        elif lvl == 'warning': return logging.WARNING
-        elif lvl == 'error': return logging.ERROR
-        elif lvl == 'critical': return logging.CRITICAL
-        else: return logging.NOTSET
-
-    def start(self, log_path: str, lvl: str, verbose: bool):
-        '''
-        starting the logging instance 
-        '''
-        # basic logger instance
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(self.get_level(lvl))
-        formatter = logging.Formatter('%(levelname)s - %(message)s')
-        f_handle = logging.FileHandler(log_path, mode='w') # logging to file
-        f_handle.setLevel(self.get_level(lvl))
-        f_handle.setFormatter(formatter)
-        self.logger.addHandler(f_handle)
-        if verbose: 
-            # also print to terminal 
-            s_handle = logging.StreamHandler()
-            s_handle.setLevel(self.get_level(lvl))
-            s_handle.setFormatter(formatter)
-            self.logger.addHandler(s_handle)
-        self.running = True
-    
-    def log(self, msg: str, lvl: str):
-        '''
-        log message
-        '''
-        if self.running: 
-            if lvl == 'debug':
-                self.logger.debug(msg)
-            elif lvl == 'info':
-                self.logger.info(msg)
-            elif lvl == 'warning':
-                self.logger.warning(msg)
-            elif lvl == 'error':
-                self.logger.error(msg)
-            elif lvl == 'critical':
-                self.logger.critical(msg)
-            else:
-                raise ValueError('Logger does not recognize level: {}'.format(lvl))
 
 class SingleTFA:
     ''' 

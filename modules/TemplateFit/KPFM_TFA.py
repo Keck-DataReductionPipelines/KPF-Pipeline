@@ -22,24 +22,16 @@ import modules.TemplateFit.src.alg as alg
 import modules.TemplateFit.src.arg as arg
 import modules.TemplateFit.src.primitives as prim
 
-def bary_correct(spec: arg.TFASpec) -> arg.TFASpec: 
-    '''
-
-    '''
-    berv = spec.header['eso drs berv']
-    dlamb = np.sqrt((1+berv/mc.C_SPEED)/(1-berv/mc.C_SPEED))
-
-    for order in range(spec.NOrder): 
-        spec.shift_wave(dlamb, order)
-
-    return spec
-
-
-
 class TFAMakeTemplate(KPF1_Primitive):
     '''
-    The template fitting module
+    TFA Module: create a KFP1 template for followup RV calculation
+    Input: 
+        a list of KPF1 data models 
+    
     '''
+    abbr = 'TFATemp'
+    default_config_path = 'modules/TemplateFit/configs/TFATemp.cfg'
+
     def __init__(self, 
             action: Action, 
             context: ProcessingContext) -> None:
@@ -52,20 +44,25 @@ class TFAMakeTemplate(KPF1_Primitive):
 
         # we assume that a ConfigParser class is included in the argument
         KPF1_Primitive.__init__(self, action, context)
-        self.abbr = 'TFATemp'
 
         try: 
-            config_file = context.tfa_config
-            dirpath = context.arg['tfa_input']
+            self.flist = self.context.arg['tfa_input']
         except AttributeError:
             raise IOError('Mandatory input missing')
-        # Consider all fits files in the provided folder a candidate
-        self.flist = mc.findfiles(dirpath, '.fits')
+
+        try: 
+            config_file = self.context.config_path['tfa_config']
+        except AttributeError:
+            config_file = self.default_config_path
+
         # Read the config file with config parser
-        self.cfg = cp.ConfigParser(comment_prefixes='#')
-        res = self.cfg.read(config_file)
+        self.logger = start_logger(self.abbr, config_file)
+        cfg = cp.ConfigParser(comment_prefixes='#')
+        res = cfg.read(config_file)
+        if res == []:
+            cfg.read(self.default_config_path)
         # Now parse the config 
-        self.parse_config(self.cfg)
+        self.parse_config(cfg)
         
         # Pre and post process
 
@@ -75,16 +72,7 @@ class TFAMakeTemplate(KPF1_Primitive):
         '''
         get all logging related configurations
         '''
-        try: # logging related configs
-            if config.getboolean('LOGGER', 'log'):
-                log_config = config['LOGGER']
-                self.logger = start_logger(self.abbr, log_config)
-                # by this point the logger should have started, so we 
-                # can start logging 
-                msg = 'logger started'
-                self.logger.info(msg)
-        except:
-            print(sys.exc_info())
+        pass
 
     def make_template(self) -> None:
         # Initialize the preliminary as the template
