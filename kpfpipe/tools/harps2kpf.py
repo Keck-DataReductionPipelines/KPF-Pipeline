@@ -28,6 +28,7 @@ class Converter:
 
         self.flux = None
         self.wave = None
+        self.coef = []
         self.header = {}
 
     def read(self, fn: str, dtype: str,
@@ -78,7 +79,6 @@ class Converter:
             self.berv = header['beryVel']
             NOrder = header['naxis2']
             NPixel = header['naxis1']
-            a = np.zeros(self.opower+1)
 
             self.flux = hdu_list[source].data
             NOrder, NPixel = self.flux.shape
@@ -88,14 +88,16 @@ class Converter:
 
             self.wave = np.zeros_like(self.flux)
             for order in range(0, NOrder):
+                a = np.zeros(self.opower+1)
                 for i in range(0, self.opower+1, 1):
                     keyi = 'hierarch waveinterp ord ' + str(order) +\
                     ' deg ' + str(i)
                     a[i] = header[keyi]
                 self.wave[order] = np.polyval(
-                    np.flip(a),
-                    np.arange(NPixel, dtype=np.float64)
+                    np.flip(a), np.arange(NPixel, dtype=np.float64)
                 )
+                self.coef.append(a)
+
             self.julian = Time(header['bjd'], format='jd')
             self.header = header
 
@@ -114,7 +116,6 @@ class Converter:
             self.berv = header['eso drs berv']
             NOrder = header['naxis2']
             NPixel = header['naxis1']
-            a = np.zeros(self.opower+1)
 
             self.flux = hdu_list[source].data
             NOrder, NPixel = self.flux.shape
@@ -124,13 +125,14 @@ class Converter:
 
             self.wave = np.zeros_like(self.flux)
             for order in range(0, NOrder):
+                a = np.zeros(self.opower+1)
                 for i in range(0, self.opower+1, 1):
                     keyi = 'eso drs cal th coeff ll' + str((self.opower+1)*order+i)
                     a[i] = header[keyi]
                 self.wave[order] = np.polyval(
-                    np.flip(a),
-                    np.arange(NPixel, dtype=np.float64)
+                    np.flip(a), np.arange(NPixel, dtype=np.float64)
                 )
+                self.coef.append(a)
             self.julian = Time(header['eso drs bjd'], format='jd')
             self.header['HARPS'] = header
     
@@ -153,13 +155,19 @@ class Converter:
         hdu_header.set('hierarch eso drs bjd', self.julian.jd)
 
         # Record polynomial interpolation results to headers
-        for order in range(NOrder):
-            c = np.polyfit(np.arange(NPixel), self.wave[order], self.opower)
-            c = np.flip(c)
-            for i, ci in enumerate(c):
-                key = 'hierarch eso drs cal th coeff ll' + str((self.opower+1)*order+i)
-                hdu_header.set(key, ci)
-
+        if self.coef == []:
+            print('wht?')
+            for order in range(NOrder):
+                c = np.polyfit(np.arange(NPixel), self.wave[order], self.opower)
+                c = np.flip(c)
+                for i, ci in enumerate(c):
+                    key = 'hierarch eso drs cal th coeff ll' + str((self.opower+1)*order+i)
+                    hdu_header.set(key, ci)
+        else:
+            for order, c in enumerate(self.coef):
+                for i, ci in enumerate(c):
+                    key = 'hierarch eso drs cal th coeff ll' + str((self.opower+1)*order+i)
+                    hdu_header.set(key, ci)
         hdul = fits.HDUList([hdu])
         hdul.writeto(fn, overwrite=True)
         
@@ -177,14 +185,21 @@ class Converter:
         hdu_header.set('hierarch waveinterp deg', self.opower)
 
         # Interpolation information for wavelength
-        for order in range(NOrder):
-            c = np.polyfit(np.arange(NPixel), self.wave[order], self.opower)
-            c = np.flip(c)
-            for i, ci in enumerate(c):
-                key = 'hierarch waveinterp ord ' + \
-                    str(order) + ' deg ' + str(i)
-                hdu_header.set(key, ci)
-
+        if self.coef == []:
+            print('wht?')
+            for order in range(0, NOrder):
+                c = np.polyfit(np.arange(NPixel), self.wave[order], self.opower)
+                c = np.flip(c)
+                for i, ci in enumerate(c):
+                    key = 'hierarch waveinterp ord ' + \
+                        str(order) + ' deg ' + str(i)
+                    hdu_header.set(key, ci)
+        else:
+            for order, c in enumerate(self.coef):
+                for i, ci in enumerate(c):
+                    key = 'hierarch waveinterp ord ' + \
+                        str(order) + ' deg ' + str(i)
+                    hdu_header.set(key, ci)
         hdul = fits.HDUList([hdu])
         hdul.writeto(fn, overwrite=True)
 
@@ -198,7 +213,6 @@ if __name__ == '__main__':
         C = Converter()
         C.read(fn, 'HARPS')
         print(out_name)
-        print(out_fpath)
         C.write(out_fpath +'/'+ out_name, 'KPF1')
 
 

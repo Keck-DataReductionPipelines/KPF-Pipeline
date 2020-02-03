@@ -52,9 +52,7 @@ class ReadKPF1(KPF1_Primitive):
         flist = findfiles(self.fpath, '.fits')
         self.context.arg['KPF1'] = []
         for fn in flist: 
-            data = KPF1()
-            data.from_fits(fn)
-            self.context.arg['KPF1'].append(data)
+            self.context.arg['KPF1'].append(KPF1.from_fits(fn))
             self.logger.info('read {}'.format(os.path.basename(fn)))
         self.logger.info('finished {}'.format(self.__class__.__name__))
 

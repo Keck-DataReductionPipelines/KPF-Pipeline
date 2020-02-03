@@ -4,7 +4,10 @@ Define objects used in level one data processing
 
 from astropy.io import fits
 from astropy.time import Time
+import copy 
 import numpy as np
+
+import matplotlib.pyplot as plt
 
 class KPF1(object):
     """
@@ -22,12 +25,17 @@ class KPF1(object):
     """
 
     def __init__(self) -> None:
+        '''
+        Constructor
+        Initializes an empty KPF1 data class
+        '''
 
         self.spectrums = {}
         self.hk = None       # 1D CaII-HK spectrum 
         self.expmeter = None # time series of 1D exposure meter spectra
 
-    def from_fits(self, fn: str, 
+    @classmethod
+    def from_fits(cls, fn: str, 
                   overwrite: bool=True) -> None:
         '''
         Read data from .fits file
@@ -47,8 +55,9 @@ class KPF1(object):
             # This instance already contains data
             msg = 'Cannot overwrite existing data'
             raise IOError(msg)
-            
-        self.filename = fn
+        
+        this_data = cls()
+        this_data.filename = fn
         with fits.open(fn) as hdu_list:
             # First record relevant header information
             for hdu in hdu_list:
@@ -56,16 +65,38 @@ class KPF1(object):
                 # Some header keywords in primary hdu are global to 
                 # the file. Record them here
                 if isinstance(hdu, fits.PrimaryHDU):
-                    self.julian = Time(hdu.header['bjd'], format='jd')
-                    self.berv = hdu.header['beryVel']
+                    try: 
+                        this_data.julian = Time(hdu.header['bjd'], format='jd')
+                        this_data.berv = hdu.header['beryVel']
+                        this_data.NOrder = hdu.header['naxis2']
+                        this_data.NPixel = hdu.header['naxis1']
+                    except KeyError:
+                        this_data.berv = 0.0
 
                 header = hdu.header
-                spec = Spectrum(hdu.name, hdu.data, 
-                                header['waveinterp deg'], 
+                spec = Spectrum(hdu.name, hdu.data,
                                 header)
-                self.spectrums[hdu.name] = spec
-            
-        
+                this_data.spectrums[hdu.name] = spec
+        print(np.sum(spec.flux[28]))
+        print(np.sum(spec.wave[28]))
+        return this_data
+    
+    @classmethod
+    def from_array(cls, data: tuple, jd: int, source: str) -> None:
+
+        this_data = cls()
+        wave, flux = data
+        assert(np.all(wave.shape == flux.shape))
+
+        this_data.julian = Time(jd, format='jd')
+        this_data.berv = 0.0
+        this_data.NOrder, this_data.NPixel = wave.shape
+
+        spec = Spectrum(source, flux, None)
+        spec.wave = wave
+        this_data.spectrums[source] = spec
+        return this_data
+
     def get_order(self, order: int, source: str) -> np.ndarray:
         '''
         Returns a wave-flux pair data
@@ -73,10 +104,19 @@ class KPF1(object):
             order (int):  order of data
             source (str): source of data
         '''
+        # return a copy of the wave and flux so that 
+        # they won't be modified in unexpected ways
+        ret_val =  copy.deepcopy((self.spectrums[source].wave[order], 
+                    self.spectrums[source].flux[order]))
+        return ret_val
 
-        return (self.spec[source].wave[order], 
-                self.spec[source].flux[order])
-
+    def plot_order(self, order: int, 
+                   source: str='PRIMARY',
+                   color: str='b'):
+        wave = self.spectrums[source].wave
+        flux = self.spectrums[source].flux
+        plt.plot(wave[order], flux[order], linewidth=0.5)
+    
     def to_fits(self, fn):
         """
         Optional: collect all the level 1 data into a monolithic fits file
@@ -98,27 +138,30 @@ class Spectrum(object):
     """
     def __init__(self, source: str, 
                  data: np.ndarray,
-                 opwer: int,
                  header: fits.Header) -> None:
         
         self.source = source
         self.flux = data
-        self.opwer = opwer
 
         NOrder, NPixel = data.shape
 
-        # Generate 
-        self.wave = np.zeros_like(self.flux)
-        a = np.zeros(opwer+1)
-        for order in range(0, NOrder):
-            for i in range(0, self.opwer+1, 1):
-                keyi = 'hierarch waveinterp ord ' + str(order) +\
-                ' deg ' + str(i)
-                a[i] = header[keyi]
-            self.wave[order] = np.polyval(
-                np.flip(a),
-                np.arange(NPixel, dtype=np.float64)
-            )
+        if header is not None:
+            # a .fits header is provided, so generate the wave
+            self.opwer = header['waveinterp deg']
+            self.wave = np.zeros_like(self.flux)
+            a = np.zeros(self.opwer+1)
+            for order in range(0, NOrder):
+                for i in range(0, self.opwer+1, 1):
+                    keyi = 'hierarch waveinterp ord ' + str(order) +\
+                    ' deg ' + str(i)
+                    a[i] = header[keyi]
+                self.wave[order] = np.polyval(
+                    np.flip(a),
+                    np.arange(NPixel, dtype=np.float64)
+                )
+        else:
+            self.opwer = 3
+            self.wave = None
 
 class HK1(object):
     """
