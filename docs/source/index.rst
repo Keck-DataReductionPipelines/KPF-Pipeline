@@ -7,6 +7,7 @@ KPF Data Reduction Pipeline Documentation
 =========================================
 This is the documentation for the KPF Data Reduction Pipeline.
 
+Get familar with the package:
 
 .. toctree::
     :maxdepth: 1
@@ -14,6 +15,3 @@ This is the documentation for the KPF Data Reduction Pipeline.
     intro/getting_started.rst
     repository/start.rst
 
-
-* :ref:`modindex`
-* :ref:`search`
