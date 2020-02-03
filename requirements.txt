@@ -1,12 +1,12 @@
 astropy==3.2.2
 pandas==0.25.2
+numpy==1.18.1
+xlsxwriter
 matplotlib
 scipy
 
-
-file:../KeckDRPFramework/#egg=keckdrpframework
-
 pytest
+
 
 # Documentation
 sphinx

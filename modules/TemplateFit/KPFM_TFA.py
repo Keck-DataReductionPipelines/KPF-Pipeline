@@ -5,6 +5,8 @@ import configparser as cp
 import logging
 import numpy as np
 import sys
+import matplotlib.pyplot as plt
+import copy
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -46,7 +48,8 @@ class TFAMakeTemplate(KPF1_Primitive):
         KPF1_Primitive.__init__(self, action, context)
 
         try: 
-            self.flist = self.context.arg['tfa_input']
+            in_arg = self.context.arg['tfa_input']
+            self.flist = self.context.arg[in_arg]
         except AttributeError:
             raise IOError('Mandatory input missing')
 
@@ -57,61 +60,55 @@ class TFAMakeTemplate(KPF1_Primitive):
 
         # Read the config file with config parser
         self.logger = start_logger(self.abbr, config_file)
-        cfg = cp.ConfigParser(comment_prefixes='#')
-        res = cfg.read(config_file)
+        self.cfg = cp.ConfigParser(comment_prefixes='#')
+        res = self.cfg.read(config_file)
         if res == []:
-            cfg.read(self.default_config_path)
-        # Now parse the config 
-        self.parse_config(cfg)
+            self.cfg.read(self.default_config_path)
         
         # Pre and post process
 
         self.res = arg.TFAFinalResult()
 
-    def parse_config(self, config: cp.ConfigParser) -> None:
-        '''
-        get all logging related configurations
-        '''
-        pass
-
     def make_template(self) -> None:
         # Initialize the preliminary as the template
-        prelim = alg.prob_for_prelim(self.flist)
+        prelim = alg.prob_for_prelim(self.flist, 'PRIMARY')
         # The file name, without path 
-        fname = prelim.split('/')[-1]
         self.logger.info('beginning to create template')
-        self.logger.info('preliminary file used: {}'.format(fname))
+        self.logger.info('preliminary file used: {}'.format(prelim.filename))
         
-        SP = arg.TFASpec(filename=prelim)
-        SP = bary_correct(SP) 
+        SP = alg.bary_correct(prelim)
+
 
         n_files = len(self.flist)
         # get the wavelength and specs of the preliminary  
         # as foundation to the template
-        twave = SP._wave
-        tspec = SP._spec
+        twave = copy.deepcopy(SP.spectrums['PRIMARY'].wave)
+        tflux = copy.deepcopy(SP.spectrums['PRIMARY'].flux)
 
         # Currently just a average of all spectrum
         # should also be taking care of the outliers (3-sigma clipping)
-        for i, file in enumerate(self.flist):
-            name = file.split('/')[-1]
-            self.logger.info('({}/{}) processing {}'.format(
-                i+1, len(self.flist), name))
-            S = arg.TFASpec(filename=file)
-            SS = bary_correct(S)
-            T = alg.SingleTFA(SP, SS, None, self.logger)
+        for i, data in enumerate(self.flist):
+            print(data.get_order(28, 'PRIMARY'))
+            data = alg.bary_correct(data)
+            T = alg.SingleTFA(SP, data, self.cfg, self.logger)
             res = T.run()
             rel = res.res_df[['alpha', 'success']].to_records()
             for order in rel:
                 if order[2]: #success
-                    flamb, fspec = SS.get_order(order[0])
-                    fspec2 = np.interp(twave[order[0], :], flamb, fspec)
-                    tspec[order[0], :] += fspec2
+                    flamb, fflux = copy.deepcopy(data.get_order(order[0], 'PRIMARY'))
+                    fflux2 = np.interp(twave[order[0], :], flamb, fflux)
+                    tflux[order[0], :] += fflux2
                 else: 
                     n_files -= 1
-        tspec = np.divide(tspec, n_files)
+            self.logger.info('({}/{})[{}]processed {} after {} loop'.format(
+                i+1, len(self.flist), 
+                np.mean(res.res_df['success']), 
+                data.filename, 
+                np.mean(res.res_df['iteration'])))
+        tflux = np.divide(tflux, n_files)
         self.logger.info('finised making templated')
-        self.context.arg.tfa_out = arg.TFASpec(data=(twave, tspec), jd=SP.julian_day)
+        self.context.arg.tfa_out = KPF1from_array(
+                result, SP.julian.jd, 'PRIMARY')
         self.context.arg.tfa_out.write_to('template.fits', 3)
 
     # def calc_velocity(self, temp: str, flist:list) -> arg.TFAFinalResult:

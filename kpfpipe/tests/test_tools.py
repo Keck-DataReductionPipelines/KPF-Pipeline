@@ -19,7 +19,8 @@ def test_harps2kpf():
     C2.read(out1_file, 'KPF1')
     C3.read(out2_file, 'HARPS')
     assert(np.all(C2.flux == C3.flux))
-    # due to interpolation, wave values are not exactly identical, 
-    # but are equal within a certain tolerance. Will this be 
-    # an issue?
-    assert(np.all(C2.wave - C3.wave < 1e-3))
+    assert(np.all(C2.wave == C3.wave))
+    assert(np.all(C1.flux == C3.flux))
+    assert(np.all(C1.wave == C3.wave))
+    assert(C1.berv == C2.berv == C3.berv)
+    assert(C1.julian == C2.julian == C3.julian)

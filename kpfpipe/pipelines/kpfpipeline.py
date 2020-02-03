@@ -28,7 +28,8 @@ class KPFPipeline(BasePipeline):
         'evaluate_recipe': ('evaluate_recipe', 'evaluating_recipe', None), 
         'exit': ('exit_loop', 'exiting...', None),
         'TFAMakeTemplate': ('TFAMakeTemplate', 'TEST', None),
-        'ReadKPF1': ('ReadKPF1', 'READ', None)
+        'ReadKPF1': ('ReadKPF1', 'READ', None),
+        'KPFModExample': ('KPFModExample', 'EXAMPLE', None)
         }
     
 

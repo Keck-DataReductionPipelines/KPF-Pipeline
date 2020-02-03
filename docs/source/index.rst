@@ -7,29 +7,13 @@ KPF Data Reduction Pipeline Documentation
 =========================================
 This is the documentation for the KPF Data Reduction Pipeline.
 
-Requirement
-===========
-The dependencies for this package is listed in the ``requirements.txt``
-which is also used by python to setup the package. There is one dependency
-that requires special attention: the``KeckDRPFramework`` package.
-This is the data reduction framework
-that dictates how pipeline should be developed, and can be found
-`here <https://github.com/Keck-DataReductionPipelines/KeckDRPFramework>`_
-
-Repository Structure
-====================
-
-
-
 
 .. toctree::
     :maxdepth: 1
 
     intro/getting_started.rst
+    repository/start.rst
 
-
-Indices and tables
-==================
 
 * :ref:`modindex`
 * :ref:`search`

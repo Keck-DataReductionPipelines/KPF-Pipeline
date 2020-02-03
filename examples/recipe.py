@@ -1,1 +1,0 @@
-context.push_event('TFAMakeTemplate', action.args)

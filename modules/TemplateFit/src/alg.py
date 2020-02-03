@@ -5,6 +5,7 @@
 # import python built-in packages 
 import sys, os
 import logging
+import copy
 
 # import external dependencies
 
@@ -12,6 +13,7 @@ import numpy as np
 import scipy.interpolate as ip
 import configparser as cp
 import pandas as pd
+import xlsxwriter
 
 # import pipeline dependencies
 from kpfpipe.models.level1 import KPF1
@@ -30,23 +32,23 @@ def prob_for_prelim(data_list: list, source: str) -> KPF1:
     best_data = None, 
     best_val = 0
     for data in data_list:
-        mean = np.mean(data.spec[source])
+        mean = np.mean(data.spectrums[source].flux)
         if mean > best_val:
             best_val = mean
-            best_file = f
-    return best_file
+            best_data = data
+    return copy.deepcopy(best_data)
 
-def bary_correct(data: KPF1, source: str) -> KPF1: 
+def bary_correct(data: KPF1) -> KPF1: 
     '''
 
     '''
     berv = data.berv # berycentric velocities
     dlamb = np.sqrt((1+berv/mc.C_SPEED)/(1-berv/mc.C_SPEED))
 
-    for order in range(data.NOrder): 
-        spec.shift_wave(dlamb, order)
+    for source, spectrum in data.spectrums.items():
+        data.spectrums[source].wave *= dlamb
 
-    return spec
+    return data
 
 class Debugger:
     '''
@@ -113,12 +115,11 @@ class Debugger:
         if self.running:
             self.result[order].record(self.xlsx_writer, self.path + '.dat')
 
-
 class SingleTFA:
     ''' 
     The template fitting algorithm
     '''
-    def __init__(self, temp: arg.TFASpec, obs: arg.TFASpec, 
+    def __init__(self, temp: KPF1, obs: KPF1, 
                  cfg: cp.ConfigParser, log:logging.Logger) -> None:
         '''
         Initializer
@@ -143,7 +144,7 @@ class SingleTFA:
         # each file is identified by their julian date in normal mode
         # in debug mode each file name is also saved
 
-        self.res = arg.TFAOrderResult(self.m, obs.julian_day)
+        self.res = arg.TFAOrderResult(self.m, obs.julian)
         self.outlier = prim.RemoveOutlier()
 
         # a configuration file is provided
@@ -187,11 +188,13 @@ class SingleTFA:
         Returns the updating step 
         '''
         # Reference data
-        tlamb, tspec = self.temp.get_order(order)
+        tlamb, tspec = self.temp.get_order(order, 'PRIMARY')
         # Observed data
-        flamb ,fspec = self.obs.get_order(order)
+        flamb ,fspec = self.obs.get_order(order, 'PRIMARY')
 
         av_lamb = np.multiply(a[0], tlamb)
+        # if order == 28: 
+        #     print('{:.10f}'.format(tlamb[0]))
         # overlapping interval between tspec (F) and observed(f)
         # we can only compare the two in this interval
         # print(av_lamb.size, flamb.size)
@@ -247,7 +250,7 @@ class SingleTFA:
         '''
         Apply the template fitting algorithm on a single order
         '''
-        _, flux = self.temp.get_order(order)
+        _, flux = copy.deepcopy(self.temp.get_order(order, 'PRIMARY'))
         flux = self.correct(flux)
 
         w = np.sqrt(flux)
