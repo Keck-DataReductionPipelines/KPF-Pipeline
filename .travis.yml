@@ -11,7 +11,7 @@ install:
 - docker pull $CACHE_IMAGE:latest || true
 - docker build --cache-from $CACHE_IMAGE:latest --tag $CACHE_IMAGE:latest .
 script:
-- docker run kpf
+- docker run $CACHE_IMAGE:latest
 notifications:
   slack: false
   email: false
