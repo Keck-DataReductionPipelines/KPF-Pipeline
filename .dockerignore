@@ -1,0 +1,7 @@
+.idea
+docs
+dist
+build
+kpfpipe.egg-info
+*.pyc
+*.so

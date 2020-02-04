@@ -88,7 +88,6 @@ class TFAMakeTemplate(KPF1_Primitive):
         # Currently just a average of all spectrum
         # should also be taking care of the outliers (3-sigma clipping)
         for i, data in enumerate(self.flist):
-            print(data.get_order(28, 'PRIMARY'))
             data = alg.bary_correct(data)
             T = alg.SingleTFA(SP, data, self.cfg, self.logger)
             res = T.run()
@@ -107,9 +106,10 @@ class TFAMakeTemplate(KPF1_Primitive):
                 np.mean(res.res_df['iteration'])))
         tflux = np.divide(tflux, n_files)
         self.logger.info('finised making templated')
-        self.context.arg.tfa_out = KPF1from_array(
+        result = (twave, tflux)
+        self.context.arg.tfa_out = KPF1.from_array(
                 result, SP.julian.jd, 'PRIMARY')
-        self.context.arg.tfa_out.write_to('template.fits', 3)
+        # self.context.arg.tfa_out.write_to('template.fits', 3)
 
     # def calc_velocity(self, temp: str, flist:list) -> arg.TFAFinalResult:
     #     '''
