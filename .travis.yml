@@ -1,0 +1,18 @@
+language: python
+
+branches:
+    only: 
+        - develop
+
+services:
+  - docker
+
+install:
+  - docker build --tag kpf .
+
+script:
+  - docker run kpf
+
+notifications:
+    slack: False
+    email: False
