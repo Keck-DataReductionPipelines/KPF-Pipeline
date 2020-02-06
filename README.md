@@ -1,6 +1,3 @@
-KPF Data Reduction Pipeline
-===========================
-
 To install this package, you first need to download
 [KeckDRPFramework](https://github.com/Keck-DataReductionPipelines/KeckDRPFramework),
 as it is the only dependency that cannot be installed with `pip`
@@ -25,5 +22,3 @@ Since this branch is still on develop, a github page cannot be set up yet for
 the documentation. So, this branch contains the .html build of the documentaion
 from sphinx. To see  the documentation,
 navigate into `docs` and open `index.html` with a browswer of your choice
-
-See the documentation for further detail, including package installation and setup.
