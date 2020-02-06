@@ -1,0 +1,6 @@
+-- Bugs (?) -- 
+1. have 'KPFModule_dummy.py' module that contains 'KPFModule_dummy' class, but 
+BasePipeline imports module and try to call it as class.  
+
+-- Concerns -- 
+1. helpers that only occur once as local functions?

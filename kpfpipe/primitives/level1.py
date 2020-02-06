@@ -4,11 +4,10 @@ Define primitives that operate on KPF data
 
 import numpy as np
 
-from keckdrpframework.primitives.base_primitive import Base_primitive
+from keckdrpframework.primitives.base_primitive import BasePrimitive
 
 from kpfpipe.primitives.core import KPF_Primitive
-from kpfpipe.level2 import KPF2
-
+from kpfpipe.logger import start_logger
 
 class KPF1_Primitive(KPF_Primitive):
     """
@@ -17,69 +16,62 @@ class KPF1_Primitive(KPF_Primitive):
     
     Args:
         action (keckdrpframework.models.action.Action): Keck DRPF Action object
-        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
 
     """
     def __init__(self, action, context):
-        Base_primitive.__init__(self, action, context)
+        BasePrimitive.__init__(self, action, context)
 
-        self.level0 = self.action.args.level0
-        self.level1 = self.action.args.level1
-
-        # get some config from args
-        self.orders = self.context.config.run.orders
-        self.chips = self.context.config.instrument.chips
-        self.regions = self.context.config.run.regions
-
-        # get some config from file
-        self.correction_mask = self.context.config.instrument.correction_mask
+        # Argument can be a KPF1 data type, or a
+        # list of KPF1 data type
+        self.arg = []
 
     def checklevel1(self):
         if (self.level1 is None) or (not self.valid_level1_data()):
             raise (TypeError, "Invalid data")
 
-    def valid_level1_data(self):
-        """
-        Confirms that KPF1 object has necessary data/structure to operate on (after checking for its existence)
-        The first checks are similar to valid_level0_data(), but we keep them separated because different checks may be
-        necessary e.g., checking that we only have 1-d spectra for each chip now, the correct number of orderlets, etc.
+    # def valid_level1_data(self):
+    #     """
+    #     Confirms that KPF1 object has necessary data/structure to operate on (after checking for its existence)
+    #     The first checks are similar to valid_level0_data(), but we keep them separated because different checks may be
+    #     necessary e.g., checking that we only have 1-d spectra for each chip now, the correct number of orderlets, etc.
 
-        Returns:
-            bool
-        """
+    #     Returns:
+    #         bool
+    #     """
 
-        # The absolutely necessary data in a level1 array is in the self.data dictionary.
-        # Check that it has not been corrupted
-        if type(self.level1.orderlets) is not dict:
-            return False
-        # Check that it contains some data
-        if len(self.level1.orderlets) <= 0:
-            return False
-        # And that the data is appropriate
-        for key in self.level1.orderlets.keys():
-            if ((not isinstance(self.level1.orderlets[key][0].flux, np.ndarray)) or
-                    not np.all(np.isfinite(self.level1.orderlets[key][0].flux))):
-                return False
-            # Could check for dimensionality, but we won't do this for flexibility
-            # if self.data[key].shape == shape:
-            #    return False
-        # We will also want to check some other things eventually
-        # if self.level1.header is None:
-        #    return False
-        return True
+    #     # The absolutely necessary data in a level1 array is in the self.data dictionary.
+    #     # Check that it has not been corrupted
+    #     if type(self.level1.orderlets) is not dict:
+    #         return False
+    #     # Check that it contains some data
+    #     if len(self.level1.orderlets) <= 0:
+    #         return False
+    #     # And that the data is appropriate
+    #     for key in self.level1.orderlets.keys():
+    #         if ((not isinstance(self.level1.orderlets[key][0].flux, np.ndarray)) or
+    #                 not np.all(np.isfinite(self.level1.orderlets[key][0].flux))):
+    #             return False
+    #         # Could check for dimensionality, but we won't do this for flexibility
+    #         # if self.data[key].shape == shape:
+    #         #    return False
+    #     # We will also want to check some other things eventually
+    #     # if self.level1.header is None:
+    #     #    return False
+    #     return True
 
-    def _pre_condition(self):
-        """execute before any _perform method"""
-        self.logger.debug('Running level1 primitive %s' % self.action.name)
-        # self.logger.debug('Appending method to method list')
-        # self.method_list.append(str(level1_method_function.__name__))
-        # self.logger.debug('Checking level1 before method')
+    # def _pre_condition(self):
+    #     """execute before any _perform method"""
+    #     self.logger.debug('Running level1 primitive %s' % self.action.name)
+    #     # self.logger.debug('Appending method to method list')
+    #     # self.method_list.append(str(level1_method_function.__name__))
+    #     # self.logger.debug('Checking level1 before method')
 
-        if (self.action.args.level1 is None) or (not self.valid_level1_data()):
-            self.logger.error("Invalid level 1 data")
-            return False
-        else:
-            return True
+    #     if (self.action.args.level1 is None) or (not self.valid_level1_data()):
+    #         self.logger.error("Invalid level 1 data")
+    #         return False
+    #     else:
+    #         return True
 
 
 class calibrate_wavelengths(KPF1_Primitive):
@@ -88,7 +80,7 @@ class calibrate_wavelengths(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -109,7 +101,7 @@ class remove_emission_line_regions(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -136,7 +128,7 @@ class remove_solar_regions(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -163,7 +155,7 @@ class correct_telluric_lines(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -190,7 +182,7 @@ class correct_wavelength_dependent_barycentric_velocity(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 
@@ -209,7 +201,7 @@ class calculate_RV_from_spectrum(KPF1_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         KPF1_Primitive.__init__(self, action, context)
 

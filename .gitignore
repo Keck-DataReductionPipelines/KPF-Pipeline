@@ -103,3 +103,8 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# IDE related settings
+.vscode
+
+.pytest_cache

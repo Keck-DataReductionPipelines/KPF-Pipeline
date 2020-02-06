@@ -1,2 +1,13 @@
 astropy==3.2.2
 pandas==0.25.2
+numpy==1.18.1
+xlsxwriter
+matplotlib
+scipy
+
+pytest
+
+
+# Documentation
+sphinx
+sphinx-rtd-theme
