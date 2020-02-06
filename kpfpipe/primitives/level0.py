@@ -4,7 +4,7 @@ Define primitives that operate on KPF data
 
 import numpy as np
 
-from keckdrpframework.primitives.base_primitive import Base_primitive
+from keckdrpframework.primitives.base_primitive import BasePrimitive
 
 from kpfpipe.primitives.core import KPF_Primitive
 from kpfpipe.level1 import KPF1
@@ -17,11 +17,11 @@ class KPF0_Primitive(KPF_Primitive):
     
     Args:
         action (keckdrpframework.models.action.Action): Keck DRPF Action object
-        context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+        context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
 
     """
     def __init__(self, action, context):
-        Base_primitive.__init__(self, action, context)
+        BasePrimitive.__init__(self, action, context)
 
         self.level0 = action.args.level0
 
@@ -74,7 +74,7 @@ class subtract_bias(KPF0_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
 
         Attributes:
             chips (list): list of chips to process (e.g. ['red', 'green'])
@@ -115,7 +115,7 @@ class divide_flat(KPF0_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
 
         Attributes:
             chips (list): list of chips to process (e.g. ['red', 'green'])
@@ -152,7 +152,7 @@ class extract_spectrum(KPF0_Primitive):
         """
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.processing_context.Processing_context): Keck DRPF Processing_context object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
 
         Attributes:
             chips (list): list of chips to extract (e.g. ['red', 'green'])

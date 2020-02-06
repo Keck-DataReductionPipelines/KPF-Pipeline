@@ -1,0 +1,287 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Running a Simple Module &mdash; KPFPipeline 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../_static/jquery.js"></script>
+        <script type="text/javascript" src="../_static/underscore.js"></script>
+        <script type="text/javascript" src="../_static/doctools.js"></script>
+        <script type="text/javascript" src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Logging" href="logging.html" />
+    <link rel="prev" title="Installing from Develop or Feature Branches" href="install_develop.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> KPFPipeline
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="getting_started.html">Getting Started</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="install_develop.html">Installing from Develop or Feature Branches</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Running a Simple Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="logging.html">Logging</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../repository/start.html">Repository</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">KPFPipeline</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="getting_started.html">Getting Started</a> &raquo;</li>
+        
+      <li>Running a Simple Module</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/intro/example_trivial.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="running-a-simple-module">
+<h1>Running a Simple Module<a class="headerlink" href="#running-a-simple-module" title="Permalink to this headline">¶</a></h1>
+<p>In the <code class="docutils literal notranslate"><span class="pre">/example</span></code> directory, you shoudl find two pairs of recipe
+and configuration files. For now, we focus on: <code class="docutils literal notranslate"><span class="pre">recipe_simple.py</span></code>
+and <code class="docutils literal notranslate"><span class="pre">deffault_simple.cfg</span></code></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">recipe_simple.py</span></code> contains a single line:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">context</span><span class="o">.</span><span class="n">push_event</span><span class="p">(</span><span class="s1">&#39;KPFModExample&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This states that the <code class="docutils literal notranslate"><span class="pre">KPFModExample</span></code>,
+located at <code class="docutils literal notranslate"><span class="pre">modules/Trivial/KPFM_Trivial.py</span></code>, is running as the
+only module in this pipeline.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">default_simple.cfg</span></code> configuration contains:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Pipeline logger configurations</span>
+<span class="p">[</span><span class="n">LOGGER</span><span class="p">]</span>
+<span class="n">start_log</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">log_path</span> <span class="o">=</span> <span class="n">logs</span><span class="o">/</span><span class="n">pipe_log</span><span class="o">.</span><span class="n">log</span>
+<span class="n">log_level</span> <span class="o">=</span> <span class="n">info</span>
+<span class="n">log_verbose</span> <span class="o">=</span> <span class="kc">True</span>
+
+<span class="c1"># Framework related configurations</span>
+<span class="p">[</span><span class="n">FRAMEWORK</span><span class="p">]</span>
+<span class="n">config_path</span> <span class="o">=</span> <span class="n">configs</span><span class="o">/</span><span class="n">framework</span><span class="o">.</span><span class="n">cfg</span>
+<span class="n">log_config</span> <span class="o">=</span> <span class="n">configs</span><span class="o">/</span><span class="n">framework_logger</span><span class="o">.</span><span class="n">cfg</span>
+
+<span class="c1"># Pipeline parameters</span>
+<span class="p">[</span><span class="n">PIPELINE</span><span class="p">]</span>
+<span class="n">pipeline_name</span> <span class="o">=</span> <span class="n">KPF</span><span class="o">-</span><span class="n">Pipe</span>
+<span class="n">mod_search_path</span> <span class="o">=</span> <span class="n">modules</span>
+
+<span class="c1"># file</span>
+<span class="p">[</span><span class="n">ARGUMENT</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">MODULES</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Note that the sections <code class="docutils literal notranslate"><span class="pre">[ARGUMENT]</span></code> and <code class="docutils literal notranslate"><span class="pre">[MODULES]</span></code> are empty, since
+the module we are executing does not require any of these settings.
+However, the sections must still be present in the configuration file
+for the pipeline to be properly initialized.</p>
+<p>To run this pairs of files, execute the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kpf</span> <span class="n">examples</span><span class="o">/</span><span class="n">recipe_simple</span><span class="o">.</span><span class="n">py</span> <span class="n">examples</span><span class="o">/</span><span class="n">default_simple</span><span class="o">.</span><span class="n">cfg</span>
+</pre></div>
+</div>
+<p>If everything runs smoothly, you should see the following
+printed to terminal:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>[KPF-Pipe][INFO]:Logger started
+2020-02-02 17:02:25:KPF-Pipe:INFO: Logger started
+[KPF-Pipe][INFO]:Finished initializting Pipeline
+2020-02-02 17:02:25:KPF-Pipe:INFO: Finished initializting Pipeline
+[DRPFrame][INFO]:Event to action (&#39;evaluate_recipe&#39;, &#39;evaluating_recipe&#39;, None)
+2020-02-02 17:02:25:DRPFrame:INFO: Event to action (&#39;evaluate_recipe&#39;, &#39;evaluating_recipe&#39;, None)
+[DRPFrame][INFO]:Framework main loop started
+2020-02-02 17:02:25:DRPFrame:INFO: Framework main loop started
+[DRPFrame][INFO]:Executing action evaluate_recipe
+2020-02-02 17:02:25:DRPFrame:INFO: Executing action evaluate_recipe
+[DRPFrame][INFO]:Action evaluate_recipe done
+2020-02-02 17:02:25:DRPFrame:INFO: Action evaluate_recipe done
+[DRPFrame][INFO]:Event to action (&#39;KPFModExample&#39;, &#39;EXAMPLE&#39;, None)
+2020-02-02 17:02:25:DRPFrame:INFO: Event to action (&#39;KPFModExample&#39;, &#39;EXAMPLE&#39;, None)
+[DRPFrame][INFO]:Executing action KPFModExample
+2020-02-02 17:02:25:DRPFrame:INFO: Executing action KPFModExample
+[KPFModExample] missing log configuration.. not starting logger
+[KPFModExample] Performed!
+[DRPFrame][INFO]:Action KPFModExample done
+2020-02-02 17:02:26:DRPFrame:INFO: Action KPFModExample done
+[DRPFrame][INFO]:Event to action (&#39;exit_loop&#39;, &#39;exiting...&#39;, None)
+2020-02-02 17:02:26:DRPFrame:INFO: Event to action (&#39;exit_loop&#39;, &#39;exiting...&#39;, None)
+[DRPFrame][INFO]:Executing action exit_loop
+2020-02-02 17:02:26:DRPFrame:INFO: Executing action exit_loop
+[KPF-Pipe][INFO]:exiting pipeline...
+2020-02-02 17:02:26:KPF-Pipe:INFO: exiting pipeline...
+</pre></div>
+</div>
+<p>Continue to <a class="reference internal" href="logging.html"><span class="doc">Logging</span></a> for explainations on what these messages mean</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="logging.html" class="btn btn-neutral float-right" title="Logging" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="install_develop.html" class="btn btn-neutral float-left" title="Installing from Develop or Feature Branches" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Arpita Roy, BJ Fulton, Andrew Howard
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
