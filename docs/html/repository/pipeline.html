@@ -35,6 +35,7 @@
   <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API" href="../API/api.html" />
     <link rel="prev" title="Modules" href="modules.html" /> 
 </head>
 
@@ -90,6 +91,7 @@
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Pipeline</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../API/api.html">API</a></li>
 </ul>
 
             
@@ -158,6 +160,44 @@
             
   <div class="section" id="pipeline">
 <h1>Pipeline<a class="headerlink" href="#pipeline" title="Permalink to this headline">¶</a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">/kpfpipe</span></code> directory contains the source code to the pipeline. Its
+structure is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>kpfpipe
+├── models
+|   └── ...
+├── primitives
+|   └── ...
+├── tools
+|   └── ...
+├── tests
+|   └── ...
+├── pipelines
+|   └── ...
+├── cli.py
+└── logger.py
+</pre></div>
+</div>
+<p>Directory <code class="docutils literal notranslate"><span class="pre">models</span></code> contains the implementation of KPF data models. There
+are three levels of KPF data in total, and are implemented in <code class="docutils literal notranslate"><span class="pre">level0.py</span></code>,
+<code class="docutils literal notranslate"><span class="pre">level1.py</span></code>, <code class="docutils literal notranslate"><span class="pre">level2.py</span></code> respectively. The KPF data type inherit from
+the <code class="docutils literal notranslate"><span class="pre">Argument</span></code> class from the Keck DRP framework.</p>
+<p>Directory <code class="docutils literal notranslate"><span class="pre">primitives</span></code> contains the implementation of KPF primitives. For
+each level of KPF data, there is a corresponding KPF primitive,
+and each primitive must take there data level as input. For example,
+<code class="docutils literal notranslate"><span class="pre">KPF0_Primitive</span></code> defined in <code class="docutils literal notranslate"><span class="pre">level0.py</span></code> takes a level 0 KPF data type
+as input. The primitive’s output must also be a KPF data type. However,
+the output’s data level is not restricted.</p>
+<p>The KPF primitives inherit from the KeckDRPFramework’s <code class="docutils literal notranslate"><span class="pre">BasePrimitive</span></code>.
+This means that all KPF primitives’s constructors are defined as:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitives</span> <span class="kn">import</span> <span class="n">BasePrimitive</span>
+<span class="kn">from</span> <span class="nn">keckdrpframework.models.action</span> <span class="kn">import</span> <span class="n">Action</span>
+<span class="kn">from</span> <span class="nn">keckdrpframework.models.processing_context</span> <span class="kn">import</span> <span class="n">ProcessingContext</span>
+
+<span class="n">KPF_Primitive</span><span class="p">(</span><span class="n">BasePrimitive</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Action</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ProcessingContext</span><span class="p">):</span>
+</pre></div>
+</div>
 </div>
 
 
@@ -167,6 +207,8 @@
           <footer>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../API/api.html" class="btn btn-neutral float-right" title="API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
         <a href="modules.html" class="btn btn-neutral float-left" title="Modules" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>

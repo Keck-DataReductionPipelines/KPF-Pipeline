@@ -15,8 +15,9 @@ def get_level(lvl:str) -> int:
 
 def start_logger(logger_name: str, config: str) -> logging.Logger:
     '''
+
     Args:
-        logger_name (str): name of primitive, which will be shown in each log msg
+        logger_name (str): name of primitive, which will be shown in each log msg. 
         config (str): path to configuration file
     '''
     # start a logger instance:
