@@ -38,8 +38,9 @@ class KPF1(object):
     def from_fits(cls, fn: str, 
                   overwrite: bool=True) -> None:
         '''
-        Read data from .fits file
-        Arg: 
+        Read data from .fits file.
+
+        Args: 
             fn (str): .fits file name
             HDU (str): HDU (Deader Data Unit) to be read
             overwrite (bool): if this instance already contains data
