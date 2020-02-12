@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>KPFPipeline &mdash; KPFPipeline 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Level 1 Data" href="level1_data.html" />
+    <link rel="prev" title="Core" href="core.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> KPFPipeline
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../intro/getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../repository/start.html">Repository</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">API</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="core.html">Core</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">KPFPipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="level1_data.html">Level 1 Data</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../logger.html">Logger</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">KPFPipeline</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../api.html">API</a> &raquo;</li>
+        
+          <li><a href="core.html">Core</a> &raquo;</li>
+        
+      <li>KPFPipeline</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/API/core/kpfpipe.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-kpfpipe.pipelines.kpfpipeline">
+<span id="kpfpipeline"></span><h1>KPFPipeline<a class="headerlink" href="#module-kpfpipe.pipelines.kpfpipeline" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline">
+<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.pipelines.kpfpipeline.</code><code class="sig-name descname">KPFPipeline</code><span class="sig-paren">(</span><em class="sig-param">context: keckdrpframework.models.processing_context.ProcessingContext</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pipeline to Process KPF data using the KeckDRPFramework</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>context (ProcessingContext): context class provided by the framework</p>
+</dd>
+<dt>Attributes:</dt><dd><p>event_table (dictionary): table of actions known to framework.
+All primitives must be registered here.</p>
+</dd>
+</dl>
+<dl class="method">
+<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline.evaluate_recipe">
+<code class="sig-name descname">evaluate_recipe</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline.evaluate_recipe"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline.evaluate_recipe" title="Permalink to this definition">¶</a></dt>
+<dd><p>Evaluates the recipe file (Python file) specified in context.config.run.recipe.
+All actions are executed consecutively in the high priority queue</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>action (keckdrpframework.models.action.Action): Keck DRPF Action object
+context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline.exit_loop">
+<code class="sig-name descname">exit_loop</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline.exit_loop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline.exit_loop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Force the Keck DRP Framework to exit the infinite loop</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>action (keckdrpframework.models.action.Action): Keck DRPF Action object
+context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline.start">
+<code class="sig-name descname">start</code><span class="sig-paren">(</span><em class="sig-param">config: configparser.ConfigParser</em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline.start"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline.start" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize the customized pipeline.
+Customized in that it sets up logger and configurations differently 
+from how the BasePipeline does.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Args</dt>
+<dd class="field-odd"><p>config (ConfigParser): containing pipeline configuration</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="level1_data.html" class="btn btn-neutral float-right" title="Level 1 Data" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="core.html" class="btn btn-neutral float-left" title="Core" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Arpita Roy, BJ Fulton, Andrew Howard
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
