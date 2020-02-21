@@ -39,7 +39,7 @@ class KPF1(object):
         self.__flux = {}
         # Contain error for each of the fiber
         self.__variance= {}
-        self.__wave = np.nan
+        self.__wave = {}
         # Ca H & K spectrum
         self.__hk = np.nan
         # header keywords
@@ -57,7 +57,7 @@ class KPF1(object):
 
     @classmethod
     def from_fits(cls, fn: str,
-                  data_type: str=None) -> None:
+                  data_type: str) -> None:
         '''
         Create a KPF1 data from a .fits file
         '''
@@ -68,9 +68,9 @@ class KPF1(object):
         # Return this instance
         return this_data
 
-    def read(self, fn: str, 
-             overwrite: bool=True,
-             data_type: str=None) -> None:
+    def read(self, fn: str,
+             data_type: str,
+             overwrite: bool=True) -> None:
         '''
         Read the content of a .fits file and populate this 
         data structure. Note that this is not a @classmethod 
@@ -86,25 +86,7 @@ class KPF1(object):
             raise IOError('Cannot overwrite existing data')
         
         with fits.open(fn) as hdu_list:
-            # a data type is not provided, so try all the available
-            # read methods. 
-            if data_type == None:
-                for dtype, read_method in self.read_methods.items():
-                    try:
-                        read_method(hdu_list, force=False)
-                        # if this point is reached, then the file is successfully
-                        # read. Break out of the for loop.
-                        break
-                    except: 
-                        # an error is raised inside the read_method
-                        # so try the next one instead
-                        continue
-                # if this point is reached, then none of the read_method work.
-                raise IOError('Failed to read {} implicitly. Try again with an \
-                                explicit data_type'.format(fn))
-            else:
-                # a data_type is actually provided. Use the 
-                # corresponding reading method
+                # Use the reading method for the provided data type
                 try:
                     self.read_methods[data_type](hdu_list)
                 except KeyError:
@@ -161,14 +143,19 @@ class KPF1(object):
                         else:
                             raise IOError() 
 
-            # populate the _spectrum with data contain in current hdu
-            # assuming that the hdu name is the fiber name 
-            # ('SCI', 'CALIBRATION', 'SKY')
-            self.__flux[hdu.name] = hdu.data  
-
-            ## --TODO--
-            # 1. calculate wavelength 
-            #    How is wavelength information stored in KPF1 FITS file?
+            # For each fiber, there are two HDU: flux and wave
+            # We assume that the names of HDU follow the convention 
+            # 'fiberName_flux' / 'fiberName_wave'
+            try:
+                fiber, array_type = hdu.name.split('_')
+            except: 
+                raise NameError('invalid HUD name: {}'.format(hdu.name))
+            if array_type == 'wave':
+                self.__wave[fiber] = hdu.data
+            elif array_type == 'flux':
+                self.__flux[fiber] = hdu.data
+            else: 
+                raise NameError('Array type must be "wave" or "flux", got {} instead'.format(array_type))  
             
             ## set default segments (1 segment for each order)
             self.segment_data([])
@@ -215,15 +202,18 @@ class KPF1(object):
             raise ValueError('expected {} for value, got {}'.format(
                 type(np.ndarray), type(value)))
     
-    def set_wave(self, value: np.ndarray) -> None:
+    def set_wave(self, fiber: str, value: np.ndarray) -> None:
         '''
-        overwrite self.__wave with new value
+        overwrite self.__wave[fiber] with new value
         '''
         # --TODO-- implement some more checks
         try: 
             assert(isinstance(value, np.ndarray))
-            self.__wave = value
+            self.__wave[fiber] = value
             self.segment_data() # resegment data to default (1 segement/order)
+        except KeyError:
+            # This happens when fiber is not a key in self.__flux 
+            raise ValueError('{} fiber not recognized'.format(fiber))
         except AssertionError:
             # Value is not a np.ndarray
             raise ValueError('expected {} for value, got {}'.format(
@@ -282,9 +272,10 @@ class KPF1(object):
             raise NameError('filename must ends with .fits')
 
         hdu_list = []
+        # Store flux arrays first
         for i, fiber in enumerate(self.__flux.items()):
             if i == 0: 
-                # use the first fiber as the primary HDU
+                # use the first fiber flux as the primary HDU
                 data = self.__flux[fiber]
                 hdu = fits.PrimaryHDU(data)
                 # set all keywords
@@ -298,7 +289,13 @@ class KPF1(object):
                 # store the data only. Header keywords are only 
                 # stored to PrimaryHDU
                 hdu = fits.ImageHDU(self.__flux[key])
-            hdu.name = fiber # set the name of hdu to the name of the fiber
+            hdu.name = fiber + '_flux' # set the name of hdu to the name of the fiber
+            hdu_list.append(hdu)
+        # now store wave arrays 
+        for i, fiber in enumerate(self.__wave.items()):
+            # Don't store any header keywords 
+            hdu = fits.ImageHDU(self.__wave[key])
+            hdu.name = fiber + '_wave'
             hdu_list.append(hdu)
 
         # finish up writing 

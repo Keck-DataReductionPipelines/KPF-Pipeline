@@ -21,16 +21,20 @@ class KPF0(object):
             * implement `to_fits` and `from_fits` methods
 
         """
+        ## Internal members 
+        ## all are private members (not accesible from the outside directly)
+        ## to modify them, use the appropriate methods.
 
-        self.data = {}  # Doing it this way allows flexibility in the structure of the input data
-                        # e.g., it is not required to have both red and green chips for testing.
-        self.flat = {}
-        self.bias = {}
-        self.header = {}  # meta data from KPF, telesceope, and observatory (dict)
-        self.hk = None
-        self.expmeter = None
-        self.guidecam = None
-        
+        # 1D spectrums
+        # Contain 'object', 'sky', and 'calibration' fiber.
+        # Each fiber is accessible through their key.
+        self.__flux = {}
+        self.__variance = {}
+
+        # header keywords 
+        self.__header = {}
+        self.__source = {}      
+
     def from_fits(self, fn):
         """
         Contruct KPF0 object from a raw FITS file.
