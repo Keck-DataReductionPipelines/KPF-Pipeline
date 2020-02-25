@@ -1,7 +1,15 @@
-Changes to lvl1 data: 
+Updates: 
 1. waves now get their own HDU in fits files
 2. no header keywords is store in any HDU that is not the PrimaryHDU
 3. HDU are names as '{%fiberName}_{%arrayType}', arrayType can only be 'flux' or 'wave'
+4. Level1 requires at least 15 HDU for storage (5 fiber, each with flux, wave and variance)
+5. info are identified through KPF header keywords. 
 
 Questions: 
-1. write in data format other than KPF? (HARPS, NEID, ...)
+1. write in data format other than KPF? (HARPS, NEID, ...) NO
+
+bring the ones arent mapped into the data as well
+
+store segments in a different file (config?)
+segments are identified by wave (start - finish)
+segment info included in lvl2 
