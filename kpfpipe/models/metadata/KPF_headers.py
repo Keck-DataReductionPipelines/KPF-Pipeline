@@ -69,8 +69,8 @@ HEADER_KEY = {
     'CTYPE1':   float,  # coordinate type and projection (RA-TAN)
     'CTYPE2':   float,  # coordiante type and projection (DEC-TAN)
     'RADECSYS': str,    # coordinate system
-    'NAXIS1':   int,  # number of pixels in axis 1
-    'NAXIS2':   int,  # number of pixels in axis 2
+    'NAXIS1':   int,    # number of pixels in axis 1
+    'NAXIS2':   int,    # number of pixels in axis 2
 
     ## Spectrograph configurations
     # --TODO-- missing
@@ -89,7 +89,7 @@ HEADER_KEY = {
 }
 
 ## Header keywords required by level 1 and level 2 data
-LVL1_KEY = [
+LVL1_KEY = {
     ## DRP configuration for extration
     # --TODO-- missing
 
@@ -101,10 +101,10 @@ LVL1_KEY = [
 
     ## Derived mid-exposure time for different wavelength bins
     # --TODO-- missing
-]
+}
 
 ## Header keywords required by level 2 data only
-LVL2_KEY = [
+LVL2_KEY = {
     ## Reference mask used for cross-correlation
     # --TODO-- missing
 
@@ -114,4 +114,4 @@ LVL2_KEY = [
     ## Estimated single-measure RV precision for each orderlet of
     ## science fiber
     # --TODO-- missing
-]
+}

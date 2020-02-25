@@ -1,5 +1,7 @@
 # Standard dependencies
 import copy 
+import collections
+import warnings
 
 # External dependencies
 import astropy
@@ -10,6 +12,81 @@ import matplotlib.pyplot as plt
 
 # Pipeline dependencies
 from kpfpipe.models.required_header import HEADER_KEY, LVL1_KEY
+
+class SpecDict(collections.MutableMapping, dict):
+    '''
+    This is a dictionary with modified __getitem__ and __setitem__
+    for monitored access to its members
+    '''
+    def __init__(self, dictionary: dict, type_of_dict: str) -> None:
+        '''
+        Set the type of dict this is (array or header_key)
+        '''
+        if type_of_dict != 'header' or type_of_dict != 'array':
+            # This should never happen since this classed is not 
+            # intended for users 
+            raise ValueError('invalid type')
+        self.__type = type_of_dict 
+    
+    def __getitem__(self, key: str) -> type:
+        '''
+        returns a copy of dict[key] instead, so that the original 
+        value is not affected
+        '''
+        value_copy = copy.deepcopy(dict.__getitem__(self, key))
+    
+    def __setitem__(self, key: str, value: type) -> None:
+        '''
+        Setting dict[key] with special constraint
+        '''
+        # depending on whether this dict stores header keywords
+        # or np.ndarrays, apply different checks
+        if self.__type == 'header':
+            self.__set_header(key, value)
+        elif self.__type == 'array':
+            self.__set_array(key, value)
+        else: 
+            # this should never happen
+            pass
+    
+    def __set_array(self, key: type, value: np.ndarray) -> None:
+        # Values should always be a numpy 2D array
+        try:
+            assert(isinstance(value, np.ndarray))
+            assert(len(value) == 2)
+        except AssertionError:
+            raise TypeError('Value can only be 2D numpy arrays')
+
+        # all values in arrays must be positive real floating points
+        try:
+            assert(np.all(np.real(value)))
+            assert(np.all(np.positive(value)))
+            assert(np.all(isinstance(value, np.float64)))
+        except AssertionError:
+            raise ValueError('All values must be positive real np.float64')
+            
+        # passed all tests, setting value
+        dict.__setitem__(key, value)
+    
+    def __set_header(self, key: str, value: type):
+        # if key is defined in KPF headers, make sure that
+        # the values are the proper types
+        
+        # combine the two header key dictionaries 
+        all_keys = {**HEADER_KEY, **LVL1_KEY}
+        if key in all_keys.keys:
+            try:
+                assert(isinstance(value, all_keys[key]))
+            except AssertionError:
+                raise TypeError('expected value as {}, but got {}'.format(
+                                all_keys[key], type(value)))
+        else: 
+            warnings.warn('{} not found in KPF_header')
+        
+        # this point is reached if no exception is raised 
+        dict.__setitem__(key, value)
+
+
 
 class KPF1(object):
     """
@@ -30,20 +107,17 @@ class KPF1(object):
         Initializes an empty KPF1 data class
         '''
         ## Internal members 
-        ## all are private members (not accesible from the outside directly)
-        ## to modify them, use the appropriate methods.
 
         # 1D spectrums
-        # Contain 'object', 'sky', and 'calibration' fiber.
         # Each fiber is accessible through their key.
-        self.__flux = {}
+        self.flux = SpecDict({}, 'array')
         # Contain error for each of the fiber
-        self.__variance= {}
-        self.__wave = {}
+        self.variance= SpecDict({}, 'array')
+        self.wave = SpecDict({}, 'array')
         # Ca H & K spectrum
         self.__hk = np.nan
         # header keywords
-        self.__headers = None
+        self.headers = SpecDict({}, 'header')
         # dictionary of segments in the data
         # This is a 2D dictionary requiring 2 input to 
         # locate a specific segement: fiber name and index
@@ -102,7 +176,7 @@ class KPF1(object):
         # first parse header keywords
         self.header = {}
         # check keys in both HEADER_KEY and LVL1_KEY
-        HEADER_KEY.update(LVL1_KEY)
+        all_keys = {**HEADER_KEY, **LVL1_KEY}
         # we assume that all keywords are stored in PrimaryHDU
         # loop through the 
         for hdu in hdu_list:
@@ -110,7 +184,7 @@ class KPF1(object):
             if isinstance(hdu, astropy.io.fits.PrimaryHDU):
                 # verify that all required keywords are present in header
                 # and provided values are expected types
-                for key, value_type in HEADER_KEY.items():
+                for key, value_type in all_keys.items():
                     try: 
                         value = hdu.header[key]
                         if isinstance(value_type, Time):
@@ -167,57 +241,6 @@ class KPF1(object):
         '''
         # --TODO--: implement this
         return
-
-    def set_flux(self, fiber: str, value: np.ndarray) -> None:
-        '''
-        overwrite self.__flux[fiber] with the new value
-        '''
-        # --TODO-- implement some more checks
-        try: 
-            assert(isinstance(value, np.ndarray))
-            self.__flux[fiber] = value
-            self.segment_data() # resegment data to default (1 segement/order)
-        except KeyError:
-            # This happens when fiber is not a key in self.__flux 
-            raise ValueError('{} fiber not recognized'.format(fiber))
-        except AssertionError:
-            # Value is not a np.ndarray
-            raise ValueError('expected {} for value, got {}'.format(
-                type(np.ndarray), type(value)))
-
-    def set_variance(self, fiber: str, value: np.ndarray) -> None:
-        '''
-        overwrite self.__flux[fiber] with the new value
-        '''
-        # --TODO-- implement some more checks
-        try: 
-            assert(isinstance(value, np.ndarray))
-            self.__variance[fiber] = value
-            self.segment_data() # resegment data to default (1 segement/order)
-        except KeyError:
-            # This happens when fiber is not a key in self.__flux 
-            raise ValueError('{} fiber not recognized'.format(fiber))
-        except AssertionError:
-            # Value is not a np.ndarray
-            raise ValueError('expected {} for value, got {}'.format(
-                type(np.ndarray), type(value)))
-    
-    def set_wave(self, fiber: str, value: np.ndarray) -> None:
-        '''
-        overwrite self.__wave[fiber] with new value
-        '''
-        # --TODO-- implement some more checks
-        try: 
-            assert(isinstance(value, np.ndarray))
-            self.__wave[fiber] = value
-            self.segment_data() # resegment data to default (1 segement/order)
-        except KeyError:
-            # This happens when fiber is not a key in self.__flux 
-            raise ValueError('{} fiber not recognized'.format(fiber))
-        except AssertionError:
-            # Value is not a np.ndarray
-            raise ValueError('expected {} for value, got {}'.format(
-                type(np.ndarray), type(value)))
         
     def segment_data(self, seg: np.ndarray=[]) -> None:
         '''
@@ -307,8 +330,8 @@ class Segement:
     Data wrapper that contains a segment of wave flux pair in the 
     KPF1 class. 
     '''
-    def __init__(self, start_coordinate: tuple
-                       length: int
+    def __init__(self, start_coordinate: tuple,
+                       length: int,
                        fiber: str):
         '''
         constructor
@@ -318,7 +341,7 @@ class Segement:
             assert(len(start_coordinate) == 2)
             assert(isinstance(start_coordinate[1], int))
             assert(isinstance(start_coordinate[0], int))
-        except AssertionError
+        except AssertionError:
             raise ValueError('start_coordinate must be a tuple of 2 integers')
 
         self.start_coordinate = start_coordinate # coordinate of segment's beginning

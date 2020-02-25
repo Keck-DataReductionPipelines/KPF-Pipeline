@@ -8,18 +8,6 @@ class KPF0(object):
     def __init__(self):
         """
 
-        Attributes:
-            data (dictionary): Keys correspond to chips (e.g. green, red). Values contain the 2D flux arrays
-            flat (dictionary): Master flat files
-            bias (dictionary): Master bias files
-            header (dictionary): FITS header as dictionary
-            hk (array): (optional) Echellogram (image) from HK spectrometer CCD; 2D array (row, col)
-            expmeter (array): (optional) Exposure meter sequence; 3D array = time series of 2D CCD images (time, row, col)
-            guidecam (array): (optional) Guidecam sequence; 3D array = time series of 2D CCD images (time, row, col)
-
-        Todo:
-            * implement `to_fits` and `from_fits` methods
-
         """
         ## Internal members 
         ## all are private members (not accesible from the outside directly)
