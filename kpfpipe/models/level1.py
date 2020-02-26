@@ -86,7 +86,13 @@ class SpecDict(collections.MutableMapping, dict):
         # this point is reached if no exception is raised 
         dict.__setitem__(key, value)
 
-
+def find_nearest_idx(array: np.ndarray, value: np.float64) -> tuple:
+    '''
+    A helper function that finds the index of the nearest value in the array
+    '''
+    x = np.abs(array - value)
+    idx = np.where(x == x.min())
+    return idx
 
 class KPF1(object):
     """
@@ -118,10 +124,8 @@ class KPF1(object):
         self.__hk = np.nan
         # header keywords
         self.headers = SpecDict({}, 'header')
-        # dictionary of segments in the data
-        # This is a 2D dictionary requiring 2 input to 
-        # locate a specific segement: fiber name and index
-        self.__segments = {}
+
+        self.segments = Segement()
 
         # supported data types
         self.read_methods = {
@@ -242,23 +246,34 @@ class KPF1(object):
         # --TODO--: implement this
         return
         
-    def segment_data(self, seg: np.ndarray=[]) -> None:
+    def segment_data(self, seg: np.ndarray=[], fiber: str=None) -> None:
         '''
         Segment the data based on the given array. 
         If an empty list is given, reset segment to default (1 segment/order)
         '''
         if len(seg) == 0:
             # empty segment array. reset to default 
-            self.__segments.clear() # first clear any value in 
-            for fiber, data in self.__flux.items():
-                self.__segments[fiber] = {}
-                for i, order in enumerate(data):
-                    # Segment(start_coordinate, length_of_segment, fiber_name)
-                    self.__segments[fiber][i] = Segement((i, 0), len(order), fiber)
-        else: 
-            # --TODO-- implement non-trivial segment
-            pass
+            self.segments.clear() # first clear any value in 
 
+        else: 
+            # seg is a list of 2-element tuples. Each tuple contains the boundires defined
+            # by wavelength 
+            for wave_range in seg:
+                try: 
+                    # range must be valid
+                    assert(wave_range[0] < wave_range[1])
+                    start = find_nearest_idx(self.wave[fiber], wave_range[0])
+                    stop = find_nearest_idx(self.wave[fiber], wave_range[1])
+                    # must be in same order
+                    assert(np.all(start[0] == stop[0]))
+
+                    length = (stop[1] - start[1])[0]
+                    # add this segment 
+                    self.segments.add_segment(start, length, fiber)
+
+                except AssertionError:
+                    warnings.warn('invalid wavelength range: {}'.format(wave_range))
+    
     def get_segmentation(self) -> list:
         '''
         returns the current segmenting of data as a list 
@@ -274,16 +289,7 @@ class KPF1(object):
 
         '''
         
-        seg_info = self.__segments[fiber][i]
-        # The coordinate information of the piece of spectrum 
-        order = seg_info.start_coordinate[0]
-        start = order
-        finish = start + seg_info.length
-        # the actual data
-        flux_data = copy.deepcopy(self.__flux[fiber][order, start:finish])
-        wave_data = copy.deepcopy(self.__wave[fiber][order, start:finish])
-        # --TODO--: implement a wrapper class that contains this data
-        return (wave_data, flux_data)
+        # --TODO-- add to changes
 
     def to_fits(self, fn:str) -> None:
         """
@@ -330,23 +336,48 @@ class Segement:
     Data wrapper that contains a segment of wave flux pair in the 
     KPF1 class. 
     '''
-    def __init__(self, start_coordinate: tuple,
-                       length: int,
-                       fiber: str):
+    def __init__(self):
         '''
         constructor
         '''
+        # dictionary of segments in the data
+        # This is a dictionary of arrays requiring two argument
+        # locate a specific segement: fiber name and index
+        self.seg_list = {}
+
+
+    def add_segment(self, start_coordinate: tuple,
+                       length: int,
+                       fiber: str, 
+                       order: int)
+        ''' 
+        Add a new segment to the current connection
+        '''
+
         # check tat input is valid
         try: 
+            assert(isinstance(start_coordinate, tuple))
             assert(len(start_coordinate) == 2)
-            assert(isinstance(start_coordinate[1], int))
-            assert(isinstance(start_coordinate[0], int))
         except AssertionError:
-            raise ValueError('start_coordinate must be a tuple of 2 integers')
+            raise ValueError('start_coordinate must be a tuple of 2')
 
-        self.start_coordinate = start_coordinate # coordinate of segment's beginning
-        self.length = length                     # how long the segment is
-        self.fiber = fiber                       # name of the fiber
+        if fiber not in self.seg_list:
+            # no segment has been created for this fiber yet
+            self.seg_list[fiber] = [(start_coordinate, length, order)]
+        else: 
+            self.seg_list[fiber].append((start_coordinate, length, order))
+    
+    def clear(self):
+        '''
+        Clear the entire segment collection
+        '''
+        self.seg_list.clear()
+    
+    def delete(self, fiber: str, index: int):
+        '''
+        delete a single segment, given the fiber and index
+        '''
+        self.seg_list[fiber].pop(index)
 
 class HK1(object):
     """
