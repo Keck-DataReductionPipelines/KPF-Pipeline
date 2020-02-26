@@ -1,28 +1,78 @@
 import pytest
 
-from kpfpipe.models.level1 import KPF1
+import kpfpipe.models.level1 as lvl1
+
+@pytest.fixture
+def kpf1():
+    '''
+    Initializes an KPF1 data product from 
+    a testing HARPS file.
+    This fixture assumes that basic init/IO of KPF1 
+    is functioning
+    '''
+    # --TODO--
+    pass
+
+## custom structs and helper functions
+def test_spec_dict():
+    '''
+    Check that the get/set item methods are working 
+    '''
+    # --TODO-- 
+    pass
+
+## Constructor and Deconstructor
+def test_init():
+    '''
+    Check that level1 data initializes correctly
+    '''
+    # --TODO--
+    pass
+
+## Initializer through I/O
+def test_from_harps():
+    '''
+    Check that the _read_from_HARP() works
+    '''
+    # --TODO--
+    pass
+
+def test_from_kpf1(): 
+    '''
+    Check that the _read_from_KPF() works as intended
+    '''
+    # --TODO--
+    pass
+
 
 def test_from_fits():
-    # setup
-    in_file = 'kpfpipe/tests/data/KPF.2007-04-04T09_17_51.376_e2ds_A.fits'
+    '''
+    check that the class method is functioning 
+    '''
+    # --TODO--
+    pass
 
-    # Constructor
-    K = KPF1()
-    
-    # read in data from a .fits file
-    # Each order is treated as a segment
-    K.from_fits(in_file)
-    
-    # segment each orders into different segments
-    # by default each order is its own segment
-    # segment cannot be larger than an order
-    K.segment_data(seg_list)
+def test_to_fits():
+    '''
+    Check that data can be written to FITS files
+    '''
+    # --TODO--
+    pass
 
-    # print out information in each segment of the data
-    K.info()
 
-    # get a copy of specific segment by its index in the list 
-    # of segments
-    K.get_segment_index(ind)
+## Interface
+def test_get_attr():
+    '''
+    Check that access of information functions as intended
+    '''
+    # --TODO--
+    pass
 
-    # 
+def test_set_attr():
+    '''
+    Check that data can only be modified in expected ways
+    '''
+    # --TODO--
+    pass
+
+
