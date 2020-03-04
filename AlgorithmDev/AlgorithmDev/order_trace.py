@@ -513,37 +513,33 @@ class OrderTrace:
         dist_y = abs(end_y[0]-end_y[1])
         return dist_x, dist_y
 
-    def cross_other_cluster(self, polys, cluster_nos_for_polys, cluster_nos, x, y, index, power, sort_map, merged_coeffs):
+    def cross_other_cluster(self, polys, cluster_nos_for_polys, cluster_nos, x, y, index, power, sort_map, merged_coeffs, print_result=False):
+        #merge_coeffs contains the coeffs and range in case the two cluster is merged
         min_x = int(merged_coeffs[power+1])
         max_x = int(merged_coeffs[power+2])
         min_y = int(merged_coeffs[power+3])
         max_y = int(merged_coeffs[power+4])
 
         cluster_idx = np.where(np.logical_or(index == cluster_nos[0], index == cluster_nos[1]))[0]
-        #min_y = np.amin(y[cluster_idx])
-        #max_y = np.amax(y[cluster_idx])
-        #min_x = np.amin(x[cluster_idx])
-        #max_x = np.amax(x[cluster_idx])
-
         cluster_x = x[cluster_idx]
         cluster_y = y[cluster_idx]
 
         two_curve_x1 = polys[cluster_nos_for_polys[0], power+2]
         two_curve_x2 = polys[cluster_nos_for_polys[1], power+1]
 
-
         _, nx, ny = self.get_spectral_data()
 
         all_x = list()
         all_y = list()
 
+        # find x belonging to curves tested to be merged
         for s_x in range(min_x, max_x+1):
             x_idx = np.where(cluster_x == s_x)[0]
             if x_idx.size > 0:
                 all_x.append(s_x)
                 all_y.append((np.amin(cluster_y[x_idx])+np.amax(cluster_y[x_idx]))/2)
 
-        # test if two curves connected to each other, no gap between
+        # test if two curves connected to each other, no vertical cut gap between
         if two_curve_x2 <= two_curve_x1:
             x_idx = np.where(cluster_x == two_curve_x1)[0]
             y_min_1 = np.amin(cluster_y[x_idx])
@@ -551,6 +547,8 @@ class OrderTrace:
             x_idx = np.where(cluster_x == two_curve_x2)[0]
             y_min_2 = np.amin(cluster_y[x_idx])
             y_max_2 = np.amax(cluster_y[x_idx])
+
+            # vertical position overlapped, or very close
             if y_max_1 >= y_min_2 and y_min_1 <= y_max_2:
                 #print(cluster_nos, ' connected to each other 1 ',two_curve_x1, two_curve_x2)
                 return False
@@ -561,13 +559,10 @@ class OrderTrace:
 
         total_c = np.shape(polys)[0]
 
-        #if cluster_nos[0] == 2 and cluster_nos[1] == 7:
-        #    print('in cross_other_cluster ' + str(len(all_x)))
-        #    import pdb;pdb.set_trace()
+        if print_result is True:
+            print('in cross_other_cluster ' + str(len(all_x)))
 
-        #print('in cross_other_cluster ' + str(len(all_x)))
-        #import pdb;pdb.set_trace()
-
+        # find the horizontal gap
         all_x_idx = np.where((all_x - np.roll(all_x, 1)) >= 2)[0]
         gap_x_idx = list()
         for idx in all_x_idx:
@@ -595,26 +590,38 @@ class OrderTrace:
 
             cross_point = dict()
 
+
+            # find if tested cluster horizontally ovelaps out of gap ends of two merged clusters
             if polys[c_idx, power+1] <= max_x and polys[c_idx, power+2] >= min_x:
                 com_min_x = int(max(polys[c_idx, power+1], min_x))
                 com_max_x = int(min(polys[c_idx, power+2], max_x))
+                com_list = [com_min_x, com_max_x] if com_min_x != com_max_x else [com_min_x]
 
-                for curve_end in [com_min_x, com_max_x]:
-                    if curve_end in np.array(all_x)[gap_x_idx]:
+                for curve_end in com_list:
+                    if curve_end in np.array(all_x)[gap_x_idx]:   # the end point of overlap meet the gap ends
                         continue
                     one_y_val = np.polyval(polys[c_idx, 0:power+1], curve_end)
                     merged_y = np.polyval(merged_coeffs[0:power+1], curve_end)
 
+                    # compare the y location of the tested curve and the merged curves
                     if abs(one_y_val - merged_y) < 1:
                         cross_point[int(curve_end)] = 0
                     else:
                         cross_point[int(curve_end)] = (one_y_val - merged_y)/abs(one_y_val-merged_y)
 
             vals = np.array([ v for v in cross_point.values()])
-            if (np.size(np.where(vals == 0)[0]) == 2) and abs(com_max_x - com_min_x) < 10:
-                #print(' curve ', c_idx, ' from ', sort_map[c_idx], ' connect to ', cluster_nos)
-                continue
 
+            # check if tested curve has short horizontal overlap with merged curves and vertically meets with the merged curves at all gap ends
+            if np.size(vals) != 0:
+                same_y_count = np.size(np.where(vals == 0)[0])
+                com_dist = abs(com_max_x - com_min_x)
+
+                # overlap at one pixel and same y or overlap at short range and same y at two ends of overlap
+                if (( same_y_count == 1 and com_dist == 0) or ( same_y_count == 2 and com_dist < 10)):
+                    #print(' curve ', c_idx, ' from ', sort_map[c_idx], ' connect to ', cluster_nos)
+                    continue
+
+            # check the y location at every gap overlapping with the test curve, cross_point records the y position at selected x positions
             for n_idx in range(0, len(gap_x_idx), 2):
                 gap1 = gap_x_idx[n_idx]
                 gap2 = gap_x_idx[n_idx+1]
@@ -638,14 +645,23 @@ class OrderTrace:
 
 
             vals = np.array([ v for v in cross_point.values()])
-            positive_total = np.size(np.where(np.logical_or(vals == 1, vals == 0))[0])
-            negative_total = np.size(np.where(np.logical_or(vals == -1, vals == 0))[0])
 
-            #print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',  cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ', \
-            #               polys[c_idx, power+1], polys[c_idx, power+2])
-            #import pdb;pdb.set_trace()
-            if positive_total >= 1 and negative_total >= 1:
-                #print('  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx], ' x range: ', polys[c_idx, power+1:power+3])
+            zero_total = np.size(np.where(vals == 0)[0])
+            positive_zero_total = np.size(np.where(np.logical_or(vals == 1, vals == 0))[0])
+            negative_zero_total = np.size(np.where(np.logical_or(vals == -1, vals == 0))[0])
+
+            #if positive_zero_total >=1 positive_zero_total == negative_zero_total and  and zero_total == positive_zero_total:
+            #    print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',  cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ', \
+            #            polys[c_idx, power+1], polys[c_idx, power+2])
+            #    import pdb;pdb.set_trace()
+
+            if print_result is True:
+                print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',  cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ', \
+                           polys[c_idx, power+1], polys[c_idx, power+2])
+
+            if positive_zero_total >= 1 and negative_zero_total >= 1:
+                if print_result is True:
+                    print('  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx], ' x range: ', polys[c_idx, power+1:power+3])
                 return True
 
         return False
@@ -688,7 +704,8 @@ class OrderTrace:
                     c1 += 1
                     continue
 
-            #print("current test curve: c1: "+ str(c1) + " o_c1: "+ str(sort_idx_on_miny[c1]))
+            if print_result is True:
+                print("current test curve: c1: "+ str(c1) + " o_c1: "+ str(sort_idx_on_miny[c1]))
             if new_polys[c1, x_min_c] == non_exist or (new_polys[c1, x_max_c] - new_polys[c1, x_min_c] > short_curve):
                 kept_curves.append(sort_idx_on_miny[c1])
                 c1 += 1
@@ -731,8 +748,9 @@ class OrderTrace:
                     o_c2 = sort_idx_on_miny[v_neighbors[i]]
                     merged_poly_info[o_c2], errors[i] = self.merge_two_clusters(np.array([o_c1, o_c2]), x, y, index, power)
 
-            #print('neighbors errors: ', errors)
-            #import pdb;pdb.set_trace()
+            if print_result is True:
+                print('neighbors: ', v_neighbors, 'neighbors errors: ', errors)
+
             # no neighbors or no neighbors qualified to merge
             if (v_neighbors.size == 0  or (v_neighbors.size > 0 and np.amin(errors) > threshold)):
                 curve_width = new_polys[c1, x_max_c] - new_polys[c1, x_min_c]
@@ -746,7 +764,8 @@ class OrderTrace:
 
                 index = np.where(index==o_c1, 0, index)
                 new_polys[c1, x_min_c] = non_exist
-                #print("remove: ", c1, ' from: ', o_c1)
+                if print_result is True:
+                    print("remove: ", c1, ' from: ', o_c1)
                 log += 'remove '+str(o_c1)
                 cluster_changed += 1
                 c1 += 1
@@ -769,9 +788,12 @@ class OrderTrace:
                 x_dists[i] = dist_x
                 y_dists[i] = dist_y
 
-                if self.cross_other_cluster(new_polys, np.array([c1, c2]), np.array([o_c1, o_c2]), x, y, index, power, sort_idx_on_miny, merged_poly_info[o_c2]):
+                if self.cross_other_cluster(new_polys, np.array([c1, c2]), np.array([o_c1, o_c2]), x, y, index, power, \
+                                            sort_idx_on_miny, merged_poly_info[o_c2], print_result=print_result):
                     cross_neighbor[i] = 1
-                #print('c2: ', c2,  'from',  o_c2, 'c1: ', o_c1, ' dist: ', dist_x, dist_y, (dist_x+dist_y), cross_neighbor[i])
+                if print_result is True:
+                    print('c2: ', c2,  'from',  o_c2, 'c1: ', o_c1, ' dist: ', dist_x, dist_y, (dist_x+dist_y), cross_neighbor[i])
+                    #import pdb;pdb.set_trace()
 
             neighbor_idx = np.where(np.logical_and(x_dists < nx/2, cross_neighbor == 0))[0]
 
@@ -786,7 +808,8 @@ class OrderTrace:
                         continue
                 index = np.where(index==o_c1, 0, index)
                 new_polys[c1, x_min_c] = non_exist
-                print("remove: ", c1, ' from: ', o_c1)
+                if print_result is True:
+                    print("remove: ", c1, ' from: ', o_c1)
                 log += 'remove '+str(o_c1)
                 cluster_changed += 1
                 c1 += 1
@@ -798,7 +821,8 @@ class OrderTrace:
             best_neighbor = best_neighbors[np.argsort(c_neighbors_distance)][0]
             o_c2 = sort_idx_on_miny[best_neighbor]
             index = np.where(index==o_c2, o_c1, index)
-            print('merge: ', c1, best_neighbor, ' from: ', o_c1, o_c2)
+            if print_result is True:
+                print('merge: ', c1, best_neighbor, ' from: ', o_c1, o_c2)
             log += 'merge '+str(o_c1) + ' and ' + str(o_c2)
 
             new_polys[c1, x_min_c] = min(new_polys[c1, x_min_c], new_polys[best_neighbor, x_min_c])
@@ -812,7 +836,7 @@ class OrderTrace:
 
 
         return {'status':  'changed' if cluster_changed >= 1 else 'nochange', 'index': index, 'cluster_changed': cluster_changed, 'log': log,
-                'kept_curves': kept_curves}
+                'kept_curves': kept_curves, 'log': log}
 
     def reorganize_index_old(self, index, x, y):
         """ remove pixels with unsigned cluster no and reorder the cluster number """
@@ -2201,8 +2225,8 @@ class OrderTrace:
             else:
                 return index_new, all_status
 
-    def one_step_merge_cluster(self, crt_coeffs, power, crt_index, crt_x, crt_y):
-            merge_status = self.merge_fitting_curve(crt_coeffs, power, crt_index, crt_x, crt_y)
+    def one_step_merge_cluster(self, crt_coeffs, power, crt_index, crt_x, crt_y, print_result=False):
+            merge_status = self.merge_fitting_curve(crt_coeffs, power, crt_index, crt_x, crt_y, print_result=print_result)
 
             if merge_status['status'] != 'nochange':
                 next_x, next_y, next_index, convert_map = self.reorganize_index(merge_status['index'], crt_x, crt_y, True)
@@ -2236,7 +2260,7 @@ class OrderTrace:
 
         return m_x, m_y, m_index, m_coeffs
 
-    def find_all_cluster_widths(self, index_t, x_t, y_t, coeffs, cluster_points, power):
+    def find_all_cluster_widths(self, index_t, x_t, y_t, coeffs, cluster_points, power, cluster_set=None):
         new_index = index_t.copy()
         new_x = x_t.copy()
         new_y = y_t.copy()
@@ -2244,40 +2268,46 @@ class OrderTrace:
         cluster_coeffs = coeffs.copy()
         cluster_widths = list()
 
-        for n in range(1, max_cluster_no+1):
+        if cluster_set is None:
+            cluster_set = list(range(1, max_cluster_no+1))
+
+        for n in cluster_set:
             print('cluster: ', n)
-            ext_spectrum = self.get_spectrum_around_cluster(n, new_index, new_x, new_y, cluster_coeffs, power)
-            if ext_spectrum is not None:
-                cluster_width_info = self.width_of_cluster_by_gaussian(n, cluster_coeffs, cluster_points, power)
-                cluster_widths.append({'avg_nwidth': cluster_width_info['avg_nwidth'], 'avg_pwidth': cluster_width_info['avg_pwidth']})
-                print('top width: ', cluster_width_info['avg_nwidth'], ' bottom width: ', cluster_width_info['avg_pwidth'])
-            else:
+            if n < 1 or n > max_cluster_no or (np.where(index_t==n)[0]).size == 0:
                 cluster_widths.append({'avg_nwidth': WIDTH_DEFAULT, 'avg_pwidth': WIDTH_DEFAULT})
+                continue
+            #ext_spectrum = self.get_spectrum_around_cluster(n, new_index, new_x, new_y, cluster_coeffs, power)
+            #if ext_spectrum is not None:
+            cluster_width_info = self.width_of_cluster_by_gaussian(n, cluster_coeffs, cluster_points, power)
+            cluster_widths.append({'avg_nwidth': cluster_width_info['avg_nwidth'], 'avg_pwidth': cluster_width_info['avg_pwidth']})
+            print('top width: ', cluster_width_info['avg_nwidth'], ' bottom width: ', cluster_width_info['avg_pwidth'])
 
         return cluster_widths
 
 
-    def write_cluster_info_to_csv(self, cluster_widths, cluster_coeffs, power, csvfile):
+    def sort_cluster_in_y(self, cluster_coeffs, power):
         total_cluster = np.shape(cluster_coeffs)[0]-1
         _, nx, ny = self.get_spectral_data()
         c_x = nx/2
         min_x = np.amax(cluster_coeffs[1:total_cluster+1, power+1])
         max_x = np.amin(cluster_coeffs[1:total_cluster+1, power+2])
+
         if min_x > max_x:
             return None;
 
-        if c_x < min_x:
-            c_x = min_x
-        elif c_x > max_x:
-            c_x = max_x
+        c_x = min(max(nx//2, min_x), max_x)
+
+        y_pos = np.zeros(total_cluster+1)
+        for i in  range(1, total_cluster+1):
+            y_pos[i] = np.polyval(cluster_coeffs[i, 0:power+1], c_x)
+
+        sorted_index = np.argsort(y_pos)
+        return sorted_index
+
+    def write_cluster_info_to_csv(self, cluster_widths, cluster_coeffs, power, csvfile):
+        sorted_index = self.sort_cluster_in_y(cluster_coeffs, power)
 
         with open(csvfile, mode='w') as result_file:
-            y_pos = np.zeros(total_cluster+1)
-            for i in  range(1, total_cluster+1):
-                y_pos[i] = np.polyval(cluster_coeffs[i, 0:power+1], c_x)
-
-            #y_pos =(cluster_coeffs[:, power+3]+cluster_coeffs[:, power+4])/2
-            sorted_index = np.argsort(y_pos)
             result_writer = csv.writer(result_file)
             for i in range(1, len(sorted_index)):
                 id = sorted_index[i]
