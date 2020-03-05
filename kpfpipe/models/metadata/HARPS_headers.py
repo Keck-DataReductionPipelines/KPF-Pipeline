@@ -4,7 +4,7 @@ from astropy.time import Time
 
 ## Manual section 4.2.1
 ## Raw frame (equivalent KPF lvl 0)
-HAPRS_HEADER_RAW = {
+HARPS_HEADER_RAW = {
     # '%(HARPS_key):  (%(expected_value_type), %(equivalent_KPF_key))
     'NAXIS':     (int,    None),    # number of data axes (typically 2)
     'NAXIS1':    (int,    None),    # length of data axis 1 (row)

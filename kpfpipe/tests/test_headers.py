@@ -44,25 +44,25 @@ def test_harps_structure():
     assert(HARPS_headers.HARPS_HEADER_E2DS)
 
     # Check that each key-value pair are in expected structures
-    for key, value in HARPS_headers.HAPRS_HEADER_RAW.items():
+    for key, value in HARPS_headers.HARPS_HEADER_RAW.items():
         # Check that key is a string
         assert(isinstance(key, str))
         # Check that value is a two element tuple
         assert(isinstance(value, tuple))
         assert(len(value) == 2)
         # Check that each element is their proper type
-        keyword_type, kpf_key = value
+        keyword_type, harps_key = value
         assert(isinstance(keyword_type, type))
-        assert(isinstance(keyword_type, str) or keyword_type is None)
+        assert(isinstance(harps_key, tuple) or harps_key is None)
     
     # do the same for other dict
     for key, value in HARPS_headers.HARPS_HEADER_E2DS.items():
         assert(isinstance(key, str))
         assert(isinstance(value, tuple))
         assert(len(value) == 2)
-        keyword_type, kpf_key = value
+        keyword_type, harps_key = value
         assert(isinstance(keyword_type, type))
-        assert(isinstance(keyword_type, str) or keyword_type is None)
+        assert(isinstance(harps_key, tuple) or harps_key is None)
 
 if __name__ == '__main__':
     pass
