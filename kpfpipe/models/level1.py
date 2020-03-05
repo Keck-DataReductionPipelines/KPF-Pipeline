@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Pipeline dependencies
-from kpfpipe.models.required_header import HEADER_KEY, LVL1_KEY
+from kpfpipe.models.metadata.KPF_headers import HEADER_KEY, LVL1_KEY
 
 class SpecDict(collections.MutableMapping, dict):
     '''
@@ -22,7 +22,8 @@ class SpecDict(collections.MutableMapping, dict):
         '''
         Set the type of dict this is (array or header_key)
         '''
-        if type_of_dict != 'header' or type_of_dict != 'array':
+        if type_of_dict != 'header' and type_of_dict != 'array':
+            print(type_of_dict)
             # This should never happen since this classed is not 
             # intended for users 
             raise ValueError('invalid type')
@@ -43,13 +44,15 @@ class SpecDict(collections.MutableMapping, dict):
         # or np.ndarrays, apply different checks
         if self.__type == 'header':
             self.__set_header(key, value)
-        elif self.__type == 'array':
+        elif self.__type == 'array':                
+            assert(isinstance(value, all_keys[key]))
+
             self.__set_array(key, value)
         else: 
             # this should never happen
             pass
     
-    def __set_array(self, key: type, value: np.ndarray) -> None:
+    def __set_array(self, key: str, value: np.ndarray) -> None:
         # Values should always be a numpy 2D array
         try:
             assert(isinstance(value, np.ndarray))
@@ -61,12 +64,13 @@ class SpecDict(collections.MutableMapping, dict):
         try:
             assert(np.all(np.real(value)))
             assert(np.all(np.positive(value)))
-            assert(np.all(isinstance(value, np.float64)))
+            assert(value.dtype == 'float64')
+            # assert(np.all(abs(value) < 1))
         except AssertionError:
             raise ValueError('All values must be positive real np.float64')
             
         # passed all tests, setting value
-        dict.__setitem__(key, value)
+        dict.__setitem__(self, key, value)
     
     def __set_header(self, key: str, value: type):
         # if key is defined in KPF headers, make sure that
@@ -84,7 +88,7 @@ class SpecDict(collections.MutableMapping, dict):
             warnings.warn('{} not found in KPF_header')
         
         # this point is reached if no exception is raised 
-        dict.__setitem__(key, value)
+        dict.__setitem__(self, skey, value)
 
 def find_nearest_idx(array: np.ndarray, value: np.float64) -> tuple:
     '''
@@ -154,6 +158,7 @@ class KPF1(object):
         data structure. Note that this is not a @classmethod 
         so initialization is required before calling this function
         '''
+
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
@@ -349,7 +354,7 @@ class Segement:
     def add_segment(self, start_coordinate: tuple,
                        length: int,
                        fiber: str, 
-                       order: int)
+                       order: int):
         ''' 
         Add a new segment to the current connection
         '''
