@@ -29,7 +29,7 @@ class SpecDict(collections.MutableMapping, dict):
             raise ValueError('invalid type')
         self.__type = type_of_dict 
     
-    def __getitem__(self, key: str) -> type:
+    def __getitem__(self, key: str) -> np.ndarray:
         '''
         returns a copy of dict[key] instead, so that the original 
         value is not affected
@@ -45,14 +45,15 @@ class SpecDict(collections.MutableMapping, dict):
         if self.__type == 'header':
             self.__set_header(key, value)
         elif self.__type == 'array':                
-            assert(isinstance(value, all_keys[key]))
-
             self.__set_array(key, value)
         else: 
             # this should never happen
             pass
     
     def __set_array(self, key: str, value: np.ndarray) -> None:
+        '''
+        Setting a array 
+        '''
         # Values should always be a numpy 2D array
         try:
             assert(isinstance(value, np.ndarray))
@@ -63,9 +64,8 @@ class SpecDict(collections.MutableMapping, dict):
         # all values in arrays must be positive real floating points
         try:
             assert(np.all(np.real(value)))
-            assert(np.all(np.positive(value)))
+            assert(np.all(value >= 0))
             assert(value.dtype == 'float64')
-            # assert(np.all(abs(value) < 1))
         except AssertionError:
             raise ValueError('All values must be positive real np.float64')
             
@@ -116,13 +116,13 @@ class KPF1(object):
         Constructor
         Initializes an empty KPF1 data class
         '''
-        ## Internal members 
 
         # 1D spectrums
         # Each fiber is accessible through their key.
         self.flux = SpecDict({}, 'array')
         # Contain error for each of the fiber
         self.variance= SpecDict({}, 'array')
+        # Contain wavelength values for each fiber
         self.wave = SpecDict({}, 'array')
         # Ca H & K spectrum
         self.__hk = np.nan
@@ -335,6 +335,12 @@ class KPF1(object):
         # finish up writing 
         hdul = fits.HDUList(hdu_list)
         hdul.writeto(fn)
+
+    def verify(self) -> bool:
+        '''
+        Verify that the data stored in the current instance is valid
+        '''
+        pass
 
 class Segement:
     '''
