@@ -9,6 +9,7 @@ import copy
 import csv
 from numpy.polynomial.polynomial import polyval, polyder
 from numpy import sqrt, square
+import time
 
 X = 0
 Y = 1
@@ -87,7 +88,7 @@ class PolygonClipping:
             for c in range(0, mask_size[1]):
                 if mask_data[r, c] != 0:
                     continue
-                #import pdb; pdb.set_trace()
+
                 num = 0
                 total = 0.0
                 c1 = max(c-1, 0)
@@ -101,7 +102,7 @@ class PolygonClipping:
                             num = num+1
                             total += in_data[y, x]
                             #print("y = ", y, " x = ", x, " data = ", in_data[y, x], " num = ", num, " total =", total)
-                #import pdb; pdb.set_trace()
+
                 if num != 0:
                     new_in_data[r, c] = total/num
                     print("new data at r, c", r, c, " is ", new_in_data[r, c])
@@ -112,15 +113,31 @@ class PolygonClipping:
 
 
 
-    def load_csv_file(self, filename, delimit=','):
+    def load_csv_file(self, filename, power = None, delimit=','):
         rows = []
+        widths = []
+
         with open(filename) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=delimit)
-            for row in csv_reader:
-                row_num = [float(n) for n in row]
-                rows.append(row_num)
 
-        return rows
+            for row in csv_reader:
+                if power is not None:
+                    row_num = [float(n) for n in row[0:power+1]]
+                    if len(row) > (power+1):
+                        width_num = [float(n) for n in row[power+1:]]
+                        if len(width_num) == 1:
+                            width_num.append(width_num[0])
+                    else:
+                        width_num = [self.order_width, self.order_width]
+                else:
+                    row_num = [float(n) for n in row]
+                    width_num = [self.order_width, self.order_width]
+
+                rows.append(row_num)
+                widths.append(width_num[0:2])
+
+
+        return rows, widths
 
     def load_simple_spectral_info(self):
         """Load simple spectral trace from the fits file"""
@@ -183,6 +200,7 @@ class PolygonClipping:
             x_step.insert(o_x, crt_x)
             y_mid.insert(o_x, polyval(crt_x, coeffs))
 
+        import pdb;pdb.set_trace()
         v_border = [max(y_mid), min(y_mid)]
         if verbose is True:
             print('v_border: ', v_border)
@@ -206,7 +224,7 @@ class PolygonClipping:
 
         return out_data
 
-    def rectify_spectral_curve(self, coeffs, in_data, s_rate=[1, 1], sum_extraction=True, verbose=False):
+    def rectify_spectral_curve(self, coeffs, widths, in_data, s_rate=[1, 1], sum_extraction=True, verbose=False):
         """Straighten the spectral trace
 
         Parameters:
@@ -265,15 +283,18 @@ class PolygonClipping:
         input_upper_corners = []   # corners above the curve, row based list
         input_lower_corners = []   # corners below the curve, row based list
 
-        output_width = int(self.get_output_pos(self.order_width, sampling_rate[Y]))  # width of output
-        upper_width = min(output_width, output_ydim - v_mid)
-        lower_width = min(output_width, v_mid)
+        for n in range(2):
+            output_width = int(self.get_output_pos(widths[n], sampling_rate[Y]))  # width of output
+            if n == 1:
+                upper_width = min(output_width, output_ydim - 1 - v_mid)
+            else:
+                lower_width = min(output_width, v_mid)
         if verbose is True:
             print('width at output: ', upper_width, lower_width)
 
         corners_at_mid = [[x, y] for x, y in zip(x_step, y_mid)]
-        #if verbose is True:
-        #   print('corners_at_mid: ', corners_at_mid)
+        if verbose is True:
+            print('corners_at_mid: ', corners_at_mid)
 
         y_size = 1 if sum_extraction is True else (upper_width+lower_width)
         out_data = np.zeros((y_size, output_xdim))
@@ -292,6 +313,8 @@ class PolygonClipping:
             input_lower_corners.insert(o_y, next_lower_corners)
 
         for o_x in x_output_step[0:-1]:
+            if o_x%100 == 0:
+                print(o_x, end=" ")
             for o_y in range(0, upper_width):
                 input_corners = [input_upper_corners[o_y+c[0]][o_x+c[1]] for c in [[0, 0], [1, 0], [1, 1], [0, 1]]]
                 flux = self.compute_output_flux(input_corners, in_data, input_xdim, input_ydim, False)
@@ -307,18 +330,16 @@ class PolygonClipping:
                 flux = self.compute_output_flux(input_corners, in_data, input_xdim, input_ydim, False)
                 if sum_extraction is True:
                     out_data[0, o_x] += flux
-                    #if verbose is True:
-                    #    print(o_y, o_x, flux, out_data[0, o_x])
                 else:
                     out_data[lower_width-o_y-1, o_x] = flux
 
-            #print('o_x: ', o_x, out_data[:, o_x])
-            #import pdb; pdb.set_trace()
             if verbose is True:
                 print('[%d %.2f]' % (o_x, out_data[0, o_x]), end=' ')
 
+        print(' ')
         if verbose is True:
             print(' ')
+
         result_data = {'y_center': v_mid,
                        'width': [upper_width, lower_width],
                        'dim': [output_ydim, output_xdim],
@@ -326,9 +347,11 @@ class PolygonClipping:
 
         return result_data
 
-    def rectify_spectral_curve_by_optimal(self, coeffs, in_data, flat_data, s_rate=[1, 1], verbose=False):
-        s_result = self.rectify_spectral_curve(coeffs, in_data, s_rate, sum_extraction=False)
-        f_result = self.rectify_spectral_curve(coeffs, flat_data, s_rate, sum_extraction=False)
+    def rectify_spectral_curve_by_optimal(self, coeffs, widths, in_data, flat_data, s_rate=[1, 1], verbose=False):
+        print('in optimal')
+        import pdb;pdb.set_trace()
+        s_result = self.rectify_spectral_curve(coeffs, widths, in_data, s_rate, sum_extraction=False)
+        f_result = self.rectify_spectral_curve(coeffs, widths, flat_data, s_rate, sum_extraction=False)
 
         height = sum(s_result.get('width'))
         width = s_result.get('dim')[1]
@@ -340,8 +363,10 @@ class PolygonClipping:
         for x in range(0, width):
             w_sum = sum(f_data[:, x])
             #w_data_tmp = [ s_data[y, x] * f_data[y, x]/w_sum for y in range(0, height)]
-            w_data[0, x] = sum([ s_data[y, x] * f_data[y, x]/w_sum for y in range(0, height)])
+            w_data[0, x] = sum([ s_data[y, x] * f_data[y, x]/w_sum if w_sum != 0.0 else 0.0 for y in range(0, height)])
 
+        print(w_data[0, 1000:1500])
+        import pdb;pdb.set_trace()
         result_data = {'y_center': s_result.get('y_center'),
                        'dim': s_result.get('dim'),
                        'out_data': w_data
@@ -349,9 +374,9 @@ class PolygonClipping:
 
         return result_data
 
-    def rectify_spectral_curve_by_optimal2(self, coeffs, in_data, flat_data, s_rate=[1, 1], verbose=False):
-            s_result = self.rectify_spectral_curve(coeffs, in_data, s_rate, sum_extraction=False)
-            f_result = self.rectify_spectral_curve(coeffs, flat_data, s_rate, sum_extraction=False)
+    def rectify_spectral_curve_by_optimal2(self, coeffs, widths, in_data, flat_data, s_rate=[1, 1], verbose=False):
+            s_result = self.rectify_spectral_curve(coeffs, widths, in_data, s_rate, sum_extraction=False)
+            f_result = self.rectify_spectral_curve(coeffs, widths, flat_data, s_rate, sum_extraction=False)
 
             height = sum(s_result.get('width'))
             width = s_result.get('dim')[1]
@@ -374,7 +399,9 @@ class PolygonClipping:
                 dem = [ math.pow(p_data[y], 2)/ d_var[y] for y in range(0, height)]
                 w_data[0, x] = sum(num)/sum(dem)
 
-            #import pdb; pdb.set_trace()
+            print(w_data[0, 1000:1500])
+            import pdb;pdb.set_trace()
+
             result_data = {'y_center': s_result.get('y_center'),
                            'dim': s_result.get('dim'),
                            'out_data': w_data,
@@ -527,27 +554,35 @@ class PolygonClipping:
 
         flux = 0.0
 
+        #start=time.time()
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
                 if verbose is True:
                     print('input_data[', y, x,']: ', input_data[y, x])
 
                 if input_data[y, x] != 0.0:
+                    #start1 = time.time()
                     new_corners = self.polygon_clipping(input_corners, [[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
+                    #start2 = time.time()
+                    #print('poly_clipping: ', (start2-start1))
                     area = self.polygon_area(new_corners)
+                    #start3 = time.time()
+                    #print('area: ', (start3-start2))
                     if verbose is True:
                         print('area: ', area)
                     flux += area * input_data[y, x]
 
+        #end = time.time()
+        #print('flux: ', (end-start))
         return flux
 
     def polygon_clipping(self, poly_points, clipper_points, clipper_size):
         """ New polygon points after performing the clipping based on the specified clipping area"""
 
         new_poly_points = copy.deepcopy(poly_points)
-
         for i in range(clipper_size):
             k = (i+1)%clipper_size
+
             new_poly_points = self.clip(new_poly_points, clipper_points[i][0], clipper_points[i][1],
                                    clipper_points[k][0], clipper_points[k][1])
 
