@@ -1,4 +1,5 @@
 import pytest
+import warnings
 
 from kpfpipe.models.level1 import *
 
@@ -58,9 +59,6 @@ def test_array_dict_set_attr():
         # ndarray is not np.float64
         array_dict['test'] = np.asarray([[1, 2], [3, 4]], dtype=int)
     
-    with pytest.raises(ValueError):
-        # ndarray contains invalid data
-        array_dict['test'] = np.asarray([[-1, -2], [3, 4]], dtype=np.float64)
 
 
 def test_array_dict_get_attr():
@@ -69,14 +67,15 @@ def test_array_dict_get_attr():
     '''
     ## Arrange
     array_dict = SpecDict({}, 'array')
-    array_dict['test'] = np.asarray([[1, 2], [3, 4]], dtype=np.float64)
+    data = np.asarray([[1, 2], [3, 4]], dtype=np.float64)
+    array_dict['test'] = data
     
     ## Act
     result = array_dict['test']
-    result = np.asarray([[2, 3], [4, 5]], dtype=np.float64)
 
     ## Assert
-    assert(np.any(result != array_dict['test'])) # Original should not be modified
+    assert(np.any(result == data)) # result values should be equal
+    assert(id(result) != id(array_dict['test'])) # instances should be differnet
 
 
 ## Constructor and Deconstructor
@@ -84,7 +83,6 @@ def test_init():
     '''
     Check that level1 data initializes correctly
     '''
-    # --TODO--
     pass
 
 ## Initializer through I/O
@@ -92,8 +90,13 @@ def test_from_harps():
     '''
     Check that the _read_from_HARP() works
     '''
-    # --TODO--
-    pass
+    ## Arrange
+    warnings.filterwarnings("ignore")
+
+    fpath = 'resource/HARPS_E2DS/HARPS.2007-04-04T09_17_51.376_e2ds_A.fits'
+    data = KPF1.from_fits(fpath, 'HARPS')
+    data.info()
+    
 
 def test_from_kpf1(): 
     '''
@@ -134,4 +137,5 @@ def test_set_attr():
     pass
 
 if __name__ == '__main__':
-    test_spec_dict()
+    test_from_harps()
+    
