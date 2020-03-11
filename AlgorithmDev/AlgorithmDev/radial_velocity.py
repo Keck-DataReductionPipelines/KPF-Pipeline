@@ -13,6 +13,7 @@ from astropy.utils import iers
 import os.path
 import csv
 
+#STEP_INDEX = [-82, 82]
 STEP_INDEX = [-80.0, 81.0]
 LIGHT_SPEED = 299792.458   # light speed in km/s
 LIGHT_SPEED_M = 299792458. # light speed in m/s
@@ -150,13 +151,13 @@ class RadialVelocity:
         return self.mask_line
 
 
-    def get_wavecalib_poly_params(self, hdr):
+    def get_wavecalib_poly_params(self, hdr, start_order):
         CAL_TH_COEFF = 'HIERARCH ESO DRS CAL TH COEFF LL'
         p_degree = hdr['HIERARCH ESO DRS CAL TH DEG LL']
 
         wcalib_coeffs_orders = []
 
-        for ord in range(self.spectrum_order):
+        for ord in range(start_order, self.spectrum_order+start_order):
             coeff_base = int(p_degree+1)*ord
             ll_coeffs_order = [hdr[CAL_TH_COEFF+str(coeff_base+i)] for i in range(p_degree, -1, -1)]
             wcalib_coeffs_orders.append( ll_coeffs_order )
@@ -164,13 +165,14 @@ class RadialVelocity:
         return wcalib_coeffs_orders
 
 
-    def get_rv_on_spectrum_fits(self, spectrum_fits, weigh_ccf):
+    def get_rv_on_spectrum_fits(self, spectrum_fits, weigh_ccf, hdu_in_calib=None, BC_corr_key=None, \
+                                start_x=None, end_x=None, start_order=None, end_order=None):
         spectrum, hdr = fits.getdata(spectrum_fits, header=True)
-        return self.get_rv_on_spectrum(spectrum, hdr, weigh_ccf)
+        return self.get_rv_on_spectrum(spectrum, hdr, weigh_ccf, hdu_in_calib, BC_corr_key, start_x, end_x, start_order, end_order)
 
 
-    def get_wavecal_by_poly_from_hdr(self, hdr, spectrum_x):
-        wavecalib_coeffs = self.get_wavecalib_poly_params(hdr)
+    def get_wavecal_by_poly_from_hdr(self, hdr, spectrum_x, start_order):
+        wavecalib_coeffs = self.get_wavecalib_poly_params(hdr, start_order)
         wavecals = np.zeros((self.spectrum_order, np.size(spectrum_x)))
 
         for ord in range(self.spectrum_order):
@@ -178,15 +180,20 @@ class RadialVelocity:
 
         return wavecals
 
-    def get_wavecal_by_map(self, calib_file):
-        calib_map, hdr = fits.getdata(calib_file, header=True)
-        new_calibs = np.zeros((self.spectrum_order, (X2-X1)))
+    def get_wavecal_by_map(self, calib_file, hdu_index, spectrum_x, start_order):
+        calib_hdu = fits.open(calib_file)
+        if (hdu_index is None):
+            hdu_index = 0
 
-        total_y = min(np.shape(calib_map)[0], self.spectrum_order)
-        new_calibs[0:total_y, :] = calib_map[0:total_y, X1:X2]
+        calib_map = calib_hdu[hdu_index].data
+        end_order = start_order + self.spectrum_order
+        new_calibs = calib_map[start_order:end_order, spectrum_x]
+
         return new_calibs
 
-    def get_rv_on_spectrum(self, spectrum, hdr, weigh_ccf=None, wavelength_calib_file=None):
+    def get_rv_on_spectrum(self, spectrum, hdr, weigh_ccf=None, wavelength_calib_file=None, hdu_in_calib=None,
+                           start_x = None, end_x = None, start_order=None, end_order=None, BC_corr=None,
+                           order_diff = 0):
         """
         compute radial velocity of all orders based on 2D spectrum
 
@@ -204,22 +211,35 @@ class RadialVelocity:
                          row 72 reserved for rv summation from order 1-69 done by analyze_ccf()
         """
 
-        obsjd = hdr['MJD-OBS'] + 2400000.5 + hdr['EXPTIME'] * SEC_TO_JD/2
-        spectrum_x = np.arange(np.shape(spectrum)[1])[X1:X2]
-        new_spectrum = spectrum[:, X1:X2]
-        zb = self.get_BC_corr_RV(obsjd)[0]
+        if BC_corr is None:
+            obsjd = hdr['MJD-OBS'] + 2400000.5 + hdr['EXPTIME'] * SEC_TO_JD/2
+            zb = self.get_BC_corr_RV(obsjd)[0]
+        else:
+            zb = BC_corr
+
+        s_x = X1 if start_x is None else start_x
+        e_x = X2 if end_x is None else end_x
+        spectrum_x = np.arange(np.shape(spectrum)[1])[s_x:e_x]
+
+        s_order = 0 if start_order is None else start_order
+        e_order = self.spectrum_order+s_order-1 if end_order is None else end_order
+
+        new_spectrum = spectrum[s_order:e_order+1, s_x:e_x]
+        new_w_ccf = None if weigh_ccf is None else weigh_ccf[s_order:e_order+1, s_x:e_x]
+
         result_ccf = np.zeros([self.spectrum_order+MORE_FOR_ANALYSIS, self.velocity_steps])
 
         if wavelength_calib_file is None:
-            wavecal_all_orders = self.get_wavecal_by_poly_from_hdr(hdr, spectrum_x)
+            wavecal_all_orders = self.get_wavecal_by_poly_from_hdr(hdr, spectrum_x, s_order+order_diff)
         else:
-            wavecal_all_orders = self.get_wavecal_by_map(wavelength_calib_file)
+            wavecal_all_orders = self.get_wavecal_by_map(wavelength_calib_file, hdu_in_calib, spectrum_x, s_order+order_diff)
 
         for ord in range(self.spectrum_order):
             print(ord, ' ', end="")
             wavecal = wavecal_all_orders[ord, :]
+
             if np.any(wavecal != 0.0):
-                w_ccf = weigh_ccf[ord, :] if weigh_ccf is not None else None
+                w_ccf = weigh_ccf[ord, :] if new_w_ccf is not None else None
                 result_ccf[ord, :] = self.cross_correlate_by_mask_shift(wavecal, new_spectrum[ord, :], zb, w_ccf)
             else:
                 print("all wavelength zero")
@@ -275,32 +295,39 @@ class RadialVelocity:
         total_match = 0.
         total_cc = 0.
         for c in range(v_steps):
-
             line_dopplershifted_start =  new_line_start * shift_lines_by[c]
             line_dopplershifted_end =  new_line_end * shift_lines_by[c]
             line_dopplershifted_center =  new_line_center * shift_lines_by[c]
 
-            closestmatch = np.sum((xpixel_wavestart - line_dopplershifted_center[:,np.newaxis] <= 0.), axis=1)
+            #closestmatch = np.sum((xpixel_wavestart - line_dopplershifted_center[:,np.newaxis] <= 0.), axis=1)
+            closestmatch = np.sum((xpixel_waveend - line_dopplershifted_start[:,np.newaxis] < 0.), axis=1)
+            closestmatch_next = np.sum((xpixel_wavestart - line_dopplershifted_end[:, np.newaxis] < 0.), axis=1)
             maskspectra_dopplershifted = np.zeros(n_xpixel)
 
             for k in range(nline_index):
-                closest_xpixel = closestmatch[k] - 1    # fix: closest index before line_dopplershifted_center
-                #closest_xpixel = closestmatch[k]       # before fix
+                #closest_xpixel = closestmatch[k] - 1    # fix: closest index before line_dopplershifted_center
+                closest_xpixel = closestmatch[k]       # before fix
+                closest_xpixel_next = closestmatch_next[k]
                 line_startwave = line_dopplershifted_start[k]
                 line_endwave = line_dopplershifted_end[k]
                 line_weight = new_line_weight[k]
 
-                if (closest_xpixel > pix1 and closest_xpixel < pix2):
-                    for n in range(closest_xpixel - 5, closest_xpixel + 5):
+                if (closest_xpixel_next <= pix1 or closest_xpixel >= pix2):
+                    continue
+                else:
+                    for n in range(closest_xpixel, closest_xpixel_next):
+                        if n >= pix2:
+                            break
+                        if n <= pix1:
+                            continue
                         # if there is overlap
                         if xpixel_wavestart[n] <= line_endwave and xpixel_waveend[n] >= line_startwave:
                             wavestart = max(xpixel_wavestart[n], line_startwave)
                             waveend = min(xpixel_waveend[n], line_endwave)
                             maskspectra_dopplershifted[n] = line_weight * (waveend - wavestart)/(xpixel_waveend[n]-xpixel_wavestart[n])
-
             ccf[c] = np.nansum(spectrum * maskspectra_dopplershifted)
 
-        #print('  total_match: ', total_match, ' total cc: ', total_cc)  #total_match averagely higher than original code??
+        #print('ccf ', ccf)  #total_match averagely higher than original code??
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             if weigh_ccf_ord is None:
