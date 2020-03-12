@@ -1,0 +1,13 @@
+# example.recipe
+from modules.level0 import Normalize, NoiseReduce, Spectrum1D
+
+for data in [A, B, C]:
+    d = read_data(data)
+    out, result = Normalize(d)
+    if result < 0:
+        out, result = NoiseReduce(out)
+    elif result < 1:
+        out, result = NoiseReduce(out, 1.5)
+    else:
+        out, result = NoiseReduce(out, 2.5)
+    out, result = Spectrum1D(out, lambdaCalibration)
