@@ -1,5 +1,5 @@
 # example.recipe
-from modules.level0 import Normalize, NoiseReduce, Spectrum1D
+from modules.level0 import read_data, Normalize, NoiseReduce, Spectrum1D
 
 for data in [A, B, C]:
     d = read_data(data)
