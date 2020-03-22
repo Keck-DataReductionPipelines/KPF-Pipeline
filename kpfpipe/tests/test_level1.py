@@ -92,12 +92,23 @@ def test_from_harps():
     '''
     ## Arrange
     warnings.filterwarnings("ignore")
-
     fpath = 'resource/HARPS_E2DS/HARPS.2007-04-04T09_17_51.376_e2ds_A.fits'
+
+    ## Act
     data = KPF1.from_fits(fpath, 'HARPS')
     data.info()
     
+def test_form_neid():
+    '''
+    Check that the _read_from_HARP() works
+    '''
+    ## Arrange
+    warnings.filterwarnings("ignore")
+    fpath = 'resource/NEID/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
 
+    ## Act
+    data = KPF1.from_fits(fpath, 'NEID')
+    data.info()
 def test_from_kpf1(): 
     '''
     Check that the _read_from_KPF() works as intended
@@ -138,4 +149,4 @@ def test_set_attr():
 
 if __name__ == '__main__':
     test_from_harps()
-    
+    test_form_neid()
