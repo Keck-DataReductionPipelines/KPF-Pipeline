@@ -7,18 +7,20 @@ from astropy.coordinates import Angle
 ## Header keywords required by all levels of data
 HEADER_KEY = {
     ## Temperal keywords
-    'OBS-TIME': Time,   # universal time of observation.
+    'OBS-TIME': str,   # universal time of observation.
     'ELAPTIME': float,  # open shutter time (all coadds) (seconds)
 
     ## Observation location keywords
+    'OBSORIGIN':  str,    # Observatory name
+    'TELESCOPE':  str,    # telescope name
     'AIRMASS':  float,  # air mass
-    'AZ':       Angle,  # telescope azimuth (deg)
-    'EL':       Angle,  # telescope elevation (deg)
-    'DEC':      Angle,  # declination (DD:MM:SS.SS or decimal degree)
+    'AZ':       str,  # telescope azimuth (deg)
+    'EL':       str,  # telescope elevation (deg)
+    'DEC':      str,  # declination (DD:MM:SS.SS or decimal degree)
     'EQUINOX':  float,  # telescope equinox (2000.0)
     'OBJECT':   str,    # observed object name
-    'PA':       Angle,  # position angle from north
-    'RA':       Angle,  # right ascension (HH:MM:SS.SS or decimal degree)
+    'PA':       str,  # position angle from north
+    'RA':       str,  # right ascension (HH:MM:SS.SS or decimal degree)
     'TARGNAME': str,    # target name from WMKO starlist
 
     ## Observation type keywords
@@ -43,6 +45,7 @@ HEADER_KEY = {
     'FRAMENO':  int,    # frame number of FITS file
     'OFNAME':   str,    # original filename written to disk (sep2i0001.fits)
     'OUTDIR':   str,    # location on disk where FITS file was written
+    'FNDATE':   str,    # Date this file where this file is written
 
     ## Caliration association
     'DETMODE':  float,  # --TODO-- description
@@ -62,10 +65,10 @@ HEADER_KEY = {
     'CD1_2':    float,  # WCS coordinate transform matrix [1, 2]
     'CD2_1':    float,  # WCS coordinate transform matrix [2, 1]
     'CD2_2':    float,  # WCS coordinate transform matrix [2, 2]
-    'CRPIX1':   Angle,  # reference pixel (RA: degree)
-    'CRPIX2':   Angle,  # reference pixel (DEC: degree)
-    'CRVAL1':   Angle,  # reference pixel value (RA: degree)
-    'CRVAL2':   Angle,  # reference pixel value (DEC: degree)
+    'CRPIX1':   str,  # reference pixel (RA: degree)
+    'CRPIX2':   str,  # reference pixel (DEC: degree)
+    'CRVAL1':   str,  # reference pixel value (RA: degree)
+    'CRVAL2':   str,  # reference pixel value (DEC: degree)
     'CTYPE1':   float,  # coordinate type and projection (RA-TAN)
     'CTYPE2':   float,  # coordiante type and projection (DEC-TAN)
     'RADECSYS': str,    # coordinate system

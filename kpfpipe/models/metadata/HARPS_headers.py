@@ -5,22 +5,22 @@ from astropy.time import Time
 ## Manual section 4.2.1
 ## Raw frame (equivalent KPF lvl 0)
 HARPS_HEADER_RAW = {
-    # '%(HARPS_key):  (%(expected_value_type), %(equivalent_KPF_key))
+    # %(HARPS_key):  (%(expected_value_type), %(equivalent_KPF_key))
     'NAXIS':     (int,    None),    # number of data axes (typically 2)
-    'NAXIS1':    (int,    None),    # length of data axis 1 (row)
-    'NAXIS2':    (int,    None),    # length of data axis 2 (column)
-    'ORIGIN':    (str,    None),    # observatory name (European Southern Observatory)
-    'DATE':      (Time,   None),   # date this file was written
-    'TELESCOPE': (str,    None),    # ESO telescope name
-    'INSTRUME':  (str,    None),    # instrument name 
-    'OBJECT':    (str,    None),    # target description
-    'RA':        (float,  None),  # 17:57:47.9 RA (J2000) pointing
-    'DEC':       (float,  None),  # 04:42:51.6 DEC (J2000) pointing 
-    'EQUINOX':   (float,  None),  # standard FK5 (years)
-    'RADECSYS':  (str,    None),    # coordinate reference frame
-    'EXPTIME':   (float,  None),  # totdal integration time
+    'NAXIS1':    (int,    'NAXIS1'),    # length of data axis 1 (row)
+    'NAXIS2':    (int,    'NAXIS2'),    # length of data axis 2 (column)
+    'ORIGIN':    (str,    'OBSORGIN'),    # observatory name (European Southern Observatory)
+    'DATE':      (str,    'FNDATE'),   # date this file was written
+    'TELESCOPE': (str,    'TELESCOPE'),    # ESO telescope name
+    'INSTRUME':  (str,    'INSTRUME'),    # instrument name 
+    'OBJECT':    (str,    'OBJECT'),    # target description
+    'RA':        (float,  'RA'),  # 17:57:47.9 RA (J2000) pointing
+    'DEC':       (float,  'DEC'),  # 04:42:51.6 DEC (J2000) pointing 
+    'EQUINOX':   (float,  'EQUINOX'),  # standard FK5 (years)
+    'RADECSYS':  (str,    'RADECSYS'),    # coordinate reference frame
+    'EXPTIME':   (float,  'EAPTIME'),  # totdal integration time
     'MJD-OBS':   (float,  None),  # MJD start (2007-04-04T09:17:51.376)
-    'DATE-OBS':  (Time,   None),   # date of observation
+    'DATE-OBS':  (Time,   'OBS-TIME'),   # date of observation
     'UTC':       (float,  None),  # 09:17:46.000 UTC
     'LST':       (float,  None), # 17:24:05.503 LST
     'PI-COI':    (str,    None),   # PI-COI name
