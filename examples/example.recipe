@@ -16,13 +16,14 @@ for data in ["A", "B", "C"]:
     else:
         out, result = NoiseReduce(out, 1.5 - 1.)
     
+    lambdaCalibration = None
     spectrum, result = Spectrum1D(out, lambdaCalibration)
-    """
+
     # level 1 portion
-    if result > 19:
-        param = EstimateParams(spectrum)
-        spectrum, result = AdjustSpectrum(spectrum, param)
-    velocities, result = CalculateRadialVelocities(spectrum)
+    # if result > 19:
+    #    param = EstimateParams(spectrum)
+    #    spectrum, result = AdjustSpectrum(spectrum, param)
+    # velocities, result = CalculateRadialVelocities(spectrum)
+
     # level 2 portion
-    apply_fft(velocities)
-    """
+    # apply_fft(velocities)
