@@ -5,9 +5,9 @@ import _ast
 from collections.abc import Iterable
 from collections import deque
 from queue import Queue
-from kpfpipe.pipelines.FauxLevel0Primatives import read_data, Normalize, NoiseReduce, Spectrum1D
+from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
+from kpfpipe.models.kpf_arguments import KpfArguments
 from keckdrpframework.models.action import Action
-from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 class KpfPipelineNodeVisitor(NodeVisitor):
@@ -109,7 +109,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         if not getattr(node, 'kpf_completed', False):
             self._load.append((node.name, node.asname))
-            print("{}alias: {} as {}".format(self._indentStr * self._indent, node.name, node.asname))
+            print(f"{self._indentStr * self._indent}alias: {node.name} as {node.asname}")
             setattr(node, 'kpf_completed', True)
     
     def visit_Name(self, node):
@@ -129,9 +129,9 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             return
-        print("{}Name: {}".format(self._indentStr * self._indent, node.id))
+        print(f"{self._indentStr * self._indent}Name: {node.id}")
         if isinstance(node.ctx, _ast.Store):
-            print(f"Name is storing {node.id}")
+            # print(f"Name is storing {node.id}")
             self._store.append(node.id)
         elif isinstance(node.ctx, _ast.Load):
             value = self._params.get(node.id)
@@ -178,6 +178,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 params['current_arg'] = current_arg
                 setattr(node, 'kpf_params', params)
                 setattr(node, 'kpf_started', True)
+                print(f"\n\n\nFor: top of loop with arg {current_arg}")
             else:
                 params = getattr(node, 'kpf_params', None)
                 assert(params is not None)
@@ -192,12 +193,18 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     self.visit(subnode)
                     if self.awaiting_call_return:
                         return
-                self.reset_visited_states(subnode)
+                # reset the node visited states for all nodes
+                # underneath this "for" loop to set up for the
+                # next iteration of the loop.
+                for subnode in node.body:
+                    self.reset_visited_states(subnode)
+                # iterate by updating current_arg (and the arg iterator)
                 try:
                     current_arg = next(args_iter)
                     params['current_arg'] = current_arg
                 except StopIteration:
                     break
+                print(f"\n\n\nFor: top of loop with arg {current_arg}")
             setattr(node, 'kpf_completed', True)
 
     
@@ -225,49 +232,36 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.value)
             return
         if not getattr(node, 'kpf_completed', False):
-            print("{}Assign: ".format(self._indentStr * self._indent))
+            print(f"{self._indentStr * self._indent}Assign:")
             self._indent += 1
             loadQSizeBefore = len(self._load)
             storeQSizeBefore = len(self._store)
             if not getattr(node, 'kpf_completed_targets', False):
-                print(f"Assign: visiting targets, storeQSizeBefore is {storeQSizeBefore}")
                 setattr(node, 'kpf_storeQSizeBefore', storeQSizeBefore)
                 for target in node.targets:
                     self.visit(target)
                     if self.awaiting_call_return:
                         return
-                print(f"Assign: len(_store) is now {len(self._store)}")
                 num_store_targets = len(self._store[storeQSizeBefore:])
                 setattr(node, "kpf_num_targets", num_store_targets)
                 setattr(node, 'kpf_completed_targets', True)
             else:
-                """
-                # _store stack items should already be present, but need to know how many
-                print(f"Assign: targets previously completed; storeQSizeBefore is {storeQSizeBefore}")
-                targets = getattr(node, 'kpf_targets', None)
-                print(f"Assign: targets is {targets}")
-                for target in targets:
-                    self._store.append(target)
-                print(f"Assign: len(_store) is now {len(self._store)}")
-                """
                 num_store_targets = getattr(node, 'kpf_num_targets', 0)
             if not getattr(node, 'kpf_completed_values', False):
-                print("{}Assign from:".format(self._indentStr * self._indent))
+                print(f"{self._indentStr * self._indent}Assign from:")
                 self.visit(node.value)
                 if self.awaiting_call_return:
                     return
                 setattr(node, 'kpf_completed_values', True)
-            print(f"Assign: len(store): {len(self._store)}, storeQSizeBefore: {storeQSizeBefore}")
-            print(f"Assign: len(load): {len(self._load)}, loadQSizeBefore: {loadQSizeBefore}")
             while num_store_targets > 0 and len(self._load) > loadQSizeBefore:
                 target = self._store.pop()
                 self._params[target] = self._load.pop()
                 num_store_targets -= 1
-                print("{}Assign: {} <- {}".format(self._indentStr * self._indent, target, self._params[target]))
+                print(f"{self._indentStr * self._indent}Assign: {target} <- {self._params[target]}")
             while len(self._store) > storeQSizeBefore:
-                print("{}Assign: unfilled target: {}".format(self._indentStr * self._indent, self._store.pop()))
+                print(f"{self._indentStr * self._indent}Assign: unfilled target: {self._store.pop()}")
             while len(self._load) > loadQSizeBefore:
-                print("{}Assign: unused value: {}".format(self._indentStr * self._indent, self._load.pop()))
+                print(f"{self._indentStr * self._indent}Assign: unused value: {self._load.pop()}")
             self._indent -= 1
             setattr(node, 'kpf_completed', True)
 
@@ -284,7 +278,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.operand)
             self.visit(node.op)
             return
-        print("{}UnaryOp:".format(self._indentStr * self._indent))
+        print(f"{self._indentStr * self._indent}UnaryOp:")
         self.visit(node.operand)
         self.visit(node.op)
 
@@ -294,7 +288,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement UAdd """
         if self._reset_visited_states:
             return
-        print("{}USub".format(self._indentStr * self._indent))
+        print(f"{self._indentStr * self._indent}USub")
         if len(self._load) == 0:
             raise Exception("visit_UnaryOp: called with no argument")
         pass
@@ -305,7 +299,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         if self._reset_visited_states:
             return
-        print("{}USub".format(self._indentStr * self._indent))
+        print(f"{self._indentStr * self._indent}USub")
         if len(self._load) == 0:
             raise Exception("visit_UnaryOp: called with no argument")
         self._load.append(-self._load.pop())
@@ -314,7 +308,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         if self._reset_visited_states:
             return
-        print("{}USub".format(self._indentStr * self._indent))
+        print(f"{self._indentStr * self._indent}USub")
         if len(self._load) == 0:
             raise Exception("visit_UnaryOp: called with no argument")
         self._load.append(not self._load.pop())
@@ -457,9 +451,31 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         Implement function call
         The arguments are pulled from the _load stack into a deque.
         Targets are put on the _store stack.
-        TODO: We need some mechanism for getting the results of the call and putting
-        them in the _params dict under the keywords from the _store stack.
-        Maybe a _call_pending Bool and a number of results expected?
+        After the call has been pushed to the framework's event queue,
+        we set our awaiting_call_return flag and return.  That flag
+        causes immediate returns all the way up the call stack.
+        When the primitive has been run by the framework, the next
+        primitive will be our "resume_recipe", which will set the
+        returning_from_call flag and start traversing the AST tree
+        from the top again.  Because of the various kpf_completed
+        attributes set on nodes of the tree, processing will quickly
+        get back to here, where the output of the primitive will be
+        pushed on the _load stack, becoming the result of the call.
+
+        TODO: It is awkward to support both positional and keyword
+        arguments to the the called function, because the Arguments
+        class only supports keyword arguments.  We currently handle
+        positional arguments by naming them arg0, arg1, etc.  The
+        names should probably be made less likely to clash with
+        real keyword-based arguments.
+
+        Even more difficult is the situation with returned values
+        from the primitives.  The python syntax around a function
+        call assumes positional return values, but the Arguments
+        class only supports named values.
+
+        We need to figure out a better way to deal with arguments
+        and return values.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -472,6 +488,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 loadSizeBefore = len(self._load)
                 for arg in node.args:
                     self.visit(arg)
+                """
                 func_args = {}
                 func_args['name'] = node.func.id+"_args"
                 arg_num = 0
@@ -483,9 +500,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 print(f"Call: func_args: {func_args}")
                 args = Arguments(**func_args)
                 """
-                pipe_args = KpfPipelineArgs(self, self.tree, func_args)
-                print(f"{self._indentStr * self._indent}Call: {node.func.id}, args: {pipe_args}")
-                """
+                args = KpfArguments(name=node.func.id+"_args")
+                while len(self._load) > loadSizeBefore:
+                    # because the arguments come off the _load stack in
+                    # reverse order, we need to insert each one at the front
+                    args.insert(0, self._load.pop())
                 # Build and queue up the called function and arguments
                 # as a pipeline event.
                 # The "next_event" item in the event_table, populated
@@ -493,16 +512,26 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 # processing will continue by making resume_recipe
                 # the next scheduled event primative.
                 self.context.push_event(node.func.id, args)
-                """
-                self.action = Action(event, pipe_args)
-                self.output = self._prims[node.func.id](self.action, self.context)
-                """
                 #
                 self.awaiting_call_return = True
                 return
             else:
                 self.returning_from_call = False
-                print(f"Call: returning, output is {self.call_output}")
+                # print(f"Call: returning, output is {self.call_output}")
+
+                """
+                # This is truly ugly, since it requires primitive
+                # implementors to name their return values names
+                # that we recognize here so that we can pull them
+                # out in a well-defined order to put them on the
+                # _load stack.
+                # Alternatives I've thought of:
+                # peek at the _store stack to see the names that
+                # return values will be assigned into.  But the
+                # name used inside the primitive has no relation
+                # to the variable name in the recipe.
+                # There needs to be a way to handle positional
+                # return values!
                 arg_num = 0
                 while True:
                     argname = "arg"+str(arg_num)
@@ -510,6 +539,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                         break
                     self._load.append(getattr(self.call_output, argname))
                     arg_num += 1
+                """
+                assert(isinstance, self.call_output, KpfArguments)
+                for ix in range(len(self.call_output)):
+                    self._load.append(self.call_output[ix])
                 self.call_output = None
             setattr(node, 'kpf_completed', True)
 
@@ -530,7 +563,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(op)
             return
         if not getattr(node, 'kpf_completed', False):
-            print("{}Compare".format(self._indentStr * self._indent))
+            print(f"{self._indentStr * self._indent}Compare")
             loadQSizeBefore = len(self._load)
             # comparators before left because they're going on a stack, so left can be pulled first
             for item in node.comparators:
@@ -560,10 +593,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(item)
             return
         if not getattr(node, 'kpf_completed', False):
-            print("{}If".format(self._indentStr * self._indent))
+            print(f"{self._indentStr * self._indent}If")
             self._indent += 1
             if not getattr(node, 'kpf_completed_test', False):
-                print("{}test: ".format(self._indentStr * self._indent))
+                print(f"{self._indentStr * self._indent}test: ")
                 loadQSizeBefore = len(self._load)
                 self.visit(node.test)
                 if len(self._load) <= loadQSizeBefore:
@@ -574,13 +607,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             else:
                 boolResult = getattr(node, 'kpf_boolResult')
             if boolResult:
-                print("{}pushing and visiting Ifso: ".format(self._indentStr * self._indent))
+                print(f"{self._indentStr * self._indent}pushing and visiting Ifso")
                 for item in node.body:
                     self.visit(item)
                     if self.awaiting_call_return:
                         return
             else:
-                print("{}pushing and visiting Else:".format(self._indentStr * self._indent))
+                print(f"{self._indentStr * self._indent}pushing and visiting Else")
                 for item in node.orelse:
                     self.visit(item)
                     if self.awaiting_call_return:
@@ -597,7 +630,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             for elt in node.elts:
                 self.visit(elt)
             return
-        print("{}List".format(self._indentStr * self._indent))
+        print(f"{self._indentStr * self._indent}List")
         if not getattr(node, "kpf_completed", False):
             for elt in node.elts:
                 self.visit(elt)
@@ -610,12 +643,23 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
             return
-        print("{}Tuple".format(self._indentStr * self._indent))
+        print(f"{self._indentStr * self._indent}Tuple")
         if not getattr(node, "kpf_completed", False):
             for elt in node.elts:
                 self.visit(elt)
             setattr(node, "kpf_completed", True)
         
+    def visit_NameConstant(self, node):
+        """
+        NameConstant
+        implement name constant by putting on the _load stack
+        """
+        if self._reset_visited_states:
+            return
+        print(f"{self._indentStr * self._indent}NameConstant: {node.value}")
+        #ctx of NameConstant is always Load
+        self._load.append(node.value)
+    
     def visit_Num(self, node):
         """
         Num
@@ -626,7 +670,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             return
-        print("{}Num: {}".format(self._indentStr * self._indent, node.n))
+        print(f"{self._indentStr * self._indent}Num: {node.n}")
         # ctx of Num is always Load
         self._load.append(node.n)
 
