@@ -5,12 +5,12 @@ import _ast
 from collections.abc import Iterable
 from collections import deque
 from queue import Queue
-from FauxLevel0Primatives import read_data, Normalize, NoiseReduce, Spectrum1D
-from kpf_pipeline_args import KpfPipelineArgs
+from kpfpipe.pipelines.FauxLevel0Primatives import read_data, Normalize, NoiseReduce, Spectrum1D
 from keckdrpframework.models.action import Action
+from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
-class KpfPipelineNodeVisitor1(NodeVisitor):
+class KpfPipelineNodeVisitor(NodeVisitor):
     """
     Node visitor to convert KPF pipeline recipes expressed in python syntax
     into operations on the KPF Framework.
@@ -20,53 +20,57 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
     _indentStr = ""
     _indent = 0
 
-    def __init__(self, context=None):
+    def __init__(self, pipeline=None, context=None):
         NodeVisitor.__init__(self)
         self._indentStr = "  "
         self._indent = 0
-        # instantiate the primative dict and some primitives
-        self._prims = {}
-        self._prims["read_data"] = read_data
-        self._prims["Normalize"] = Normalize
-        self._prims["NoiseReduce"] = NoiseReduce
-        self._prims["Spectrum1D"] = Spectrum1D
         # instantiate the parameters dict
-        self._params = {}
-        # store and load stacks (implemented as lists; use append() and pop())
+        self._params = None
+        # store and load stacks
+        # (implemented as lists; use append() and pop())
         self._store = list()
         self._load = list()
         # KPF framework items
+        self.pipeline = pipeline
         self.context = context
-        self.tree = None
+        # local state flags
         self.awaiting_call_return = False
         self.returning_from_call = False
-        self.call_output = None
-        # housekeeping
         self._reset_visited_states = False
+        # value returned by primitive executed by framework
+        self.call_output = None
     
     def visit_Module(self, node):
         """
         Module node
+        A Module node is always at the top of an AST tree returned
+        by ast.parse(), and there is only one, so we initialize
+        or reset things here, and clean up (releasing allocated
+        memory) at the end.
         """
         if self._reset_visited_states:
+            setattr(node, 'kpf_started', False)
             setattr(node, 'kpf_completed', False)
             for item in node.body:
                 self.visit(item)
+            self._params = None # let storage get collected
             return
         print("Module")
+        if not getattr(node, 'kpf_started', False):
+            self._params = {}
+            setattr(node, 'kpf_started', True)
         if not getattr(node, 'kpf_completed', False):
             self._indent += 1
-            self.tree = node
             for item in node.body:
                 self.visit(item)
                 if self.awaiting_call_return:
                     return
-            self.tree = None
+            self._params = None # let allocated memory get collected
             setattr(node, 'kpf_completed', True)
 
     def visit_ImportFrom(self, node):
         """
-        import primatives from a location and add them to the prims dict
+        import primitives and add them to the pipeline's event_table
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -81,13 +85,25 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
                 self.visit(name)
             while len(self._load) > loadQSizeBefore:
                 # import the named primitive
-                # just print the name for now
+                # This comes as a 2-element tuple from visit_alias
+                #
+                # just add the name to the event_table for now
+                # But we should ensure that the name exists in the module and is Callable
                 tup = self._load.pop()
                 print(f"Import {tup[0]} from {module}")
+                # create an event_table entry that returns control
+                # to the pipeline after running
+                self.pipeline.event_table[tup[0]] = (tup[0], "Processing", "resume_recipe")
             setattr(node, 'kpf_completed', True)
 
     def visit_alias(self, node):
-        """ alias: put name and asname on _load stack as tuple """
+        """
+        alias node
+        These only appear in import clauses
+        Implement by putting name and asname on _load stack as tuple.
+        ImportFrom handles the heavy lifting
+        Note: asname is currently not supported and is ignored.
+        """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
             return
@@ -108,7 +124,7 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
         value on the _load stack.  If the name is not found, None is pushed
         on the _load stack.
 
-        NB: The same instance of a Name can appear as different nodes in a AST,
+        WARNING: The same instance of a Name can appear as different nodes in a AST,
         so nothing should be stored in the node as a node-specific attribute.
         """
         if self._reset_visited_states:
@@ -122,8 +138,7 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
             print(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
-            print("visit_Name: ctx is unexpected type: {}".format(type(node.ctx)))
-            setattr(node, 'kpf_completed', True)
+            raise Exception("visit_Name: ctx is unexpected type: {}".format(type(node.ctx)))
     
     def visit_For(self, node):
         """
@@ -170,6 +185,7 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
                 args_iter = params.get('args_iter')
                 current_arg = params.get('current_arg')
             # TODO: how to loop?
+            # (this doesn't seem to work right)
             while True:
                 self._params[target] = current_arg
                 for subnode in node.body:
@@ -191,7 +207,10 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
         The variable names come from the _store stack, while the values
         come from the _load stack.
         Calls to visit() may set self._awaiting_call_return, in which case
-        we need to immediately return, and pick up where we left off later.
+        we need to immediately return, and pick up where we left off later,
+        completing the assignment.  This typically happens when there is
+        a call to a processing primitive, which is queued up on the
+        framework's event queue.  See also resume_recipe().
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -255,7 +274,12 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
     # UnaryOp and the unary operators
     
     def visit_UnaryOp(self, node):
-        """ implement UnaryOp """
+        """
+        implement UnaryOp
+        We don't support calls in unaryOp expressions, so we don't
+        bother guarding for self.awaiting_call_return here, nor in
+        the following Unary Operators
+        """
         if self._reset_visited_states:
             self.visit(node.operand)
             self.visit(node.op)
@@ -448,27 +472,44 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
                 loadSizeBefore = len(self._load)
                 for arg in node.args:
                     self.visit(arg)
-                func_args = list()
+                func_args = {}
+                func_args['name'] = node.func.id+"_args"
+                arg_num = 0
                 while len(self._load) > loadSizeBefore:
                     foo = self._load.pop()
                     print(f"Call: processing arg {foo}")
-                    func_args.append(foo)
+                    func_args['arg'+str(arg_num)] = foo
+                    arg_num += 1
                 print(f"Call: func_args: {func_args}")
+                args = Arguments(**func_args)
+                """
                 pipe_args = KpfPipelineArgs(self, self.tree, func_args)
                 print(f"{self._indentStr * self._indent}Call: {node.func.id}, args: {pipe_args}")
-                
-                event = (node.func.id, None, "resume_Call")
-                #TODO the below will need to be replaced by something that calls push_event
+                """
+                # Build and queue up the called function and arguments
+                # as a pipeline event.
+                # The "next_event" item in the event_table, populated
+                # by visit_ImportFrom, will ensure that the recipe
+                # processing will continue by making resume_recipe
+                # the next scheduled event primative.
+                self.context.push_event(node.func.id, args)
+                """
                 self.action = Action(event, pipe_args)
                 self.output = self._prims[node.func.id](self.action, self.context)
+                """
                 #
                 self.awaiting_call_return = True
                 return
             else:
                 self.returning_from_call = False
-                print(f"Call: returning, output is {self.action.output}")
-                for output in self.call_output:
-                    self._load.append(output)
+                print(f"Call: returning, output is {self.call_output}")
+                arg_num = 0
+                while True:
+                    argname = "arg"+str(arg_num)
+                    if not hasattr(self.call_output, argname):
+                        break
+                    self._load.append(getattr(self.call_output, argname))
+                    arg_num += 1
                 self.call_output = None
             setattr(node, 'kpf_completed', True)
 
@@ -638,34 +679,3 @@ class KpfPipelineNodeVisitor1(NodeVisitor):
         self._load.clear()
         self._store.clear()
         self._reset_visited_states = False
-
-
-class FauxFramework():
-    """
-    FauxFramework is a simple replacement for the Keck DRP Framework
-    The purpose is to work out how to integrate our AST=based pipeline
-    into such a framework.
-    """
-
-    _event_queue = Queue()
-
-    def __init__(self, v):
-        self._v = v
-    
-    def queue_push(self, item):
-        self._event_queue.put(item)
-    
-    def execute(self):
-        item = self._event_queue.get()
-
-# reentry after call
-
-def resume_Call(action: Action, context: ProcessingContext):
-    # pick up the recipe processing where we left off
-    v = action.args.visitor
-    t = action.args.tree
-    v.returning_from_call = True
-    v.awaiting_call_return = False
-    v.call_output = action.args.args # framework put previous output here
-    v.visit(t)
-    return KpfPipelineArgs(action.args.visitor, action.args.tree, ())
