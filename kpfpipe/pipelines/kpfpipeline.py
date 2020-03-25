@@ -1,11 +1,16 @@
 # An example pipeline that is used to test the template fitting 
 # algorithm module. 
 import os
+import sys
 import importlib
 import configparser as cp
 import logging
 
 from kpfpipe.logger import start_logger
+
+# AST recipe support
+import ast
+from kpfpipe.pipelines.kpf_parse_ast import KpfPipelineNodeVisitor
 
 # KeckDRPFramework dependencies
 from keckdrpframework.pipelines.base_pipeline import BasePipeline
@@ -30,7 +35,8 @@ class KPFPipeline(BasePipeline):
     name = 'KPF-Pipe'
     event_table = {
         # action_name: (name_of_callable, current_state, next_event_name)
-        'evaluate_recipe': ('evaluate_recipe', 'evaluating_recipe', None), 
+        'start_recipe': ('start_recipe', 'starting recipe', None), 
+        'resume_recipe': ('resume_recipe', 'resuming recipe', None),
         'exit': ('exit_loop', 'exiting...', None),
         'TFAMakeTemplate': ('TFAMakeTemplate', 'TEST', None),
         'ReadKPF1': ('ReadKPF1', 'READ', None),
@@ -69,9 +75,9 @@ class KPFPipeline(BasePipeline):
         self.context.config_path = cfg_obj._sections['MODULES']
         self.logger.info('Finished initializting Pipeline')
 
-    def evaluate_recipe(self, action, context):
+    def start_recipe(self, action, context):
         """
-        Evaluates the recipe file (Python file) specified in context.config.run.recipe.
+        Starts evaluating the recipe file (Python syntax) specified in context.config.run.recipe.
         All actions are executed consecutively in the high priority queue
 
         Args:
@@ -82,8 +88,10 @@ class KPFPipeline(BasePipeline):
             recipe_file = action.args.recipe
             f = open(recipe_file)
             fstr = f.read()
-            exec(fstr)
             f.close()
+            self._recipe_ast = ast.parse(fstr)
+            self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
+            self._recipe_visitor.visit(self._recipe_ast)
         except:
             print(sys.exit_info())
 
@@ -97,3 +105,13 @@ class KPFPipeline(BasePipeline):
         """
         self.logger.info("exiting pipeline...")
         os._exit(0)
+
+    # reentry after call
+
+    def resume_recipe(self, action: Action, context: ProcessingContext):
+        # pick up the recipe processing where we left off
+        self._recipe_visitor.returning_from_call = True
+        self._recipe_visitor.awaiting_call_return = False
+        self._recipe_visitor.call_output = action.args # framework put previous output here
+        self._recipe_visitor.visit(self._recipe_ast)
+        return

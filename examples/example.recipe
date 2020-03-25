@@ -1,13 +1,28 @@
 # example.recipe
-from modules.level0 import read_data, Normalize, NoiseReduce, Spectrum1D
+from examples.level0 import read_data, Normalize, NoiseReduce, Spectrum1D
+#from examples.extra.level0 import EstimateParams
+#from examples.level1 import AdjustSpectrum
+#from modules.level2 import apply_fft
 
-for data in [A, B, C]:
+for data in ["A", "B", "C"]:
+    result = -2
+    # level 0 portion
     d = read_data(data)
     out, result = Normalize(d)
-    if result < 0:
+    if result >= 0:
         out, result = NoiseReduce(out)
     elif result < 1:
         out, result = NoiseReduce(out, 1.5)
     else:
-        out, result = NoiseReduce(out, 2.5)
-    out, result = Spectrum1D(out, lambdaCalibration)
+        out, result = NoiseReduce(out, 1.5 - 1.)
+    
+    spectrum, result = Spectrum1D(out, lambdaCalibration)
+    """
+    # level 1 portion
+    if result > 19:
+        param = EstimateParams(spectrum)
+        spectrum, result = AdjustSpectrum(spectrum, param)
+    velocities, result = CalculateRadialVelocities(spectrum)
+    # level 2 portion
+    apply_fft(velocities)
+    """
