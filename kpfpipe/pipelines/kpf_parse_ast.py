@@ -55,8 +55,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(item)
             self._params = None # let storage get collected
             return
-        print("Module")
         if not getattr(node, 'kpf_started', False):
+            print("Module")
             self._params = {}
             setattr(node, 'kpf_started', True)
         if not getattr(node, 'kpf_completed', False):
@@ -135,7 +135,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self._store.append(node.id)
         elif isinstance(node.ctx, _ast.Load):
             value = self._params.get(node.id)
-            print(f"Name is loading {value} from {node.id}")
+            # print(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
             raise Exception("visit_Name: ctx is unexpected type: {}".format(type(node.ctx)))
@@ -155,6 +155,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             for subnode in node.body:
                 self.visit(subnode)
             return
+            
         print("{}For: {} in ".format(self._indentStr * self._indent, node.target.id))
         if not getattr(node, 'kpf_completed', False):
             if not getattr(node, 'kpf_started', False):
@@ -485,68 +486,48 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         if not getattr(node, 'kpf_completed', False):
             print(f"{self._indentStr * self._indent}Call: {node.func.id}")
             if not self.returning_from_call:
-                loadSizeBefore = len(self._load)
+                kwargs = {}
+                for kwnode in node.keywords:
+                    self.visit(kwnode)
+                    tup = self._load.pop()
+                    kwargs[tup[0]] = tup[1]
+                args = []
                 for arg in node.args:
                     self.visit(arg)
-                """
-                func_args = {}
-                func_args['name'] = node.func.id+"_args"
-                arg_num = 0
-                while len(self._load) > loadSizeBefore:
-                    foo = self._load.pop()
-                    print(f"Call: processing arg {foo}")
-                    func_args['arg'+str(arg_num)] = foo
-                    arg_num += 1
-                print(f"Call: func_args: {func_args}")
-                args = Arguments(**func_args)
-                """
-                args = KpfArguments(name=node.func.id+"_args")
-                while len(self._load) > loadSizeBefore:
-                    # because the arguments come off the _load stack in
-                    # reverse order, we need to insert each one at the front
-                    args.insert(0, self._load.pop())
+                    args.append(self._load.pop())
+                event_args = KpfArguments(*args, **kwargs, name=node.func.id+"_args")
                 # Build and queue up the called function and arguments
                 # as a pipeline event.
                 # The "next_event" item in the event_table, populated
                 # by visit_ImportFrom, will ensure that the recipe
                 # processing will continue by making resume_recipe
                 # the next scheduled event primative.
-                self.context.push_event(node.func.id, args)
+                self.context.push_event(node.func.id, event_args)
                 #
                 self.awaiting_call_return = True
                 return
             else:
                 self.returning_from_call = False
                 # print(f"Call: returning, output is {self.call_output}")
-
-                """
-                # This is truly ugly, since it requires primitive
-                # implementors to name their return values names
-                # that we recognize here so that we can pull them
-                # out in a well-defined order to put them on the
-                # _load stack.
-                # Alternatives I've thought of:
-                # peek at the _store stack to see the names that
-                # return values will be assigned into.  But the
-                # name used inside the primitive has no relation
-                # to the variable name in the recipe.
-                # There needs to be a way to handle positional
-                # return values!
-                arg_num = 0
-                while True:
-                    argname = "arg"+str(arg_num)
-                    if not hasattr(self.call_output, argname):
-                        break
-                    self._load.append(getattr(self.call_output, argname))
-                    arg_num += 1
-                """
                 assert(isinstance, self.call_output, KpfArguments)
                 for ix in range(len(self.call_output)):
                     self._load.append(self.call_output[ix])
                 self.call_output = None
             setattr(node, 'kpf_completed', True)
 
-    
+    def visit_keyword(self, node):
+        """
+        implement keyword as follows:
+        Since this only occurs in the context of keyword arguments in a
+        call signature, we can generate tuples of (keyword, value)
+        """
+        if self._reset_visited_states:
+            return
+        # let the value node put the value on the _load stack
+        self.visit(node.value)
+        val = self._load.pop()
+        self._load.append((node.arg, val))
+
     def visit_Compare(self, node):
         """
         Implement Compare as follows:
