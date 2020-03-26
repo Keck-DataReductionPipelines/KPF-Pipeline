@@ -73,8 +73,6 @@ class Spectrum1D(BasePrimitive):
         if len(self.action.args) == 0:
             raise Exception("Spectrum1D._perform: at least one argument is needed")
         input= self.action.args[0]
-        if len(self.action.args) > 1:
-            param = self.action.args[1]
+        param = getattr(self.action.args, 'calibration', None)
         result = (param is not None)
-        print(f"Spectrum1D: input is {input}, result is {result}")
         return KpfArguments(input, result, name='Spectrum1D_results')

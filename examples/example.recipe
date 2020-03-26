@@ -16,8 +16,8 @@ for data in ["A", "B", "C"]:
     else:
         out, result = NoiseReduce(out, 1.5 - 1.)
     
-    lambdaCalibration = None
-    spectrum, result = Spectrum1D(out, lambdaCalibration)
+    lambdaCalibration = 24.5
+    spectrum, result = Spectrum1D(out, calibration=lambdaCalibration)
 
     # level 1 portion
     # if result > 19:
