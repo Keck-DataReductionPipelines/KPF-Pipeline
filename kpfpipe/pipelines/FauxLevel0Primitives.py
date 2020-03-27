@@ -23,8 +23,7 @@ class read_data(BasePrimitive):
         args: data_set
         results: numpy.array
         """
-        # unused example input (badly named as output)
-        filename = self.output[0]
+        filename = self.action.args[0]
         return KpfArguments([0, 1, 2, 3, 4, 5, 6], name='read_data_results')
 
 class Normalize(BasePrimitive):
