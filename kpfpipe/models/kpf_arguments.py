@@ -27,35 +27,33 @@ class KpfArguments(Arguments):
     def __init__(self, *args, **kwargs):
         Arguments.__init__(self)
         self.name = "undef"
-        self.args = []
-        self.args.extend(args)
+        self._kpfargs = []
+        self._kpfargs.extend(args)
         self.__dict__.update(kwargs)
 
     def __str__(self):
         out = []
-        # for arg in self.args:
-        #    out.append(f"{arg}")
-        for k, v in self.__dict__.items():
-            out.append(f"{k}: {v}")
+        [out.append(f"{arg}") for arg in self._kpfargs]
+        [out.append(f"{k}: {v}") for k, v in self.__dict__.items() if k != '_kpfargs']
         return ", ".join(out)
 
     def __iter__(self):
-        return iter(self.args)
+        return iter(self._kpfargs)
     
     def __getitem__(self, ix):
-        return self.args.__getitem__(ix)
+        return self._kpfargs.__getitem__(ix)
     
     def __setitem__(self, ix, val):
-        self.args.__setitem__(ix, val)
+        self._kpfargs.__setitem__(ix, val)
 
     def insert(self, ix, val):
-        self.args.insert(ix, val)
+        self._kpfargs.insert(ix, val)
 
     def append(self, val):
-        self.args.append(val)
+        self._kpfargs.append(val)
     
     def pop(self):
-        return self.args.pop()
+        return self._kpfargs.pop()
 
     def __len__(self):
-        return len(self.args)
+        return len(self._kpfargs)

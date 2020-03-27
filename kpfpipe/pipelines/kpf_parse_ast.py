@@ -14,16 +14,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     """
     Node visitor to convert KPF pipeline recipes expressed in python syntax
     into operations on the KPF Framework.
-
-    Prototype version!
     """
-    _indentStr = ""
-    _indent = 0
 
     def __init__(self, pipeline=None, context=None):
         NodeVisitor.__init__(self)
-        self._indentStr = "  "
-        self._indent = 0
         # instantiate the parameters dict
         self._params = None
         # store and load stacks
@@ -56,11 +50,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self._params = None # let storage get collected
             return
         if not getattr(node, 'kpf_started', False):
-            print("Module")
+            self.pipeline.logger.debug("Module")
             self._params = {}
             setattr(node, 'kpf_started', True)
         if not getattr(node, 'kpf_completed', False):
-            self._indent += 1
             for item in node.body:
                 self.visit(item)
                 if self.awaiting_call_return:
@@ -83,17 +76,17 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             loadQSizeBefore = len(self._load)
             for name in node.names:
                 self.visit(name)
-            while len(self._load) > loadQSizeBefore:
-                # import the named primitive
-                # This comes as a 2-element tuple from visit_alias
-                #
-                # just add the name to the event_table for now
-                # But we should ensure that the name exists in the module and is Callable
-                tup = self._load.pop()
-                print(f"Import {tup[0]} from {module}")
-                # create an event_table entry that returns control
-                # to the pipeline after running
-                self.pipeline.event_table[tup[0]] = (tup[0], "Processing", "resume_recipe")
+                if len(self._load) > loadQSizeBefore:
+                    # import the named primitive
+                    # This comes as a 2-element tuple from visit_alias
+                    #
+                    # just add the name to the event_table for now
+                    # But we should ensure that the name exists in the module and is Callable
+                    tup = self._load.pop()
+                    # create an event_table entry that returns control
+                    # to the pipeline after running
+                    self.pipeline.event_table[tup[0]] = (tup[0], "Processing", "resume_recipe")
+                    self.pipeline.logger.info(f"Added {tup[0]} from {module} to event_table")
             setattr(node, 'kpf_completed', True)
 
     def visit_alias(self, node):
@@ -109,7 +102,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         if not getattr(node, 'kpf_completed', False):
             self._load.append((node.name, node.asname))
-            print(f"{self._indentStr * self._indent}alias: {node.name} as {node.asname}")
+            self.pipeline.logger.debug(f"alias: {node.name} as {node.asname}")
             setattr(node, 'kpf_completed', True)
     
     def visit_Name(self, node):
@@ -129,13 +122,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Name: {node.id}")
+        self.pipeline.logger.debug(f"Name: {node.id}")
         if isinstance(node.ctx, _ast.Store):
-            # print(f"Name is storing {node.id}")
+            self.pipeline.logger.debug(f"Name is storing {node.id}")
             self._store.append(node.id)
         elif isinstance(node.ctx, _ast.Load):
             value = self._params.get(node.id)
-            # print(f"Name is loading {value} from {node.id}")
+            self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
             raise Exception("visit_Name: ctx is unexpected type: {}".format(type(node.ctx)))
@@ -156,7 +149,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(subnode)
             return
             
-        print("{}For: {} in ".format(self._indentStr * self._indent, node.target.id))
         if not getattr(node, 'kpf_completed', False):
             if not getattr(node, 'kpf_started', False):
                 params = {}
@@ -179,15 +171,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 params['current_arg'] = current_arg
                 setattr(node, 'kpf_params', params)
                 setattr(node, 'kpf_started', True)
-                print(f"\n\n\nFor: top of loop with arg {current_arg}")
+                self.pipeline.logger.info(f"Starting For loop on recipe line {node.lineno} with arg {current_arg}")
             else:
                 params = getattr(node, 'kpf_params', None)
                 assert(params is not None)
                 target = params.get('target')
                 args_iter = params.get('args_iter')
                 current_arg = params.get('current_arg')
-            # TODO: how to loop?
-            # (this doesn't seem to work right)
             while True:
                 self._params[target] = current_arg
                 for subnode in node.body:
@@ -205,7 +195,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     params['current_arg'] = current_arg
                 except StopIteration:
                     break
-                print(f"\n\n\nFor: top of loop with arg {current_arg}")
+                self.pipeline.logger.info(f"Starting For loop on recipe line {node.lineno} with arg {current_arg}")
             setattr(node, 'kpf_completed', True)
 
     
@@ -233,8 +223,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.value)
             return
         if not getattr(node, 'kpf_completed', False):
-            print(f"{self._indentStr * self._indent}Assign:")
-            self._indent += 1
             loadQSizeBefore = len(self._load)
             storeQSizeBefore = len(self._store)
             if not getattr(node, 'kpf_completed_targets', False):
@@ -249,7 +237,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             else:
                 num_store_targets = getattr(node, 'kpf_num_targets', 0)
             if not getattr(node, 'kpf_completed_values', False):
-                print(f"{self._indentStr * self._indent}Assign from:")
                 self.visit(node.value)
                 if self.awaiting_call_return:
                     return
@@ -258,12 +245,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 target = self._store.pop()
                 self._params[target] = self._load.pop()
                 num_store_targets -= 1
-                print(f"{self._indentStr * self._indent}Assign: {target} <- {self._params[target]}")
+                self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}")
             while len(self._store) > storeQSizeBefore:
-                print(f"{self._indentStr * self._indent}Assign: unfilled target: {self._store.pop()}")
+                self.pipeline.logger.warning(f"Assign: unfilled target: {self._store.pop()}")
             while len(self._load) > loadQSizeBefore:
-                print(f"{self._indentStr * self._indent}Assign: unused value: {self._load.pop()}")
-            self._indent -= 1
+                self.pipeline.logger.warning(f"Assign: unused value: {self._load.pop()}")
             setattr(node, 'kpf_completed', True)
 
     # UnaryOp and the unary operators
@@ -279,7 +265,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.operand)
             self.visit(node.op)
             return
-        print(f"{self._indentStr * self._indent}UnaryOp:")
+        self.pipeline.logger.debug(f"UnaryOp:")
         self.visit(node.operand)
         self.visit(node.op)
 
@@ -289,7 +275,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement UAdd """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}USub")
+        self.pipeline.logger.debug(f"USub")
         if len(self._load) == 0:
             raise Exception("visit_UnaryOp: called with no argument")
         pass
@@ -300,7 +286,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}USub")
+        self.pipeline.logger.debug(f"USub")
         if len(self._load) == 0:
             raise Exception("visit_UnaryOp: called with no argument")
         self._load.append(-self._load.pop())
@@ -309,7 +295,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}USub")
+        self.pipeline.logger.debug(f"USub")
         if len(self._load) == 0:
             raise Exception("visit_UnaryOp: called with no argument")
         self._load.append(not self._load.pop())
@@ -325,13 +311,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.left)
             self.visit(node.op)
             return
-        print("{}BinOp:".format(self._indentStr * self._indent))
-        self._indent += 1
+        self.pipeline.logger.debug("BinOp:")
         # right before left because they're being pushed on a stack, so left comes off first
         self.visit(node.right)
         self.visit(node.left)
         self.visit(node.op)
-        self._indent -= 1
 
     # binary operators
 
@@ -339,7 +323,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement the addition operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Add")
+        self.pipeline.logger.debug(f"Add")
         if len(self._load) < 2:
             raise Exception(f"Add called with insufficient number of arguments: {len(self._load)}")
         self._load.append(self._load.pop() + self._load.pop())
@@ -348,7 +332,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement the subtraction operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Sub")
+        self.pipeline.logger.debug(f"Sub")
         if len(self._load) < 2:
             raise Exception(f"Sub called with insufficient number of arguments: {len(self._load)}")
         self._load.append(self._load.pop() - self._load.pop())
@@ -357,7 +341,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement the multiplication operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Mult")
+        self.pipeline.logger.debug(f"Mult")
         if len(self._load) < 2:
             raise Exception(f"Mult called with insufficient number of arguments: {self._load.qsize()}")
         self._load.append(self._load.pop() * self._load.pop())
@@ -366,7 +350,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement the division operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Div")
+        self.pipeline.logger.debug(f"Div")
         if len(self._load) < 2:
             raise Exception(f"Div called with insufficient number of arguments: {len(self._load)}")
         self._load.append(self._load.pop() / self._load.pop())
@@ -377,7 +361,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement Eq comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Eq")
+        self.pipeline.logger.debug(f"Eq")
         if len(self._load) < 2:
             raise Exception(f"Eq called with less than two arguments: {self._load.qsize()}")
         self._load.append(self._load.pop() == self._load.pop())
@@ -386,7 +370,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement NotEq comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}NotEq")
+        self.pipeline.logger.debug(f"NotEq")
         if len(self._load) < 2:
             raise Exception(f"NotEq called with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() != self._load.pop())
@@ -395,7 +379,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement Lt comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Lt")
+        self.pipeline.logger.debug(f"Lt")
         if len(self._load) < 2:
             raise Exception(f"Lt called with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() < self._load.pop())
@@ -404,7 +388,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement LtE comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}LtE")
+        self.pipeline.logger.debug(f"LtE")
         if len(self._load) < 2:
             raise Exception(f"LtE called with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() <= self._load.pop())
@@ -413,7 +397,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement Gt comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Gt")
+        self.pipeline.logger.debug(f"Gt")
         if len(self._load) < 2:
             raise Exception(f"Gt called with less than two arguments: {self._load.qsize()}")
         self._load.append(self._load.pop() > self._load.pop())
@@ -422,7 +406,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement GtE comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}GtE")
+        self.pipeline.logger.debug(f"GtE")
         if len(self._load) < 2:
             raise Exception(f"GtE called with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() >= self._load.pop())
@@ -431,7 +415,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement Lt comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Is")
+        self.pipeline.logger.debug(f"Is")
         if len(self._load) < 2:
             raise Exception(f"Is called with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() is self._load.pop())
@@ -440,7 +424,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement Lt comparison operator """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}IsNot")
+        self.pipeline.logger.debug(f"IsNot")
         if len(self._load) < 2:
             raise Exception(f"IsNot called with less than two arguments: {len(self._load)}")
         self._load.append(not (self._load.pop() is self._load.pop()))
@@ -462,21 +446,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         attributes set on nodes of the tree, processing will quickly
         get back to here, where the output of the primitive will be
         pushed on the _load stack, becoming the result of the call.
-
-        TODO: It is awkward to support both positional and keyword
-        arguments to the the called function, because the Arguments
-        class only supports keyword arguments.  We currently handle
-        positional arguments by naming them arg0, arg1, etc.  The
-        names should probably be made less likely to clash with
-        real keyword-based arguments.
-
-        Even more difficult is the situation with returned values
-        from the primitives.  The python syntax around a function
-        call assumes positional return values, but the Arguments
-        class only supports named values.
-
-        We need to figure out a better way to deal with arguments
-        and return values.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -484,7 +453,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(arg)
             return
         if not getattr(node, 'kpf_completed', False):
-            print(f"{self._indentStr * self._indent}Call: {node.func.id}")
+            self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}")
             if not self.returning_from_call:
                 kwargs = {}
                 for kwnode in node.keywords:
@@ -503,13 +472,14 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 # processing will continue by making resume_recipe
                 # the next scheduled event primative.
                 self.context.push_event(node.func.id, event_args)
+                self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                 #
                 self.awaiting_call_return = True
                 return
             else:
                 self.returning_from_call = False
-                # print(f"Call: returning, output is {self.call_output}")
-                assert(isinstance, self.call_output, KpfArguments)
+                self.pipeline.logger.debug(f"Call on recipe line {node.lineno} returned output {self.call_output}")
+                assert isinstance(self.call_output, KpfArguments)
                 for ix in range(len(self.call_output)):
                     self._load.append(self.call_output[ix])
                 self.call_output = None
@@ -526,6 +496,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # let the value node put the value on the _load stack
         self.visit(node.value)
         val = self._load.pop()
+        self.pipeline.logger.debug(f"keyword: {val}")
         self._load.append((node.arg, val))
 
     def visit_Compare(self, node):
@@ -544,7 +515,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(op)
             return
         if not getattr(node, 'kpf_completed', False):
-            print(f"{self._indentStr * self._indent}Compare")
+            self.pipeline.logger.debug(f"Compare")
             loadQSizeBefore = len(self._load)
             # comparators before left because they're going on a stack, so left can be pulled first
             for item in node.comparators:
@@ -552,9 +523,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.left)
             for op in node.ops:
                 self.visit(op)
-            print("{}Compare changed load qsize by {}".format(
-                self._indentStr * self._indent,
-                len(self._load)-loadQSizeBefore))
             setattr(node, 'kpf_completed', True)
 
     def visit_If(self, node):
@@ -574,32 +542,29 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(item)
             return
         if not getattr(node, 'kpf_completed', False):
-            print(f"{self._indentStr * self._indent}If")
-            self._indent += 1
             if not getattr(node, 'kpf_completed_test', False):
-                print(f"{self._indentStr * self._indent}test: ")
                 loadQSizeBefore = len(self._load)
                 self.visit(node.test)
                 if len(self._load) <= loadQSizeBefore:
                     raise Exception("visit_If: test didn't push a result on the _load stack")
                 boolResult = self._load.pop()
+                self.pipeline.logger.info(f"If condition on recipe line {node.lineno} was {boolResult}")
                 setattr(node, 'kpf_boolResult', boolResult)
                 setattr(node, 'kpf_completed_test', True)
             else:
                 boolResult = getattr(node, 'kpf_boolResult')
             if boolResult:
-                print(f"{self._indentStr * self._indent}pushing and visiting Ifso")
+                self.pipeline.logger.debug(f"If on recipe line {node.lineno} pushing and visiting Ifso")
                 for item in node.body:
                     self.visit(item)
                     if self.awaiting_call_return:
                         return
             else:
-                print(f"{self._indentStr * self._indent}pushing and visiting Else")
+                self.pipeline.logger.debug(f"If on recipe line {node.lineno} pushing and visiting Else")
                 for item in node.orelse:
                     self.visit(item)
                     if self.awaiting_call_return:
                         return
-            self._indent -= 1
             setattr(node, 'kpf_completed', True)
 
     def visit_List(self, node):
@@ -611,7 +576,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             for elt in node.elts:
                 self.visit(elt)
             return
-        print(f"{self._indentStr * self._indent}List")
+        self.pipeline.logger.debug(f"List")
         if not getattr(node, "kpf_completed", False):
             for elt in node.elts:
                 self.visit(elt)
@@ -624,7 +589,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
             return
-        print(f"{self._indentStr * self._indent}Tuple")
+        self.pipeline.logger.debug(f"Tuple")
         if not getattr(node, "kpf_completed", False):
             for elt in node.elts:
                 self.visit(elt)
@@ -637,7 +602,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}NameConstant: {node.value}")
+        self.pipeline.logger.debug(f"NameConstant: {node.value}")
         #ctx of NameConstant is always Load
         self._load.append(node.value)
     
@@ -651,7 +616,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Num: {node.n}")
+        self.pipeline.logger.debug(f"Num: {node.n}")
         # ctx of Num is always Load
         self._load.append(node.n)
 
@@ -662,7 +627,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             return
-        print(f"{self._indentStr * self._indent}Str: {node.s}")
+        self.pipeline.logger.debug(f"Str: {node.s}")
         # ctx of Str is always Load
         self._load.append(node.s)
     
@@ -682,7 +647,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""
-        print("generic_visit: got {}".format(type(node)))
+        self.pipeline.logger.warning("generic_visit: got {}".format(type(node)))
         for field, value in iter_fields(node):
             if isinstance(value, list):
                 for item in value:

@@ -29,8 +29,13 @@ class KPFPipeline(BasePipeline):
     Attributes:
         event_table (dictionary): table of actions known to framework.
         All primitives must be registered here.
-
+    
+    Note: the correct operation of the recipe visitor depends on action.args being KpfArguments, which
+    is an extension (class derived from) the Keck DRPF Arguments class.  All pipeline primitives must use
+    KpfArguments rather than simply Arguments for their return values.  They will also get input arguments
+    packaged as KpfArguments. 
     """
+
     # Modification: 
     name = 'KPF-Pipe'
     event_table = {
@@ -73,7 +78,7 @@ class KPFPipeline(BasePipeline):
 
         ## Setup primitive-specific configs:
         self.context.config_path = cfg_obj._sections['MODULES']
-        self.logger.info('Finished initializting Pipeline')
+        self.logger.info('Finished initializing Pipeline')
 
     def start_recipe(self, action, context):
         """
@@ -109,6 +114,13 @@ class KPFPipeline(BasePipeline):
     # reentry after call
 
     def resume_recipe(self, action: Action, context: ProcessingContext):
+        """
+        Continues evaluating the recipe started in start_recipe().
+
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
         # pick up the recipe processing where we left off
         self._recipe_visitor.returning_from_call = True
         self._recipe_visitor.awaiting_call_return = False
