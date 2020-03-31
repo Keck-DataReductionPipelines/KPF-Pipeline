@@ -57,19 +57,13 @@ class SpecDict(dict):
         '''
         Setting a array 
         '''
-        # Values should always be a numpy 2D array
-        # try:
-        #     assert(isinstance(value, np.ndarray))
-        #     assert(len(value.shape) == 2)
-        # except AssertionError:
-        #     raise TypeError('Value can only be 2D numpy arrays')
-
-        # # all values in arrays must be positive real floating points
-        # try:
-        #     # assert(np.all(np.real(value)))
-        #     assert(value.dtype == 'float64')
-        # except AssertionError:
-        #     raise ValueError('All values must be positive real np.float64')
+        if not np.all(np.isnan(value)):
+            try:
+                assert(isinstance(value, np.ndarray))
+                assert(len(value.shape) == 2)
+            except AssertionError:
+                # np.nan represent empty array
+                raise TypeError('Value can only be 2D numpy arrays')
             
         # passed all tests, setting value
         dict.__setitem__(self, key, value)
@@ -106,11 +100,6 @@ class KPF1(object):
     Container object for level one data
 
     Attributes:
-        Norderlets (dictionary): Number of orderlets per chip
-        Norderlets_total (int): Total number of orderlets
-        orderlets (dictionary): Collection of Spectrum objects for each chip, order, and orderlet
-        hk (array): Extracted spectrum from HK spectrometer CCD; 2D array (order, col)
-        expmeter (array): exposure meter sequence; 3D array (time, order, col)
 
     """
 
@@ -119,7 +108,6 @@ class KPF1(object):
         Constructor
         Initializes an empty KPF1 data class
         '''
-
         # 1D spectrums
         # Each fiber is accessible through their key.
         # Contains 'data', 'wavelength', 'variance'
@@ -138,7 +126,7 @@ class KPF1(object):
             'HARPS': self._read_from_HARPS,
             'NEID': self._read_from_NEID
         }
-
+    
     @classmethod
     def from_fits(cls, fn: str,
                   data_type: str) -> None:
@@ -189,43 +177,14 @@ class KPF1(object):
         all_keys = {**HEADER_KEY, **LVL1_KEY}
         # we assume that all keywords are stored in PrimaryHDU
         # loop through the 
-        for hdu in hdu_list:
-            # we assume that all keywords are stored in PrimaryHDU
-            if isinstance(hdu, astropy.io.fits.PrimaryHDU):
-                # verify that all required keywords are present in header
-                # and provided values are expected types
-                for key, value_type in all_keys.items():
-                    try: 
-                        value = hdu.header[key]
-                        if isinstance(value_type, Time):
-                            # astropy time object requires time format 
-                            # as additional initailization parameter
-                            # setup format in Julian date
-                            self.header[key] = value_type(value, format='jd')
-                        
-                        # add additional handling here, if required
-                        else:
-                            self.header[key] = value_type(value)
-                    
-                    except KeyError: 
-                        # require key is not present in FITS header
-                        msg =  'cannot read {} as KPF1 data: \
-                                cannot find keyword {} in FITS header'.format(
-                                self.filename, key)
-                        if force:
-                            self.header[key] = None
-                        else:
-                            raise IOError(msg)
+        for hdu in hdul:
+            # --TODO--
+            # verify that all required keywords are present in header
+            # and provided values are expected types
 
-                    except ValueError: 
-                        # value in FITS header is not the anticipated type
-                        msg = 'cannot read {} as KPF1 data: \
-                            expected type {} from value of keyword {}, got {}'.format(
-                            self.filename, value_type.__name__, type(value).__name__)
-                        if force:
-                            self.header[key] = None
-                        else:
-                            raise IOError() 
+            if hdu.name == 'PRIMARY':
+                self.header['PRIMARY'] = hdu.header
+                continue
 
             # For each fiber, there are two HDU: flux and wave
             # We assume that the names of HDU follow the convention 
@@ -234,15 +193,17 @@ class KPF1(object):
                 fiber, array_type = hdu.name.split('_')
             except: 
                 raise NameError('invalid HUD name: {}'.format(hdu.name))
-            if array_type == 'wave':
-                self.__wave[fiber] = hdu.data
-            elif array_type == 'flux':
-                self.__flux[fiber] = hdu.data
+
+            if array_type == 'WAVE':
+                self.wave[fiber] = hdu.data
+            elif array_type == 'FLUX':
+                self.flux[fiber] = hdu.data
+            elif array_type == 'VARIANCE':
+                self.variance[fiber] = hdu.data
             else: 
                 raise NameError('Array type must be "wave" or "flux", got {} instead'.format(array_type))  
             
-            ## set default segments (1 segment for each order)
-            self.segment_data([])
+            self.header[array_type] = hdu.header
 
     def _read_from_HARPS(self, hdul: astropy.io.fits.HDUList,
                         force: bool=True) -> None:
@@ -284,25 +245,25 @@ class KPF1(object):
                     pass
             # Interpolate wave from headers
             # 
-            header = hdu.header
-            opower = header['ESO DRS CAL TH DEG LL']
-            a = np.zeros(opower+1)
-            wave = np.zeros_like(hdu.data, dtype=np.float64)
-            for order in range(0, header['NAXIS2']):
-                for i in range(0, opower+1, 1): 
-                    keyi = 'ESO DRS CAL TH COEFF LL' + str((opower+1)*order+i)
-                    a[i] = header[keyi]
-                wave[order, :] = np.polyval(
-                    np.flip(a),
-                    np.arange(header['NAXIS1'], dtype=np.float64)
-                )
-            self.wave['sci'] = wave
+        header = hdu.header
+        opower = header['ESO DRS CAL TH DEG LL']
+        a = np.zeros(opower+1)
+        wave = np.zeros_like(hdu.data, dtype=np.float64)
+        for order in range(0, header['NAXIS2']):
+            for i in range(0, opower+1, 1): 
+                keyi = 'ESO DRS CAL TH COEFF LL' + str((opower+1)*order+i)
+                a[i] = header[keyi]
+            wave[order, :] = np.polyval(
+                np.flip(a),
+                np.arange(header['NAXIS1'], dtype=np.float64)
+            )
+        self.wave['SCI1'] = wave
 
-        self.flux['sci'] = np.asarray(hdu.data, dtype=np.float64)
+        self.flux['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
         # no variance is given in E2DS file, so set all to zero
-        self.variance['sci'] = np.zeros_like(hdu.data, dtype=np.float64)
+        self.variance['SCI1'] = np.zeros_like(hdu.data, dtype=np.float64)
         # Save the header key to 'data'
-        self.header['sci'] = this_header
+        self.header['SCI1'] = this_header
 
     def _read_from_NEID(self, hdul: astropy.io.fits.HDUList,
                         force: bool=True) -> None:
@@ -336,34 +297,36 @@ class KPF1(object):
             # depending on the name of the HDU, store them with corresponding keys
             if hdu.name == 'PRIMARY':
                 # no data is actually stored in primary HDU, as it contains only eader keys
-                self.header['primary'] = this_header
+                self.header['PRIMARY'] = this_header
             elif hdu.name == 'SCIFLUX':
-                self.flux['sci'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['sci'] = this_header
+                self.flux['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['SCI1_FLUX'] = this_header
             elif hdu.name == 'SKYFLUX':
-                self.flux['sky'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['sky'] = this_header
+                self.flux['SKY'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['SKY_FLUX'] = this_header
             elif hdu.name == 'CALFLUX':
-                self.flux['cal'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['cal'] = this_header
+                self.flux['CAL'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['CAL_FLUX'] = this_header
             elif hdu.name == 'SCIVAR':
-                self.variance['sci'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['sci_var'] = this_header
+                self.variance['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['SCI1_VARIANCE'] = this_header
             elif hdu.name == 'SKYVAR':
-                self.variance['sky'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['sky_var'] = this_header
+                self.variance['SKY'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['SKY_VARIANCE'] = this_header
             elif hdu.name == 'CALVAR':
-                self.variance['cal'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['cal_var'] = this_header
+                self.variance['CAL'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['CAL_VARIANCE'] = this_header
             elif hdu.name == 'SCIWAVE':
-                self.wave['sci'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['sci_wave'] = this_header
+                self.wave['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['SCI1_WAVE'] = this_header
             elif hdu.name == 'SKYWAVE':
-                self.wave['sky'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['sky_wave'] = this_header
+                self.wave['SKY'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['SKY_WAVE'] = this_header
             elif hdu.name == 'CALWAVE':
-                self.wave['cal'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['cal_wave'] = this_header
+                self.wave['CAL'] = np.asarray(hdu.data, dtype=np.float64)
+                self.header['CAL_WAVE'] = this_header
+        self.wave['CAL'] = self.wave['SCI1']
+        self.wave['SKY'] = self.wave['SCI1']
 
     def segment_data(self, seg: np.ndarray=[], fiber: str=None) -> None:
         '''
@@ -418,38 +381,30 @@ class KPF1(object):
         if not fn.endswith('.fits'):
             # we only want to write to a '.fits file
             raise NameError('filename must ends with .fits')
-
         hdu_list = []
-        # Store flux arrays first
-        first = True
-        for key, array in self.flux.items():
-            if first: 
-                # use the first fiber flux as the primary HDU
-                hdu = fits.PrimaryHDU(array)
-                # set all keywords
-                for keyword, value in self.header:
-                    if len(keyword) >= 8:
-                        # for keywords longer than 8, a "HIERARCH" prefix
-                        # must be added to the keyword.
-                        keyword = '{} {}'.format('HIERARCH', keyword)
-                    hdu.header.set(keyword, value)
-                first = False
+
+        for name, header_keys in self.header.items():
+            if name == 'PRIMARY':
+                hdu = fits.PrimaryHDU()
             else: 
-                # store the data only. Header keywords are only 
-                # stored to PrimaryHDU
-                hdu = fits.ImageHDU(array)
-            hdu.name = key + '_flux' # set the name of hdu to the name of the fiber
-            hdu_list.append(hdu)
-        # now store wave arrays 
-        for key, array in self.wave.items():
-            # Don't store any header keywords 
-            hdu = fits.ImageHDU(self.wave[key])
-            hdu.name = fiber + '_wave'
+                fiber, array_type = name.split('_')
+
+                if array_type == 'WAVE':
+                    hdu = fits.ImageHDU(data=self.wave[fiber])
+                elif array_type == 'VARIANCE':
+                    hdu = fits.ImageHDU(data=self.variance[fiber])
+                elif array_type == 'FLUX':
+                    hdu = fits.ImageHDU(data=self.flux[fiber])
+
+            for key, value in header_keys.items():
+                hdu.header.set(key, value)
+
+            hdu.name = name
             hdu_list.append(hdu)
 
         # finish up writing 
         hdul = fits.HDUList(hdu_list)
-        hdul.writeto(fn)
+        hdul.writeto(fn, overwrite=True)
 
     def verify(self) -> bool:
         '''

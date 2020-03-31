@@ -35,33 +35,31 @@ def test_spec_dict():
     assert(isinstance(array_dict, dict))
     assert(isinstance(header_dict, dict))
 
-def test_array_dict_set_attr():
-    '''
-    Test that array dicts only 2D accept numpy arrays
-    '''
-    ## Arrange
-    array_dict = SpecDict({}, 'array')
+# def test_array_dict_set_attr():
+#     '''
+#     Test that array dicts only 2D accept numpy arrays
+#     '''
+#     ## Arrange
+#     array_dict = SpecDict({}, 'array')
 
-    ## act/assert
-    with pytest.raises(TypeError):
-        # Key is not a string
-        array_dict[10] = np.ndarray([[1, 2], [3, 4]], dtype=np.float64)
+#     ## act/assert
+#     with pytest.raises(TypeError):
+#         # Key is not a string
+#         array_dict[10] = np.ndarray([[1, 2], [3, 4]], dtype=np.float64)
 
-    with pytest.raises(TypeError):
-        # not a np.ndarray
-        array_dict['test'] = [[1, 2], [3, 4]]
+#     with pytest.raises(TypeError):
+#         # not a np.ndarray
+#         array_dict['test'] = [[1, 2], [3, 4]]
     
-    with pytest.raises(TypeError):
-        # ndarray is not 2D
-        array_dict['test'] = np.asarray([1, 2, 3, 4], dtype=np.float64) #1D
+#     with pytest.raises(TypeError):
+#         # ndarray is not 2D
+#         array_dict['test'] = np.asarray([1, 2, 3, 4], dtype=np.float64) #1D
     
-    with pytest.raises(ValueError):
-        # ndarray is not np.float64
-        array_dict['test'] = np.asarray([[1, 2], [3, 4]], dtype=int)
+#     with pytest.raises(ValueError):
+#         # ndarray is not np.float64
+#         array_dict['test'] = np.asarray([[1, 2], [3, 4]], dtype=int)
     
-
-
-def test_array_dict_get_attr():
+def test_array_dict_get_attr_copy():
     '''
     Test that getting an attribute only gets a copy
     '''
@@ -76,7 +74,6 @@ def test_array_dict_get_attr():
     ## Assert
     assert(np.any(result == data)) # result values should be equal
     assert(id(result) != id(array_dict['test'])) # instances should be differnet
-
 
 ## Constructor and Deconstructor
 def test_init():
@@ -116,20 +113,25 @@ def test_from_kpf1():
     # --TODO--
     pass
 
+def test_io():
+    '''
+    integration test that checks that read/write is reversible
+    '''
+    warnings.filterwarnings("ignore")
+    neid_in = 'resource/NEID/TAUCETI_20191217/L1/neidL1_20191217T025613.fits'
+    KPF_out = 'kpf_out.fits'
 
-def test_from_fits():
-    '''
-    check that the class method is functioning 
-    '''
-    # --TODO--
-    pass
+    data = KPF1.from_fits(neid_in, 'NEID')
+    data.to_fits(KPF_out)
 
-def test_to_fits():
-    '''
-    Check that data can be written to FITS files
-    '''
-    # --TODO--
-    pass
+    data2 = KPF1.from_fits(KPF_out, 'KPF1')
+    for key, value in data.wave.items():
+        assert(np.all(data.wave[key] == data2.wave[key]))
+    for key, value in data.flux.items():
+        assert(np.all(data.flux[key] == data2.flux[key]))
+    for key, value in data.variance.items():
+        assert(np.all(data.variance[key] == data2.variance[key]))
+
 
 
 ## Interface
@@ -148,5 +150,4 @@ def test_set_attr():
     pass
 
 if __name__ == '__main__':
-    test_from_harps()
-    test_form_neid()
+    pass
