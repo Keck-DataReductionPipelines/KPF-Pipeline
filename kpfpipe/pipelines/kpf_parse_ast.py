@@ -1,4 +1,4 @@
-# kpf_parse_ast_1.py
+# kpf_parse_ast.py
 
 from ast import NodeVisitor, iter_fields
 import _ast
@@ -482,8 +482,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 # Get any returned values, stored by resume_recipe() in self.call_output,
                 # and push them on the _load stack for Assign (or whatever) to handle.
                 self.pipeline.logger.debug(f"Call on recipe line {node.lineno} returned output {self.call_output}")
-                for ix in range(len(self.call_output)):
-                    self._load.append(self.call_output[ix])
+                if isinstance(self.call_return, Arguments):
+                    # got output that we can deal with, otherwise, ignore the returned value
+                    for ix in range(len(self.call_output)):
+                        self._load.append(self.call_output[ix])
                 self.call_output = None
                 self.returning_from_call = False
             setattr(node, 'kpf_completed', True)
