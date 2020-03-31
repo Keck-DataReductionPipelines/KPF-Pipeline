@@ -482,7 +482,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 # Get any returned values, stored by resume_recipe() in self.call_output,
                 # and push them on the _load stack for Assign (or whatever) to handle.
                 self.pipeline.logger.debug(f"Call on recipe line {node.lineno} returned output {self.call_output}")
-                if isinstance(self.call_return, Arguments):
+                if isinstance(self.call_output, Arguments):
                     # got output that we can deal with, otherwise, ignore the returned value
                     for ix in range(len(self.call_output)):
                         self._load.append(self.call_output[ix])

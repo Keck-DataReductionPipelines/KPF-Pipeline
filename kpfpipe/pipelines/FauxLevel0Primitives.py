@@ -27,6 +27,20 @@ class read_data(BasePrimitive):
         filename = self.action.args[0]
         return Arguments([0, 1, 2, 3, 4, 5, 6], name='read_data_results')
 
+class ProcessSpectrum(BasePrimitive):
+    """
+    read_data -- fake processing primitive
+    """
+    def __init__(self, action, context):
+        BasePrimitive.__init__(self, action, context)
+
+    def _perform(self):
+        """
+        read_data
+        args: data_set
+        results: numpy.array
+        """
+        filename = self.action.args[0]
 class Normalize(BasePrimitive):
     """
     Normalize
