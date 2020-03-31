@@ -1,9 +1,10 @@
 # FauxLevel0Primitives.py
 
 from keckdrpframework.models.action import Action
+from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 from keckdrpframework.primitives.base_primitive import BasePrimitive
-from kpfpipe.models.kpf_arguments import KpfArguments
+#from kpfpipe.models.kpf_arguments import KpfArguments
 
 """
 Provides some faked primitives that do nothing but provide results
@@ -24,7 +25,7 @@ class read_data(BasePrimitive):
         results: numpy.array
         """
         filename = self.action.args[0]
-        return KpfArguments([0, 1, 2, 3, 4, 5, 6], name='read_data_results')
+        return Arguments([0, 1, 2, 3, 4, 5, 6], name='read_data_results')
 
 class Normalize(BasePrimitive):
     """
@@ -39,7 +40,7 @@ class Normalize(BasePrimitive):
     def _perform(self):
         # expect argument "d"
         input = self.action.args[0]
-        return KpfArguments(input, 0.5, name='Normalize_results')
+        return Arguments(input, 0.5, name='Normalize_results')
 
 class NoiseReduce(BasePrimitive):
     """
@@ -57,7 +58,7 @@ class NoiseReduce(BasePrimitive):
         if len(self.action.args) > 1:
             param = self.action.args[1]
         result = (param != 0.)
-        return KpfArguments(input, result, name='NoiseReduce_results')
+        return Arguments(input, result, name='NoiseReduce_results')
 
 class Spectrum1D(BasePrimitive):
     """
@@ -72,6 +73,7 @@ class Spectrum1D(BasePrimitive):
         if len(self.action.args) == 0:
             raise Exception("Spectrum1D._perform: at least one argument is needed")
         input= self.action.args[0]
+        # we could use self.action.args['calibration'], but want to provide a default
         param = getattr(self.action.args, 'calibration', None)
         result = (param is not None)
-        return KpfArguments(input, result, name='Spectrum1D_results')
+        return Arguments(input, result, name='Spectrum1D_results')

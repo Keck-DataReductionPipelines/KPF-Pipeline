@@ -5,7 +5,6 @@ from examples.level0 import read_data, Normalize, NoiseReduce, Spectrum1D
 #from modules.level2 import apply_fft
 
 for data in ["A", "B", "C"]:
-    result = -2
     # level 0 portion
     d = read_data(data)
     out, result = Normalize(d)

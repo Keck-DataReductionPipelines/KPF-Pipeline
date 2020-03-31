@@ -6,8 +6,8 @@ from collections.abc import Iterable
 from collections import deque
 from queue import Queue
 from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
-from kpfpipe.models.kpf_arguments import KpfArguments
 from keckdrpframework.models.action import Action
+from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 class KpfPipelineNodeVisitor(NodeVisitor):
@@ -453,36 +453,39 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(arg)
             return
         if not getattr(node, 'kpf_completed', False):
-            self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}")
             if not self.returning_from_call:
-                kwargs = {}
-                for kwnode in node.keywords:
-                    self.visit(kwnode)
-                    tup = self._load.pop()
-                    kwargs[tup[0]] = tup[1]
-                args = []
-                for arg in node.args:
-                    self.visit(arg)
-                    args.append(self._load.pop())
-                event_args = KpfArguments(*args, **kwargs, name=node.func.id+"_args")
+                self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}")
                 # Build and queue up the called function and arguments
                 # as a pipeline event.
                 # The "next_event" item in the event_table, populated
                 # by visit_ImportFrom, will ensure that the recipe
                 # processing will continue by making resume_recipe
                 # the next scheduled event primative.
+                # add keyword arguments
+                kwargs = {}
+                for kwnode in node.keywords:
+                    self.visit(kwnode)
+                    tup = self._load.pop()
+                    kwargs[tup[0]] = tup[1]
+                event_args = Arguments(name=node.func.id+"_args", **kwargs)
+                # add positional arguments
+                for argnode in node.args:
+                    self.visit(argnode)
+                    event_args.append(self._load.pop())
                 self.context.push_event(node.func.id, event_args)
                 self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                 #
                 self.awaiting_call_return = True
                 return
             else:
-                self.returning_from_call = False
+                # returning from a call (pipeline event):
+                # Get any returned values, stored by resume_recipe() in self.call_output,
+                # and push them on the _load stack for Assign (or whatever) to handle.
                 self.pipeline.logger.debug(f"Call on recipe line {node.lineno} returned output {self.call_output}")
-                assert isinstance(self.call_output, KpfArguments)
                 for ix in range(len(self.call_output)):
                     self._load.append(self.call_output[ix])
                 self.call_output = None
+                self.returning_from_call = False
             setattr(node, 'kpf_completed', True)
 
     def visit_keyword(self, node):
