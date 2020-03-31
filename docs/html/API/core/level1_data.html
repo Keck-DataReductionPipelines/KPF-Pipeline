@@ -21,10 +21,10 @@
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
-        <script type="text/javascript" src="../../_static/jquery.js"></script>
-        <script type="text/javascript" src="../../_static/underscore.js"></script>
-        <script type="text/javascript" src="../../_static/doctools.js"></script>
-        <script type="text/javascript" src="../../_static/language_data.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
     
     <script type="text/javascript" src="../../_static/js/theme.js"></script>
 
@@ -164,88 +164,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="module-kpfpipe.models.level1">
-<span id="level-1-data"></span><h1>Level 1 Data<a class="headerlink" href="#module-kpfpipe.models.level1" title="Permalink to this headline">¶</a></h1>
-<p>Define objects used in level one data processing</p>
-<dl class="class">
-<dt id="kpfpipe.models.level1.HK1">
-<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.models.level1.</code><code class="sig-name descname">HK1</code><a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#HK1"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.HK1" title="Permalink to this definition">¶</a></dt>
-<dd><p>Contanier for data associated with level one data products from the HK spectrometer</p>
-<blockquote>
-<div><p>Attributes:
-source (string): e.g. ‘sky’, ‘sci’, <cite>cal</cite>
-flux (array): flux values
-flux_err (array): flux uncertainties
-wav (array): wavelengths</p>
-</div></blockquote>
-</dd></dl>
-
-<dl class="class">
-<dt id="kpfpipe.models.level1.KPF1">
-<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.models.level1.</code><code class="sig-name descname">KPF1</code><a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1" title="Permalink to this definition">¶</a></dt>
-<dd><p>Container object for level one data</p>
-<dl class="simple">
-<dt>Attributes:</dt><dd><p>Norderlets (dictionary): Number of orderlets per chip
-Norderlets_total (int): Total number of orderlets
-orderlets (dictionary): Collection of Spectrum objects for each chip, order, and orderlet
-hk (array): Extracted spectrum from HK spectrometer CCD; 2D array (order, col)
-expmeter (array): exposure meter sequence; 3D array (time, order, col)</p>
-</dd>
-<dt>Todo:</dt><dd><ul class="simple">
-<li><p>implement <cite>to_fits</cite> and <cite>from_fits</cite> methods</p></li>
-</ul>
-</dd>
-</dl>
-<dl class="method">
-<dt id="kpfpipe.models.level1.KPF1.from_fits">
-<em class="property">classmethod </em><code class="sig-name descname">from_fits</code><span class="sig-paren">(</span><em class="sig-param">fn: str</em>, <em class="sig-param">overwrite: bool = True</em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.from_fits"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.from_fits" title="Permalink to this definition">¶</a></dt>
-<dd><p>Read data from .fits file.</p>
-<dl>
-<dt>Args: </dt><dd><p>fn (str): .fits file name
-HDU (str): HDU (Deader Data Unit) to be read
-overwrite (bool): if this instance already contains data</p>
-<blockquote>
-<div><p>specifies whether newly read-in data should overwrite 
-existing data</p>
-</div></blockquote>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="kpfpipe.models.level1.KPF1.get_order">
-<code class="sig-name descname">get_order</code><span class="sig-paren">(</span><em class="sig-param">order: int</em>, <em class="sig-param">source: str</em><span class="sig-paren">)</span> &#x2192; numpy.ndarray<a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.get_order"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.get_order" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a wave-flux pair data
-Args:</p>
-<blockquote>
-<div><p>order (int):  order of data
-source (str): source of data</p>
-</div></blockquote>
-</dd></dl>
-
-<dl class="method">
-<dt id="kpfpipe.models.level1.KPF1.to_fits">
-<code class="sig-name descname">to_fits</code><span class="sig-paren">(</span><em class="sig-param">fn</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.to_fits"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.to_fits" title="Permalink to this definition">¶</a></dt>
-<dd><p>Optional: collect all the level 1 data into a monolithic fits file</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="class">
-<dt id="kpfpipe.models.level1.Spectrum">
-<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.models.level1.</code><code class="sig-name descname">Spectrum</code><span class="sig-paren">(</span><em class="sig-param">source: str</em>, <em class="sig-param">data: numpy.ndarray</em>, <em class="sig-param">header: astropy.io.fits.header.Header</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#Spectrum"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.Spectrum" title="Permalink to this definition">¶</a></dt>
-<dd><p>Contanier for data that’s associated with level one data products per orderlet</p>
-<dl class="simple">
-<dt>Attributes:</dt><dd><p>source (string): e.g. ‘sky’, ‘sci’, <cite>cal</cite>
-flux (array): flux values
-flux_err (array): flux uncertainties
-wav (array): wavelengths
-fiberid (int): fiber identifier
-ordernum (int): order identifier</p>
-</dd>
-</dl>
-</dd></dl>
-
+  <div class="section" id="level-1-data">
+<h1>Level 1 Data<a class="headerlink" href="#level-1-data" title="Permalink to this headline">¶</a></h1>
 </div>
 
 

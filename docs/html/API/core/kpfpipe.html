@@ -21,10 +21,10 @@
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
-        <script type="text/javascript" src="../../_static/jquery.js"></script>
-        <script type="text/javascript" src="../../_static/underscore.js"></script>
-        <script type="text/javascript" src="../../_static/doctools.js"></script>
-        <script type="text/javascript" src="../../_static/language_data.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
     
     <script type="text/javascript" src="../../_static/js/theme.js"></script>
 
@@ -164,57 +164,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="module-kpfpipe.pipelines.kpfpipeline">
-<span id="kpfpipeline"></span><h1>KPFPipeline<a class="headerlink" href="#module-kpfpipe.pipelines.kpfpipeline" title="Permalink to this headline">¶</a></h1>
-<dl class="class">
-<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline">
-<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.pipelines.kpfpipeline.</code><code class="sig-name descname">KPFPipeline</code><span class="sig-paren">(</span><em class="sig-param">context: keckdrpframework.models.processing_context.ProcessingContext</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline" title="Permalink to this definition">¶</a></dt>
-<dd><p>Pipeline to Process KPF data using the KeckDRPFramework</p>
-<dl class="simple">
-<dt>Args:</dt><dd><p>context (ProcessingContext): context class provided by the framework</p>
-</dd>
-<dt>Attributes:</dt><dd><p>event_table (dictionary): table of actions known to framework.
-All primitives must be registered here.</p>
-</dd>
-</dl>
-<dl class="method">
-<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline.evaluate_recipe">
-<code class="sig-name descname">evaluate_recipe</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline.evaluate_recipe"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline.evaluate_recipe" title="Permalink to this definition">¶</a></dt>
-<dd><p>Evaluates the recipe file (Python file) specified in context.config.run.recipe.
-All actions are executed consecutively in the high priority queue</p>
-<dl class="simple">
-<dt>Args:</dt><dd><p>action (keckdrpframework.models.action.Action): Keck DRPF Action object
-context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline.exit_loop">
-<code class="sig-name descname">exit_loop</code><span class="sig-paren">(</span><em class="sig-param">action</em>, <em class="sig-param">context</em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline.exit_loop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline.exit_loop" title="Permalink to this definition">¶</a></dt>
-<dd><p>Force the Keck DRP Framework to exit the infinite loop</p>
-<dl class="simple">
-<dt>Args:</dt><dd><p>action (keckdrpframework.models.action.Action): Keck DRPF Action object
-context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="kpfpipe.pipelines.kpfpipeline.KPFPipeline.start">
-<code class="sig-name descname">start</code><span class="sig-paren">(</span><em class="sig-param">config: configparser.ConfigParser</em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpfpipeline.html#KPFPipeline.start"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpfpipeline.KPFPipeline.start" title="Permalink to this definition">¶</a></dt>
-<dd><p>Initialize the customized pipeline.
-Customized in that it sets up logger and configurations differently 
-from how the BasePipeline does.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Args</dt>
-<dd class="field-odd"><p>config (ConfigParser): containing pipeline configuration</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
+  <div class="section" id="kpfpipeline">
+<h1>KPFPipeline<a class="headerlink" href="#kpfpipeline" title="Permalink to this headline">¶</a></h1>
 </div>
 
 
