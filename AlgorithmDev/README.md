@@ -28,9 +28,9 @@ The KPF-Pipeline repository is located at https://github.com/California-Planet-S
   - examples/order_trace_width_test_neid.ipynb: order trace test
   - examples/paras_test_optimal_trace_order_2.ipynb: optimal extraction and sum fraction extraction test on data from OrderTrace module by using PolygonClipping2. PolygonClipping2 is refactored from PolygonClipping. 
 
--- The main test samples from L0 data to produce L1 and L2 data:
-     examples/order_trace_width_test_neid.ipynb: to get order trace description from OrderTrace 
-     examples/paras_test_optimal_trace_order_2.ipynb: to make optimal extraction or fraction summation extraction from PolygonClipping2
-     examples/radial_velocity_test_neid.ipynb: to calculate radial velocity from RadialVelocity
+- The main test samples from L0 data to produce L1 and L2 data
+  - examples/order_trace_width_test_neid.ipynb: to get order trace description from OrderTrace 
+  - examples/paras_test_optimal_trace_order_2.ipynb: to make optimal extraction or fraction summation extraction from PolygonClipping2
+  - examples/radial_velocity_test_neid.ipynb: to calculate radial velocity from RadialVelocity
 
 
