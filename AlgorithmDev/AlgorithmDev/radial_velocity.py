@@ -13,8 +13,7 @@ from astropy.utils import iers
 import os.path
 import csv
 
-#STEP_INDEX = [-82, 82]
-STEP_INDEX = [-80.0, 81.0]
+STEP_INDEX = [-82, 82]
 LIGHT_SPEED = 299792.458   # light speed in km/s
 LIGHT_SPEED_M = 299792458. # light speed in m/s
 X1 = 500
@@ -34,6 +33,7 @@ PM_RA = 'pm_ra'
 PM_DEC = 'pm_dec'
 PARALLAX = 'parallax'
 STEP = 'step'
+STEP_RANGE = 'step_range'
 MASK_WID = 'mask_width'
 
 class RadialVelocity:
@@ -55,6 +55,7 @@ class RadialVelocity:
         self.velocity_steps = None    # total number in velocity_loop
         self.mask_line = None
         self.zb_long = None
+        self.step_range = None
         self.spectrum_order = spectrum_order
         self.init_calc = False
         if 'overwrite' not in self.config:
@@ -68,17 +69,26 @@ class RadialVelocity:
 
         if self.config and set(must_config_keys).issubset(self.config):
             iers.Conf.iers_auto_url.set('ftp://cddis.gsfc.nasa.gov/pub/products/iers/finals2000A.all')
+            self.get_step_range()
             self.get_velocity_loop()
             self.get_velocity_steps()
             self.get_zb_long()
-            self.get_mask_line()
+            self.get_mask_line(self.config.get('air_to_vaccum', False))
+
             return True
         else:
             return False
 
+    def get_step_range(self):
+        if self.step_range is None:
+            self.step_range = self.config.get(STEP_RANGE, STEP_INDEX)
+
+        return self.step_range
+
     def get_velocity_loop(self):
         if self.velocity_loop is None:
-            self.velocity_loop = np.arange(STEP_INDEX[0], STEP_INDEX[1]) * self.config[STEP] + self.config[STAR_RV]
+            range = self.get_step_range()
+            self.velocity_loop = np.arange(range[0], range[1]) * self.config[STEP] + self.config[STAR_RV]
         return self.velocity_loop
 
     def get_velocity_steps(self):
@@ -128,12 +138,37 @@ class RadialVelocity:
             self.zb_long = np.array([min(rv_list), max(rv_list)])
         return self.zb_long
 
+    def airtovac(self, wave_air):
+        """ convert mask wavelength from air to vaccum environment """
 
-    def get_mask_line(self):
+        is_array = isinstance(wave_air, np.ndarray)
+        if  is_array is False:
+            new_wave_air = np.array([wave_air])
+        else:
+            new_wave_air = wave_air.copy()
+
+        wave_vac = new_wave_air * 1.0
+        g = wave_vac > 2000.0       # only modify above 2000 A(ngstroms)
+
+        if np.any(g):
+            for iter in [0, 1]:
+                if isinstance(g, np.ndarray):
+                    sigma2 = (1e4/wave_vac[g])**2.0   #Convert to wavenumber squared
+
+                    # Compute conversion factor
+                    fact = 1. + 5.792105e-2 / (238.0185 - sigma2) + 1.67917e-3 / (57.362 - sigma2)
+                    wave_vac[g] = new_wave_air[g] * fact          #Convert Wavelength
+
+        return wave_vac if is_array else wave_vac[0]
+
+    def get_mask_line(self, air_to_vaccum = False):
         """calculate mask line center, start and end"""
         if self.mask_line is None:
             mask_width = self.config[MASK_WID]
             line_center, line_weight = np.loadtxt(self.mask_path, dtype=float, unpack=True) # load mask file
+
+            if air_to_vaccum is True:
+                line_center = self.airtovac(line_center)
             line_mask_width = line_center * (mask_width/LIGHT_SPEED)
 
             self.mask_line = {'start': line_center - line_mask_width,
@@ -193,7 +228,7 @@ class RadialVelocity:
 
     def get_rv_on_spectrum(self, spectrum, hdr, weigh_ccf=None, wavelength_calib_file=None, hdu_in_calib=None,
                            start_x = None, end_x = None, start_order=None, end_order=None, BC_corr=None,
-                           order_diff = 0):
+                           order_diff = 0, jd_time=None):
         """
         compute radial velocity of all orders based on 2D spectrum
 
@@ -215,7 +250,11 @@ class RadialVelocity:
             obsjd = hdr['MJD-OBS'] + 2400000.5 + hdr['EXPTIME'] * SEC_TO_JD/2
             zb = self.get_BC_corr_RV(obsjd)[0]
         else:
-            zb = BC_corr
+            if jd_time is not None:
+                #zb = self.get_BC_corr_RV(jd_time)[0]
+                zb = BC_corr
+            else:
+                zb = BC_corr
 
         s_x = X1 if start_x is None else start_x
         e_x = X2 if end_x is None else end_x
@@ -262,7 +301,11 @@ class RadialVelocity:
 
     def cross_correlate_by_mask_shift(self, wavecal, spectrum, zb, weigh_ccf_ord):
         line = self.mask_line
+
+        # made some fix on line_index. the original calculation may miss some pixels at the edges while finding the overlap between
+        # the wavelength range of the pixels and the maximum wavelength range of the mask line
         line_index = np.where ((line.get('bc_corr_start') > np.min(wavecal)) & (line.get('bc_corr_end') < np.max(wavecal)))[0]
+        #line_index = np.where ((line.get('bc_corr_end') > np.min(wavecal)) & (line.get('bc_corr_start') < np.max(wavecal)))[0]
         nline_index = len(line_index)
 
         v_steps = self.velocity_steps
@@ -304,10 +347,30 @@ class RadialVelocity:
             closestmatch_next = np.sum((xpixel_wavestart - line_dopplershifted_end[:, np.newaxis] < 0.), axis=1)
             maskspectra_dopplershifted = np.zeros(n_xpixel)
 
+            """
+            # this is the original code, it may miss some pixel in the edge
             for k in range(nline_index):
-                #closest_xpixel = closestmatch[k] - 1    # fix: closest index before line_dopplershifted_center
-                closest_xpixel = closestmatch[k]       # before fix
-                closest_xpixel_next = closestmatch_next[k]
+                closest_xpixel = closestmatch[k] - 1    # fix: closest index before line_dopplershifted_center
+                #closest_xpixel = closestmatch[k]       # before fix
+
+                line_startwave = line_dopplershifted_start[k]
+                line_endwave = line_dopplershifted_end[k]
+                line_weight = new_line_weight[k]
+
+                if (closest_xpixel > pix1 and closest_xpixel < pix2):
+                    for n in range(closest_xpixel - 5, closest_xpixel + 5):
+                        # if there is overlap
+                        if xpixel_wavestart[n] <= line_endwave and xpixel_waveend[n] >= line_startwave:
+                            wavestart = max(xpixel_wavestart[n], line_startwave)
+                            waveend = min(xpixel_waveend[n], line_endwave)
+                            maskspectra_dopplershifted[n] = line_weight * (waveend - wavestart)/(xpixel_waveend[n]-xpixel_wavestart[n])
+
+            """
+            idx_collection = list()
+            for k in range(nline_index):
+                #closest_xpixel = closestmatch[k] - 1
+                closest_xpixel = closestmatch[k]       # closest index starting before line_dopplershifted_start
+                closest_xpixel_next = closestmatch_next[k] # closest index starting after line_dopplershifted_end
                 line_startwave = line_dopplershifted_start[k]
                 line_endwave = line_dopplershifted_end[k]
                 line_weight = new_line_weight[k]
@@ -325,6 +388,12 @@ class RadialVelocity:
                             wavestart = max(xpixel_wavestart[n], line_startwave)
                             waveend = min(xpixel_waveend[n], line_endwave)
                             maskspectra_dopplershifted[n] = line_weight * (waveend - wavestart)/(xpixel_waveend[n]-xpixel_wavestart[n])
+                            if n in idx_collection:
+                                print(str(n), ' already taken')
+                                import pdb;pdb.set_trace()
+                            else:
+                                idx_collection.append(n)
+
             ccf[c] = np.nansum(spectrum * maskspectra_dopplershifted)
 
         #print('ccf ', ccf)  #total_match averagely higher than original code??
@@ -353,17 +422,22 @@ class RadialVelocity:
 
     def output_ccf_to_fits(self, ccf, out_fits, ref_head, mean ):
         hdu = fits.PrimaryHDU(ccf)
-        for key in ref_head:
-            if key in hdu.header or key == 'COMMENT':
-                continue
-            else:
-                if key == 'Date':
-                    hdu.header[key] = str(datetime.datetime.now())
-                elif 'ESO' in key:
-                    if  'ESO DRS CCF RVC' in key:
-                        hdu.header['CCF-RVC'] = (str(mean), ' Baryc RV (km/s)')
+
+        if ref_head is not None:   # mainly for PARAS data
+            for key in ref_head:
+                if key in hdu.header or key == 'COMMENT':
+                    continue
                 else:
-                    hdu.header[key] = ref_head[key]
+                    if key == 'Date':
+                        hdu.header[key] = str(datetime.datetime.now())
+                    elif 'ESO' in key:
+                        if  'ESO DRS CCF RVC' in key:
+                            hdu.header['CCF-RVC'] = (str(mean), ' Baryc RV (km/s)')
+                    else:
+                        hdu.header[key] = ref_head[key]
+        else:
+            hdu.header['Date'] = str(datetime.datetime.now())
+            hdu.header['CCF-RVC'] = (str(mean), ' Baryc RV (km/s)')
 
         hdu.writeto(out_fits, overwrite=True)
 

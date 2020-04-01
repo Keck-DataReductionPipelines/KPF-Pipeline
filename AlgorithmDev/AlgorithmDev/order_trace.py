@@ -1445,14 +1445,14 @@ class OrderTrace:
         #import pdb;pdb.set_trace()
         return x_new_set, y_new_set
 
-    def fit_width_by_gaussian(self, x_set, y_set, center_y, xs):
+    def fit_width_by_gaussian(self, x_set, y_set, center_y, xs, sigma=3.0):
         g_init = models.Gaussian1D(mean=center_y)
         gaussian_fit = FIT_G(g_init, x_set, y_set)
 
         #print('gaussian_fit: ', gaussian_fit, ' center_y: ', center_y)
         if abs(gaussian_fit.mean.value - center_y) <= 1.0:
             #width = gaussian_fit.stddev.value*3.0
-            width = gaussian_fit.stddev.value*2.0  # 2 sigma
+            width = gaussian_fit.stddev.value*sigma
             gaussian_center = gaussian_fit.mean.value
 
             #if width >= 12.0:
