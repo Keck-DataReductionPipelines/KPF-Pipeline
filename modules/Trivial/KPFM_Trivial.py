@@ -27,4 +27,3 @@ class KPFModExample(KPF1_Primitive):
         This primitive's action
         '''
         print('[{}] Performed!'.format(self.__class__.__name__))
-
