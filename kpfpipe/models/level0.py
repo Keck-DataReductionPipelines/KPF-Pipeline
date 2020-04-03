@@ -47,8 +47,6 @@ class MasterFlat(KPF0):
     """
     def __init__(self):
         pass
-
-
 class MasterBias(KPF0):
     """
     Bias frame derived from a stack of bias observations
