@@ -12,5 +12,4 @@ This is the documentation for the KPF Data Reduction Pipeline.
 
     intro/getting_started.rst
     repository/start.rst
-    API/api.rst
 
