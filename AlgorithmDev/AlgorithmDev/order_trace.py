@@ -10,6 +10,8 @@ from numpy import sqrt, square
 from scipy import linalg, ndimage
 from astropy.modeling import models, fitting
 import csv
+import time
+import sys, os
 
 GRATING = 0
 PRISM = 1
@@ -38,8 +40,15 @@ class OrderTrace:
         self.spectral_info = None
         self.clusters_all_y = None
 
+    def print_set(self, is_print = False):
+        if is_print:
+            sys.stdout = sys.__stdout__
+        else:
+            sys.stdout = open(os.devnull, 'w')
 
-    def set_debug(self, on_off_debug = True):
+    def set_debug(self, on_off_debug = True, print_msg=None):
+        if print_msg is not None:
+            print(print_msg)
         if on_off_debug:
             import pdb;pdb.set_trace()
 
@@ -118,42 +127,51 @@ class OrderTrace:
 
         return f
 
-    def remove_vertical_line(self, x_loc, y_loc, imm, len_th = None):
-        im_data, ny, nx = self.get_spectral_data()
-        th = ny//100 if len_th is None else len_th
+    def reset_row_or_column(self, imm,  reset_ranges = None, row_or_column = 0, val=0):
+        """ set value of columns or rows to be val, the setting is on row if row_or_column is 0 or on column """
 
-        print('start remove vertical long line, th:', th)
+        if reset_ranges is None:
+            pos = np.where(imm>0)
+            return imm, pos[1], pos[0]
 
-        total_y = list()
-
-        #for cx in range(0, nx):
-        #    idx_cx = np.where(x_loc == cx)[0]
-        #    total_y.append(np.size(idx_cx))
-
-        v_idx = np.array([439, 440, 446, 447])
-        for cx in v_idx:
-            imm[:, cx] = 0
+        self.set_debug(False, 'reset ' + ('row: ' if row_or_column == 0 else 'col: ')+ str(reset_ranges))
+        for range in reset_ranges:
+            range_idxs = np.arange(range[0], range[1], dtype=int)
+            if row_or_column == 0:
+                for r in range_idxs:
+                    imm[r, :] = val
+            else:
+                for c in range_idxs:
+                    imm[:, c] = val
 
         pos = np.where(imm>0)
+        return imm, pos[1], pos[0]
 
-        return pos[1], pos[0], imm
-
-
-    def locate_clusters(self, filename=None,  filter=20, mask=1, noise=0.0, remove_vertical=False):
-        """ Find cluster pixels from 2D data array
+    def locate_clusters(self, filename=None,  filter=20, mask=1, noise=0.0, cols_to_reset=None, rows_to_reset=None):
+        """ Find cluster pixels from 2D data array, cluster means a pixel unit containing connected pixels with value '1'
 
         Parameters:
             filename (str): spectral file name or use the one already loaded
             filter (number): the width of the filter for detection of pixels that belong to local maxima
-
+            mask (number): value for cluster pixels
+            nose (number): noise value for filtering
+            cols_to_reset (list): columns to be reset after filtering,
+                               each element in the list contains a list of two numbers meaning the location of two columns
+                               and all pixels within those two columns (the column of second number is excluded) are reset
+                               with value 0.
+            rows_to_reset (list): rows to be reset after filtering,
+                               each element in the list contains a list of two numbers meaning the location of two rows
+                               and all pixels within those two rows (the row of second number is excluded) are reset
+                               with value 0.
         Returns:
             cluster_info (dict): result of cluster, like
-                                     {'x': array([2, 2, 2, 2],
-                                      'y': array([4, 5, 6, 7])}
+                                     {'x': array([2, 2, 2, 2],   # x position of cluster pixels
+                                      'y': array([4, 5, 6, 7]),  # y position of cluster pixels
+                                      'im_map': 2D array  #cluster pixels with value 1 or value 0
+                                      }
         """
 
         im_data, total_col, total_row = self.get_spectral_data(filename)
-
         if im_data is None:
             return None
 
@@ -166,16 +184,20 @@ class OrderTrace:
             imm[:, col][mm>(h+1)] = mask
 
         pos = np.where(imm>0)  # ex: (array([4, 5, 6, 7]), array([2, 2, 2, 2]))
+        y, x= pos
 
-        x = pos[1]
-        y = pos[0]
+        #self.set_debug(False, 'pos size after filtering: '+str(np.size(y))+' '+str(np.size(x)))
 
-        # image correction for stacked_2fiber_flat.fits (temporary fixing)
+        # image correction (ex. for stacked_2fiber_flat.fits )
+        if rows_to_reset is not None:
+            imm, x, y = self.reset_row_or_column(imm, rows_to_reset)
+            #self.set_debug(False, 'pos size after row reset: '+str(np.size(y)) + ' '+ str(np.size(x)))
 
-        if remove_vertical == True:
-            x, y, imm = self.remove_vertical_line(x, y, imm)
+        if cols_to_reset is not None:
+            imm, x, y = self.reset_row_or_column(imm, cols_to_reset, row_or_column=1)
+            #self.set_debug(False, 'pos size after column reset: ' + str(np.size(y)) + ' ' + str(np.size(x)))
 
-        return {'x': pos[1], 'y':pos[0], 'im_map': imm}
+        return {'x': x, 'y': y, 'im_map': imm}
 
     def form_cluster(self, x, y, thres=400):
         """ Take x and y coordinates of pixels from (nx, ny) 2D array and identify individual clusters from pixels.
@@ -655,12 +677,12 @@ class OrderTrace:
             #            polys[c_idx, power+1], polys[c_idx, power+2])
             #    import pdb;pdb.set_trace()
 
-            if print_result is True:
+            if print_result:
                 print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',  cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ', \
-                           polys[c_idx, power+1], polys[c_idx, power+2])
+                   polys[c_idx, power+1], polys[c_idx, power+2])
 
             if positive_zero_total >= 1 and negative_zero_total >= 1:
-                if print_result is True:
+                if print_result:
                     print('  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx], ' x range: ', polys[c_idx, power+1:power+3])
                 return True
 
@@ -668,7 +690,7 @@ class OrderTrace:
 
 
 
-    def merge_fitting_curve(self, poly_curves, power, index, x, y, fixed_curves = None, threshold = FIT_ERROR_TH, print_result=True):
+    def merge_fitting_curve(self, poly_curves, power, index, x, y, fixed_curves = None, threshold = FIT_ERROR_TH, print_result=False):
         """ merge the curve which is close to each other by max_change merge """
         x_min_c = power+1
         x_max_c = power+2
@@ -704,8 +726,8 @@ class OrderTrace:
                     c1 += 1
                     continue
 
-            if print_result is True:
-                print("current test curve: c1: "+ str(c1) + " o_c1: "+ str(sort_idx_on_miny[c1]))
+            #if print_result is True:
+            #    print("current test curve: c1: "+ str(c1) + " o_c1: "+ str(sort_idx_on_miny[c1]))
             if new_polys[c1, x_min_c] == non_exist or (new_polys[c1, x_max_c] - new_polys[c1, x_min_c] > short_curve):
                 kept_curves.append(sort_idx_on_miny[c1])
                 c1 += 1
@@ -748,8 +770,8 @@ class OrderTrace:
                     o_c2 = sort_idx_on_miny[v_neighbors[i]]
                     merged_poly_info[o_c2], errors[i] = self.merge_two_clusters(np.array([o_c1, o_c2]), x, y, index, power)
 
-            if print_result is True:
-                print('neighbors: ', v_neighbors, 'neighbors errors: ', errors)
+            #if print_result is True:
+            #    print('neighbors: ', v_neighbors, 'neighbors errors: ', errors)
 
             # no neighbors or no neighbors qualified to merge
             if (v_neighbors.size == 0  or (v_neighbors.size > 0 and np.amin(errors) > threshold)):
@@ -789,11 +811,10 @@ class OrderTrace:
                 y_dists[i] = dist_y
 
                 if self.cross_other_cluster(new_polys, np.array([c1, c2]), np.array([o_c1, o_c2]), x, y, index, power, \
-                                            sort_idx_on_miny, merged_poly_info[o_c2], print_result=print_result):
+                                            sort_idx_on_miny, merged_poly_info[o_c2]):
                     cross_neighbor[i] = 1
-                if print_result is True:
-                    print('c2: ', c2,  'from',  o_c2, 'c1: ', o_c1, ' dist: ', dist_x, dist_y, (dist_x+dist_y), cross_neighbor[i])
-                    #import pdb;pdb.set_trace()
+                #if print_result is True:
+                #    print('c2: ', c2,  'from',  o_c2, 'c1: ', o_c1, ' dist: ', dist_x, dist_y, (dist_x+dist_y), cross_neighbor[i])
 
             neighbor_idx = np.where(np.logical_and(x_dists < nx/2, cross_neighbor == 0))[0]
 
@@ -858,7 +879,6 @@ class OrderTrace:
     def reorganize_index(self, index, x, y, return_map = False):
         """ remove pixels with unsigned cluster no and reorder the cluster number """
 
-        #import pdb;pdb.set_trace()
         new_x, new_y, new_index = self.remove_unassigned_cluster(x, y, index)
         max_index = np.amax(new_index)
         unique_index = np.sort(np.unique(new_index[1:]))
@@ -877,18 +897,14 @@ class OrderTrace:
         offset = 0
         bound1 = -1
 
-        #print("not exist idx: ", not_exist_idx)
         for b in not_exist_idx:
             bound2 = b
             inbound_idx = np.where(np.logical_and(new_index > bound1, new_index < bound2))[0]
-            #print('bound: ', bound1, bound2, inbound_idx)
             if (np.size(inbound_idx) != 0):
                 rnt_index[inbound_idx] = new_index[inbound_idx] - offset
             offset += 1
             bound1 = bound2
 
-        #print("end index reorganize")
-        #import pdb;pdb.set_trace()
 
         unique_result = np.sort(np.unique(rnt_index[1:]))
 
@@ -1160,138 +1176,6 @@ class OrderTrace:
         new_str = f"{afloat:.4f}"
         return new_str
 
-    def width_of_cluster(self, cluster_no, poly_coeffs, cluster_points, power):
-        """ find the width of the cluster
-
-        Parameters:
-            cluster_no (number): cluster number
-            poly_coeffs (array): polynomial fitting information of each cluster
-            power (number): power of polynomial curve
-
-        Returns:
-            out: cluster width information including
-                    cluster number, width before and after the cluster along x direction, and one width number before
-                    and after the cluster among all width numbers
-        """
-
-
-        pow_width = 4
-        spec_data, nx, ny = self.get_spectral_data()
-        max_cluster_no = np.shape(poly_coeffs)[0]-1
-        center_x = nx//2
-        index_pos = self.get_sorted_index(poly_coeffs, cluster_no, power, center_x)
-
-        # index of cluster_no in index_pos list
-        idx = index_pos['idx']
-        idx_v_post = index_pos['index_v_pos']
-        prev_idx = idx - 1 if idx > 1 else idx
-        next_idx = idx + 1 if idx < max_cluster_no else idx
-
-        three_clusters = np.array([cluster_no, idx_v_post[prev_idx], idx_v_post[next_idx]])
-        min_x = int(np.amax(poly_coeffs[three_clusters, power+1]))
-        max_x = int(np.amin(poly_coeffs[three_clusters, power+2]))
-        x_range = np.array([min_x, max_x])
-
-        # get background data along the curve of cluster_no at upper and lower sides
-        background_data = self.find_background_around(cluster_no, poly_coeffs, power, cluster_points)
-
-        # compute the width along x direction every step
-        step = 100
-        x_loc1 = np.arange(center_x, int(x_range[1])+1, step)
-        x_loc2 = np.arange(center_x-step, int(x_range[0])-1, -step)
-        x_loc = np.concatenate((np.flip(x_loc2), x_loc1))
-        cluster_width_info = list()
-        prev_widths = list()
-        next_widths = list()
-
-        for xs in x_loc:
-            cluster_y = cluster_points[cluster_no, xs]
-            cluster_y_next = cluster_points[idx_v_post[idx+1], xs] if idx < max_cluster_no else ny-1
-            cluster_y_prev = cluster_points[idx_v_post[idx-1], xs] if idx > 1 else 0
-
-            if idx == 1 and idx < max_cluster_no:
-                cluster_y_prev = max(cluster_y - abs(cluster_y_next - cluster_y), 0)
-            if idx == max_cluster_no and idx > 1:
-                cluster_y_next = min(cluster_y + abs(cluster_y - cluster_y_prev), ny-1)
-
-
-            next_mid = min(ny-1, ((cluster_y+cluster_y_next)//2+1))
-            prev_mid = max(0, ((cluster_y+cluster_y_prev)//2-1))
-
-            next_dist = min((next_mid - cluster_y)//4, 10)
-            prev_dist = min((cluster_y - prev_mid)//4, 10)
-            next_mid_data = background_data[TOP, xs]
-            prev_mid_data = background_data[BOTTOM, xs]
-
-            slope_coeffs_bound = list()
-            # finding width at both sides
-            x_set=np.arange(prev_mid, cluster_y+1)
-            y_set=spec_data[prev_mid:(cluster_y+1), xs]
-            slope_coeff = np.polyfit(x_set, y_set, pow_width)
-            slope_der = np.polyder(slope_coeff)
-            all_roots = np.roots(slope_der)
-            roots=all_roots[np.where(all_roots<cluster_y)[0]].real
-            #prev_width = cluster_y - np.amax(roots)
-            prev_width = self.find_trace_width(cluster_y, roots, xs)
-            prev_widths.append(prev_width)
-            slope_coeffs_bound.append({'coeffs':slope_coeff, 'bound':[prev_mid, cluster_y],
-                                      'x_set': x_set, 'y_set': y_set})
-
-
-            x_set = np.arange(cluster_y, next_mid+1)
-            y_set = spec_data[cluster_y:(next_mid+1), xs]
-            slope_coeff = np.polyfit(x_set, y_set, pow_width)
-            slope_der = np.polyder(slope_coeff)
-            all_roots = np.roots(slope_der)
-            roots=all_roots[np.where(all_roots>cluster_y)[0]].real
-            #next_width = np.amin(roots)-cluster_y
-            next_width = self.find_trace_width(cluster_y, roots, xs, 1)
-            next_widths.append(next_width)
-            slope_coeffs_bound.append({'coeffs':slope_coeff, 'bound':[cluster_y, next_mid],
-                                       'x_set': x_set, 'y_set': y_set})
-
-
-            info_at_x = {'x': str(xs), 'y': str(cluster_y),
-                    'n_mid': str(next_mid), 'p_mid': str(prev_mid),
-                    'backgd0': self.float_to_string(prev_mid_data),
-                    'backgd1':self.float_to_string(next_mid_data),
-                    'data': self.float_to_string(spec_data[cluster_y, xs]),
-                    'width0': self.float_to_string(prev_width), 'width1': self.float_to_string(next_width)}
-
-            next_slope = list()
-            for y in range(cluster_y+1, next_mid-next_dist):
-                x_set_1 = np.arange(cluster_y, y+1)
-                y_set_1 = spec_data[cluster_y:(y+1), xs]
-                x_set_2 = np.arange(y, next_mid+1)
-                y_set_2 = spec_data[y:(next_mid+1), xs]
-                slope_coeff1 = np.polyfit(x_set_1, y_set_1, 1)
-                slope_coeff2 = np.polyfit(x_set_2, y_set_2, 1)
-                next_slope.append([y, slope_coeff1[0], slope_coeff2[0], spec_data[y, xs]])
-
-            prev_slope = list()
-            for y in range(cluster_y-1, prev_mid+prev_dist, -1):
-                x_set_1 = np.arange(y, cluster_y+1)
-                y_set_1 = spec_data[y:(cluster_y+1), xs]
-                x_set_2 = np.arange(prev_mid, y+1)
-                y_set_2 = spec_data[prev_mid:(y+1), xs]
-                slope_coeff1 = np.polyfit(x_set_1, y_set_1, 1)
-                slope_coeff2 = np.polyfit(x_set_2, y_set_2, 1)
-                prev_slope.append([y, slope_coeff1[0], slope_coeff2[0], spec_data[y, xs]])
-
-            cluster_width_info.append({'x': xs, 'width_info': info_at_x, 'slopes_next': next_slope,
-                                       'slopes_prev': prev_slope, 'slope_coeffs': slope_coeffs_bound })
-
-        avg_pwidth = self.find_val_from_histogram(np.array(prev_widths))
-        avg_nwidth = self.find_val_from_histogram(np.array(next_widths))
-
-        self.values_at_width(avg_pwidth, avg_nwidth, cluster_points[cluster_no, center_x], center_x)
-
-        return {'cluster_no': cluster_no,
-                'width_info_all_x': cluster_width_info,
-                'avg_pwidth': avg_pwidth,
-                'avg_nwidth': avg_nwidth,
-                'prev_widths': prev_widths,
-                'next_widths': next_widths}
 
     def width_of_cluster_by_gaussian(self, cluster_no, poly_coeffs, cluster_points, power):
         """ find the width of the cluster
@@ -1410,8 +1294,6 @@ class OrderTrace:
             cluster_width_info.append({'x': xs, 'width_info': info_at_x, 'slopes_next': next_slope,
                                        'slopes_prev': prev_slope, 'slope_coeffs': slope_coeffs_bound })
 
-        #print(prev_widths)
-        #import pdb;pdb.set_trace()
         cluster_h = poly_coeffs[cluster_no, power+4] - poly_coeffs[cluster_no, power+3]
         avg_pwidth = self.find_val_from_histogram(np.array(prev_widths), range=[0, cluster_h], bin_no=int(cluster_h//WIDTH_TH), cut_at=WIDTH_DEFAULT)
         avg_nwidth = self.find_val_from_histogram(np.array(next_widths), range=[0, cluster_h], bin_no=int(cluster_h//WIDTH_TH), cut_at=WIDTH_DEFAULT)
@@ -1442,7 +1324,6 @@ class OrderTrace:
             x_new_set = np.concatenate((x_set, x_other_side))
             y_new_set = np.concatenate((y_set, y_other_side))
 
-        #import pdb;pdb.set_trace()
         return x_new_set, y_new_set
 
     def fit_width_by_gaussian(self, x_set, y_set, center_y, xs, sigma=3.0):
@@ -1464,54 +1345,7 @@ class OrderTrace:
             #width = 6.0
             #gaussian_fit = None
 
-        #print('width: ', width)F
-        #import pdb;pdb.set_trace()
         return gaussian_fit, width, gaussian_center
-
-    def fit_width_by_trap(self, x_set, y_set, center_y):
-        t_init = models.Trapezoid1D(x_0=center_y)
-        trape_fit = FIT_G(t_init, x_set, y_set)
-
-        #print('trape_fit: ', trape_fit, ' center_y: ', center_y)
-        #import pdb;pdb.set_trace()
-        if abs(trape_fit.x_0.value - center_y) <= 1.0:
-            width = trape_fit.width.value*3.0
-            if width >= 12.0:
-                width = 6.0
-                trape_fit = None
-        else:
-            width = 6.0
-            trape_fit = None
-
-        #print('width: ', width)
-        #import pdb;pdb.set_trace()
-        return trape_fit, width
-
-
-    def find_trace_width(self, center_y, roots, xloc, direction = 0):
-        ratio = 0.3
-        default_width = 6.0
-
-        data, nx, ny = self.get_spectral_data()
-        peak = data[center_y, xloc]
-        sorted_roots = np.sort(roots)
-        if direction == 0:
-            sorted_roots = np.flip(sorted_roots)
-
-        if direction == 0:
-            for r in sorted_roots:
-                yi = math.floor(r)
-                val = data[yi, xloc]
-                if val < peak * ratio:
-                    return (center_y - r)
-        if direction == 1:
-            for r in sorted_roots:
-                yi = math.ceil(r)
-                val = data[yi, xloc]
-                if val < peak * ratio:
-                    return (r - center_y)
-
-        return default_width
 
 
     def values_at_width(self, avg_pwidth, avg_nwidth, center_y, xloc):
@@ -1522,11 +1356,9 @@ class OrderTrace:
         v1 = data[y1, xloc]
         v2 = data[y2, xloc]
 
-        print("peak: ", peak, 'p_val/ratio: ', self.float_to_string(v1), '/', self.float_to_string(v1/peak),
-                        ' n_val/ratio: ', self.float_to_string(v2), '/', self.float_to_string(v2/peak))
+        #print("peak: ", peak, 'p_val/ratio: ', self.float_to_string(v1), '/', self.float_to_string(v1/peak),
+        #                ' n_val/ratio: ', self.float_to_string(v2), '/', self.float_to_string(v2/peak))
         return
-
-
 
 
     def find_val_from_histogram(self, vals, bin_no=4, range=None, cut_at=None):
@@ -1656,9 +1488,9 @@ class OrderTrace:
 
             if (w <= w_size_thres and h <= h_size_thres):
                 index[crt_cluster_idx] = 0
-                print('cluster ', c_id, ' total: ', t_p, ' w, h', w, h, ' => remove')
-            else:
-                print('cluster ', c_id, ' total: ', t_p, ' w, h', w, h)
+                #print('cluster ', c_id, ' total: ', t_p, ' w, h', w, h, ' => remove')
+            #else:
+                #print('cluster ', c_id, ' total: ', t_p, ' w, h', w, h)
         nregions = np.amax(index)+1 if np.amin(index) == 0  else  np.amax(index)
 
         return {'index': index, 'nregiopns': nregions}
@@ -1701,7 +1533,6 @@ class OrderTrace:
             #if cy%10 == 0:
             print(cy, ' ', end='')
 
-            #import pdb;pdb.set_trace()
             idx_at_cy = np.where(y == cy)[0]   # idx for y at cy
 
             clusters_endy_dict[cy] = list()
@@ -1740,7 +1571,6 @@ class OrderTrace:
             # each element contains connected clusters ('cluster_idx') and connected segments ('segment_idx')
             connected_set = list()
 
-            #import pdb;pdb.set_trace()
             # associate clusters of previous y with each segment
             clusters_at_py = clusters_endy_dict[cy-1]
             for s_idx in range(len(segments_at_cy)):
@@ -1777,7 +1607,6 @@ class OrderTrace:
 
                 """
 
-            #import pdb;pdb.set_trace()
             # create new cluster for current y from isolated segment and cluster unit containing associated segements and
             # clusters of previous y
 
@@ -1814,7 +1643,6 @@ class OrderTrace:
                              if c not in connected_set[b_conn]['cluster_idx']:
                                 connected_set[b_conn]['cluster_idx'].append(c)
 
-            #import pdb;pdb.set_trace()
             # create new cluster based on each element in the cluster unit, connected_set
             for conn in connected_set:
                 all_segments = dict()
@@ -1844,7 +1672,6 @@ class OrderTrace:
                 new_cluster['y2'] = max_y
                 cluster_at_crt_y.append(new_cluster)
 
-            #import pdb;pdb.set_trace()
             cluster_at_crt_y =  self.sort_cluster_on_loc(cluster_at_crt_y, 'x1')
             clusters_endy_dict[cy] = cluster_at_crt_y
 
@@ -1863,9 +1690,6 @@ class OrderTrace:
             for c in cluster_to_update:
                 clusters_endy_dict[cy-1].pop(c)
 
-            #import pdb;pdb.set_trace()
-            #print("finish ", (cy))
-
         self.clusters_all_y = clusters_endy_dict
         print('\n')
         return clusters_endy_dict
@@ -1878,6 +1702,8 @@ class OrderTrace:
 
 
     def get_segments_from_index_list(self, id_list, loc):
+        """ collect segments based on location list and the index set for the location """
+
         segments = list()
 
         distcont_idx = np.where((loc[id_list] - loc[np.roll(id_list, 1)]) != 1)[0]
@@ -1924,7 +1750,7 @@ class OrderTrace:
 
             x_set = list()
             y_set = list()
-            print('curve: ', curve_idx, ' width: ', str(curve['start_x']-curve['crt_x']), ' height: ', str(curve['y2'] - curve['y1'] ))
+            #print('curve: ', curve_idx, ' width: ', str(curve['start_x']-curve['crt_x']), ' height: ', str(curve['y2'] - curve['y1'] ))
             for x_loc in range(curve['crt_x'], curve['start_x']+1):
                 segs_in_y = curve[x_loc]
                 #total = 0
@@ -1936,10 +1762,10 @@ class OrderTrace:
                         y_set.append(s_y)
                 #total_crt_x[x_loc] = total
             if total_pixel < thres:
-                print('  total pixel: ', total_pixel, ' => less pixel')
+                #print('  total pixel: ', total_pixel, ' => less pixel')
                 continue
             else:
-                print('  total pixel: ', total_pixel, ' => polyfit test')
+                #print('  total pixel: ', total_pixel, ' => polyfit test')
                 x_ary = np.array(x_set)
                 y_ary = np.array(y_set)
                 sort_idx = np.argsort(x_ary)
@@ -1947,7 +1773,7 @@ class OrderTrace:
                 y_ary = y_ary[sort_idx]
                 coeffs = np.polyfit(x_ary, y_ary, power)
                 errors = math.sqrt(np.square(np.polyval(coeffs, x_ary) - y_ary).mean())
-                print("  errors: ", errors)
+                #print("  errors: ", errors)
                 #if (errors > FIT_ERROR_TH and total_pixel < thres) or (errors >= 3.0):
                 if errors > FIT_ERROR_TH:
                     continue
@@ -1958,17 +1784,12 @@ class OrderTrace:
                 segs_in_y = curve[x_loc]
                 total = 0
                 for seg_y in segs_in_y:
-                    #print('seg_y: ', seg_y)
-                    #import pdb;pdb.set_trace()
                     y_log = np.logical_and(crt_cluster_y >= seg_y[0], crt_cluster_y <= seg_y[1])
                     set_idx = crt_cluster_idx[np.where(np.logical_and(y_log, crt_cluster_x==x_loc))[0]]
                     index[set_idx] = cluster_no
                     #y_range = np.arange(seg_y[0], (seg_y[1]+1), dtype=int)
                     #set_idx2 = np.where(np.logical_and(np.isin(y_index, y_range), x_index==x_loc))[0]
                     #total += np.size(set_idx)
-                #if (total != total_crt_x[x_loc]):
-                #    print(total, total_crt_x[x_loc])
-                #    import pdb;pdb.set_trace()
             poly_fitting_results[cluster_no] = {'errors': errors, 'coeffs': coeffs,
                                                 'area':[np.amin(x_ary), np.amax(x_ary), np.amin(y_ary), np.amax(y_ary)]}
 
@@ -2043,7 +1864,7 @@ class OrderTrace:
                 crt_seg = crt_segments_y[crt_seg_idx]
                 crt_seg_y = crt_cluster_y[crt_seg]
                 if (crt_seg_y[1] - crt_seg_y[0]) > CURVE_TH*2:
-                    print('skip on long segment: x, y1, y1 => ', xi, crt_seg_y[0], crt_seg_y[1])
+                    #print('skip on long segment: x, y1, y1 => ', xi, crt_seg_y[0], crt_seg_y[1])
                     continue
 
                 for c_idx in range(len(pre_curves)):
@@ -2153,7 +1974,7 @@ class OrderTrace:
         for xi in range(xmin, xmax+1):
             all_curves_in_cluster.extend(curve_records[xi])
 
-        print('removing noise on (', str(len(all_curves_in_cluster)), ' curves)')
+        #print('removing noise on (', str(len(all_curves_in_cluster)), ' curves)')
         index_in_cluster, poly_fitting = self.remove_noise_in_cluster(all_curves_in_cluster, x, y, crt_cluster_idx, power)
 
         #print('after removal: ', index_in_cluster[crt_cluster_idx], ' num_set[0]:', num_set[0])
@@ -2238,14 +2059,14 @@ class OrderTrace:
             else:
                 return crt_index, crt_x, crt_y, crt_coeffs, merge_status
 
-    def merge_clusters (self, index, x, y, power):
+    def merge_clusters (self, index, x, y, power, print_result=False):
         new_index = index.copy()
         new_x = x.copy()
         new_y = y.copy()
         new_coeffs, errors = self.curve_fitting_on_all_clusters(new_index, new_x, new_y, power)
 
         while(True):
-            n_index, n_x, n_y, n_coeffs, merge_status = self.one_step_merge_cluster(new_coeffs, power, new_index, new_x, new_y)
+            n_index, n_x, n_y, n_coeffs, merge_status = self.one_step_merge_cluster(new_coeffs, power, new_index, new_x, new_y, print_result=print_result)
 
             new_index = n_index.copy()
             new_x = n_x.copy()
@@ -2259,6 +2080,30 @@ class OrderTrace:
         m_coeffs, errors = self.curve_fitting_on_all_clusters(m_index, m_x, m_y, power)
 
         return m_x, m_y, m_index, m_coeffs
+
+    def approximate_width(self, cluster_widths, cluster_points, power):
+        """ width approximation based on selected y location and relevant widths at that location """
+        _, nx, ny = self.get_spectral_data()
+
+        h_center = nx//2
+        y_middle_list = cluster_points[1:, h_center]
+        widths_all = list()
+
+        widths_all.append(np.array([c_widths['avg_pwidth'] for c_widths in cluster_widths]))
+        widths_all.append(np.array([c_widths['avg_nwidth'] for c_widths in cluster_widths]))
+        for widths in widths_all:
+            c_idx = np.where(widths != WIDTH_DEFAULT)[0]
+            s_idx = np.where(widths == WIDTH_DEFAULT)[0]
+            coeffs = np.polyfit(y_middle_list[c_idx], widths[c_idx], power)
+            w_sel = np.polyval(coeffs, y_middle_list[s_idx])
+            widths[s_idx] = w_sel
+
+        new_cluster_widths = list()
+        for i in range(len(widths_all[0])):
+            new_cluster_widths.append({'avg_nwidth': widths_all[1][i], 'avg_pwidth': widths_all[0][i]})
+
+        return new_cluster_widths
+
 
     def find_all_cluster_widths(self, index_t, x_t, y_t, coeffs, cluster_points, power, cluster_set=None):
         new_index = index_t.copy()
@@ -2325,42 +2170,66 @@ class OrderTrace:
 
                 result_writer.writerow(row_data)
 
-    def extract_order_trace(self, power):
+    def time_check(self, t_start):
+        t_end = time.time()
+        print("         time: ", (t_end-t_start))
+        return t_end
+
+    def extract_order_trace(self, power, cols_to_reset=None, rows_to_reset=None, power_for_width = -1, show_time=False):
         imm_spec, nx, ny = self.get_spectral_data()
         r_v = True if 'stacked_2fiber_flat' in self.spectral_file else False
 
-        print("locate cluster")
+
+        if show_time:
+            t_start = time.time()
         # locate cluster
-        cluster_xy = self.locate_clusters(remove_vertical = r_v)
+        print("*** locate cluster")
+        cluster_xy = self.locate_clusters(cols_to_reset=cols_to_reset, rows_to_reset=rows_to_reset)
+        t_start = self.time_check(t_start)
+
 
         # assign cluster id and do basic cleaning
-        print("assign cluster")
+        print("*** assign cluster")
         cluster_info = self.collect_clusters(cluster_xy['x'], cluster_xy['y'])
         clean_cluster_info = self.remove_cluster_noise(cluster_info, cluster_xy['x'], cluster_xy['y'])
         x, y, index_c = self.reorganize_index(clean_cluster_info['index'], cluster_xy['x'], cluster_xy['y'])
+        if show_time:
+            t_start = self.time_check(t_start)
 
         # advanced cleaning
-        print("advance clean cluster")
+        print("*** advanced clean cluster")
         advanced_index, all_status = self.advanced_cluster_cleaning_handler(index_c, x, y, power)
         new_x, new_y, new_index = self.reorganize_index(advanced_index, x, y)
+        if show_time:
+            t_start = self.time_check(t_start)
 
         # clean clusters along bottom and top border
-        print("clean border")
+        print("*** clean border")
         index_b = self.clean_clusters_on_border(new_x, new_y, new_index, 0)
         index_t = self.clean_clusters_on_border(new_x, new_y, index_b, ny-1)
         x_border, y_border, index_border =  self.reorganize_index(index_t, new_x, new_y)
+        if show_time:
+            t_start = self.time_check(t_start)
 
-        print("merge cluster")
-        merge_x, merge_y, merge_index, merge_coeffs = self.merge_clusters(index_border, x_border, y_border, power)
+        print("*** merge cluster")
+        merge_x, merge_y, merge_index, merge_coeffs = self.merge_clusters(index_border, x_border, y_border, power, print_result=True)
         c_x, c_y, c_index = self.remove_broken_cluster(merge_index, merge_x, merge_y, merge_coeffs)
         cluster_coeffs, errors = self.curve_fitting_on_all_clusters(c_index, c_x, c_y, power)
         cluster_points = self.get_cluster_points(cluster_coeffs, power)
+        if show_time:
+            t_start = self.time_check(t_start)
 
         #peak_info = self.curve_fitting_on_peaks(cluster_coeffs, power)
         #cluster_coeffs = peak_info['coeffs']
         #cluster_points = peak_info['peak_piexls']
 
-        print("find widths")
+        print("*** find widths")
         all_widths = self.find_all_cluster_widths(c_index, c_x, c_y, cluster_coeffs,  cluster_points, power)
+        if show_time:
+            t_start = self.time_check(t_start)
+
+        if power_for_width > 0:
+            all_widths = self.approximate_width(all_widths, cluster_points, power_for_width)
+
         return {'cluster_index': c_index, 'cluster_x': c_x, 'cluster_y': c_y, 'widths': all_widths,
                 'coeffs': cluster_coeffs, 'errors': errors}

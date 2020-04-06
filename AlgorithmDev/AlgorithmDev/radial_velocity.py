@@ -304,8 +304,8 @@ class RadialVelocity:
 
         # made some fix on line_index. the original calculation may miss some pixels at the edges while finding the overlap between
         # the wavelength range of the pixels and the maximum wavelength range of the mask line
-        line_index = np.where ((line.get('bc_corr_start') > np.min(wavecal)) & (line.get('bc_corr_end') < np.max(wavecal)))[0]
-        #line_index = np.where ((line.get('bc_corr_end') > np.min(wavecal)) & (line.get('bc_corr_start') < np.max(wavecal)))[0]
+        #line_index = np.where ((line.get('bc_corr_start') > np.min(wavecal)) & (line.get('bc_corr_end') < np.max(wavecal)))[0]
+        line_index = np.where ((line.get('bc_corr_end') > np.min(wavecal)) & (line.get('bc_corr_start') < np.max(wavecal)))[0]
         nline_index = len(line_index)
 
         v_steps = self.velocity_steps
