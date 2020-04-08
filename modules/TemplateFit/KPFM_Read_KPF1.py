@@ -31,7 +31,7 @@ class ReadKPF1(KPF1_Primitive):
         Constructor
         '''
         KPF1_Primitive.__init__(self, action, context)
-        # default_path = 'modules/TemplateFit/configs/ReadKPF1.cfg'
+        default_path = 'modules/TemplateFit/configs/ReadKPF1.cfg'
 
         self.fpath = self.context.arg['pipeline_input']
         try:
@@ -40,7 +40,6 @@ class ReadKPF1(KPF1_Primitive):
             config_path = 'modules/TemplateFit/configs/ReadKPF1.cfg'
         self.logger = start_logger(self.__class__.__name__, config_path)
     
-    # Optional
     def _pre_condition(self):
         try: 
             assert(os.path.isdir(self.fpath))

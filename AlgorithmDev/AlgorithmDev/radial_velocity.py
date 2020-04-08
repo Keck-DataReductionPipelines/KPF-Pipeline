@@ -9,9 +9,6 @@ import numpy as np
 import time
 import datetime
 from barycorrpy import get_BC_vel
-from astropy.utils import iers
-import os.path
-import csv
 
 STEP_INDEX = [-80.0, 81.0]
 LIGHT_SPEED = 299792.458   # light speed in km/s
@@ -66,7 +63,6 @@ class RadialVelocity:
         must_config_keys = (STAR_RV, OBSLON, OBSLAT, OBSALT, RA, DEC, PM_RA, PM_DEC, PARALLAX, STEP, MASK_WID)
 
         if self.config and set(must_config_keys).issubset(self.config):
-            iers.Conf.iers_auto_url.set('ftp://cddis.gsfc.nasa.gov/pub/products/iers/finals2000A.all')
             self.get_velocity_loop()
             self.get_velocity_steps()
             self.get_zb_long()
@@ -87,43 +83,23 @@ class RadialVelocity:
         return self.velocity_steps
 
     def get_BC_corr_RV(self, start_jd, days_period=None):
-        bc_corr = list()
+        jds = np.arange(days_period, dtype=float) + start_jd if days_period is not None else [start_jd]
 
-        bc_file = None
-        if days_period is None or days_period == 0:
-            jds = [start_jd]
-        else:
-            bc_file = '../test_data/rv_test/bc_corr'+str(start_jd)+'_'+str(days_period)+'.csv';
-            if os.path.isfile(bc_file):
-                with open(bc_file) as bc_csv:
-                    bc_row = csv.reader(bc_csv)
-                    for row in bc_row:
-                        bc_corr.append(float(row[0]))
-
-        if len(bc_corr) == 0:
-            jds = np.arange(days_period, dtype=float) + start_jd if days_period is not None else [start_jd]
-
-            bc_corr = [get_BC_vel(JDUTC=jd,
-                                 ra = self.config[RA],
-                                 dec = self.config[DEC],
-                                 pmra = self.config[PM_RA],
-                                 pmdec = self.config[PM_DEC],
-                                 px = self.config[PARALLAX],
-                                 lat = self.config[OBSLAT],
-                                 longi = self.config[OBSLON],
-                                 alt = self.config[OBSALT],
-                                 rv = self.config[STAR_RV])[0][0]/LIGHT_SPEED_M for jd in jds]
-
-            if bc_file is not None:
-                with open(bc_file, mode='w') as bc_csv:
-                    result_writer = csv.writer(bc_csv)
-                    for bc in bc_corr:
-                        result_writer.writerow([bc])
+        bc_corr = [get_BC_vel(JDUTC=jd,
+                             ra = self.config[RA],
+                             dec = self.config[DEC],
+                             pmra = self.config[PM_RA],
+                             pmdec = self.config[PM_DEC],
+                             px = self.config[PARALLAX],
+                             lat = self.config[OBSLAT],
+                             longi = self.config[OBSLON],
+                             alt = self.config[OBSALT],
+                             rv = self.config[STAR_RV])[0][0]/LIGHT_SPEED_M for jd in jds]
         return np.array(bc_corr)
 
     def get_zb_long(self):
         if self.zb_long is None:
-            rv_list = self.get_BC_corr_RV(2458591.5, 380) #self.get_BC_corr_RV(2458591.5, 380)
+            rv_list = self.get_BC_corr_RV(2458591.5, 380)
             self.zb_long = np.array([min(rv_list), max(rv_list)])
         return self.zb_long
 
@@ -169,24 +145,7 @@ class RadialVelocity:
         return self.get_rv_on_spectrum(spectrum, hdr, weigh_ccf)
 
 
-    def get_wavecal_by_poly_from_hdr(self, hdr, spectrum_x):
-        wavecalib_coeffs = self.get_wavecalib_poly_params(hdr)
-        wavecals = np.zeros((self.spectrum_order, np.size(spectrum_x)))
-
-        for ord in range(self.spectrum_order):
-            wavecals[ord, :] = np.polyval(np.poly1d(wavecalib_coeffs[ord]), spectrum_x) # calibrate pixel to wavelength
-
-        return wavecals
-
-    def get_wavecal_by_map(self, calib_file):
-        calib_map, hdr = fits.getdata(calib_file, header=True)
-        new_calibs = np.zeros((self.spectrum_order, (X2-X1)))
-
-        total_y = min(np.shape(calib_map)[0], self.spectrum_order)
-        new_calibs[0:total_y, :] = calib_map[0:total_y, X1:X2]
-        return new_calibs
-
-    def get_rv_on_spectrum(self, spectrum, hdr, weigh_ccf=None, wavelength_calib_file=None):
+    def get_rv_on_spectrum(self, spectrum, hdr, weigh_ccf):
         """
         compute radial velocity of all orders based on 2D spectrum
 
@@ -208,23 +167,14 @@ class RadialVelocity:
         spectrum_x = np.arange(np.shape(spectrum)[1])[X1:X2]
         new_spectrum = spectrum[:, X1:X2]
         zb = self.get_BC_corr_RV(obsjd)[0]
+
+        wavecalib_coeffs = self.get_wavecalib_poly_params(hdr)
         result_ccf = np.zeros([self.spectrum_order+MORE_FOR_ANALYSIS, self.velocity_steps])
 
-        if wavelength_calib_file is None:
-            wavecal_all_orders = self.get_wavecal_by_poly_from_hdr(hdr, spectrum_x)
-        else:
-            wavecal_all_orders = self.get_wavecal_by_map(wavelength_calib_file)
-
         for ord in range(self.spectrum_order):
-            print(ord, ' ', end="")
-            wavecal = wavecal_all_orders[ord, :]
-            if np.any(wavecal != 0.0):
-                w_ccf = weigh_ccf[ord, :] if weigh_ccf is not None else None
-                result_ccf[ord, :] = self.cross_correlate_by_mask_shift(wavecal, new_spectrum[ord, :], zb, w_ccf)
-            else:
-                print("all wavelength zero")
+            wavecal = np.polyval(np.poly1d(wavecalib_coeffs[ord]), spectrum_x) # calibrate pixel to wavelength
+            result_ccf[ord, :] = self.cross_correlate_by_mask_shift(wavecal, new_spectrum[ord, :], zb, weigh_ccf[ord, :])
 
-        print("\n")
         result_ccf[~np.isfinite(result_ccf)] = 0.
 
         return result_ccf
@@ -259,8 +209,8 @@ class RadialVelocity:
         new_line_center = line['center'][line_index]
         new_line_weight = line['weight'][line_index]
 
-        xpixel_wavestart = (wavecal + np.roll(wavecal,1))/2.0   # w[0]-(w[1]-w[0])/2, (w[0]+w[1]).....
-        xpixel_waveend = np.roll(xpixel_wavestart, -1)          # (w[0]+w[1])/2,      (w[1]+w[2])/2....
+        xpixel_wavestart = (wavecal + np.roll(wavecal,1))/2.0
+        xpixel_waveend = np.roll(xpixel_wavestart, -1)
         #xpixel_waveend = (wavecal + np.roll(wavecal,-1))/2.0
 
         #xpixel_wavestart[0] = wavecal[0]
@@ -303,8 +253,6 @@ class RadialVelocity:
         #print('  total_match: ', total_match, ' total cc: ', total_cc)  #total_match averagely higher than original code??
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            if weigh_ccf_ord is None:
-                weigh_ccf_ord = ccf.copy()
             ccf *=  np.nanmean(weigh_ccf_ord / ccf)
         return ccf
 
@@ -338,7 +286,7 @@ class RadialVelocity:
                 else:
                     hdu.header[key] = ref_head[key]
 
-        hdu.writeto(out_fits, overwrite=True)
+        hdu.writeto(out_fits)
 
     def fit_ccf(self, result_ccf, velocity_cut=100.0):
         rv_guess = self.config[STAR_RV]
