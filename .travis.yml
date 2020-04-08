@@ -15,11 +15,3 @@ script:
 notifications:
   slack: false
   email: false
-
-
-  # each fiber has its own wavelength
-  # different hdu will have different headers 
-  # level0 -> 1 HDU
-  # segment.flux, .wave, .var, .fiber='sci1', .source='star', .midtime, ...
-  # H&K->  
-  # wavelength stored in seperate HDU

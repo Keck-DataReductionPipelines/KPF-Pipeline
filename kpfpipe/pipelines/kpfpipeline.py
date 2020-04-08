@@ -17,9 +17,14 @@ from keckdrpframework.models.processing_context import ProcessingContext
 class KPFPipeline(BasePipeline):
     """
     Pipeline to Process KPF data using the KeckDRPFramework
-
+    
+    Args:
+        context (ProcessingContext): context class provided by the framework
+    
     Attributes:
-        event_table (dictionary): table of actions known to framework. All primitives must be registered here.
+        event_table (dictionary): table of actions known to framework.
+        All primitives must be registered here.
+
     """
     # Modification: 
     name = 'KPF-Pipe'
@@ -33,16 +38,16 @@ class KPFPipeline(BasePipeline):
         }
     
 
-    def __init__(self, context):
+    def __init__(self, context: ProcessingContext):
         BasePipeline.__init__(self, context)
 
     def start(self, config: cp.ConfigParser) -> None:
         '''
         Initialize the customized pipeline.
         Customized in that it sets up logger and configurations differently 
-        from how the BasePipeline does. 
-        Args: 
-            config: a ConfigParser object containing pipeline configuration 
+        from how the BasePipeline does.
+
+        :Args: config (ConfigParser): containing pipeline configuration
         '''
         ## setup pipeline configuration 
         # Technically the pipeline's configuration is stored in self.context as 
