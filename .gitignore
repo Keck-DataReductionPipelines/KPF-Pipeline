@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 *~
+*.DS_Store
 .idea/
 logs/
 receipts/
@@ -107,4 +108,5 @@ ENV/
 # IDE related settings
 .vscode
 
+resource 
 .pytest_cache
