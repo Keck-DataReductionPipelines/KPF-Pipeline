@@ -17,6 +17,8 @@ C0 = 0
 C1 = 1
 C2 = 2
 C3 = 3
+NORMAL = 0
+VERTICAL = 1
 
 class PolygonClipping2:
     """Class for doing polygon clipping on simulated spectral trace.
@@ -106,7 +108,7 @@ class PolygonClipping2:
         return rows, widths, xrange
 
 
-    def rectify_spectral_curve(self, coeffs, widths, xrange, data_group, s_rate=[1, 1], sum_extraction=True, verbose=False, vertical_normal=0):
+    def rectify_spectral_curve(self, coeffs, widths, xrange, data_group, s_rate=[1, 1], sum_extraction=True, verbose=False, vertical_normal=NORMAL):
         """Straighten the spectral trace
 
         Parameters:
@@ -148,7 +150,7 @@ class PolygonClipping2:
         x_output_step = self.get_output_pos(x_step, sampling_rate[X]).astype(int)
         y_mid = np.polyval(coeffs, x_step)          # spectral trace value at mid point
 
-        if vertical_normal == 0:
+        if vertical_normal == NORMAL:
             y_norm_step = self.poly_normal(x_step, coeffs, sampling_rate[Y])   # curve norm along x in input domain
         else:
             y_norm_step = self.vertical_normal(x_step, sampling_rate[Y])   # vertical norm along x in input domain
@@ -235,8 +237,9 @@ class PolygonClipping2:
 
         return result_data
 
-    def rectify_spectral_curve_by_optimal(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False):
-        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False)
+
+    def rectify_spectral_curve_by_optimal(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False, norm_direction=NORMAL):
+        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
 
         #f_result = self.rectify_spectral_curve(coeffs, widths, x_range, flat_data, s_rate, sum_extraction=False)
 
@@ -249,27 +252,25 @@ class PolygonClipping2:
         s_data = results.get('out_data')[0]
         f_data = results.get('out_data')[1]
 
-
-
         for x in range(0, width):
             w_sum = sum(f_data[:, x])
 
             if w_sum != 0.0:
                 w_data[0, x] = np.sum(s_data[:, x] * f_data[:, x])/w_sum
 
-        #print(w_data[0, 1000:1500])
-        #import pdb; pdb.set_trace()
         result_data = {'y_center': results.get('y_center'),
                        'dim': results.get('dim'),
                        'out_data': w_data,
                        'rectified_trace': s_data,
                        'rectified_flat': f_data
-                       }
+                      }
 
         return result_data
 
-    def rectify_spectral_curve_by_optimal2(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False):
-        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False)
+
+    def rectify_spectral_curve_by_optimal2(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False, norm_direction=NORMAL):
+        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
+        #results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False)
 
         height = sum(results.get('width'))
         width = results.get('dim')[1]
@@ -287,8 +288,8 @@ class PolygonClipping2:
                 dem = np.power(p_data, 2)/d_var
                 w_data[0, x] = np.sum(num)/np.sum(dem)
 
-        #print(w_data[0, 1000:1500])
-        #import pdb; pdb.set_trace()
+
+        #print(w_data[0, (x_range[0]-2):(x_range[0]+10)])
         result_data = {'y_center': results.get('y_center'),
                        'dim': results.get('dim'),
                        'out_data': w_data,
@@ -298,7 +299,8 @@ class PolygonClipping2:
 
         return result_data
 
-    def rectify_spectral_curve_by_fractional_sum(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False):
+
+    def rectify_spectral_curve_by_fractional_sum(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False, norm_direction=NORMAL):
         results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=1)
 
         height = sum(results.get('width'))
@@ -317,8 +319,7 @@ class PolygonClipping2:
                 dem = np.power(p_data, 2)/d_var
                 w_data[0, x] = np.sum(num)/np.sum(dem)
 
-        #print(w_data[0, 1000:1500])
-        #import pdb; pdb.set_trace()
+        #print(x_range, w_data[0, (x_range[0]-2):(x_range[0]+10)])
         result_data = {'y_center': results.get('y_center'),
                        'dim': results.get('dim'),
                        'out_data': w_data,
@@ -328,7 +329,8 @@ class PolygonClipping2:
 
         return result_data
 
-    def rectify_spectral_curve_by_sum(self, coeffs, widths, x_range, in_data, s_rate=[1,1], verbose=False):
+
+    def rectify_spectral_curve_by_sum(self, coeffs, widths, x_range, in_data, s_rate=[1,1], verbose=False, norm_direction=NORMAL):
         """Straighten the spectral trace and perform the summation on the rectify trace
 
         Parameters:
@@ -343,13 +345,17 @@ class PolygonClipping2:
             spectral_info (dict): straightened spectral information including dimension and the data
 
         """
-
-        result_data = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data], s_rate, False, verbose)
+        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
+        #result_data = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data], s_rate, False, verbose)
         if verbose is True:
             print('rectify curve: ', result_data)
 
-        return self.sum_curve(result_data.get('out_data')[0], verbose)
-
+        s_data = results.get('out_data')[0]
+        return {'y_center': results.get('y_center'),
+                'dim': results.get('dim'),
+                'out_data': self.sum_curve(s_data, verbose),
+                'rectified_trace': s_data
+                }
 
     def sum_curve(self, flat_data, verbose=False):
         """Sum a band of spectral trace
