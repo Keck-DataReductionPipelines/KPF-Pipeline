@@ -64,7 +64,7 @@ def main():
     # python code
     arg = Arguments() # Placeholder. actual arguments are set in the pipeline
     arg.recipe = recipe
-    framework.append_event('evaluate_recipe', arg)
+    framework.append_event('start_recipe', arg)
     framework.append_event('exit', arg)
     framework.start()
 
