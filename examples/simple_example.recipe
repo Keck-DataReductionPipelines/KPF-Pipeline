@@ -1,0 +1,6 @@
+# Simple example recipe
+
+d = read_data(data)
+out, result = Normalize(d)
+out1, result = NoiseReduce(d)
+final, result = Spectrum1D(out, out1)
