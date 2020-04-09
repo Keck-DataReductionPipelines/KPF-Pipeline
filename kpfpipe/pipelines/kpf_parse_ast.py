@@ -10,6 +10,9 @@ from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
+class RecipeError(Exception):
+    """ Special recipe exception """
+
 class KpfPipelineNodeVisitor(NodeVisitor):
     """
     Node visitor to convert KPF pipeline recipes expressed in python syntax
@@ -127,11 +130,26 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.pipeline.logger.debug(f"Name is storing {node.id}")
             self._store.append(node.id)
         elif isinstance(node.ctx, _ast.Load):
+            """
+            if not hasattr(self._params, node.id):
+                self.pipeline.logger.error(
+                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                raise RecipeError(
+                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
             value = self._params.get(node.id)
+            """
+            try:
+                value = self._params[node.id]
+            except KeyError:
+                self.pipeline.logger.error(
+                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                raise RecipeError(
+                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
-            raise Exception("visit_Name: ctx is unexpected type: {}".format(type(node.ctx)))
+            raise RecipeError(
+                f"visit_Name: on recipe line {node.lineno}, ctx is unexpected type: {type(node.ctx)}")
     
     def visit_For(self, node):
         """
@@ -246,10 +264,18 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self._params[target] = self._load.pop()
                 num_store_targets -= 1
                 self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}")
+            had_error = False
             while len(self._store) > storeQSizeBefore:
-                self.pipeline.logger.warning(f"Assign: unfilled target: {self._store.pop()}")
+                had_error = True
+                self.pipeline.logger.error(
+                    f"Assign: unfilled target: {self._store.pop()} on line {node.lineno} of recipe.")
             while len(self._load) > loadQSizeBefore:
-                self.pipeline.logger.warning(f"Assign: unused value: {self._load.pop()}")
+                had_error = True
+                self.pipeline.logger.error(
+                    f"Assign: unused value: {self._load.pop()} on line {node.lineno} of recipe.")
+            if had_error:
+                raise RecipeError(
+                    f"Error during assignment on line {node.lineno} of recipe.  See log for details.")
             setattr(node, 'kpf_completed', True)
 
     # UnaryOp and the unary operators
@@ -277,7 +303,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"USub")
         if len(self._load) == 0:
-            raise Exception("visit_UnaryOp: called with no argument")
+            raise RecipeError(
+                f"visit_UnaryOp: called on recipe line {node.lineno} with no argument")
         pass
         # it would be silly to do this:
         # self._load.append(+self._load.pop())
@@ -288,7 +315,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"USub")
         if len(self._load) == 0:
-            raise Exception("visit_UnaryOp: called with no argument")
+            raise RecipeError(
+                f"visit_UnaryOp: called on recipe line {node.lineno} with no argument")
         self._load.append(-self._load.pop())
 
     def visit_UNot(self, node):
@@ -297,7 +325,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"USub")
         if len(self._load) == 0:
-            raise Exception("visit_UnaryOp: called with no argument")
+            raise RecipeError(
+                f"visit_UnaryOp: called on recipe line {node.lineno} with no argument")
         self._load.append(not self._load.pop())
 
     # BinOp and the binary operators
@@ -325,7 +354,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Add")
         if len(self._load) < 2:
-            raise Exception(f"Add called with insufficient number of arguments: {len(self._load)}")
+            raise RecipeError(
+                f"Add called on recipe line {node.lineno} with insufficient number of arguments: {len(self._load)}")
         self._load.append(self._load.pop() + self._load.pop())
 
     def visit_Sub(self, node):
@@ -334,7 +364,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Sub")
         if len(self._load) < 2:
-            raise Exception(f"Sub called with insufficient number of arguments: {len(self._load)}")
+            raise RecipeError(
+                f"Sub called on recipe line {node.lineno} with insufficient number of arguments: {len(self._load)}")
         self._load.append(self._load.pop() - self._load.pop())
     
     def visit_Mult(self, node):
@@ -343,7 +374,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Mult")
         if len(self._load) < 2:
-            raise Exception(f"Mult called with insufficient number of arguments: {self._load.qsize()}")
+            raise RecipeError(
+                f"Mult called on recipe line {node.lineno} with insufficient number of arguments: {self._load.qsize()}")
         self._load.append(self._load.pop() * self._load.pop())
     
     def visit_Div(self, node):
@@ -352,7 +384,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Div")
         if len(self._load) < 2:
-            raise Exception(f"Div called with insufficient number of arguments: {len(self._load)}")
+            raise RecipeError(
+                f"Div called on recipe line {node.lineno} with insufficient number of arguments: {len(self._load)}")
         self._load.append(self._load.pop() / self._load.pop())
     
     # Comparison operators
@@ -363,7 +396,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Eq")
         if len(self._load) < 2:
-            raise Exception(f"Eq called with less than two arguments: {self._load.qsize()}")
+            raise RecipeError(
+                f"Eq called on recipe line {node.lineno} with less than two arguments: {self._load.qsize()}")
         self._load.append(self._load.pop() == self._load.pop())
     
     def visit_NotEq(self, node):
@@ -372,7 +406,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"NotEq")
         if len(self._load) < 2:
-            raise Exception(f"NotEq called with less than two arguments: {len(self._load)}")
+            raise RecipeError(
+                f"NotEq called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() != self._load.pop())
     
     def visit_Lt(self, node):
@@ -381,7 +416,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Lt")
         if len(self._load) < 2:
-            raise Exception(f"Lt called with less than two arguments: {len(self._load)}")
+            raise RecipeError(
+                f"Lt called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() < self._load.pop())
     
     def visit_LtE(self, node):
@@ -390,7 +426,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"LtE")
         if len(self._load) < 2:
-            raise Exception(f"LtE called with less than two arguments: {len(self._load)}")
+            raise RecipeError(
+                f"LtE called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() <= self._load.pop())
     
     def visit_Gt(self, node):
@@ -399,7 +436,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Gt")
         if len(self._load) < 2:
-            raise Exception(f"Gt called with less than two arguments: {self._load.qsize()}")
+            raise RecipeError(
+                f"Gt called on recipe line {node.lineno} with less than two arguments: {self._load.qsize()}")
         self._load.append(self._load.pop() > self._load.pop())
     
     def visit_GtE(self, node):
@@ -408,7 +446,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"GtE")
         if len(self._load) < 2:
-            raise Exception(f"GtE called with less than two arguments: {len(self._load)}")
+            raise RecipeError(
+                f"GtE called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() >= self._load.pop())
     
     def visit_Is(self, node):
@@ -417,7 +456,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"Is")
         if len(self._load) < 2:
-            raise Exception(f"Is called with less than two arguments: {len(self._load)}")
+            raise RecipeError(
+                f"Is called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
         self._load.append(self._load.pop() is self._load.pop())
     
     def visit_IsNot(self, node):
@@ -426,7 +466,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"IsNot")
         if len(self._load) < 2:
-            raise Exception(f"IsNot called with less than two arguments: {len(self._load)}")
+            raise RecipeError(
+                f"IsNot called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
         self._load.append(not (self._load.pop() is self._load.pop()))
     
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
@@ -551,7 +592,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 loadQSizeBefore = len(self._load)
                 self.visit(node.test)
                 if len(self._load) <= loadQSizeBefore:
-                    raise Exception("visit_If: test didn't push a result on the _load stack")
+                    raise RecipeError(
+                        f"visit_If: on recipe line {node.lineno}, test didn't push a result on the _load stack")
                 boolResult = self._load.pop()
                 self.pipeline.logger.info(f"If condition on recipe line {node.lineno} was {boolResult}")
                 setattr(node, 'kpf_boolResult', boolResult)
@@ -559,13 +601,15 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             else:
                 boolResult = getattr(node, 'kpf_boolResult')
             if boolResult:
-                self.pipeline.logger.debug(f"If on recipe line {node.lineno} pushing and visiting Ifso")
+                self.pipeline.logger.debug(
+                    f"If on recipe line {node.lineno} pushing and visiting Ifso")
                 for item in node.body:
                     self.visit(item)
                     if self.awaiting_call_return:
                         return
             else:
-                self.pipeline.logger.debug(f"If on recipe line {node.lineno} pushing and visiting Else")
+                self.pipeline.logger.debug(
+                    f"If on recipe line {node.lineno} pushing and visiting Else")
                 for item in node.orelse:
                     self.visit(item)
                     if self.awaiting_call_return:
@@ -652,14 +696,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""
-        self.pipeline.logger.warning("generic_visit: got {}".format(type(node)))
-        for field, value in iter_fields(node):
-            if isinstance(value, list):
-                for item in value:
-                    if isinstance(item, _ast.AST):
-                        self.visit(item)
-            elif isinstance(value, _ast.AST):
-                self.visit(value)
+        self.pipeline.logger.error(
+            f"generic_visit: got unsupported node {node.__class__.__name__}")
+        raise RecipeError(
+            f"Unsupported language feature: {node.__class__.__name__}")
     
     def reset_visited_states(self, node):
         """
