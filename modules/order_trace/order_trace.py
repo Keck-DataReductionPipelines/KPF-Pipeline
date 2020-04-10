@@ -54,17 +54,19 @@ class OrderTrace(KPF0_Primitive):
         return success
 
     def _perform(self) -> None:
-        '''
+        """
         This primitive's action
-        '''
+        """
+
         # 1) Locate cluster
-        cluster_xy = self.alg.locate_cluster()
+        cluster_xy = self.alg.locate_clusters()
 
         # 2) assign cluster id and do basic cleaning
-        cluster_info = self.collect_clusters(cluster_xy)
-        clean_info = remove_cluster_noise(cluster_info, cluster_xy)
-        x, y, index = reorganize_index(clean_info, cluster_xy)
+        cluster_info = self.alg.collect_clusters(cluster_xy['x'], cluster_xy['y'])
+        clean_info = self.alg.remove_cluster_noise(cluster_info, cluster_xy['x'], cluster_xy['y'])
+        x, y, index = reorganize_index(clean_info['index'], cluster_xy['x'], cluster_cy['y'])
 
+        power = self.alg.get_poly_degree()
         # 3) advanced cleaning
         index, all_status = advanced_cluster_cleaning_handler(index, x, y, self.config['power'])
         x, y, index = reorganize_index(index, x, y)
