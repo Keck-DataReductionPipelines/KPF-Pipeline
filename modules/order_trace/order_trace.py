@@ -63,12 +63,12 @@ class OrderTrace(KPF0_Primitive):
 
         # 2) assign cluster id and do basic cleaning
         cluster_info = self.alg.collect_clusters(cluster_xy['x'], cluster_xy['y'])
-        clean_info = self.alg.remove_cluster_noise(cluster_info, cluster_xy['x'], cluster_xy['y'])
+        clean_info = self.alg.remove_cluster_by_size(cluster_info, cluster_xy['x'], cluster_xy['y'])
         x, y, index = reorganize_index(clean_info['index'], cluster_xy['x'], cluster_cy['y'])
 
         power = self.alg.get_poly_degree()
         # 3) advanced cleaning
-        index, all_status = advanced_cluster_cleaning_handler(index, x, y, self.config['power'])
+        index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y, self.config['power'])
         x, y, index = reorganize_index(index, x, y)
 
         # 4) clean clusters along bottom and top border
