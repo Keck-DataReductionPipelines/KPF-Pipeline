@@ -138,13 +138,16 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     f"Name {node.id} on line {node.lineno} of recipe not defined.")
             value = self._params.get(node.id)
             """
-            try:
-                value = self._params[node.id]
-            except KeyError:
-                self.pipeline.logger.error(
-                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
-                raise RecipeError(
-                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
+            if node.id == "None":
+                value = None
+            else:
+                try:
+                    value = self._params[node.id]
+                except KeyError:
+                    self.pipeline.logger.error(
+                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                    raise RecipeError(
+                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
@@ -297,37 +300,27 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     # Unary Operators
 
-    def visit_UAdd(self, node):
-        """ implement UAdd """
+    def _unary_op_impl(self, node, name, func):
+        """ Helper function containing common implementation of unary operators. """
         if self._reset_visited_states:
             return
-        self.pipeline.logger.debug(f"USub")
+        self.pipeline.logger.debug(name)
         if len(self._load) == 0:
             raise RecipeError(
-                f"visit_UnaryOp: called on recipe line {node.lineno} with no argument")
-        pass
-        # it would be silly to do this:
-        # self._load.append(+self._load.pop())
+                f"Unary operator {name} invoked on recipe line {name.lineno} with no argument")
+        self._load.append(func(self._load.pop()))
+
+    def visit_UAdd(self, node):
+        """ implement UAdd """
+        self._unary_op_impl(node, "UAdd", lambda x : x)
 
     def visit_USub(self, node):
         """ implement USub """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"USub")
-        if len(self._load) == 0:
-            raise RecipeError(
-                f"visit_UnaryOp: called on recipe line {node.lineno} with no argument")
-        self._load.append(-self._load.pop())
+        self._unary_op_impl(node, "USub", lambda x : -x)
 
     def visit_UNot(self, node):
-        """ implement USub """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"USub")
-        if len(self._load) == 0:
-            raise RecipeError(
-                f"visit_UnaryOp: called on recipe line {node.lineno} with no argument")
-        self._load.append(not self._load.pop())
+        """ implement UNot """
+        self._unary_op_impl(node, "UNot", lambda x : not x)
 
     # BinOp and the binary operators
 
@@ -348,127 +341,76 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     # binary operators
 
-    def visit_Add(self, node):
-        """ implement the addition operator """
+    def _binary_op_impl(self, node, name, func):
+        """ Helper function containing common implementation of binary operators. """
         if self._reset_visited_states:
             return
-        self.pipeline.logger.debug(f"Add")
+        self.pipeline.logger.debug(name)
         if len(self._load) < 2:
             raise RecipeError(
-                f"Add called on recipe line {node.lineno} with insufficient number of arguments: {len(self._load)}")
-        self._load.append(self._load.pop() + self._load.pop())
+                f"Binary operator {name} invoked on recipe line {node.lineno} with insufficient number of arguments {len(self._load)}")
+        self._load.append(func(self._load.pop(), self._load.pop()))
+
+    def visit_Add(self, node):
+        """ implement the addition operator """
+        self._binary_op_impl(node, "Add", lambda x, y: x + y)
 
     def visit_Sub(self, node):
         """ implement the subtraction operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"Sub")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"Sub called on recipe line {node.lineno} with insufficient number of arguments: {len(self._load)}")
-        self._load.append(self._load.pop() - self._load.pop())
+        self._binary_op_impl(node, "Sub", lambda x, y: x - y)
     
     def visit_Mult(self, node):
         """ implement the multiplication operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"Mult")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"Mult called on recipe line {node.lineno} with insufficient number of arguments: {self._load.qsize()}")
-        self._load.append(self._load.pop() * self._load.pop())
+        self._binary_op_impl(node, "Mult", lambda x, y: x * y)
     
     def visit_Div(self, node):
         """ implement the division operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"Div")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"Div called on recipe line {node.lineno} with insufficient number of arguments: {len(self._load)}")
-        self._load.append(self._load.pop() / self._load.pop())
+        self._binary_op_impl(node, "Div", lambda x, y: x / y)
     
     # Comparison operators
 
-    def visit_Eq(self, node):
-        """ implement Eq comparison operator """
+    def _compare_op_impl(self, node, name, func):
+        """ Helper function containing common implementation of comparison operators. """
         if self._reset_visited_states:
             return
-        self.pipeline.logger.debug(f"Eq")
+        self.pipeline.logger.debug(name)
         if len(self._load) < 2:
             raise RecipeError(
-                f"Eq called on recipe line {node.lineno} with less than two arguments: {self._load.qsize()}")
-        self._load.append(self._load.pop() == self._load.pop())
+                "Comparison operator {} invoked on line {} with less than two arguments: {}".format(
+                name, node.lineno, len(self._load)))
+        self._load.append(func(self._load.pop(), self._load.pop()))
+
+    def visit_Eq(self, node):
+        """ implement Eq comparison operator """
+        self._comopare_op_impl(node, "Eq", lambda x, y: x == y)
     
     def visit_NotEq(self, node):
         """ implement NotEq comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"NotEq")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"NotEq called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
-        self._load.append(self._load.pop() != self._load.pop())
+        self._comopare_op_impl(node, "NotEq", lambda x, y: x != y)
     
     def visit_Lt(self, node):
         """ implement Lt comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"Lt")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"Lt called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
-        self._load.append(self._load.pop() < self._load.pop())
+        self._comopare_op_impl(node, "Lt", lambda x, y: x < y)
     
     def visit_LtE(self, node):
         """ implement LtE comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"LtE")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"LtE called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
-        self._load.append(self._load.pop() <= self._load.pop())
+        self._comopare_op_impl(node, "LtE", lambda x, y: x <= y)
     
     def visit_Gt(self, node):
         """ implement Gt comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"Gt")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"Gt called on recipe line {node.lineno} with less than two arguments: {self._load.qsize()}")
-        self._load.append(self._load.pop() > self._load.pop())
+        self._comopare_op_impl(node, "Gt", lambda x, y: x > y)
     
     def visit_GtE(self, node):
         """ implement GtE comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"GtE")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"GtE called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
-        self._load.append(self._load.pop() >= self._load.pop())
+        self._comopare_op_impl(node, "GtE", lambda x, y: x >= y)
     
     def visit_Is(self, node):
         """ implement Lt comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"Is")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"Is called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
-        self._load.append(self._load.pop() is self._load.pop())
+        self._comopare_op_impl(node, "Is", lambda x, y: x is y)
     
     def visit_IsNot(self, node):
-        """ implement Lt comparison operator """
-        if self._reset_visited_states:
-            return
-        self.pipeline.logger.debug(f"IsNot")
-        if len(self._load) < 2:
-            raise RecipeError(
-                f"IsNot called on recipe line {node.lineno} with less than two arguments: {len(self._load)}")
-        self._load.append(not (self._load.pop() is self._load.pop()))
+        """ implement IsNot comparison operator """
+        self._comopare_op_impl(node, "IsNot", lambda x, y: not (x is y))
     
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
 
