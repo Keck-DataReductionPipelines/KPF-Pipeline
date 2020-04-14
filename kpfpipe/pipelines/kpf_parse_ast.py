@@ -348,7 +348,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(name)
         if len(self._load) < 2:
             raise RecipeError(
-                f"Binary operator {name} invoked on recipe line {node.lineno} with insufficient number of arguments {len(self._load)}")
+                f"Binary operator {name} invoked on recipe line {node.lineno} " +
+                f"with insufficient number of arguments {len(self._load)}")
         self._load.append(func(self._load.pop(), self._load.pop()))
 
     def visit_Add(self, node):
@@ -376,8 +377,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(name)
         if len(self._load) < 2:
             raise RecipeError(
-                "Comparison operator {} invoked on line {} with less than two arguments: {}".format(
-                name, node.lineno, len(self._load)))
+                f"Comparison operator {name} invoked on line {node.lineno} " +
+                f"with less than two arguments: {len(self._load)}")
         self._load.append(func(self._load.pop(), self._load.pop()))
 
     def visit_Eq(self, node):
