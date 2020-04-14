@@ -386,31 +386,31 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_NotEq(self, node):
         """ implement NotEq comparison operator """
-        self._comopare_op_impl(node, "NotEq", lambda x, y: x != y)
+        self._compare_op_impl(node, "NotEq", lambda x, y: x != y)
     
     def visit_Lt(self, node):
         """ implement Lt comparison operator """
-        self._comopare_op_impl(node, "Lt", lambda x, y: x < y)
+        self._compare_op_impl(node, "Lt", lambda x, y: x < y)
     
     def visit_LtE(self, node):
         """ implement LtE comparison operator """
-        self._comopare_op_impl(node, "LtE", lambda x, y: x <= y)
+        self._compare_op_impl(node, "LtE", lambda x, y: x <= y)
     
     def visit_Gt(self, node):
         """ implement Gt comparison operator """
-        self._comopare_op_impl(node, "Gt", lambda x, y: x > y)
+        self._compare_op_impl(node, "Gt", lambda x, y: x > y)
     
     def visit_GtE(self, node):
         """ implement GtE comparison operator """
-        self._comopare_op_impl(node, "GtE", lambda x, y: x >= y)
+        self._compare_op_impl(node, "GtE", lambda x, y: x >= y)
     
     def visit_Is(self, node):
         """ implement Lt comparison operator """
-        self._comopare_op_impl(node, "Is", lambda x, y: x is y)
+        self._compare_op_impl(node, "Is", lambda x, y: x is y)
     
     def visit_IsNot(self, node):
         """ implement IsNot comparison operator """
-        self._comopare_op_impl(node, "IsNot", lambda x, y: not (x is y))
+        self._compare_op_impl(node, "IsNot", lambda x, y: not (x is y))
     
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
 
