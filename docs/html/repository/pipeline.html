@@ -35,7 +35,7 @@
   <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="API" href="../API/api.html" />
+    <link rel="next" title="KPF File Handling" href="../data_models/io.html" />
     <link rel="prev" title="Modules" href="modules.html" /> 
 </head>
 
@@ -91,7 +91,7 @@
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Pipeline</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../API/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_models/io.html">KPF File Handling</a></li>
 </ul>
 
             
@@ -189,13 +189,13 @@ as input. The primitive’s output must also be a KPF data type. However,
 the output’s data level is not restricted.</p>
 <p>The KPF primitives inherit from the KeckDRPFramework’s <code class="docutils literal notranslate"><span class="pre">BasePrimitive</span></code>.
 This means that all KPF primitives’s constructors are defined as:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitives</span> <span class="kn">import</span> <span class="n">BasePrimitive</span>
-<span class="kn">from</span> <span class="nn">keckdrpframework.models.action</span> <span class="kn">import</span> <span class="n">Action</span>
-<span class="kn">from</span> <span class="nn">keckdrpframework.models.processing_context</span> <span class="kn">import</span> <span class="n">ProcessingContext</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">keckdrpframework.primitives.base_primitives</span> <span class="k">import</span> <span class="n">BasePrimitive</span>
+<span class="kn">from</span> <span class="nn">keckdrpframework.models.action</span> <span class="k">import</span> <span class="n">Action</span>
+<span class="kn">from</span> <span class="nn">keckdrpframework.models.processing_context</span> <span class="k">import</span> <span class="n">ProcessingContext</span>
 
 <span class="n">KPF_Primitive</span><span class="p">(</span><span class="n">BasePrimitive</span><span class="p">):</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Action</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ProcessingContext</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Action</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ProcessingContext</span><span class="p">):</span>
 </pre></div>
 </div>
 </div>
@@ -208,7 +208,7 @@ This means that all KPF primitives’s constructors are defined as:</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="../API/api.html" class="btn btn-neutral float-right" title="API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="../data_models/io.html" class="btn btn-neutral float-right" title="KPF File Handling" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
         <a href="modules.html" class="btn btn-neutral float-left" title="Modules" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
