@@ -98,7 +98,7 @@ class KPFPipeline(BasePipeline):
             self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
             self._recipe_visitor.visit(self._recipe_ast)
         except:
-            print(sys.exit_info())
+            print(sys.exc_info())
 
     def exit_loop(self, action, context):
         """
@@ -109,7 +109,7 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         self.logger.info("exiting pipeline...")
-        os._exit(0)
+        # os._exit(0)
 
     # reentry after call
 
