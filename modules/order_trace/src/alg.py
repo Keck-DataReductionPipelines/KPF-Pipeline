@@ -7,6 +7,7 @@ import math
 from astropy.modeling import models, fitting
 import csv
 import time
+import pandas as pd
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -37,9 +38,36 @@ class OrderTraceAlg:
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None):
+    def __init__(self, data, config=None, debug=None):
         self.flat_data = data
         self.config = config
+        self.is_debug = False if debug is None else debug.getboolean('debug', False)
+        self.debug_output = '' if debug is None else debug.get('debug_path', '')
+        self.is_time_profile = False if debug is None else debug.getboolean('time', False)
+        self.time_output = '' if debug is None else debug.get('time_path', '')
+
+    def enable_debug_print(self, to_print=True):
+        """
+        enable or disable debug printing
+        """
+        self.is_debug = to_print
+
+    def enable_time_profile(self, is_time=False):
+        self.is_time_profile = is_time
+
+    def redirect_debug_output(self, direct_file=''):
+        if direct_file == 'no':
+            self.enable_debug_print(False)
+        else:
+            self.enable_debug_print(True)
+            self.debug_output = direct_file
+
+    def redirect_time_profile(self, time_output=''):
+        if time_output == 'no':
+            self.enable_time_profile(False)
+        else:
+            self.enable_time_profile(True)
+            self.time_output = time_output
 
     def get_config_value(self, property: str, default=''):
         """
@@ -58,10 +86,23 @@ class OrderTraceAlg:
     def get_poly_degree(self):
         return self.get_config_value('fitting_poly_degree', 3)
 
-    @staticmethod
-    def d_print(is_print, *args, end='\n'):
-        if is_print:
-            print(' '.join([str(item) for item in args]), end=end)
+    def d_print(self, *args, end='\n'):
+        if self.is_debug:
+            if self.debug_output:
+                with open(self.debug_output, 'a') as f:
+                    f.write(' '.join([str(item) for item in args])+end)
+                    f.close()
+            else:
+                print(' '.join([str(item) for item in args]), end=end)
+
+    def t_print(self, *args, end='\n'):
+        if self.is_time_profile:
+            if self.time_output:
+                with open(self.time_output, 'a') as f:
+                    f.write(' '.join([str(item) for item in args])+end)
+                    f.close()
+            else:
+                print(' '.join([str(item) for item in args]), end=end)
 
     def get_spectral_data(self):
         """
@@ -129,12 +170,10 @@ class OrderTraceAlg:
         pos = np.where(imm > 0)
         return imm, pos[1], pos[0]
 
-    def locate_clusters(self, is_print: bool = False):
+    def locate_clusters(self):
         """ 
         Find cluster pixels from 2D data array. Cluster pixels are pixels with value '1' after smoothing and conversion.
 
-        Parameters:
-            is_print (bool): if printing debug information
         Returns:
             cluster_info (dict): result of formed clusters, like
                                 { 'x': <1D np.ndarray>, 'y': <1D np.ndarray> , 'cluster_image': <2D np.ndarray>}
@@ -166,8 +205,8 @@ class OrderTraceAlg:
                 if all([isinstance(c, list) and len(c) == 2 for c in cols_list]):
                     cols_to_reset = [c if c[0] >= 0 else [c[0]+n_col, c[1]+n_col] for c in cols_list]
 
-        self.d_print(is_print, 'rows_to_reset:', rows_to_reset)
-        self.d_print(is_print, 'cols to reset:', cols_to_reset)
+        self.d_print('rows_to_reset:', rows_to_reset)
+        self.d_print('cols to reset:', cols_to_reset)
         # binary array
         imm = np.zeros((n_row, n_col), dtype=np.uint8)
 
@@ -178,27 +217,28 @@ class OrderTraceAlg:
             imm[:, col][mm > (h+1)] = mask
 
         y, x = np.where(imm > 0)  # ex: (array([4, 5, 6, 7]), array([2, 2, 2, 2]))
-        self.d_print(is_print, 'total cluster pixel: ', y.size)
 
         # correction on filtered image (ex. for NEID flat, stacked_2fiber_flat.fits)
         if rows_to_reset is not None:
+            self.d_print('pos size before row reset: ' + str(np.size(y)) + ' ' + str(np.size(x)))
             imm, x, y = self.reset_row_or_column(imm, rows_to_reset)
-            self.d_print(is_print, 'pos size after row reset: '+str(np.size(y)) + ' ' + str(np.size(x)))
+            self.d_print('pos size after row reset: '+str(np.size(y)) + ' ' + str(np.size(x)))
 
         if cols_to_reset is not None:
+            self.d_print('pos size before column reset: ' + str(np.size(y)) + ' ' + str(np.size(x)))
             imm, x, y = self.reset_row_or_column(imm, cols_to_reset, row_or_column=1)
-            self.d_print(is_print, 'pos size after column reset: ' + str(np.size(y)) + ' ' + str(np.size(x)))
+            self.d_print('pos size after column reset: ' + str(np.size(y)) + ' ' + str(np.size(x)))
 
         return {'x': x, 'y': y, 'cluster_image': imm}
 
-    def collect_clusters(self, c_x: np.ndarray, c_y: np.ndarray, is_print: bool = False):
+    def collect_clusters(self, c_x: np.ndarray, c_y: np.ndarray):
         """
         Identify clusters per position of all cluster pixels, i.e. c_x and c_y.
 
         Parameters:
             c_x (array): x coordinates for all cluster pixels
             c_y (array): y coordinates for all cluster pixels
-            is_print (bool): if printing debug information
+
         Returns:
             out (dict): identified cluster units for entire image, the format is like:
                         {<y_1>: clusters_1 (list), <y_2>: clusters_2 (list), ..., <y_n>: clusters_n (list)},
@@ -239,7 +279,7 @@ class OrderTraceAlg:
 
         for cy in range(ny):
             # if cy%10 == 0:
-            self.d_print(is_print, cy, '', end='')
+            self.d_print(cy, '', end='')
 
             idx_at_cy = np.where(y == cy)[0]   # idx for y at cy
 
@@ -367,11 +407,10 @@ class OrderTraceAlg:
             for c in cluster_to_update:
                 clusters_endy_dict[cy-1].pop(c)
 
-        self.d_print(is_print, '\n')
+        self.d_print('\n')
         return clusters_endy_dict
 
-    def remove_cluster_by_size(self, clusters_endy_dict: dict, x_index: np.ndarray, y_index: np.ndarray, th=None,
-                               is_print: bool = False):
+    def remove_cluster_by_size(self, clusters_endy_dict: dict, x_index: np.ndarray, y_index: np.ndarray, th=None):
         """
         Remove noisy cluster per pixel number and the size of the cluster. Assign an Id to non-noisy cluster.
 
@@ -381,7 +420,6 @@ class OrderTraceAlg:
             x_index (array): x coordinates of cluster pixels
             y_index (array): y coordinates of cluster pixels
             th (int): optional size threshold for removing the noisy cluster
-            is_print(bool): if printing debug information
 
         Returns:
             out (dict): cluster information containing assigned id, like
@@ -394,7 +432,7 @@ class OrderTraceAlg:
         if th is None:
             th = h_th * w_th
 
-        self.d_print(is_print, 'there are total ', x_index.size, ' clusters to test.')
+        self.d_print('there are total ', x_index.size, ' clusters to test.')
         index = np.zeros(x_index.size, dtype=int)
         cluster_no = 1
         for y in range(ny):
@@ -433,15 +471,15 @@ class OrderTraceAlg:
 
             if w <= w_size_th and h <= h_size_th:
                 index[crt_cluster_idx] = 0
-                self.d_print(is_print, 'cluster ', c_id, ' total: ', t_p, ' w, h', w, h, ' => remove')
+                self.d_print('cluster ', c_id, ' total: ', t_p, ' w, h', w, h, ' => remove')
             else:
-                self.d_print(is_print, 'cluster ', c_id, ' total: ', t_p, ' w, h', w, h)
+                self.d_print('cluster ', c_id, ' total: ', t_p, ' w, h', w, h)
 
         n_regions = np.amax(index) + 1 if np.amin(index) == 0 else np.amax(index)
 
         return {'index': index, 'n_regions': n_regions}
 
-    def form_clusters(self, c_x: np.ndarray, c_y: np.ndarray, th=None, is_print: bool = False):
+    def form_clusters(self, c_x: np.ndarray, c_y: np.ndarray, th=None):
         """
         Form clusters and assign id to each formed cluster.
 
@@ -449,20 +487,19 @@ class OrderTraceAlg:
             c_x (array): x coordinates for all cluster pixels
             c_y (array): y coordinates for all cluster pixels
             th (int): size threshold used for removing noisy cluster
-            is_print (bool): if printing debug information
 
         Returns:
             out (tuple): new_x, array of x coordinates of cluster pixels
                          new_y, array of y coordinates of cluster pixels
                          new_index, array of cluster id on cluster pixels
         """
-        clusters_all_y = self.collect_clusters(c_x, c_y, is_print=is_print)
-        index_info = self.remove_cluster_by_size(clusters_all_y, c_x, c_y, th, is_print=is_print)
+        clusters_all_y = self.collect_clusters(c_x, c_y)
+        index_info = self.remove_cluster_by_size(clusters_all_y, c_x, c_y, th)
         new_x, new_y, new_index = self.reorganize_index(index_info['index'], c_x, c_y)
         return new_x, new_y, new_index
 
     def advanced_cluster_cleaning_handler(self, index: np.ndarray, x: np.ndarray, y: np.ndarray,
-                                          start_cluster: int = None, stop_cluster: int = None, is_print: bool = False):
+                                          start_cluster: int = None, stop_cluster: int = None):
         """
         Remove or clean noisy cluster using polynomial fit on all or selected clusters from form_clusters.
 
@@ -472,7 +509,6 @@ class OrderTraceAlg:
             y (array): array of y coordinates on cluster pixels
             start_cluster (int): start cluster id
             stop_cluster (int): end cluster id
-            is_print (bool): if printing debug information
 
         Returns:
             out (tuple): new cluster id and cleaning status, like
@@ -501,7 +537,7 @@ class OrderTraceAlg:
                 index_p, status = self.handle_noisy_cluster(index_p, x_p, y_p, [next_idx])
 
             all_status[next_idx] = status
-            self.d_print(is_print, 'idx: ', next_idx, ' status: ', status)
+            self.d_print('idx: ', next_idx, ' status: ', status)
 
             next_idx = next_idx+1 if next_idx < original_max_idx else None
             if next_idx is not None:
@@ -887,7 +923,7 @@ class OrderTraceAlg:
 
         return new_x, new_y, new_index
 
-    def merge_clusters_and_clean(self, index: np.ndarray, x: np.ndarray, y: np.ndarray, is_print: bool = False):
+    def merge_clusters_and_clean(self, index: np.ndarray, x: np.ndarray, y: np.ndarray):
         """
         Merge clusters and remove the clusters with big opening in the center (broader processing for merging clusters)
 
@@ -895,7 +931,6 @@ class OrderTraceAlg:
             index (array): array of cluster id on cluster pixels
             x (array): x coordinates of cluster pixels
             y (array): y coordinates of cluster pixels
-            is_print (bool): if printing debug information
 
         Returns:
             out (tuple): a new set data on cluster pixels after merge,
@@ -907,13 +942,13 @@ class OrderTraceAlg:
                          errors: least square error of each polynomial fit
         """
 
-        m_x, m_y, m_index, m_coeffs = self.merge_clusters(index, x, y, is_print=is_print)
+        m_x, m_y, m_index, m_coeffs = self.merge_clusters(index, x, y)
         new_x, new_y, new_index = self.remove_broken_cluster(m_index, m_x, m_y)
         cluster_coeffs, errors = self.curve_fitting_on_all_clusters(new_index, new_x, new_y)
         cluster_points = self.get_cluster_points(cluster_coeffs)
         return new_x, new_y, new_index, cluster_coeffs, cluster_points, errors
 
-    def merge_clusters(self, index: np.ndarray, x: np.ndarray, y: np.ndarray, is_print: bool = False):
+    def merge_clusters(self, index: np.ndarray, x: np.ndarray, y: np.ndarray):
         """
         Merge clusters based on the closeness between the clusters and the fitting quality to the same polynomial.
 
@@ -921,7 +956,6 @@ class OrderTraceAlg:
             index (array): array of cluster id on cluster pixels
             x (array): x coordinates of cluster pixels
             y (array): y coordinates of cluster pixels
-            is_print (bool): if printing debug information
 
         Returns:
             out (tuple): a new set data on cluster pixels after merge,
@@ -937,11 +971,10 @@ class OrderTraceAlg:
         t = 1
 
         while True:
-            self.d_print(is_print, 'merge time: ', t)
+            self.d_print('merge time: ', t)
             t += 1
             n_index, n_x, n_y, n_coeffs, merge_status = self.one_step_merge_cluster(new_coeffs,
-                                                                                    new_index, new_x, new_y,
-                                                                                    is_print=is_print)
+                                                                                    new_index, new_x, new_y)
 
             new_index = n_index.copy()
             new_x = n_x.copy()
@@ -968,7 +1001,7 @@ class OrderTraceAlg:
         return m_x, m_y, m_index, m_coeffs
 
     def one_step_merge_cluster(self, crt_coeffs: np.ndarray, crt_index: np.ndarray,
-                               crt_x: np.ndarray, crt_y: np.ndarray, is_print: bool = False):
+                               crt_x: np.ndarray, crt_y: np.ndarray):
         """
         Single step of cluster merging, at most one pair of clusters is merged.
 
@@ -977,7 +1010,6 @@ class OrderTraceAlg:
             crt_index (array): cluster id on cluster pixels
             crt_x (array): x coordinates of cluster pixels
             crt_y (array): y coordinates of cluster pixels
-            is_print (bool): if printing debug information
 
         Returns:
             out (tuple): cluster information after merge and merge status,
@@ -988,7 +1020,7 @@ class OrderTraceAlg:
                         merge_status: merge status, please see merge_fitting_curve for the detail
         """
 
-        merge_status = self.merge_fitting_curve(crt_coeffs, crt_index, crt_x, crt_y, is_print=is_print)
+        merge_status = self.merge_fitting_curve(crt_coeffs, crt_index, crt_x, crt_y)
 
         if merge_status['status'] != 'nochange':
             next_x, next_y, next_index, convert_map = self.reorganize_index(merge_status['index'], crt_x, crt_y,
@@ -1002,7 +1034,7 @@ class OrderTraceAlg:
             return crt_index, crt_x, crt_y, crt_coeffs, merge_status
 
     def merge_fitting_curve(self, poly_curves: np.ndarray, index: np.ndarray, x: np.ndarray, y: np.ndarray,
-                            threshold=FIT_ERROR_TH, is_print: bool = False):
+                            threshold=FIT_ERROR_TH):
 
         """
         Merge the cluster to the closest neighbor. The merge iterates on cluster pairs and stops when one merge is made.
@@ -1013,7 +1045,6 @@ class OrderTraceAlg:
             x (array): x coordinates of cluster pixels
             y (array): y coordinates of cluster pixels
             threshold (float): error threshold to determine the polynomial fit quality
-            is_print (bool): if printing debug information
 
         Returns:
             out (dict): merge status, like
@@ -1125,7 +1156,7 @@ class OrderTraceAlg:
 
                 index = np.where(index == o_c1, 0, index)
                 new_polys[c1, x_min_c] = non_exist
-                self.d_print(is_print, "remove: ", c1, ' from: ', o_c1)
+                self.d_print("remove: ", c1, ' from: ', o_c1)
                 log += 'remove '+str(o_c1)
                 cluster_changed += 1
                 c1 += 1
@@ -1164,7 +1195,7 @@ class OrderTraceAlg:
                         continue
                 index = np.where(index == o_c1, 0, index)
                 new_polys[c1, x_min_c] = non_exist
-                self.d_print(is_print, "remove: ", c1, ' from: ', o_c1)
+                self.d_print("remove: ", c1, ' from: ', o_c1)
                 log += 'remove '+str(o_c1)
                 cluster_changed += 1
                 c1 += 1
@@ -1175,7 +1206,7 @@ class OrderTraceAlg:
             best_neighbor = best_neighbors[np.argsort(c_neighbors_distance)][0]
             o_c2 = sort_idx_on_miny[best_neighbor]
             index = np.where(index == o_c2, o_c1, index)
-            self.d_print(is_print, 'merge: ', c1, best_neighbor, ' from: ', o_c1, o_c2)
+            self.d_print('merge: ', c1, best_neighbor, ' from: ', o_c1, o_c2)
             log += 'merge '+str(o_c1) + ' and ' + str(o_c2)
 
             new_polys[c1, x_min_c] = min(new_polys[c1, x_min_c], new_polys[best_neighbor, x_min_c])
@@ -1245,9 +1276,9 @@ class OrderTraceAlg:
 
     def cross_other_cluster(self, polys: np.ndarray, cluster_nos_for_polys: np.ndarray, cluster_nos: np.ndarray,
                             x: np.ndarray, y: np.ndarray, index: np.ndarray, power: int,
-                            sort_map: np.ndarray, merged_coeffs: np.ndarray, is_print: bool = False):
+                            sort_map: np.ndarray, merged_coeffs: np.ndarray):
         """
-        detect if there is another cluster that will prevent the merge of two clusters
+        detect if there is another cluster that will prevent the merge of two given clusters, i.e. cluster_nos
         """
 
         width_th = self.get_config_value('order_width_th', 7)
@@ -1261,6 +1292,7 @@ class OrderTraceAlg:
         cluster_x = x[cluster_idx]
         cluster_y = y[cluster_idx]
 
+        # x1 of cluster_nos_for_polys[0] is smaller than that of cluster_nos_for_polys[1]
         two_curve_x1 = polys[cluster_nos_for_polys[0], power+2]
         two_curve_x2 = polys[cluster_nos_for_polys[1], power+1]
 
@@ -1269,7 +1301,7 @@ class OrderTraceAlg:
         all_x = list()
         all_y = list()
 
-        # find x belonging to curves tested to be merged
+        # find x belonging to curves intended to be merged
         for s_x in range(min_x, max_x+1):
             x_idx = np.where(cluster_x == s_x)[0]
             if x_idx.size > 0:
@@ -1287,15 +1319,12 @@ class OrderTraceAlg:
 
             # vertical position overlapped, or very close
             if y_max_1 >= y_min_2 and y_min_1 <= y_max_2:
-                # print(cluster_nos, ' connected to each other 1 ',two_curve_x1, two_curve_x2)
                 return False
             elif abs(y_max_1-y_min_2) < width_th or abs(y_min_1-y_max_2) < width_th:
-                # print(cluster_nos, ' connected to each other 2', two_curve_x1, two_curve_x2)
                 return False
 
         total_c = np.shape(polys)[0]
-
-        self.d_print(is_print, 'in cross_other_cluster ' + str(len(all_x)))
+        self.d_print('in cross_other_cluster test for: ', cluster_nos_for_polys, ' from ', cluster_nos)
 
         # find the horizontal gap
         all_x_idx = np.where((all_x - np.roll(all_x, 1)) >= 2)[0]
@@ -1315,8 +1344,14 @@ class OrderTraceAlg:
             elif polys[c_idx, power+4] < min_y:
                 continue
 
+            # cross_point is used to record if the tested cluster is vertically above or below or the same as the
+            # as the merged clusters at x locations including ends of the overlap to the merged clusters and
+            # the overlap to the gaps of the merged clusters
             cross_point = dict()
+            com_min_x = com_max_x = -1
 
+            zero_above = 0
+            zero_below = 0
             # find if tested cluster horizontally overlaps out of gap ends of two merged clusters
             if polys[c_idx, power+1] <= max_x and polys[c_idx, power+2] >= min_x:
                 com_min_x = int(max(polys[c_idx, power+1], min_x))
@@ -1326,12 +1361,18 @@ class OrderTraceAlg:
                 for curve_end in com_list:
                     if curve_end in np.array(all_x)[gap_x_idx]:   # the end point of overlap meet the gap ends
                         continue
+
+                    # mark if end point of overlap vertically connected to the two merged clusters
                     one_y_val = np.polyval(polys[c_idx, 0:power+1], curve_end)
                     merged_y = np.polyval(merged_coeffs[0:power+1], curve_end)
 
                     # compare the y location of the tested curve and the merged curves
-                    if abs(one_y_val - merged_y) < 1:
+                    if abs(one_y_val - merged_y) < 1:             # within one pixel range
                         cross_point[int(curve_end)] = 0
+                        if one_y_val > merged_y:
+                            zero_above += 1
+                        elif one_y_val < merged_y:
+                            zero_below += 1
                     else:
                         cross_point[int(curve_end)] = (one_y_val - merged_y)/abs(one_y_val-merged_y)
 
@@ -1339,32 +1380,37 @@ class OrderTraceAlg:
 
             # check if tested curve has short horizontal overlap with merged curves and vertically meets with the merged
             # curves at all gap ends
-            if np.size(vals) != 0:
+            if np.size(vals) != 0:      # when overlap ends not at the gap ends
                 same_y_count = np.size(np.where(vals == 0)[0])
                 com_dist = abs(com_max_x - com_min_x)
 
-                # overlap at one pixel and same y or overlap at short range and same y at two ends of overlap
+                # overlap ends are the same and same y or overlap with short range and same y at two ends of overlap,
+                # meaning no chance to intersect the merged clusters
                 if (same_y_count == 1 and com_dist == 0) or (same_y_count == 2 and com_dist < 10):
-                    # print(' curve ', c_idx, ' from ', sort_map[c_idx], ' connect to ', cluster_nos)
                     continue
 
             # check the y location at every gap overlapping with the test curve, cross_point records the y position
             # at selected x positions
+
+            in_gap = 0
             for n_idx in range(0, len(gap_x_idx), 2):
                 gap1 = gap_x_idx[n_idx]
                 gap2 = gap_x_idx[n_idx+1]
 
-                if (polys[c_idx, power+1] < (all_x[gap2] + offset)) and (polys[c_idx, power+2] > (all_x[gap1] - offset)):
-                    if all_x[gap2] < polys[c_idx, power+1]:
+                if (polys[c_idx, power+1] < (all_x[gap2] + offset)) and \
+                        (polys[c_idx, power+2] > (all_x[gap1] - offset)):            # overlap or close to the gap area
+                    if all_x[gap2] < polys[c_idx, power+1]:                          # no overlap, at the right of gap
                         two_y_val = np.polyval(polys[c_idx, 0:power+1],
                                                np.array([polys[c_idx, power+1], polys[c_idx, power+1]]))
-                    elif all_x[gap1] > polys[c_idx, power+2]:
+                    elif all_x[gap1] > polys[c_idx, power+2]:                       # no overlap, at the left of gap
                         two_y_val = np.polyval(polys[c_idx, 0:power+1],
                                                np.array([polys[c_idx, power+2], polys[c_idx, power+2]]))
                     else:
-                        end1 = max(all_x[gap1], polys[c_idx, power+1])
+                        end1 = max(all_x[gap1], polys[c_idx, power+1])              # overlap with the gap
                         end2 = min(all_x[gap2], polys[c_idx, power+2])
                         two_y_val = np.polyval(polys[c_idx, 0:power+1], np.array([end1, end2]))
+                    in_gap = 1
+
                     for i in [0, 1]:
                         if abs(two_y_val[i] - all_y[gap_x_idx[n_idx+i]]) < 1:
                             cross_point[all_x[gap_x_idx[n_idx+i]]] = 0
@@ -1376,13 +1422,20 @@ class OrderTraceAlg:
             positive_zero_total = np.size(np.where(np.logical_or(vals == 1, vals == 0))[0])
             negative_zero_total = np.size(np.where(np.logical_or(vals == -1, vals == 0))[0])
 
-            self.d_print(is_print, 'test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',
+            self.d_print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',
                          cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ',
                          polys[c_idx, power+1], polys[c_idx, power+2])
 
+            # in case the cluster is not above or below the merged clusters at all overlap ends or gap ends
             if positive_zero_total >= 1 and negative_zero_total >= 1:
-                self.d_print(is_print, '  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx],
-                             ' x range: ', polys[c_idx, power+1:power+3])
+
+                if in_gap == 0:
+                    if 0 < zero_above == negative_zero_total and zero_below == 0:
+                        continue
+                    if 0 < zero_below == positive_zero_total and zero_above == 0:
+                        continue
+
+                self.d_print('  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx])
                 return True
 
         return False
@@ -1431,7 +1484,7 @@ class OrderTraceAlg:
     def find_all_cluster_widths(self, index_t: np.ndarray, coeffs: np.ndarray,
                                 cluster_points: np.ndarray,
                                 power_for_width_estimation: int = 3,
-                                cluster_set: list = None, is_print: bool = False):
+                                cluster_set: list = None):
 
         """
         Compute the top and bottom widths along the order trace
@@ -1444,11 +1497,10 @@ class OrderTraceAlg:
                                               the estimation step skips in case the number is less than 0.
             cluster_set (list): optional, set of selected cluster id for width finding.
                                 Widths of all clusters are computed if no cluster_set is set.
-            is_print (bool): if printing debug information
 
         Returns:
             cluster_widths (list): a list of width information for each trace. Each element is like
-                                   {'top_width': float, 'bottom_width': float}
+                                   {'top_edge': float, 'bottom_edge': float}
                                    for both top and bottom width along the trace.
 
         """
@@ -1462,21 +1514,22 @@ class OrderTraceAlg:
             cluster_set = list(range(1, max_cluster_no+1))
 
         for n in cluster_set:
-            self.d_print(is_print, 'cluster: ', n)
+            self.d_print('cluster: ', n)
             if n < 1 or n > max_cluster_no or (np.where(index_t == n)[0]).size == 0:
-                cluster_widths.append({'top_width': width_default, 'bottom_width': width_default})
+                cluster_widths.append({'top_edge': width_default, 'bottom_edge': width_default})
                 continue
 
             cluster_width_info = self.find_cluster_width_by_gaussian(n, cluster_coeffs, cluster_points)
-            cluster_widths.append({'top_width': cluster_width_info['avg_nwidth'],
-                                   'bottom_width': cluster_width_info['avg_pwidth']})
-            self.d_print(is_print, 'top width: ', cluster_width_info['avg_nwidth'],
-                         ' bottom width: ', cluster_width_info['avg_pwidth'])
+            cluster_widths.append({'top_edge': cluster_width_info['avg_nwidth'],
+                                   'bottom_edge': cluster_width_info['avg_pwidth']})
+            self.d_print('top edge: ', cluster_width_info['avg_nwidth'],
+                         ' bottom edge: ', cluster_width_info['avg_pwidth'])
 
         if power_for_width_estimation > 0:
             cluster_widths = self.approximate_width_of_default(cluster_widths, cluster_points, cluster_coeffs,
                                                                power_for_width_estimation)
-            self.d_print(is_print, 'after estimation: \n', '\n'.join([str(w) for w in cluster_widths]))
+            self.d_print('after estimation: \n', '\n'.join([str(w) for w in cluster_widths]))
+
         return cluster_widths
 
     def find_cluster_width_by_gaussian(self, cluster_no: int, poly_coeffs: np.ndarray, cluster_points: np.ndarray):
@@ -1786,14 +1839,14 @@ class OrderTraceAlg:
 
         Parameters:
             cluster_widths (list): top and bottom widths of all clusters, like
-                                  [{'top_width': <number>, 'bottom_width': <number>}...]
+                                  [{'top_edge': <number>, 'bottom_edge': <number>}...]
             cluster_points (array): cluster y coordinates of all pixels along x axis of all clusters
             cluster_coeffs (array): polynomial fit coefficients and area on all traces
             poly_fit_power (int): degree of polynomial fit for width estimation, degree 2 or 3 is suggested.
         Returns:
             out (list): top and bottom widths of all clusters after approximation on widths previously set by the
                         default, like
-                        [{'top_width': <number>, 'bottom_width': <number>}, ..., <top and bottom width of cluster i>]
+                        [{'top_edge': <number>, 'bottom_edge': <number>}, ..., <top and bottom width of cluster i>]
 
         """
         _, nx, ny = self.get_spectral_data()
@@ -1812,8 +1865,8 @@ class OrderTraceAlg:
         widths_all = list()   # [ <np.array of bottom_width>, <np.array of top widths> ]
         width_default = self.get_config_value('width_default', 6)
 
-        widths_all.append(np.array([c_widths['bottom_width'] for c_widths in cluster_widths]))
-        widths_all.append(np.array([c_widths['top_width'] for c_widths in cluster_widths]))
+        widths_all.append(np.array([c_widths['bottom_edge'] for c_widths in cluster_widths]))
+        widths_all.append(np.array([c_widths['top_edge'] for c_widths in cluster_widths]))
         for widths in widths_all:
             c_idx = np.where(widths != width_default)[0]    # index set of non-cut widths
             s_idx = np.where(widths == width_default)[0]    # index set of cut widths
@@ -1821,7 +1874,7 @@ class OrderTraceAlg:
             w_sel = np.polyval(coeffs, y_middle_list[s_idx])   # approximate the widths by poly fit
             widths[s_idx] = w_sel
 
-        new_cluster_widths = [{'top_width': widths_all[self.UPPER][i], 'bottom_width': widths_all[self.LOWER][i]}
+        new_cluster_widths = [{'top_edge': widths_all[self.UPPER][i], 'bottom_edge': widths_all[self.LOWER][i]}
                               for i in range(total_cluster)]
 
         return new_cluster_widths
@@ -1838,8 +1891,8 @@ class OrderTraceAlg:
             for i in range(1, len(sorted_index)):
                 id = sorted_index[i]           # cluster id
                 c_widths = cluster_widths[id-1]
-                prev_width = c_widths['bottom_width']
-                next_width = c_widths['top_width']
+                prev_width = c_widths['bottom_edge']
+                next_width = c_widths['top_edge']
 
                 row_data = list()
                 for t in range(power, -1, -1):  # from lower degree to higher degree
@@ -1850,6 +1903,28 @@ class OrderTraceAlg:
                 row_data.append(int(cluster_coeffs[id, power+2]))    # right x
 
                 result_writer.writerow(row_data)
+
+    def write_cluster_info_to_dataframe(self, cluster_widths: list, cluster_coeffs: np.ndarray):
+        """
+        Write edge results of the order to Pandas DataFrame Object
+        """
+        power = self.get_poly_degree()
+        total_row = np.shape(cluster_coeffs)[0]
+        trace_table = {}
+        column_names = ['Coeff'+str(i) for i in range(power+1)]
+        for i in range(power+1):
+            trace_table[column_names[i]] = cluster_coeffs[1:, power - i]
+
+        trace_table['BottomEdge'] = np.zeros(total_row-1)
+        trace_table['TopEdge'] = np.zeros(total_row-1)
+        for i in range(total_row-1):
+            trace_table['BottomEdge'][i] = self.float_to_string(cluster_widths[i]['bottom_edge'])
+            trace_table['TopEdge'][i] = self.float_to_string(cluster_widths[i]['top_edge'])
+        trace_table['X1'] = cluster_coeffs[1:, power+1].astype(int)
+        trace_table['X2'] = cluster_coeffs[1:, power+2].astype(int)
+
+        results = pd.DataFrame(trace_table)
+        return results
 
     def get_cluster_points(self, polys_coeffs: np.ndarray):
         """
@@ -2138,7 +2213,7 @@ class OrderTraceAlg:
 
     def make_2d_data(self, index: np.ndarray, x: np.ndarray, y: np.ndarray, selected_clusters: np.ndarray = None):
         """
-        Make 2D data based on cluster number and location
+        create 2D data based on cluster number and location and return the 2D data with value 1 at cluster pixels
 
         Parameters:
             x (array): x coordinates of cluster pixels
@@ -2154,24 +2229,12 @@ class OrderTraceAlg:
 
         imm = np.zeros((ny, nx), dtype=np.uint8)
         if selected_clusters is None:
-            ymin = 0
-            ymax = ny-1
-        else:
-            sel = np.where(np.isin(index, selected_clusters))[0]
-            ymin = np.amin(y[sel])
-            ymax = np.amax(y[sel])
+            selected_clusters = np.arange(1, np.amax(index) + 1, dtype=int)
 
-        for cy in range(ny):
-            if cy < ymin:
-                continue
-            elif cy > ymax:
-                break
-            y_cond = np.where(y == cy)[0]
-            if selected_clusters is None:
-                nz_idx_at_cy = y_cond[np.where(index[y_cond] != 0)[0]]
-            else:
-                nz_idx_at_cy = y_cond[np.where(np.isin(index[y_cond], selected_clusters))[0]]
-            imm[cy, x[nz_idx_at_cy]] = 1
+        for idx in selected_clusters:
+            crt_idx = np.where(index == idx)[0]
+            imm[y[crt_idx], x[crt_idx]] = 1
+
         return imm
 
     @staticmethod
@@ -2197,69 +2260,79 @@ class OrderTraceAlg:
         new_str = f"{afloat:.4f}"
         return new_str
 
-    def time_check(self, show_time, t_start, step_msg):
+    def time_check(self, t_start, step_msg):
         t_end = time.time()
-        self.d_print(show_time, step_msg, (t_end-t_start), 'sec.')
+        self.t_print(step_msg, (t_end - t_start), 'sec.')
         return t_end
 
-    def extract_order_trace(self, power_for_width_estimation: int = -1, show_time: bool = False,
-                            print_progress: bool = False):
+    def extract_order_trace(self, power_for_width_estimation: int = -1, show_time: str = None,
+                            print_progress: str = None):
         """
         Order trace extraction including all steps including cluster formation, cleaning, trace approximation and
         width finding
 
         Parameters:
             power_for_width_estimation (int): degree of polynomial fit for trace width estimation
-            show_time (bool): show progress time of each step
-            print_progress (bool): print the progress of the steps
+            show_time (string): show progress time of each step or not.
+                                no display if it is 'no'.
+                                print out the time to stdout if it is '' or to a file per string value, or
+                                print out to the time output channel as the as the setting from DEBUG section of .cfg
+                                file if it is None.
+            print_progress (string): print the progress of the steps to stdout or a file or None.
+                                     no display if it is 'no',
+                                     print out to the stdout if it is '' or a file per string value, or
+                                     print out to the debug channel as the setting from DEBUG section of .cfg file if
+                                     it is None
 
         Returns:
             out (dict): order trace extraction and analysis result, like
-                        {'cluster_index': <array of cluster id of cluster pixels, np.array>
+                        {'order_trace_result': table storing polynomial fit info of the order in Pandas DataFrame Object
+                        'cluster_index': <array of cluster id of cluster pixels, np.array>
                         'cluster_x': <x coordinates of cluster pixels, np.nddarray>
-                        'cluster_y': <y coordinates of cluster pixels, np.ndarray>
-                        'widths': <top and bottom widths of extracted trace, list>
-                        'coeffs': <coeffs of polynomial fit and area of extracted trace, np.ndarray>
-                        'errors': <least square errors of polynomial fit of each extracted trace, np.ndarray>
+                        'cluster_y': <y coordinates of cluster pixels, np.ndarray>}
         """
         imm_spec, nx, ny = self.get_spectral_data()
+        if print_progress is not None:
+            self.redirect_debug_output(print_progress)
+
+        if show_time is not None:
+            self.redirect_time_profile(show_time)
 
         t_start = time.time()
         # locate cluster
-        self.d_print(print_progress, "*** locate cluster")
-        cluster_xy = self.locate_clusters(is_print=print_progress)
-        t_start = self.time_check(show_time, t_start, '*** locate cluster: ')
+        self.d_print("*** locate cluster")
+        cluster_xy = self.locate_clusters()
+        t_start = self.time_check(t_start, '*** locate cluster: ')
 
         # assign cluster id and do basic cleaning
-        self.d_print(print_progress, "*** form cluster")
-        x, y, index_r = self.form_clusters(cluster_xy['x'], cluster_xy['y'], is_print=print_progress)
-        t_start = self.time_check(show_time, t_start, "*** assign cluster: ")
+        self.d_print("*** form cluster")
+        x, y, index_r = self.form_clusters(cluster_xy['x'], cluster_xy['y'])
+        t_start = self.time_check(t_start, "*** assign cluster: ")
 
         # advanced cleaning
-        self.d_print(print_progress, "*** advanced clean cluster")
-        index_adv, all_status = self.advanced_cluster_cleaning_handler(index_r, x, y, is_print=print_progress)
+        self.d_print("*** advanced clean cluster")
+        index_adv, all_status = self.advanced_cluster_cleaning_handler(index_r, x, y)
         new_x, new_y, new_index = self.reorganize_index(index_adv, x, y)
-        t_start = self.time_check(show_time, t_start,  "*** advanced clean cluster: ")
+        t_start = self.time_check(t_start,  "*** advanced clean cluster: ")
 
         # clean clusters along bottom and top border
-        self.d_print(print_progress, "*** clean border")
+        self.d_print("*** clean border")
         new_x, new_y, new_index = self.clean_clusters_on_borders(new_x, new_y, new_index, top_border=ny-1,
                                                                  bottom_border=0)
-        t_start = self.time_check(show_time, t_start, "*** clean border: ")
+        t_start = self.time_check(t_start, "*** clean border: ")
 
         # merge clusters & remove broken cluster
-        self.d_print(print_progress, "*** merge cluster and remove cluster with big opening in the center ")
+        self.d_print("*** merge cluster and remove cluster with big opening in the center ")
         new_x, new_y, new_index, cluster_coeffs, cluster_points, errors = \
-            self.merge_clusters_and_clean(new_index, new_x, new_y, is_print=print_progress)
-        t_start = self.time_check(show_time, t_start,
+            self.merge_clusters_and_clean(new_index, new_x, new_y)
+        t_start = self.time_check(t_start,
                                   "*** merge cluster and remove cluster with big opening in the center: ")
-
         # find width
-        self.d_print(print_progress, "*** find widths")
+        self.d_print("*** find widths")
         all_widths = self.find_all_cluster_widths(new_index, cluster_coeffs, cluster_points,
-                                                  power_for_width_estimation=power_for_width_estimation,
-                                                  is_print=print_progress)
-        self.time_check(show_time, t_start, "*** find widths: ")
+                                                  power_for_width_estimation=power_for_width_estimation)
+        self.time_check(t_start, "*** find widths: ")
 
-        return {'cluster_index': new_index, 'cluster_x': new_x, 'cluster_y': new_y, 'widths': all_widths,
-                'coeffs': cluster_coeffs, 'errors': errors}
+        self.d_print("*** write result to Pandas Dataframe")
+        df = self.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
+        return {'order_trace_result': df, 'cluster_index': new_index, 'cluster_x': new_x, 'cluster_y': new_y}

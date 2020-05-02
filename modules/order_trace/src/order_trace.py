@@ -41,7 +41,7 @@ class OrderTrace(KPF0_Primitive):
             self.config.read(DEFAULT_CFG_PATH)
 
         # Order trace algorithm setup 
-        self.alg = OrderTraceAlg(self.flat_data, self.config['PARAM'])
+        self.alg = OrderTraceAlg(self.flat_data, self.config['PARAM'], self.config['DEBUG'])
 
     
     def _pre_condition():
@@ -62,7 +62,7 @@ class OrderTrace(KPF0_Primitive):
         cluster_xy = self.alg.locate_clusters()
 
         # 2) assign cluster id and do basic cleaning
-        x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'], is_print=print_progress)
+        x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
         power = self.alg.get_poly_degree()
         # 3) advanced cleaning
@@ -75,10 +75,13 @@ class OrderTrace(KPF0_Primitive):
 
         # 5) Merge cluster
         c_x, c_y, c_index, cluster_coeffs, cluster_points, errors = \
-            self.alg.merge_clusters_and_clean(new_index, new_x, new_y, is_print=print_progress)
+            self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
 
         # 6) Find width
         all_widths = self.alg.find_all_cluster_widths(c_index, cluster_coeffs,  cluster_points,
                                                       power_for_width_estimation=3)
-        return {'cluster_index': c_index, 'cluster_x': c_x, 'cluster_y': c_y, 'widths': all_widths,
-                'coeffs': cluster_coeffs, 'errors': errors}
+
+        df = write_cluster_into_dataframe(all_widths, cluster_coeffs)
+
+        self.action.args.order_trace_result = df
+        return self.action.args
