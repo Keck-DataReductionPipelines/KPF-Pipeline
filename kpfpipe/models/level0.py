@@ -38,7 +38,7 @@ class KPF0(object):
 
         # supported data types
         self.read_methods = {
-            'KPF1': self._read_from_KPF0,
+            'KPF0': self._read_from_KPF0,
             'NEID': self._read_from_NEID
         }
 
