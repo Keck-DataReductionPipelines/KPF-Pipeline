@@ -205,7 +205,8 @@ class PolygonClipping2:
             for o_y in range(0, upper_width):
                 input_corners = input_upper_corners[o_y:o_y+2, s_x:s_x+2].reshape((4,2))[[0,2,3,1]]
                 for i in range(0, total_data_group):
-                    flux = self.compute_output_flux(input_corners, data_group[i], input_xdim, input_ydim, False)
+                    flux = self.compute_output_flux(input_corners, data_group[i], input_xdim, input_ydim,
+                                                    vertical_normal, False)
                     if sum_extraction is True:
                         out_data[i][0, o_x] += flux
                     else:
@@ -214,7 +215,9 @@ class PolygonClipping2:
             for o_y in range(0, lower_width):
                 input_corners = input_lower_corners[o_y:o_y+2, s_x:s_x+2].reshape((4,2))[[2,0,1,3]]
                 for i in range(0, total_data_group):
-                    flux = self.compute_output_flux(input_corners, data_group[i], input_xdim, input_ydim, False)
+                    flux = self.compute_output_flux(input_corners, data_group[i], input_xdim, input_ydim,
+                                                    vertical_normal, False)
+
                     if sum_extraction is True:
                         out_data[i][0, o_x] += flux
                     else:
@@ -237,13 +240,108 @@ class PolygonClipping2:
 
         return result_data
 
+    def collect_data_from_order(self, coeffs, widths, xrange, data_group, s_rate=[1, 1], sum_extraction=True, verbose=False):
+        """collect the spectral data per order by polynomial fit
+        Parameters:
+            coeffs (array): polynomial coefficient list starting from that of zero order
+            widths (array): lower and upper order trace widths
+            data_group (array): input data from different source such as spectral data and flat data
+            s_rate (list): sampling rate from input domain to output domain
+            sum_extraction(bool): flag to indicate if performing summation on rectified curve or not
+            verbose(bool): flag for debug
+
+        Returns:
+            spectral_info (dict): straightened spectral information including dimension and the data
+
+        """
+
+        input_ydim, input_xdim = np.shape(data_group[0])
+        sampling_rate = []
+        if type(s_rate).__name__ == 'list':
+            sampling_rate.extend(s_rate)
+        else:
+            sampling_rate.append([s_rate, s_rate])
+
+        output_xdim = input_xdim * sampling_rate[X]
+        output_ydim = input_ydim * sampling_rate[Y]
+
+        if verbose is True:
+            print('output_xdim: ', output_xdim, 'sampling_rate: ', sampling_rate)
+
+        # construct corners map between input and output
+
+        x_output_step = np.arange(0, output_xdim, dtype=int)           # x step in output domain, both ends are included
+
+        #if verbose is True:
+        #   print('x_output_step=', x_output_step)
+
+        x_step = self.get_input_pos(x_output_step, sampling_rate[X])  # x step in input domain
+        x_step = x_step[np.where(np.logical_and(x_step >= xrange[0], x_step <= xrange[1]))[0]]
+        x_output_step = self.get_output_pos(x_step, sampling_rate[X]).astype(int)
+        y_mid = np.polyval(coeffs, x_step)                            # spectral trace value at mid point
+
+        v_border = np.array([np.amax(y_mid), np.amin(y_mid)])
+        if verbose is True:
+            print('v_border: ', v_border)
+
+        # the vertical position to locate the output spectral
+        v_mid = self.get_output_pos(np.mean(v_border), sampling_rate[Y])
+        if verbose is True:
+            print('v_mid: ', v_mid)
+
+        output_widths = self.get_output_pos(widths, sampling_rate[Y]).astype(int)  # width of output
+        upper_width = min(output_widths[1], output_ydim - 1 - v_mid)
+        lower_width = min(output_widths[0], v_mid)
+        if verbose is True:
+            print('width at output: ', upper_width, lower_width)
+
+        y_size = 1 if sum_extraction is True else (upper_width+lower_width)
+        total_data_group = len(data_group)
+        out_data = [np.zeros((y_size, output_xdim)) for i in range(0, total_data_group)]
+
+        # x_output_step in sync with x_step,
+        s_x = 0
+        for o_x in x_output_step:               # ox: 0...xdim-1, out_data: 0...xdim-1, corners: 0...
+            if o_x%1000 == 0:
+                print(o_x, end=" ")
+            for o_y in range(0, upper_width):
+                y_i = int(math.floor(y_mid[s_x]+o_y))
+                x_i = int(math.floor(x_step[s_x]))
+                for i in range(0, total_data_group):
+                    if sum_extraction is True:
+                        out_data[i][0, o_x] += data_group[i][y_i, x_i]
+                    else:
+                        out_data[i][lower_width+o_y, o_x] = data_group[i][y_i, x_i]
+
+            for o_y in range(0, lower_width):
+                y_i = int(math.floor(y_mid[s_x]-o_y-1))
+                x_i = int(math.floor(x_step[s_x]))
+                for i in range(0, total_data_group):
+                    if sum_extraction is True:
+                        out_data[i][0, o_x] += data_group[i][y_i, x_i]
+                    else:
+                        out_data[i][lower_width-o_y-1, o_x] = data_group[i][y_i, x_i]
+
+            s_x += 1
+            if verbose is True:
+                print('[%d %.2f]' % (o_x, out_data[0][0, o_x]), end=' ')
+
+        print(' ')
+        if verbose is True:
+            print(' ')
+
+        result_data = {'y_center': v_mid,
+                       'width': [upper_width, lower_width],
+                       'dim': [output_ydim, output_xdim],
+                       'out_data': [out_data[i] for i in range(0, total_data_group)]}
+
+        return result_data
 
     def rectify_spectral_curve_by_optimal(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False, norm_direction=NORMAL):
-        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
-
-        #f_result = self.rectify_spectral_curve(coeffs, widths, x_range, flat_data, s_rate, sum_extraction=False)
-
-        #print('in optimal')
+        if norm_direction is None:
+            results = self.collect_data_from_order(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False)
+        else:
+            results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
 
         height = sum(results.get('width'))
         width = results.get('dim')[1]
@@ -267,29 +365,23 @@ class PolygonClipping2:
 
         return result_data
 
-
     def rectify_spectral_curve_by_optimal2(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False, norm_direction=NORMAL):
-        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
-        #results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False)
+        """
+        Do rectification (optional) and optimal extraction. No rectification is done if norm_direction is NOne.
+        """
+
+        if norm_direction is None:
+            results = self.collect_data_from_order(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False)
+        else:
+            results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
 
         height = sum(results.get('width'))
         width = results.get('dim')[1]
-        w_data = np.zeros((1, width))
-
         s_data = results.get('out_data')[0]
         f_data = results.get('out_data')[1]
 
-        for x in range(0, width):
-            w_sum = sum(f_data[:, x])
-            d_var = np.full((1, height), 1.0)
-            if w_sum != 0.0:
-                p_data = f_data[:, x]/w_sum
-                num = p_data * s_data[:, x]/d_var
-                dem = np.power(p_data, 2)/d_var
-                w_data[0, x] = np.sum(num)/np.sum(dem)
+        w_data = self.optimal_extraction(s_data, f_data, width, height)
 
-
-        #print(w_data[0, (x_range[0]-2):(x_range[0]+10)])
         result_data = {'y_center': results.get('y_center'),
                        'dim': results.get('dim'),
                        'out_data': w_data,
@@ -299,39 +391,23 @@ class PolygonClipping2:
 
         return result_data
 
+    def optimal_extraction(self, s_data, f_data, data_width, data_height):
+        w_data = np.zeros((1, data_width))
 
-    def rectify_spectral_curve_by_fractional_sum(self, coeffs, widths, x_range, in_data, flat_data, s_rate=[1, 1], verbose=False, norm_direction=NORMAL):
-        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data, flat_data], s_rate, sum_extraction=False, vertical_normal=1)
-
-        height = sum(results.get('width'))
-        width = results.get('dim')[1]
-        w_data = np.zeros((1, width))
-
-        s_data = results.get('out_data')[0]
-        f_data = results.get('out_data')[1]
-
-        for x in range(0, width):
+        for x in range(0, data_width):
             w_sum = sum(f_data[:, x])
-            d_var = np.full((1, height), 1.0)
-            if w_sum != 0.0:
+            d_var = np.full((1, data_height), 1.0)    # set the variance to be 1.0
+            if w_sum != 0.0:                          # pixel is not out of range
                 p_data = f_data[:, x]/w_sum
-                num = p_data * s_data[:, x]/d_var
+                num = p_data * s_data[:, x]/d_var     # sum((f/sum(f)) * s/variance)/sum(((f/sum(f))^2)/variance)) ref. Horne 1986
                 dem = np.power(p_data, 2)/d_var
                 w_data[0, x] = np.sum(num)/np.sum(dem)
 
-        #print(x_range, w_data[0, (x_range[0]-2):(x_range[0]+10)])
-        result_data = {'y_center': results.get('y_center'),
-                       'dim': results.get('dim'),
-                       'out_data': w_data,
-                       'rectified_trace': s_data,
-                       'rectified_flat': f_data
-                       }
-
-        return result_data
+        return w_data
 
 
     def rectify_spectral_curve_by_sum(self, coeffs, widths, x_range, in_data, s_rate=[1,1], verbose=False, norm_direction=NORMAL):
-        """Straighten the spectral trace and perform the summation on the rectify trace
+        """Straighten the spectral trace and perform the summation on the rectified trace
 
         Parameters:
             coeffs (array): polynomial coefficient list starting from that of zero order
@@ -345,8 +421,11 @@ class PolygonClipping2:
             spectral_info (dict): straightened spectral information including dimension and the data
 
         """
-        results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
-        #result_data = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data], s_rate, False, verbose)
+        if norm_direction is None:
+            results = self.collect_data_from_order(coeffs, widths, x_range, [in_data], s_rate, sum_extraction=False)
+        else:
+            results = self.rectify_spectral_curve(coeffs, widths, x_range, [in_data], s_rate, sum_extraction=False, vertical_normal=norm_direction)
+
         if verbose is True:
             print('rectify curve: ', result_data)
 
@@ -507,7 +586,7 @@ class PolygonClipping2:
         return all([(c[Y] < 0 or c[Y] > size[0] or c[X] < 0 or c[X] > size[1]) for c in corners_on_cell])
 
 
-    def compute_output_flux(self, input_corners, input_data, input_xdim, input_ydim, verbose=False):
+    def compute_output_flux(self, input_corners, input_data, input_xdim, input_ydim, vertical_normal, verbose=False):
         """ compute the flux per corners and a matrix of data per polygon clipping algorithm
 
         Parameters:
@@ -541,29 +620,164 @@ class PolygonClipping2:
         if verbose is True:
             print('x_1:', x_1, ' x2:', x_2, ' y1:', y_1, ' y2:', y_2)
 
-        flux = 0.0
 
-        #start=time.time()
+        flux = 0.0
+        if vertical_normal == VERTICAL:
+            flux_vertical, total_area_vertical = self.compute_flux_from_vertical_clipping(input_corners, [x_1, x_2, y_1, y_2], input_data)
+            return flux_vertical
+
+        flux_polygon, total_area_polygon = self.compute_flux_from_polygon_clipping(input_corners, [x_1, x_2, y_1, y_2], input_data)
+        return flux_polygon
+
+
+    def compute_flux_from_polygon_clipping(self, poly_corners, border_points, input_data, verbose=False):
+        x_1, x_2, y_1, y_2 = border_points
+        total_area = 0.0
+
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
                 if verbose is True:
                     print('input_data[', y, x,']: ', input_data[y, x])
 
-                if input_data[y, x] != 0.0:
-                    #start1 = time.time()
-                    new_corners = self.polygon_clipping(input_corners,[[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
-                    #start2 = time.time()
-                    #print('poly_clipping: ', (start2-start1))
-                    area = self.polygon_area(new_corners)
-                    #start3 = time.time()
-                    #print('area: ', (start3-start2))
-                    if verbose is True:
-                        print('area: ', area)
-                    flux += area * input_data[y, x]
+            if input_data[y, x] != 0.0:
+                new_corners = self.polygon_clipping(input_corners,[[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
+                area = self.polygon_area(new_corners)
+                if verbose is True:
+                    print('area: ', area)
+                total_area += area
+                flux += area * input_data[y, x]
 
-        #end = time.time()
-        #print('flux: ', (end-start))
-        return flux
+        return flux, total_area
+
+    def compute_flux_from_vertical_clipping(self, poly_corners, border_points, input_data):
+        # make mark on vertical grid line
+
+        x1, x2, y1, y2 = border_points  # grid boundary of poly_corners
+        y_grid = np.arange(y1, y2+1, dtype = float)
+
+        border_x1 = np.amin(poly_corners[:, X])        # x range of poly_corners,
+        border_x2 = np.amax(poly_corners[:, X])
+        border_x = np.arange(math.floor(border_x1), math.ceil(border_x2)+1, dtype=float)  # horizontal coverage along x
+        border_x[0] = border_x1  if border_x1 != border_x[0] else border_x[0]
+        border_x[-1] = border_x2 if border_x2 != border_x[-1] else border_x[-1]
+
+        # y top and bottom ends of poly_corners at each point in border_x
+        bottom_y = ((border_x - border_x1)*poly_corners[3, Y]+ (border_x2 - border_x)*poly_corners[0, Y])/(border_x2-border_x1)
+        top_y = ((border_x-border_x1)*poly_corners[2, Y] + (border_x2 - border_x)*poly_corners[1, Y])/(border_x2-border_x1)
+
+        mark_y = []
+        for i in range(len(border_x)):
+            # vertical coverage at each point in border_x
+            border_y = np.arange(math.floor(bottom_y[i]), math.ceil(top_y[i])+1, dtype=float)
+            border_y[0] = bottom_y[i]
+            border_y[-1] = top_y[i]
+            mark_y.append(border_y)
+
+        x_ni = 0
+        rows, cols = (y2-y1, x2-x1)
+        cell_corners = [ [None for _ in range(cols)] for _ in range(rows)] # corners set in each cell starting from x1, y1
+
+        for x_ni in range(np.size(border_x)-1):
+            # corners & points_at_borders: [<point at border 1>, <point at border 2>]
+
+            y_line1 = mark_y[x_ni]
+            y_line2 = mark_y[x_ni+1]
+            sy1 = np.where((y_line1 - y_grid[0]) >= 0)[0][0]            # first index in y_line1 covered by y_grid
+            y_line1_sy = np.where((y_grid - y_line1[sy1]) <= 0)[0][-1]  # first index from y_grid
+            sy2 = np.where((y_line2 - y_grid[0]) >= 0)[0][0]            # first index in y_line2 covered by y_grid
+            y_line2_sy = np.where((y_grid - y_line2[sy2]) <= 0)[0][-1]  # first index from y_grid
+            ey1 = np.where((y_line1 - y_grid[-1]) < 0)[0][-1]           # last index in y_line1 covered by y_grid
+            y_line1_ey = np.where((y_line1[ey1] - y_grid) >= 0)[0][-1]  # last index from y_grid
+            ey2 = np.where((y_line2 - y_grid[-1]) < 0)[0][-1]           # last index in y_line2 covered by y_grid
+            y_line2_ey = np.where((y_line2[ey2] - y_grid) >= 0)[0][-1]  # last index from y_grid
+
+            min_sy_idx = min(y_line1_sy, y_line2_sy)   # y index on y_grid
+            max_sy_idx = max(y_line1_sy, y_line2_sy)
+            min_ey_idx = min(y_line1_ey, y_line2_ey)
+            max_ey_idx = max(y_line1_ey, y_line2_ey)
+
+            v_cell_info = [{'inter_points': None, 'border_points': [None, None]} for _ in y_grid]
+            for y_idx in range(min_sy_idx, max_ey_idx+1):
+                if min(y_line1[sy1], y_line2[sy2]) < y_grid[y_idx] < max(y_line1[sy1], y_line2[sy2]):
+                    x_inter = (abs(y_grid[y_idx] - y_line1[sy1]) * border_x[x_ni+1] +
+                               abs(y_line2[sy2] - y_grid[y_idx]) * border_x[x_ni])/abs(y_line1[sy1]-y_line2[sy2])
+                    if y_line1[sy1] < y_line2[sy2]:   # line1 is lower
+                        v_cell_info[y_idx]['inter_points'] = [border_x[x_ni], x_inter]
+                    else:
+                        v_cell_info[y_idx]['inter_points'] = [x_inter, border_x[x_ni+1]]
+                if min(y_line1[ey1], y_line2[ey2]) < y_grid[y_idx] < max(y_line1[ey1], y_line2[ey2]):
+                    x_inter = (abs(y_grid[y_idx] - y_line1[ey1]) * border_x[x_ni+1] +
+                               abs(y_line2[ey2] - y_grid[y_idx]) * border_x[x_ni])/abs(y_line1[ey1]-y_line2[ey2])
+                    if y_line1[ey1] < y_line2[ey2]:
+                        v_cell_info[y_idx]['inter_points'] = [x_inter, border_x[x_ni+1]]
+                    else:
+                        v_cell_info[y_idx]['inter_points'] = [border_x[x_ni], x_inter]
+            if y_line1[sy1] > y_grid[y_line1_sy]:
+                v_cell_info[y_line1_sy]['border_points'][0] = [border_x[x_ni], y_line1[sy1]]
+            if y_line2[sy2] > y_grid[y_line2_sy]:
+                v_cell_info[y_line2_sy]['border_points'][1] = [border_x[x_ni+1], y_line2[sy2]]
+
+            if y_line1[ey1] > y_grid[y_line1_ey]:
+                v_cell_info[y_line1_ey]['border_points'][0] = [border_x[x_ni], y_line1[ey1]]
+            if y_line2[ey2] > y_grid[y_line2_ey]:
+                v_cell_info[y_line2_ey]['border_points'][1] = [border_x[x_ni+1], y_line2[ey2]]
+
+            bottom_p = [[border_x[x_ni], y_line1[sy1]], [border_x[x_ni+1], y_line2[sy2]]]
+            if y_line1_sy < y_line2_sy:
+                bottom_p[1] = bottom_p[0]
+            elif y_line1_sy > y_line2_sy:
+                bottom_p[0] = bottom_p[1]
+
+            top_p = [[border_x[x_ni], y_line1[ey1]], [border_x[x_ni+1], y_line2[ey2]]]
+            if y_line1_ey > y_line2_ey:
+                top_p[1] = top_p[0]
+            elif y_line2_ey > y_line1_ey:
+                top_p[0] = top_p[1]
+
+            for y_idx in range(min_sy_idx, max_ey_idx):
+                corners = list()
+                corners.append(bottom_p[0])
+                if (v_cell_info[y_idx]['border_points'][0] is not None) and \
+                   (v_cell_info[y_idx]['border_points'][0] != bottom_p[0]):
+                    corners.append(v_cell_info[y_idx]['border_points'][0])
+
+                y_c = y_grid[y_idx+1]
+                if v_cell_info[y_idx+1]['inter_points'] is not None:
+                    corners.append([v_cell_info[y_idx+1]['inter_points'][0], y_c])
+                    corners.append([v_cell_info[y_idx+1]['inter_points'][1], y_c])
+                else:
+                    corners.extend([[border_x[x_ni], y_c], [border_x[x_ni+1], y_c]])
+
+                next_bottom = [corners[-2], corners[-1]]
+
+                if (v_cell_info[y_idx]['border_points'][1] is not None) and \
+                   (v_cell_info[y_idx]['border_points'][1] != corners[-1]):
+                   corners.append(v_cell_info[y_idx]['border_points'][1])
+
+                if bottom_p[1] != corners[-1] and bottom_p[1] != corners[0]:
+                    corners.append(bottom_p[1])
+                bottom_p = next_bottom
+
+                cell_corners[y_idx][x_ni] = corners
+
+            cell_corners[max_ey_idx][x_ni] = [bottom_p[0], top_p[0], top_p[1], bottom_p[1]]
+            x_ni += 1
+
+        total_area = 0.0
+        flux = 0.0
+        for y in range(rows):
+            for x in range(cols):
+                if cell_corners[y][x] is None or input_data[y1+y, x1+x] == 0:
+                    continue
+
+                #corners = np.array(cell_corners[y][x])-np.array([x1, y1])
+                corners = np.array(cell_corners[y][x])
+                area = self.polygon_area(corners)
+                total_area += area
+                flux += area * input_data[y1+y, x1+x]
+
+        return flux, total_area
+
 
     def polygon_clipping(self, poly_points, clipper_points, clipper_size):
         """ New polygon points after performing the clipping based on the specified clipping area"""
