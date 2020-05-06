@@ -633,14 +633,14 @@ class PolygonClipping2:
     def compute_flux_from_polygon_clipping(self, poly_corners, border_points, input_data, verbose=False):
         x_1, x_2, y_1, y_2 = border_points
         total_area = 0.0
-
+        flux = 0.0
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
                 if verbose is True:
                     print('input_data[', y, x,']: ', input_data[y, x])
 
             if input_data[y, x] != 0.0:
-                new_corners = self.polygon_clipping(input_corners,[[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
+                new_corners = self.polygon_clipping(poly_corners,[[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
                 area = self.polygon_area(new_corners)
                 if verbose is True:
                     print('area: ', area)
