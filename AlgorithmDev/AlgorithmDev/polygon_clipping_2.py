@@ -634,18 +634,19 @@ class PolygonClipping2:
         x_1, x_2, y_1, y_2 = border_points
         total_area = 0.0
         flux = 0.0
+
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
                 if verbose is True:
                     print('input_data[', y, x,']: ', input_data[y, x])
 
-            if input_data[y, x] != 0.0:
-                new_corners = self.polygon_clipping(poly_corners,[[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
-                area = self.polygon_area(new_corners)
-                if verbose is True:
-                    print('area: ', area)
-                total_area += area
-                flux += area * input_data[y, x]
+                if input_data[y, x] != 0.0:
+                    new_corners = self.polygon_clipping(poly_corners,[[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
+                    area = self.polygon_area(new_corners)
+                    if verbose is True:
+                        print('area: ', area)
+                    total_area += area
+                    flux += area * input_data[y, x]
 
         return flux, total_area
 
@@ -761,7 +762,7 @@ class PolygonClipping2:
                 cell_corners[y_idx][x_ni] = corners
 
             cell_corners[max_ey_idx][x_ni] = [bottom_p[0], top_p[0], top_p[1], bottom_p[1]]
-            x_ni += 1
+
 
         total_area = 0.0
         flux = 0.0
