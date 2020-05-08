@@ -3,7 +3,7 @@ import os
 
 ## This is an ugly fix for local package dependencies 
 # --TODO-- find a better way to do this 
-sys.path.insert(0, os.path.abspath('/home/qwang3/Desktop/Work/KeckDRPFramework'))
+sys.path.insert(0, os.path.abspath('/Users/cwang/documents/KPF/KeckDRPFramework'))
 
 import kpfpipe.cli
 

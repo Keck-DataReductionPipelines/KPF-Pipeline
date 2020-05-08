@@ -15,7 +15,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from kpfpipe.modules.order_trace.alg import OrderTraceAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/order_trace/default.cfg'
+DEFAULT_CFG_PATH = 'modules/order_trace/configs/default.cfg'
 
 class OrderTrace(KPF0_Primitive):
 
@@ -31,7 +31,7 @@ class OrderTrace(KPF0_Primitive):
         self.logger = start_logger(self.__class__.__name__, None)
 
         # input argument 
-        self.flat_data = action.args.arg
+        self.flat_data = action.args.arg.data
         # input configuration
         self.config = configparser.ConfigParser()
         try: 
@@ -41,10 +41,10 @@ class OrderTrace(KPF0_Primitive):
             self.config.read(DEFAULT_CFG_PATH)
 
         # Order trace algorithm setup 
-        self.alg = OrderTraceAlg(self.flat_data, self.config['PARAM'], self.config['DEBUG'])
+        self.alg = OrderTraceAlg(self.flat_data, self.config)
 
     
-    def _pre_condition():
+    def _pre_condition(self) -> bool:
         '''
         Check for some necessary pre conditions
         '''

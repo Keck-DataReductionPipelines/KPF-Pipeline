@@ -10,12 +10,11 @@ import time
 import pandas as pd
 
 # Pipeline dependencies
-from kpfpipe.logger import start_logger
-from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.models.level0 import KPF0
+# from kpfpipe.logger import start_logger
+# from kpfpipe.primitives.level0 import KPF0_Primitive
+# from kpfpipe.models.level0 import KPF0
 
 FIT_G = fitting.LevMarLSQFitter()
-
 
 class OrderTraceAlg:
     """
@@ -38,13 +37,15 @@ class OrderTraceAlg:
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None, debug=None):
-        self.flat_data = data
-        self.config = config
-        self.is_debug = False if debug is None else debug.getboolean('debug', False)
-        self.debug_output = '' if debug is None else debug.get('debug_path', '')
-        self.is_time_profile = False if debug is None else debug.getboolean('time', False)
-        self.time_output = '' if debug is None else debug.get('time_path', '')
+    def __init__(self, data, config=None):
+        self.flat_data = data.data
+        c_debug =  config['DEBUG'] if (config is not None and config.has_section('DEBUG')) else None
+        self.config_param = config['PARAM'] if (config is not None and config.has_section('PARAM')) else None
+
+        self.is_debug = False if c_debug is None else c_debug.getboolean('debug', False)
+        self.debug_output = '' if c_debug is None else c_debug.get('debug_path', '')
+        self.is_time_profile = False if c_debug is None else c_debug.getboolean('time', False)
+        self.time_output = '' if c_debug is None else c_debug.get('time_path', '')
 
     def enable_debug_print(self, to_print=True):
         """
@@ -73,13 +74,14 @@ class OrderTraceAlg:
         """
         get defined value from the config file
         """
-        if self.config is not None:
+
+        if self.config_param is not None:
             if isinstance(default, int):
-                return self.config.getint(property, default)
+                return self.config_param.getint(property, default)
             elif isinstance(default, float):
-                return self.config.getfloat(property, default)
+                return self.config_param.getfloat(property, default)
             else:
-                return self.config.get(property, default)
+                return self.config_param.get(property, default)
         else:
             return default
 
@@ -108,14 +110,14 @@ class OrderTraceAlg:
         """
         get spectral information including data and size
         """
-
         try:
-            assert self.flat_data
+            assert self.flat_data.all()
         except AssertionError:
             return None
 
-        ny, nx = np.shape(self.flat_data.data)
-        return self.flat_data.data, nx, ny
+        ny, nx = np.shape(self.flat_data)
+
+        return self.flat_data, nx, ny
 
     @staticmethod
     def opt_filter(y_data: np.ndarray, par: int, weight: np.ndarray = None):
@@ -1324,7 +1326,7 @@ class OrderTraceAlg:
                 return False
 
         total_c = np.shape(polys)[0]
-        self.d_print('in cross_other_cluster test for: ', cluster_nos_for_polys, ' from ', cluster_nos)
+        # self.d_print('in cross_other_cluster test for: ', cluster_nos_for_polys, ' from ', cluster_nos)
 
         # find the horizontal gap
         all_x_idx = np.where((all_x - np.roll(all_x, 1)) >= 2)[0]
@@ -1422,9 +1424,9 @@ class OrderTraceAlg:
             positive_zero_total = np.size(np.where(np.logical_or(vals == 1, vals == 0))[0])
             negative_zero_total = np.size(np.where(np.logical_or(vals == -1, vals == 0))[0])
 
-            self.d_print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',
-                         cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ',
-                         polys[c_idx, power+1], polys[c_idx, power+2])
+            # self.d_print('test ', c_idx, ' from ', sort_map[c_idx], ' merged original index: ',
+            #             cluster_nos, ' vals: ', vals, ' at points: ', cross_point.keys(), ' x: ',
+            #             polys[c_idx, power+1], polys[c_idx, power+2])
 
             # in case the cluster is not above or below the merged clusters at all overlap ends or gap ends
             if positive_zero_total >= 1 and negative_zero_total >= 1:
@@ -1435,7 +1437,7 @@ class OrderTraceAlg:
                     if 0 < zero_below == positive_zero_total and zero_above == 0:
                         continue
 
-                self.d_print('  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx])
+                # self.d_print('  ', cluster_nos, ' cross ', c_idx, ' from ', sort_map[c_idx])
                 return True
 
         return False
@@ -1870,6 +1872,8 @@ class OrderTraceAlg:
         for widths in widths_all:
             c_idx = np.where(widths != width_default)[0]    # index set of non-cut widths
             s_idx = np.where(widths == width_default)[0]    # index set of cut widths
+            if np.size(s_idx) == 0:
+                continue
             coeffs = np.polyfit(y_middle_list[c_idx], widths[c_idx], poly_fit_power)  # poly fit on all non-cut width
             w_sel = np.polyval(coeffs, y_middle_list[s_idx])   # approximate the widths by poly fit
             widths[s_idx] = w_sel
@@ -1878,53 +1882,6 @@ class OrderTraceAlg:
                               for i in range(total_cluster)]
 
         return new_cluster_widths
-
-    def write_cluster_info_to_csv(self, cluster_widths: list, cluster_coeffs: np.ndarray, csvfile: str):
-        """
-        Write the polynomial fit coefficients, area and widths of clusters to a csv file
-        """
-        power = self.get_poly_degree()
-        sorted_index = self.sort_cluster_in_y(cluster_coeffs)
-
-        with open(csvfile, mode='w') as result_file:
-            result_writer = csv.writer(result_file)
-            for i in range(1, len(sorted_index)):
-                id = sorted_index[i]           # cluster id
-                c_widths = cluster_widths[id-1]
-                prev_width = c_widths['bottom_edge']
-                next_width = c_widths['top_edge']
-
-                row_data = list()
-                for t in range(power, -1, -1):  # from lower degree to higher degree
-                    row_data.append(cluster_coeffs[id, t])
-                row_data.append(self.float_to_string(prev_width))    # bottom width
-                row_data.append(self.float_to_string(next_width))    # top width
-                row_data.append(int(cluster_coeffs[id, power+1]))    # left x
-                row_data.append(int(cluster_coeffs[id, power+2]))    # right x
-
-                result_writer.writerow(row_data)
-
-    def write_cluster_info_to_dataframe(self, cluster_widths: list, cluster_coeffs: np.ndarray):
-        """
-        Write edge results of the order to Pandas DataFrame Object
-        """
-        power = self.get_poly_degree()
-        total_row = np.shape(cluster_coeffs)[0]
-        trace_table = {}
-        column_names = ['Coeff'+str(i) for i in range(power+1)]
-        for i in range(power+1):
-            trace_table[column_names[i]] = cluster_coeffs[1:, power - i]
-
-        trace_table['BottomEdge'] = np.zeros(total_row-1)
-        trace_table['TopEdge'] = np.zeros(total_row-1)
-        for i in range(total_row-1):
-            trace_table['BottomEdge'][i] = self.float_to_string(cluster_widths[i]['bottom_edge'])
-            trace_table['TopEdge'][i] = self.float_to_string(cluster_widths[i]['top_edge'])
-        trace_table['X1'] = cluster_coeffs[1:, power+1].astype(int)
-        trace_table['X2'] = cluster_coeffs[1:, power+2].astype(int)
-
-        results = pd.DataFrame(trace_table)
-        return results
 
     def get_cluster_points(self, polys_coeffs: np.ndarray):
         """
@@ -2252,6 +2209,56 @@ class OrderTraceAlg:
             rms[c] = np.sqrt(np.mean((y1_clusters - y2_clusters)**2))
         return rms
 
+    def write_cluster_info_to_csv(self, cluster_widths: list, cluster_coeffs: np.ndarray, csvfile: str):
+        """
+        Write the polynomial fit coefficients, area and widths of clusters to a csv file
+        """
+        power = self.get_poly_degree()
+        sorted_index = self.sort_cluster_in_y(cluster_coeffs)
+
+        with open(csvfile, mode='w') as result_file:
+            result_writer = csv.writer(result_file)
+            for i in range(1, len(sorted_index)):
+                id = sorted_index[i]           # cluster id
+                c_widths = cluster_widths[id-1]
+                prev_width = c_widths['bottom_edge']
+                next_width = c_widths['top_edge']
+
+                row_data = list()
+                for t in range(power, -1, -1):  # from lower degree to higher degree
+                    row_data.append(cluster_coeffs[id, t])
+                row_data.append(self.float_to_string(prev_width))    # bottom width
+                row_data.append(self.float_to_string(next_width))    # top width
+                row_data.append(int(cluster_coeffs[id, power+1]))    # left x
+                row_data.append(int(cluster_coeffs[id, power+2]))    # right x
+
+                result_writer.writerow(row_data)
+
+    def write_cluster_info_to_dataframe(self, cluster_widths: list, cluster_coeffs: np.ndarray):
+        """
+        Write edge results of the order to Pandas DataFrame Object
+        """
+        power = self.get_poly_degree()
+        total_row = np.shape(cluster_coeffs)[0]
+        trace_table = {}
+        column_names = ['Coeff'+str(i) for i in range(power+1)]
+        for i in range(power+1):
+            trace_table[column_names[i]] = cluster_coeffs[1:, power - i]
+
+        trace_table['BottomEdge'] = np.zeros(total_row-1)
+        trace_table['TopEdge'] = np.zeros(total_row-1)
+        for i in range(total_row-1):
+            trace_table['BottomEdge'][i] = self.float_to_string(cluster_widths[i]['bottom_edge'])
+            trace_table['TopEdge'][i] = self.float_to_string(cluster_widths[i]['top_edge'])
+        trace_table['X1'] = cluster_coeffs[1:, power+1].astype(int)
+        trace_table['X2'] = cluster_coeffs[1:, power+2].astype(int)
+
+        results = pd.DataFrame(trace_table)
+        results.attrs['POLY_ORD'] = self.get_poly_degree()
+        results.attrs['EXTNAME'] = 'ORDERTRACE'
+
+        return results
+
     @staticmethod
     def float_to_string(afloat):
         """
@@ -2273,12 +2280,12 @@ class OrderTraceAlg:
 
         Parameters:
             power_for_width_estimation (int): degree of polynomial fit for trace width estimation
-            show_time (string): show progress time of each step or not.
+            show_time (str): show progress time of each step or not.
                                 no display if it is 'no'.
                                 print out the time to stdout if it is '' or to a file per string value, or
                                 print out to the time output channel as the as the setting from DEBUG section of .cfg
                                 file if it is None.
-            print_progress (string): print the progress of the steps to stdout or a file or None.
+            print_progress (str): print the progress of the steps to stdout or a file or None.
                                      no display if it is 'no',
                                      print out to the stdout if it is '' or a file per string value, or
                                      print out to the debug channel as the setting from DEBUG section of .cfg file if
