@@ -4,6 +4,7 @@ import os
 import sys
 import importlib
 import configparser as cp
+import keckdrpframework.config.framework_config as cfg
 import logging
 
 from kpfpipe.logger import start_logger
@@ -42,10 +43,11 @@ class KPFPipeline(BasePipeline):
         # action_name: (name_of_callable, current_state, next_event_name)
         'start_recipe': ('start_recipe', 'starting recipe', None), 
         'resume_recipe': ('resume_recipe', 'resuming recipe', None),
-        'exit': ('exit_loop', 'exiting...', None),
-        'TFAMakeTemplate': ('TFAMakeTemplate', 'TEST', None),
-        'ReadKPF1': ('ReadKPF1', 'READ', None),
-        'KPFModExample': ('KPFModExample', 'EXAMPLE', None)
+        'to_fits': ('to_fits', 'processing', 'resume_recipe'),
+        'kpf0_from_fits': ('kpf0_from_fits', 'processing', 'resume_recipe'),
+        'kpf1_from_fits': ('kpf1_from_fits', 'processing', 'resume_recipe'),
+        'kpf2_from_fits': ('kpf2_from_fits', 'processing', 'resume_recipe'),
+        'exit': ('exit_loop', 'exiting...', None)
         }
     
 
@@ -70,11 +72,17 @@ class KPFPipeline(BasePipeline):
         ## Setup argument
         try: 
             cfg_obj = cp.ConfigParser()
+            # cfg_obj = cfg.ConfigClass()
             cfg_obj.read(config)
             arg = cfg_obj._sections['ARGUMENT']
         except KeyError:
             raise IOError('cannot find [ARGUMENT] section in config')
         self.context.arg = arg
+
+        ## Dave's experiment
+        # print("kpfpipeline: about to assign into pipeline.config")
+        # self.config = cfg_obj
+        # print(f"Experiment: type of self.config is {type(self.config)}")
 
         ## Setup primitive-specific configs:
         self.context.config_path = cfg_obj._sections['MODULES']
