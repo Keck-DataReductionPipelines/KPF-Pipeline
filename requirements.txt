@@ -4,7 +4,6 @@ numpy==1.18.1
 xlsxwriter
 matplotlib>=2.0.0
 scipy
-
 pytest
 
 
