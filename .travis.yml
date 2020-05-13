@@ -7,6 +7,7 @@ language: python
 services:
 - docker
 install:
+- echo $CACHE_IMAGE
 - docker pull $CACHE_IMAGE:latest || true
 - docker build --cache-from $CACHE_IMAGE:latest --tag $CACHE_IMAGE:latest .
 script:
