@@ -7,11 +7,10 @@ language: python
 services:
 - docker
 install:
-- echo $CACHE_IMAGE
-- docker pull $CACHE_IMAGE:latest || true
-- docker build --cache-from $CACHE_IMAGE:latest --tag $CACHE_IMAGE:latest .
+- docker pull qwangcr/kpf:latest || true
+- docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
 script:
-- docker run $CACHE_IMAGE:latest
+- docker run qwangcr/kpf:latest
 notifications:
   slack: false
   email: false
