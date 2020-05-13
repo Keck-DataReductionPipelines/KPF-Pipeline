@@ -7,7 +7,6 @@ scipy
 pytest
 
 
-
 # Documentation
 sphinx
 sphinx-rtd-theme
