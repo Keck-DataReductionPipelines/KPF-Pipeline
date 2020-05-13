@@ -7,7 +7,6 @@ language: python
 services:
 - docker
 install:
-- echo "$DOCKER_PWD" | docker login -u qwangcr --password-stdin
 - docker pull $CACHE_IMAGE:latest || true
 - docker build --cache-from $CACHE_IMAGE:latest --tag $CACHE_IMAGE:latest .
 script:
