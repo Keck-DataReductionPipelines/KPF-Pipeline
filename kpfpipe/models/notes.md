@@ -18,3 +18,27 @@
 ## Level 2 data
 
 - data stored in table. Each row is identified by a segment.
+
+## Demo
+
+### Astropy and FITS
+
+- import astropy, read fits, fits info
+
+### Core
+
+- create empty level 0: info
+- receipt: info, access, add, remove
+- auxiliary extensions: add, remove
+
+### level 0
+
+- read level 0 NEID
+- write level 0 KPF
+- read level 0 KPF
+
+### level 1
+
+- read level 1 NEID
+- write level 1 KPF
+- segement: info, append, delete.
