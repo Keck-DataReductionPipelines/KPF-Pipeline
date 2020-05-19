@@ -31,7 +31,9 @@ class KPF1(KPFDataModel):
 
     def _read_from_NEID(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
-        
+        '''
+        Parse the HDUL based on NEID standards
+        '''
         for hdu in hdul:
             this_header = hdu.header
             if hdu.name == 'PRIMARY':
@@ -88,10 +90,13 @@ class KPF1(KPFDataModel):
     
     def _read_from_KPF(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
-        
+        '''
+        Parse the HDUL based on KPF standards
+        '''
         for hdu in hdul:
             this_header = hdu.header
             if hdu.name == 'PRIMARY':
+                # PRIMARY extension does not contain data
                 self.header['PRIMARY'] = this_header
             elif hdu.name == 'SEGMENTS':
                 self.header['SEGMENTS'] = hdu.header
@@ -115,10 +120,11 @@ class KPF1(KPFDataModel):
                 else: 
                     raise ValueError('HDU name {} not recognized'.format(hdu.name))
                 self.header[hdu.name] = hdu.header
-            
     
     def create_hdul(self):
-
+        '''
+        create an hdul in FITS format
+        '''
         hdu_list = []
         # Add primary HDU 
         hdu = fits.PrimaryHDU()
@@ -150,14 +156,13 @@ class KPF1(KPFDataModel):
             hdu_list.append(variance_hdu)
             hdu_list.append(wave_hdu)
 
-        # Segments
+        # Add segments
         t = Table.from_pandas(self.receipt)
         hdu = fits.table_to_hdu(t)
         hdu.name = 'SEGMENTS'
         for key, value in self.header['SEGMENTS'].items():
             hdu.header.set(key, value)
         hdu_list.append(hdu)
-
         
         return hdu_list
 
@@ -167,7 +172,7 @@ class KPF1(KPFDataModel):
     def add_segment(self, begin_idx: tuple, end_idx: tuple,
                     label=None, comment=None) -> None:
         '''
-
+        Add an entry in the segments
         '''
         if label is None:
             label = 'Custom segment {}'.format(self.n_custom_seg)
@@ -176,12 +181,10 @@ class KPF1(KPFDataModel):
             raise NameError('provided label already exist for another segment')
 
         # make sure that the index provided is valid
-        
         if begin_idx[0] != end_idx[0]:
             # segments must be on same order
             raise ValueError('Segment begin on order {}, end on order {}'.format(
                                 begin_idx[0], end_idx[0]))
-
         if begin_idx[1] >= end_idx[1]:
             raise ValueError('Segment begin location must be before end location')
 
@@ -193,7 +196,7 @@ class KPF1(KPFDataModel):
     
     def clear_segment(self):
         '''
-
+        Reset the table containing segments
         '''
         seg_header = ['Label', 'Order', 'Begin_idx',\
                       'End_idx', 'Length', 'Comment']
@@ -202,6 +205,9 @@ class KPF1(KPFDataModel):
         self.n_custom_seg = 0
     
     def remove_segment(self, label: str) -> None:
+        '''
+        Remove a segment based on label
+        '''
         if label not in list(self.segments['Label']):
             raise ValueError('{} not found'.format(label))
         idx = self.segments.index[self.segments['Label'] == label].tolist()

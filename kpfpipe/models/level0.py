@@ -25,6 +25,9 @@ class KPF0(KPFDataModel):
     
     def _read_from_NEID(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
+        '''
+        Parse the HDUL based on NEID standards
+        '''
         for hdu in hdul:
             this_header = hdu.header
 
@@ -40,7 +43,9 @@ class KPF0(KPFDataModel):
     
     def _read_from_KPF(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
-        
+        '''
+        Parse the HDUL based on KPF standards
+        '''
         for hdu in hdul:
             if isinstance(hdu, fits.PrimaryHDU):
                 self.header['PRIMARY'] = hdu.header
