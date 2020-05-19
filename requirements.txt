@@ -6,7 +6,7 @@ matplotlib
 scipy
 GitPython
 pytest
-
+python-dotenv
 
 # Documentation
 sphinx

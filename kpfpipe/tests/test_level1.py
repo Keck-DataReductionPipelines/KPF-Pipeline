@@ -1,153 +1,105 @@
 import pytest
 import warnings
+import os
+import shutil
+from dotenv import load_dotenv
 
 from kpfpipe.models.level1 import *
 
-## All unit test should follow the AAA (arrange, act, assert) style
+# Load .env file for test path 
+load_dotenv()
 
-@pytest.fixture
-def kpf1():
-    '''
-    Initializes an KPF1 data product from 
-    a testing HARPS file.
-    This fixture assumes that basic init/IO of KPF1 
-    is functioning
-    '''
-    # --TODO--
-    pass
+# =============================================================================
+# Segments
 
-## custom structs and helper functions
-def test_spec_dict():
-    '''
-    Check that the get/set item methods are working 
-    '''
-    ## Arrange
-    # Init empty dicts of available type
-    array_dict = SpecDict({}, 'header')
-    header_dict = SpecDict({}, 'array')
+def test():
+    data = KPF1()
+    data.add_segment((0, 1), (0, 5), label='test')
+    data.add_segment((0, 1), (0 ,5))
+    print(list(data.segments['Label']))
 
-    ## Act
-    # we are testing on empty arrays, so nothing to be done here
+def test_add_segments():
+    '''
+    Check that segments are added properly
+    '''
+    data = KPF1()
+    data.add_segment((0, 1), (0, 5), label='test')
+    data.add_segment((0, 1), (0 ,5))
+    assert('Custom segment 1' in list(data.segments['Label']))
+    assert('test' in list(data.segments['Label']))
+
+def test_remove_segment():
+    '''
+    Check that segments are removed properly
+    '''
+    data = KPF1()
+    data.add_segment((0, 1), (0, 5), label='test')
+    data.add_segment((0, 1), (0 ,5))
+    data.remove_segment('test')
+    data.remove_segment('Custom segment 1')
+    assert(len(data.segments) == 0)
+
+def test_segments_exceptions():
+    '''
+    Check that proper exceptions are raised with an invalid input
+    '''
+    data = KPF1()
+    data.add_segment((0, 1), (0, 2), label='test')
+
+    with pytest.raises(ValueError):
+        # end index is less than beginning index
+        data.add_segment((0, 3), (0, 2))
     
-    ## Assert
-    # make sure that they are still dictionaries
-    # this make sure that the newly defined dicts still behave as default dicts
-    assert(isinstance(array_dict, dict))
-    assert(isinstance(header_dict, dict))
-
-# def test_array_dict_set_attr():
-#     '''
-#     Test that array dicts only 2D accept numpy arrays
-#     '''
-#     ## Arrange
-#     array_dict = SpecDict({}, 'array')
-
-#     ## act/assert
-#     with pytest.raises(TypeError):
-#         # Key is not a string
-#         array_dict[10] = np.ndarray([[1, 2], [3, 4]], dtype=np.float64)
-
-#     with pytest.raises(TypeError):
-#         # not a np.ndarray
-#         array_dict['test'] = [[1, 2], [3, 4]]
+    with pytest.raises(ValueError):
+        # segment not on same order
+        data.add_segment((0, 1), (1, 2))
     
-#     with pytest.raises(TypeError):
-#         # ndarray is not 2D
-#         array_dict['test'] = np.asarray([1, 2, 3, 4], dtype=np.float64) #1D
+    with pytest.raises(NameError):
+        # duplicate label 
+        data.add_segment((0, 1), (0, 2), label='test')
     
-#     with pytest.raises(ValueError):
-#         # ndarray is not np.float64
-#         array_dict['test'] = np.asarray([[1, 2], [3, 4]], dtype=int)
-    
-def test_array_dict_get_attr_copy():
-    '''
-    Test that getting an attribute only gets a copy
-    '''
-    ## Arrange
-    array_dict = SpecDict({}, 'array')
-    data = np.asarray([[1, 2], [3, 4]], dtype=np.float64)
-    array_dict['test'] = data
-    
-    ## Act
-    result = array_dict['test']
-
-    ## Assert
-    assert(np.any(result == data)) # result values should be equal
-    assert(id(result) != id(array_dict['test'])) # instances should be differnet
-
-## Constructor and Deconstructor
-def test_init():
-    '''
-    Check that level1 data initializes correctly
-    '''
-    pass
-
-## Initializer through I/O
-def test_from_harps():
-    '''
-    Check that the _read_from_HARP() works
-    '''
-    ## Arrange
-    warnings.filterwarnings("ignore")
-    fpath = 'resource/HARPS_E2DS/HARPS.2007-04-04T09_17_51.376_e2ds_A.fits'
-
-    ## Act
-    data = KPF1.from_fits(fpath, 'HARPS')
-    data.info()
-    
-def test_form_neid():
-    '''
-    Check that the _read_from_HARP() works
-    '''
-    ## Arrange
-    warnings.filterwarnings("ignore")
-    fpath = 'resource/NEID/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
-
-    ## Act
-    data = KPF1.from_fits(fpath, 'NEID')
-    data.info()
-def test_from_kpf1(): 
-    '''
-    Check that the _read_from_KPF() works as intended
-    '''
-    # --TODO--
-    pass
-
-def test_io():
-    '''
-    integration test that checks that read/write is reversible
-    '''
-    warnings.filterwarnings("ignore")
-    neid_in = 'resource/NEID/TAUCETI_20191217/L1/neidL1_20191217T025613.fits'
-    KPF_out = 'kpf_out.fits'
-
-    data = KPF1.from_fits(neid_in, 'NEID')
-    data.to_fits(KPF_out)
-
-    data2 = KPF1.from_fits(KPF_out, 'KPF1')
-    for key, value in data.wave.items():
-        assert(np.all(data.wave[key] == data2.wave[key]))
-    for key, value in data.flux.items():
-        assert(np.all(data.flux[key] == data2.flux[key]))
-    for key, value in data.variance.items():
-        assert(np.all(data.variance[key] == data2.variance[key]))
+    with pytest.raises(ValueError):
+        # Non-existent label
+        data.remove_segment('what')
 
 
+# =============================================================================
+# IO
+fpath = os.environ['KPFPIPE_TEST_DATA'] + '/NEIDdata/TAUCETI_20191217/L1'
+flist = [f for f in os.listdir(fpath)]
 
-## Interface
-def test_get_attr():
+def test_from_NEID():
     '''
-    Check that access of information functions as intended
+    Read all available level 0 data and check for data
     '''
-    # --TODO--
-    pass
+    for f in flist:
+        data = KPF1.from_fits(os.path.join(fpath, f), 'NEID')
 
-def test_set_attr():
+def test_NEID2KPF():
     '''
-    Check that data can only be modified in expected ways
+    Check that data 
     '''
-    # --TODO--
-    pass
+    # Make a temporary folder
+    try:
+        os.mkdir('temp')
+    except FileExistsError:
+        pass
 
-if __name__ == '__main__':
-    pass
+    for f in flist:
+        # read NEID data and convert to KPF data
+        data = KPF1.from_fits(os.path.join(fpath, f), 'NEID')
+        to_path = 'temp/' + f
+        data.to_fits(to_path)
+        # read the converted data
+        data2 = KPF1.from_fits(to_path, 'KPF')
+        # compare the data value of the two
+        for key, value in data2.flux.items():
+            assert(np.all(value == data.flux[key]))
+        for key, value in data2.wave.items():
+            assert(np.all(value == data.wave[key]))
+        for key, value in data2.variance.items():
+            assert(np.all(value == data.variance[key]))
+    # Clean up 
+    shutil.rmtree('temp')
+if __name__ == "__main__":
+    test()
