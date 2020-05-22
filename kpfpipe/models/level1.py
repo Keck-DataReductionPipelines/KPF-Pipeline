@@ -13,6 +13,8 @@ from astropy.table import Table
 import numpy as np
 import pandas as pd
 
+from kpfpipe.models.data_model import KPFDataModel
+
 class KPF1(KPFDataModel):
 
     def __init__(self):

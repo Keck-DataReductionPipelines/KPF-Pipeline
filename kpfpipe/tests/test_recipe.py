@@ -1,7 +1,8 @@
 # test_recipe.py
-
-import sys, traceback
+import sys, os, traceback
 import ast
+
+sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
 
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments

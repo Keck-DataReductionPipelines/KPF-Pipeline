@@ -101,5 +101,6 @@ def test_NEID2KPF():
             assert(np.all(value == data.variance[key]))
     # Clean up 
     shutil.rmtree('temp')
+
 if __name__ == "__main__":
     test()
