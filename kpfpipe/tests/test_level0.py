@@ -38,6 +38,8 @@ def test_aux():
     assert(len(data.extension) == 0)
     assert('hello' not in data.header.keys())
 
+    # 
+
 def test_aux_exceptions():
     '''
     Test that proper exceptions are raised when invalid 
@@ -80,14 +82,14 @@ def test_NEID2KPF():
     '''
     # Make a temporary folder
     try:
-        os.mkdir('temp')
+        os.mkdir('temp_level0')
     except FileExistsError:
         pass
 
     for f in flist:
         # read NEID data and convert to KPF data
         data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
-        to_path = 'temp/' + f
+        to_path = 'temp_level0/' + f
         data.to_fits(to_path)
         # read the converted data
         data2 = KPF0.from_fits(to_path, 'KPF')
@@ -96,6 +98,8 @@ def test_NEID2KPF():
         assert(np.all(data2.variance == data.variance))
     # Clean up 
     shutil.rmtree('temp')
+
+    # import tempfile
         
 
 
