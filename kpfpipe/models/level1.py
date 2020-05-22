@@ -1,9 +1,17 @@
 '''
 KPF Level 1 Data Model
 '''
-
-from kpfpipe.models.data_model import *
+# Standard dependencies
+import os
 import copy
+
+# External dependencies
+import astropy
+from astropy.io import fits
+from astropy.time import Time
+from astropy.table import Table
+import numpy as np
+import pandas as pd
 
 class KPF1(KPFDataModel):
 
@@ -13,18 +21,18 @@ class KPF1(KPFDataModel):
         '''
         KPFDataModel.__init__(self)
         
-        self.flux = {'CAL':  None,
-                     'SCI1': None,
-                     'SCI2': None,
-                     'SCI3': None,
-                     'SKY':  None}
-        self.wave = copy.deepcopy(self.flux)
-        self.variance = copy.deepcopy(self.flux)
+        self.flux: dict = {'CAL':  None,
+                           'SCI1': None,
+                           'SCI2': None,
+                           'SCI3': None,
+                           'SKY':  None}
+        self.wave: dict = copy.deepcopy(self.flux)
+        self.variance: dict = copy.deepcopy(self.flux)
 
         # start an empty segment table
         self.clear_segment()
 
-        self.read_methods = {
+        self.read_methods: dict = {
             'KPF':  self._read_from_KPF,
             'NEID': self._read_from_NEID
         }
@@ -121,11 +129,11 @@ class KPF1(KPFDataModel):
                     raise ValueError('HDU name {} not recognized'.format(hdu.name))
                 self.header[hdu.name] = hdu.header
     
-    def create_hdul(self):
+    def create_hdul(self) -> list:
         '''
         create an hdul in FITS format
         '''
-        hdu_list = []
+        hdu_list: dict = []
         # Add primary HDU 
         hdu = fits.PrimaryHDU()
         for key, value in self.header['PRIMARY'].items():
@@ -174,6 +182,8 @@ class KPF1(KPFDataModel):
         '''
         Add an entry in the segments
         '''
+        # data.segment
+
         if label is None:
             label = 'Custom segment {}'.format(self.n_custom_seg)
         
@@ -185,16 +195,16 @@ class KPF1(KPFDataModel):
             # segments must be on same order
             raise ValueError('Segment begin on order {}, end on order {}'.format(
                                 begin_idx[0], end_idx[0]))
-        if begin_idx[1] >= end_idx[1]:
+        if begin_idx[1] > end_idx[1]:
             raise ValueError('Segment begin location must be before end location')
 
-        length = end_idx[1] - begin_idx[1]
+        length = end_idx[1] - begin_idx[1] + 1
         order = begin_idx[0]
         row = [label, order, begin_idx, end_idx, length, comment]
         self.segments.loc[len(self.segments)] = row
         self.n_custom_seg += 1
     
-    def clear_segment(self):
+    def clear_segment(self) -> None:
         '''
         Reset the table containing segments
         '''
@@ -213,7 +223,7 @@ class KPF1(KPFDataModel):
         idx = self.segments.index[self.segments['Label'] == label].tolist()
         self.segments = self.segments.drop(idx, axis=0)
 
-    def info(self):
+    def info(self) -> None:
         '''
         Pretty print information about this data to stdout 
         '''

@@ -29,22 +29,23 @@ class KPFDataModel:
         '''
         Constructor
         '''
-        self.filename = None
+        self.filename: str = ''
 
-        self.header = {'PRIMARY': {}, 
-                       'RECEIPT': {}}
+        self.header: dict = {'PRIMARY': {}, 
+                             'RECEIPT': {}}
 
+        self.flux = None
         # Construct the receipt table
-        self.receipt = pd.DataFrame(columns=RECEIPT_COL)
+        self.receipt: pd.DataFrame = pd.DataFrame(columns=RECEIPT_COL)
 
         # list of auxiliary extensions 
-        self.extension = {}
+        self.extension: dict = {}
 
 # =============================================================================
 # I/O related methods
     @classmethod
     def from_fits(cls, fn: str,
-                  data_type: str) -> None:
+                  data_type: str) -> KPFDataModel:
         """
         
         """
@@ -67,7 +68,7 @@ class KPFDataModel:
             # Can only read .fits files
             raise IOError('input files must be FITS files')
 
-        if not overwrite and not self.flux:
+        if not overwrite and self.flux:
             # This instance already contains data, and
             # we don't want to overwrite 
             raise IOError('Cannot overwrite existing data')
@@ -97,7 +98,7 @@ class KPFDataModel:
                 # not in the self.read_methods list
                 raise IOError('cannot recognize data type {}'.format(data_type))
     
-    def to_fits(self, fn:str):
+    def to_fits(self, fn:str) -> None:
         """
         Collect all the level 1 data into a monolithic FITS file
         Can only write to KPF1 formatted FITS 
@@ -115,18 +116,18 @@ class KPFDataModel:
         # handles receipt
         t = Table.from_pandas(self.receipt)
         hdu = fits.table_to_hdu(t)
-        hdu.name = 'RECEIPT'
         for key, value in self.header['RECEIPT'].items():
             hdu.header.set(key, value)
+        hdu.name = 'RECEIPT'
         hdu_list.append(hdu)
 
         # hanles any auxiliary extensions
         for name, table in self.extension.items():
             t = Table.from_pandas(table)
             hdu = fits.table_to_hdu(t)
-            hdu.name = name
             for key, value in self.header[name].items():
                 hdu.header.set(key, value)
+            hdu.name = name
             hdu_list.append(hdu)
 
         # finish up writing
