@@ -34,7 +34,6 @@ class KPFDataModel:
         self.header: dict = {'PRIMARY': {}, 
                              'RECEIPT': {}}
 
-        self.flux = None
         # Construct the receipt table
         self.receipt: pd.DataFrame = pd.DataFrame(columns=RECEIPT_COL)
 
@@ -45,7 +44,7 @@ class KPFDataModel:
 # I/O related methods
     @classmethod
     def from_fits(cls, fn: str,
-                  data_type: str) -> KPFDataModel:
+                  data_type: str):
         """
         
         """
@@ -57,7 +56,7 @@ class KPFDataModel:
 
     def read(self, fn: str,
              data_type: str,
-             overwrite: bool=True) -> None:
+             overwrite: bool=False) -> None:
         """
         Read the content of a .fits file and populate this 
         data structure. Note that this is not a @classmethod 
@@ -67,8 +66,8 @@ class KPFDataModel:
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
-
-        if not overwrite and self.flux:
+        
+        if not overwrite and self.filename != '':
             # This instance already contains data, and
             # we don't want to overwrite 
             raise IOError('Cannot overwrite existing data')

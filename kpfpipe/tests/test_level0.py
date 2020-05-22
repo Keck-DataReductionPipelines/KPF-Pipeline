@@ -64,7 +64,7 @@ def test_aux_exceptions():
 # IO
 # Level 0 path: 
 fpath = os.environ['KPFPIPE_TEST_DATA'] + '/NEIDdata/TAUCETI_20191217/L0'
-flist = [f for f in os.listdir(fpath)]
+flist = [f for f in os.listdir(fpath)][0:1]
     
 def test_from_NEID():
     '''
@@ -97,9 +97,24 @@ def test_NEID2KPF():
         assert(np.all(data2.data == data.data))
         assert(np.all(data2.variance == data.variance))
     # Clean up 
-    shutil.rmtree('temp')
+    shutil.rmtree('temp_level0')
 
     # import tempfile
+
+def test_exceptions():
+    
+    f = flist[0]
+    f_naught = f.split('.')[0] # same file without .fits file extension
+    data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
+    
+    with pytest.raises(IOError):
+        data2 = KPF0()
+        # Invalid file extension
+        data2.from_fits(os.path.join(fpath, f_naught), 'NEID')
+
+    with pytest.raises(IOError):
+        # overwriting without setting overwrite to True
+        data.read(os.path.join(fpath, f), 'NEID')
         
 
 
