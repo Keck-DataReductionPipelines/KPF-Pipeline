@@ -8,6 +8,7 @@ import csv
 import time
 import pandas as pd
 from astropy.io import fits
+import re
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -28,10 +29,10 @@ class OptimalExtractionAlg:
     NORMAL = 0
     VERTICAL = 1
     NoRECT = 2
-
     def __init__(self, flat_data, spectrum_data, config=None):
         self.flat_flux = flat_data.data
         self.spectrum_flux = spectrum_data.data
+        self.original_spectrum_flux = self.spectrum_flux.copy()
         self.spectrum_header = spectrum_data.header['PRIMARY']
 
         rows, cols = np.shape(self.flat_flux)
@@ -41,12 +42,13 @@ class OptimalExtractionAlg:
         self.poly_order = flat_data.header['ORDERTRACE']['POLY_ORD']
         self.config_param = config['PARAM'] if (config is not None and config.has_section('PARAM')) else None
         self.config_debug = config['DEBUG'] if (config is not None and config.has_section('DEBUG')) else None
+        self.order_trace = flat_data.order_trace_result
 
         order_trace = flat_data.order_trace_result
         self.total_order = np.shape(order_trace)[0]
-        self.order_coeffs = np.flip(order_trace[:, 0:self.poly_order+1], axis=1)
-        self.order_edges = order_trace[:, self.poly_order+1: self.poly_order+3]
-        self.order_xrange = order_trace[:, self.poly_order+3:self.poly_order+5].astype(int)
+        self.order_coeffs = np.flip(self.order_trace[:, 0:self.poly_order+1], axis=1)
+        self.order_edges = None
+        self.order_xrange = None
 
         self.is_debug = False if self.config_debug is None else self.config_debug.getboolean('debug', False)
         self.debug_output = '' if self.config_debug is None else self.config_debug.get('debug_path', '')
@@ -64,6 +66,30 @@ class OptimalExtractionAlg:
                 return self.config_param.get(property, default)
         else:
             return default
+
+    def get_order_edges(self, idx: int = 0):
+        if self.order_edges is None:
+            trace_col = np.shape(self.order_trace)[1]
+            if trace_col >= self.poly_order+3:
+                self.order_edges = self.order_trace[:, self.poly_order+1: self.poly_order+3]
+            else:
+                self.order_edges = np.repeat(np.ones((1, 2))*self.get_config_value('width_default', 6),
+                                             self.total_order, axis=0)
+        if idx >= self.total_order or idx < 0:
+            idx = 0
+        return self.order_edges[idx, :]
+
+    def get_order_xrange(self, idx: int = 0):
+        if self.order_xrange is None:
+            trace_col = np.shape(self.order_trace)[1]
+            if trace_col >= self.poly_order + 5:
+                self.order_xrange = self.order_trace[:, self.poly_order + 3: self.poly_order + 5].astype(int)
+            else:
+                self.order_xrange = np.repeat(np.array([0, self.dim_width-1], dtype=int).reshape((1, 2)),
+                                              self.total_order, axis=0)
+        if idx >= self.total_order or idx < 0:
+            idx = 0
+        return self.order_xrange[idx, :]
 
     def get_spectrum_size(self):
         return self.dim_width, self.dim_height
@@ -93,9 +119,38 @@ class OptimalExtractionAlg:
             else:
                 print(' '.join([str(item) for item in args]), end=end)
 
+    def update_spectrum_flux(self, bleeding_cure_file: str=None):
+        """
+        update the spectrum flux per specified bleeding cure file or  'nan_pixels' set in config file
+        """
+        if bleeding_cure_file is not None:
+            correct_data, correct_header = fits.getdata(bleeding_cure_file, header=True)
+            if np.shape(correct_data) == np.shape(self.spectrum_flux):
+                correct_method = self.get_config_value('correct_method')
+                if correct_method == 'sub':
+                    self.spectrum_flux = self.spectrum_flux - correct_data
+
+        nan_pixels = self.get_config_value('nan_pixels').replace(' ', '')
+        if nan_pixels:
+            pixel_groups = re.findall("^\\((.*)\\)$", nan_pixels)
+
+            if len(pixel_groups) > 0:            # group of nan pixels is set
+                res = [i.start()+1 for i in re.finditer('\\],\\[', pixel_groups[0])]
+                res.insert(0, -1)
+                res.append(len(pixel_groups[0]))
+                idx_groups = [ pixel_groups[0][res[i]+1:res[i+1]] for i in range(len(res)-1)]
+                for group in idx_groups:
+                    idx_set = re.findall("^\\[([0-9]*):([0-9]*),([0-9]*):([0-9]*)\\]$", group)
+                    if len(idx_set) > 0 and len(idx_set[0]) == 4:
+                        y_idx, x_idx = idx_set[0][0:2], idx_set[0][2:4]
+                        r_idx = [int(y_idx[i]) if y_idx[i] else (0 if i == 0 else self.dim_height) for i in range(2)]
+                        c_idx = [int(x_idx[i]) if x_idx[i] else (0 if i == 0 else self.dim_width) for i in range(2)]
+                        self.spectrum_flux[r_idx[0]:r_idx[1], c_idx[0]:c_idx[1]] = np.nan
+
     def collect_data_from_order(self, coeffs: np.ndarray, widths: np.ndarray, xrange: np.ndarray,
                                 data_group: list, s_rate=[1, 1], sum_extraction=True):
-        """collect the spectral data per order by polynomial fit
+        """
+        collect the spectral data per order by polynomial fit
         Parameters:
             coeffs (array): polynomial coefficients starting from zero order
             widths (array): lower and upper edges of the order
@@ -138,7 +193,7 @@ class OptimalExtractionAlg:
         output_widths = self.get_output_pos(widths, sampling_rate[self.Y]).astype(int)  # width of output
         upper_width = min(output_widths[1], output_y_dim - 1 - y_output_mid)
         lower_width = min(output_widths[0], y_output_mid)
-        # self.d_print('edges of order at output: ', upper_width, lower_width)
+        self.d_print('edges of order at output: ', upper_width, lower_width)
 
         y_size = 1 if sum_extraction is True else (upper_width+lower_width)
         total_data_group = len(data_group)
@@ -169,7 +224,6 @@ class OptimalExtractionAlg:
 
             s_x += 1
 
-        # self.d_print(' ')
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
                        'dim': [output_y_dim, output_x_dim],
@@ -417,7 +471,7 @@ class OptimalExtractionAlg:
         return {'order_data': s_data, 'extraction': out_data, 'y_center': y_center}
 
     @staticmethod
-    def fill_2d_with_data(from_data: np.ndarray, to_data: np.ndarray, to_pos: int, from_pos: int=0):
+    def fill_2d_with_data(from_data: np.ndarray, to_data: np.ndarray, to_pos: int, from_pos: int = 0):
         """
         Fill a band of 2D data into another band of 2D to the vertical position in 'to_data'
 
@@ -433,7 +487,7 @@ class OptimalExtractionAlg:
         to_y_dim = np.shape(to_data)[0]
         from_y_dim = np.shape(from_data)[0]
 
-        if to_pos < 0 or to_pos >= to_y_dim or from_pos < 0 or from_pos >= from_y_dim: # out of range, do nothing
+        if to_pos < 0 or to_pos >= to_y_dim or from_pos < 0 or from_pos >= from_y_dim:  # out of range, do nothing
             return to_data
 
         h = min((to_y_dim - to_pos), from_y_dim-from_pos)
@@ -545,11 +599,13 @@ class OptimalExtractionAlg:
 
         if vertical_normal == self.VERTICAL:
             flux_vertical, total_area_vertical = self.compute_flux_from_vertical_clipping(input_corners,
-                                                                            [x_1, x_2, y_1, y_2], input_data)
+                                                                                          [x_1, x_2, y_1, y_2],
+                                                                                          input_data)
             return flux_vertical
 
         flux_polygon, total_area_polygon = self.compute_flux_from_polygon_clipping(input_corners,
-                                                                            [x_1, x_2, y_1, y_2], input_data)
+                                                                                   [x_1, x_2, y_1, y_2],
+                                                                                   input_data)
         return flux_polygon
 
     def compute_flux_from_polygon_clipping(self, poly_corners: np.ndarray, border_points: list, input_data: np.ndarray):
@@ -807,7 +863,8 @@ class OptimalExtractionAlg:
 
     def extract_spectrum(self, rectification_method: int = NoRECT, extraction_method: str = 'optimal',
                          order_set: np.ndarray = None,
-                         print_progress: str = None):
+                         print_progress: str = None,
+                         bleeding_file: str = None):
         """
         Optimal extraction from 2D flux to 1D. Rectification step is optional.
 
@@ -822,12 +879,15 @@ class OptimalExtractionAlg:
                                      'no': no display,
                                      empty string or a string: print out to stdout or a file per string value.
                                      None: print out to the debug channel as the setting in DEBUG section of .cfg file.
+            bleeding_file (str): bleeding cure file
 
         Returns:
             out (array): 1D spectrum data
         """
         if print_progress is not None:
             self.redirect_debug_output(print_progress)
+
+        self.update_spectrum_flux(bleeding_file)
 
         dim_width, dim_height = self.get_spectrum_size()
         total_order = self.get_spectrum_order()
@@ -838,10 +898,13 @@ class OptimalExtractionAlg:
 
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
-            self.d_print(c_order, end=" ")
-            order_flux = self.get_flux_from_order(self.order_coeffs[c_order], self.order_edges[c_order],
-                                                  self.order_xrange[c_order], self.spectrum_flux, self.flat_flux,
+            self.d_print(c_order, ' edges: ', self.get_order_edges(c_order),
+                         ' xrange: ', self.get_order_xrange(c_order), end=" ")
+            order_flux = self.get_flux_from_order(self.order_coeffs[c_order], self.get_order_edges(c_order),
+                                                  self.get_order_xrange(c_order), self.spectrum_flux, self.flat_flux,
                                                   norm_direction=rectification_method)
+
+            # check element with nan np.argwhere(np.isnan(order_flux.get('order_data'))), paras data has nan in spectrum
             result = dict()
             if 'optimal' in extraction_method:
                 result = self.optimal_extraction(order_flux.get('order_data'), order_flux.get('order_flat'),
@@ -866,9 +929,8 @@ class OptimalExtractionAlg:
             return {'result': 'error', 'msg': 'dimension is not the same'}
 
         diff_data = target_data - data_result
-        diff_idx = np.where(diff_data != 0.0)[0]
+        diff_idx = np.where((diff_data != 0.0) & (~np.isnan(diff_data)))[0]
 
-        print('result difference: ', diff_idx)
         if diff_idx.size > 0:
             return {'result': 'error', 'msg': 'data is not the same at '+diff_idx.tostring()}
 
