@@ -129,9 +129,7 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
         framework = Framework(pipe, framework_config)
         # Overwrite the framework logger with this instance of logger
         # using framework default logger creates some obscure problem
-        """
         framework.logger = start_logger('DRPFrame', framework_logcfg)
-        """
         framework.pipeline.start(pipe_config)
     except Exception as e:
         print("Failed to initialize framework, exiting ...", e)
