@@ -15,8 +15,9 @@ for data in ["A", "B", "C"]:
     else:
         out, result = NoiseReduce(out, 1.5 - 1.)
     
+    input = config.pipeline_input
     lambdaCalibration = 24.5
-    spectrum, result = Spectrum1D(out, calibration=lambdaCalibration)
+    spectrum, result = Spectrum1D(out, calibration=config.lambdaCalibration)
     
     ProcessSpectrum(spectrum)
 
