@@ -4,9 +4,10 @@ numpy==1.18.1
 xlsxwriter
 matplotlib
 scipy
-
+GitPython
 pytest
-
+python-dotenv
+pytest
 
 # Documentation
 sphinx
