@@ -5,7 +5,6 @@ import os
 # --TODO-- find a better way to do this 
 sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
 
-
 import kpfpipe.cli
 
 __version__ = '0.0.1'
