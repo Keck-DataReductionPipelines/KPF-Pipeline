@@ -1,16 +1,22 @@
 # Composition of the containers
 
-jenkins:
-  build: .
-  ports:
-   - 5555:8080
-   - 50000:50000
-  volumes:
-    - ${KPFPIPE_TEST_DATA}:/data/
-    - ${KPFPIPE_TEST_OUTPUTS}:/outputs/
-    - /var/run/docker.sock:/var/run/docker.sock
-    - jenkinsvol:/var/jenkins_home
-  expose:
-   - 5555
-  privileged: true
-  
+version: '2.4'
+services:
+  jenkins:
+    build: .
+    ports:
+     - 5555:8080
+     - 50000:50000
+    expose:
+      - 5555
+    privileged: true
+    group_add:
+      - 0
+    volumes:
+      - ${KPFPIPE_TEST_DATA}:/data/
+      - ${KPFPIPE_TEST_OUTPUTS}:/outputs/
+      - /var/run/docker.sock:/var/run/docker.sock
+      - jenkinsvol:/var/jenkins_home
+
+volumes:
+  jenkinsvol:
