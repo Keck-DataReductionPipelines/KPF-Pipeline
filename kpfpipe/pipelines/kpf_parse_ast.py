@@ -5,6 +5,8 @@ import _ast
 from collections.abc import Iterable
 from collections import deque
 from queue import Queue
+# from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
+
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext

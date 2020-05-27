@@ -1,7 +1,8 @@
 # test_recipe.py
-
-import sys, traceback
+import sys, os, traceback
 import ast
+
+sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
 
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
@@ -28,6 +29,9 @@ test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2., snr_thresh, 3.5)
 input_filename = config.ARGUMENT['input_filename']
 
 if sum > snr_thresh:
+test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2.)
+
+if sum > dif:
     bool1 = True
 else:
     bool1 = False
