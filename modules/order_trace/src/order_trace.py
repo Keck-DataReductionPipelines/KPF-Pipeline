@@ -1,5 +1,7 @@
 # Standard dependencies 
 import configparser
+import pandas as pd
+import copy
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -31,7 +33,8 @@ class OrderTrace(KPF0_Primitive):
         self.logger = start_logger(self.__class__.__name__, None)
 
         # input argument 
-        self.flat_data = action.args.arg.data
+        self.input = action.args.arg
+        self.flat_data = self.input.data
         # input configuration
         self.config = configparser.ConfigParser()
         try: 
@@ -53,6 +56,14 @@ class OrderTrace(KPF0_Primitive):
 
         return success
 
+    def _post_condition(self) -> bool:
+        '''
+        check for some necessary post condition
+        '''
+        pass
+
+
+
     def _perform(self) -> None:
         """
         This primitive's action
@@ -68,8 +79,7 @@ class OrderTrace(KPF0_Primitive):
         # 3) advanced cleaning
         index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
         x, y, index = self.alg.reorganize_index(index, x, y)
-
-        # 4) clean clusters along bottom and top border
+action.args.arg.data
         x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
         new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
 
@@ -82,6 +92,11 @@ class OrderTrace(KPF0_Primitive):
                                                       power_for_width_estimation=3)
 
         df = write_cluster_into_dataframe(all_widths, cluster_coeffs)
+        assert(isinstance(df, pd.DataFrame))
 
-        self.action.args.order_trace_result = df
-        return self.action.args
+        # self.action.args.order_trace_result = df
+        # return self.action.args
+        self.output = copy.deepcopy(self.input)
+        self.output.create_extension('ORDER TRACE RESULT')
+        self.output.extensions['ORDER TRACE RESULT'] = df
+        return self.output
