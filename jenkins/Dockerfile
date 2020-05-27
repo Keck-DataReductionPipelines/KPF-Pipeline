@@ -15,5 +15,10 @@ RUN add-apt-repository \
        $(lsb_release -cs) \
        stable"
 RUN apt-get update && apt-get install -y docker-ce-cli
+RUN mkdir /data && \
+    mkdir /outputs
+
+ENV KPFPIPE_TEST_DATA=/data/
+ENV KPFPIPE_TEST_OUTPUTS=/outputs/
 
 USER jenkins
