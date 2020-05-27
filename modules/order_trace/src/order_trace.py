@@ -15,7 +15,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from kpfpipe.modules.order_trace.alg import OrderTraceAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/order_trace/default.cfg'
+DEFAULT_CFG_PATH = 'modules/order_trace/configs/default.cfg'
 
 class OrderTrace(KPF0_Primitive):
 
@@ -31,7 +31,7 @@ class OrderTrace(KPF0_Primitive):
         self.logger = start_logger(self.__class__.__name__, None)
 
         # input argument 
-        self.flat_data = action.args.arg
+        self.flat_data = action.args.arg.data
         # input configuration
         self.config = configparser.ConfigParser()
         try: 
@@ -41,10 +41,10 @@ class OrderTrace(KPF0_Primitive):
             self.config.read(DEFAULT_CFG_PATH)
 
         # Order trace algorithm setup 
-        self.alg = OrderTraceAlg(self.flat_data, self.config['PARAM'])
+        self.alg = OrderTraceAlg(self.flat_data, self.config)
 
     
-    def _pre_condition():
+    def _pre_condition(self) -> bool:
         '''
         Check for some necessary pre conditions
         '''
@@ -62,27 +62,26 @@ class OrderTrace(KPF0_Primitive):
         cluster_xy = self.alg.locate_clusters()
 
         # 2) assign cluster id and do basic cleaning
-        cluster_info = self.alg.collect_clusters(cluster_xy['x'], cluster_xy['y'])
-        clean_info = self.alg.remove_cluster_by_size(cluster_info, cluster_xy['x'], cluster_xy['y'])
-        x, y, index = reorganize_index(clean_info['index'], cluster_xy['x'], cluster_cy['y'])
+        x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
         power = self.alg.get_poly_degree()
         # 3) advanced cleaning
-        index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y, self.config['power'])
-        x, y, index = reorganize_index(index, x, y)
+        index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
+        x, y, index = self.alg.reorganize_index(index, x, y)
 
         # 4) clean clusters along bottom and top border
-        index_b = clean_clusters_on_border(x, y, index, 0)
-        index_t = clean_clusters_on_border(x, y, index_b, ny-1)
-        x_border, y_border, index_border =  self.reorganize_index(index_t, x, y)
+        x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
+        new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
 
         # 5) Merge cluster
-        merge_x, merge_y, merge_index, merge_coeffs = self.merge_clusters(index_border, x_border, y_border, power)
-        c_x, c_y, c_index = self.remove_broken_cluster(merge_index, merge_x, merge_y, merge_coeffs)
-        cluster_coeffs, errors = self.curve_fitting_on_all_clusters(c_index, c_x, c_y, power)
-        cluster_points = self.get_cluster_points(cluster_coeffs, power)
+        c_x, c_y, c_index, cluster_coeffs, cluster_points, errors = \
+            self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
 
         # 6) Find width
-        all_widths = self.find_all_cluster_widths(c_index, c_x, c_y, cluster_coeffs,  cluster_points, power)
-        return {'cluster_index': c_index, 'cluster_x': c_x, 'cluster_y': c_y, 'widths': all_widths,
-                'coeffs': cluster_coeffs, 'errors': errors}
+        all_widths = self.alg.find_all_cluster_widths(c_index, cluster_coeffs,  cluster_points,
+                                                      power_for_width_estimation=3)
+
+        df = write_cluster_into_dataframe(all_widths, cluster_coeffs)
+
+        self.action.args.order_trace_result = df
+        return self.action.args
