@@ -29,22 +29,22 @@ class KPFDataModel:
         '''
         Constructor
         '''
-        self.filename = None
+        self.filename: str = ''
 
-        self.header = {'PRIMARY': {}, 
-                       'RECEIPT': {}}
+        self.header: dict = {'PRIMARY': {}, 
+                             'RECEIPT': {}}
 
         # Construct the receipt table
-        self.receipt = pd.DataFrame(columns=RECEIPT_COL)
+        self.receipt: pd.DataFrame = pd.DataFrame(columns=RECEIPT_COL)
 
         # list of auxiliary extensions 
-        self.extension = {}
+        self.extension: dict = {}
 
 # =============================================================================
 # I/O related methods
     @classmethod
     def from_fits(cls, fn: str,
-                  data_type: str) -> None:
+                  data_type: str):
         """
         
         """
@@ -56,7 +56,7 @@ class KPFDataModel:
 
     def read(self, fn: str,
              data_type: str,
-             overwrite: bool=True) -> None:
+             overwrite: bool=False) -> None:
         """
         Read the content of a .fits file and populate this 
         data structure. Note that this is not a @classmethod 
@@ -66,8 +66,8 @@ class KPFDataModel:
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
-
-        if not overwrite and not self.flux:
+        
+        if not overwrite and self.filename != '':
             # This instance already contains data, and
             # we don't want to overwrite 
             raise IOError('Cannot overwrite existing data')
@@ -77,10 +77,10 @@ class KPFDataModel:
             # Handles the Receipt and the auxilary HDUs 
             for hdu in hdu_list:
                 if isinstance(hdu, fits.BinTableHDU):
+                    t = Table.read(hdu)
                     if hdu.name == 'RECEIPT':
                         # Table contains the RECEIPT
                         self.header['RECEIPT'] = hdu.header
-                        t = Table.read(hdu)
                         self.receipt = t.to_pandas()
                 
                     else:
@@ -88,7 +88,6 @@ class KPFDataModel:
                             if hdu.header['AUX'] == True:
                                 # This is an auxiliary extension
                                 self.header[hdu.name] = hdu.header
-                                t = Table.read(hdu)
                                 self.extension[hdu.name] = t.to_pandas()
             # Leave the rest of HDUs to level specific readers
             try:
@@ -98,7 +97,7 @@ class KPFDataModel:
                 # not in the self.read_methods list
                 raise IOError('cannot recognize data type {}'.format(data_type))
     
-    def to_fits(self, fn:str):
+    def to_fits(self, fn:str) -> None:
         """
         Collect all the level 1 data into a monolithic FITS file
         Can only write to KPF1 formatted FITS 
@@ -116,18 +115,18 @@ class KPFDataModel:
         # handles receipt
         t = Table.from_pandas(self.receipt)
         hdu = fits.table_to_hdu(t)
-        hdu.name = 'RECEIPT'
         for key, value in self.header['RECEIPT'].items():
             hdu.header.set(key, value)
+        hdu.name = 'RECEIPT'
         hdu_list.append(hdu)
 
         # hanles any auxiliary extensions
         for name, table in self.extension.items():
             t = Table.from_pandas(table)
             hdu = fits.table_to_hdu(t)
-            hdu.name = name
             for key, value in self.header[name].items():
                 hdu.header.set(key, value)
+            hdu.name = name
             hdu_list.append(hdu)
 
         # finish up writing
@@ -136,7 +135,7 @@ class KPFDataModel:
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, Mod: type, param: str, status: str):
+    def receipt_add_entry(self, Mod: str, param: str, status: str):
         
         # time of execution in ISO format
         time = datetime.datetime.now().isoformat()
@@ -148,18 +147,11 @@ class KPFDataModel:
 
         # add the row to the bottom of the table
         row = [time, '---', git_branch, git_commit_hash, \
-               Mod.__name__, '---', '---', param, status]
+               Mod, '---', '---', param, status]
         self.receipt.loc[len(self.receipt)] = row
 
     def receipt_info(self):
         print(self.receipt[['Time', 'Module_Name', 'Status']])
-    
-    def write_receipt(self, fn: str):
-        '''
-
-        '''
-        pass
-
 
 # =============================================================================
 # Auxiliary related extension
@@ -169,7 +161,7 @@ class KPFDataModel:
         '''
         # check whether the extension already exist
         if ext_name in self.header.keys():
-            raise KeyError('name {} already exist as extension'.format(ext_name))
+            raise NameError('name {} already exist as extension'.format(ext_name))
         
         self.extension[ext_name] = pd.DataFrame()
         self.header[ext_name] = {'AUX': True}
@@ -178,7 +170,7 @@ class KPFDataModel:
         '''
 
         '''
-        if ext_name not in self.header.keys():
+        if ext_name not in self.extension.keys():
             raise KeyError('extension {} could not be found'.format(ext_name))
         
         del self.extension[ext_name]
@@ -187,6 +179,4 @@ class KPFDataModel:
 
 
 if __name__ == '__main__':
-    k = KPFDataModel()
-    k.add_entry(int, 'test', 'yay!')
-    print(k.receipt)
+    pass

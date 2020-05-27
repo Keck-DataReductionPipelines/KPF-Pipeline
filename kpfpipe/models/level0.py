@@ -1,8 +1,21 @@
 """
 Level 0 Data Model
 """
+# Standard dependencies
+import os
+import copy
 
-from kpfpipe.models.data_model import *
+# External dependencies
+import astropy
+from astropy.io import fits
+from astropy.time import Time
+from astropy.table import Table
+import numpy as np
+import pandas as pd
+
+from kpfpipe.models.data_model import KPFDataModel
+
+
 
 class KPF0(KPFDataModel):
     """
@@ -15,16 +28,19 @@ class KPF0(KPFDataModel):
         """
         KPFDataModel.__init__(self)
         # level 0 contain only 1 array
-        self.data = None
-        self.variance = None
+        self.data: np.ndarray = None
+        self.variance: np.ndarray = None
 
-        self.read_methods = {
+        self.read_methods: dict = {
             'KPF':  self._read_from_KPF,
             'NEID': self._read_from_NEID
         }
     
     def _read_from_NEID(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
+        '''
+        Parse the HDUL based on NEID standards
+        '''
         for hdu in hdul:
             this_header = hdu.header
 
@@ -40,7 +56,9 @@ class KPF0(KPFDataModel):
     
     def _read_from_KPF(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
-        
+        '''
+        Parse the HDUL based on KPF standards
+        '''
         for hdu in hdul:
             if isinstance(hdu, fits.PrimaryHDU):
                 self.header['PRIMARY'] = hdu.header
@@ -90,14 +108,13 @@ class KPF0(KPFDataModel):
         for name, aux in self.extension.items():
             row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table', str(aux.shape))
             head += row
-
         print(head)
 
     def create_hdul(self):
         '''
         create an hdul in FITS format
         '''
-        hdu_list = []
+        hdu_list: list = []
         for name, header_keys in self.header.items():
             if name == 'PRIMARY':
                 hdu = fits.PrimaryHDU()
