@@ -1,6 +1,9 @@
 # Use python 3.6 
 FROM python:3.6-slim
 
+ENV KPFPIPE_TEST_DATA=/data
+ENV KPFPIPE_TEST_OUTPUTS=/outputs
+
 # setup the working directory
 RUN mkdir /code && \
     mkdir /code/KPF-Pipeline && \
@@ -21,9 +24,6 @@ ADD requirements.txt /code/KPF-Pipeline/requirements.txt
 RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 
 ADD . /code/KPF-Pipeline
-
-ENV KPFPIPE_TEST_DATA=/data/
-ENV KPFPIPE_TEST_OUTPUTS=/outputs/
 
 # Run app.py when the container launches
 CMD make init && \
