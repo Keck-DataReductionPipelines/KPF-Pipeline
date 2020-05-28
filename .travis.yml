@@ -12,6 +12,8 @@ install:
 - docker pull qwangcr/kpf:latest || true
 - docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
 script:
+- ls /data
+- echo ${KPFPIPE_TEST_DATA}
 - docker run -v /data:/data -v /outputs:/outputs qwangcr/kpf:latest
 notifications:
   slack: false
