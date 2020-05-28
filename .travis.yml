@@ -8,11 +8,13 @@ env:
 language: python
 services:
 - docker
-install:
-- docker pull qwangcr/kpf:latest || true
-- docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
+# install:
+# - docker pull qwangcr/kpf:latest || true
+# - docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
 script:
-- docker run -v ${KPFPIPE_TEST_DATA}:/data -v ${KPFPIPE_TEST_OUTPUTS}:/outputs qwangcr/kpf:latest
+# - docker run -v ${KPFPIPE_TEST_DATA}:/data -v ${KPFPIPE_TEST_OUTPUTS}:/outputs qwangcr/kpf:latest
+- make init
+- make test
 notifications:
   slack: false
   email: false
