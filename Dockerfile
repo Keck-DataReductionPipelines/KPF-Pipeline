@@ -26,5 +26,7 @@ RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 ADD . /code/KPF-Pipeline
 
 # Run app.py when the container launches
-CMD make init && \
+CMD ls $KPFPIPE_TEST_DATA && \
+    make init && \
     make test
+    
