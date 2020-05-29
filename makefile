@@ -18,6 +18,6 @@ clean: clear
 	find . -name '*.pyo' -exec rm --force {} +
 
 test:
-	pytest
+	pytest --ignore=kpfpipe/tests/test_recipe.py
 
 .PHONY: init
