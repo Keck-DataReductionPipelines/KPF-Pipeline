@@ -65,10 +65,10 @@ class KPFPipeline(BasePipeline):
         ## setup pipeline configuration 
         # Technically the pipeline's configuration is stored in self.context as 
         # a ConfigClass() defined by keckDRP. But we will be using configParser
-    
 
         self.logger = start_logger(self.name, config)
         self.logger.info('Logger started')
+        
         ## Setup argument
         try: 
             cfg_obj = cp.ConfigParser()
@@ -107,6 +107,8 @@ class KPFPipeline(BasePipeline):
             self._recipe_visitor.visit(self._recipe_ast)
         except:
             print(sys.exc_info())
+        
+        return Arguments()
 
     def exit_loop(self, action, context):
         """
@@ -134,4 +136,4 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.awaiting_call_return = False
         self._recipe_visitor.call_output = action.args # framework put previous output here
         self._recipe_visitor.visit(self._recipe_ast)
-        return
+        return Arguments()
