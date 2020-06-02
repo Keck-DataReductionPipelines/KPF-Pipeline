@@ -14,7 +14,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from kpfpipe.modules.order_trace.alg import OrderTraceAlg
+from modules.order_trace.src.alg import OrderTraceAlg
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/order_trace/configs/default.cfg'
@@ -33,7 +33,7 @@ class OrderTrace(KPF0_Primitive):
         self.logger = start_logger(self.__class__.__name__, None)
 
         # input argument 
-        self.input = action.args.arg
+        self.input = action.args[0]
         self.flat_data = self.input.data
         # input configuration
         self.config = configparser.ConfigParser()
@@ -52,7 +52,7 @@ class OrderTrace(KPF0_Primitive):
         Check for some necessary pre conditions
         '''
         # input argument must be KPF0
-        success = isinstance(self.flat_data, KPF0)
+        success = isinstance(self.input, KPF0)
 
         return success
 
@@ -68,7 +68,6 @@ class OrderTrace(KPF0_Primitive):
         """
         This primitive's action
         """
-
         # 1) Locate cluster
         cluster_xy = self.alg.locate_clusters()
 
@@ -79,7 +78,6 @@ class OrderTrace(KPF0_Primitive):
         # 3) advanced cleaning
         index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
         x, y, index = self.alg.reorganize_index(index, x, y)
-action.args.arg.data
         x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
         new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
 
@@ -96,7 +94,6 @@ action.args.arg.data
 
         # self.action.args.order_trace_result = df
         # return self.action.args
-        self.output = copy.deepcopy(self.input)
-        self.output.create_extension('ORDER TRACE RESULT')
-        self.output.extensions['ORDER TRACE RESULT'] = df
-        return self.output
+        self.input.create_extension('ORDER TRACE RESULT')
+        self.input.extensions['ORDER TRACE RESULT'] = df
+        return Arguments(self.input)

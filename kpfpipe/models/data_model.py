@@ -120,7 +120,7 @@ class KPFDataModel:
         hdu.name = 'RECEIPT'
         hdu_list.append(hdu)
 
-        # hanles any auxiliary extensions
+        # handles any auxiliary extensions
         for name, table in self.extension.items():
             t = Table.from_pandas(table)
             hdu = fits.table_to_hdu(t)
