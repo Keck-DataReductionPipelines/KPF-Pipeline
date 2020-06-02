@@ -4,11 +4,7 @@ Define primitives that operate on KPF data
 
 import numpy as np
 
-from keckdrpframework.primitives.base_primitive import BasePrimitive
-
 from kpfpipe.primitives.core import KPF_Primitive
-from kpfpipe.level1 import KPF1
-
 
 class KPF0_Primitive(KPF_Primitive):
     """
@@ -21,7 +17,7 @@ class KPF0_Primitive(KPF_Primitive):
 
     """
     def __init__(self, action, context):
-        BasePrimitive.__init__(self, action, context)
+        KPF_Primitive.__init__(self, action, context)
 
         self.level0 = action.args.level0
 
@@ -64,126 +60,3 @@ class KPF0_Primitive(KPF_Primitive):
             return False
         else:
             return True
-
-
-class subtract_bias(KPF0_Primitive):
-    """Subtract bias from a KPF level 0 object"""
-
-
-    def __init__(self, action, context):
-        """
-        Args:
-            action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-
-        Attributes:
-            chips (list): list of chips to process (e.g. ['red', 'green'])
-        """
-        KPF0_Primitive.__init__(self, action, context)
-
-        self.chips = self.action.args.chips
-
-    def _perform(self):
-        """Execute the primitive"""
-
-        self.logger.debug('Entered subtract_bias')
-        if self.chips is True:
-            self.logger.warning('Chips have not been explicitly set in subtract_bias method')
-            self.logger.warning('Setting chips to self.level0.data.keys()')
-            self.chips = self.level0.data.keys()
-        for chip in self.chips:
-            self.logger.debug('Subtracting bias from chip: ' + chip)
-            try:
-                self.level0.data[chip] -= self.level0.bias[chip]
-                rms = np.sqrt(np.mean(np.square(self.level0.data[chip])))
-                med = np.median(self.level0.data[chip])
-                self.logger.info('After bias subtraction on chip ' + chip + ', RMS = %f, median = %f' % (rms, med))
-            except AttributeError:
-                self.logger.error('There is no bias for chip ' + chip + ' so bias subtraction failed')
-                pass  # maybe we don't want this to crash the program, but we record an ERROR in the log
-        self.logger.debug('Finished subtract_bias method')
-
-        self.action.args.level0 = self.level0
-
-        return self.action.args
-
-
-class divide_flat(KPF0_Primitive):
-    """Divide by flat"""
-
-    def __init__(self, action, context):
-        """
-        Args:
-            action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-
-        Attributes:
-            chips (list): list of chips to process (e.g. ['red', 'green'])
-        """
-
-        KPF0_Primitive.__init__(self, action, context)
-
-        self.chips = self.action.args.chips
-
-    def _perform(self):
-        """Execute the primitive"""
-
-        if self.chips is True:
-            self.chips = self.level0.data.keys()
-        for chip in self.chips:
-            try:
-                self.level0.data[chip] -= self.level0.flat[chip]
-                rms = np.sqrt(np.mean(np.square(self.level0.data[chip])))
-                med = np.median(self.level0.data[chip])
-                self.logger.info('After dividing flat on chip ' + chip + ', RMS = %f, median = %f' % (rms, med))
-            except AttributeError:
-                self.logger.error('There is no bias for chip ' + chip + ' so dividing flat failed')
-                pass  # maybe we don't want this to crash the program, but we record an ERROR in the log
-                      # Perhaps log some additional data if desired
-
-        self.action.args.level0 = self.level0
-
-        return self.action.args
-
-
-class extract_spectrum(KPF0_Primitive):
-
-    def __init__(self, action, context):
-        """
-        Args:
-            action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-
-        Attributes:
-            chips (list): list of chips to extract (e.g. ['red', 'green'])
-            orders (list): list of orders to extract
-            level1 (KPF1): KPF level 1 object
-        """
-
-        KPF0_Primitive.__init__(self, action, context)
-
-        self.chips = self.action.args.chips
-        self.orders = self.action.args.orders
-        self.level1 = self.action.args.level1
-
-    def _perform(self):
-        """Execute the primitive"""
-
-        if self.chips is True:
-            self.chips = self.level0.data.keys()
-        for chip in self.chips:
-            for i in range(self.level1.Norderlets[chip]):
-                # grab some parameter from the config objects embedded in self
-                max_extraction_width = self.config.max_extraction_width
-
-                # This is where the extraction algorithm is called. For now we just use np.mean
-                self.logger.info('Extracting order {} on the {} chip'.format(i, chip))
-                self.level1.orderlets[chip][i].flux = np.mean(self.level0.data[chip], axis=1)
-                self.level1.orderlets[chip][i].flux_err = np.mean(self.level0.data[chip], axis=1)
-                rms = np.sqrt(np.mean(np.square(self.level0.data[chip])))
-                med = np.median(self.level0.data[chip])
-
-        self.action.args.level1 = self.level1
-
-        return self.action.args
-
