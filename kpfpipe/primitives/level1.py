@@ -20,6 +20,9 @@ class KPF1_Primitive(KPF_Primitive):
     def __init__(self, action, context):
         KPF_Primitive.__init__(self, action, context)
 
+<<<<<<< HEAD
         # Argument can be a KPF1 data type, or a
         # list of KPF1 data type
         self.arg = []
+=======
+>>>>>>> 348817e6f04f0058c0cdf81c7f78480c6773997e

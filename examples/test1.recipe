@@ -1,0 +1,7 @@
+from mumble import OrderTrace
+
+file = '/home/qwang3/ownCloud/KPF-Pipeline-TestData/NEIDdata/FLAT/stacked_2fiber_flat.fits'
+
+data = kpf0_from_fits(file, data_type="NEID")
+data = OrderTrace(data)
+result = to_fits(data, 'test_result.fits')
