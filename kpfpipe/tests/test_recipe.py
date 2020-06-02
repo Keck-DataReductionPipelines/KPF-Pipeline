@@ -64,6 +64,14 @@ kpf2 = kpf2_from_fits(fname, data_type="NEID")
 result = to_fits(kpf2, "temp_level2.fits")
 """
 
+order_trace_recipe = """# test level0 fits reader recipe
+from mumble import order_trace
+fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits"
+kpf0 = kpf0_from_fits(fname, data_type="NEID")
+kpf0 = order_trace(kpf0)
+result = to_fits(kpf0, "temp_order_trace.fits")
+"""
+
 class TestKpfPipeline(KPFPipeline):
     """
     Test pipeline class extending KpfPipeline
@@ -192,6 +200,12 @@ def test_recipe_level2_from_to():
         run_recipe(level2_from_to_recipe)
     except Exception as e:
         assert False, f"test_recipe_level2_from_to: unexpected exception {e}"
+
+def test_recipe_order_trace():
+    try:
+        run_recipe(order_trace_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_order_trace: unexpected exception {e}"
 
 def main():
     test_recipe_basics()

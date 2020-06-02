@@ -6,7 +6,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from keckdrpframework.primitives.base_primitive import BasePrimitive
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
-from kpfpipe.models.level2 import KPF2
+# from kpfpipe.models.level2 import KPF2
 
 #from kpfpipe.models.kpf_arguments import KpfArguments
 
@@ -90,14 +90,14 @@ class kpf1_from_fits(FromFitsBasePrimitive):
     def _perform(self):
         return self._perform_common(KPF1(), 'kpf1')
 
-class kpf2_from_fits(FromFitsBasePrimitive):
-    """
-    kpf0_from_fits: create a KPF2 data model object and instantiate
-                    its contents from the given FITS file
-    """
-    def __init__(self, action, context):
-        FromFitsBasePrimitive.__init__(self, action, context)
+# class kpf2_from_fits(FromFitsBasePrimitive):
+#     """
+#     kpf0_from_fits: create a KPF2 data model object and instantiate
+#                     its contents from the given FITS file
+#     """
+#     def __init__(self, action, context):
+#         FromFitsBasePrimitive.__init__(self, action, context)
 
-    def _perform(self):
-        return self._perform_common(KPF2(), 'kpf2')
+#     def _perform(self):
+#         return self._perform_common(KPF2(), 'kpf2')
 
