@@ -89,6 +89,7 @@ class OrderTrace(KPF0_Primitive):
         index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
         x, y, index = self.alg.reorganize_index(index, x, y)
         x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
+        _, _, ny = self.alg.get_spectral_data()
         new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
 
         # 5) Merge cluster
