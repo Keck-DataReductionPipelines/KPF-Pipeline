@@ -146,11 +146,11 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
     framework.append_event('exit', Arguments())
     framework.start()
 
-def test_recipe_basics():
-    try:
-        run_recipe(basics_recipe)
-    except Exception as e:
-        assert False, f"test_recipe_basics: unexpected exception {e}"
+# def test_recipe_basics():
+#     try:
+#         run_recipe(basics_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_basics: unexpected exception {e}"
 
 # The framework doesn't return control after an exception, so we can't run
 # the following two tests at the moment.
