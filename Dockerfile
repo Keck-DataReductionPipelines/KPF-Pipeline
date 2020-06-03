@@ -24,7 +24,6 @@ ADD requirements.txt /code/KPF-Pipeline/requirements.txt
 RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 
 ADD . /code/KPF-Pipeline
-ADD /data /data
 
 # Run app.py when the container launches
 CMD make init && \
