@@ -2,6 +2,7 @@
 import configparser
 import pandas as pd
 import copy
+import numpy as np
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -31,6 +32,8 @@ class OrderTrace(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
         # start a logger
         self.logger = start_logger(self.__class__.__name__, None)
+        if not self.logger:
+            self.logger = self.context.logger
 
         # input argument 
         self.input = action.args[0]
@@ -44,7 +47,7 @@ class OrderTrace(KPF0_Primitive):
             self.config.read(DEFAULT_CFG_PATH)
 
         # Order trace algorithm setup 
-        self.alg = OrderTraceAlg(self.flat_data, self.config)
+        self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
 
     
     def _pre_condition(self) -> bool:
@@ -52,7 +55,8 @@ class OrderTrace(KPF0_Primitive):
         Check for some necessary pre conditions
         '''
         # input argument must be KPF0
-        success = isinstance(self.input, KPF0)
+        success = isinstance(self.input, KPF0) and \
+            isinstance(self.input.data, np.ndarray)
 
         return success
 

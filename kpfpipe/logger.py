@@ -31,7 +31,7 @@ def start_logger(logger_name: str, config: str) -> logging.Logger:
         # a config file is not provided, so don't start logger
         print('[{}] missing log configuration.. not starting logger'.format(
             logger_name))
-        return logger
+        return None
     config_obj = cp.ConfigParser()
     res = config_obj.read(config)
     if res == []:

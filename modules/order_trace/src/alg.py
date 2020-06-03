@@ -37,8 +37,9 @@ class OrderTraceAlg:
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None):
-        self.flat_data = data.data
+    def __init__(self, data, config=None, logger=None):
+        self.logger = logger
+        self.flat_data = data
         c_debug =  config['DEBUG'] if (config is not None and config.has_section('DEBUG')) else None
         self.config_param = config['PARAM'] if (config is not None and config.has_section('PARAM')) else None
 
