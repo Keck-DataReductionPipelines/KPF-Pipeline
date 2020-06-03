@@ -29,7 +29,7 @@ def start_logger(logger_name: str, config: str) -> logging.Logger:
 
     if config is None: 
         # a config file is not provided, so don't start logger
-        print('[{}] missing log configuration.. not starting logger'.format(
+        print('[{}] missing log configuration...not starting a new logger'.format(
             logger_name))
         return None
     config_obj = cp.ConfigParser()
