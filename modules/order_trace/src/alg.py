@@ -280,6 +280,9 @@ class OrderTraceAlg:
         clusters_endy_dict = dict()      # contain clusters end at y (0 to ny-1)
         nx_prev_cluster_id = [list() for _ in range(nx)]
 
+        if self.logger:
+            self.logger.info("OrderTraceAlg: collecting clusters...")
+
         for cy in range(ny):
             # if cy%10 == 0:
             self.d_print(cy, '', end='')
@@ -429,6 +432,10 @@ class OrderTraceAlg:
                         { 'index': <array of cluster id associated with cluster pixels>
                           'n_regions': <total clusters (??? check here)>}
         """
+
+        if self.logger:
+            self.logger.info("OrderTraceAlg: removing clusters by size...")
+
         _, nx, ny = self.get_spectral_data()
         w_th = nx//100
         h_th = ny//800
