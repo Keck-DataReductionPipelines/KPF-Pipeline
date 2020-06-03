@@ -76,7 +76,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         if not getattr(node, 'kpf_completed', False):
             module = node.module
-            #TODO do something with module to extract a path
+            # append the module path to the framework's primitive_path
+            self.context.config.primitive_path = tuple([*self.context.config.primitive_path, module])
             loadQSizeBefore = len(self._load)
             for name in node.names:
                 self.visit(name)

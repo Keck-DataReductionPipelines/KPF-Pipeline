@@ -65,10 +65,10 @@ result = to_fits(kpf2, "temp_level2.fits")
 """
 
 order_trace_recipe = """# test level0 fits reader recipe
-from mumble import order_trace
+from modules.order_trace.src.order_trace import OrderTrace
 fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits"
 kpf0 = kpf0_from_fits(fname, data_type="NEID")
-kpf0 = order_trace(kpf0)
+kpf0 = OrderTrace(kpf0)
 result = to_fits(kpf0, "temp_order_trace.fits")
 """
 
