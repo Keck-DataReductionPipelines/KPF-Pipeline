@@ -201,7 +201,7 @@ def test_recipe_level2_from_to():
     except Exception as e:
         assert False, f"test_recipe_level2_from_to: unexpected exception {e}"
 
-def test_recipe_order_trace():
+def my_test_recipe_order_trace():
     try:
         run_recipe(order_trace_recipe)
     except Exception as e:
