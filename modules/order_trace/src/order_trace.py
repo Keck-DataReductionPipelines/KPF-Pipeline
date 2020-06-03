@@ -106,7 +106,7 @@ class OrderTrace(KPF0_Primitive):
 
         if self.logger:
             self.logger.info("OrderTrace: writing cluster into dataframe...")
-        df = self.alg.write_cluster_into_dataframe(all_widths, cluster_coeffs)
+        df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
 
         if self.logger:
