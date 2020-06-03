@@ -73,31 +73,44 @@ class OrderTrace(KPF0_Primitive):
         This primitive's action
         """
         # 1) Locate cluster
+        if self.logger:
+            self.logger.info("OrderTrace: locating cluster...")
         cluster_xy = self.alg.locate_clusters()
 
         # 2) assign cluster id and do basic cleaning
+        if self.logger:
+            self.logger.info("OrderTrace: assigning cluster id and cleaning...")
         x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
         power = self.alg.get_poly_degree()
         # 3) advanced cleaning
+        if self.logger:
+            self.logger.info("OrderTrace: advanced cleaning...")
         index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
         x, y, index = self.alg.reorganize_index(index, x, y)
         x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
         new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
 
         # 5) Merge cluster
+        if self.logger:
+            self.logger.info("OrderTrace: merging cluster...")
         c_x, c_y, c_index, cluster_coeffs, cluster_points, errors = \
             self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
 
         # 6) Find width
+        if self.logger:
+            self.logger.info("OrderTrace: finding width...")
         all_widths = self.alg.find_all_cluster_widths(c_index, cluster_coeffs,  cluster_points,
                                                       power_for_width_estimation=3)
 
+        if self.logger:
+            self.logger.info("OrderTrace: writing cluster into dataframe...")
         df = write_cluster_into_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
 
-        # self.action.args.order_trace_result = df
-        # return self.action.args
+        if self.logger:
+            self.logger.info("OrderTrace: Done!")
+        
         self.input.create_extension('ORDER TRACE RESULT')
         self.input.extensions['ORDER TRACE RESULT'] = df
         return Arguments(self.input)
