@@ -175,23 +175,23 @@ def test_recipe_basics():
 #     else:
 #         assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
 
-def test_recipe_level0_from_to():
-    try:
-        run_recipe(level0_from_to_recipe)
-    except Exception as e:
-        assert False, f"test_recipe_level0_from_to: unexpected exception {e}"
+# def test_recipe_level0_from_to():
+#     try:
+#         run_recipe(level0_from_to_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_level0_from_to: unexpected exception {e}"
 
-def test_recipe_level1_from_to():
-    try:
-        run_recipe(level1_from_to_recipe)
-    except Exception as e:
-        assert False, f"test_recipe_level1_from_to: unexpected exception {e}"
+# def test_recipe_level1_from_to():
+#     try:
+#         run_recipe(level1_from_to_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_level1_from_to: unexpected exception {e}"
 
-def test_recipe_level2_from_to():
-    try:
-        run_recipe(level2_from_to_recipe)
-    except Exception as e:
-        assert False, f"test_recipe_level2_from_to: unexpected exception {e}"
+# def test_recipe_level2_from_to():
+#     try:
+#         run_recipe(level2_from_to_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_level2_from_to: unexpected exception {e}"
 
 def main():
     test_recipe_basics()
