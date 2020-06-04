@@ -2261,11 +2261,7 @@ class OrderTraceAlg:
         trace_table['X1'] = cluster_coeffs[1:, power+1].astype(int)
         trace_table['X2'] = cluster_coeffs[1:, power+2].astype(int)
 
-        results = pd.DataFrame(trace_table)
-        results.attrs['POLY_ORD'] = self.get_poly_degree()
-        results.attrs['EXTNAME'] = 'ORDERTRACE'
-
-        return results
+        return pd.DataFrame(trace_table)
 
     @staticmethod
     def float_to_string(afloat):
