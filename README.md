@@ -22,4 +22,3 @@ Since this branch is still on develop, a github page cannot be set up yet for
 the documentation. So, this branch contains the .html build of the documentaion
 from sphinx. To see  the documentation,
 navigate into `docs` and open `index.html` with a browswer of your choice.
-
