@@ -110,7 +110,7 @@ class OrderTrace(KPF0_Primitive):
         assert(isinstance(df, pd.DataFrame))
         
         self.input.create_extension('ORDER TRACE RESULT')
-        self.input.extensions['ORDER TRACE RESULT'] = df
+        self.input.extension['ORDER TRACE RESULT'] = df
 
         self.input.header['ORDER TRACE RESULT']['POLY DEGREE'] = self.alg.get_poly_degree()
 
