@@ -143,7 +143,11 @@ class KPFDataModel:
         # get version control info (git)
         repo = git.Repo(search_parent_directories=True)
         git_commit_hash = repo.head.object.hexsha
-        git_branch = repo.active_branch.name
+        # this raises a type error if in a detached head state
+        try:
+            git_branch = repo.active_branch.name
+        except TypeError:
+            git_branch = "detached"
 
         # add the row to the bottom of the table
         row = [time, '---', git_branch, git_commit_hash, \
