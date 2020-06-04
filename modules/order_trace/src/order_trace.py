@@ -108,10 +108,13 @@ class OrderTrace(KPF0_Primitive):
             self.logger.info("OrderTrace: writing cluster into dataframe...")
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
-
-        if self.logger:
-            self.logger.info("OrderTrace: Done!")
         
         self.input.create_extension('ORDER TRACE RESULT')
         self.input.extensions['ORDER TRACE RESULT'] = df
+
+        self.input.header['ORDER TRACE RESULT']['POLY DEGREE'] = self.alg.get_poly_degree()
+
+        if self.logger:
+            self.logger.info("OrderTrace: Done!")
+
         return Arguments(self.input)
