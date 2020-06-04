@@ -11,7 +11,7 @@ def spectrum():
     spec = arg.TFASpec(filename=testfile)
     return spec
 
-def test_op(spectrum):
-    spectrum2 = spectrum.copy()
-    assert(spectrum == spectrum2)
-    assert(id(spectrum) != id(spectrum2))
+# def test_op(spectrum):
+#     spectrum2 = spectrum.copy()
+#     assert(spectrum == spectrum2)
+#     assert(id(spectrum) != id(spectrum2))
