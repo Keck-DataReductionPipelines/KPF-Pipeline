@@ -8,6 +8,7 @@ from astropy.modeling import models, fitting
 import csv
 import time
 import pandas as pd
+import logging
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -40,36 +41,24 @@ class OrderTraceAlg:
     def __init__(self, data, config=None, logger=None):
         self.logger = logger
         self.flat_data = data
-        c_debug =  config['DEBUG'] if (config is not None and config.has_section('DEBUG')) else None
-        self.config_param = config['PARAM'] if (config is not None and config.has_section('PARAM')) else None
 
-        self.is_debug = False if c_debug is None else c_debug.getboolean('debug', False)
-        self.debug_output = '' if c_debug is None else c_debug.get('debug_path', '')
-        self.is_time_profile = False if c_debug is None else c_debug.getboolean('time', False)
-        self.time_output = '' if c_debug is None else c_debug.get('time_path', '')
+        p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
+        self.instrument = p_config.get('instrument', '') if p_config is not None else ''
+        ins = self.instrument.upper()
+        self.config_param = config[ins] if ins and config.has_section(ins) else p_config
+        self.config_logger = config['LOGGER'] if config is not None and config.has_section('LOGGER') else None
+        self.debug_output = None
+        self.is_time_profile = False
+        self.is_debug = True if self.logger else False
 
     def enable_debug_print(self, to_print=True):
         """
         enable or disable debug printing
         """
-        self.is_debug = to_print
+        self.is_debug = to_print or bool(self.logger)
 
     def enable_time_profile(self, is_time=False):
         self.is_time_profile = is_time
-
-    def redirect_debug_output(self, direct_file=''):
-        if direct_file == 'no':
-            self.enable_debug_print(False)
-        else:
-            self.enable_debug_print(True)
-            self.debug_output = direct_file
-
-    def redirect_time_profile(self, time_output=''):
-        if time_output == 'no':
-            self.enable_time_profile(False)
-        else:
-            self.enable_time_profile(True)
-            self.time_output = time_output
 
     def get_config_value(self, property: str, default=''):
         """
@@ -89,23 +78,29 @@ class OrderTraceAlg:
     def get_poly_degree(self):
         return self.get_config_value('fitting_poly_degree', 3)
 
-    def d_print(self, *args, end='\n'):
-        if self.is_debug:
-            if self.debug_output:
-                with open(self.debug_output, 'a') as f:
-                    f.write(' '.join([str(item) for item in args])+end)
-                    f.close()
-            else:
-                print(' '.join([str(item) for item in args]), end=end)
+    def get_instrument(self):
+        return self.instrument
 
-    def t_print(self, *args, end='\n'):
-        if self.is_time_profile:
-            if self.time_output:
-                with open(self.time_output, 'a') as f:
-                    f.write(' '.join([str(item) for item in args])+end)
-                    f.close()
-            else:
-                print(' '.join([str(item) for item in args]), end=end)
+    def d_print(self, *args, end='\n', info=False):
+        if self.is_debug:
+            out_str = ' '.join([str(item) for item in args])
+            if self.logger:
+                if info:
+                    self.logger.info(out_str)
+                else:
+                    self.logger.debug(out_str)
+            if self.debug_output is not None and not info:
+                if self.debug_output:
+                    with open(self.debug_output, 'a') as f:
+                        f.write(' '.join([str(item) for item in args]) + end)
+                        f.close()
+                else:
+                    print(out_str, end=end)
+
+    def t_print(self, *args):
+        if self.is_time_profile and self.logger:
+            out_str = ' '.join([str(item) for item in args])
+            self.logger.info(out_str)
 
     def get_spectral_data(self):
         """
@@ -284,8 +279,8 @@ class OrderTraceAlg:
             self.logger.info("OrderTraceAlg: collecting clusters...")
 
         for cy in range(ny):
-            # if cy%10 == 0:
-            self.d_print(cy, '', end='')
+            if cy%100 == 0:
+                self.d_print(cy, '', end='')
 
             idx_at_cy = np.where(y == cy)[0]   # idx for y at cy
 
@@ -1514,7 +1509,8 @@ class OrderTraceAlg:
                                    for both top and bottom width along the trace.
 
         """
-        width_default = self.get_config_value('width_default', 7)
+
+        width_default = self.get_config_value('width_default', 6)
         new_index = index_t.copy()
         cluster_coeffs = coeffs.copy()
         max_cluster_no = np.amax(new_index)
@@ -1538,7 +1534,8 @@ class OrderTraceAlg:
         if power_for_width_estimation > 0:
             cluster_widths = self.approximate_width_of_default(cluster_widths, cluster_points, cluster_coeffs,
                                                                power_for_width_estimation)
-            self.d_print('after estimation: \n', '\n'.join([str(w) for w in cluster_widths]))
+            self.d_print('after estimation: \n', '\n'.join([str(index+1)+': '+str(w)
+                                                            for index, w in enumerate(cluster_widths)]))
 
         return cluster_widths
 
@@ -1880,7 +1877,8 @@ class OrderTraceAlg:
         for widths in widths_all:
             c_idx = np.where(widths != width_default)[0]    # index set of non-cut widths
             s_idx = np.where(widths == width_default)[0]    # index set of cut widths
-            if np.size(s_idx) == 0:
+
+            if np.size(s_idx) == 0 or (np.size(c_idx) <= (poly_fit_power+1)):
                 continue
             coeffs = np.polyfit(y_middle_list[c_idx], widths[c_idx], poly_fit_power)  # poly fit on all non-cut width
             w_sel = np.polyval(coeffs, y_middle_list[s_idx])   # approximate the widths by poly fit
@@ -2276,24 +2274,22 @@ class OrderTraceAlg:
         self.t_print(step_msg, (t_end - t_start), 'sec.')
         return t_end
 
-    def extract_order_trace(self, power_for_width_estimation: int = -1, show_time: str = None,
-                            print_progress: str = None):
+    def add_file_logger(self, filename: str = None):
+        self.enable_debug_print(filename is not None)
+        self.debug_output = filename
+
+    def extract_order_trace(self, power_for_width_estimation: int = -1, show_time: bool = False,
+                            print_debug: str = None):
         """
         Order trace extraction including all steps including cluster formation, cleaning, trace approximation and
         width finding
 
         Parameters:
             power_for_width_estimation (int): degree of polynomial fit for trace width estimation
-            show_time (str): show progress time of each step or not.
-                                no display if it is 'no'.
-                                print out the time to stdout if it is '' or to a file per string value, or
-                                print out to the time output channel as the as the setting from DEBUG section of .cfg
-                                file if it is None.
-            print_progress (str): print the progress of the steps to stdout or a file or None.
-                                     no display if it is 'no',
-                                     print out to the stdout if it is '' or a file per string value, or
-                                     print out to the debug channel as the setting from DEBUG section of .cfg file if
-                                     it is None
+            show_time (bool): show running time of the step
+            print_debug (str): print development debug information to stdout or a file (not to logger)
+                                  <filepath>: print to the file specified or print to stdout if empty string
+                                  None: no print out
 
         Returns:
             out (dict): order trace extraction and analysis result, like
@@ -2303,47 +2299,44 @@ class OrderTraceAlg:
                         'cluster_y': <y coordinates of cluster pixels, np.ndarray>}
         """
         imm_spec, nx, ny = self.get_spectral_data()
-        if print_progress is not None:
-            self.redirect_debug_output(print_progress)
-
-        if show_time is not None:
-            self.redirect_time_profile(show_time)
+        self.enable_time_profile(show_time)
+        self.add_file_logger(print_debug)
 
         t_start = time.time()
         # locate cluster
-        self.d_print("*** locate cluster")
+        self.d_print("*** locate cluster", info=True)
         cluster_xy = self.locate_clusters()
         t_start = self.time_check(t_start, '*** locate cluster: ')
 
         # assign cluster id and do basic cleaning
-        self.d_print("*** form cluster")
+        self.d_print("*** form cluster", info=True)
         x, y, index_r = self.form_clusters(cluster_xy['x'], cluster_xy['y'])
         t_start = self.time_check(t_start, "*** assign cluster: ")
 
         # advanced cleaning
-        self.d_print("*** advanced clean cluster")
+        self.d_print("*** advanced clean cluster", info=True)
         index_adv, all_status = self.advanced_cluster_cleaning_handler(index_r, x, y)
         new_x, new_y, new_index = self.reorganize_index(index_adv, x, y)
         t_start = self.time_check(t_start,  "*** advanced clean cluster: ")
 
         # clean clusters along bottom and top border
-        self.d_print("*** clean border")
+        self.d_print("*** clean border", info=True)
         new_x, new_y, new_index = self.clean_clusters_on_borders(new_x, new_y, new_index, top_border=ny-1,
                                                                  bottom_border=0)
         t_start = self.time_check(t_start, "*** clean border: ")
 
         # merge clusters & remove broken cluster
-        self.d_print("*** merge cluster and remove cluster with big opening in the center ")
+        self.d_print("*** merge cluster and remove cluster with big opening in the center ", info=True)
         new_x, new_y, new_index, cluster_coeffs, cluster_points, errors = \
             self.merge_clusters_and_clean(new_index, new_x, new_y)
         t_start = self.time_check(t_start,
                                   "*** merge cluster and remove cluster with big opening in the center: ")
         # find width
-        self.d_print("*** find widths")
+        self.d_print("*** find widths", info=True)
         all_widths = self.find_all_cluster_widths(new_index, cluster_coeffs, cluster_points,
                                                   power_for_width_estimation=power_for_width_estimation)
         self.time_check(t_start, "*** find widths: ")
 
-        self.d_print("*** write result to Pandas Dataframe")
+        self.d_print("*** write result to Pandas Dataframe", info=True)
         df = self.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         return {'order_trace_result': df, 'cluster_index': new_index, 'cluster_x': new_x, 'cluster_y': new_y}
