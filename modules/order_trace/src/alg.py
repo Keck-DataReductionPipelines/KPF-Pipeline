@@ -11,9 +11,9 @@ import pandas as pd
 import logging
 
 # Pipeline dependencies
-# from kpfpipe.logger import start_logger
-# from kpfpipe.primitives.level0 import KPF0_Primitive
-# from kpfpipe.models.level0 import KPF0
+from kpfpipe.logger import start_logger
+from kpfpipe.primitives.level0 import KPF0_Primitive
+from kpfpipe.models.level0 import KPF0
 
 FIT_G = fitting.LevMarLSQFitter()
 
