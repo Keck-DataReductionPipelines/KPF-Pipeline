@@ -31,20 +31,16 @@ class OrderTrace(KPF0_Primitive):
 
         KPF0_Primitive.__init__(self, action, context)
         # start a logger
-        self.logger = start_logger(self.__class__.__name__, None)
-        self.logger.info('+++++++++++++++++++++++++++++++++++++++++++++++++')
+        self.logger = start_logger(self.__class__.__name__, DEFAULT_CFG_PATH)
 
         # input argument 
-<<<<<<< HEAD:modules/order_trace/src/order_trace.py
-        self.input = action.args[0]
-=======
         # action.args[0] 
         self.input = action.args[0] # action.args['name'] also works
 
->>>>>>> 348817e6f04f0058c0cdf81c7f78480c6773997e:modules/order_trace/order_trace.py
         self.flat_data = self.input.data
         # input configuration
         self.config = configparser.ConfigParser()
+        
         try: 
             config_path = action.args.config
             self.config.read(config_path)
@@ -60,14 +56,10 @@ class OrderTrace(KPF0_Primitive):
         Check for some necessary pre conditions
         '''
         # input argument must be KPF0
-        success = isinstance(self.input, KPF0)
-<<<<<<< HEAD:modules/order_trace/src/order_trace.py
-
-=======
+        # success = isinstance(self.input, KPF0)
         self.logger.debug(f'self.input is {self.input}')
         
->>>>>>> 348817e6f04f0058c0cdf81c7f78480c6773997e:modules/order_trace/order_trace.py
-        return success
+        return True
 
     def _post_condition(self) -> bool:
         '''
@@ -82,30 +74,33 @@ class OrderTrace(KPF0_Primitive):
         This primitive's action
         """
         # 1) Locate cluster
+        self.logger.info("locating cluster")
         cluster_xy = self.alg.locate_clusters()
 
         # 2) assign cluster id and do basic cleaning
+        self.logger.info("assign cluser ID and do basic cleaning")
         x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
         power = self.alg.get_poly_degree()
         # 3) advanced cleaning
+        ny = self.flat_data.shape[1]
+        self.logger.info("Advanced Cleaning")
         index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
         x, y, index = self.alg.reorganize_index(index, x, y)
-<<<<<<< HEAD:modules/order_trace/src/order_trace.py
-=======
-
->>>>>>> 348817e6f04f0058c0cdf81c7f78480c6773997e:modules/order_trace/order_trace.py
         x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
         new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
 
         # 5) Merge cluster
+        self.logger.info('Merging Cluster')
         c_x, c_y, c_index, cluster_coeffs, cluster_points, errors = \
             self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
 
         # 6) Find width
+        self.logger.info('Finding Width')
         all_widths = self.alg.find_all_cluster_widths(c_index, cluster_coeffs,  cluster_points,
                                                       power_for_width_estimation=3)
 
+        self.logger.info("writing results")
         df = write_cluster_into_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
 
@@ -113,8 +108,4 @@ class OrderTrace(KPF0_Primitive):
         # return self.action.args
         self.input.create_extension('ORDER TRACE RESULT')
         self.input.extensions['ORDER TRACE RESULT'] = df
-<<<<<<< HEAD:modules/order_trace/src/order_trace.py
-        return Arguments(self.input)
-=======
         return Arguments(self.input, name="order_trace_output")
->>>>>>> 348817e6f04f0058c0cdf81c7f78480c6773997e:modules/order_trace/order_trace.py

@@ -32,8 +32,9 @@ class KPF0(KPFDataModel):
         self.variance: np.ndarray = None
 
         self.read_methods: dict = {
-            'KPF':  self._read_from_KPF,
-            'NEID': self._read_from_NEID
+            'KPF':   self._read_from_KPF,
+            'NEID':  self._read_from_NEID,
+            'PARAS': self._read_from_PARAS
         }
     
     def _read_from_NEID(self, hdul: fits.HDUList,
@@ -75,6 +76,23 @@ class KPF0(KPFDataModel):
                 # This HDU contains the 2D variance array
                 self.variance = hdu.data
                 self.header['VARIANCE'] = hdu.header
+            
+
+    def _read_from_PARAS(self, hdul: fits.HDUList,
+                        force: bool=True) -> None:
+        '''
+
+        '''
+        for hdu in hdul: 
+            if isinstance(hdu, fits.PrimaryHDU):
+                # PARAS data is stored in primary only
+                self.header['DATA'] = hdu.header
+                self.data = hdu.data
+                self.variance = np.zeros_like(self.data)
+            
+            else: 
+                raise NameError('cannot recognize HDU {}'.format(hdu.name))
+
     
     def info(self):
         '''
