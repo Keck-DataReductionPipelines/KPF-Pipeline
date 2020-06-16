@@ -15,6 +15,20 @@ import pandas as pd
 
 from kpfpipe.models.data_model import KPFDataModel
 
+MAPPING = {
+    # Order:  (header-key, data-target, data-key)
+    'PRIMARY' : ('PRIMARY', None, None),
+    'SCIFLUX' : ('SCI1_FLUX', 'flux', 'SCI1'),
+    'SKYFLUX' : ('SKY_FLUX', 'flux', 'SKY'),
+    'CALFLUX' : ('CAL_FLUX', 'flux', 'CAL'),
+    'SCIVAR'  : ('SCI1_VARIANCE', 'variance', 'SCI1'),
+    'SKYVAR'  : ('SKY_VARIANCE', 'variance', 'SKY'),
+    'CALVAR'  : ('CAL_VARIANCE', 'variance', 'CAL'),
+    'SCIWAVE' : ('SCI1_WAVE', 'wave', 'SCI1'),
+    'SKYWAVE' : ('SKY_WAVE', 'wave', 'SKY'),
+    'CALWAVE' : ('CAL_WAVE', 'wave', 'CAL'),
+}
+
 class KPF1(KPFDataModel):
 
     def __init__(self):
@@ -45,47 +59,23 @@ class KPF1(KPFDataModel):
         Parse the HDUL based on NEID standards
         '''
         for hdu in hdul:
-            this_header = hdu.header
-            if hdu.name == 'PRIMARY':
-                # no data is actually stored in primary HDU, as it contains only eader keys
-                self.header['PRIMARY'] = this_header
-            elif hdu.name == 'SCIFLUX':
-                self.flux['SCI1'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['SCI1_FLUX'] = this_header
-            elif hdu.name == 'SKYFLUX':
-                self.flux['SKY'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['SKY_FLUX'] = this_header
-            elif hdu.name == 'CALFLUX':
-                self.flux['CAL'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['CAL_FLUX'] = this_header
-            elif hdu.name == 'SCIVAR':
-                self.variance['SCI1'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['SCI1_VARIANCE'] = this_header
-            elif hdu.name == 'SKYVAR':
-                self.variance['SKY'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['SKY_VARIANCE'] = this_header
-            elif hdu.name == 'CALVAR':
-                self.variance['CAL'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['CAL_VARIANCE'] = this_header
-            elif hdu.name == 'SCIWAVE':
-                self.wave['SCI1'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['SCI1_WAVE'] = this_header
-            elif hdu.name == 'SKYWAVE':
-                self.wave['SKY'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['SKY_WAVE'] = this_header
-            elif hdu.name == 'CALWAVE':
-                self.wave['CAL'] = np.asarray(hdu.data, dtype=np.float32)
-                self.header['CAL_WAVE'] = this_header
+            t = MAPPING.get(hdu.name)
+            if t is None:
+                raise ValueError(f'Unrecognized header "{hdu.name}"')
+
+            (header_key, data_target, data_key) = t
+            self.header[header_key] = hdu.header
+
+            if data_target is not None:
+                getattr(self, data_target)[data_key] = np.asarray(hdu.data, dtype=np.float32)
+
         self.wave['CAL'] = self.wave['SCI1']
         self.wave['SKY'] = self.wave['SCI1']
 
         # NEID files do not contain these keys
-        self.header['SCI2_FLUX'] = {}
-        self.header['SCI2_WAVE'] = {}
-        self.header['SCI2_VARIANCE'] = {}
-        self.header['SCI3_FLUX'] = {}
-        self.header['SCI3_WAVE'] = {}
-        self.header['SCI3_VARIANCE'] = {}
+        for k in ['SCI2_FLUX', 'SCI2_WAVE', 'SCI2_VARIANCE', 
+                'SCI3_FLUX', 'SCI3_WAVE', 'SCI3_VARIANCE']:
+            self.header[k] = {}
 
         # Generate default segments
         for order in range(self.flux['SCI1'].shape[0]):
