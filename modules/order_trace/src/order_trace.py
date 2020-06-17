@@ -49,7 +49,7 @@ class OrderTrace(KPF0_Primitive):
         # Order trace algorithm setup 
         self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
 
-    
+
     def _pre_condition(self) -> bool:
         '''
         Check for some necessary pre conditions

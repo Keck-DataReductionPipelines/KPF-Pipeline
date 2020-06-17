@@ -22,7 +22,15 @@ from kpfpipe.models.metadata.receipt_columns import *
 
 class KPFDataModel:
     '''
-    The base class for all KPF data models
+    The base class for all KPF data models.
+    Attributes:
+        header (dict): a dictionary of headers of each extension (HDU)
+        receipt (pandas.DataFrame): a table that records the history of this data
+        extension (dict): a dictionary of auxiliary extensions.
+
+    Warning: 
+        This class (KPFDataModel) should not be used directly.
+        Based on the data level of your .fits file, used the appropriate data model.
     '''
 
     def __init__(self):
@@ -46,7 +54,13 @@ class KPFDataModel:
     def from_fits(cls, fn: str,
                   data_type: str):
         """
-        
+        Create a data instance from a file
+        Args: 
+            fn (str): file path (relative to the repository)
+            data_type (str): instrument type of the file
+        Returns: 
+            cls (data model class): the data instance containing the file content
+
         """
         this_data = cls()
         # populate it with self.read()
@@ -59,8 +73,15 @@ class KPFDataModel:
              overwrite: bool=False) -> None:
         """
         Read the content of a .fits file and populate this 
-        data structure. Note that this is not a @classmethod 
-        so initialization is required before calling this function
+        data structure. 
+        Args: 
+            fn (str): file path (relative to the repository)
+            data_type (str): instrument type of the file
+            overwrite (bool): if this instance is not empty, specifies
+                 whether to overwrite
+        Note:
+            This is not a @classmethod so initialization is 
+            required before calling this function
         """
 
         if not fn.endswith('.fits'):
@@ -99,8 +120,12 @@ class KPFDataModel:
     
     def to_fits(self, fn:str) -> None:
         """
-        Collect all the level 1 data into a monolithic FITS file
-        Can only write to KPF1 formatted FITS 
+        Collect the content of this instance into a monolithic FITS file
+        Args: 
+            fn (str): file path
+
+        Note:
+            Can only write to KPF formatted FITS 
         """
         if not fn.endswith('.fits'):
             # we only want to write to a '.fits file
@@ -135,7 +160,14 @@ class KPFDataModel:
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, Mod: str, param: str, status: str):
+    def receipt_add_entry(self, Mod: str, param: str, status: str) -> None:
+        '''
+        Add an entry to the receipt
+        Args:
+            Mod (str): Name of the module making this entry
+            param (str): param to be recorded
+            status (str): status to be recorded
+        '''
         
         # time of execution in ISO format
         time = datetime.datetime.now().isoformat()
@@ -151,13 +183,18 @@ class KPFDataModel:
         self.receipt.loc[len(self.receipt)] = row
 
     def receipt_info(self):
+        '''
+        Print the short version of the receipt
+        '''
         print(self.receipt[['Time', 'Module_Name', 'Status']])
 
 # =============================================================================
 # Auxiliary related extension
     def create_extension(self, ext_name: str):
         '''
-
+        Create an Auxiliary extension to be saved to FITS 
+        Args:
+            ext_name (str): extension name
         '''
         # check whether the extension already exist
         if ext_name in self.header.keys():
@@ -168,15 +205,15 @@ class KPFDataModel:
     
     def del_extension(self, ext_name: str):
         '''
-
+        Delete an existing auxiliary extension
+        Args:
+            ext_name (str): extension name
         '''
         if ext_name not in self.extension.keys():
             raise KeyError('extension {} could not be found'.format(ext_name))
         
         del self.extension[ext_name]
         del self.header[ext_name]
-
-
 
 if __name__ == '__main__':
     pass

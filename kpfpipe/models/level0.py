@@ -19,7 +19,7 @@ from kpfpipe.models.data_model import KPFDataModel
 
 class KPF0(KPFDataModel):
     """
-    Container for level 0 data
+    The level 1 KPF data. Initialize with empty fields
     """
 
     def __init__(self):
@@ -37,10 +37,11 @@ class KPF0(KPFDataModel):
             'PARAS': self._read_from_PARAS
         }
     
-    def _read_from_NEID(self, hdul: fits.HDUList,
-                        force: bool=True) -> None:
+    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
         '''
         Parse the HDUL based on NEID standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
         for hdu in hdul:
             this_header = hdu.header
@@ -55,10 +56,11 @@ class KPF0(KPFDataModel):
             else: 
                 raise KeyError('Unrecognized')
     
-    def _read_from_KPF(self, hdul: fits.HDUList,
-                        force: bool=True) -> None:
+    def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
-        Parse the HDUL based on KPF standards
+        Parse the HDUL based on NEID standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
         for hdu in hdul:
             if isinstance(hdu, fits.PrimaryHDU):
@@ -81,7 +83,9 @@ class KPF0(KPFDataModel):
     def _read_from_PARAS(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
         '''
-
+        Parse the HDUL based on PARAS standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
         for hdu in hdul: 
             if isinstance(hdu, fits.PrimaryHDU):
