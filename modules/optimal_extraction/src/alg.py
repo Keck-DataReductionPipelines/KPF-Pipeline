@@ -11,9 +11,9 @@ from astropy.io import fits
 import re
 
 # Pipeline dependencies
-# from kpfpipe.logger import start_logger
-# from kpfpipe.primitives.level0 import KPF0_Primitive
-# from kpfpipe.models.level0 import KPF0
+from kpfpipe.logger import start_logger
+from kpfpipe.primitives.level0 import KPF0_Primitive
+from kpfpipe.models.level0 import KPF0
 
 
 class OptimalExtractionAlg:
@@ -29,7 +29,9 @@ class OptimalExtractionAlg:
     NORMAL = 0
     VERTICAL = 1
     NoRECT = 2
-    def __init__(self, flat_data, spectrum_data, config=None):
+
+    def __init__(self, flat_data, spectrum_data, config=None, logger=None):
+        self.logger = logger
         self.flat_flux = flat_data.data
         self.spectrum_flux = spectrum_data.data
         self.original_spectrum_flux = self.spectrum_flux.copy()
@@ -39,9 +41,9 @@ class OptimalExtractionAlg:
         self.dim_width = cols
         self.dim_height = rows
 
-        self.poly_order = flat_data.header['ORDERTRACE']['POLY_ORD']
+        self.poly_order = flat_data.header['ORDER TRACE RESULT']['POLY DEGREE']
         self.config_param = config['PARAM'] if (config is not None and config.has_section('PARAM')) else None
-        self.config_debug = config['DEBUG'] if (config is not None and config.has_section('DEBUG')) else None
+        self.config_logger = config['LOGGER'] if (config is not None and config.has_section('LOGGER')) else None
         self.order_trace = flat_data.order_trace_result
 
         order_trace = flat_data.order_trace_result
@@ -50,8 +52,9 @@ class OptimalExtractionAlg:
         self.order_edges = None
         self.order_xrange = None
 
-        self.is_debug = False if self.config_debug is None else self.config_debug.getboolean('debug', False)
-        self.debug_output = '' if self.config_debug is None else self.config_debug.get('debug_path', '')
+        self.is_debug = True if self.logger else False
+        self.debug_output = None
+        self.is_time_profile = False
 
     def get_config_value(self, property: str, default=''):
         """
@@ -101,25 +104,33 @@ class OptimalExtractionAlg:
         """
         enable or disable debug printing
         """
-        self.is_debug = to_print
+        self.is_debug = to_print or bool(self.logger)
 
-    def redirect_debug_output(self, direct_file=''):
-        if direct_file == 'no':
-            self.enable_debug_print(False)
-        else:
-            self.enable_debug_print(True)
-            self.debug_output = direct_file
+    def enable_time_profile(self, is_time=False):
+        self.is_time_profile = is_time
 
-    def d_print(self, *args, end='\n'):
+    def d_print(self, *args, end='\n', info=False):
         if self.is_debug:
-            if self.debug_output:
-                with open(self.debug_output, 'a') as f:
-                    f.write(' '.join([str(item) for item in args])+end)
-                    f.close()
-            else:
-                print(' '.join([str(item) for item in args]), end=end)
+            out_str = ' '.join([str(item) for item in args])
+            if self.logger:
+                if info:
+                    self.logger.info(out_str)
+                else:
+                    self.logger.debug(out_str)
+            if self.debug_output is not None and not info:
+                if self.debug_output:
+                    with open(self.debug_output, 'a') as f:
+                        f.write(' '.join([str(item) for item in args]) + end)
+                        f.close()
+                else:
+                    print(out_str, end=end)
 
-    def update_spectrum_flux(self, bleeding_cure_file: str=None):
+    def t_print(self, *args):
+        if self.is_time_profile and self.logger:
+            out_str = ' '.join([str(item) for item in args])
+            self.logger.info(out_str)
+
+    def update_spectrum_flux(self, bleeding_cure_file: str = None):
         """
         update the spectrum flux per specified bleeding cure file or  'nan_pixels' set in config file
         """
@@ -138,7 +149,7 @@ class OptimalExtractionAlg:
                 res = [i.start()+1 for i in re.finditer('\\],\\[', pixel_groups[0])]
                 res.insert(0, -1)
                 res.append(len(pixel_groups[0]))
-                idx_groups = [ pixel_groups[0][res[i]+1:res[i+1]] for i in range(len(res)-1)]
+                idx_groups = [pixel_groups[0][res[i]+1:res[i+1]] for i in range(len(res)-1)]
                 for group in idx_groups:
                     idx_set = re.findall("^\\[([0-9]*):([0-9]*),([0-9]*):([0-9]*)\\]$", group)
                     if len(idx_set) > 0 and len(idx_set[0]) == 4:
@@ -861,32 +872,45 @@ class OptimalExtractionAlg:
 
         return df_result
 
+    def time_check(self, t_start, step_msg):
+        t_end = time.time()
+        self.t_print(step_msg, (t_end - t_start), 'sec.')
+        return t_end
+
+    def add_file_logger(self, filename: str = None):
+        self.enable_debug_print(filename is not None)
+        self.debug_output = filename
+
     def extract_spectrum(self, rectification_method: int = NoRECT, extraction_method: str = 'optimal',
                          order_set: np.ndarray = None,
-                         print_progress: str = None,
+                         show_time: bool = False,
+                         print_debug: str = None,
                          bleeding_file: str = None):
         """
         Optimal extraction from 2D flux to 1D. Rectification step is optional.
 
         Parameters:
-            rectification_method (int): NoRECT: no rectification.
-                    VERTICAL: pixels at  the north-up direction along the order are collected to be rectified.
-                    NORMAL: pixels at the normal direction of the order are collected to be rectified.
-            extraction_method (str): extraction method. 'optimal' for optimal extraction or
+            rectification_method (int):
+                    OptimalExtractionAlg.NoRECT: no rectification. (the fastest computation)
+                    OptimalExtractionAlg.VERTICAL: pixels at  the north-up direction along the order are collected
+                                                    to be rectified.
+                    OptimalExtractionAlg.NORMAL: pixels at the normal direction of the order are collected to
+                                                    be rectified.
+            extraction_method (str): extraction method.
+                                    'optimal' for optimal extraction or
                                     'sum' for summation on extraction.
             order_set (array): set of order to extract.
-            print_progress (str): output debug information to stdout,  a file or no print per the following values,
-                                     'no': no display,
-                                     empty string or a string: print out to stdout or a file per string value.
-                                     None: print out to the debug channel as the setting in DEBUG section of .cfg file.
+            show_time (bool):  show running time of the step
+            print_debug (str): print development debug information to stdout or a file (not to logger)
+                                     <filepath>: print to the file specified or print to stdout if empty string
+                                     None:  no print out
             bleeding_file (str): bleeding cure file
 
         Returns:
             out (array): 1D spectrum data
         """
-        if print_progress is not None:
-            self.redirect_debug_output(print_progress)
-
+        self.add_file_logger(print_debug)
+        self.enable_time_profile(show_time)
         self.update_spectrum_flux(bleeding_file)
 
         dim_width, dim_height = self.get_spectrum_size()
@@ -896,6 +920,9 @@ class OptimalExtractionAlg:
 
         out_data = np.zeros((order_set.size, dim_width))
 
+        self.d_print("do ", extraction_method, ' on ', order_set.size, ' orders', info=True)
+
+        t_start = time.time()
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             self.d_print(c_order, ' edges: ', self.get_order_edges(c_order),
@@ -914,6 +941,8 @@ class OptimalExtractionAlg:
                 result = self.summation_extraction(order_flux.get('order_data'), order_flux.get('out_y_center'))
             if 'extraction' in result:
                 self.fill_2d_with_data(result.get('extraction'), out_data, idx_out)
+
+            t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
         self.d_print(" ")
         data_df = self.write_data_to_dataframe(out_data)
 

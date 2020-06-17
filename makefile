@@ -7,15 +7,15 @@ update:
 	pip3 install -r requirements.txt --upgrade
 
 clear: 
-	rm -f --recursive *.log
+	rm -f -r *.log
 
 clean: clear
-	rm --force --recursive build/
-	rm --force --recursive dist/
-	rm --force --recursive *.egg-info
-	rm --force --recursive .pytest_cache
-	find . -name '*.pyc' -exec rm --force {} +
-	find . -name '*.pyo' -exec rm --force {} +
+	rm -f -r build/
+	rm -f -r dist/
+	rm -f -r *.egg-info
+	rm -f -r .pytest_cache
+	find . -name '*.pyc' -exec rm -f {} +
+	find . -name '*.pyo' -exec rm -f {} +
 
 test:
 	pytest --ignore=kpfpipe/tests/test_recipe.py

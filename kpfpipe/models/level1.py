@@ -30,6 +30,9 @@ MAPPING = {
 }
 
 class KPF1(KPFDataModel):
+    '''
+    The level 1 KPF data. Initialize with empty fields
+    '''
 
     def __init__(self):
         '''
@@ -53,10 +56,11 @@ class KPF1(KPFDataModel):
             'NEID': self._read_from_NEID
         }
 
-    def _read_from_NEID(self, hdul: fits.HDUList,
-                        force: bool=True) -> None:
+    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
         '''
         Parse the HDUL based on NEID standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
         for hdu in hdul:
             t = MAPPING.get(hdu.name)
@@ -92,6 +96,8 @@ class KPF1(KPFDataModel):
                         force: bool=True) -> None:
         '''
         Parse the HDUL based on KPF standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
         for hdu in hdul:
             this_header = hdu.header
@@ -123,7 +129,7 @@ class KPF1(KPFDataModel):
     
     def create_hdul(self) -> list:
         '''
-        create an hdul in FITS format
+        Create an hdul in FITS format
         '''
         hdu_list: dict = []
         # Add primary HDU 
@@ -173,6 +179,18 @@ class KPF1(KPFDataModel):
                     label=None, comment=None) -> None:
         '''
         Add an entry in the segments
+        Args:
+            begin_index (tuple): xy coordinate of the start of segments
+            end_idx (tuple): xy coordinate of the end of segments
+            label (str): segment label. Auto generated if None
+            comment (str): comment attached to the segment
+        examples:
+            # Assume we have a KPF1 object called "level1"
+            # Creating a segments that begins on 10th pixel of 0th order
+            # and ends on 300th pixel of 0th order 
+            >>> level1.add_segment((10, 0), (300, 0), 'example', 'an example order')
+            # access the segment we just added: 
+            >>> seg_info = level1.segments[0]
         '''
         # data.segment
 
@@ -189,6 +207,7 @@ class KPF1(KPFDataModel):
                                 begin_idx[0], end_idx[0]))
         if begin_idx[1] > end_idx[1]:
             raise ValueError('Segment begin location must be before end location')
+
 
         length = end_idx[1] - begin_idx[1] + 1
         order = begin_idx[0]
@@ -209,6 +228,8 @@ class KPF1(KPFDataModel):
     def remove_segment(self, label: str) -> None:
         '''
         Remove a segment based on label
+        Args: 
+            label (str): label of the segment to be removed
         '''
         if label not in list(self.segments['Label']):
             raise ValueError('{} not found'.format(label))
@@ -217,7 +238,8 @@ class KPF1(KPFDataModel):
 
     def info(self) -> None:
         '''
-        Pretty print information about this data to stdout 
+        Pretty print information about this data with print()
+        
         '''
         if self.filename is not None:
             print('File name: {}'.format(self.filename))
