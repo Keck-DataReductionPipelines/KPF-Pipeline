@@ -64,7 +64,7 @@ class OrderTrace(KPF0_Primitive):
         '''
         check for some necessary post condition
         '''
-        pass
+        return True
 
 
 
