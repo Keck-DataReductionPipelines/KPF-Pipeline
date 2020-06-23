@@ -16,17 +16,17 @@ import pandas as pd
 from kpfpipe.models.data_model import KPFDataModel
 
 MAPPING = {
-    # Order:  (header-key, data-target, data-key)
+    # Order:  (header-key, dimension, data-key)
     'PRIMARY' : ('PRIMARY', None, None),
-    'SCIFLUX' : ('SCI1_FLUX', 'flux', 'SCI1'),
-    'SKYFLUX' : ('SKY_FLUX', 'flux', 'SKY'),
-    'CALFLUX' : ('CAL_FLUX', 'flux', 'CAL'),
-    'SCIVAR'  : ('SCI1_VARIANCE', 'variance', 'SCI1'),
-    'SKYVAR'  : ('SKY_VARIANCE', 'variance', 'SKY'),
-    'CALVAR'  : ('CAL_VARIANCE', 'variance', 'CAL'),
-    'SCIWAVE' : ('SCI1_WAVE', 'wave', 'SCI1'),
-    'SKYWAVE' : ('SKY_WAVE', 'wave', 'SKY'),
-    'CALWAVE' : ('CAL_WAVE', 'wave', 'CAL'),
+    'SCIFLUX' : ('SCI1_FLUX', 0, 'SCI1'),
+    'SKYFLUX' : ('SKY_FLUX', 0, 'SKY'),
+    'CALFLUX' : ('CAL_FLUX', 0, 'CAL'),
+    'SCIVAR'  : ('SCI1_VARIANCE', 2, 'SCI1'),
+    'SKYVAR'  : ('SKY_VARIANCE', 2, 'SKY'),
+    'CALVAR'  : ('CAL_VARIANCE', 2, 'CAL'),
+    'SCIWAVE' : ('SCI1_WAVE', 1, 'SCI1'),
+    'SKYWAVE' : ('SKY_WAVE', 1, 'SKY'),
+    'CALWAVE' : ('CAL_WAVE', 1, 'CAL'),
 }
 
 class KPF1(KPFDataModel):
@@ -40,13 +40,11 @@ class KPF1(KPFDataModel):
         '''
         KPFDataModel.__init__(self)
         
-        self.flux: dict = {'CAL':  None,
+        self.data: dict = {'CAL':  None,
                            'SCI1': None,
                            'SCI2': None,
                            'SCI3': None,
                            'SKY':  None}
-        self.wave: dict = copy.deepcopy(self.flux)
-        self.variance: dict = copy.deepcopy(self.flux)
 
         # start an empty segment table
         self.clear_segment()
@@ -67,30 +65,34 @@ class KPF1(KPFDataModel):
             if t is None:
                 raise ValueError(f'Unrecognized header "{hdu.name}"')
 
-            (header_key, data_target, data_key) = t
+            (header_key, dimension, data_key) = t
             self.header[header_key] = hdu.header
 
-            if data_target is not None:
-                getattr(self, data_target)[data_key] = np.asarray(hdu.data, dtype=np.float32)
+            if data_key is not None and dimension is not None: 
 
-        self.wave['CAL'] = self.wave['SCI1']
-        self.wave['SKY'] = self.wave['SCI1']
+                if self.data[data_key] is None:
+                    nx, ny = hdu.data.shape
+                    self.data[data_key] = np.zeros((3, nx, ny))
 
-        # NEID files do not contain these keys
-        for k in ['SCI2_FLUX', 'SCI2_WAVE', 'SCI2_VARIANCE', 
-                'SCI3_FLUX', 'SCI3_WAVE', 'SCI3_VARIANCE']:
-            self.header[k] = {}
+                if dimension is not None:
+                    self.data[data_key][dimension, :, :]= np.asarray(hdu.data, dtype=np.float64)
+
+        # populate wave for SKY and CAL
+        self.data['SKY'][1, :, :] = self.data['SCI1'][1, :, :]
+        self.data['CAL'][1, :, :] = self.data['SCI1'][1, :, :]
 
         # Generate default segments
-        for order in range(self.flux['SCI1'].shape[0]):
-            label = 'Order {}'.format(order)
-            begin_idx = (order, 0)
-            end_idx = (order, self.flux['SCI1'].shape[1])
-            length = self.flux['SCI1'].shape[1]
-            comment = 'default segemnt for order {}'.format(order)
+        for fiber in self.data.keys():
+            if self.data[fiber] is not None:
+                for order in range(self.data[fiber].shape[1]):
+                    label = 'Order {}'.format(order)
+                    begin_idx = (order, 0)
+                    end_idx = (order, self.data[fiber].shape[2])
+                    length = self.data[fiber].shape[2]
+                    comment = 'default segemnt for order {}'.format(order)
 
-            row = [label, order, begin_idx, end_idx, length, comment]
-            self.segments.loc[len(self.segments)] = row
+                    row = [label, order, begin_idx, end_idx, length, comment]
+                    self.segments[fiber].loc[len(self.segments[fiber])] = row
     
     def _read_from_KPF(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
@@ -99,6 +101,9 @@ class KPF1(KPFDataModel):
         Args:
             hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
+        flux = {}
+        variance = {}
+        wave = {}
         for hdu in hdul:
             this_header = hdu.header
             if hdu.name == 'PRIMARY':
@@ -118,18 +123,41 @@ class KPF1(KPFDataModel):
                     raise NameError('Extension {} not recognized'.format(hdu.name))
 
                 if datatype == 'FLUX':
-                    self.flux[fiber] = hdu.data
+                    flux[fiber] = hdu.data
                 elif datatype == 'VARIANCE':
-                    self.variance[fiber] = hdu.data
+                    variance[fiber] = hdu.data
                 elif datatype == 'WAVE':
-                    self.wave[fiber] = hdu.data
+                    wave[fiber] = hdu.data
                 else: 
                     raise ValueError('HDU name {} not recognized'.format(hdu.name))
                 self.header[hdu.name] = hdu.header
+
+        # make sure that flux, 
+        for fiber, value in flux.items():
+            try: 
+                assert(wave[fiber].shape == value.shape)
+                assert(variance[fiber].shape == value.shape)
+            except AssertionError:
+                raise ValueError('Data dimensions do not agree')
+        
+        # stack flux, wave, variance into a 3D array
+        for fiber in self.data.keys():
+            try: 
+                nx, ny = flux[fiber].shape
+                self.data[fiber] = np.zeros((3, nx, ny,))
+                self.data[fiber][0, :, :] = flux[fiber]
+                self.data[fiber][1, :, :] = wave[fiber]
+                self.data[fiber][2, :, :] = variance[fiber]
+            except KeyError:
+                # This may happen when the expected fiber extension is not in file
+                self.data[fiber] = None
+
     
     def create_hdul(self) -> list:
         '''
         Create an hdul in FITS format
+        Note: 
+            This method should only be used by BaseModel
         '''
         hdu_list: dict = []
         # Add primary HDU 
@@ -139,28 +167,29 @@ class KPF1(KPFDataModel):
         hdu_list.append(hdu)
 
         # add fiber data
-        for fiber, data in self.flux.items():
-            flux_hdu = fits.ImageHDU(data=data)
-            header_key = fiber + '_FLUX'
-            for key, val in self.header[header_key].items():
-                flux_hdu.header.set(key, val)
-            flux_hdu.name = header_key
+        for fiber, data in self.data.items():
+            if data is not None:
+                flux_hdu = fits.ImageHDU(data=data[0, :, :])
+                header_key = fiber + '_FLUX'
+                for key, val in self.header[header_key].items():
+                    flux_hdu.header.set(key, val)
+                flux_hdu.name = header_key
 
-            variance_hdu = fits.ImageHDU(data=self.variance[fiber])
-            header_key = fiber + '_VARIANCE'
-            for key, val in self.header[header_key].items():
-                variance_hdu.header.set(key, val)
-            variance_hdu.name = header_key
+                variance_hdu = fits.ImageHDU(data=data[2, :, :])
+                header_key = fiber + '_VARIANCE'
+                for key, val in self.header[header_key].items():
+                    variance_hdu.header.set(key, val)
+                variance_hdu.name = header_key
 
-            wave_hdu = fits.ImageHDU(data=self.wave[fiber])
-            header_key = fiber + '_WAVE'
-            for key, val in self.header[header_key].items():
-                wave_hdu.header.set(key, val)
-            wave_hdu.name = header_key  
+                wave_hdu = fits.ImageHDU(data=data[1, :, :])
+                header_key = fiber + '_WAVE'
+                for key, val in self.header[header_key].items():
+                    wave_hdu.header.set(key, val)
+                wave_hdu.name = header_key  
 
-            hdu_list.append(flux_hdu)
-            hdu_list.append(variance_hdu)
-            hdu_list.append(wave_hdu)
+                hdu_list.append(flux_hdu)
+                hdu_list.append(variance_hdu)
+                hdu_list.append(wave_hdu)
 
         # Add segments
         t = Table.from_pandas(self.receipt)
@@ -175,29 +204,33 @@ class KPF1(KPFDataModel):
 # ============================================================================
 # Segment related operations
 
-    def add_segment(self, begin_idx: tuple, end_idx: tuple,
+    def add_segment(self, fiber: str, begin_idx: tuple, end_idx: tuple,
                     label=None, comment=None) -> None:
         '''
         Add an entry in the segments
         Args:
+            fiber (str): name of the orderlette 
             begin_index (tuple): xy coordinate of the start of segments
             end_idx (tuple): xy coordinate of the end of segments
             label (str): segment label. Auto generated if None
             comment (str): comment attached to the segment
         examples:
             # Assume we have a KPF1 object called "level1"
-            # Creating a segments that begins on 10th pixel of 0th order
+            # Creating a segments for 'SCI1' that begins on 10th pixel of 0th order
             # and ends on 300th pixel of 0th order 
-            >>> level1.add_segment((10, 0), (300, 0), 'example', 'an example order')
+            >>> level1.add_segment('SCI1', (10, 0), (300, 0), 'example', 'an example order')
             # access the segment we just added: 
             >>> seg_info = level1.segments[0]
         '''
         # data.segment
 
+        if self.data[fiber] is None:
+            raise ValueError('Cannot add segment for empty data')
+
         if label is None:
             label = 'Custom segment {}'.format(self.n_custom_seg)
         
-        if label in list(self.segments['Label']):
+        if label in list(self.segments[fiber]['Label']):
             raise NameError('provided label already exist for another segment')
 
         # make sure that the index provided is valid
@@ -207,12 +240,22 @@ class KPF1(KPFDataModel):
                                 begin_idx[0], end_idx[0]))
         if begin_idx[1] > end_idx[1]:
             raise ValueError('Segment begin location must be before end location')
-
+    
+        # make sure index are not out of bound
+        if begin_idx[0] < 0 or begin_idx[0] > self.data[fiber].shape[0]:
+            raise ValueError('Invalid beginning row index')
+        if begin_idx[1] < 0 or begin_idx[1] > self.data[fiber].shape[1]:
+            raise ValueError('Invalid beginning column index')
+    
+        if end_idx[0] < 0 or end_idx[0] > self.data[fiber].shape[0]:
+            raise ValueError('Invalid end row index')
+        if end_idx[1] < 0 or end_idx[1] > self.data[fiber].shape[1]:
+            raise ValueError('Invalid end column index')
 
         length = end_idx[1] - begin_idx[1] + 1
         order = begin_idx[0]
         row = [label, order, begin_idx, end_idx, length, comment]
-        self.segments.loc[len(self.segments)] = row
+        self.segments[fiber].loc[len(self.segments[fiber])] = row
         self.n_custom_seg += 1
     
     def clear_segment(self) -> None:
@@ -221,20 +264,22 @@ class KPF1(KPFDataModel):
         '''
         seg_header = ['Label', 'Order', 'Begin_idx',\
                       'End_idx', 'Length', 'Comment']
-        self.segments = pd.DataFrame(columns=seg_header)
+        self.segments = {}
+        for fiber, value in self.data.items():
+            self.segments[fiber] = pd.DataFrame(columns=seg_header)
         self.header['SEGMENTS'] = {}
         self.n_custom_seg = 0
     
-    def remove_segment(self, label: str) -> None:
+    def remove_segment(self, fiber: str, label: str) -> None:
         '''
         Remove a segment based on label
         Args: 
             label (str): label of the segment to be removed
         '''
-        if label not in list(self.segments['Label']):
+        if label not in list(self.segments[fiber]['Label']):
             raise ValueError('{} not found'.format(label))
-        idx = self.segments.index[self.segments['Label'] == label].tolist()
-        self.segments = self.segments.drop(idx, axis=0)
+        idx = self.segments[fiber].index[self.segments[fiber]['Label'] == label].tolist()
+        self.segments[fiber] = self.segments[fiber].drop(idx, axis=0)
 
     def info(self) -> None:
         '''
@@ -258,7 +303,7 @@ class KPF1(KPFDataModel):
             'Fiber Name', 'Data Type', 'Data Dimension',
             '='*80 + '\n'
         )
-        for fiber, data in self.flux.items():
+        for fiber, data in self.data.items():
             if data is not None:
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(
                     fiber+'_FLUX', 'array', str(data.shape))
