@@ -52,4 +52,3 @@ for a basic example.
 
     install_develop.rst
     example_trivial.rst
-    logging.rst

@@ -1,0 +1,497 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>KPF Recipe AST Parser &mdash; KPFPipeline 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Implemented Primitives" href="../../primitives/primitives.html" />
+    <link rel="prev" title="Basic KPF Primitives" href="fits_primitive.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> KPFPipeline
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../intro/getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../repository/start.html">Repository</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../data_model/data_model.html">Data Models</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="pipeline.html">Pipelines</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="kpfpipe.html">KPF Pipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fits_primitive.html">Basic KPF Primitives</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">KPF Recipe AST Parser</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../primitives/primitives.html">Implemented Primitives</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">KPFPipeline</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../api.html">API</a> &raquo;</li>
+        
+          <li><a href="pipeline.html">Pipelines</a> &raquo;</li>
+        
+      <li>KPF Recipe AST Parser</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/api/pipeline/parse_ast.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-kpfpipe.pipelines.kpf_parse_ast">
+<span id="kpf-recipe-ast-parser"></span><h1>KPF Recipe AST Parser<a class="headerlink" href="#module-kpfpipe.pipelines.kpf_parse_ast" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor">
+<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.pipelines.kpf_parse_ast.</code><code class="sig-name descname">KpfPipelineNodeVisitor</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pipeline</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">context</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Node visitor to convert KPF pipeline recipes expressed in python syntax
+into operations on the KPF Framework.</p>
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.generic_visit">
+<code class="sig-name descname">generic_visit</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.generic_visit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.generic_visit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called if no explicit visitor function exists for a node.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.reset_visited_states">
+<code class="sig-name descname">reset_visited_states</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.reset_visited_states"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.reset_visited_states" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resets kpf_completed and other attributes of this and all subnodes,
+e.g. so that a for loop can iterate with a fresh start.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Add">
+<code class="sig-name descname">visit_Add</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Add"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Add" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement the addition operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Assign">
+<code class="sig-name descname">visit_Assign</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Assign"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Assign" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign one or more constant or calculated values to named variables
+The variable names come from the _store stack, while the values
+come from the _load stack.
+Calls to visit() may set self._awaiting_call_return, in which case
+we need to immediately return, and pick up where we left off later,
+completing the assignment.  This typically happens when there is
+a call to a processing primitive, which is queued up on the
+framework’s event queue.  See also resume_recipe().</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_BinOp">
+<code class="sig-name descname">visit_BinOp</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_BinOp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_BinOp" title="Permalink to this definition">¶</a></dt>
+<dd><p>BinOp</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Call">
+<code class="sig-name descname">visit_Call</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Call"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Call" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implement function call
+The arguments are pulled from the _load stack into a deque.
+Targets are put on the _store stack.
+After the call has been pushed to the framework’s event queue,
+we set our awaiting_call_return flag and return.  That flag
+causes immediate returns all the way up the call stack.
+When the primitive has been run by the framework, the next
+primitive will be our “resume_recipe”, which will set the
+returning_from_call flag and start traversing the AST tree
+from the top again.  Because of the various kpf_completed
+attributes set on nodes of the tree, processing will quickly
+get back to here, where the output of the primitive will be
+pushed on the _load stack, becoming the result of the call.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Compare">
+<code class="sig-name descname">visit_Compare</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Compare"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Compare" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implement Compare as follows:
+visiting “left” and “comparators” puts values on the _load stack.
+visiting “ops” evaluates some comparison operator, and puts the result
+on the _load stack as a Bool.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Div">
+<code class="sig-name descname">visit_Div</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Div"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Div" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement the division operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Eq">
+<code class="sig-name descname">visit_Eq</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Eq"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Eq" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement Eq comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Expr">
+<code class="sig-name descname">visit_Expr</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Expr"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Expr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expr node</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_For">
+<code class="sig-name descname">visit_For</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_For"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_For" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implement the For node</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Gt">
+<code class="sig-name descname">visit_Gt</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Gt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Gt" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement Gt comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_GtE">
+<code class="sig-name descname">visit_GtE</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_GtE"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_GtE" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement GtE comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_If">
+<code class="sig-name descname">visit_If</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_If"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_If" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implementation of If
+Evaluate the test and visit one of the two branches, body or orelse.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_ImportFrom">
+<code class="sig-name descname">visit_ImportFrom</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_ImportFrom"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_ImportFrom" title="Permalink to this definition">¶</a></dt>
+<dd><p>import primitives and add them to the pipeline’s event_table</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Is">
+<code class="sig-name descname">visit_Is</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Is"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Is" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement Lt comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_IsNot">
+<code class="sig-name descname">visit_IsNot</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_IsNot"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_IsNot" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement IsNot comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_List">
+<code class="sig-name descname">visit_List</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_List"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_List" title="Permalink to this definition">¶</a></dt>
+<dd><p>List node</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Lt">
+<code class="sig-name descname">visit_Lt</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Lt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Lt" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement Lt comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_LtE">
+<code class="sig-name descname">visit_LtE</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_LtE"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_LtE" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement LtE comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Module">
+<code class="sig-name descname">visit_Module</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Module"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Module node
+A Module node is always at the top of an AST tree returned
+by ast.parse(), and there is only one, so we initialize
+or reset things here, and clean up (releasing allocated
+memory) at the end.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Mult">
+<code class="sig-name descname">visit_Mult</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Mult"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Mult" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement the multiplication operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Name">
+<code class="sig-name descname">visit_Name</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Name"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implementation of Name node
+A Name can occur on either the left or right side of an assignment.
+If it’s on the left side the context is Store, and the Name is the
+variable name into which to store a value.  We push that variable name
+on the _store stack.
+If the Name is on the right side, e.g. as part of an expression,
+we look up the name in our params dict, and push the corresponding
+value on the _load stack.  If the name is not found, None is pushed
+on the _load stack.</p>
+<p>WARNING: The same instance of a Name can appear as different nodes in a AST,
+so nothing should be stored in the node as a node-specific attribute.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_NameConstant">
+<code class="sig-name descname">visit_NameConstant</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_NameConstant"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_NameConstant" title="Permalink to this definition">¶</a></dt>
+<dd><p>NameConstant
+implement name constant by putting on the _load stack</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_NotEq">
+<code class="sig-name descname">visit_NotEq</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_NotEq"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_NotEq" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement NotEq comparison operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Num">
+<code class="sig-name descname">visit_Num</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Num"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Num" title="Permalink to this definition">¶</a></dt>
+<dd><p>Num
+implement numeric constant by putting it on the _load stack</p>
+<p>NB: An instance of Num can appear as different nodes in the same AST,
+so we can’t store node specific information as an attribute.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Str">
+<code class="sig-name descname">visit_Str</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Str"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Str" title="Permalink to this definition">¶</a></dt>
+<dd><p>Str node
+TODO: I’m not sure what to do with a multiline comment expressed as Str</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Sub">
+<code class="sig-name descname">visit_Sub</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Sub"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Sub" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement the subtraction operator</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Tuple">
+<code class="sig-name descname">visit_Tuple</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_Tuple"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_Tuple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tuple node</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_UAdd">
+<code class="sig-name descname">visit_UAdd</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_UAdd"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_UAdd" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement UAdd</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_UNot">
+<code class="sig-name descname">visit_UNot</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_UNot"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_UNot" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement UNot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_USub">
+<code class="sig-name descname">visit_USub</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_USub"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_USub" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement USub</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_UnaryOp">
+<code class="sig-name descname">visit_UnaryOp</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_UnaryOp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_UnaryOp" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement UnaryOp
+We don’t support calls in unaryOp expressions, so we don’t
+bother guarding for self.awaiting_call_return here, nor in
+the following Unary Operators</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_alias">
+<code class="sig-name descname">visit_alias</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_alias"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_alias" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias node
+These only appear in import clauses
+Implement by putting name and asname on _load stack as tuple.
+ImportFrom handles the heavy lifting
+Note: asname is currently not supported and is ignored.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_keyword">
+<code class="sig-name descname">visit_keyword</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#KpfPipelineNodeVisitor.visit_keyword"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.KpfPipelineNodeVisitor.visit_keyword" title="Permalink to this definition">¶</a></dt>
+<dd><p>implement keyword as follows:
+Since this only occurs in the context of keyword arguments in a
+call signature, we can generate tuples of (keyword, value)</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt id="kpfpipe.pipelines.kpf_parse_ast.RecipeError">
+<em class="property">exception </em><code class="sig-prename descclassname">kpfpipe.pipelines.kpf_parse_ast.</code><code class="sig-name descname">RecipeError</code><a class="reference internal" href="../../_modules/kpfpipe/pipelines/kpf_parse_ast.html#RecipeError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.pipelines.kpf_parse_ast.RecipeError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Special recipe exception</p>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../../primitives/primitives.html" class="btn btn-neutral float-right" title="Implemented Primitives" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="fits_primitive.html" class="btn btn-neutral float-left" title="Basic KPF Primitives" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Arpita Roy, BJ Fulton, Andrew Howard
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

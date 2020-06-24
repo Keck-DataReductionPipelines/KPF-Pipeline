@@ -12,3 +12,5 @@ pytest
 # Documentation
 sphinx
 sphinx-rtd-theme
+sphinxcontrib-napoleon
+

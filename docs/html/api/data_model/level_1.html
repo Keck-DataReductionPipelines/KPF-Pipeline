@@ -1,0 +1,360 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Level 1 Data Model &mdash; KPFPipeline 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Pipelines" href="../pipeline/pipeline.html" />
+    <link rel="prev" title="Level 0 Data Model" href="level_0.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> KPFPipeline
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../intro/getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../repository/start.html">Repository</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api.html">API</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="data_model.html">Data Models</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="base_model.html">Base Data Model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="level_0.html">Level 0 Data Model</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Level 1 Data Model</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../pipeline/pipeline.html">Pipelines</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../primitives/primitives.html">Implemented Primitives</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">KPFPipeline</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../api.html">API</a> &raquo;</li>
+        
+          <li><a href="data_model.html">Data Models</a> &raquo;</li>
+        
+      <li>Level 1 Data Model</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/api/data_model/level_1.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="level-1-data-model">
+<h1>Level 1 Data Model<a class="headerlink" href="#level-1-data-model" title="Permalink to this headline">¶</a></h1>
+<span class="target" id="module-kpfpipe.models.level1"></span><p>KPF Level 1 Data Model</p>
+<dl class="py class">
+<dt id="kpfpipe.models.level1.KPF1">
+<em class="property">class </em><code class="sig-prename descclassname">kpfpipe.models.level1.</code><code class="sig-name descname">KPF1</code><a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1" title="Permalink to this definition">¶</a></dt>
+<dd><p>The level 1 KPF data. Initialize with empty fields</p>
+<dl class="py attribute">
+<dt id="kpfpipe.models.level1.KPF1.data">
+<code class="sig-name descname">data</code><a class="headerlink" href="#kpfpipe.models.level1.KPF1.data" title="Permalink to this definition">¶</a></dt>
+<dd><p>A dictionary of 5 orderlettes’ 1D extracted spectrum.</p>
+<p>This is the attribute of the instance that contains all image data.
+The keys are the name of each orderlette, and the values are image data
+asscoaited with that orderlette.</p>
+<p>Each image data is a stack by row by column 3D numpy array. The first dimension
+(stack) is fixed at 3. The first stack is the 1D extracted spectrum (2D ndarray),
+the second stack is the wavelength calibration, and the 3rd stack is the pixel variance.
+The second dimension (row) specifies a 1D extracted spectrum, and each row is an order.</p>
+<dl class="simple">
+<dt>There are five orderlettes (valid keys to the dict) in total:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">CAL</span></code>: Calibration fiber</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SKY</span></code>: Sky fiber</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SCI1</span></code>: Science fiber 1</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SCI2</span></code>: Science fiber 2</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SCI3</span></code>: Science fiber 3</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.8)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="kpfpipe.models.level1.KPF1.segments">
+<code class="sig-name descname">segments</code><a class="headerlink" href="#kpfpipe.models.level1.KPF1.segments" title="Permalink to this definition">¶</a></dt>
+<dd><p>A dictionary of 5 tables of spectrum segments</p>
+<p>A segment is a meaningful part of a 1D spectrum, identified by a
+<code class="docutils literal notranslate"><span class="pre">begin_index</span></code> and <code class="docutils literal notranslate"><span class="pre">end_index</span></code>. Both are 2-element tuples that specifies
+the row-column coordinate on the data array. Additionally, each segment has
+a corresponding string label that uniquely defines it. Each segment can also
+be attached with a string comment.</p>
+<p>Each orderlette can have its own list of segments, so segments are sorted in
+a dictionary, with the keys being names of the orderlettes. The value to each
+key is a pandas.DataFrame table. Each row of the table represent a unique
+segment.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">kpfpipe.models.level1</span> <span class="kn">import</span> <span class="n">KPF1</span>
+<span class="go"># Assume we have an NEID level 1 file called &quot;level1.fits&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">level1</span> <span class="o">=</span> <span class="n">KPF1</span><span class="o">.</span><span class="n">from_fits</span><span class="p">(</span><span class="s1">&#39;level1.fits&#39;</span><span class="p">,</span> <span class="s1">&#39;NEID&#39;</span><span class="p">)</span>
+<span class="go"># By default each order comes as its own segment.</span>
+<span class="go"># Access the default segments for the &#39;SKY&#39; orderlette</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="s1">&#39;SKY&#39;</span><span class="p">]</span>
+<span class="go">    Label   Order   Begin_idx        End_idx   Length   Comment</span>
+<span class="go">1     &#39;1&#39;       0      (0, 0)      (0, 9216)     9217   1st order</span>
+<span class="go">2     &#39;2&#39;       1      (1, 0)      (1, 9216)     9217   2nd order</span>
+<span class="go">3     &#39;3&#39;       2      (2, 0)      (2, 9216)     9217   3rd order</span>
+<span class="gp">...</span>
+<span class="go">118 &#39;118&#39;     117    (117, 0)    (117, 9216)     9217   127th order</span>
+<span class="go"># Creating a segments for &#39;SCI1&#39; that begins on 10th pixel of 0th order</span>
+<span class="go"># and ends on 300th pixel of 0th order</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">level1</span><span class="o">.</span><span class="n">add_segment</span><span class="p">(</span><span class="s1">&#39;SKY&#39;</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="s1">&#39;example&#39;</span><span class="p">,</span> <span class="s1">&#39;an example order&#39;</span><span class="p">)</span>
+<span class="go"># Access the segment we just added (the very last entry)</span>
+<span class="go"># Any pandas.dataframe method will work here</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">example_segment</span><span class="o">=</span> <span class="n">level1</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="s1">&#39;SKY&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">119</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">example_segment</span>
+<span class="go">Label                              example</span>
+<span class="go">Order                                    0</span>
+<span class="go">Begin_idx                           (0, 0)</span>
+<span class="go">End_idx                           (0, 300)</span>
+<span class="go">Length                                 301</span>
+<span class="go">Comment                   an example order</span>
+<span class="go">Name: 119, dtype: object</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.8)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="kpfpipe.models.level1.KPF1.read_methods">
+<code class="sig-name descname">read_methods</code><a class="headerlink" href="#kpfpipe.models.level1.KPF1.read_methods" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dictionaries of supported parsers.</p>
+<p>These parsers are used by the base model to read in .fits files from other
+instruments</p>
+<p>Supported parsers: <code class="docutils literal notranslate"><span class="pre">KPF</span></code>, <code class="docutils literal notranslate"><span class="pre">NEID</span></code></p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.8)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.models.level1.KPF1.add_segment">
+<code class="sig-name descname">add_segment</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">fiber</span><span class="p">:</span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)">str</a></span></em>, <em class="sig-param"><span class="n">begin_idx</span><span class="p">:</span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.8)">tuple</a></span></em>, <em class="sig-param"><span class="n">end_idx</span><span class="p">:</span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.8)">tuple</a></span></em>, <em class="sig-param"><span class="n">label</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">comment</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.add_segment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.add_segment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add an entry in the segments</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fiber</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)"><em>str</em></a>) – name of the orderlette</p></li>
+<li><p><strong>begin_index</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.8)"><em>tuple</em></a>) – xy coordinate of the start of segments</p></li>
+<li><p><strong>end_idx</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.8)"><em>tuple</em></a>) – xy coordinate of the end of segments</p></li>
+<li><p><strong>label</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)"><em>str</em></a>) – segment label. Auto generated if None</p></li>
+<li><p><strong>comment</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)"><em>str</em></a>) – comment attached to the segment</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.models.level1.KPF1.clear_segment">
+<code class="sig-name descname">clear_segment</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.clear_segment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.clear_segment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reset the table containing segments</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.models.level1.KPF1.info">
+<code class="sig-name descname">info</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pretty print information about this data with print()</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="kpfpipe.models.level1.KPF1.remove_segment">
+<code class="sig-name descname">remove_segment</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">fiber</span><span class="p">:</span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)">str</a></span></em>, <em class="sig-param"><span class="n">label</span><span class="p">:</span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)">str</a></span></em><span class="sig-paren">)</span> &#x2192; None<a class="reference internal" href="../../_modules/kpfpipe/models/level1.html#KPF1.remove_segment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#kpfpipe.models.level1.KPF1.remove_segment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove a segment based on label</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>label</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.8)"><em>str</em></a>) – label of the segment to be removed</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../pipeline/pipeline.html" class="btn btn-neutral float-right" title="Pipelines" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="level_0.html" class="btn btn-neutral float-left" title="Level 0 Data Model" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Arpita Roy, BJ Fulton, Andrew Howard
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
