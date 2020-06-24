@@ -1,3 +1,7 @@
+# Data Reduction Pipeline for the Keck Planet Finder Spectrograph
+
+[![Documentation Status](https://readthedocs.com/projects/california-planet-search-kpf-pipeline/badge/?version=latest&token=c97d33303c445e56bffba50b137c3cbcd39ed1fa5f6d356bb70a7fb9f064d517)](https://california-planet-search-kpf-pipeline.readthedocs-hosted.com/en/latest/?badge=latest)
+
 To install this package, you first need to download
 [KeckDRPFramework](https://github.com/Keck-DataReductionPipelines/KeckDRPFramework),
 as it is the only dependency that cannot be installed with `pip`
