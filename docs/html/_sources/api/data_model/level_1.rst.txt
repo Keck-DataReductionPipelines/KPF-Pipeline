@@ -1,8 +1,6 @@
 Level 1 Data Model
 ==================
 
-.. data_model:
-
 .. module:: kpfpipe
     :noindex:
 
