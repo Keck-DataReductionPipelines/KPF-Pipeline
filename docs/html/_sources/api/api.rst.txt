@@ -1,4 +1,10 @@
+API
+===
+
+Documentation for the core KPF pipeline code base
+
 .. toctree::
    :maxdepth: 2
 
-    datamodel
+   data_model/data_model.rst
+   pipeline/pipeline.rst

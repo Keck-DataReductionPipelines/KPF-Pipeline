@@ -109,14 +109,6 @@ def test_segments_exceptions():
     with pytest.raises(ValueError):
         # Non-existent label
         data.remove_segment('SCI1', 'what')
-
-def test():
-    fn = os.path.join(fpath, flist[0])
-    hdul = fits.open(fn)
-    hdu = hdul[0]
-    for card in hdu.header.cards:
-        if sys.getsizeof(card) <= 80:
-            print(card[0])
-
+        
 if __name__ == "__main__":
     test()

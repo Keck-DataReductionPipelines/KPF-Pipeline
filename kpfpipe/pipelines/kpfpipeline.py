@@ -28,13 +28,13 @@ class KPFPipeline(BasePipeline):
         context (ProcessingContext): context class provided by the framework
     
     Attributes:
-        event_table (dictionary): table of actions known to framework.
-        All primitives must be registered here.
+        event_table (dictionary): table of actions known to framework. All primitives must be registered here.
     
-    Note: the correct operation of the recipe visitor depends on action.args being KpfArguments, which
-    is an extension (class derived from) the Keck DRPF Arguments class.  All pipeline primitives must use
-    KpfArguments rather than simply Arguments for their return values.  They will also get input arguments
-    packaged as KpfArguments. 
+    Note: 
+        The correct operation of the recipe visitor depends on action.args being KpfArguments, which
+        is an extension (class derived from) the Keck DRPF Arguments class.  All pipeline primitives must use
+        KpfArguments rather than simply Arguments for their return values.  They will also get input arguments
+        packaged as KpfArguments. 
     """
 
     # Modification: 
@@ -60,7 +60,8 @@ class KPFPipeline(BasePipeline):
         Customized in that it sets up logger and configurations differently 
         from how the BasePipeline does.
 
-        :Args: config (ConfigParser): containing pipeline configuration
+        Args: 
+            config (ConfigParser): containing pipeline configuration
         '''
         ## setup pipeline configuration 
         # Technically the pipeline's configuration is stored in self.context as 

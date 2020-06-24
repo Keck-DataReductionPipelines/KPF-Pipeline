@@ -8,10 +8,10 @@ KPF Data Reduction Pipeline Documentation
 This is the documentation for the KPF Data Reduction Pipeline.
 
 .. toctree::
-    :maxdepth: 1
+   :maxdepth: 2
 
-    intro/getting_started.rst
-    repository/start.rst
-    data_models/io.rst
-    api/api.rst
-
+   intro/getting_started.rst
+   repository/start.rst
+   api/api.rst
+   primitives/primitives.rst
+    

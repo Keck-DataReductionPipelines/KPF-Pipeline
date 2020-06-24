@@ -13,7 +13,7 @@ from astropy.table import Table
 import numpy as np
 import pandas as pd
 
-from kpfpipe.models.data_model import KPFDataModel
+from kpfpipe.models.base_model import KPFDataModel
 
 MAPPING = {
     # Order:  (header-key, dimension, data-key)
@@ -32,6 +32,74 @@ MAPPING = {
 class KPF1(KPFDataModel):
     '''
     The level 1 KPF data. Initialize with empty fields
+
+    Attributes:
+        data (dict): A dictionary of 5 orderlettes' 1D extracted spectrum.
+
+            This is the attribute of the instance that contains all image data.
+            The keys are the name of each orderlette, and the values are image data
+            asscoaited with that orderlette. 
+            
+            Each image data is a stack by row by column 3D numpy array. The first dimension
+            (stack) is fixed at 3. The first stack is the 1D extracted spectrum (2D ndarray),
+            the second stack is the wavelength calibration, and the 3rd stack is the pixel variance.
+            The second dimension (row) specifies a 1D extracted spectrum, and each row is an order.
+
+            There are five orderlettes (valid keys to the dict) in total:
+                - ``CAL``: Calibration fiber
+                - ``SKY``: Sky fiber
+                - ``SCI1``: Science fiber 1
+                - ``SCI2``: Science fiber 2
+                - ``SCI3``: Science fiber 3
+
+
+        segments (dict): A dictionary of 5 tables of spectrum segments
+
+            A segment is a meaningful part of a 1D spectrum, identified by a 
+            ``begin_index`` and ``end_index``. Both are 2-element tuples that specifies
+            the row-column coordinate on the data array. Additionally, each segment has 
+            a corresponding string label that uniquely defines it. Each segment can also 
+            be attached with a string comment.
+
+            Each orderlette can have its own list of segments, so segments are sorted in
+            a dictionary, with the keys being names of the orderlettes. The value to each
+            key is a pandas.DataFrame table. Each row of the table represent a unique 
+            segment.
+
+            Examples:
+                >>> from kpfpipe.models.level1 import KPF1
+                # Assume we have an NEID level 1 file called "level1.fits"
+                >>> level1 = KPF1.from_fits('level1.fits', 'NEID')
+                # By default each order comes as its own segment. 
+                # Access the default segments for the 'SKY' orderlette
+                >>> data.segments['SKY']
+                    Label   Order   Begin_idx        End_idx   Length   Comment 
+                1     '1'       0      (0, 0)      (0, 9216)     9217   1st order 
+                2     '2'       1      (1, 0)      (1, 9216)     9217   2nd order 
+                3     '3'       2      (2, 0)      (2, 9216)     9217   3rd order 
+                ...
+                118 '118'     117    (117, 0)    (117, 9216)     9217   127th order 
+                # Creating a segments for 'SCI1' that begins on 10th pixel of 0th order
+                # and ends on 300th pixel of 0th order 
+                >>> level1.add_segment('SKY', (0, 10), (0, 300), 'example', 'an example order')
+                # Access the segment we just added (the very last entry)
+                # Any pandas.dataframe method will work here
+                >>> example_segment= level1.segments['SKY'].loc[119]
+                >>> example_segment
+                Label                              example
+                Order                                    0
+                Begin_idx                           (0, 0)
+                End_idx                           (0, 300)
+                Length                                 301
+                Comment                   an example order
+                Name: 119, dtype: object
+
+        read_methods (dict): Dictionaries of supported parsers. 
+        
+            These parsers are used by the base model to read in .fits files from other
+            instruments
+
+            Supported parsers: ``KPF``, ``NEID``
     '''
 
     def __init__(self):
@@ -153,7 +221,7 @@ class KPF1(KPFDataModel):
                 self.data[fiber] = None
 
     
-    def create_hdul(self) -> list:
+    def _create_hdul(self) -> list:
         '''
         Create an hdul in FITS format
         Note: 
@@ -208,19 +276,14 @@ class KPF1(KPFDataModel):
                     label=None, comment=None) -> None:
         '''
         Add an entry in the segments
+
         Args:
             fiber (str): name of the orderlette 
             begin_index (tuple): xy coordinate of the start of segments
             end_idx (tuple): xy coordinate of the end of segments
             label (str): segment label. Auto generated if None
             comment (str): comment attached to the segment
-        examples:
-            # Assume we have a KPF1 object called "level1"
-            # Creating a segments for 'SCI1' that begins on 10th pixel of 0th order
-            # and ends on 300th pixel of 0th order 
-            >>> level1.add_segment('SCI1', (10, 0), (300, 0), 'example', 'an example order')
-            # access the segment we just added: 
-            >>> seg_info = level1.segments[0]
+
         '''
         # data.segment
 
@@ -273,6 +336,7 @@ class KPF1(KPFDataModel):
     def remove_segment(self, fiber: str, label: str) -> None:
         '''
         Remove a segment based on label
+
         Args: 
             label (str): label of the segment to be removed
         '''

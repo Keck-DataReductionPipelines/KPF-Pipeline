@@ -13,13 +13,22 @@ from astropy.table import Table
 import numpy as np
 import pandas as pd
 
-from kpfpipe.models.data_model import KPFDataModel
-
-
+from kpfpipe.models.base_model import KPFDataModel
 
 class KPF0(KPFDataModel):
     """
-    The level 1 KPF data. Initialize with empty fields
+    The level 1 KPF data. Initialized with empty fields
+
+    Attributes:
+        data (numpy.ndarray): 2D numpy array storing raw image
+        variance (numpy.ndarray): 2D numpy array storing pixel variance
+        read_methods (dict): Dictionaries of supported parsers. 
+        
+            These parsers are used by the base model to read in .fits files from other
+            instruments
+
+            Supported parsers: ``KPF``, ``NEID``, ``PARAS``
+
     """
 
     def __init__(self):
@@ -40,8 +49,10 @@ class KPF0(KPFDataModel):
     def _read_from_NEID(self, hdul: fits.HDUList) -> None:
         '''
         Parse the HDUL based on NEID standards
+
         Args:
             hdul (fits.HDUList): List of HDUs parsed with astropy.
+
         '''
         for hdu in hdul:
             this_header = hdu.header
@@ -59,8 +70,10 @@ class KPF0(KPFDataModel):
     def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
         Parse the HDUL based on NEID standards
+
         Args:
             hdul (fits.HDUList): List of HDUs parsed with astropy.
+
         '''
         for hdu in hdul:
             if isinstance(hdu, fits.PrimaryHDU):
@@ -84,8 +97,10 @@ class KPF0(KPFDataModel):
                         force: bool=True) -> None:
         '''
         Parse the HDUL based on PARAS standards
+
         Args:
             hdul (fits.HDUList): List of HDUs parsed with astropy.
+            
         '''
         for hdu in hdul: 
             if isinstance(hdu, fits.PrimaryHDU):
@@ -132,9 +147,10 @@ class KPF0(KPFDataModel):
             head += row
         print(head)
 
-    def create_hdul(self):
+    def _create_hdul(self):
         '''
-        create an hdul in FITS format
+        Create an hdul in FITS format. 
+        This ise used by the base model for writing data context to file
         '''
         hdu_list: list = []
         for name, header_keys in self.header.items():
