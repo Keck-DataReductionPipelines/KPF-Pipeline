@@ -1,6 +1,7 @@
 import pytest
 import warnings
 import os
+import sys
 import shutil
 from dotenv import load_dotenv
 
@@ -109,6 +110,13 @@ def test_segments_exceptions():
         # Non-existent label
         data.remove_segment('SCI1', 'what')
 
+def test():
+    fn = os.path.join(fpath, flist[0])
+    hdul = fits.open(fn)
+    hdu = hdul[0]
+    for card in hdu.header.cards:
+        if sys.getsizeof(card) <= 80:
+            print(card[0])
 
 if __name__ == "__main__":
     test()

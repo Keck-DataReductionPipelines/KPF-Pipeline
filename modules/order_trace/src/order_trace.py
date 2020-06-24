@@ -30,21 +30,23 @@ class OrderTrace(KPF0_Primitive):
         '''
         # Initialize parent class
         KPF0_Primitive.__init__(self, action, context)
-        # start a logger
-        self.logger = start_logger(self.__class__.__name__, None)
-        if not self.logger:
-            self.logger = self.context.logger
 
         # input argument 
         self.input = action.args[0]
         self.flat_data = self.input.data
         # input configuration
         self.config = configparser.ConfigParser()
-        try: 
-            config_path = action.args.config
-            self.config.read(config_path)
+        try:
+            config_path = context.config_path['order_trace']
         except:
-            self.config.read(DEFAULT_CFG_PATH)
+            config_path = DEFAULT_CFG_PATH
+        self.config.read(config_path)
+
+        # start a logger
+        self.logger = start_logger(self.__class__.__name__, config_path)
+        if not self.logger:
+            self.logger = self.context.logger
+        self.logger.info('Loading config from: {}'.format(config_path))
 
         # Order trace algorithm setup 
         self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
