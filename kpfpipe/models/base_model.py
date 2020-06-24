@@ -26,11 +26,11 @@ class KPFDataModel:
 
     Warning: 
         This class (KPFDataModel) should not be used directly.
-        Based on the data level of your .fits file, used the appropriate data model.
+        Based on the data level of your .fits file, used the appropriate
+        level specific data model.
 
     This is the base model for all KPF data models. Level specific data inherit from this 
-    class, so any attribute and method listed here also apply to the level speific data 
-    model
+    class, so any attribute and method listed here applies to all data models.
 
     Attributes:
         header (dict): a dictionary of headers of each extension (HDU)
@@ -110,7 +110,7 @@ class KPFDataModel:
         '''
         Constructor
         '''
-        self.filename: str = ''
+        self.filename: str = None
 
         self.header: dict = {'PRIMARY': {}, 
                              'RECEIPT': {}}
@@ -127,6 +127,9 @@ class KPFDataModel:
     def from_fits(cls, fn: str,
                   data_type: str):
         """Create a data instance from a file
+
+        This method emplys the ``read`` method for reading the file. Refer to 
+        it for more detail.
 
         Args: 
             fn (str): file path (relative to the repository)
@@ -152,6 +155,9 @@ class KPFDataModel:
             fn (str): file path (relative to the repository)
             data_type (str): instrument type of the file
             overwrite (bool): if this instance is not empty, specifies whether to overwrite
+        
+        Raises:
+            IOError: when a invalid file is presented
 
         Note:
             This is not a @classmethod so initialization is 
@@ -186,9 +192,9 @@ class KPFDataModel:
                                 self.header[hdu.name] = hdu.header
                                 self.extension[hdu.name] = t.to_pandas()
             # Leave the rest of HDUs to level specific readers
-            try:
+            if data_type in self.read_methods.keys():
                 self.read_methods[data_type](hdu_list)
-            except KeyError:
+            else:
                 # the provided data_type is not recognized, ie.
                 # not in the self.read_methods list
                 raise IOError('cannot recognize data type {}'.format(data_type))
