@@ -3,6 +3,7 @@ Data models for KPF data
 """
 # Standard dependencies
 import os
+import sys
 import copy 
 import warnings
 import time
@@ -153,6 +154,12 @@ class KPFDataModel:
                 hdu.header.set(key, value)
             hdu.name = name
             hdu_list.append(hdu)
+
+        # check that no card in any HDU is greater than 80
+        # this is a hard limit by FITS 
+        for hdu in hdu_list:
+            if 'OBS FILE' in hdu.header.keys():
+                del hdu.header['OBS FILE']
 
         # finish up writing
         hdul = fits.HDUList(hdu_list)
