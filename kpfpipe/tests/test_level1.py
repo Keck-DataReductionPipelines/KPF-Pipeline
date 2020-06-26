@@ -49,6 +49,28 @@ def test_NEID2KPF():
     # Clean up 
     shutil.rmtree('temp')
 
+def test_io_exception():
+
+    data = KPF1()
+    with pytest.raises(FileNotFoundError):
+        # file does not exist 
+        data.read('not_exist.fits', 'NEID')
+
+    with pytest.raises(IOError):
+        # valid path, but no .fits extension
+        path = os.path.join(fpath, flist[0])
+        path = path.split('.')[0] # remove the '.fit' from extension
+        data.read(path, 'NEID')
+    
+    data = KPF1()
+    path = os.path.join(fpath, flist[0])
+    data.read(path, 'NEID')
+
+    with pytest.raises(IOError):
+        #trying to overwrite existing data
+        data.read(path, 'NEID')
+
+
 # =============================================================================
 # Segments
 
