@@ -68,8 +68,6 @@ class OrderTrace(KPF0_Primitive):
         '''
         return True
 
-
-
     def _perform(self) -> None:
         """
         This primitive's action
