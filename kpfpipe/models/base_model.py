@@ -169,7 +169,7 @@ class KPFDataModel:
             # Can only read .fits files
             raise IOError('input files must be FITS files')
         
-        if not overwrite and self.filename != '':
+        if not overwrite and self.filename is not None:
             # This instance already contains data, and
             # we don't want to overwrite 
             raise IOError('Cannot overwrite existing data')
