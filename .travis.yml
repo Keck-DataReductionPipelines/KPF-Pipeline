@@ -10,7 +10,7 @@ install:
 - docker pull qwangcr/kpf:latest || true
 - docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
 script:
-- docker run qwangcr/kpf:latest
+- docker run -v /Users/bfulton/owncloud/bfulton/KPF-Pipeline-TestData:/data qwangcr/kpf:latest
 notifications:
   slack: false
   email: false
