@@ -9,10 +9,9 @@ pytest
 python-dotenv
 pytest
 pytest-cov
-pytest-html
+coveralls
 
 # Documentation
 sphinx
 sphinx-rtd-theme
 sphinxcontrib-napoleon
-
