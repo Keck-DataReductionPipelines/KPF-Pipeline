@@ -10,7 +10,7 @@ install:
 - docker pull qwangcr/kpf:latest || true
 - docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
 script:
-- docker run -v /Users/bfulton/owncloud/bfulton/KPF-Pipeline-TestData:/data qwangcr/kpf:latest
+- docker run -e COVERALLS_REPO_TOKEN=$KPFPIPE_COVERALLS_TOKEN -e CI_PULL_REQUEST=$ghprbPullId -v /Users/bfulton/owncloud/bfulton/KPF-Pipeline-TestData:/data qwangcr/kpf:latest
 notifications:
   slack: false
   email: false

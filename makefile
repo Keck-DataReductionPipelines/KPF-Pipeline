@@ -1,6 +1,6 @@
 init: 
 	pip3 install -r requirements.txt
-	python3 setup.py install
+	python setup.py install
 	mkdir -p logs
 
 update: 
@@ -18,6 +18,7 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 test:
-	pytest --ignore=kpfpipe/tests/test_recipe.py --cov --cov-report xml
+	pytest --ignore=kpfpipe/tests/test_recipe.py --cov=/usr/local/lib/python3.6/site-packages/kpfpipe
+	coveralls
 
 .PHONY: init

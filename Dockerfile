@@ -18,13 +18,11 @@ RUN mkdir /code && \
 
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
-ADD requirements.txt /code/KPF-Pipeline/requirements.txt
-
-# Install any needed packages specified in requirements.txt
-RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
-
 ADD . /code/KPF-Pipeline
 
-# Run app.py when the container launches
+# Install the package
+RUN pip3 install -r requirements.txt
+
+# Run testswhen the container launches
 CMD make init && \
     make test
