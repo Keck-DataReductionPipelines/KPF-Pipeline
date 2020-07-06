@@ -265,8 +265,12 @@ class KPFDataModel:
 
         # get version control info (git)
         repo = git.Repo(search_parent_directories=True)
-        git_commit_hash = repo.head.object.hexsha
-        git_branch = repo.active_branch.name
+        try:
+            git_commit_hash = repo.head.object.hexsha
+            git_branch = repo.active_branch.name
+        except TypeError:  # expected if running in testing env
+            git_commit_hash = ''
+            git_branch = ''
 
         # add the row to the bottom of the table
         row = [time, '---', git_branch, git_commit_hash, \
