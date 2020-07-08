@@ -178,11 +178,11 @@
 
 <span class="sd">    Warning: </span>
 <span class="sd">        This class (KPFDataModel) should not be used directly.</span>
-<span class="sd">        Based on the data level of your .fits file, used the appropriate data model.</span>
+<span class="sd">        Based on the data level of your .fits file, used the appropriate</span>
+<span class="sd">        level specific data model.</span>
 
 <span class="sd">    This is the base model for all KPF data models. Level specific data inherit from this </span>
-<span class="sd">    class, so any attribute and method listed here also apply to the level speific data </span>
-<span class="sd">    model</span>
+<span class="sd">    class, so any attribute and method listed here applies to all data models.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        header (dict): a dictionary of headers of each extension (HDU)</span>
@@ -262,7 +262,7 @@
         <span class="sd">&#39;&#39;&#39;</span>
 <span class="sd">        Constructor</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;PRIMARY&#39;</span><span class="p">:</span> <span class="p">{},</span> 
                              <span class="s1">&#39;RECEIPT&#39;</span><span class="p">:</span> <span class="p">{}}</span>
@@ -279,6 +279,9 @@
     <span class="k">def</span> <span class="nf">from_fits</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
                   <span class="n">data_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Create a data instance from a file</span>
+
+<span class="sd">        This method emplys the ``read`` method for reading the file. Refer to </span>
+<span class="sd">        it for more detail.</span>
 
 <span class="sd">        Args: </span>
 <span class="sd">            fn (str): file path (relative to the repository)</span>
@@ -304,6 +307,9 @@
 <span class="sd">            fn (str): file path (relative to the repository)</span>
 <span class="sd">            data_type (str): instrument type of the file</span>
 <span class="sd">            overwrite (bool): if this instance is not empty, specifies whether to overwrite</span>
+<span class="sd">        </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            IOError: when a invalid file is presented</span>
 
 <span class="sd">        Note:</span>
 <span class="sd">            This is not a @classmethod so initialization is </span>
@@ -315,7 +321,7 @@
             <span class="c1"># Can only read .fits files</span>
             <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s1">&#39;input files must be FITS files&#39;</span><span class="p">)</span>
         
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># This instance already contains data, and</span>
             <span class="c1"># we don&#39;t want to overwrite </span>
             <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s1">&#39;Cannot overwrite existing data&#39;</span><span class="p">)</span>
@@ -338,9 +344,9 @@
                                 <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">header</span>
                                 <span class="bp">self</span><span class="o">.</span><span class="n">extension</span><span class="p">[</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
             <span class="c1"># Leave the rest of HDUs to level specific readers</span>
-            <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_methods</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">read_methods</span><span class="p">[</span><span class="n">data_type</span><span class="p">](</span><span class="n">hdu_list</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># the provided data_type is not recognized, ie.</span>
                 <span class="c1"># not in the self.read_methods list</span>
                 <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s1">&#39;cannot recognize data type </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">data_type</span><span class="p">))</span></div>
@@ -411,8 +417,12 @@
 
         <span class="c1"># get version control info (git)</span>
         <span class="n">repo</span> <span class="o">=</span> <span class="n">git</span><span class="o">.</span><span class="n">Repo</span><span class="p">(</span><span class="n">search_parent_directories</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">git_commit_hash</span> <span class="o">=</span> <span class="n">repo</span><span class="o">.</span><span class="n">head</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">hexsha</span>
-        <span class="n">git_branch</span> <span class="o">=</span> <span class="n">repo</span><span class="o">.</span><span class="n">active_branch</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">git_commit_hash</span> <span class="o">=</span> <span class="n">repo</span><span class="o">.</span><span class="n">head</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">hexsha</span>
+            <span class="n">git_branch</span> <span class="o">=</span> <span class="n">repo</span><span class="o">.</span><span class="n">active_branch</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>  <span class="c1"># expected if running in testing env</span>
+            <span class="n">git_commit_hash</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+            <span class="n">git_branch</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
 
         <span class="c1"># add the row to the bottom of the table</span>
         <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">time</span><span class="p">,</span> <span class="s1">&#39;---&#39;</span><span class="p">,</span> <span class="n">git_branch</span><span class="p">,</span> <span class="n">git_commit_hash</span><span class="p">,</span> \
