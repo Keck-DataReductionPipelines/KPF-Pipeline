@@ -250,7 +250,9 @@ var Search = {
       if (results.length) {
         var item = results.pop();
         var listItem = $('<li style="display:none"></li>');
-        if (DOCUMENTATION_OPTIONS.FILE_SUFFIX === '') {
+        var requestUrl = "";
+        var linkUrl = "";
+        if (DOCUMENTATION_OPTIONS.BUILDER === 'dirhtml') {
           // dirhtml builder
           var dirname = item[0] + '/';
           if (dirname.match(/\/index\/$/)) {
@@ -259,13 +261,15 @@ var Search = {
             dirname = '';
           }
           requestUrl = DOCUMENTATION_OPTIONS.URL_ROOT + dirname;
+          linkUrl = requestUrl;
 
         } else {
           // normal html builders
           requestUrl = DOCUMENTATION_OPTIONS.URL_ROOT + item[0] + DOCUMENTATION_OPTIONS.FILE_SUFFIX;
+          linkUrl = item[0] + DOCUMENTATION_OPTIONS.LINK_SUFFIX;
         }
         listItem.append($('<a/>').attr('href',
-            requestUrl +
+            linkUrl +
             highlightstring + item[2]).html(item[1]));
         if (item[3]) {
           listItem.append($('<span> (' + item[3] + ')</span>'));
@@ -429,7 +433,7 @@ var Search = {
         for (j = 0; j < _files.length; j++) {
           file = _files[j];
           if (!(file in scoreMap))
-            scoreMap[file] = {}
+            scoreMap[file] = {};
           scoreMap[file][word] = o.score;
         }
       });
@@ -437,7 +441,7 @@ var Search = {
       // create the mapping
       for (j = 0; j < files.length; j++) {
         file = files[j];
-        if (file in fileMap)
+        if (file in fileMap && fileMap[file].indexOf(word) === -1)
           fileMap[file].push(word);
         else
           fileMap[file] = [word];

@@ -30,26 +30,28 @@ class OrderTrace(KPF0_Primitive):
         '''
         # Initialize parent class
         KPF0_Primitive.__init__(self, action, context)
-        # start a logger
-        self.logger = start_logger(self.__class__.__name__, None)
-        if not self.logger:
-            self.logger = self.context.logger
 
         # input argument 
         self.input = action.args[0]
         self.flat_data = self.input.data
         # input configuration
         self.config = configparser.ConfigParser()
-        try: 
-            config_path = action.args.config
-            self.config.read(config_path)
+        try:
+            config_path = context.config_path['order_trace']
         except:
-            self.config.read(DEFAULT_CFG_PATH)
+            config_path = DEFAULT_CFG_PATH
+        self.config.read(config_path)
+
+        # start a logger
+        self.logger = start_logger(self.__class__.__name__, config_path)
+        if not self.logger:
+            self.logger = self.context.logger
+        self.logger.info('Loading config from: {}'.format(config_path))
 
         # Order trace algorithm setup 
         self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
 
-    
+
     def _pre_condition(self) -> bool:
         '''
         Check for some necessary pre conditions
@@ -64,9 +66,7 @@ class OrderTrace(KPF0_Primitive):
         '''
         check for some necessary post condition
         '''
-        pass
-
-
+        return True
 
     def _perform(self) -> None:
         """
@@ -83,26 +83,21 @@ class OrderTrace(KPF0_Primitive):
         x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
         power = self.alg.get_poly_degree()
-        # 3) advanced cleaning
+        # 3) advanced cleaning and border cleaning
         if self.logger:
             self.logger.info("OrderTrace: advanced cleaning...")
-        index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
-        x, y, index = self.alg.reorganize_index(index, x, y)
-        x, y, index_b = self.alg.clean_clusters_on_border(x, y, index, 0)
-        _, _, ny = self.alg.get_spectral_data()
-        new_x, new_y, new_index = self.alg.clean_clusters_on_border(x, y, index_b, ny-1)
+        new_x, new_y, new_index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
+        new_x, new_y, new_index = self.alg.clean_clusters_on_borders(new_x, new_y, new_index)
 
         # 5) Merge cluster
         if self.logger:
             self.logger.info("OrderTrace: merging cluster...")
-        c_x, c_y, c_index, cluster_coeffs, cluster_points, errors = \
-            self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
+        c_x, c_y, c_index = self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
 
         # 6) Find width
         if self.logger:
             self.logger.info("OrderTrace: finding width...")
-        all_widths = self.alg.find_all_cluster_widths(c_index, cluster_coeffs,  cluster_points,
-                                                      power_for_width_estimation=3)
+        all_widths, cluster_coeffs = self.alg.find_all_cluster_widths(c_index, c_x, c_y, power_for_width_estimation=3)
 
         if self.logger:
             self.logger.info("OrderTrace: writing cluster into dataframe...")

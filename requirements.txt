@@ -8,7 +8,11 @@ GitPython
 pytest
 python-dotenv
 pytest
+pytest-cov
+pytest-html
 
 # Documentation
 sphinx
 sphinx-rtd-theme
+sphinxcontrib-napoleon
+
