@@ -280,11 +280,11 @@ class OrderTraceAlg:
             dict: result of formed clusters, like::
 
                     {
-                        'x': numpy.ndarray,     # Array of x coordinates of cluster pixels.
-                        'y': numpy.ndarray,     # Array of y coordinates of cluster pixels.
+                        'x': numpy.ndarray,  # Array of x coordinates of cluster pixels.
+                        'y': numpy.ndarray,  # Array of y coordinates of cluster pixels.
                         'cluster_image': numpy.ndarray
-                                                # 2D image in which the cluster pixels are with
-                                                # value 1 and non cluster pixels are with value 0.
+                                             # 2D image in which the cluster pixels are with
+                                             # value 1 and non cluster pixels are with value 0.
                     }
 
         """
@@ -559,7 +559,7 @@ class OrderTraceAlg:
 
         Args:
             clusters_endy_dict (dict): Collection of clusters collected by collect_clusters,
-                please see 'Returns' setion of :func:`~alg.OrderTraceAlg.collect_clusters` for more detail.
+                please see `Returns` section of :func:`~alg.OrderTraceAlg.collect_clusters` for more detail.
             x_index (numpy.ndarray): Array of x coordinates of cluster pixels.
             y_index (numpy.ndarray): Array of y coordinates of cluster pixels.
             th (int, optional): Size threshold for removing the noisy cluster. Defaults to None.
@@ -568,8 +568,9 @@ class OrderTraceAlg:
             dict: cluster information containing assigned id, like::
 
                 {
-                    'index': numpy.ndarray, # array of cluster id associated with cluster pixels.
-                    'n_regions': int        # total cluster.
+                    'index': numpy.ndarray,
+                                        # array of cluster id associated with cluster pixels.
+                    'n_regions': int    # total cluster.
                 }
 
         """
@@ -788,8 +789,10 @@ class OrderTraceAlg:
                                 'cluster_added': [<new_id_1>, <new_id_2>,...,<new_id_i>],
                                 'poly_fitting':{
                                     <cluster_id>: {
-                                        'errors': float,  # Least square error by using polynomial fit.
-                                        'coeffs': numpy.ndarray,  # Coefficients of polynomial fit.
+                                        'errors': float,
+                                                    # Least square error by using polynomial fit.
+                                        'coeffs': numpy.ndarray,
+                                                    # Coefficients of polynomial fit.
                                         'area': list,     # Area of the cluster, like
                                                           # [<min_x>, <max_x>, <min_y>, <max_y>]
                                                           # for 4 borders of the cluster.
@@ -797,7 +800,7 @@ class OrderTraceAlg:
                                     <new_id_1>: {'errors': ..., 'coeffs': ..., 'area': ...},
                                     <new_id_n>: {'errors': ..., 'coeffs': ..., 'area': ...}}
                             }
-                            # <new_id_i> is the id for newly created cluster, if the status is 'split'.
+                            # <new_id_i> is the id for newly created cluster, if 'split'.
 
         """
 
@@ -1004,10 +1007,11 @@ class OrderTraceAlg:
                 [[<start_idx>_i, <end_idx>_i], ..., [<start_idx>_n, <end_idx>_n]]
                 '''
                 where
-                    <start_idx>_i and <end_idx>_i represent the starting and ending index of
-                    the i-th segment and the index is associated with parameter loc.
+                    <start_idx>_i and <end_idx>_i represent the starting and ending index
+                    of the i-th segment and the index is associated with parameter loc.
 
-                ex. [[1, 3], [7, 10], ..., [150, 160]] means the following segments are included,
+                ex. [[1, 3], [7, 10], ..., [150, 160]] means the following segments are
+                    included,
                     1st segment is from loc[1] to loc[3] along x-axis.
                     2nd segment is from loc[7] to loc[10] along x-axis.
                     last segment is from loc[150] to loc[160] along x-axis.
@@ -1361,12 +1365,13 @@ class OrderTraceAlg:
 
                     {
                         'status': 'changed'|'nochange'.
-                        'index': numpy.ndarray,  # Array of cluster id on cluster pixels after merge.
+                        'index': numpy.ndarray,
+                                        # Array of cluster id on cluster pixels after merge.
                         'kept_curves': list,     # Array of cluster id of unchanged clusters.
                         'log': <messge>.
                     }
 
-                    # 'status' means if there is 'changed' clusters (if merge happens) or 'nochange'.
+                    # 'status' means if clusters are 'changed' (if merge happens) or 'nochange'.
                     # 'log' contains the message regarding any merge action if there is,
                     # like 'remove id' or 'merge id_1 and id_2'.
 
@@ -2006,12 +2011,12 @@ class OrderTraceAlg:
         Returns:
             numpy.ndarray: background data above and below the cluster along x direction, like::
 
-                [[<background_value_below_trace>_i, <background_value_above_trace>_i], ...., ]
+                [[<background_value_below_trace>_i, <background_value_above_trace>_i], .., ]
                 where
                     <background_value_below_trace>_i (float):
-                                            # background value below the trace at i-th x location.
+                                        # background value below the trace at i-th x location.
                     <background_value_abobe_trace>_i (float):
-                                            # background value above the trace at i-th x location.
+                                        # background value above the trace at i-th x location.
 
         """
 
@@ -2555,9 +2560,10 @@ class OrderTraceAlg:
             dict: contains the sorted information, like::
 
                 {
-                    'idx': int,  # index of the cluster `cluster_no` from the new sorted list.
+                    'idx': int,
+                            # index of the cluster `cluster_no` from the new sorted list.
                     'index_v_pos': numpy.ndarray
-                                 # sorted list of cluster id based on the y position at `x_loc`.
+                            # sorted list of cluster id based on the y position at `x_loc`.
                 }
 
         """
@@ -2913,7 +2919,7 @@ class OrderTraceAlg:
             power_for_width_estimation (int): Degree of polynomial fit for trace width estimation. Defaults to -1.
             show_time (bool, optional): Show running time if True. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
-                a file with path `print_deug` if it is non empty string, or no print if it is None.
+                a file with path `print_debug` if it is non empty string, or no print if it is None.
                 Defaults to None.
 
         Returns:
@@ -2921,11 +2927,11 @@ class OrderTraceAlg:
 
                 {
                     'order_trace_result': Padas.DataFrame,
-                                                # table storing coefficients of polynomial
-                                                # fit, bottom/top width, and left/right boundary.
-                    'cluster_index': numpy.ndarray,    # Array of cluster id on cluster pixels.
-                    'cluster_x': numpy.ndarray,        # Array of x coordinates of cluster pixels.
-                    'cluster_y': numpy.ndarray         # Array of y coordinates of cluster pixels.
+                                            # table storing coefficients of polynomial
+                                            # fit, bottom/top width, and left/right boundary.
+                    'cluster_index': numpy.ndarray,  # Array of cluster id on cluster pixels.
+                    'cluster_x': numpy.ndarray,      # Array of x coordinates of cluster pixels.
+                    'cluster_y': numpy.ndarray       # Array of y coordinates of cluster pixels.
                 }
 
         """
