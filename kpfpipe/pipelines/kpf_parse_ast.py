@@ -458,7 +458,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 for argnode in node.args:
                     self.visit(argnode)
                     event_args.append(self._load.pop())
-                self.context.push_event(node.func.id, event_args)
+                self.context.append_event(node.func.id, event_args)
                 self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                 #
                 self.awaiting_call_return = True

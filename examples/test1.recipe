@@ -1,6 +1,6 @@
-from mumble import OrderTrace
+from modules.order_trace.src.order_trace import OrderTrace
 
-file = '/home/qwang3/ownCloud/KPF-Pipeline-TestData/order_trace_test/paras.flatA.fits'
+file = '../ownCloud/KPF-Pipeline-TestData/order_trace_test/paras.flatA.fits'
 
 data = kpf0_from_fits(file, data_type="PARAS")
 data = OrderTrace(data)
