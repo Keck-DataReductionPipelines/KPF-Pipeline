@@ -4,6 +4,7 @@ import os
 import sys
 import importlib
 import configparser as cp
+import keckdrpframework.config.framework_config as cfg
 import logging
 
 from kpfpipe.logger import start_logger
@@ -27,13 +28,13 @@ class KPFPipeline(BasePipeline):
         context (ProcessingContext): context class provided by the framework
     
     Attributes:
-        event_table (dictionary): table of actions known to framework.
-        All primitives must be registered here.
+        event_table (dictionary): table of actions known to framework. All primitives must be registered here.
     
-    Note: the correct operation of the recipe visitor depends on action.args being KpfArguments, which
-    is an extension (class derived from) the Keck DRPF Arguments class.  All pipeline primitives must use
-    KpfArguments rather than simply Arguments for their return values.  They will also get input arguments
-    packaged as KpfArguments. 
+    Note: 
+        The correct operation of the recipe visitor depends on action.args being KpfArguments, which
+        is an extension (class derived from) the Keck DRPF Arguments class.  All pipeline primitives must use
+        KpfArguments rather than simply Arguments for their return values.  They will also get input arguments
+        packaged as KpfArguments. 
     """
 
     # Modification: 
@@ -42,10 +43,11 @@ class KPFPipeline(BasePipeline):
         # action_name: (name_of_callable, current_state, next_event_name)
         'start_recipe': ('start_recipe', 'starting recipe', None), 
         'resume_recipe': ('resume_recipe', 'resuming recipe', None),
-        'exit': ('exit_loop', 'exiting...', None),
-        'TFAMakeTemplate': ('TFAMakeTemplate', 'TEST', None),
-        'ReadKPF1': ('ReadKPF1', 'READ', None),
-        'KPFModExample': ('KPFModExample', 'EXAMPLE', None)
+        'to_fits': ('to_fits', 'processing', 'resume_recipe'),
+        'kpf0_from_fits': ('kpf0_from_fits', 'processing', 'resume_recipe'),
+        'kpf1_from_fits': ('kpf1_from_fits', 'processing', 'resume_recipe'),
+        'kpf2_from_fits': ('kpf2_from_fits', 'processing', 'resume_recipe'),
+        'exit': ('exit_loop', 'exiting...', None)
         }
     
 
@@ -58,23 +60,30 @@ class KPFPipeline(BasePipeline):
         Customized in that it sets up logger and configurations differently 
         from how the BasePipeline does.
 
-        :Args: config (ConfigParser): containing pipeline configuration
+        Args: 
+            config (ConfigParser): containing pipeline configuration
         '''
         ## setup pipeline configuration 
         # Technically the pipeline's configuration is stored in self.context as 
         # a ConfigClass() defined by keckDRP. But we will be using configParser
-    
 
         self.logger = start_logger(self.name, config)
         self.logger.info('Logger started')
+        
         ## Setup argument
         try: 
             cfg_obj = cp.ConfigParser()
+            # cfg_obj = cfg.ConfigClass()
             cfg_obj.read(config)
             arg = cfg_obj._sections['ARGUMENT']
         except KeyError:
             raise IOError('cannot find [ARGUMENT] section in config')
         self.context.arg = arg
+
+        ## Dave's experiment
+        # print("kpfpipeline: about to assign into pipeline.config")
+        # self.config = cfg_obj
+        # print(f"Experiment: type of self.config is {type(self.config)}")
 
         ## Setup primitive-specific configs:
         self.context.config_path = cfg_obj._sections['MODULES']
@@ -98,7 +107,9 @@ class KPFPipeline(BasePipeline):
             self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
             self._recipe_visitor.visit(self._recipe_ast)
         except:
-            print(sys.exit_info())
+            print(sys.exc_info())
+        
+        return Arguments()
 
     def exit_loop(self, action, context):
         """
@@ -109,7 +120,7 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         self.logger.info("exiting pipeline...")
-        os._exit(0)
+        # os._exit(0)
 
     # reentry after call
 
@@ -126,4 +137,4 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.awaiting_call_return = False
         self._recipe_visitor.call_output = action.args # framework put previous output here
         self._recipe_visitor.visit(self._recipe_ast)
-        return
+        return Arguments()  # nothing to actually return, but meet the Framework requirement

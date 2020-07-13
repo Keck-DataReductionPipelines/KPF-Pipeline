@@ -1,0 +1,590 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>kpfpipe.models.level1 &mdash; KPFPipeline 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> KPFPipeline
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../intro/start.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../develop/start.html">KPF Pipeline Development</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/api.html">API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../primitives/primitives.html">Implemented Primitives</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">KPFPipeline</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>kpfpipe.models.level1</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for kpfpipe.models.level1</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">KPF Level 1 Data Model</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="c1"># Standard dependencies</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+
+<span class="c1"># External dependencies</span>
+<span class="kn">import</span> <span class="nn">astropy</span>
+<span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
+<span class="kn">from</span> <span class="nn">astropy.time</span> <span class="kn">import</span> <span class="n">Time</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+
+<span class="kn">from</span> <span class="nn">kpfpipe.models.base_model</span> <span class="kn">import</span> <span class="n">KPFDataModel</span>
+
+<span class="n">MAPPING</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="c1"># Order:  (header-key, dimension, data-key)</span>
+    <span class="s1">&#39;PRIMARY&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;PRIMARY&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+    <span class="s1">&#39;SCIFLUX&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;SCI1_FLUX&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;SCI1&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;SKYFLUX&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;SKY_FLUX&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;SKY&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;CALFLUX&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;CAL_FLUX&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;CAL&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;SCIVAR&#39;</span>  <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;SCI1_VARIANCE&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;SCI1&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;SKYVAR&#39;</span>  <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;SKY_VARIANCE&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;SKY&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;CALVAR&#39;</span>  <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;CAL_VARIANCE&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;CAL&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;SCIWAVE&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;SCI1_WAVE&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;SCI1&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;SKYWAVE&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;SKY_WAVE&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;SKY&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;CALWAVE&#39;</span> <span class="p">:</span> <span class="p">(</span><span class="s1">&#39;CAL_WAVE&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;CAL&#39;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<div class="viewcode-block" id="KPF1"><a class="viewcode-back" href="../../../api/data_model/level_1.html#kpfpipe.models.level1.KPF1">[docs]</a><span class="k">class</span> <span class="nc">KPF1</span><span class="p">(</span><span class="n">KPFDataModel</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    The level 1 KPF data. Initialize with empty fields</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        data (dict): A dictionary of 5 orderlettes&#39; 1D extracted spectrum.</span>
+
+<span class="sd">            This is the attribute of the instance that contains all image data.</span>
+<span class="sd">            The keys are the name of each orderlette, and the values are image data</span>
+<span class="sd">            asscoaited with that orderlette. </span>
+<span class="sd">            </span>
+<span class="sd">            Each image data is a stack by row by column 3D numpy array. The first dimension</span>
+<span class="sd">            (stack) is fixed at 3. The first stack is the 1D extracted spectrum (2D ndarray),</span>
+<span class="sd">            the second stack is the wavelength calibration, and the 3rd stack is the pixel variance.</span>
+<span class="sd">            The second dimension (row) specifies a 1D extracted spectrum, and each row is an order.</span>
+
+<span class="sd">            There are five orderlettes (valid keys to the dict) in total:</span>
+<span class="sd">                - ``CAL``: Calibration fiber</span>
+<span class="sd">                - ``SKY``: Sky fiber</span>
+<span class="sd">                - ``SCI1``: Science fiber 1</span>
+<span class="sd">                - ``SCI2``: Science fiber 2</span>
+<span class="sd">                - ``SCI3``: Science fiber 3</span>
+
+
+<span class="sd">        segments (dict): A dictionary of 5 tables of spectrum segments</span>
+
+<span class="sd">            A segment is a meaningful part of a 1D spectrum, identified by a </span>
+<span class="sd">            ``begin_index`` and ``end_index``. Both are 2-element tuples that specifies</span>
+<span class="sd">            the row-column coordinate on the data array. Additionally, each segment has </span>
+<span class="sd">            a corresponding string label that uniquely defines it. Each segment can also </span>
+<span class="sd">            be attached with a string comment.</span>
+
+<span class="sd">            Each orderlette can have its own list of segments, so segments are sorted in</span>
+<span class="sd">            a dictionary, with the keys being names of the orderlettes. The value to each</span>
+<span class="sd">            key is a pandas.DataFrame table. Each row of the table represent a unique </span>
+<span class="sd">            segment.</span>
+
+<span class="sd">            Examples:</span>
+<span class="sd">                &gt;&gt;&gt; from kpfpipe.models.level1 import KPF1</span>
+<span class="sd">                # Assume we have an NEID level 1 file called &quot;level1.fits&quot;</span>
+<span class="sd">                &gt;&gt;&gt; level1 = KPF1.from_fits(&#39;level1.fits&#39;, &#39;NEID&#39;)</span>
+<span class="sd">                # By default each order comes as its own segment. </span>
+<span class="sd">                # Access the default segments for the &#39;SKY&#39; orderlette</span>
+<span class="sd">                &gt;&gt;&gt; data.segments[&#39;SKY&#39;]</span>
+<span class="sd">                    Label   Order   Begin_idx        End_idx   Length   Comment </span>
+<span class="sd">                1     &#39;1&#39;       0      (0, 0)      (0, 9216)     9217   1st order </span>
+<span class="sd">                2     &#39;2&#39;       1      (1, 0)      (1, 9216)     9217   2nd order </span>
+<span class="sd">                3     &#39;3&#39;       2      (2, 0)      (2, 9216)     9217   3rd order </span>
+<span class="sd">                ...</span>
+<span class="sd">                118 &#39;118&#39;     117    (117, 0)    (117, 9216)     9217   127th order </span>
+<span class="sd">                # Creating a segments for &#39;SCI1&#39; that begins on 10th pixel of 0th order</span>
+<span class="sd">                # and ends on 300th pixel of 0th order </span>
+<span class="sd">                &gt;&gt;&gt; level1.add_segment(&#39;SKY&#39;, (0, 10), (0, 300), &#39;example&#39;, &#39;an example order&#39;)</span>
+<span class="sd">                # Access the segment we just added (the very last entry)</span>
+<span class="sd">                # Any pandas.dataframe method will work here</span>
+<span class="sd">                &gt;&gt;&gt; example_segment= level1.segments[&#39;SKY&#39;].loc[119]</span>
+<span class="sd">                &gt;&gt;&gt; example_segment</span>
+<span class="sd">                Label                              example</span>
+<span class="sd">                Order                                    0</span>
+<span class="sd">                Begin_idx                           (0, 0)</span>
+<span class="sd">                End_idx                           (0, 300)</span>
+<span class="sd">                Length                                 301</span>
+<span class="sd">                Comment                   an example order</span>
+<span class="sd">                Name: 119, dtype: object</span>
+
+<span class="sd">        read_methods (dict): Dictionaries of supported parsers. </span>
+<span class="sd">        </span>
+<span class="sd">            These parsers are used by the base model to read in .fits files from other</span>
+<span class="sd">            instruments</span>
+
+<span class="sd">            Supported parsers: ``KPF``, ``NEID``</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Constructor</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">KPFDataModel</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;CAL&#39;</span><span class="p">:</span>  <span class="kc">None</span><span class="p">,</span>
+                           <span class="s1">&#39;SCI1&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                           <span class="s1">&#39;SCI2&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                           <span class="s1">&#39;SCI3&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                           <span class="s1">&#39;SKY&#39;</span><span class="p">:</span>  <span class="kc">None</span><span class="p">}</span>
+
+        <span class="c1"># start an empty segment table</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">clear_segment</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">read_methods</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;KPF&#39;</span><span class="p">:</span>  <span class="bp">self</span><span class="o">.</span><span class="n">_read_from_KPF</span><span class="p">,</span>
+            <span class="s1">&#39;NEID&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_from_NEID</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_read_from_NEID</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hdul</span><span class="p">:</span> <span class="n">fits</span><span class="o">.</span><span class="n">HDUList</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Parse the HDUL based on NEID standards</span>
+<span class="sd">        Args:</span>
+<span class="sd">            hdul (fits.HDUList): List of HDUs parsed with astropy.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">for</span> <span class="n">hdu</span> <span class="ow">in</span> <span class="n">hdul</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">MAPPING</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Unrecognized header &quot;</span><span class="si">{</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+
+            <span class="p">(</span><span class="n">header_key</span><span class="p">,</span> <span class="n">dimension</span><span class="p">,</span> <span class="n">data_key</span><span class="p">)</span> <span class="o">=</span> <span class="n">t</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">header_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">header</span>
+
+            <span class="k">if</span> <span class="n">data_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">dimension</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span> 
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_key</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">nx</span><span class="p">,</span> <span class="n">ny</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">))</span>
+
+                <span class="k">if</span> <span class="n">dimension</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_key</span><span class="p">][</span><span class="n">dimension</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">hdu</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+        <span class="c1"># populate wave for SKY and CAL</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SKY&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SCI1&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;CAL&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;SCI1&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+
+        <span class="c1"># Generate default segments</span>
+        <span class="k">for</span> <span class="n">fiber</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">order</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                    <span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Order </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+                    <span class="n">begin_idx</span> <span class="o">=</span> <span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                    <span class="n">end_idx</span> <span class="o">=</span> <span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                    <span class="n">length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+                    <span class="n">comment</span> <span class="o">=</span> <span class="s1">&#39;default segemnt for order </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+
+                    <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">label</span><span class="p">,</span> <span class="n">order</span><span class="p">,</span> <span class="n">begin_idx</span><span class="p">,</span> <span class="n">end_idx</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">comment</span><span class="p">]</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">])]</span> <span class="o">=</span> <span class="n">row</span>
+    
+    <span class="k">def</span> <span class="nf">_read_from_KPF</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hdul</span><span class="p">:</span> <span class="n">fits</span><span class="o">.</span><span class="n">HDUList</span><span class="p">,</span>
+                        <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Parse the HDUL based on KPF standards</span>
+<span class="sd">        Args:</span>
+<span class="sd">            hdul (fits.HDUList): List of HDUs parsed with astropy.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">variance</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">wave</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">hdu</span> <span class="ow">in</span> <span class="n">hdul</span><span class="p">:</span>
+            <span class="n">this_header</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">header</span>
+            <span class="k">if</span> <span class="n">hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;PRIMARY&#39;</span><span class="p">:</span>
+                <span class="c1"># PRIMARY extension does not contain data</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;PRIMARY&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">this_header</span>
+            <span class="k">elif</span> <span class="n">hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;SEGMENTS&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;SEGMENTS&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">header</span>
+                <span class="n">t</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">hdu</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">segments</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="n">hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s1">&#39;RECEIPT&#39;</span><span class="p">:</span>
+                <span class="c1"># this is handled by the base class</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span> 
+                <span class="k">try</span><span class="p">:</span> 
+                    <span class="n">fiber</span><span class="p">,</span> <span class="n">datatype</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;Extension </span><span class="si">{}</span><span class="s1"> not recognized&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+
+                <span class="k">if</span> <span class="n">datatype</span> <span class="o">==</span> <span class="s1">&#39;FLUX&#39;</span><span class="p">:</span>
+                    <span class="n">flux</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">data</span>
+                <span class="k">elif</span> <span class="n">datatype</span> <span class="o">==</span> <span class="s1">&#39;VARIANCE&#39;</span><span class="p">:</span>
+                    <span class="n">variance</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">data</span>
+                <span class="k">elif</span> <span class="n">datatype</span> <span class="o">==</span> <span class="s1">&#39;WAVE&#39;</span><span class="p">:</span>
+                    <span class="n">wave</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">data</span>
+                <span class="k">else</span><span class="p">:</span> 
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;HDU name </span><span class="si">{}</span><span class="s1"> not recognized&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">hdu</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">header</span>
+
+        <span class="c1"># make sure that flux, </span>
+        <span class="k">for</span> <span class="n">fiber</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">flux</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span> 
+                <span class="k">assert</span><span class="p">(</span><span class="n">wave</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="k">assert</span><span class="p">(</span><span class="n">variance</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">AssertionError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Data dimensions do not agree&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># stack flux, wave, variance into a 3D array</span>
+        <span class="k">for</span> <span class="n">fiber</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span> 
+                <span class="n">nx</span><span class="p">,</span> <span class="n">ny</span> <span class="o">=</span> <span class="n">flux</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">,))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">flux</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">][</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">wave</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">][</span><span class="mi">2</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">variance</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="c1"># This may happen when the expected fiber extension is not in file</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    
+    <span class="k">def</span> <span class="nf">_create_hdul</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Create an hdul in FITS format</span>
+<span class="sd">        Note: </span>
+<span class="sd">            This method should only be used by BaseModel</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">hdu_list</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Add primary HDU </span>
+        <span class="n">hdu</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">PrimaryHDU</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;PRIMARY&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">hdu</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="n">hdu_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hdu</span><span class="p">)</span>
+
+        <span class="c1"># add fiber data</span>
+        <span class="k">for</span> <span class="n">fiber</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">flux_hdu</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">ImageHDU</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+                <span class="n">header_key</span> <span class="o">=</span> <span class="n">fiber</span> <span class="o">+</span> <span class="s1">&#39;_FLUX&#39;</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">header_key</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">flux_hdu</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+                <span class="n">flux_hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">header_key</span>
+
+                <span class="n">variance_hdu</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">ImageHDU</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+                <span class="n">header_key</span> <span class="o">=</span> <span class="n">fiber</span> <span class="o">+</span> <span class="s1">&#39;_VARIANCE&#39;</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">header_key</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">variance_hdu</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+                <span class="n">variance_hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">header_key</span>
+
+                <span class="n">wave_hdu</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">ImageHDU</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+                <span class="n">header_key</span> <span class="o">=</span> <span class="n">fiber</span> <span class="o">+</span> <span class="s1">&#39;_WAVE&#39;</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="n">header_key</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">wave_hdu</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+                <span class="n">wave_hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">header_key</span>  
+
+                <span class="n">hdu_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">flux_hdu</span><span class="p">)</span>
+                <span class="n">hdu_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">variance_hdu</span><span class="p">)</span>
+                <span class="n">hdu_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">wave_hdu</span><span class="p">)</span>
+
+        <span class="c1"># Add segments</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">receipt</span><span class="p">)</span>
+        <span class="n">hdu</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">table_to_hdu</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+        <span class="n">hdu</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;SEGMENTS&#39;</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;SEGMENTS&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">hdu</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="n">hdu_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hdu</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">hdu_list</span>
+
+<span class="c1"># ============================================================================</span>
+<span class="c1"># Segment related operations</span>
+
+<div class="viewcode-block" id="KPF1.add_segment"><a class="viewcode-back" href="../../../api/data_model/level_1.html#kpfpipe.models.level1.KPF1.add_segment">[docs]</a>    <span class="k">def</span> <span class="nf">add_segment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fiber</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">begin_idx</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">end_idx</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span>
+                    <span class="n">label</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">comment</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Add an entry in the segments</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            fiber (str): name of the orderlette </span>
+<span class="sd">            begin_index (tuple): xy coordinate of the start of segments</span>
+<span class="sd">            end_idx (tuple): xy coordinate of the end of segments</span>
+<span class="sd">            label (str): segment label. Auto generated if None</span>
+<span class="sd">            comment (str): comment attached to the segment</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="c1"># data.segment</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Cannot add segment for empty data&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">label</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Custom segment </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_custom_seg</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">][</span><span class="s1">&#39;Label&#39;</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s1">&#39;provided label already exist for another segment&#39;</span><span class="p">)</span>
+
+        <span class="c1"># make sure that the index provided is valid</span>
+        <span class="k">if</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="c1"># segments must be on same order</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Segment begin on order </span><span class="si">{}</span><span class="s1">, end on order </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                                <span class="n">begin_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Segment begin location must be before end location&#39;</span><span class="p">)</span>
+    
+        <span class="c1"># make sure index are not out of bound</span>
+        <span class="k">if</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid beginning row index&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid beginning column index&#39;</span><span class="p">)</span>
+    
+        <span class="k">if</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid end row index&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid end column index&#39;</span><span class="p">)</span>
+
+        <span class="n">length</span> <span class="o">=</span> <span class="n">end_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="n">begin_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">label</span><span class="p">,</span> <span class="n">order</span><span class="p">,</span> <span class="n">begin_idx</span><span class="p">,</span> <span class="n">end_idx</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">comment</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">])]</span> <span class="o">=</span> <span class="n">row</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_custom_seg</span> <span class="o">+=</span> <span class="mi">1</span></div>
+    
+<div class="viewcode-block" id="KPF1.clear_segment"><a class="viewcode-back" href="../../../api/data_model/level_1.html#kpfpipe.models.level1.KPF1.clear_segment">[docs]</a>    <span class="k">def</span> <span class="nf">clear_segment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Reset the table containing segments</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">seg_header</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Label&#39;</span><span class="p">,</span> <span class="s1">&#39;Order&#39;</span><span class="p">,</span> <span class="s1">&#39;Begin_idx&#39;</span><span class="p">,</span>\
+                      <span class="s1">&#39;End_idx&#39;</span><span class="p">,</span> <span class="s1">&#39;Length&#39;</span><span class="p">,</span> <span class="s1">&#39;Comment&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">segments</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">fiber</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">seg_header</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;SEGMENTS&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_custom_seg</span> <span class="o">=</span> <span class="mi">0</span></div>
+    
+<div class="viewcode-block" id="KPF1.remove_segment"><a class="viewcode-back" href="../../../api/data_model/level_1.html#kpfpipe.models.level1.KPF1.remove_segment">[docs]</a>    <span class="k">def</span> <span class="nf">remove_segment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fiber</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Remove a segment based on label</span>
+
+<span class="sd">        Args: </span>
+<span class="sd">            label (str): label of the segment to be removed</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">][</span><span class="s1">&#39;Label&#39;</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> not found&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">label</span><span class="p">))</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">][</span><span class="s1">&#39;Label&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">label</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="KPF1.info"><a class="viewcode-back" href="../../../api/data_model/level_1.html#kpfpipe.models.level1.KPF1.info">[docs]</a>    <span class="k">def</span> <span class="nf">info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Pretty print information about this data with print()</span>
+<span class="sd">        </span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;File name: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span> 
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Empty KPF0 Data product&#39;</span><span class="p">)</span>
+        <span class="c1"># a typical command window is 80 in length</span>
+        <span class="n">head_key</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> </span><span class="se">\n</span><span class="si">{:40}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="s1">&#39;Header Name&#39;</span><span class="p">,</span> <span class="s1">&#39;# Cards&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;=&#39;</span><span class="o">*</span><span class="mi">80</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20}</span><span class="s1"> </span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+            <span class="n">head_key</span> <span class="o">+=</span> <span class="n">row</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">head_key</span><span class="p">)</span>
+        <span class="n">head</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> </span><span class="se">\n</span><span class="si">{:40}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="s1">&#39;Fiber Name&#39;</span><span class="p">,</span> <span class="s1">&#39;Data Type&#39;</span><span class="p">,</span> <span class="s1">&#39;Data Dimension&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;=&#39;</span><span class="o">*</span><span class="mi">80</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">fiber</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">fiber</span><span class="o">+</span><span class="s1">&#39;_FLUX&#39;</span><span class="p">,</span> <span class="s1">&#39;array&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+                <span class="n">head</span> <span class="o">+=</span> <span class="n">row</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">variance</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">fiber</span><span class="o">+</span><span class="s1">&#39;_VARIANCE&#39;</span><span class="p">,</span> <span class="s1">&#39;array&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">variance</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+                <span class="n">head</span> <span class="o">+=</span> <span class="n">row</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">wave</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">fiber</span><span class="o">+</span><span class="s1">&#39;_WAVE&#39;</span><span class="p">,</span> <span class="s1">&#39;array&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">wave</span><span class="p">[</span><span class="n">fiber</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+                <span class="n">head</span> <span class="o">+=</span> <span class="n">row</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="s1">&#39;Receipt&#39;</span><span class="p">,</span> <span class="s1">&#39;table&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">receipt</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+        <span class="n">head</span> <span class="o">+=</span> <span class="n">row</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="s1">&#39;Segment&#39;</span><span class="p">,</span> <span class="s1">&#39;table&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+        <span class="n">head</span> <span class="o">+=</span> <span class="n">row</span>
+        
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">aux</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">extension</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="s1">&#39;|</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="s1"> |</span><span class="si">{:20s}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;table&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">aux</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+            <span class="n">head</span> <span class="o">+=</span> <span class="n">row</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="n">head</span><span class="p">)</span></div></div>
+
+
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Arpita Roy, BJ Fulton, Andrew Howard
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

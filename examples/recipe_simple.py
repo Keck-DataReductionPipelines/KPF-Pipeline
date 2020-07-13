@@ -1,1 +1,0 @@
-context.push_event('KPFModExample', action.args)
