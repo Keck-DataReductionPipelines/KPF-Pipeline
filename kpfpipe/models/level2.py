@@ -1,14 +1,6 @@
-class KPF2(object):
-    def __init__(self):
-        self.rv = {} # final radial-velocity (float)
-        #self.orderlets # collection of Orderlet2
-        self.activity = {} # collection of different activity mectrics like svalue, bspan, halpha (dict)
-
-    def to_fits(self):
-        """
-        Collect all the level 2 data into a monolithic fits file
-        """
-        pass
+'''
+KPF Level 2 Data Model
+'''
         
 #class Orderlet2(object):
 #    """

@@ -1,0 +1,64 @@
+Comments from 2020-05-19 code review of Qifan's data model classes, and
+associated tests.
+
+Makefile
+ - Document its purpose at the top of the file.
+ - Add make variables for PIP, PYTHON for your makefile
+ - Add other phony targets to .PHONY
+
+data_model.py
+ - Yay type annotations, good job!
+   - But:  add type annotations to fields as well
+   - DONNIE:  Send out cheat sheet about type annotations
+ - Line 70:  if not overwrite and not self.flux:
+   Dave asks, should it be "...and self.flux" ?
+   (Also need to define in __init__())
+ - Line 110:  Define create_hdul(self) method in base type, and make it raise
+ - Continue to write docs for the class
+
+level0.py
+ - Line 5:  Try to avoid * imports
+ - self.read_methods = { ... }
+   Suggestion:  Initialize empty read_methods dict in base type __init__,
+   and have the sub-type add read-methods to the dict in the subtype __init__
+ - Line 113:  "else: continue" - document why
+   Suggestion:
+       elif name == 'RECEIPT':
+           continue
+       else:
+           raise SomeError
+   Suggestion:
+       elif name in ['RECEIPT', 'OTHER_TAGS']:
+           continue
+       else:
+           raise SomeError
+
+test_level0.py
+ - Yay there are tests!!!
+ - Should keys be normalized to all-caps?  Yes?  No?  Not sure!
+   FITS converts all keys to uppercase at writing / reading
+ - Should the test code access the internal state of the objects?
+   Expected behavior:  users will access internal fields directly
+   If users aren't advanced, they will make mistakes regarding case.
+   Should probably take care of normalization for users to avoid issues.
+ - Line 92:  Instead of relying on a local directory "temp", use the
+   tempfile Python module to create a temporary directory to use.
+   Kyung:  Does pytest provide a tempdir-factory to automatically take
+   care of this for tests?
+
+level1.py
+ - Similar import * problem
+ - Similar self.read_methods suggestions
+ - Starting with Line 39 - long chain of if/elif statements
+   Replace with a table            ** DONNIE:  WRITE UP AN EXAMPLE VERSION
+   Replace with lambdas etc.
+ - Line 136 - for loop:  three blocks of very similar code - replace with
+   a helper function?
+ - Line 190 - can a segment be empty?  The test has an "=" in the condition.
+ - Line 190 - What are the conventions for begin_idx and end_idx?
+   begin_idx is the index of the first element, end_idx is the index of the
+   last element [NOT ONE PAST THE LAST ELEMENT].
+   Checks need to be verified against what convention this code follows.
+
+test_level1.py
+ - Basically all the same comments as for test_level0.py
