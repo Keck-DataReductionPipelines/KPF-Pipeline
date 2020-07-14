@@ -275,7 +275,7 @@ class KPFDataModel:
         except TypeError:  # expected if running in testing env
             git_commit_hash = ''
             git_branch = ''
-
+            git_tag = ''
         # add the row to the bottom of the table
         row = [time, git_tag, git_branch, git_commit_hash, \
                Mod, str(self.level), mod_path, param, status]
