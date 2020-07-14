@@ -104,10 +104,10 @@ class OrderTrace(KPF0_Primitive):
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
         
-        self.input.create_extension('ORDER TRACE RESULT')
-        self.input.extension['ORDER TRACE RESULT'] = df
+        self.input.create_extension('ORDER_TRACE_RESULT')
+        self.input.extension['ORDER_TRACE_RESULT'] = df
 
-        self.input.header['ORDER TRACE RESULT']['POLY DEGREE'] = self.alg.get_poly_degree()
+        self.input.header['ORDER_TRACE_RESULT']['POLY_DEGREE'] = self.alg.get_poly_degree()
 
         self.input.receipt_add_entry('OrderTrace', f'config_path={self.config_path}', 'PASS')
         if self.logger:
