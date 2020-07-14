@@ -109,7 +109,7 @@ class OrderTrace(KPF0_Primitive):
 
         self.input.header['ORDER_TRACE_RESULT']['POLY_DEGREE'] = self.alg.get_poly_degree()
 
-        self.input.receipt_add_entry('OrderTrace', f'config_path={self.config_path}', 'PASS')
+        self.input.receipt_add_entry('OrderTrace', self.__module__, f'config_path={self.config_path}', 'PASS')
         if self.logger:
             self.logger.info("OrderTrace: Receipt written")
 

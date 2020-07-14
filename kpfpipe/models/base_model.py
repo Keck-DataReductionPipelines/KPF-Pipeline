@@ -121,6 +121,9 @@ class KPFDataModel:
         # list of auxiliary extensions 
         self.extension: dict = {}
 
+        # level of data model
+        self.level = None # set in each derived class
+
 # =============================================================================
 # I/O related methods
     @classmethod
@@ -249,7 +252,7 @@ class KPFDataModel:
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, Mod: str, param: str, status: str) -> None:
+    def receipt_add_entry(self, Mod: str, mod_path: str, param: str, status: str) -> None:
         '''
         Add an entry to the receipt
 
@@ -275,7 +278,7 @@ class KPFDataModel:
 
         # add the row to the bottom of the table
         row = [time, git_tag, git_branch, git_commit_hash, \
-               Mod, '---', '---', param, status]
+               Mod, str(self.level), mod_path, param, status]
         self.receipt.loc[len(self.receipt)] = row
 
     def receipt_info(self):
