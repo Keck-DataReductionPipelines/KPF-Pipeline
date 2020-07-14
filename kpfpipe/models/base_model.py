@@ -268,12 +268,13 @@ class KPFDataModel:
         try:
             git_commit_hash = repo.head.object.hexsha
             git_branch = repo.active_branch.name
+            git_tag = str(repo.tags[-1])
         except TypeError:  # expected if running in testing env
             git_commit_hash = ''
             git_branch = ''
 
         # add the row to the bottom of the table
-        row = [time, '---', git_branch, git_commit_hash, \
+        row = [time, git_tag, git_branch, git_commit_hash, \
                Mod, '---', '---', param, status]
         self.receipt.loc[len(self.receipt)] = row
 
