@@ -9,6 +9,7 @@ from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseRe
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
+import configparser as cp
 
 class RecipeError(Exception):
     """ Special recipe exception """
@@ -36,6 +37,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._reset_visited_states = False
         # value returned by primitive executed by framework
         self.call_output = None
+        self._builtins = {}
+        self._builtins['int'] = int
+        self._builtins['float'] = float
+        self._builtins['str'] = str
     
     def visit_Module(self, node):
         """
@@ -130,22 +135,20 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.pipeline.logger.debug(f"Name is storing {node.id}")
             self._store.append(node.id)
         elif isinstance(node.ctx, _ast.Load):
-            """
-            if not hasattr(self._params, node.id):
-                self.pipeline.logger.error(
-                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
-                raise RecipeError(
-                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
-            value = self._params.get(node.id)
-            """
             if node.id == "None":
                 value = None
+            elif node.id == "config":
+                if self.pipeline != None and hasattr(self.pipeline, "config"):
+                    value = self.pipeline.config
+                else:
+                    self.pipeline.logger.error(f"Name: No context or context has no config attribute")
+                    raise Exception(f"Name: No context or context has no config attribute")
             else:
                 try:
                     value = self._params[node.id]
                 except KeyError:
-                    self.pipeline.logger.error(
-                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                    # self.pipeline.logger.error(
+                    #     f"Name {node.id} on line {node.lineno} of recipe not defined.")
                     raise RecipeError(
                         f"Name {node.id} on line {node.lineno} of recipe not defined.")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
@@ -266,7 +269,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 target = self._store.pop()
                 self._params[target] = self._load.pop()
                 num_store_targets -= 1
-                self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}")
+                self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}, type: {self._params[target].__class__.__name__}")
             had_error = False
             while len(self._store) > storeQSizeBefore:
                 had_error = True
@@ -451,6 +454,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     self.visit(kwnode)
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
+                if node.func.id in self._builtins.keys():
+                    if len(node.args) != 1:
+                        self.pipeline.logger.error(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
+                        raise RecipeError(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
+                    self.visit(node.args[0])
+                    self._load.append(self._builtins[node.func.id](self._load.pop()))
+                    return
                 event_args = Arguments(name=node.func.id+"_args", **kwargs)
                 # add positional arguments
                 for argnode in node.args:
@@ -636,6 +646,51 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             if self.awaiting_call_return:
                 return
             setattr(node, 'kpf_complted', True)
+    
+    def visit_Attribute(self, node):
+        """ Attribute node -- handle dictionary attribute """
+        if self._reset_visited_states:
+            return
+        self.visit(node.value)
+        obj = self._load.pop()
+        if isinstance(node.ctx, _ast.Load):
+            try:
+                value = obj.getValue(node.attr)
+                # print(f"Attribute: value is {type(value)}: {value}")
+            except (KeyError, AttributeError):
+                self.pipeline.logger.error(
+                    f"Object {obj} on line {node.lineno} of recipe has no attribute {node.attr}.")
+                raise RecipeError(
+                    f"Object {obj} on line {node.lineno} of recipe has no attribute {node.attr}.")
+            self.pipeline.logger.debug(f"Name is loading {value} from {node.attr}")
+            self._load.append(value)
+        elif isinstance(node.ctx, _ast.Store):
+            self.pipeline.logger.error(
+                f"Assigning to dictionary attribute on line {node.lineno} not supported")
+            raise RecipeError(
+                f"Assigning to dictionary attribute on line {node.lineno} not supported")
+    
+    def visit_Subscript(self, node):
+        """ Subscript node """
+        if self._reset_visited_states:
+            return
+        if isinstance(node.ctx, _ast.Load):
+            self.visit(node.value)
+            value = self._load.pop()
+            self.visit(node.slice)
+            sliceName = self._load.pop()
+            self._load.append(value[sliceName])
+        elif isinstance(node.ctx, _astStore):
+            self.pipeline.logger.error(
+                f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
+            raise RecipeError(
+                f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
+    
+    def visit_Index(self, node):
+        """ Index node """
+        if self._reset_visited_states:
+            return
+        self.visit(node.value)
 
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""

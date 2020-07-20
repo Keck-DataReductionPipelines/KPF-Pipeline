@@ -2,6 +2,7 @@
 
 import sys, traceback
 import ast
+import tempfile
 
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
@@ -18,9 +19,14 @@ sum = 1 + 4
 dif = sum - 2.
 prod = 2 * 3
 div = prod / 3.
-test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2.)
 
-if sum > dif:
+snr_thresh = config.ARGUMENT.snr_threshold
+snr_thresh_subscript = config.ARGUMENT['snr_threshold']
+test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2., snr_thresh, 3.5, snr_thresh_subscript, 3.5)
+
+input_filename = config.ARGUMENT.input_filename
+
+if sum > snr_thresh:
     bool1 = True
 else:
     bool1 = False
@@ -44,23 +50,6 @@ class TestKpfPipeline(KPFPipeline):
         """ constructor """
         KPFPipeline.__init__(self, context)
         self.event_table['test_start_recipe'] = ("test_start_recipe", "starting recipe", None)
-
-    def test_start_recipe(self, action, context):
-        """
-        Starts evaluating the recipe file (Python syntax) specified in context.config.run.recipe.
-        All actions are executed consecutively in the high priority queue
-
-        Args:
-            action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-        """
-        try: 
-            recipe_str = action.args.recipe
-            self._recipe_ast = ast.parse(recipe_str)
-            self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
-            self._recipe_visitor.visit(self._recipe_ast)
-        except:
-            print(sys.exc_info())
 
     def test_primitive_validate_args(self, action: Action, context: ProcessingContext):
         """
@@ -88,9 +77,13 @@ pipe_config = "examples/default_simple.cfg"
 
 def run_recipe(recipe: str, pipe_config: str=pipe_config):
     """
-    This is the code that runs the recipe given as the only argument.
-    It mimics the kpf framework/pipeline startup code in cli.py, but
-    uses strings instead of file names for the recipes.
+    This is the code that runs the given recipe.
+    It mimics the kpf framework/pipeline startup code in cli.py, but writes
+    the recipe string into a temporary file before invoking the framework
+    with start_recipe as the initial event.
+    The framework is put in testing mode so that it passes exceptions
+    on to this testing code.  That we can test the proper handling of
+    recipe errors, e.g. undefined variables.
     """
     pipe = TestKpfPipeline
 
@@ -101,21 +94,25 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
 
     # Try to initialize the framework 
     try:
-        framework = Framework(pipe, framework_config)
+        framework = Framework(pipe, framework_config, testing=True)
         # Overwrite the framework logger with this instance of logger
         # using framework default logger creates some obscure problem
+        """
         framework.logger = start_logger('DRPFrame', framework_logcfg)
+        """
         framework.pipeline.start(pipe_config)
     except Exception as e:
         print("Failed to initialize framework, exiting ...", e)
-        # traceback.print_exc()
+        traceback.print_exc()
         # sys.exit(1)
 
     # python code
-    arg = Arguments(name="test_start_recipe_args", recipe=recipe)
-    framework.append_event('test_start_recipe', arg)
-    framework.append_event('exit', Arguments())
-    framework.start()
+    with tempfile.NamedTemporaryFile(mode='w+') as f:
+        f.write(recipe)
+        f.seek(0)
+        arg = Arguments(name="start_recipe_args", recipe=f.name)
+        framework.append_event('start_recipe', arg)
+        framework.main_loop()
 
 def test_recipe_basics():
     try:
@@ -143,3 +140,7 @@ def test_recipe_bad_assignment():
     else:
         assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
 
+def main():
+    test_recipe_basics()
+    test_recipe_undefined_variable()
+    test_recipe_bad_assignment()
