@@ -1,8 +1,9 @@
 # test_recipe.py
-
-import sys, traceback
+import sys, os, traceback
 import ast
 import tempfile
+
+sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
 
 from keckdrpframework.core.framework import Framework
 from keckdrpframework.models.arguments import Arguments
@@ -33,12 +34,24 @@ else:
 test_primitive_validate_args(bool1, True)
 """
 
-undefined_variable_recipe = """# test recipe with undefined variable
-b = a + 1
+# undefined_variable_recipe = """# test recipe with undefined variable
+# b = a + 1
+# """
+
+# bad_assignment_recipe = """# test recipe with bad assignment statement
+# a, b = 19
+# """
+
+level0_from_to_recipe = """# test level0 fits reader recipe
+fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits"
+kpf0 = kpf0_from_fits(fname, data_type="NEID")
+result = to_fits(kpf0, "temp_level0.fits")
 """
 
-bad_assignment_recipe = """# test recipe with bad assignment statement
-a, b = 19
+level1_from_to_recipe = """# test level1 fits reader recipe
+fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits"
+kpf1 = kpf1_from_fits(fname, data_type="NEID")
+result = to_fits(kpf1, "temp_level1.fits")
 """
 
 class TestKpfPipeline(KPFPipeline):

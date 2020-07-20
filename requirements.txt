@@ -1,13 +1,18 @@
 astropy==3.2.2
-pandas==0.25.2
+pandas==1.0.4
 numpy==1.18.1
 xlsxwriter
 matplotlib
 scipy
-
+GitPython
 pytest
-
+python-dotenv
+pytest
+pytest-cov
+pytest-html
 
 # Documentation
 sphinx
 sphinx-rtd-theme
+sphinxcontrib-napoleon
+

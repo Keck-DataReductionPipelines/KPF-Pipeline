@@ -5,7 +5,8 @@ import _ast
 from collections.abc import Iterable
 from collections import deque
 from queue import Queue
-from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
+# from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
+
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
@@ -80,7 +81,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         if not getattr(node, 'kpf_completed', False):
             module = node.module
-            #TODO do something with module to extract a path
+            # append the module path to the framework's primitive_path
+            self.context.config.primitive_path = tuple([*self.context.config.primitive_path, module])
             loadQSizeBefore = len(self._load)
             for name in node.names:
                 self.visit(name)
@@ -466,7 +468,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 for argnode in node.args:
                     self.visit(argnode)
                     event_args.append(self._load.pop())
-                self.context.push_event(node.func.id, event_args)
+                self.context.append_event(node.func.id, event_args)
                 self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                 #
                 self.awaiting_call_return = True

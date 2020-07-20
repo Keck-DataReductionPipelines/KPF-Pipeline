@@ -1,503 +1,398 @@
+'''
+KPF Level 1 Data Model
+'''
 # Standard dependencies
 import os
-import copy 
-import warnings
-import time
+import copy
+
 # External dependencies
 import astropy
 from astropy.io import fits
 from astropy.time import Time
+from astropy.table import Table
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 
-# Pipeline dependencies
-from kpfpipe.models.metadata.KPF_headers import HEADER_KEY, LVL1_KEY
-from kpfpipe.models.metadata.HARPS_headers import HARPS_HEADER_E2DS, HARPS_HEADER_RAW
-from kpfpipe.models.metadata.NEID_headers import NEID0, NEID1
+from kpfpipe.models.base_model import KPFDataModel
 
-class SpecDict(dict):
-    '''
-    This is a dictionary with modified __getitem__ and __setitem__
-    for monitored access to its members
-    '''
-    def __init__(self, dictionary: dict, type_of_dict: str) -> None:
-        '''
-        Set the type of dict this is (array or header_key)
-        '''
-        dict.__init__(dictionary)
-        if type_of_dict != 'header' and type_of_dict != 'array':
-            # This should never happen since this classed is not 
-            # intended for users 
-            raise ValueError('invalid type')
-        self.__type = type_of_dict 
-    
-    def __getitem__(self, key: str) -> np.ndarray:
-        '''
-        returns a copy of dict[key] instead, so that the original 
-        value is not affected
-        '''
-        value_copy = copy.deepcopy(dict.__getitem__(self, key))
-        return value_copy
-    
-    def __setitem__(self, key: str, value: type) -> None:
-        '''
-        Setting dict[key] with special constraint
-        '''
-        # depending on whether this dict stores header keywords
-        # or np.ndarrays, apply different checks
-        if self.__type == 'header':
-            self.__set_header(key, value)
-        elif self.__type == 'array':                
-            self.__set_array(key, value)
-        else: 
-            # this should never happen
-            pass
-    
-    def __set_array(self, key: str, value: np.ndarray) -> None:
-        '''
-        Setting a array 
-        '''
-        if not np.all(np.isnan(value)):
-            try:
-                assert(isinstance(value, np.ndarray))
-                assert(len(value.shape) == 2)
-            except AssertionError:
-                # np.nan represent empty array
-                raise TypeError('Value can only be 2D numpy arrays')
-            
-        # passed all tests, setting value
-        dict.__setitem__(self, key, value)
-    
-    def __set_header(self, key: str, value: type):
-        # if key is defined in KPF headers, make sure that
-        # the values are the proper types
-        
-        # combine the two header key dictionaries 
-        # all_keys = {**HEADER_KEY, **LVL1_KEY}
-        # if key in all_keys.keys():
-        #     try:
-        #         assert(isinstance(value, all_keys[key]))
-        #     except AssertionError:
-        #         warnings.warn('expected value as {}, but got {}'.format(
-        #                         all_keys[key], type(value)))
-        # else: 
-        #     # print(key, type(value), value)
-        #     warnings.warn('{} not found in KPF_header')
-        
-        # this point is reached if no exception is raised 
-        dict.__setitem__(self, key, value)
+MAPPING = {
+    # Order:  (header-key, dimension, data-key)
+    'PRIMARY' : ('PRIMARY', None, None),
+    'SCIFLUX' : ('SCI1_FLUX', 0, 'SCI1'),
+    'SKYFLUX' : ('SKY_FLUX', 0, 'SKY'),
+    'CALFLUX' : ('CAL_FLUX', 0, 'CAL'),
+    'SCIVAR'  : ('SCI1_VARIANCE', 2, 'SCI1'),
+    'SKYVAR'  : ('SKY_VARIANCE', 2, 'SKY'),
+    'CALVAR'  : ('CAL_VARIANCE', 2, 'CAL'),
+    'SCIWAVE' : ('SCI1_WAVE', 1, 'SCI1'),
+    'SKYWAVE' : ('SKY_WAVE', 1, 'SKY'),
+    'CALWAVE' : ('CAL_WAVE', 1, 'CAL'),
+}
 
-def find_nearest_idx(array: np.ndarray, value: np.float64) -> tuple:
+class KPF1(KPFDataModel):
     '''
-    A helper function that finds the index of the nearest value in the array
-    '''
-    x = np.abs(array - value)
-    idx = np.where(x == x.min())
-    return idx
-
-class KPF1(object):
-    """
-    Container object for level one data
+    The level 1 KPF data. Initialize with empty fields
 
     Attributes:
+        data (dict): A dictionary of 5 orderlettes' 1D extracted spectrum.
 
-    """
+            This is the attribute of the instance that contains all image data.
+            The keys are the name of each orderlette, and the values are image data
+            asscoaited with that orderlette. 
+            
+            Each image data is a stack by row by column 3D numpy array. The first dimension
+            (stack) is fixed at 3. The first stack is the 1D extracted spectrum (2D ndarray),
+            the second stack is the wavelength calibration, and the 3rd stack is the pixel variance.
+            The second dimension (row) specifies a 1D extracted spectrum, and each row is an order.
 
-    def __init__(self) -> None:
+            There are five orderlettes (valid keys to the dict) in total:
+                - ``CAL``: Calibration fiber
+                - ``SKY``: Sky fiber
+                - ``SCI1``: Science fiber 1
+                - ``SCI2``: Science fiber 2
+                - ``SCI3``: Science fiber 3
+
+
+        segments (dict): A dictionary of 5 tables of spectrum segments
+
+            A segment is a meaningful part of a 1D spectrum, identified by a 
+            ``begin_index`` and ``end_index``. Both are 2-element tuples that specifies
+            the row-column coordinate on the data array. Additionally, each segment has 
+            a corresponding string label that uniquely defines it. Each segment can also 
+            be attached with a string comment.
+
+            Each orderlette can have its own list of segments, so segments are sorted in
+            a dictionary, with the keys being names of the orderlettes. The value to each
+            key is a pandas.DataFrame table. Each row of the table represent a unique 
+            segment.
+
+            Examples:
+                >>> from kpfpipe.models.level1 import KPF1
+                # Assume we have an NEID level 1 file called "level1.fits"
+                >>> level1 = KPF1.from_fits('level1.fits', 'NEID')
+                # By default each order comes as its own segment. 
+                # Access the default segments for the 'SKY' orderlette
+                >>> data.segments['SKY']
+                    Label   Order   Begin_idx        End_idx   Length   Comment 
+                1     '1'       0      (0, 0)      (0, 9216)     9217   1st order 
+                2     '2'       1      (1, 0)      (1, 9216)     9217   2nd order 
+                3     '3'       2      (2, 0)      (2, 9216)     9217   3rd order 
+                ...
+                118 '118'     117    (117, 0)    (117, 9216)     9217   127th order 
+                # Creating a segments for 'SCI1' that begins on 10th pixel of 0th order
+                # and ends on 300th pixel of 0th order 
+                >>> level1.add_segment('SKY', (0, 10), (0, 300), 'example', 'an example order')
+                # Access the segment we just added (the very last entry)
+                # Any pandas.dataframe method will work here
+                >>> example_segment= level1.segments['SKY'].loc[119]
+                >>> example_segment
+                Label                              example
+                Order                                    0
+                Begin_idx                           (0, 0)
+                End_idx                           (0, 300)
+                Length                                 301
+                Comment                   an example order
+                Name: 119, dtype: object
+
+        read_methods (dict): Dictionaries of supported parsers. 
+        
+            These parsers are used by the base model to read in .fits files from other
+            instruments
+
+            Supported parsers: ``KPF``, ``NEID``
+    '''
+
+    def __init__(self):
         '''
         Constructor
-        Initializes an empty KPF1 data class
         '''
-        # 1D spectrums
-        # Each fiber is accessible through their key.
-        # Contains 'data', 'wavelength', 'variance'
-        self.flux = SpecDict({}, 'array')
-        # header keywords
-        # dict key contains 'data', 'wavelength', 'variance'
-        self.header = SpecDict({}, 'header')
-        self.wave = SpecDict({}, 'array')
-        self.variance = SpecDict({}, 'array')
+        KPFDataModel.__init__(self)
 
-        self.segments = {}
+        self.level = 1
+        
+        self.data: dict = {'CAL':  None,
+                           'SCI1': None,
+                           'SCI2': None,
+                           'SCI3': None,
+                           'SKY':  None}
 
-        # supported data types
-        self.read_methods = {
-            'KPF1': self._read_from_KPF1,
-            'HARPS': self._read_from_HARPS,
+        # start an empty segment table
+        self.clear_segment()
+
+        self.read_methods: dict = {
+            'KPF':  self._read_from_KPF,
             'NEID': self._read_from_NEID
         }
+
+    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
+        '''
+        Parse the HDUL based on NEID standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
+        '''
+        for hdu in hdul:
+            t = MAPPING.get(hdu.name)
+            if t is None:
+                raise ValueError(f'Unrecognized header "{hdu.name}"')
+
+            (header_key, dimension, data_key) = t
+            self.header[header_key] = hdu.header
+
+            if data_key is not None and dimension is not None: 
+
+                if self.data[data_key] is None:
+                    nx, ny = hdu.data.shape
+                    self.data[data_key] = np.zeros((3, nx, ny))
+
+                if dimension is not None:
+                    self.data[data_key][dimension, :, :]= np.asarray(hdu.data, dtype=np.float64)
+
+        # populate wave for SKY and CAL
+        self.data['SKY'][1, :, :] = self.data['SCI1'][1, :, :]
+        self.data['CAL'][1, :, :] = self.data['SCI1'][1, :, :]
+
+        # Generate default segments
+        for fiber in self.data.keys():
+            if self.data[fiber] is not None:
+                for order in range(self.data[fiber].shape[1]):
+                    label = 'Order {}'.format(order)
+                    begin_idx = (order, 0)
+                    end_idx = (order, self.data[fiber].shape[2])
+                    length = self.data[fiber].shape[2]
+                    comment = 'default segemnt for order {}'.format(order)
+
+                    row = [label, order, begin_idx, end_idx, length, comment]
+                    self.segments[fiber].loc[len(self.segments[fiber])] = row
     
-    @classmethod
-    def from_fits(cls, fn: str,
-                  data_type: str) -> None:
-        '''
-        Create a KPF1 data from a .fits file
-        '''
-        # Initialize an instance of KPF1
-        this_data = cls()
-        # populate it with self.read()
-        this_data.read(fn, data_type=data_type)
-        # Return this instance
-        return this_data
-
-    def read(self, fn: str,
-             data_type: str,
-             overwrite: bool=True) -> None:
-        '''
-        Read the content of a .fits file and populate this 
-        data structure. Note that this is not a @classmethod 
-        so initialization is required before calling this function
-        '''
-
-        if not fn.endswith('.fits'):
-            # Can only read .fits files
-            raise IOError('input files must be FITS files')
-
-        if not overwrite and not self.flux:
-            # This instance already contains data, and
-            # we don't want to overwrite 
-            raise IOError('Cannot overwrite existing data')
-        
-        self.filename = os.path.basename(fn)
-        with fits.open(fn) as hdu_list:
-                # Use the reading method for the provided data type
-                try:
-                    self.read_methods[data_type](hdu_list)
-                except KeyError:
-                    # the provided data_type is not recognized, ie.
-                    # not in the self.read_methods list
-                    raise IOError('cannot recognize data type {}'.format(data_type))
-
-    def _read_from_KPF1(self, hdul: astropy.io.fits.HDUList,
-                        force: bool=False) -> None:
-        '''
-        Populate the current data object with data from a KPF1 FITS file
-        '''
-        # check keys in both HEADER_KEY and LVL1_KEY
-        all_keys = {**HEADER_KEY, **LVL1_KEY}
-        # we assume that all keywords are stored in PrimaryHDU
-        # loop through the 
-        for hdu in hdul:
-            # --TODO--
-            # verify that all required keywords are present in header
-            # and provided values are expected types
-
-            if hdu.name == 'PRIMARY':
-                self.header['PRIMARY'] = hdu.header
-                continue
-
-            # For each fiber, there are two HDU: flux and wave
-            # We assume that the names of HDU follow the convention 
-            # 'fiberName_flux' / 'fiberName_wave'
-            try:
-                fiber, array_type = hdu.name.split('_')
-            except: 
-                raise NameError('invalid HUD name: {}'.format(hdu.name))
-
-            if array_type == 'WAVE':
-                self.wave[fiber] = hdu.data
-            elif array_type == 'FLUX':
-                self.flux[fiber] = hdu.data
-            elif array_type == 'VARIANCE':
-                self.variance[fiber] = hdu.data
-            else: 
-                raise NameError('Array type must be "wave" or "flux", got {} instead'.format(array_type))  
-            
-            self.header[array_type] = hdu.header
-
-    def _read_from_HARPS(self, hdul: astropy.io.fits.HDUList,
+    def _read_from_KPF(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
         '''
-        Populate the current data object with data from a HARPS FITS file
+        Parse the HDUL based on KPF standards
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
         '''
-        t0 = time.time()
-        all_keys = {**HARPS_HEADER_E2DS, **HARPS_HEADER_RAW}
-        this_header = {}
-
-        # HARPS E2DS contains only 1 HDU, which stores the flux data
-        # wave data need to be interpolated from the header keywords
-        hdu = hdul[0]
-        for key, value in hdu.header.items():
-            # convert key to KPF keys
-            try: 
-                expected_type, kpf_key = all_keys[key]
-                if not kpf_key: # kpf_key != None
-                    this_header[kpf_key] = expected_type(value)
-                else: 
-                    # dont save the key for now
-                    # --TODO-- this might change soon
-                    pass
-            
-            except KeyError: 
-                # Key is in FITS file header, but not in metadata files
-                if force:
-                    this_header[key] = value
-                else:
-                    # dont save the key for now
-                    pass
-
-            except ValueError: 
-                # Expecte value in metadata file does not match value in FITS file
-                if force:
-                    this_header[key] = value
-                else:
-                    # dont save the key for now
-                    pass
-            # Interpolate wave from headers
-            # 
-        header = hdu.header
-        opower = header['ESO DRS CAL TH DEG LL']
-        a = np.zeros(opower+1)
-        wave = np.zeros_like(hdu.data, dtype=np.float64)
-        for order in range(0, header['NAXIS2']):
-            for i in range(0, opower+1, 1): 
-                keyi = 'ESO DRS CAL TH COEFF LL' + str((opower+1)*order+i)
-                a[i] = header[keyi]
-            wave[order, :] = np.polyval(
-                np.flip(a),
-                np.arange(header['NAXIS1'], dtype=np.float64)
-            )
-        self.wave['SCI1'] = wave
-
-        self.flux['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
-        # no variance is given in E2DS file, so set all to zero
-        self.variance['SCI1'] = np.zeros_like(hdu.data, dtype=np.float64)
-        # Save the header key to 'data'
-        self.header['SCI1'] = this_header
-
-    def _read_from_NEID(self, hdul: astropy.io.fits.HDUList,
-                        force: bool=True) -> None:
-        all_keys = {**NEID0, **NEID1}
+        flux = {}
+        variance = {}
+        wave = {}
         for hdu in hdul:
-            this_header = {}
-            for key, value in hdu.header.items():
-                # convert key to KPF keys
-                try: 
-                    expected_type, kpf_key = all_keys[key]
-                    if not kpf_key: # kpf_key != None
-                        this_header[kpf_key] = expected_type(value)
-                    else: 
-                        # dont save the key for now
-                        # --TODO-- this might change soon
-                        pass
-                except KeyError: 
-                    # Key is in FITS file header, but not in metadata files
-                    if force:
-                        this_header[key] = value
-                    else:
-                        # dont save the key for now
-                        pass
-                except ValueError: 
-                    # Expecte value in metadata file does not match value in FITS file
-                    if force:
-                        this_header[key] = value
-                    else:
-                        # dont save the key for now
-                        pass
-            # depending on the name of the HDU, store them with corresponding keys
+            this_header = hdu.header
             if hdu.name == 'PRIMARY':
-                # no data is actually stored in primary HDU, as it contains only eader keys
+                # PRIMARY extension does not contain data
                 self.header['PRIMARY'] = this_header
-            elif hdu.name == 'SCIFLUX':
-                self.flux['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['SCI1_FLUX'] = this_header
-            elif hdu.name == 'SKYFLUX':
-                self.flux['SKY'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['SKY_FLUX'] = this_header
-            elif hdu.name == 'CALFLUX':
-                self.flux['CAL'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['CAL_FLUX'] = this_header
-            elif hdu.name == 'SCIVAR':
-                self.variance['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['SCI1_VARIANCE'] = this_header
-            elif hdu.name == 'SKYVAR':
-                self.variance['SKY'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['SKY_VARIANCE'] = this_header
-            elif hdu.name == 'CALVAR':
-                self.variance['CAL'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['CAL_VARIANCE'] = this_header
-            elif hdu.name == 'SCIWAVE':
-                self.wave['SCI1'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['SCI1_WAVE'] = this_header
-            elif hdu.name == 'SKYWAVE':
-                self.wave['SKY'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['SKY_WAVE'] = this_header
-            elif hdu.name == 'CALWAVE':
-                self.wave['CAL'] = np.asarray(hdu.data, dtype=np.float64)
-                self.header['CAL_WAVE'] = this_header
-        self.wave['CAL'] = self.wave['SCI1']
-        self.wave['SKY'] = self.wave['SCI1']
-
-    def segment_data(self, seg: np.ndarray=[], fiber: str=None) -> None:
-        '''
-        Segment the data based on the given array. 
-        If an empty list is given, reset segment to default (1 segment/order)
-        '''
-        if len(seg) == 0:
-            # empty segment array. reset to default 
-            self.segments.clear() # first clear any value in 
-
-        else: 
-            # seg is a list of 2-element tuples. Each tuple contains the boundires defined
-            # by wavelength 
-            for wave_range in seg:
-                try: 
-                    # range must be valid
-                    assert(wave_range[0] < wave_range[1])
-                    start = find_nearest_idx(self.wave[fiber], wave_range[0])
-                    stop = find_nearest_idx(self.wave[fiber], wave_range[1])
-                    # must be in same order
-                    assert(np.all(start[0] == stop[0]))
-
-                    length = (stop[1] - start[1])[0]
-                    # add this segment 
-                    self.segments.add_segment(start, length, fiber)
-
-                except AssertionError:
-                    warnings.warn('invalid wavelength range: {}'.format(wave_range))
-    
-    def get_segmentation(self) -> list:
-        '''
-        returns the current segmenting of data as a list 
-        '''
-        # --TODO-- implement this
-        return
-
-    def get_segment(self, fiber: str, i: int) -> tuple:
-        '''
-        Get a copy of ith segemnt from a specific fiber.
-        Whatever happens to the returned copy will not affect 
-        the original piece of data
-
-        '''
-        
-        # --TODO-- add to changes
-
-    def to_fits(self, fn:str) -> None:
-        """
-        Collect all the level 1 data into a monolithic FITS file
-        Can only write to KPF1 formatted FITS 
-        """
-        if not fn.endswith('.fits'):
-            # we only want to write to a '.fits file
-            raise NameError('filename must ends with .fits')
-        hdu_list = []
-
-        for name, header_keys in self.header.items():
-            if name == 'PRIMARY':
-                hdu = fits.PrimaryHDU()
+            elif hdu.name == 'SEGMENTS':
+                self.header['SEGMENTS'] = hdu.header
+                t = Table.read(hdu)
+                self.segments = t.to_pandas()
+            elif hdu.name == 'RECEIPT':
+                # this is handled by the base class
+                pass
             else: 
-                fiber, array_type = name.split('_')
+                try: 
+                    fiber, datatype = hdu.name.split('_')
+                except ValueError:
+                    raise NameError('Extension {} not recognized'.format(hdu.name))
 
-                if array_type == 'WAVE':
-                    hdu = fits.ImageHDU(data=self.wave[fiber])
-                elif array_type == 'VARIANCE':
-                    hdu = fits.ImageHDU(data=self.variance[fiber])
-                elif array_type == 'FLUX':
-                    hdu = fits.ImageHDU(data=self.flux[fiber])
+                if datatype == 'FLUX':
+                    flux[fiber] = hdu.data
+                elif datatype == 'VARIANCE':
+                    variance[fiber] = hdu.data
+                elif datatype == 'WAVE':
+                    wave[fiber] = hdu.data
+                else: 
+                    raise ValueError('HDU name {} not recognized'.format(hdu.name))
+                self.header[hdu.name] = hdu.header
 
-            for key, value in header_keys.items():
-                hdu.header.set(key, value)
+        # make sure that flux, 
+        for fiber, value in flux.items():
+            try: 
+                assert(wave[fiber].shape == value.shape)
+                assert(variance[fiber].shape == value.shape)
+            except AssertionError:
+                raise ValueError('Data dimensions do not agree')
+        
+        # stack flux, wave, variance into a 3D array
+        for fiber in self.data.keys():
+            try: 
+                nx, ny = flux[fiber].shape
+                self.data[fiber] = np.zeros((3, nx, ny,))
+                self.data[fiber][0, :, :] = flux[fiber]
+                self.data[fiber][1, :, :] = wave[fiber]
+                self.data[fiber][2, :, :] = variance[fiber]
+            except KeyError:
+                # This may happen when the expected fiber extension is not in file
+                self.data[fiber] = None
 
-            hdu.name = name
-            hdu_list.append(hdu)
-
-        # finish up writing 
-        hdul = fits.HDUList(hdu_list)
-        hdul.writeto(fn, overwrite=True)
-
-    def verify(self) -> bool:
+    
+    def _create_hdul(self) -> list:
         '''
-        Verify that the data stored in the current instance is valid
+        Create an hdul in FITS format
+        Note: 
+            This method should only be used by BaseModel
         '''
-        return True
+        hdu_list: dict = []
+        # Add primary HDU 
+        hdu = fits.PrimaryHDU()
+        for key, value in self.header['PRIMARY'].items():
+            hdu.header.set(key, value)
+        hdu_list.append(hdu)
 
-    def info(self) -> None: 
+        # add fiber data
+        for fiber, data in self.data.items():
+            if data is not None:
+                flux_hdu = fits.ImageHDU(data=data[0, :, :])
+                header_key = fiber + '_FLUX'
+                for key, val in self.header[header_key].items():
+                    flux_hdu.header.set(key, val)
+                flux_hdu.name = header_key
+
+                variance_hdu = fits.ImageHDU(data=data[2, :, :])
+                header_key = fiber + '_VARIANCE'
+                for key, val in self.header[header_key].items():
+                    variance_hdu.header.set(key, val)
+                variance_hdu.name = header_key
+
+                wave_hdu = fits.ImageHDU(data=data[1, :, :])
+                header_key = fiber + '_WAVE'
+                for key, val in self.header[header_key].items():
+                    wave_hdu.header.set(key, val)
+                wave_hdu.name = header_key  
+
+                hdu_list.append(flux_hdu)
+                hdu_list.append(variance_hdu)
+                hdu_list.append(wave_hdu)
+
+        # Add segments
+        t = Table.from_pandas(self.receipt)
+        hdu = fits.table_to_hdu(t)
+        hdu.name = 'SEGMENTS'
+        for key, value in self.header['SEGMENTS'].items():
+            hdu.header.set(key, value)
+        hdu_list.append(hdu)
+        
+        return hdu_list
+
+# ============================================================================
+# Segment related operations
+
+    def add_segment(self, fiber: str, begin_idx: tuple, end_idx: tuple,
+                    label=None, comment=None) -> None:
         '''
-        Pretty print information about this data to stdout 
+        Add an entry in the segments
+
+        Args:
+            fiber (str): name of the orderlette 
+            begin_index (tuple): xy coordinate of the start of segments
+            end_idx (tuple): xy coordinate of the end of segments
+            label (str): segment label. Auto generated if None
+            comment (str): comment attached to the segment
+
         '''
+        # data.segment
+
+        if self.data[fiber] is None:
+            raise ValueError('Cannot add segment for empty data')
+
+        if label is None:
+            label = 'Custom segment {}'.format(self.n_custom_seg)
+        
+        if label in list(self.segments[fiber]['Label']):
+            raise NameError('provided label already exist for another segment')
+
+        # make sure that the index provided is valid
+        if begin_idx[0] != end_idx[0]:
+            # segments must be on same order
+            raise ValueError('Segment begin on order {}, end on order {}'.format(
+                                begin_idx[0], end_idx[0]))
+        if begin_idx[1] > end_idx[1]:
+            raise ValueError('Segment begin location must be before end location')
+    
+        # make sure index are not out of bound
+        if begin_idx[0] < 0 or begin_idx[0] > self.data[fiber].shape[0]:
+            raise ValueError('Invalid beginning row index')
+        if begin_idx[1] < 0 or begin_idx[1] > self.data[fiber].shape[1]:
+            raise ValueError('Invalid beginning column index')
+    
+        if end_idx[0] < 0 or end_idx[0] > self.data[fiber].shape[0]:
+            raise ValueError('Invalid end row index')
+        if end_idx[1] < 0 or end_idx[1] > self.data[fiber].shape[1]:
+            raise ValueError('Invalid end column index')
+
+        length = end_idx[1] - begin_idx[1] + 1
+        order = begin_idx[0]
+        row = [label, order, begin_idx, end_idx, length, comment]
+        self.segments[fiber].loc[len(self.segments[fiber])] = row
+        self.n_custom_seg += 1
+    
+    def clear_segment(self) -> None:
+        '''
+        Reset the table containing segments
+        '''
+        seg_header = ['Label', 'Order', 'Begin_idx',\
+                      'End_idx', 'Length', 'Comment']
+        self.segments = {}
+        for fiber, value in self.data.items():
+            self.segments[fiber] = pd.DataFrame(columns=seg_header)
+        self.header['SEGMENTS'] = {}
+        self.n_custom_seg = 0
+    
+    def remove_segment(self, fiber: str, label: str) -> None:
+        '''
+        Remove a segment based on label
+
+        Args: 
+            label (str): label of the segment to be removed
+        '''
+        if label not in list(self.segments[fiber]['Label']):
+            raise ValueError('{} not found'.format(label))
+        idx = self.segments[fiber].index[self.segments[fiber]['Label'] == label].tolist()
+        self.segments[fiber] = self.segments[fiber].drop(idx, axis=0)
+
+    def info(self) -> None:
+        '''
+        Pretty print information about this data with print()
+        
+        '''
+        if self.filename is not None:
+            print('File name: {}'.format(self.filename))
+        else: 
+            print('Empty KPF0 Data product')
         # a typical command window is 80 in length
         head_key = '|{:20s} |{:20s} \n{:40}'.format(
-            'Header_Name', '# Cards',
-            '='*40 + '\n'
+            'Header Name', '# Cards',
+            '='*80 + '\n'
         )
         for key, value in self.header.items():
             row = '|{:20s} |{:20} \n'.format(key, len(value))
             head_key += row
         print(head_key)
         head = '|{:20s} |{:20s} |{:20s} \n{:40}'.format(
-            'Data_Name', 'Data_Dimension', 'N_Segment',
-            '='*60 + '\n'
+            'Fiber Name', 'Data Type', 'Data Dimension',
+            '='*80 + '\n'
         )
-        for key, value in {**self.flux, **self.wave, **self.variance}.items():
-            row = '|{:20s} |{:20s} |{:20} \n'.format(key, str(value.shape), len(self.segments))
+        for fiber, data in self.data.items():
+            if data is not None:
+                row = '|{:20s} |{:20s} |{:20s}\n'.format(
+                    fiber+'_FLUX', 'array', str(data.shape))
+                head += row
+            if self.variance[fiber] is not None:
+                row = '|{:20s} |{:20s} |{:20s}\n'.format(
+                    fiber+'_VARIANCE', 'array', str(self.variance[fiber].shape))
+                head += row
+            if self.wave[fiber] is not None:
+                row = '|{:20s} |{:20s} |{:20s}\n'.format(
+                    fiber+'_WAVE', 'array', str(self.wave[fiber].shape))
+                head += row
+        row = '|{:20s} |{:20s} |{:20s}\n'.format(
+            'Receipt', 'table', str(self.receipt.shape))
+        head += row
+        row = '|{:20s} |{:20s} |{:20s}\n'.format(
+            'Segment', 'table', str(self.segments.shape))
+        head += row
+        
+        for name, aux in self.extension.items():
+            row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table', str(aux.shape))
             head += row
+
         print(head)
 
-class Segement:
-    '''
-    Data wrapper that contains a segment of wave flux pair in the 
-    KPF1 class. 
-    '''
-    def __init__(self):
-        '''
-        constructor
-        '''
-        # dictionary of segments in the data
-        # This is a dictionary of arrays requiring two argument
-        # locate a specific segement: fiber name and index
-        self.seg_list = {}
 
-
-    def add_segment(self, start_coordinate: tuple,
-                       length: int,
-                       fiber: str, 
-                       order: int):
-        ''' 
-        Add a new segment to the current connection
-        '''
-
-        # check tat input is valid
-        try: 
-            assert(isinstance(start_coordinate, tuple))
-            assert(len(start_coordinate) == 2)
-        except AssertionError:
-            raise ValueError('start_coordinate must be a tuple of 2')
-
-        if fiber not in self.seg_list:
-            # no segment has been created for this fiber yet
-            self.seg_list[fiber] = [(start_coordinate, length, order)]
-        else: 
-            self.seg_list[fiber].append((start_coordinate, length, order))
-    
-    def clear(self):
-        '''
-        Clear the entire segment collection
-        '''
-        self.seg_list.clear()
-    
-    def delete(self, fiber: str, index: int):
-        '''
-        delete a single segment, given the fiber and index
-        '''
-        self.seg_list[fiber].pop(index)
-
-class HK1(object):
-    """
-    Contanier for data associated with level one data products from the HK spectrometer
-
-        Attributes:
-        source (string): e.g. 'sky', 'sci', `cal`
-        flux (array): flux values
-        flux_err (array): flux uncertainties
-        wav (array): wavelengths
-    """
-    def __init__(self):
-        self.source # 'sky', 'sci', `cal`
-        self.flux # flux from the spectrum
-        self.flux_err # flux uncertainty
-        self.wav # wavelenth solution
-
-if __name__ == '__main__':
-    K = KPF1()
-    print(K.__flux)

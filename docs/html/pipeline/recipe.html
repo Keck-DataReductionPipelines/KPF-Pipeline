@@ -1,0 +1,287 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Recipe &mdash; KPFPipeline 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="KPF File Handling" href="../data_models/io.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> KPFPipeline
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro/getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../repository/start.html">Repository</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_models/io.html">KPF File Handling</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Recipe</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#basics">Basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#conditional-execution-of-primitives">Conditional Execution of Primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#limitations">Limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#implementation-details">Implementation Details</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">KPFPipeline</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+      <li>Recipe</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/pipeline/recipe.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="recipe">
+<h1>Recipe<a class="headerlink" href="#recipe" title="Permalink to this headline">¶</a></h1>
+<p>Data reduction is accomplished through a series of processing steps.
+Exactly which steps, in what order, and under what circumstances is determined by a text file called a <em>recipe</em>.</p>
+<div class="section" id="basics">
+<h2>Basics<a class="headerlink" href="#basics" title="Permalink to this headline">¶</a></h2>
+<p>In the KPF, recipe files have a syntax that is based on the python programming language syntax, but a recipe is not a python file, in the sense that the python interpreter is not what parses and runs it, but rather the KPF Pipeline and KDRP Framework.</p>
+<p>Here is an example of a simple recipe:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># simple recipe example</span>
+<span class="kn">from</span> <span class="nn">core.primitives</span> <span class="kn">import</span> <span class="n">read_config</span><span class="p">,</span> <span class="n">from_fits</span><span class="p">,</span> <span class="n">to_fits</span>
+<span class="kn">from</span> <span class="nn">level0.primitives</span> <span class="kn">import</span> <span class="n">flatfield</span> <span class="n">remove_cosmic_rays</span><span class="p">,</span> <span class="n">corrects_bad_pixels</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">read_config</span><span class="p">(</span><span class="n">config_filename</span><span class="p">,</span> <span class="n">command_line_args</span><span class="p">)</span>
+
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">from_fits</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">filename1</span><span class="p">)</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">flatfield</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">remove_cosmic_rays</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">correct_bad_pixels</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">to_fits</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">filename2</span><span class="p">,</span><span class="n">lev0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The actual work of data reduction is done by <em>primitives</em>, in this example <em>flatfield</em>, <em>remove_cosmic_rays</em> and <em>correct_bad_pixels</em>. In addition, it uses infrastructure primitives <em>read_config</em>, <em>from_fits</em> and <em>to_fits</em> to read the configuration and to read and write the actual data in the form of FITS files. The writer of a recipe need not be intimately familiar with the internals of each primitive used, but does need to know what arguments the primitive expects, typically a <em>data set</em>, but sometimes also additional information, and what it delivers in return, also typically a data set, but sometimes something else or in addition.</p>
+<p>Any primitive that is used in a recipe must first be <em>imported</em>. Importing a primitive adds it to table internal to the pipeline, and ensures that recipe processing can continue after that primitive runs.</p>
+<p><em>Variables</em> can be created just by assigning a value to a name, such as <em>config</em> and <em>lev0</em> in the example above. A variable must be created before it can be used; otherwise it is an error.</p>
+<blockquote>
+<div><p><em>Best Practice:</em> Reuse of variables is encouraged, especially when the size of the data the variable is holding is large. In the example above, <em>lev0</em> is a Level 0 data set, which can be quite large. If each successive processing step were assigned to different variables, e.g. <em>lev0a</em>, <em>lev0b</em>, etc., each variable would contain a copy of the data set, using a large and unnecessary amount of memory. However, recommend against using one variable hold a variety of different types of data, although, as in python, such a practice does not constitute an error. It simply makes the recipe hard to follow.</p>
+<p>The memory is reclaimed after the recipe processing ends. In a long recipe, memory can be reclaimed earlier by assigning <em>None</em> to the variable. In the example below, after processing of the level 0 data set has been completed and written to a FITS file, and a level 1 (spectrum) data set has been generated, the level 0 data set held in <em>lev0</em> is no longer needed, so the memory holding it is freed by assigning <em>None</em> to <em>lev0</em>. Additional data reduction processing could then continue using the data set in <em>lev1</em>.</p>
+</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># slightly more complex recipe example</span>
+<span class="kn">from</span> <span class="nn">core.primitives</span> <span class="kn">import</span> <span class="n">read_config</span><span class="p">,</span> <span class="n">from_fits</span><span class="p">,</span> <span class="n">to_fits</span>
+<span class="kn">from</span> <span class="nn">level0.primitives</span> <span class="kn">import</span> <span class="n">flatfield</span><span class="p">,</span> <span class="n">remove_cosmic_rays</span><span class="p">,</span> <span class="n">correct_bad_pixels</span>
+<span class="kn">from</span> <span class="nn">level1.primitives</span> <span class="kn">import</span> <span class="n">reduce_spectrum</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">read_config</span><span class="p">(</span><span class="n">config_filename</span><span class="p">,</span><span class="n">command_line_args</span><span class="p">)</span>
+
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">from_fits</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">filename1</span><span class="p">)</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">flatfield</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">remove_cosmic_rays</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">correct_bad_pixels</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">to_fits</span><span class="p">(</span><span class="n">filename2</span><span class="p">,</span><span class="n">lev0</span><span class="p">)</span>
+<span class="n">lev1</span> <span class="o">=</span> <span class="n">reduce_spectrum</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="c1"># reclaim memory, so we don&#39;t waste space with two copies</span>
+<span class="n">lev0</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">to_fits</span><span class="p">(</span><span class="n">filename3</span><span class="p">,</span><span class="n">lev1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="conditional-execution-of-primitives">
+<h2>Conditional Execution of Primitives<a class="headerlink" href="#conditional-execution-of-primitives" title="Permalink to this headline">¶</a></h2>
+<p>During data reduction in the KPF pipeline, there may be situations where processing should be done only under certain conditions, or using different algorithms or parameters. The KPF pipeline supports the use of conditional expressions in the recipe to handle these kinds of circumstances. Consider the following example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># example of conditional processing in a recipe</span>
+<span class="kn">from</span> <span class="nn">core.primitives</span> <span class="kn">import</span> <span class="n">read_config</span><span class="p">,</span> <span class="n">from_fits</span><span class="p">,</span> <span class="n">to_fits</span>
+<span class="kn">from</span> <span class="nn">level0.primitives</span> <span class="kn">import</span> <span class="n">flatfield_low_SNR</span><span class="p">,</span> <span class="n">flatfield_high_SNR</span>
+<span class="kn">from</span> <span class="nn">level0.utilities</span> <span class="kn">import</span> <span class="n">eval_SNR</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">read_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">,</span><span class="n">command_line_args</span><span class="p">)</span>
+
+<span class="n">lev0</span> <span class="o">=</span> <span class="n">from_fits</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">lev0_from_fits</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span>
+<span class="n">lev0</span><span class="p">,</span> <span class="n">SNR</span> <span class="o">=</span> <span class="n">eval_SNR</span><span class="p">(</span><span class="n">lev0</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">SNR</span> <span class="o">&lt;</span> <span class="n">config</span><span class="o">.</span><span class="n">SNR_thresh</span><span class="p">:</span>
+    <span class="n">lev0</span> <span class="o">=</span> <span class="n">flatfield_low_SNR</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">lev0</span> <span class="o">=</span> <span class="n">flatfield_high_SNR</span><span class="p">(</span><span class="n">lev0</span><span class="p">,</span><span class="n">config</span><span class="p">)</span>
+<span class="n">to_fits</span><span class="p">(</span><span class="n">filename2</span><span class="p">,</span><span class="n">lev0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In this example, if the signal-to-noise ratio (SNR) is above a threshold, a different flatfield algorithm is used that is more tolerant of noise. The first requirement for conditional processing is to gain access to the value that needs to be tested.  In this case, the primitive <em>eval_SNR</em> is used for that purpose.</p>
+<blockquote>
+<div><p><em>Design Note</em>: We chose not to include awareness of the details of the data set models in the pipeline recipe software, so that changes to the data set do not require changes to the recipe code. Rather, small primitives need to be written to provide the recipe access to fields of the data set. Only those access primitives would need to be updated should the data set model change in an incompatible way.</p>
+</div></blockquote>
+</div>
+<div class="section" id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="implementation-details">
+<h2>Implementation Details<a class="headerlink" href="#implementation-details" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="../data_models/io.html" class="btn btn-neutral float-left" title="KPF File Handling" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Arpita Roy, BJ Fulton, Andrew Howard
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

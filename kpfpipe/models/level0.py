@@ -1,121 +1,64 @@
 """
-Data models for KPF data
+Level 0 Data Model
 """
 # Standard dependencies
 import os
-import copy 
-import warnings
-import time
+import copy
+
 # External dependencies
 import astropy
 from astropy.io import fits
 from astropy.time import Time
+from astropy.table import Table
 import numpy as np
-import matplotlib.pyplot as plt
-# Pipeline dependencies
-from kpfpipe.models.metadata.KPF_headers import HEADER_KEY, LVL1_KEY
-from kpfpipe.models.metadata.HARPS_headers import HARPS_HEADER_E2DS, HARPS_HEADER_RAW
-from kpfpipe.models.metadata.NEID_headers import NEID0, NEID1
+import pandas as pd
 
-class KPF0(object):
-    """Container object for level zero data"""
+from kpfpipe.models.base_model import KPFDataModel
+
+class KPF0(KPFDataModel):
+    """
+    The level 0 KPF data. Initialized with empty fields
+
+    Attributes:
+        data (numpy.ndarray): 2D numpy array storing raw image
+        variance (numpy.ndarray): 2D numpy array storing pixel variance
+        read_methods (dict): Dictionaries of supported parsers. 
+        
+            These parsers are used by the base model to read in .fits files from other
+            instruments
+
+            Supported parsers: ``KPF``, ``NEID``, ``PARAS``
+
+    """
+
     def __init__(self):
         """
-
+        Constructor
         """
-        ## Internal members 
-        ## all are private members (not accesible from the outside directly)
-        ## to modify them, use the appropriate methods.
+        KPFDataModel.__init__(self)
+        self.level = 0
 
-        # 1D spectrums
-        # Contain 'object', 'sky', and 'calibration' fiber.
-        # Each fiber is accessible through their key.
-        self.data = None
-        self.variance = None
+        # level 0 contain only 1 array
+        self.data: np.ndarray = None
+        self.variance: np.ndarray = None
 
-        # header keywords 
-        self.header = {}
-
-        # supported data types
-        self.read_methods = {
-            'KPF1': self._read_from_KPF0,
-            'NEID': self._read_from_NEID
+        self.read_methods: dict = {
+            'KPF':   self._read_from_KPF,
+            'NEID':  self._read_from_NEID,
+            'PARAS': self._read_from_PARAS
         }
-
-    @classmethod
-    def from_fits(cls, fn: str,
-                  data_type: str) -> None:
+    
+    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
         '''
-        Create a KPF1 data from a .fits file
+        Parse the HDUL based on NEID standards
+
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
+
         '''
-        # Initialize an instance of KPF1
-        this_data = cls()
-        # populate it with self.read()
-        this_data.read(fn, data_type=data_type)
-        # Return this instance
-        return this_data
-
-    def read(self, fn: str,
-             data_type: str,
-             overwrite: bool=True) -> None:
-        '''
-        Read the content of a .fits file and populate this 
-        data structure. Note that this is not a @classmethod 
-        so initialization is required before calling this function
-        '''
-
-        if not fn.endswith('.fits'):
-            # Can only read .fits files
-            raise IOError('input files must be FITS files')
-
-        if not overwrite and not self.flux:
-            # This instance already contains data, and
-            # we don't want to overwrite 
-            raise IOError('Cannot overwrite existing data')
-        
-        self.filename = os.path.basename(fn)
-        with fits.open(fn) as hdu_list:
-            # Use the reading method for the provided data type
-            try:
-                self.read_methods[data_type](hdu_list)
-            except KeyError:
-                # the provided data_type is not recognized, ie.
-                # not in the self.read_methods list
-                raise IOError('cannot recognize data type {}'.format(data_type))
-    def _read_from_KPF0(self, hdul: fits.HDUList,
-                        force: bool=True) -> None:
-        # For now the KPF0 is the same as NEID 0 
-        self._read_from_NEID(hdul)
-
-    def _read_from_NEID(self, hdul: fits.HDUList,
-                        force: bool=True) -> None:
-        all_keys = {**NEID0}
         for hdu in hdul:
-            this_header = {}
-            for key, value in hdu.header.items():
-                # convert key to KPF keys
-                try: 
-                    expected_type, kpf_key = all_keys[key]
-                    if not kpf_key: # kpf_key != None
-                        this_header[kpf_key] = expected_type(value)
-                    else: 
-                        # dont save the key for now
-                        # --TODO-- this might change soon
-                        pass
-                except KeyError: 
-                    # Key is in FITS file header, but not in metadata files
-                    if force:
-                        this_header[key] = value
-                    else:
-                        # dont save the key for now
-                        pass
-                except ValueError: 
-                    # Expecte value in metadata file does not match value in FITS file
-                    if force:
-                        this_header[key] = value
-                    else:
-                        # dont save the key for now
-                        pass
+            this_header = hdu.header
+
             # depending on the name of the HDU, store them with corresponding keys
             if hdu.name == 'DATA':
                 self.header['DATA'] = this_header
@@ -123,28 +66,112 @@ class KPF0(object):
             elif hdu.name == 'VARIANCE':
                 self.header['VARIANCE'] = this_header
                 self.variance = np.asarray(hdu.data, dtype=np.float64)
-        
-    def to_fits(self):
-        """
-        Collect all the level 1 data into a monolithic FITS file
-        Can only write to KPF1 formatted FITS 
-        """
-        if not fn.endswith('.fits'):
-            # we only want to write to a '.fits file
-            raise NameError('filename must ends with .fits')
-        hdu_list = []
-
-        for name, header_keys in self.header.items():
-            if name == 'DATA':
-                hdu = fits.PrimaryHDU(data=self.data)
             else: 
+                raise KeyError('Unrecognized')
+    
+    def _read_from_KPF(self, hdul: fits.HDUList) -> None:
+        '''
+        Parse the HDUL based on NEID standards
+
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
+
+        '''
+        for hdu in hdul:
+            if isinstance(hdu, fits.PrimaryHDU):
+                self.header['PRIMARY'] = hdu.header
+                # Primary HDU should not contain any data
+                if hdu.data is not None:
+                    raise ValueError('Detected data in Primary HDU')
+            
+            elif hdu.name == 'DATA':
+                # This HDU contains the 2D image array 
+                self.data = hdu.data
+                self.header['DATA'] = hdu.header
+            
+            elif hdu.name == 'VARIANCE':
+                # This HDU contains the 2D variance array
+                self.variance = hdu.data
+                self.header['VARIANCE'] = hdu.header
+            
+
+    def _read_from_PARAS(self, hdul: fits.HDUList,
+                        force: bool=True) -> None:
+        '''
+        Parse the HDUL based on PARAS standards
+
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
+            
+        '''
+        for hdu in hdul: 
+            if isinstance(hdu, fits.PrimaryHDU):
+                # PARAS data is stored in primary only
+                self.header['DATA'] = hdu.header
+                self.data = hdu.data
+                self.variance = np.zeros_like(self.data)
+            
+            else: 
+                raise NameError('cannot recognize HDU {}'.format(hdu.name))
+
+    
+    def info(self):
+        '''
+        Pretty print information about this data to stdout 
+        '''
+        if self.filename is not None:
+            print('File name: {}'.format(self.filename))
+        else: 
+            print('Empty KPF0 Data product')
+        # a typical command window is 80 in length
+        head_key = '|{:20s} |{:20s} \n{:40}'.format(
+            'Header Name', '# Cards',
+            '='*80 + '\n'
+        )
+        for key, value in self.header.items():
+            row = '|{:20s} |{:20} \n'.format(key, len(value))
+            head_key += row
+        print(head_key)
+        head = '|{:20s} |{:20s} |{:20s} \n{:40}'.format(
+            'Data Name', 'Data Type', 'Data Dimension',
+            '='*80 + '\n'
+        )
+        if self.data is not None and self.variance is not None:
+            row = '|{:20s} |{:20s} |{:20s}\n'.format('Data', 'array', str(self.data.shape))
+            head += row
+            row = '|{:20s} |{:20s} |{:20s}\n'.format('Variance', 'array', str(self.variance.shape))
+            head += row
+            row = '|{:20s} |{:20s} |{:20s}\n'.format('Receipt', 'table', str(self.receipt.shape))
+            head += row
+        
+        for name, aux in self.extension.items():
+            row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table', str(aux.shape))
+            head += row
+        print(head)
+
+    def _create_hdul(self):
+        '''
+        Create an hdul in FITS format. 
+        This ise used by the base model for writing data context to file
+        '''
+        hdu_list: list = []
+        for name, header_keys in self.header.items():
+            if name == 'PRIMARY':
+                hdu = fits.PrimaryHDU()
+            elif name == 'DATA': 
+                hdu = fits.ImageHDU(data=self.data)
+            elif name == 'VARIANCE':
                 hdu = fits.ImageHDU(data=self.variance)
+            else: 
+                continue
 
             for key, value in header_keys.items():
                 hdu.header.set(key, value)
             hdu.name = name
-            hdu_list.append(hdu)
 
-        # finish up writing 
-        hdul = fits.HDUList(hdu_list)
-        hdul.writeto(fn, overwrite=True)
+            hdu_list.append(hdu)
+        return hdu_list
+
+        
+if __name__ == "__main__":
+    pass
