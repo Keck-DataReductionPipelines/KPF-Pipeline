@@ -47,9 +47,9 @@ def np_equal(ary1: np.ndarray, ary2: np.ndarray, msg_prefix=""):
 
         not_nan_1 = ary1[~np.isnan(ary1)]
         not_nan_2 = ary2[~np.isnan(ary2)]
-        diff_idx = np.where(not_nan_1 != not_nan_2)[0]
+        diff_idx = np.where(np.absolute(not_nan_1 - not_nan_2) >= 0.00001)[0]
         if diff_idx.size > 0:
-            return False, msg_prefix+"not equal data"
+            return False, msg_prefix+"not equal data, total " + str(diff_idx.size) + '.'
     return True, ""
 
 
@@ -105,7 +105,7 @@ def test_init_exceptions():
     flat_data = flat_flux[0].data
 
     spectrum_flux = fits.open(paras_data)
-    spectrum_data =  spectrum_flux[0].data
+    spectrum_data = spectrum_flux[0].data
     spectrum_header = spectrum_flux[0].header
 
     with pytest.raises(TypeError):
@@ -165,7 +165,6 @@ def test_optimal_extraction_exceptions():
 def get_flux_from_order_by_method(method):
     opt_ext = start_paras_order_trace()
 
-    print(method)
     coeffs = opt_ext.order_coeffs[c_order]
     edges = opt_ext.get_order_edges(c_order)
     xrange = opt_ext.get_order_xrange(c_order)
@@ -213,7 +212,6 @@ def test_get_flux_from_order_normal():
 def optimal_extraction_by_method(method):
     m_file = '_' + rectification_method[method] + '.fits'
     in_file = result_data + collect_flux_fits + m_file
-    print(method, ' opt file: ', in_file)
     assert os.path.isfile(in_file), "flux collection file doesn't exist"
 
     opt_ext = start_paras_order_trace()
@@ -229,7 +227,7 @@ def optimal_extraction_by_method(method):
         target_result = get_opt_fits(target_file)
         if target_result is not None:
             is_equal, msg = np_equal(target_result, opt_result, "for optimal_extraction: ")
-            assert is_equal, msg
+            assert is_equal, msg + ' in_file: ' + in_file + ' target_file: ' + target_file
 
 
 def test_optimal_extraction_norect():
