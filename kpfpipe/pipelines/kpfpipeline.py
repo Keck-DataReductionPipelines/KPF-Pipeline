@@ -4,11 +4,6 @@ import os
 import sys
 import importlib
 import configparser as cp
-<<<<<<< HEAD
-# import keckdrpframework.config.framework_config as cfg
-=======
-import keckdrpframework.config.framework_config as cfg
->>>>>>> origin/develop
 import logging
 
 from kpfpipe.logger import start_logger
