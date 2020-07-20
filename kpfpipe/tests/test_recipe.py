@@ -34,13 +34,13 @@ else:
 test_primitive_validate_args(bool1, True)
 """
 
-# undefined_variable_recipe = """# test recipe with undefined variable
-# b = a + 1
-# """
+undefined_variable_recipe = """# test recipe with undefined variable
+b = a + 1
+"""
 
-# bad_assignment_recipe = """# test recipe with bad assignment statement
-# a, b = 19
-# """
+bad_assignment_recipe = """# test recipe with bad assignment statement
+a, b = 19
+"""
 
 level0_from_to_recipe = """# test level0 fits reader recipe
 fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits"
