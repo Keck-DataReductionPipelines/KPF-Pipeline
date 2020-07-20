@@ -51,10 +51,16 @@ def main():
     # Try to initialize the framework 
     try:
         framework = Framework(pipe, framework_config)
+        framework.pipeline.start(pipe_config)
+
+        # root = logging.getLogger()
+        # map(root.removeHandler, root.handlers[:])
+        # map(root.removeFilter, root.filters[:])
+
         # Overwrite the framework logger with this instance of logger
         # using framework default logger creates some obscure problem
-        framework.logger = start_logger('DRPFrame', framework_logcfg)
-        framework.pipeline.start(pipe_config)
+        # framework.logger = start_logger('DRPFrame', framework_logcfg)
+
     except Exception as e:
         print("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()

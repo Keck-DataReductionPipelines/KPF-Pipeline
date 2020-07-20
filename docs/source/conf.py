@@ -16,9 +16,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../..'))
 import sphinx_rtd_theme
 
 # -- General configuration ------------------------------------------------
@@ -38,7 +38,9 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.imgmath',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    'sphinx_rtd_theme']
+    'sphinx_rtd_theme',
+    'sphinxcontrib.napoleon'
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -55,7 +57,7 @@ master_doc = 'index'
 # General information about the project.
 project = u'KPFPipeline'
 copyright = u'2020, Arpita Roy, BJ Fulton, Andrew Howard'
-author = u'Arpita Roy, BJ Fulton, Andrew Howard'
+author = u'Arpita Roy, BJ Fulton, Andrew Howard, Qifan Wang, David Rumph'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -172,6 +174,7 @@ texinfo_documents = [
      'Miscellaneous'),
 ]
 
+autodoc_mock_imports = ['keckdrpframework']
 
 
 
