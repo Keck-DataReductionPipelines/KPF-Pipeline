@@ -54,7 +54,7 @@ kpf1 = kpf1_from_fits(fname, data_type="NEID")
 result = to_fits(kpf1, "temp_level1.fits")
 """
 
-class TestKpfPipeline(KPFPipeline):
+class KpfPipelineForTesting(KPFPipeline):
     """
     Test pipeline class extending KpfPipeline
     """
@@ -98,7 +98,7 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
     on to this testing code.  That we can test the proper handling of
     recipe errors, e.g. undefined variables.
     """
-    pipe = TestKpfPipeline
+    pipe = KpfPipelineForTesting
 
     # Setup a pipeline logger
     # This is to differentiate between the loggers of framework and pipeline
