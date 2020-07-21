@@ -15,20 +15,31 @@ import re
 class OptimalExtractionAlg:
     """
     This module defines class 'OptimalExtractionAlg' and methods to perform the optimal or summation
-    extraction which reduces 2D spectrum to 1D spectrum for each order. Prior to the step of optimal or
-    summation extraction, pixels along the order trace are collected and rectified or not rectified. In summary,
-    3 methods are implemented to collect data for the computation of extraction,
+    extraction which reduces 2D spectrum to 1D spectrum for each order. The process includes 2 steps.
+    In the first step, the flux of each order from both spectral data and flat data is
+    processed and output to a new data set by using either rectification method or not.
+    The second step performs either the optimal or summation extraction to reduce the output data of
+    the first step into 1D data for each order.
 
-        - no data rectification by collecting the pixels at the north-up direction along the order.
-        - data rectification by collecting the pixels at the north-up direction along the order and performing weighted
-          summation over the pixels.
-        - date rectification by collecting the pixels at the normal direction along the order and performing weighted
-          summation over the pixels.
+    For the first step, the pixels along the normal or vertical direction of the order trace are collected and
+    processed column by column in 3 types of methods,
 
-    After applying rectification or non-rectification methods to both spectral data and flat data, either optimal
-    or summation extraction is performed to reduce the 2D data along the order into 1D data. By using optimal
-    extraction, the pixels are weighted based on the associated flat data and summed up column by column. By
-    using summation extraction, the pixels are summed up directly.
+        - no rectification method: collecting the pixels within the edge size along the north-up direction
+          of the order and taking the pixel flux in full to result the output pixel.
+        - vertical rectification method: collecting the pixels within the edge size along the north-up direction
+          of the order and performing fractional summation over the collected pixels to result the output pixel.
+          The output pixel coverage is based on the vector along the vertical direction and
+          the weighting for the fractional summation is based on the overlapping between the collected pixels
+          and the output pixel.
+        - normal rectification method: collecting the pixels within the edge size along the normal direction
+          of the order and performing fractional summation over the collected pixels to result the output pixel.
+          The output pixel coverage is based on the vector along the normal direction and the weighting for the
+          fractional summation is based on the overlapping between the collected pixels and the output pixel.
+
+    For the second step, either optimal or summation extraction is performed to reduce the 2D data along each order
+    into 1D data. By using optimal extraction, the output pixel of the first step from the spectrum data are weighted
+    and summed up column by column and the weighting is based on the associated output pixel of the first
+    step from the flat data. By using summation extraction, the pixels are summed up directly.
 
 
     Args:
@@ -52,7 +63,7 @@ class OptimalExtractionAlg:
         poly_order (int): Polynomial order for the approximation made on the order trace.
         config_param (configparser.SectionProxy): Related to 'PARAM' section or the section associated with
             the instrument if it is defined in the config file.
-        order_trace (numpy.ndarrary): Order trace results from order trace module incluing polynomial coefficients,
+        order_trace (numpy.ndarrary): Order trace results from order trace module including polynomial coefficients,
             top/bottom edges and  area coverage of the order trace.
         total_order (int): Total order in order trace object.
         order_coeffs (numpy.ndarray): Polynomial coefficients for order trace from higher to lower order.
@@ -75,6 +86,8 @@ class OptimalExtractionAlg:
     NORMAL = 0
     VERTICAL = 1
     NoRECT = 2
+    OPTIMAL = 'optimal'
+    SUM = 'sum'
 
     def __init__(self, flat_data, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None):
@@ -194,7 +207,7 @@ class OptimalExtractionAlg:
         return self.dim_width, self.dim_height
 
     def get_spectrum_order(self):
-        """ Get the total order of the order trace.
+        """ Get the total order of the order trace or the spectrum data.
 
         Returns:
             int: The total order.
@@ -399,7 +412,7 @@ class OptimalExtractionAlg:
 
     def rectify_spectrum_curve(self, coeffs, widths, xrange, data_group, s_rate=1, sum_extraction=True,
                                direction=NORMAL):
-        """ Rectify the order trace by collecting the pixels in vertical or normal direction of the order.
+        """ Rectify the order trace based on the pixel collection method.
 
         Parameters:
             coeffs (numpy.ndarray): Polynomial coefficients starting from higher order.
@@ -410,11 +423,11 @@ class OptimalExtractionAlg:
                 Defaults to 1.
             sum_extraction(bool, optional): Flag to indicate if performing summation on collected data
                 column by column. Defaults to True.
-            direction (int, optional): Data collection method for rectification. Defaults to None.
+            direction (int, optional): Types of data collection methods for rectification.
+                Defualts to NORMAL.
 
-                - None: no rectification.
                 - NORMAL: collect data along the normal direction of the order.
-                - VERTICAL: collect data along the vertical direction.
+                - VERTICAL: collect data along the vertical direction of the order.
 
         Returns:
             dict:  Information of rectified data from the order including the dimension, like::
@@ -522,9 +535,9 @@ class OptimalExtractionAlg:
         return result_data
 
     def get_flux_from_order(self, coeffs, widths, x_range, in_data, flat_flux, s_rate=1, norm_direction=None):
-        """  Collect the data around the order by either rectifying or not rectifying the pixels.
+        """  Collect the data along the order by either rectifying the pixels or not.
 
-        The data collection is based on the following 2 methods,
+        The data collection is based on the following 2 types of methods,
 
             - rectification method: the pixels along the order are selected depending on the edge size
               (i.e. `widths`) and the direction (i.e. `norm_direction`). With that, all pixels appearing at
@@ -568,6 +581,7 @@ class OptimalExtractionAlg:
             Exception: If the size of polynomial coefficients is not enough for the order it represents for.
             Exception: If bottom or top edge is missing.
             Exception: If the left or right border is missing.
+            Exception: If the rectification method is invalid.
 
         """
         if np.shape(in_data) != np.shape(flat_flux):
@@ -601,7 +615,10 @@ class OptimalExtractionAlg:
 
     @staticmethod
     def optimal_extraction(s_data, f_data, data_height, data_width):
-        """ Do optimal extraction from 2D data to 1D data on collected pixels along the order.
+        """ Do optimal extraction on collected pixels along the order.
+
+        This optimal extraction method does the calculation based on the variance of the spectrum data and the
+        weighting based on the flat data.
 
         Args:
             s_data (numpy.ndarray): 2D spectral data collected for one order.
@@ -658,10 +675,10 @@ class OptimalExtractionAlg:
         """ Optimal extraction based on weighting only.
 
         Do optimal extraction by reducing 2D data to 1D data on collected pixels along the order column. The formula
-        that comprises the extraction algorithm mainly calculates the weighted summation over the collected pixels and
-        the weighting is determined by the ratio between flat data of each pixel  over the summation of all pixels
+        that comprises the extraction algorithm mainly calculating the weighted summation over the collected pixels and
+        the weighting is determined by the ratio between flat data of each pixel over the summation of all pixels
         at the same column. This function is currently not used for optimal extraction. Please refer to
-        :func:`~alg.OptimalExtractionAlg.optimal_extraction()` for the optimal extraction method currently in use.
+        :func:`~alg.OptimalExtractionAlg.optimal_extraction()` as currently used optimal extraction method.
 
         Args:
             s_data (numpy.ndarray): 2D spectral data collected for one order.
@@ -886,10 +903,11 @@ class OptimalExtractionAlg:
                     total_area += area
                     flux += area * input_data[y, x]
 
-        return flux, total_area
+        new_flux = flux/total_area
+        return new_flux, total_area
 
     def compute_flux_from_vertical_clipping(self, poly_corners, border_points, input_data):
-        """ Compute flux on pixels covered by specified polygon in the vertical direction of the order.
+        """ Compute flux on pixels covered by specified polygon formed in the vertical direction of the order.
 
         Collect pixels covered by the specified polygon and compute weighted summation on the pixels.
         The computation is made to be more efficient than that of
@@ -1172,7 +1190,7 @@ class OptimalExtractionAlg:
         """ Write optimal extraction result to an instance of Pandas DataFrame.
 
         Args:
-            result_data (numpy.ndarray): Optimal extraction result.  Each row of the array represents the reduced
+            result_data (numpy.ndarray): Optimal extraction result.  Each row of the array corresponds to the reduced
                 1D data of one order.
 
         Returns:
@@ -1181,7 +1199,7 @@ class OptimalExtractionAlg:
                 - *MJD-OBS*: modified Julian date of the observation.
                 - *EXPTIME*: exposure time of the observation.
                 - *TOTALORD*: total order in the result data.
-                - *DIMWIDTH*: Width of each order in the result data.
+                - *DIMWIDTH*: Width of the order in the result data.
 
         """
         header_keys = list(self.spectrum_header.keys())
@@ -1205,7 +1223,7 @@ class OptimalExtractionAlg:
         return df_result
 
     def time_check(self, t_start, step_msg):
-        """Count the time and display the span of the time.
+        """Count and display the execution time.
 
         Args:
             t_start (float): Start time to count.
@@ -1232,7 +1250,7 @@ class OptimalExtractionAlg:
         self.enable_debug_print(filename is not None)
         self.debug_output = filename
 
-    def extract_spectrum(self, rectification_method=NoRECT, extraction_method='optimal',
+    def extract_spectrum(self, rectification_method=NoRECT, extraction_method=OPTIMAL,
                          order_set=None,
                          show_time=False,
                          print_debug=None,
@@ -1249,8 +1267,12 @@ class OptimalExtractionAlg:
                   to be rectified.
                 - OptimalExtractionAlg.NORMAL: Pixels at the normal direction of the order are collected to
                   be rectified.
-            extraction_method (str, optional): Extraction method - 'optimal' for optimal extraction or 'sum' for
-                    summation on collected flux along the order. Defaults to 'optimal'.
+            extraction_method (str, optional): There are two extraction methods performing extraction on collected
+                flux along the order. Defaults to OPTIMAL.
+
+                - OptimalExtractionAlg.OPTIMAL (i.e. 'optimal'): for optimal extraction.
+                - OptimalExtractionAlg.SUM (i.e. 'sum'): for summation extraction.
+
             order_set (numpy.ndarray, optional): Set of orders to extract. Defaults to None for all orders.
             show_time (bool, optional):  Show running time of the steps. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
@@ -1331,8 +1353,6 @@ class OptimalExtractionAlg:
                 diff_idx = np.where(not_nan_target - not_nan_data)[0]
 
                 if diff_idx.size > 0:
-                    diff_idx = not_nan_target_idx[diff_idx]
-                    msg = str([list(idx) for idx in diff_idx])
-                    return {'result': 'error', 'msg': 'data is not the same at ' + msg}
+                    return {'result': 'error', 'msg': 'data is not the same at ' + str(diff_idx.size) + ' points'}
 
         return {'result': 'ok'}
