@@ -16,6 +16,7 @@ RUN mkdir /code && \
     # Clone the KeckDRPFramework repository 
     git clone https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git \
     # Current branch only run on develop branch of KeckDRPFramewke
+    cd KeckDRPFramework \
     git checkout develop
 
 # Set the working directory to KPF-Pipeline
