@@ -1284,7 +1284,7 @@ class OptimalExtractionAlg:
             dict: Optimal extraction result from 2D spectrum data, like::
 
                     {
-                        ''optimal_extraction_result':  Padas.DataFrame
+                        'optimal_extraction_result':  Padas.DataFrame
                                     # table storing optimal extraction result.
                                     # each row of the table containing the optimal extraction
                                     # result for one order.
