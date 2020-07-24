@@ -237,6 +237,7 @@ def test_find_widths_paras():
         assert np.all((np.absolute(df.values - c_df.values)) < 0.000001), "find_widths: unmatched fitting curves"
     # print("pass find_widths")
 
+
 """
 def test_extract_order_trace_paras():
     order_t = start_paras_order_trace()
