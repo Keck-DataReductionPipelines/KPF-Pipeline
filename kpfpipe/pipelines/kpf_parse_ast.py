@@ -39,9 +39,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # value returned by primitive executed by framework
         self.call_output = None
         self._builtins = {}
-        self._builtins['int'] = int
-        self._builtins['float'] = float
-        self._builtins['str'] = str
+
+    def register_builtin(self, key, func, nargs):
+        """
+        Register a function so that it can be called from a recipe without using the framework
+        Items are tuples (function, number of input args)
+        """
+        self._builtins[key] = (func, nargs)
     
     def visit_Module(self, node):
         """
@@ -457,11 +461,15 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
                 if node.func.id in self._builtins.keys():
-                    if len(node.args) != 1:
-                        self.pipeline.logger.error(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
+                    func, nargs = self._builtins[node.func.id]
+                    if len(node.args) != nargs:
+                        self.pipeline.logger.error(f"Call to {node.func.id} takes exactly {nargs} args, got {len(node.args)} on recipe line {node.lineno}")
                         raise RecipeError(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
-                    self.visit(node.args[0])
-                    self._load.append(self._builtins[node.func.id](self._load.pop()))
+                    arglist = []
+                    for ix in range(nargs): # down through range because _load is a LIFO stack
+                        self.visit(node.args[ix])
+                        arglist.append(self._load.pop())
+                    self._load.append(func(*arglist), **kwargs)
                     return
                 event_args = Arguments(name=node.func.id+"_args", **kwargs)
                 # add positional arguments
