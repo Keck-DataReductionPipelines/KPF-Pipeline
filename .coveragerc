@@ -1,0 +1,11 @@
+[report]
+omit =
+    *__init__*
+    /code/KeckDRPFramework/*
+
+[run]
+source = kpfpipe
+
+; Run in parallel mode so that coverage can canonicalize the source paths
+; regardless of whether it runs locally or within a Docker container.
+parallel = True
