@@ -1,6 +1,4 @@
 init: 
-	pip3 install -r requirements.txt
-	pip install .
 	mkdir -p logs
 
 update: 
@@ -18,7 +16,7 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 test:
-	pytest --ignore=kpfpipe/tests/test_recipe.py --ignore=kpfpipe/tests/test_level1.py --cov=kpfpipe
+	pytest --cov=kpfpipe
 	coveralls
 
 .PHONY: init
