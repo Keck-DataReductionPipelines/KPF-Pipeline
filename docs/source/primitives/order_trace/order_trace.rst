@@ -1,4 +1,7 @@
 Module Order Trace
 ==================
 
---TODO-- Add documentation
+.. toctree::
+   :maxdepth: 2
+
+   alg.rst

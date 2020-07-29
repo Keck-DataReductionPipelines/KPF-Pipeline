@@ -107,6 +107,8 @@ class KPF1(KPFDataModel):
         Constructor
         '''
         KPFDataModel.__init__(self)
+
+        self.level = 1
         
         self.data: dict = {'CAL':  None,
                            'SCI1': None,
