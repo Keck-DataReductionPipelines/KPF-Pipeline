@@ -62,6 +62,9 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.register_builtin('str', str, 1)
         self._recipe_visitor.register_builtin('len', len, 1)
         self._recipe_visitor.register_builtin('find_files', glob.glob, 1)
+        self._recipe_visitor.register_builtin('split', os.path.split, 1)
+        self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
+        self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
 
     def start(self, configfile: str) -> None:
         '''
