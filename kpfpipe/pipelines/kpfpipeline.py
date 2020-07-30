@@ -4,7 +4,6 @@ import os
 import sys
 import importlib
 import configparser as cp
-import keckdrpframework.config.framework_config as cfg
 import logging
 
 from kpfpipe.logger import start_logger
@@ -12,6 +11,7 @@ from kpfpipe.logger import start_logger
 # AST recipe support
 import ast
 from kpfpipe.pipelines.kpf_parse_ast import KpfPipelineNodeVisitor
+import kpfpipe.config.pipeline_config as cfg
 
 # KeckDRPFramework dependencies
 from keckdrpframework.pipelines.base_pipeline import BasePipeline
@@ -54,7 +54,7 @@ class KPFPipeline(BasePipeline):
     def __init__(self, context: ProcessingContext):
         BasePipeline.__init__(self, context)
 
-    def start(self, config: cp.ConfigParser) -> None:
+    def start(self, configfile: str) -> None:
         '''
         Initialize the customized pipeline.
         Customized in that it sets up logger and configurations differently 
@@ -67,15 +67,14 @@ class KPFPipeline(BasePipeline):
         # Technically the pipeline's configuration is stored in self.context as 
         # a ConfigClass() defined by keckDRP. But we will be using configParser
 
-        self.logger = start_logger(self.name, config)
+        self.logger = start_logger(self.name, configfile)
         self.logger.info('Logger started')
         
         ## Setup argument
         try: 
-            cfg_obj = cp.ConfigParser()
-            # cfg_obj = cfg.ConfigClass()
-            cfg_obj.read(config)
-            arg = cfg_obj._sections['ARGUMENT']
+            self.config = cfg.ConfigClass()
+            self.config.read(configfile)
+            arg = self.config._sections['ARGUMENT']
         except KeyError:
             raise IOError('cannot find [ARGUMENT] section in config')
         self.context.arg = arg
@@ -86,7 +85,7 @@ class KPFPipeline(BasePipeline):
         # print(f"Experiment: type of self.config is {type(self.config)}")
 
         ## Setup primitive-specific configs:
-        self.context.config_path = cfg_obj._sections['MODULES']
+        self.context.config_path = self.config._sections['MODULES']
         self.logger.info('Finished initializing Pipeline')
 
     def start_recipe(self, action, context):
@@ -98,17 +97,13 @@ class KPFPipeline(BasePipeline):
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
-        try: 
-            recipe_file = action.args.recipe
-            f = open(recipe_file)
-            fstr = f.read()
-            f.close()
-            self._recipe_ast = ast.parse(fstr)
-            self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
-            self._recipe_visitor.visit(self._recipe_ast)
-        except:
-            print(sys.exc_info())
-        
+        recipe_file = action.args.recipe
+        f = open(recipe_file)
+        fstr = f.read()
+        f.close()
+        self._recipe_ast = ast.parse(fstr)
+        self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
+        self._recipe_visitor.visit(self._recipe_ast)
         return Arguments()
 
     def exit_loop(self, action, context):
