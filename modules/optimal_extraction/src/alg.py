@@ -328,7 +328,7 @@ class OptimalExtractionAlg:
                 column by column. Defaults to False.
 
         Returns:
-            spectral_info (dict): Information of non rectified data from the order including the dimension, like::
+            dict: Information of non rectified data from the order including the dimension, like::
 
                 {
                     'y_center': int
@@ -670,39 +670,6 @@ class OptimalExtractionAlg:
 
         return {'extraction': w_data}
 
-    @staticmethod
-    def optimal_extraction_weight_only(s_data, f_data, data_width):
-        """ Optimal extraction based on weighting only.
-
-        Do optimal extraction by reducing 2D data to 1D data on collected pixels along the order column. The formula
-        that comprises the extraction algorithm mainly calculating the weighted summation over the collected pixels and
-        the weighting is determined by the ratio between flat data of each pixel over the summation of all pixels
-        at the same column. This function is currently not used for optimal extraction. Please refer to
-        :func:`~alg.OptimalExtractionAlg.optimal_extraction()` as currently used optimal extraction method.
-
-        Args:
-            s_data (numpy.ndarray): 2D spectral data collected for one order.
-            f_data (numpy.ndarray): 2D flat data collected for one order.
-            data_width (int): Width of the 2D data for optimal extraction.
-
-        Returns:
-            dict: Information related to the order data, like::
-
-                {
-                    'extraction': numpy.ndarray   # optimal extraction result.
-                }
-
-        """
-        w_data = np.zeros((1, data_width))
-
-        # taking weighted summation on spectral data for each column,
-        # the weight is based on flat data.
-
-        w_sum = np.sum(f_data, axis=0)
-        non_zero_idx = np.where(w_sum != 0.0)[0]
-        w_data[0, non_zero_idx] = np.sum(s_data[:, non_zero_idx]*f_data[:, non_zero_idx], axis=0)/w_sum[non_zero_idx]
-
-        return {'extraction': w_data}
 
     @staticmethod
     def summation_extraction(s_data):
