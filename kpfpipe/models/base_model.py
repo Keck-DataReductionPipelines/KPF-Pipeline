@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import git
 import datetime
+import hashlib
 
 # Pipeline dependencies
 from kpfpipe.models.metadata.receipt_columns import *
@@ -201,6 +202,18 @@ class KPFDataModel:
                 # the provided data_type is not recognized, ie.
                 # not in the self.read_methods list
                 raise IOError('cannot recognize data type {}'.format(data_type))
+
+        # compute MD5 sum of source file and write it into a receipt entry for tracking.
+        # Note that MD5 sum has known security vulnerabilities, but we are only using
+        # this to ensure data integrity, and there is no known reason for someone to try
+        # to hack astronomical data files.  If something more secure is is needed,
+        # substitute hashlib.sha256 for hashlib.md5
+        md5 = hashlib.md5()
+        with open(fn, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                md5.update(chunk)
+        self.receipt_add_entry('from_fits', self.__module__, f'md5_sum={md5.hexdigest()}', 'PASS')
+
     
     def to_fits(self, fn:str) -> None:
         """

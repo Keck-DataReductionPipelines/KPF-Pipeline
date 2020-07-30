@@ -14,8 +14,6 @@ from kpfpipe.pipelines.kpfpipeline import KPFPipeline
 from kpfpipe.logger import start_logger
 
 basics_recipe = """# test recipe basics
-from test_primitives import test_primitive_validate_args
-
 sum = 1 + 4
 dif = sum - 2.
 prod = 2 * 3
@@ -35,13 +33,12 @@ test_primitive_validate_args(bool1, True)
 """
 
 builtins_recipe = """# test recipe built-ins
-from test_primitives import test_primitive_validate_args
-
 a = int(1.1)
-test_primitive_validate_args(a, 1)
 l = find_files('kpfpipe/pipelines/*.py')
 n = len(l)
-test_primitive_validate_args(n, 4)
+for file in l:
+    t, e = splitext(file)
+test_primitive_validate_args(a, 1, n, 4, e, '.py')
 """
 
 undefined_variable_recipe = """# test recipe with undefined variable
@@ -72,7 +69,7 @@ class KpfPipelineForTesting(KPFPipeline):
     def __init__(self, context: ProcessingContext):
         """ constructor """
         KPFPipeline.__init__(self, context)
-        self.event_table['test_start_recipe'] = ("test_start_recipe", "starting recipe", None)
+        self.event_table['test_primitive_validate_args'] = ("test_primitive_validate_args", "processing", None)
 
     def test_primitive_validate_args(self, action: Action, context: ProcessingContext):
         """
@@ -147,7 +144,7 @@ def test_recipe_builtins():
     try:
         run_recipe(builtins_recipe)
     except Exception as e:
-        assert False, f"test_recipe_basics: unexpected exception {e}"
+        assert False, f"test_recipe_builtins: unexpected exception {e}"
 
 def test_recipe_undefined_variable():
     try:
@@ -171,5 +168,6 @@ def test_recipe_bad_assignment():
 
 def main():
     test_recipe_basics()
+    test_recipe_builtins()
     test_recipe_undefined_variable()
     test_recipe_bad_assignment()
