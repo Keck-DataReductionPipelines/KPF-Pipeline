@@ -16,7 +16,7 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 test:
-	pytest --cov=kpfpipe
+	pytest --cov=kpfpipe --cov=modules
 	coveralls
 
 .PHONY: init
