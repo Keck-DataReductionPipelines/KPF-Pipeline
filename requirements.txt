@@ -15,3 +15,7 @@ coveralls
 sphinx
 sphinx-rtd-theme
 sphinxcontrib-napoleon
+
+# Framework
+git+https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git@master
+
