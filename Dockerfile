@@ -18,7 +18,10 @@ RUN mkdir /code && \
     apt-get install --yes git && \
     cd /code && \
     # Clone the KeckDRPFramework repository 
-    git clone https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git
+    git clone https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git && \
+    # Current branch only run on develop branch of KeckDRPFramewke
+    cd KeckDRPFramework && \
+    git checkout develop
 
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
