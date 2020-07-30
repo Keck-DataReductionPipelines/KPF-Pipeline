@@ -53,7 +53,7 @@ def np_equal(ary1: np.ndarray, ary2: np.ndarray, msg_prefix=""):
     return True, ""
 
 
-def start_paras_order_trace():
+def start_paras_optimal_extraction():
     config_paras = configparser.ConfigParser()
     config_paras['PARAM'] = {
         'instrument': 'PARAS',
@@ -119,7 +119,7 @@ def test_init_exceptions():
 
 
 def test_get_flux_from_order_exceptions():
-    opt_ext = start_paras_order_trace()
+    opt_ext = start_paras_optimal_extraction()
     coeffs = opt_ext.order_coeffs[c_order]
     edges = opt_ext.get_order_edges(c_order)
     xrange = opt_ext.get_order_xrange(c_order)
@@ -141,7 +141,7 @@ def test_get_flux_from_order_exceptions():
 
 
 def test_optimal_extraction_exceptions():
-    opt_ext = start_paras_order_trace()
+    opt_ext = start_paras_optimal_extraction()
     method = OptimalExtractionAlg.VERTICAL
 
     m_file = '_'+rectification_method[method]+'.fits'
@@ -163,7 +163,7 @@ def test_optimal_extraction_exceptions():
 
 
 def get_flux_from_order_by_method(method):
-    opt_ext = start_paras_order_trace()
+    opt_ext = start_paras_optimal_extraction()
 
     coeffs = opt_ext.order_coeffs[c_order]
     edges = opt_ext.get_order_edges(c_order)
@@ -188,9 +188,9 @@ def get_flux_from_order_by_method(method):
         assert order_h == order_flux.get('data_height'), 'unmatched data height'
         assert order_w == order_flux.get('data_width'), 'unmatched data width'
 
-        is_equal, msg = np_equal(order_data, order_flux.get('order_data', "order_data for get_flux_from_order: "))
+        is_equal, msg = np_equal(order_data, order_flux.get('order_data'), "order_data for get_flux_from_order: ")
         assert is_equal, msg
-        is_equal, msg = np_equal(order_flat, order_flux.get('order_flat', "order_flat for get_flux_from_order: "))
+        is_equal, msg = np_equal(order_flat, order_flux.get('order_flat'), "order_flat for get_flux_from_order: ")
         assert is_equal, msg
 
 
@@ -214,7 +214,7 @@ def optimal_extraction_by_method(method):
     in_file = result_data + collect_flux_fits + m_file
     assert os.path.isfile(in_file), "flux collection file doesn't exist"
 
-    opt_ext = start_paras_order_trace()
+    opt_ext = start_paras_optimal_extraction()
     order_data, order_flat, order_h, order_w = get_flux_fits(in_file)
     opt_result_obj = opt_ext.optimal_extraction(order_data, order_flat, order_h, order_w)
     assert 'extraction' in opt_result_obj, 'no optimal extraction result'
@@ -243,4 +243,3 @@ def test_optimal_extraction_vertical():
 def test_optimal_extraction_normal():
     method = OptimalExtractionAlg.NORMAL
     optimal_extraction_by_method(method)
-
