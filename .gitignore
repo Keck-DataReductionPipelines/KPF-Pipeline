@@ -68,6 +68,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/html
+docs/doctrees
 
 # PyBuilder
 target/
@@ -108,6 +110,5 @@ ENV/
 # IDE related settings
 .vscode
 
-resource 
+ 
 .pytest_cache
-KPF-Pipeline-TestData
