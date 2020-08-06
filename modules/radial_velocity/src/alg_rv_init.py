@@ -14,8 +14,6 @@ from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVe
 # from kpfpipe.primitives.level0 import KPF0_Primitive
 # from kpfpipe.models.level0 import KPF0
 
-LIGHT_SPEED = 299792.458  # light speed in km/s
-LIGHT_SPEED_M = 299792458  # light speed in m/s
 mask_file_map = {'G2_espresso': 'G2.espresso.mas',
                  'G2_harps': 'G2.harps.mas',
                  'G2_neid_v1': 'G2.neid.v1.mas',
@@ -37,12 +35,12 @@ class RadialVelocityInit(RadialVelocityBase):
         rv_config (dict): A dict instance containing the values defined in radial velocity configuration file or star
             configuration file if there is. The instance includes the following keys (these are constants defined
             in the source):
-             `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`,
-             `STAR_RV`, `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`,  `AIR_TO_VACUUM`, `STEP_RANGE`.
+                `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, `STAR_RV`,
+                `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`, `AIR_TO_VACUUM`, `STEP_RANGE`.
         mask_path (str): Mask file path.
         velocity_loop (numpy.ndarray): Evenly spaced velocity steps.
-        velocity_steps (int): Total number in `velocity_loop`.
-        zb_range (list): Barycentric velocity correction at a single time or a period of time. The list contains
+        velocity_steps (int): Total steps in `velocity_loop`.
+        zb_range (list): Redshift at a single time or redshift range over a period of time. The list contains
             one number for a single time or two numbers representing the minimum and the maximum during a period
             of time.
         mask_line (dict): A dict instance containing mask line information. Please refer to `Returns` section in
@@ -122,7 +120,7 @@ class RadialVelocityInit(RadialVelocityBase):
                 }
 
             Attribute `mask_path` is updated and the values of the following keys in `rv_config`,
-            `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, are updated.
+            `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, and `PARALLAX`, are updated.
 
         """
 
@@ -212,7 +210,7 @@ class RadialVelocityInit(RadialVelocityBase):
         self.get_step_range()
         self.get_velocity_loop()   # based on step_range and step, star_rv in rv_config
         self.get_velocity_steps()  # based on velocity_loop
-        self.get_bc_corr_period(self.test_data_dir)         # from barycentric velocity correction
+        self.get_redshift_range(self.test_data_dir)         # get redshift from barycentric velocity correction
         self.get_mask_line()       # based on mask_path, velocity loop and mask_width/vacuum_to_air
         return self.ret_status()
 
@@ -316,7 +314,7 @@ class RadialVelocityInit(RadialVelocityBase):
 
         Returns:
             int: Total velocity steps based on attribute `velocity_steps` of the class. Attribute `velocity_steps` is
-                 updated.
+            updated.
 
         """
         if self.velocity_steps is None:
@@ -324,8 +322,8 @@ class RadialVelocityInit(RadialVelocityBase):
             self.velocity_steps = len(vel_loop)
         return self.velocity_steps
 
-    def get_bc_corr_period(self, data_dir=None, jd_time=2458591.5, period=380):
-        """ Get Barycentric velocity correction over a period of time.
+    def get_redshift_range(self, data_dir=None, jd_time=2458591.5, period=380):
+        """ Get redshift range by using Barycentric velocity correction over a period of time.
 
         Args:
             data_dir (str): Test data directory. Defaults to None.
@@ -334,7 +332,7 @@ class RadialVelocityInit(RadialVelocityBase):
             period (int, optional): Period of days. Defaults to 380 (days).
 
         Returns:
-            numpy.ndarray: Barycentric velocity correction minimum and maximum over a period of time. The first number
+            numpy.ndarray: Minimum and maximum redshift over a period of time. The first number
             in the array is the minimum and the second one is the maximum. Attributes `zb_range` is updated.
 
         """
@@ -357,10 +355,10 @@ class RadialVelocityInit(RadialVelocityBase):
             dict: Mask information, like::
 
                 {
-                    'start' : numpy.ndarray          # start points of masks
-                    'end' : numpy.ndarray            # end points of masks
-                    'center': numpy.ndarray          # center of masks
-                    'weight': numpy.ndarray          # weight of masks
+                    'start' : numpy.ndarray            # start points of masks
+                    'end' : numpy.ndarray              # end points of masks
+                    'center': numpy.ndarray            # center of masks
+                    'weight': numpy.ndarray            # weight of masks
                     'bc_corr_start': numpy.ndarray     # adjusted start points of masks
                     'bc_corr_end': numpy.ndarray       # adjusted end points of masks
                 }
@@ -370,7 +368,7 @@ class RadialVelocityInit(RadialVelocityBase):
         """
 
         if self.mask_line is None:
-            zb_range = self.get_bc_corr_period()
+            zb_range = self.get_redshift_range()
             rv_maskline = RadialVelocityMaskLine()
             self.mask_line = rv_maskline.get_mask_line(self.mask_path, self.get_velocity_loop(),
                                                        zb_range, self.rv_config[self.MASK_WID],
