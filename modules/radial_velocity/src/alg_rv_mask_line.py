@@ -14,10 +14,10 @@ class RadialVelocityMaskLine:
             for cross correlation computation in radial velocity analysis, like::
 
                 {
-                    'start' : numpy.ndarray          # start points of masks
-                    'end' : numpy.ndarray            # end points of masks
-                    'center': numpy.ndarray          # center of masks
-                    'weight': numpy.ndarray          # weight of masks
+                    'start' : numpy.ndarray            # start points of masks
+                    'end' : numpy.ndarray              # end points of masks
+                    'center': numpy.ndarray            # center of masks
+                    'weight': numpy.ndarray            # weight of masks
                     'bc_corr_start': numpy.ndarray     # adjusted start points of masks
                     'bc_corr_end': numpy.ndarray       # adjusted end points of masks
                 }
@@ -48,22 +48,22 @@ class RadialVelocityMaskLine:
         return self.mask_line
 
     @staticmethod
-    def compute_mask_line(mask_path, v_steps, bc_corr_min, bc_corr_max, mask_width=0.25, air_to_vacuum=False):
-        """ Calculate mask coverage based on the mask center, mask width, and barycentric velocity correction.
+    def compute_mask_line(mask_path, v_steps, zb_min, zb_max, mask_width=0.25, air_to_vacuum=False):
+        """ Calculate mask coverage based on the mask center, mask width, and redshift range over a period of time.
 
         The calculation includes the following steps,
 
             * collect the mask centers and weights from the mask file.
             * convert mask wavelength from air to vacuum environment if needed.
             * compute the start and end points around each center.
-            * adjust start and end points around each center per velocity range and  maximum and minimum barycentric
-              velocity correction from a period of time.
+            * compute adjust start and end points around each center per velocity range and  maximum and minimum
+              redshift from barycentric velocity correction over a period of time.
 
         Args:
             mask_path (str): Mask file path.
             v_steps (numpy.ndarray): Velocity steps at even interval.
-            bc_corr_min (float): Barycentric velocity correction minimum.
-            bc_corr_max (float): Barycentric velocity correction maximum.
+            zb_min (float): Minimum redshift.
+            zb_max (float): Maximum redshift.
             mask_width (float, optional): Mask width. Defaults to 0.25 (Angstrom)
             air_to_vacuum (bool, optional): A flag indicating if converting mask from air to vacuum environment.
                 Defaults to False.
@@ -83,8 +83,8 @@ class RadialVelocityMaskLine:
                      'center': line_center,
                      'weight': line_weight}
 
-        dummy_start = mask_line['start'] * ((1.0 + (v_steps[0] / LIGHT_SPEED)) / (bc_corr_max + 1.0))
-        dummy_end = mask_line['end'] * ((1.0 + (v_steps[-1] / LIGHT_SPEED)) / (bc_corr_min + 1.0))
+        dummy_start = mask_line['start'] * ((1.0 + (v_steps[0] / LIGHT_SPEED)) / (zb_max + 1.0))
+        dummy_end = mask_line['end'] * ((1.0 + (v_steps[-1] / LIGHT_SPEED)) / (zb_min + 1.0))
         mask_line.update({'bc_corr_start': dummy_start, 'bc_corr_end': dummy_end})
 
         return mask_line

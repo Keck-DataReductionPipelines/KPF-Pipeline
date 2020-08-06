@@ -1,6 +1,7 @@
 from astropy.io import fits
 import numpy as np
 from astropy.modeling import models, fitting
+from astropy import constants as const
 import warnings
 import datetime
 import pandas as pd
@@ -8,8 +9,7 @@ from modules.radial_velocity.src.alg_rv_init import RadialVelocityInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVelCorrection
 
-
-LIGHT_SPEED = 299792.458  # light speed in km/s
+LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
 SEC_TO_JD = 1.0 / 86400.0
 FIT_G = fitting.LevMarLSQFitter()
 
@@ -179,14 +179,14 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         return obs_time
 
-    def get_bc_corr(self, default=None):
-        """Get barycentric velocity correction.
+    def get_redshift(self, default=None):
+        """Get redshift value.
 
         Args:
-            default (float, optional): Default Barycentric velocity correction value. Defaults to None.
+            default (float, optional): Default redshift value. Defaults to None.
 
         Returns:
-            float: Barycentric velocity correction at observation time.
+            float: redshift at observation time.
 
         """
         if self.spectro == 'neid' and 'SSBZ100' in self.header:
@@ -202,7 +202,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
-        bc_corr = RVBaryCentricVelCorrection.get_bc_corr_rv(rv_config_bc, self.spectro, obs_time_jd)
+        bc_corr = RVBaryCentricVelCorrection.get_zb_from_bc_corr(rv_config_bc, self.spectro, obs_time_jd)
         return bc_corr[0]
 
     def wavelength_calibration(self, spectrum_x):
@@ -282,9 +282,9 @@ class RadialVelocityAlg(RadialVelocityBase):
         if not self.obs_jd:
             return None, 'observation jd time error'
 
-        zb = self.get_bc_corr()
+        zb = self.get_redshift()
         if not zb:
-            return None, 'barycentric velocity correction error'
+            return None, 'redshift value error'
 
         self.set_order_range(start_order, end_order)
         self.set_x_range(start_x, end_x)
@@ -326,7 +326,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         Args:
             wave_cal (numpy.ndarray): Wavelength calibration associated with `spectrum`.
             spectrum (numpy.ndarray): Reduced 1D spectrum data of one order from optimal extraction computation.
-            zb (float): Barycentric velocity correction at the observation time.
+            zb (float): Redshift at the observation time.
             weigh_ccf_ord (numpy.ndarray, optional): The reference spectrum data of the associated order for scaling
                 the computed cross correlation result. Defaults to None.
 

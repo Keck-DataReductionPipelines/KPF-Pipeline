@@ -4,24 +4,24 @@ import os.path
 from barycorrpy import get_BC_vel
 from astropy.utils import iers
 import pandas as pd
+from astropy import constants as const
 
-LIGHT_SPEED_M = 299792458.  # light speed in m/s
+LIGHT_SPEED_M = const.c.value  # light speed in m/s
 
 
 class RVBaryCentricVelCorrection:
     """Barycentric velocity correction for radial velocity computation.
 
-    This module defines class 'RVBaryCentricVelCorrection' and methods to do barycentric velocity correction for
-    one single time point or a period of days.
+    This module defines class 'RVBaryCentricVelCorrection' and methods to calculate barycentric velocity correction
+    and redshift for one single time point or a period of days.
 
     Attributes:
-        zb_range (numpy.ndarray): An array containing minimum and maximum values from barycentric velocity correction
-            over a period of days.
-        bc_corr_list (numpy.ndarray): Array of Barycentric velocity correction values over a period of days.
+        zb_range (numpy.ndarray): An array containing minimum and maximum redshift value over a period of days.
+        zb_list (numpy.ndarray): Array of redshift values over a period of days.
 
     The following constants define the properties included in the dict instance used for barycentric velocity correction
-    calculation (:func:`~alg_barycentric_vel_corr.RVBaryCentricVelCorrection.get_zb_long()` and
-    :func:`~alg_barycentric_vel_corr.RVBaryCentricVelCorrection.get_bc_corr_rv()`):
+    and redshift calculation (:func:`~alg_barycentric_vel_corr.RVBaryCentricVelCorrection.get_zb_long()` and
+    :func:`~alg_barycentric_vel_corr.RVBaryCentricVelCorrection.get_zb_from_bc_corr()`):
     """
 
     RA = 'ra'
@@ -45,10 +45,10 @@ class RVBaryCentricVelCorrection:
 
     def __init__(self):
         self.zb_range = None
-        self.bc_corr_list = None
+        self.zb_list = None
 
     def get_zb_long(self, rv_config, jd, period, instrument=None, data_dir=None):
-        """ Barycenter velocity correction minimum and maximum over a period of days.
+        """ Get minimum and maximum redshift over a period of time.
 
         Args:
             rv_config (dict): A dict instance storing key-value pairs for barycentric velocity correction calculation.
@@ -59,18 +59,17 @@ class RVBaryCentricVelCorrection:
             instrument (str, optional): Instrument name. Defaults to None.
             data_dir (str, optional): Predefined directory. Defaults to None.
         Returns:
-            numpy.ndarray: Minimum and maximum of the barycentric velocity correction during the period starting from
+            numpy.ndarray: Minimum and maximum redshift values during the period starting from
             `jd`.  The first element in the array is the minimum and the second one is the maximum.
         """
-        if self.bc_corr_list is None:
-            bc_list = self.get_bc_corr_rv(rv_config, instrument, jd, period, data_dir)  # get_bc_corr_rv(2458591.5, 380)
-            self.bc_corr_list = bc_list
-            self.zb_range = np.array([min(bc_list), max(bc_list)])
+        if self.zb_list is None:
+            self.zb_list = self.get_zb_from_bc_corr(rv_config, instrument, jd, period, data_dir)
+            self.zb_range = np.array([min(self.zb_list), max(self.zb_list)]) if np.size(self.zb_list) > 0 else None
         return self.zb_range
 
     @staticmethod
-    def get_bc_corr_rv(rv_config, instrument, start_jd, days_period=None, data_dir=None):
-        """ BC correction for a period of days or a single day in Julian Date format.
+    def get_zb_from_bc_corr(rv_config, instrument, start_jd, days_period=None, data_dir=None):
+        """ Find the redshift values for a period of days or a single day by using Barycentric velocity correction.
 
         Args:
             rv_config (dict):   A dict instance storing key-value pairs for barycentric velocity correction calculation.
@@ -82,25 +81,25 @@ class RVBaryCentricVelCorrection:
             data_dir(str, optional): Data directory. Defaults to None.
 
         Returns:
-            numpy.ndarray:  An array of BC correction values over the specified period or a single time point.
+            numpy.ndarray:  An array of redshift values over the specified period or a single time point.
 
         """
         iers.Conf.iers_auto_url.set('ftp://cddis.gsfc.nasa.gov/pub/products/iers/finals2000A.all')
-        bc_corr = np.array([])
-        bc_file = None
+        zb_bc_corr = np.array([])
+        zb_bc_file = None
 
         if days_period:  # look for pre-stored file first
             ins = '_'+instrument if instrument else ''
             if data_dir is not None:
-                bc_file = data_dir + 'radial_velocity_test/data/bc_corr' \
+                zb_bc_file = data_dir + 'radial_velocity_test/data/bc_corr' \
                           + str(start_jd) + '_' + str(days_period) + ins + '.csv'
-            if bc_file is not None and os.path.isfile(bc_file):
-                df = pd.read_csv(bc_file)
-                bc_corr = np.reshape(df.values, (np.size(df.values), ))
+            if zb_bc_file is not None and os.path.isfile(zb_bc_file):
+                df = pd.read_csv(zb_bc_file)
+                zb_bc_corr = np.reshape(df.values, (np.size(df.values), ))
 
-        if np.size(bc_corr) == 0:
+        if np.size(zb_bc_corr) == 0:
             jds = np.arange(days_period, dtype=float) + start_jd if days_period else [start_jd]
-            bc_corr_list = list()
+            zb_list = list()
             for jd in jds:
                 bc = get_BC_vel(JDUTC=jd,
                                 ra=rv_config[RVBaryCentricVelCorrection.RA],
@@ -112,11 +111,15 @@ class RVBaryCentricVelCorrection:
                                 longi=rv_config[RVBaryCentricVelCorrection.LON],
                                 alt=rv_config[RVBaryCentricVelCorrection.ALT],
                                 rv=rv_config[RVBaryCentricVelCorrection.RV],
-                                leap_update=True)[0][0]/LIGHT_SPEED_M
-                bc_corr_list.append(bc)
-            bc_corr = np.array(bc_corr_list)
+                                leap_update=True)[0][0]
+                if bc:
+                    zb_list.append(bc/LIGHT_SPEED_M)
+                else:
+                    zb_list.append(None)
 
-            if bc_file is not None:  # store to csv file
-                df = pd.DataFrame(bc_corr)
-                df.to_csv(bc_file, index=False, header=False)
-        return bc_corr
+            zb_bc_corr = np.array(zb_list)
+
+            if zb_bc_file is not None:  # store to csv file
+                df = pd.DataFrame(zb_bc_corr)
+                df.to_csv(zb_bc_file, index=False, header=False)
+        return zb_bc_corr
