@@ -5,6 +5,7 @@ import sys
 import importlib
 import configparser as cp
 import logging
+import glob
 
 from kpfpipe.logger import start_logger
 
@@ -53,6 +54,17 @@ class KPFPipeline(BasePipeline):
 
     def __init__(self, context: ProcessingContext):
         BasePipeline.__init__(self, context)
+    
+    def _register_recipe_builtins(self):
+        """ register some built-in functions for the recipe to use """
+        self._recipe_visitor.register_builtin('int', int, 1)
+        self._recipe_visitor.register_builtin('float', float, 1)
+        self._recipe_visitor.register_builtin('str', str, 1)
+        self._recipe_visitor.register_builtin('len', len, 1)
+        self._recipe_visitor.register_builtin('find_files', glob.glob, 1)
+        self._recipe_visitor.register_builtin('split', os.path.split, 1)
+        self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
+        self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
 
     def start(self, configfile: str) -> None:
         '''
@@ -79,11 +91,6 @@ class KPFPipeline(BasePipeline):
             raise IOError('cannot find [ARGUMENT] section in config')
         self.context.arg = arg
 
-        ## Dave's experiment
-        # print("kpfpipeline: about to assign into pipeline.config")
-        # self.config = cfg_obj
-        # print(f"Experiment: type of self.config is {type(self.config)}")
-
         ## Setup primitive-specific configs:
         self.context.config_path = self.config._sections['MODULES']
         self.logger.info('Finished initializing Pipeline')
@@ -103,6 +110,7 @@ class KPFPipeline(BasePipeline):
         f.close()
         self._recipe_ast = ast.parse(fstr)
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
+        self._register_recipe_builtins()
         self._recipe_visitor.visit(self._recipe_ast)
         return Arguments()
 

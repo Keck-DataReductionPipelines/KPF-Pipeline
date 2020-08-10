@@ -3,7 +3,6 @@
 from ast import NodeVisitor, iter_fields
 import _ast
 from collections.abc import Iterable
-from collections import deque
 from queue import Queue
 # from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
 
@@ -39,9 +38,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # value returned by primitive executed by framework
         self.call_output = None
         self._builtins = {}
-        self._builtins['int'] = int
-        self._builtins['float'] = float
-        self._builtins['str'] = str
+
+    def register_builtin(self, key, func, nargs):
+        """
+        Register a function so that it can be called from a recipe without using the framework
+        Items are tuples (function, number of input args)
+        """
+        self._builtins[key] = (func, nargs)
     
     def visit_Module(self, node):
         """
@@ -187,24 +190,37 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     params['target'] = target             
                 loadQSizeBefore = len(self._load)
                 self.visit(node.iter)
-                args = deque()
+                args = []
+                if len(self._load) - loadQSizeBefore == 1:
+                    item = self._load.pop()
+                    if isinstance(item, Iterable):
+                        self.pipeline.logger.debug(f"For: Popping first list item, {item}, of type {type(item)}")
+                        args = item
+                    else:
+                        args.insert(0, item)
                 while len(self._load) > loadQSizeBefore:
-                    args.appendleft(self._load.pop())
-                # TODO: can this be made simpler?
+                    # pick up any additional items
+                    item = self._load.pop()
+                    self.pipeline.logger.debug(f"For: next list item is {item} of type {type(item)}")
+                    args.insert(0, item)
                 args_iter = iter(list(args))
-                current_arg = next(args_iter)
+                try:
+                    current_arg = next(args_iter)
+                    self.pipeline.logger.debug(f"For: first call to next returned {current_arg} of type {type(current_arg)}")
+                except StopIteration:
+                    current_arg = None
                 params['args_iter'] = args_iter
                 params['current_arg'] = current_arg
                 setattr(node, 'kpf_params', params)
                 setattr(node, 'kpf_started', True)
-                self.pipeline.logger.info(f"Starting For loop on recipe line {node.lineno} with arg {current_arg}")
             else:
                 params = getattr(node, 'kpf_params', None)
                 assert(params is not None)
                 target = params.get('target')
                 args_iter = params.get('args_iter')
                 current_arg = params.get('current_arg')
-            while True:
+            while current_arg is not None:
+                self.pipeline.logger.debug(f"For: in while loop with current_arg {current_arg}, type {type(current_arg)}")
                 self._params[target] = current_arg
                 for subnode in node.body:
                     self.visit(subnode)
@@ -269,9 +285,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 setattr(node, 'kpf_completed_values', True)
             while num_store_targets > 0 and len(self._load) > loadQSizeBefore:
                 target = self._store.pop()
-                self._params[target] = self._load.pop()
+                self.pipeline.logger.debug(f"Assign: assignment target is {target}")
+                if target == '_':
+                    self._load.pop() # discard
+                else:
+                    self._params[target] = self._load.pop()
+                    self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}, type: {self._params[target].__class__.__name__}")
                 num_store_targets -= 1
-                self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}, type: {self._params[target].__class__.__name__}")
             had_error = False
             while len(self._store) > storeQSizeBefore:
                 had_error = True
@@ -423,7 +443,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     def visit_Call(self, node):
         """
         Implement function call
-        The arguments are pulled from the _load stack into a deque.
+        The arguments are pulled from the _load stack into a list.
         Targets are put on the _store stack.
         After the call has been pushed to the framework's event queue,
         we set our awaiting_call_return flag and return.  That flag
@@ -457,22 +477,34 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
                 if node.func.id in self._builtins.keys():
-                    if len(node.args) != 1:
-                        self.pipeline.logger.error(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
+                    func, nargs = self._builtins[node.func.id]
+                    if len(node.args) != nargs:
+                        self.pipeline.logger.error(f"Call to {node.func.id} takes exactly {nargs} args, got {len(node.args)} on recipe line {node.lineno}")
                         raise RecipeError(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
-                    self.visit(node.args[0])
-                    self._load.append(self._builtins[node.func.id](self._load.pop()))
+                    arglist = []
+                    for ix in range(nargs-1, -1, -1): # down through range because _load is a LIFO stack
+                        self.visit(node.args[ix])
+                        arglist.append(self._load.pop())
+                    results = func(*arglist, **kwargs)
+                    if isinstance(results, tuple):
+                        self.pipeline.logger.debug(f"Call (builtin): returned tuple, unpacking")
+                        for item in results:
+                            self.pipeline.logger.debug(f"Call (builtin): appending {item} of type {type(item)} to _load")
+                            self._load.append(item)
+                    else:
+                        self.pipeline.logger.debug(f"Call (builtin): appending {results} of type {type(results)} to _load")
+                        self._load.append(results)
+                else:
+                    event_args = Arguments(name=node.func.id+"_args", **kwargs)
+                    # add positional arguments
+                    for argnode in node.args:
+                        self.visit(argnode)
+                        event_args.append(self._load.pop())
+                    self.context.append_event(node.func.id, event_args)
+                    self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
+                    #
+                    self.awaiting_call_return = True
                     return
-                event_args = Arguments(name=node.func.id+"_args", **kwargs)
-                # add positional arguments
-                for argnode in node.args:
-                    self.visit(argnode)
-                    event_args.append(self._load.pop())
-                self.context.append_event(node.func.id, event_args)
-                self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
-                #
-                self.awaiting_call_return = True
-                return
             else:
                 # returning from a call (pipeline event):
                 # Get any returned values, stored by resume_recipe() in self.call_output,
