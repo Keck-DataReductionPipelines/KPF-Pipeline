@@ -43,7 +43,8 @@ class OrderTrace(KPF0_Primitive):
         self.config.read(self.config_path)
 
         # start a logger
-        self.logger = start_logger(self.__class__.__name__, self.config_path)
+        self.logger = None
+        # self.logger = start_logger(self.__class__.__name__, self.config_path)
         if not self.logger:
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
