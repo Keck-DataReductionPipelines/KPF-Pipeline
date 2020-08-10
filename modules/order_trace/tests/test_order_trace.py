@@ -234,8 +234,9 @@ def test_find_widths_paras():
     test_csv = result_data + cluster_curve+"_paras.csv"
     if os.path.isfile(test_csv):
         df = pd.read_csv(test_csv, header=None)
-        assert np.all((df.values - c_df.values) < 0.000001), "find_widths: unmatched fitting curves"
+        assert np.all((np.absolute(df.values - c_df.values)) < 0.000001), "find_widths: unmatched fitting curves"
     # print("pass find_widths")
+
 
 """
 def test_extract_order_trace_paras():
