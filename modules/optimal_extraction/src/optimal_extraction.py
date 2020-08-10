@@ -12,7 +12,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from kpfpipe.modules.order_trace.alg import OptimalExtractionAlg
+from modules.optimal_extraction.src.alg import OptimalExtractionAlg
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
@@ -47,14 +47,19 @@ class OptimalExtraction(KPF0_Primitive):
             self.config.read(DEFAULT_CFG_PATH)
 
         # Order trace algorithm setup
-        self.alg = OrderTraceAlg(self.input_flat, self.input_spectrum, config)
+        self.alg = OptimalExtractionAlg(self.input_flat.data, self.input_spectrum.data,
+                                        self.input_spectrum.header['DATA'],
+                                        self.input_flat.extension['ORDER TRACE RESULT'],
+                                        self.input_flat.header['ORDER TRACE RESULT'],
+                                        config=self.config, logger=self.logger)
 
     def _pre_condition(self) -> bool:
         """
         Check for some necessary pre conditions
         """
         # input argument must be KPF0
-        success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0)
+        success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0) and \
+            'ORDER TRACE RESULT' in self.input_flat.extension
 
         return success
 
