@@ -61,6 +61,29 @@ kpf1 = kpf1_from_fits(fname, data_type="NEID")
 result = to_fits(kpf1, "temp_level1.fits")
 """
 
+optimal_extraction_recipe = """from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
+
+input_file_pattern = "filename"
+data_type = config.ARGUMENT.data_type
+stem_suffix = config.ARGUMENT.output_file_stem_suffix
+output_dir = config.ARGUMENT.output_dir
+flat_file_name = config.ARGUMENT.flat_file_name
+
+for input_file in find_files(input_file_pattern):
+    _, short_file = split(input_file)
+    stem, ext = splitext(short_file)
+    output_file = output_dir + '/' + stem + stem_suffix + ext
+    data = kpf0_from_fits(input_file, data_type=data_type)
+    flat = kpf0_from_fits(flat_file_name, data_type=KPF)
+    data = OptimalExtraction(data, flat)
+    result = to_fits(data, output_file)
+
+"""
+
+experimental_recipe = """l = [1, 2, 3]
+# invoke_subrecipe("examples/test1.recipe")
+"""
+
 class KpfPipelineForTesting(KPFPipeline):
     """
     Test pipeline class extending KpfPipeline
@@ -165,6 +188,18 @@ def test_recipe_bad_assignment():
         assert False, f"Unexpected error: {e}"
     else:
         assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
+
+# def test_recipe_optimal_extraction():
+#     try:
+#         run_recipe(optimal_extraction_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_optimal_extraction: unexpected exception {e}"
+
+def test_recipe_experimental():
+    try:
+        run_recipe(experimental_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_experimental: unexpected exception {e}"
 
 def main():
     test_recipe_basics()
