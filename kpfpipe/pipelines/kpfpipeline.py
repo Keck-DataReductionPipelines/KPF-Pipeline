@@ -105,10 +105,9 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         recipe_file = action.args.recipe
-        f = open(recipe_file)
-        fstr = f.read()
-        f.close()
-        self._recipe_ast = ast.parse(fstr)
+        with open(recipe_file) as f:
+            fstr = f.read()
+            self._recipe_ast = ast.parse(fstr)
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
         self._register_recipe_builtins()
         self._recipe_visitor.visit(self._recipe_ast)
