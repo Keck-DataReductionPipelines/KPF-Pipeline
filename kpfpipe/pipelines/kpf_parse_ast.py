@@ -1,6 +1,6 @@
 # kpf_parse_ast.py
 
-from ast import NodeVisitor, iter_fields
+from ast import NodeVisitor, iter_fields, parse
 import _ast
 from collections.abc import Iterable
 from queue import Queue
@@ -476,7 +476,17 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     self.visit(kwnode)
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
-                if node.func.id in self._builtins.keys():
+                if node.func.id == 'invoke_subrecipe':
+                    subrecipe = getattr(node, '_kpf_subrecipe', None)
+                    if not subrecipe:
+                        # TODO: do some argument checking here
+                        with open(node.args[0].s) as f:
+                            fstr = f.read()
+                            subrecipe = parse(fstr)
+                        node._kpf_subrecipe = subrecipe
+                    self.visit(subrecipe)
+
+                elif node.func.id in self._builtins.keys():
                     func, nargs = self._builtins[node.func.id]
                     if len(node.args) != nargs:
                         self.pipeline.logger.error(f"Call to {node.func.id} takes exactly {nargs} args, got {len(node.args)} on recipe line {node.lineno}")
@@ -614,8 +624,15 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"List")
         if not getattr(node, "kpf_completed", False):
+            l = []
+            loadDepth = len(self._load)
             for elt in node.elts:
                 self.visit(elt)
+                if len(self._load) > loadDepth:
+                    l.append(self._load.pop())
+                else:
+                    raise RecipeException("List: expected item to append to list, but none was found")
+            self._load.append(l)
             setattr(node, "kpf_completed", True)
     
     def visit_Tuple(self, node):
