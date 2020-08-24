@@ -8,7 +8,6 @@ import os
 import pandas as pd
 load_dotenv()
 
-
 # result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/order_trace/tests/result_data/'
 result_data = os.getenv('KPFPIPE_TEST_DATA') + '/order_trace_test/for_pytest/'
 

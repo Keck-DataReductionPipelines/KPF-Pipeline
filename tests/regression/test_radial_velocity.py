@@ -3,14 +3,14 @@ from dotenv import load_dotenv
 from astropy.io import fits
 import numpy as np
 from modules.radial_velocity.src.alg import RadialVelocityAlg
-from modules.radial_velocity.src.alg_rv_init import RadialVelocityInit
+from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 import configparser
 import os
 load_dotenv()
 
-# result_data = os.getenv('KPFPIPE_TEST_DATA') + '/radial_velocity_test/for_pytest/neid_optimal_norm_fraction_023129_'
-result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/radial_velocity/results/NEID/for_width_3/rv_output' + \
-              'neid_optimal_norm_fraction_023129_'
+result_data = os.getenv('KPFPIPE_TEST_DATA') + '/radial_velocity_test/for_pytest/neid_optimal_norm_fraction_023129_'
+# result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/radial_velocity/results/NEID/for_width_3/rv_output' + \
+#             'neid_optimal_norm_fraction_023129_'
 
 rv_fits = 'radial_velocity'
 s_order = 20
@@ -65,7 +65,7 @@ def init_radial_velocity():
         'air_to_vacuum': True,
         'header_date_obs': 'DATE-OBS'
     }
-    rv_init = RadialVelocityInit(config_neid)
+    rv_init = RadialVelocityAlgInit(config_neid)
 
     return rv_init, config_neid
 
@@ -86,7 +86,7 @@ def collect_data_for_rv():
 
 def test_rv_init_exception():
     with pytest.raises(Exception):
-        RadialVelocityInit()
+        RadialVelocityAlgInit()
 
 
 def test_rv_ccf_init_exception():

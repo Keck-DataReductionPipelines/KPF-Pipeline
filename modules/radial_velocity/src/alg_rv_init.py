@@ -20,11 +20,11 @@ mask_file_map = {'G2_espresso': 'G2.espresso.mas',
                  'G2_neid_v2': 'G2.neid.v2.mas'}
 
 
-class RadialVelocityInit(RadialVelocityBase):
+class RadialVelocityAlgInit(RadialVelocityBase):
     """ Radial velocity Init.
 
-    This module defines class 'RadialVelocityInit' and methods to do init work for making mask lines and velocity steps
-    based on star and module associated configuration for further radial velocity computation.
+    This module defines class 'RadialVelocityAlgInit' and methods to do init work for making mask lines and velocity
+    steps based on star and module associated configuration for further radial velocity computation.
 
     Args:
         config (configparser.ConfigParser): Config context.
@@ -44,7 +44,7 @@ class RadialVelocityInit(RadialVelocityBase):
             one number for a single time or two numbers representing the minimum and the maximum during a period
             of time.
         mask_line (dict): A dict instance containing mask line information. Please refer to `Returns` section in
-            :func:`~alg_rv_init.RadialVelocityInit.get_mask_line()` for the information detail.
+            :func:`~alg_rv_init.RadialVelocityAlgInit.get_mask_line()` for the information detail.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -406,10 +406,14 @@ class RadialVelocityInit(RadialVelocityBase):
                 or to a file path,  `print_debug`, if it is non empty string, or no print is made  if it is None.
                 Defaults to None.
 
-        Raises:
-            AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
-            Exception: If there is error from init calculation,
-                :func:`~alg_rv_init.RadialVelocityInit.init_calculation()`
+        Returns:
+            dict: Result of init data, like::
+
+                {
+                    'status': True|False
+                    'msg': <error message if status is False>
+                    'data': <init data>     # Please see Returns of function collect_init_data
+                }
 
         """
 
