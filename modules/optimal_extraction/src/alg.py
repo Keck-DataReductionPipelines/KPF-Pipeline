@@ -78,6 +78,7 @@ class OptimalExtractionAlg:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
         TypeError: If there is type error for `flat_data`, `spectrum_data`, or `order_trace_data`.
         TypeError: If there is type error for `spectrum_header` or `order_trace_header`.
+        Exception: If the order size between spectrum data and order trace data is not the same.
 
     """
 
@@ -88,9 +89,11 @@ class OptimalExtractionAlg:
     NoRECT = 2
     OPTIMAL = 'optimal'
     SUM = 'sum'
+    rectifying_method = ['normal rectification', 'vertical rectification', 'no rectification' ]
 
     def __init__(self, flat_data, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None):
+
         if not isinstance(flat_data, np.ndarray):
             raise TypeError('flat data type error, cannot construct object from OptionalExtractionAlg')
         if not isinstance(spectrum_data, np.ndarray):
@@ -99,8 +102,9 @@ class OptimalExtractionAlg:
             raise TypeError('flux data type error, cannot construct object from OptionalExtractionAlg')
         if not isinstance(spectrum_header, fits.header.Header):
             raise TypeError('flux header type error, cannot construct object from OptionalExtractionAlg')
-        if not isinstance(order_trace_header, dict):
-            raise TypeError('flux header type error, cannot construct object from OptionalExtractionAlg')
+        if not isinstance(order_trace_header, dict) and not isinstance(order_trace_header, fits.header.Header):
+            raise TypeError('type: ' + type(order_trace_header) +
+                            ' flux header type error, cannot construct object from OptionalExtractionAlg')
 
         self.logger = logger
         self.flat_flux = flat_data
@@ -109,16 +113,16 @@ class OptimalExtractionAlg:
         rows, cols = np.shape(self.flat_flux)
         self.dim_width = cols
         self.dim_height = rows
-
-        self.poly_order = order_trace_header['POLY DEGREE'] if 'POLY DEGREE' in order_trace_header else 3
-
+        self.poly_order = order_trace_header['POLY_DEG'] if 'POLY_DEG' in order_trace_header else 3
         p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
         self.instrument = p_config.get('instrument', '') if p_config is not None else ''
         ins = self.instrument.upper()
         self.config_param = config[ins] if ins and config.has_section(ins) else p_config
-
-        self.order_trace = order_trace_data.values if isinstance(order_trace_data, pd.DataFrame) else order_trace_data
-        self.total_order = np.shape(self.order_trace)[0]
+        self.total_order = np.shape(order_trace_data)[0]
+        if isinstance(order_trace_data, pd.DataFrame):
+            self.order_trace = order_trace_data.values
+        else:
+            self.order_trace = np.array(order_trace_data)
         self.order_coeffs = np.flip(self.order_trace[:, 0:self.poly_order+1], axis=1)
         self.order_edges = None
         self.order_xrange = None
@@ -372,36 +376,30 @@ class OptimalExtractionAlg:
         output_widths = self.get_output_pos(widths, sampling_rate[self.Y]).astype(int)  # width of output
         upper_width = min(output_widths[1], output_y_dim - 1 - y_output_mid)
         lower_width = min(output_widths[0], y_output_mid)
-        self.d_print('no rectify: width at output: ', upper_width, lower_width)
+        # self.d_print('no rectify: width at output: ', upper_width, lower_width)
 
         y_size = 1 if sum_extraction is True else (upper_width+lower_width)
         total_data_group = len(data_group)
         out_data = [np.zeros((y_size, output_x_dim)) for _ in range(0, total_data_group)]
 
         # x_output_step in sync with x_step,
-        s_x = 0
-        for o_x in x_output_step:               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
+        input_widths = np.array([self.get_input_pos(y_o, sampling_rate[self.Y])
+                                                            for y_o in range(-lower_width, upper_width)])
+        input_x = np.floor(x_step).astype(int)
+
+        for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
             # if o_x % 1000 == 0:
             #    self.d_print(o_x, end=" ")
-            for o_y in range(0, upper_width):
-                y_i = int(math.floor(y_mid[s_x]+o_y))
-                x_i = int(math.floor(x_step[s_x]))
-                for i in range(0, total_data_group):
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += data_group[i][y_i, x_i]
-                    else:
-                        out_data[i][lower_width+o_y, o_x] = data_group[i][y_i, x_i]
 
-            for o_y in range(0, lower_width):
-                y_i = int(math.floor(y_mid[s_x]-o_y-1))
-                x_i = int(math.floor(x_step[s_x]))
-                for i in range(0, total_data_group):
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += data_group[i][y_i, x_i]
-                    else:
-                        out_data[i][lower_width-o_y-1, o_x] = data_group[i][y_i, x_i]
-
-            s_x += 1
+            x_i = input_x[s_x]
+            y_input = np.floor(input_widths + y_mid[s_x]).astype(int)
+            y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
+            y_input = y_input[y_input_idx]
+            for i in range(0, total_data_group):
+                if sum_extraction is True:
+                    out_data[i][0, o_x] = np.sum(data_group[i][y_input, x_i])
+                else:
+                    out_data[i][y_input_idx , o_x] = data_group[i][y_input, x_i]
 
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
@@ -1181,8 +1179,11 @@ class OptimalExtractionAlg:
         exptime = self.spectrum_header['EXPTIME'] if 'EXPTIME' in header_keys else 600.0
 
         total_order, dim_width = np.shape(result_data)
+        # result_table = {'order_'+str(i): result_data[i, :] for i in range(total_order) }
+        # df_result = pd.DataFrame(result_table)
         df_result = pd.DataFrame(result_data)
         df_result.attrs['MJD-OBS'] = mjd
+        df_result.attrs['OBSJD'] = mjd + 2400000.5
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
         df_result.attrs['DIMWIDTH'] = dim_width
@@ -1266,22 +1267,24 @@ class OptimalExtractionAlg:
         dim_width, dim_height = self.get_spectrum_size()
         total_order = self.get_spectrum_order()
         if order_set is None:
-            order_set = np.arange(0, total_order, dtype=int)
+            if self.instrument and self.get_instrument().upper() == 'NEID':
+                order_set = np.arange(0, total_order, 2, dtype=int)
+            else:
+                order_set = np.arange(0, total_order, dtype=int)
 
         out_data = np.zeros((order_set.size, dim_width))
 
-        self.d_print("do ", rectification_method, extraction_method, ' on ', order_set.size, ' orders', info=True)
+        self.d_print("do ", self.rectifying_method[rectification_method], extraction_method,
+                     ' on ', order_set.size, ' orders', info=True)
 
         t_start = time.time()
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             self.d_print(c_order, ' edges: ', self.get_order_edges(c_order),
-                         ' xrange: ', self.get_order_xrange(c_order), end=" ")
+                         ' xrange: ', self.get_order_xrange(c_order), end=" ", info=True)
             order_flux = self.get_flux_from_order(self.order_coeffs[c_order], self.get_order_edges(c_order),
                                                   self.get_order_xrange(c_order), self.spectrum_flux, self.flat_flux,
                                                   norm_direction=rectification_method)
-
-            # check element with nan np.argwhere(np.isnan(order_flux.get('order_data'))), paras data has nan in spectrum
             result = dict()
             if 'optimal' in extraction_method:
                 result = self.optimal_extraction(order_flux.get('order_data'), order_flux.get('order_flat'),
@@ -1294,12 +1297,10 @@ class OptimalExtractionAlg:
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
         self.d_print(" ")
         data_df = self.write_data_to_dataframe(out_data)
-
         return {'optimal_extraction_result': data_df}
 
     @staticmethod
-    def result_test(target_file, data_result):
-        target_data = fits.getdata(target_file)
+    def result_test(target_data, data_result):
         t_y, t_x = np.shape(target_data)
         r_y, r_x = np.shape(data_result)
 
@@ -1323,3 +1324,13 @@ class OptimalExtractionAlg:
                     return {'result': 'error', 'msg': 'data is not the same at ' + str(diff_idx.size) + ' points'}
 
         return {'result': 'ok'}
+
+    @staticmethod
+    def update_wavecal_from_existing_L1(fiber, wave_key, L1_wave_data, header, data_obj, header_obj, wave_start_order = 0):
+        wave_end_order = min(np.shape(data_obj[fiber][1, :, :])[0] + wave_start_order,
+                             np.shape(L1_wave_data[fiber][1, :, :])[0])
+        data_obj[fiber][1, :, :] = L1_wave_data[fiber][1, wave_start_order:wave_end_order, :]
+        header_obj[wave_key] = header[wave_key]
+        header_obj[fiber+'_FLUX']['SSBZ100'] = header['PRIMARY']['SSBZ100']
+        header_obj[fiber+'_FLUX']['SSBJD100'] = header['PRIMARY']['SSBJD100']
+
