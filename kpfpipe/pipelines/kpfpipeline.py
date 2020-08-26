@@ -111,7 +111,7 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
         self._register_recipe_builtins()
         self._recipe_visitor.visit(self._recipe_ast)
-        return Arguments()
+        return Arguments(name="start_recipe_return")
 
     def exit_loop(self, action, context):
         """
@@ -135,8 +135,9 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         # pick up the recipe processing where we left off
+        self.logger.debug("resume_recipe")
         self._recipe_visitor.returning_from_call = True
         self._recipe_visitor.awaiting_call_return = False
         self._recipe_visitor.call_output = action.args # framework put previous output here
         self._recipe_visitor.visit(self._recipe_ast)
-        return Arguments()  # nothing to actually return, but meet the Framework requirement
+        return Arguments(name="resume_recipe_return")  # nothing to actually return, but meet the Framework requirement
