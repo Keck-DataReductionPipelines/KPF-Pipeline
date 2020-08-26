@@ -38,6 +38,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # value returned by primitive executed by framework
         self.call_output = None
         self._builtins = {}
+        self.subrecipe_depth = 0
 
     def register_builtin(self, key, func, nargs):
         """
@@ -56,22 +57,22 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_started', False)
-            setattr(node, 'kpf_completed', False)
             for item in node.body:
                 self.visit(item)
-            self._params = None # let storage get collected
+            if self.subrecipe_depth == 0:
+                self._params = None # let storage get collected
             return
+        self.pipeline.logger.info(f"Module: subrecipe_depth = {self.subrecipe_depth}")
         if not getattr(node, 'kpf_started', False):
-            self.pipeline.logger.debug("Module")
-            self._params = {}
+            if self.subrecipe_depth == 0:
+                self._params = {}
             setattr(node, 'kpf_started', True)
-        if not getattr(node, 'kpf_completed', False):
-            for item in node.body:
-                self.visit(item)
-                if self.awaiting_call_return:
-                    return
+        for item in node.body:
+            self.visit(item)
+            if self.awaiting_call_return:
+                return
+        if self.subrecipe_depth == 0:
             self._params = None # let allocated memory get collected
-            setattr(node, 'kpf_completed', True)
 
     def visit_ImportFrom(self, node):
         """
@@ -461,9 +462,26 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             for arg in node.args:
                 self.visit(arg)
             return
-        if not getattr(node, 'kpf_completed', False):
+        self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}; kpf_completed is {getattr(node, 'kpf_completed', False)}")
+        if node.func.id == 'invoke_subrecipe':
+            subrecipe = getattr(node, '_kpf_subrecipe', None)
+            if not subrecipe:
+                self.pipeline.logger.debug(f"invoke_subrecipe: opening and parsing recipe file {node.args[0].s}")
+                # TODO: do some argument checking here
+                with open(node.args[0].s) as f:
+                    fstr = f.read()
+                    subrecipe = parse(fstr)
+                node._kpf_subrecipe = subrecipe
+            else:
+                self.pipeline.logger.debug(f"invoke_subrecipe: found existing subrecipe of type {type(subrecipe)}")
+            saved_depth = self.subrecipe_depth
+            self.subrecipe_depth = self.subrecipe_depth + 1
+            self.visit(subrecipe)
+            self.subrecipe_depth = saved_depth
+            if self.awaiting_call_return:
+                return
+        elif not getattr(node, 'kpf_completed', False):
             if not self.returning_from_call:
-                self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}")
                 # Build and queue up the called function and arguments
                 # as a pipeline event.
                 # The "next_event" item in the event_table, populated
@@ -476,17 +494,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     self.visit(kwnode)
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
-                if node.func.id == 'invoke_subrecipe':
-                    subrecipe = getattr(node, '_kpf_subrecipe', None)
-                    if not subrecipe:
-                        # TODO: do some argument checking here
-                        with open(node.args[0].s) as f:
-                            fstr = f.read()
-                            subrecipe = parse(fstr)
-                        node._kpf_subrecipe = subrecipe
-                    self.visit(subrecipe)
-
-                elif node.func.id in self._builtins.keys():
+                if node.func.id in self._builtins.keys():
                     func, nargs = self._builtins[node.func.id]
                     if len(node.args) != nargs:
                         self.pipeline.logger.error(f"Call to {node.func.id} takes exactly {nargs} args, got {len(node.args)} on recipe line {node.lineno}")
