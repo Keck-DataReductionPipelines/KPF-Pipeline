@@ -29,7 +29,9 @@ if sum > snr_thresh:
     bool1 = True
 else:
     bool1 = False
-test_primitive_validate_args(bool1, True)
+
+bool2 = (div == 42)
+test_primitive_validate_args(bool1, True, bool2, False)
 """
 
 builtins_recipe = """# test recipe built-ins
@@ -38,7 +40,9 @@ l = find_files('kpfpipe/pipelines/*.py')
 n = len(l)
 for file in l:
     t, e = splitext(file)
-test_primitive_validate_args(a, 1, n, 4, e, '.py')
+
+bool1 = not l
+test_primitive_validate_args(a, 1, n, 4, e, '.py', bool1, False)
 """
 
 undefined_variable_recipe = """# test recipe with undefined variable
