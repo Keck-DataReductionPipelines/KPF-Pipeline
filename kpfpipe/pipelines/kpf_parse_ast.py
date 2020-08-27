@@ -409,7 +409,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_Eq(self, node):
         """ implement Eq comparison operator """
-        self._comopare_op_impl(node, "Eq", lambda x, y: x == y)
+        self._compare_op_impl(node, "Eq", lambda x, y: x == y)
     
     def visit_NotEq(self, node):
         """ implement NotEq comparison operator """
