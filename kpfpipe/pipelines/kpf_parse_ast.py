@@ -344,9 +344,9 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         self._unary_op_impl(node, "USub", lambda x : -x)
 
-    def visit_UNot(self, node):
+    def visit_Not(self, node):
         """ implement UNot """
-        self._unary_op_impl(node, "UNot", lambda x : not x)
+        self._unary_op_impl(node, "Not", lambda x : not x)
 
     # BinOp and the binary operators
 
