@@ -344,9 +344,9 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         self._unary_op_impl(node, "USub", lambda x : -x)
 
-    def visit_UNot(self, node):
+    def visit_Not(self, node):
         """ implement UNot """
-        self._unary_op_impl(node, "UNot", lambda x : not x)
+        self._unary_op_impl(node, "Not", lambda x : not x)
 
     # BinOp and the binary operators
 
@@ -409,7 +409,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_Eq(self, node):
         """ implement Eq comparison operator """
-        self._comopare_op_impl(node, "Eq", lambda x, y: x == y)
+        self._compare_op_impl(node, "Eq", lambda x, y: x == y)
     
     def visit_NotEq(self, node):
         """ implement NotEq comparison operator """
