@@ -4,11 +4,15 @@
 import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
+os.getenv('KPFPIPE_TEST_DATA')+ '/NEIDdata/BIAS/' + '/NEIDdata/TAUCETI_20191217/L0/'
 
 #importing test files
-test_bias="/Users/Paminabby/ownCloud/KPF-Pipeline-TestData/NEIDdata/BIAS/neidTemp_Bias20190325.fits"
-test_raw="/Users/Paminabby/ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits"
+test_bias="neidTemp_Bias20190325.fits"
+test_raw="neidTemp_2D20191217T023129.fits"
 
 
 #defining bias subtraction function
