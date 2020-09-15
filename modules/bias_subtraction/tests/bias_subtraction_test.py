@@ -8,13 +8,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-#result_data=os.getenv('KPFPIPE_TEST_DATA')+ '/NEIDdata/BIAS/' + '/NEIDdata/TAUCETI_20191217/L0/'
-
 #importing test files
-test_bias=os.getenv('KPFPIPE_TEST_DATA')+ '/NEIDdata/BIAS/' + "neidTemp_Bias20190325.fits"
-test_raw=os.getenv('KPFPIPE_TEST_DATA') + '/NEIDdata/TAUCETI_20191217/L0/' + "neidTemp_2D20191214T052542.fits"
-
-
+test_bias = os.getenv('KPFPIPE_TEST_DATA')+ '/NEIDdata/BIAS/neidTemp_Bias20190325.fits'
+test_raw= os.getenv('KPFPIPE_TEST_DATA') + '/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits' 
 
 #defining bias subtraction function
 #gets data from fits files, subtracts bias array values from raw array values
