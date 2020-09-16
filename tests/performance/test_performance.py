@@ -30,7 +30,7 @@ def execution_time_limit(time_limit=300):
 
 # Test time to create level 0 files from NEID data. Should be pretty quick, 5 s limit
 # =============================================================================
-@execution_time_limit(time_limit=15)
+@execution_time_limit(time_limit=30)
 def test_level0_creation():
     test_from_NEID()
 
