@@ -22,7 +22,7 @@ regression_tests:
 performance_tests:
 	pytest --pyargs tests.performance
 
-performance_tests:
-	pytest --pyargs tests.performance
+validation_tests:
+	pytest --pyargs tests.validation
 
 .PHONY: init
