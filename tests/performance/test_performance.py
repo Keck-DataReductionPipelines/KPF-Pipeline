@@ -34,8 +34,8 @@ def get_execution_limits(func):
     Returns:
         tuple or None: (min_execution_time, max_execution_time)
     """
-    if func.__name__ in exe_limits['function_name'].values:
-        row = exe_limits.query('hostname == "{}" & function_name == "{}"'.format(hostname, func.__name__))
+    row = exe_limits.query('hostname == "{}" & function_name == "{}"'.format(hostname, func.__name__))
+    if row.count() > 0:
         limits = (row['min_time'].values[0], row['max_time'].values[0])
     else:
         limits = (None, None)
