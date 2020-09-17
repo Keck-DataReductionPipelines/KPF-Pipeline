@@ -15,8 +15,14 @@ clean: clear
 	find . -name '*.pyc' -exec rm -f {} +
 	find . -name '*.pyo' -exec rm -f {} +
 
-test:
-	pytest --cov=kpfpipe --cov=modules
+regression_tests:
+	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
+
+performance_tests:
+	pytest --pyargs tests.performance
+
+validation_tests:
+	pytest --pyargs tests.validation
 
 .PHONY: init

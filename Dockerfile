@@ -29,7 +29,3 @@ ADD . /code/KPF-Pipeline
 
 # Install the package
 RUN pip3 install -r requirements.txt
-
-# Run testswhen the container launches
-CMD make init && \
-    make test

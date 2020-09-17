@@ -1,16 +1,12 @@
 env:
   global:
-  - CACHE_IMAGE: qwangcr/kpf
   - secure: LsnXvEOw+cgd/2zSqOOMaRs/+e4WLuFORA/62y/c7FDVQS97X9MsiJrdRsy2d/mfKcJTqsBI1zAVGF05NJis+m7QvA3cH9dOPH5GzW8/pqQoEdu8ctWfpZNDldgywJI36y/BGUrpHa+kQF+QGo+ZOVbMCehN6S0kBgEN4sFoC5cmeVrd5izo5ZkO/YbglHjMtCqtu/hxBSTy4d2p548kE8J6pI3ooCa9cyBo7fgnQl3+KCpzmIecRaOuzKNA0cVkiJm9W7YpUkqfVFmPw2CG8RteMWWv4YLeuMiAfWh+skZc8nQedN05l690njBuOR25HIDAx1qn3jOvwrwomqNdAD5rEQAc/hrzv0hbD+wBkMxbJc6nQJBnyQLk250TwYy6eLgKEfLj4Al2bNaLvhMVF5SX+Hv4gWx6q/EOsUIsUzc63wC7+ndlADJ7BljJ4rWsPNyFC3EKU/GKbfCkgR4pqcQwU4zYJ6KybjsqH/o7fU0mjpolO8hVrO1g2UvrAmzkHO7GUb416CpaqLDEK3/bBoAu8GGKqW2TPk+niOnZqd/Od8I14+Asm/nUB05V2OIs0RkW1CVX3scbJoCZyppz7GCLaDFHI9oaGN3CdVrJ5b+QQZ/1oCVAua3ZkXqBBD16NcilL5gVctNcis8V9GaH7Un4UYglothsFjtCnuEcXfg=
 
 language: python
 services:
 - docker
 install:
-- docker pull qwangcr/kpf:latest || true
-- docker build --cache-from qwangcr/kpf:latest --tag qwangcr/kpf:latest .
-script:
-- docker run -e CI_PULL_REQUEST=$ghprbPullId -v /Users/bfulton/owncloud/bfulton/KPF-Pipeline-TestData:/data qwangcr/kpf:latest
+- docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
 notifications:
   slack: false
   email: false
