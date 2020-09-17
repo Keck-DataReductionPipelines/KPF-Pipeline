@@ -7,7 +7,6 @@ import time
 import pandas as pd
 from dotenv import load_dotenv
 
-from kpfpipe.models.level0 import *
 from tests.regression.test_level0 import test_from_NEID
 
 # Load .env file for test path 
@@ -22,7 +21,8 @@ execution_limits_file = os.path.join(os.environ['KPFPIPE_TEST_DATA'], 'execution
 if os.path.isfile(execution_limits_file):
     exe_limits = pd.read_csv(execution_limits_file)
 else:
-    exe_limits = pd.DataFrame([], columns=['hostname', 'function_name', 'min_time', 'max_time', 'meas_time'])
+    exe_limits = pd.DataFrame([], columns=['hostname', 'function_name', 'min_time',
+                                           'max_time', 'meas_time'])
     exe_limits.to_csv(execution_limits_file, header=True, index=False)
 
 def get_execution_limits(func):
@@ -34,7 +34,8 @@ def get_execution_limits(func):
     Returns:
         tuple or None: (min_execution_time, max_execution_time)
     """
-    row = exe_limits.query('hostname == "{}" & function_name == "{}"'.format(hostname, func.__name__))
+    row = exe_limits.query('hostname == "{}" & function_name == "{}"' \
+                           .format(hostname, func.__name__))
     if row['hostname'].count() > 0:
         limits = (row['min_time'].values[0], row['max_time'].values[0])
     else:
@@ -57,7 +58,8 @@ def set_execution_limits(func, execution_time, low_frac=0.8, high_frac=1.2):
     long_limit = high_frac * execution_time
 
     with open(execution_limits_file, 'a') as f:
-        print("{:s},{:s},{:.2f},{:.2f},{:.2f}".format(hostname, func.__name__, short_limit, long_limit, execution_time), file=f)
+        print("{:s},{:s},{:.2f},{:.2f},{:.2f}".format(hostname, func.__name__, short_limit,
+                                                      long_limit, execution_time), file=f)
 
 def execution_time_limit(time_limit=None):
     """
