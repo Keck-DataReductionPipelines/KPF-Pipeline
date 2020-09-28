@@ -45,6 +45,14 @@ bool1 = not l
 test_primitive_validate_args(a, 1, n, 4, e, '.py', bool1, False)
 """
 
+environment_recipe = """# test recipe environment
+test_data = KPFPIPE_TEST_DATA
+test_outputs = KPFPIPE_TEST_OUTPUTS
+_, test_data_stem = split(test_data)
+_, test_outputs_stem = split(test_outputs)
+test_primitive_validate_args(test_data_stem, "KPF-Pipeline-TestData", test_outputs_stem, "kpfpipeline_test_output")
+"""
+
 undefined_variable_recipe = """# test recipe with undefined variable
 b = a + 1
 """
@@ -172,6 +180,12 @@ def test_recipe_builtins():
         run_recipe(builtins_recipe)
     except Exception as e:
         assert False, f"test_recipe_builtins: unexpected exception {e}"
+
+def test_recipe_environment():
+    try:
+        run_recipe(environment_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_environment: unexpected exception {e}"
 
 def test_recipe_undefined_variable():
     try:
