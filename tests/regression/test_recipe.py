@@ -45,11 +45,6 @@ bool1 = not l
 test_primitive_validate_args(a, 1, n, 4, e, '.py', bool1, False)
 """
 
-manual_environment_recipe = """# test recipe environment
-test_env_value = DAVE_TEST_ENV_KEY
-test_primitive_validate_args(test_env_value, "DAVE_TEST_ENV_VALUE")
-"""
-
 environment_recipe = """# test recipe environment
 test_data = KPFPIPE_TEST_DATA
 test_outputs = KPFPIPE_TEST_OUTPUTS
@@ -188,7 +183,7 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
 
 def test_recipe_environment():
     try:
-        run_recipe(manual_environment_recipe)
+        run_recipe(environment_recipe)
     except Exception as e:
         assert False, f"test_recipe_environment: unexpected exception {e}"
 
@@ -225,8 +220,8 @@ def test_recipe_environment():
 #         assert False, f"test_recipe_experimental: unexpected exception {e}"
 
 def main():
-    # test_recipe_basics()
-    # test_recipe_builtins()
+    test_recipe_basics()
+    test_recipe_builtins()
     test_recipe_environment()
-    # test_recipe_undefined_variable()
-    # test_recipe_bad_assignment()
+    test_recipe_undefined_variable()
+    test_recipe_bad_assignment()

@@ -71,10 +71,8 @@ class KPFPipeline(BasePipeline):
         """ preload environment variables using dotenv """
         env_values = dotenv_values()
         for key in env_values:
-            print(f"_preload_env: {key} <- {env_values.get(key)}")
-            self.context.logger.info(f"_preload_env: {key} <- {env_values.get(key)}")
+            self.context.logger.debug(f"_preload_env: {key} <- {env_values.get(key)}")
             self._recipe_visitor.load_env_value(key, env_values.get(key))
-        self._recipe_visitor.load_env_value('DAVE_TEST_ENV_KEY', 'DAVE_TEST_ENV_VALUE')
 
     def start(self, configfile: str) -> None:
         '''
