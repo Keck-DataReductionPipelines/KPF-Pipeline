@@ -163,7 +163,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     # self.pipeline.logger.error(
                     #     f"Name {node.id} on line {node.lineno} of recipe not defined.")
                     raise RecipeError(
-                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                        f"Name {node.id} on line {node.lineno} of recipe not defined.  Environment: {self._env}")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
