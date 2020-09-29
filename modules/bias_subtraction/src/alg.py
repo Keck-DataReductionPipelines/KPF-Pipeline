@@ -17,20 +17,13 @@ class BiasSubtraction:
     
     """
 
-    def __init__(self,data,config=None, logger=None):
-        """[summary]
+    def __init__(self,rawimage,masterbias,config=None, logger=None):
+        
+        self.rawimage=rawimage
+        self.masterbias=masterbias
+        self.logger=logger
 
-        Args:
-            data ([type]): [description]
-            config ([type], optional): [description]. Defaults to None.
-            logger ([type], optional): [description]. Defaults to None.
-
-        Returns:
-            [type]: [description]
-        """
-    #use KPF0_from_fits?
-
-    def bias_subtraction(rawimage, masterbias):
+    def bias_subtraction(self):
         """
         Steps:
             Reads in bias frame data
@@ -49,8 +42,9 @@ class BiasSubtraction:
         Returns:
             raw_bcorrect (array):
         """
-        biasdata=masterbias.data
-        rawdata=rawimage.data
+        biasdata=(self.masterbias).data
+        rawdata=(self.rawimage).data
+
     #check to see if both matrices have the same dimensions, Cindy's recommendation
         if biasdata.shape==rawdata.shape:
             print ("Bias .fits Dimensions Equal, Check Passed")
