@@ -33,8 +33,8 @@ class BiasSubtraction:
     def bias_subtraction(rawimage, masterbias):
         """
         Steps:
-            Reads in bias frame .fits data
-            Reads in raw science .fits data
+            Reads in bias frame data
+            Reads in raw science data
             Checks whether both data arrays have same dimensions, prints "equal" or "not equal"
             Stacks, creates average of bias frames element-wise - final average results is master bias
             Subtracts master bias array values from raw array values
@@ -49,8 +49,8 @@ class BiasSubtraction:
         Returns:
             raw_bcorrect (array):
         """
-        biasdata = fits.getdata(masterbias, ext=0)
-        rawdata = fits.getdata(rawimage, ext=0)
+        biasdata=masterbias.data
+        rawdata=rawimage.data
     #check to see if both matrices have the same dimensions, Cindy's recommendation
         if biasdata.shape==rawdata.shape:
             print ("Bias .fits Dimensions Equal, Check Passed")
