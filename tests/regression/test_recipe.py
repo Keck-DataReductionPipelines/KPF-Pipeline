@@ -48,9 +48,9 @@ test_primitive_validate_args(a, 1, n, 4, e, '.py', bool1, False)
 environment_recipe = """# test recipe environment
 test_data = KPFPIPE_TEST_DATA
 test_outputs = KPFPIPE_TEST_OUTPUTS
-_, test_data_stem = split(test_data)
-_, test_outputs_stem = split(test_outputs)
-test_primitive_validate_args(test_data_stem, "KPF-Pipeline-TestData", test_outputs_stem, "kpfpipeline_test_output")
+test_data_bool = test_data != None
+test_outputs_bool = test_outputs != None
+test_primitive_validate_args(test_data_bool, True, test_outputs_bool, True)
 """
 
 undefined_variable_recipe = """# test recipe with undefined variable
@@ -169,17 +169,17 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
         framework.append_event('start_recipe', arg)
         framework.main_loop()
 
-# def test_recipe_basics():
-#     try:
-#         run_recipe(basics_recipe)
-#     except Exception as e:
-#         assert False, f"test_recipe_basics: unexpected exception {e}"
+def test_recipe_basics():
+    try:
+        run_recipe(basics_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_basics: unexpected exception {e}"
 
-# def test_recipe_builtins():
-#     try:
-#         run_recipe(builtins_recipe)
-#     except Exception as e:
-#         assert False, f"test_recipe_builtins: unexpected exception {e}"
+def test_recipe_builtins():
+    try:
+        run_recipe(builtins_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_builtins: unexpected exception {e}"
 
 def test_recipe_environment():
     try:
@@ -187,25 +187,25 @@ def test_recipe_environment():
     except Exception as e:
         assert False, f"test_recipe_environment: unexpected exception {e}"
 
-# def test_recipe_undefined_variable():
-#     try:
-#         run_recipe(undefined_variable_recipe)
-#     except RecipeError:
-#         pass
-#     except Exception as e:
-#         assert False, f"Unexpected error: {e}"
-#     else:
-#         assert False, "test_recipe_undefined_variable should have raised an exception, but didn't"
+def test_recipe_undefined_variable():
+    try:
+        run_recipe(undefined_variable_recipe)
+    except RecipeError:
+        pass
+    except Exception as e:
+        assert False, f"Unexpected error: {e}"
+    else:
+        assert False, "test_recipe_undefined_variable should have raised an exception, but didn't"
 
-# def test_recipe_bad_assignment():
-#     try:
-#         run_recipe(bad_assignment_recipe)
-#     except RecipeError:
-#         pass
-#     except Exception as e:
-#         assert False, f"Unexpected error: {e}"
-#     else:
-#         assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
+def test_recipe_bad_assignment():
+    try:
+        run_recipe(bad_assignment_recipe)
+    except RecipeError:
+        pass
+    except Exception as e:
+        assert False, f"Unexpected error: {e}"
+    else:
+        assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
 
 # def test_recipe_optimal_extraction():
 #     try:
