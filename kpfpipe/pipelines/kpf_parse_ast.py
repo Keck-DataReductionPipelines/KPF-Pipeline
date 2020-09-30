@@ -4,6 +4,7 @@ from ast import NodeVisitor, iter_fields, parse
 import _ast
 from collections.abc import Iterable
 from queue import Queue
+import os
 # from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
 
 from keckdrpframework.models.action import Action
@@ -163,7 +164,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     # self.pipeline.logger.error(
                     #     f"Name {node.id} on line {node.lineno} of recipe not defined.")
                     raise RecipeError(
-                        f"Name {node.id} on line {node.lineno} of recipe not defined.  Environment: {self._env}")
+                        f"Name {node.id} on line {node.lineno} of recipe not defined.  Recipe environment: {self._env}.  Python environment: {os.environ}")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:

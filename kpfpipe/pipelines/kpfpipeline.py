@@ -6,7 +6,7 @@ import importlib
 import configparser as cp
 import logging
 import glob
-from dotenv.main import dotenv_values
+from dotenv.main import load_dotenv
 
 from kpfpipe.logger import start_logger
 
@@ -55,6 +55,7 @@ class KPFPipeline(BasePipeline):
 
     def __init__(self, context: ProcessingContext):
         BasePipeline.__init__(self, context)
+        load_dotenv()
     
     def _register_recipe_builtins(self):
         """ register some built-in functions for the recipe to use """
@@ -69,10 +70,15 @@ class KPFPipeline(BasePipeline):
 
     def _preload_env(self):
         """ preload environment variables using dotenv """
+        """
         env_values = dotenv_values()
         for key in env_values:
             self.context.logger.debug(f"_preload_env: {key} <- {env_values.get(key)}")
             self._recipe_visitor.load_env_value(key, env_values.get(key))
+        """
+        for key in os.environ:
+            self.context.logger.debug(f"_preload_env: {key} <- {os.environ.get(key)}")
+            self._recipe_visitor.load_env_value(key, os.environ.get(key))
 
     def start(self, configfile: str) -> None:
         '''
