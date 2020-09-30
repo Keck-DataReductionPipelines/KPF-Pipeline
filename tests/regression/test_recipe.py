@@ -45,6 +45,14 @@ bool1 = not l
 test_primitive_validate_args(a, 1, n, 4, e, '.py', bool1, False)
 """
 
+environment_recipe = """# test recipe environment
+test_data = KPFPIPE_TEST_DATA
+test_outputs = KPFPIPE_TEST_OUTPUTS
+test_data_bool = test_data != None
+test_outputs_bool = test_outputs != None
+test_primitive_validate_args(test_data_bool, True, test_outputs_bool, True)
+"""
+
 undefined_variable_recipe = """# test recipe with undefined variable
 b = a + 1
 """
@@ -173,6 +181,12 @@ def test_recipe_builtins():
     except Exception as e:
         assert False, f"test_recipe_builtins: unexpected exception {e}"
 
+def test_recipe_environment():
+    try:
+        run_recipe(environment_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_environment: unexpected exception {e}"
+
 def test_recipe_undefined_variable():
     try:
         run_recipe(undefined_variable_recipe)
@@ -199,14 +213,15 @@ def test_recipe_bad_assignment():
 #     except Exception as e:
 #         assert False, f"test_recipe_optimal_extraction: unexpected exception {e}"
 
-def test_recipe_experimental():
-    try:
-        run_recipe(experimental_recipe)
-    except Exception as e:
-        assert False, f"test_recipe_experimental: unexpected exception {e}"
+# def test_recipe_experimental():
+#     try:
+#         run_recipe(experimental_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_experimental: unexpected exception {e}"
 
 def main():
     test_recipe_basics()
     test_recipe_builtins()
+    test_recipe_environment()
     test_recipe_undefined_variable()
     test_recipe_bad_assignment()
