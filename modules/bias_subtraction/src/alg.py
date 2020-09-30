@@ -1,13 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Sep  3 13:45:51 2020
-
-@author: paminabby
-"""
 #packages
-from astropy.io import fits
-
 #Subtracting 2D array, function to subtract master bias frame from raw data image
 
 class BiasSubtraction:
@@ -15,6 +6,15 @@ class BiasSubtraction:
     The BiasSubtraction class performs master bias frame subtraction from a raw science frame. 
     Working on file input and export.
     
+    Args:
+        rawimage
+        masterbias
+        config
+        logger
+    
+    Attributes:
+        logger
+
     """
 
     def __init__(self,rawimage,masterbias,config=None, logger=None):
@@ -44,12 +44,10 @@ class BiasSubtraction:
         """
         biasdata=(self.masterbias).data
         rawdata=(self.rawimage).data
-
     #check to see if both matrices have the same dimensions, Cindy's recommendation
         if biasdata.shape==rawdata.shape:
             print ("Bias .fits Dimensions Equal, Check Passed")
         if biasdata.shape!=rawdata.shape:
             print ("Bias .fits Dimensions NOT Equal! Check Failed")
         raw_bcorrect=rawdata-biasdata
-    #to_fits ?
         return raw_bcorrect

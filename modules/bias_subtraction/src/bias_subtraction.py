@@ -1,12 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Sep  3 14:19:46 2020
-
-@author: paminabby
-"""
 # Standard dependencies
 import configparser
+import numpy as np
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -20,6 +14,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.bias_subtraction.src.alg import BiasSubtraction
+from modules.utils.frame_combine import frame_combine
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
@@ -32,52 +27,45 @@ class BiasSubtraction(KPF0_Primitive):
         self.logger=start_logger(self.__class__.__name__, config_path)
 
         #Input argument
+        #self.input=action.args[0]
+        self.rawdata=self.input.data
         
+        #Input configuration
+        self.config=configparser.ConfigParser()
+        try:
+            config_path=context.config_path['bias_subtraction']
+        except:
+            config_path = DEFAULT_CFG_PATH
+        self.config.read(config_path)
+
         #Start logger
-        self.logger=start_logger(self.__class__.__name__.,config_path)
+        self.logger=start_logger(self.__class__.__name__,config_path)
         if not self.logger:
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
         #Bias subtraction algorithm setup
-        self.alg=BiasSubtraction(config=self.config,logger=self.logger)
+        self.alg=BiasSubtraction(self.rawimage,self.masterbias,config=self.config,logger=self.logger)
 
         #Preconditions
-        
+        """
+        Potential preconditions:
+            Make sure can find a master bias? If not, could be a problem with frame combination fxn
+            Checking that master bias frame and raw frame have same dimensions as each other?
+        """
         #Postconditions
         
         #Perform - primitive's action
+    def _perform(self) -> None:
 
-        # 1) input bias files, get data from .fits
-        if self.logger:
-            self.logger.info("Bias Subtraction: inputting bias files...")
-        #input 
-        #biases_data= get .fits data
-
-        # 2) stack bias files using util fxn, creates master bias
+        # 1) stack bias files using util fxn, creates master bias
         if self.logger:
             self.logger.info("Bias Subtraction: creating master bias...")
-        master_bias=stack_average(biases_data)
+        masterbias_data=frame_combine(biases_data)
 
-        # 3) output master bias
+        # 2) subtract master bias from raw
         if self.logger:
-            self.logger.info("Bias Subtraction: outputting master bias .fits...")
-        #output
-
-        # 4) input raw science file, master bias
-        if self.logger:
-            self.logger.info("Bias Subtraction: inputting raw science and master bias frames...")
-        #input
-        #masterbias_data = get .fits data
-        #raw_data = get .fits data
-
-        # 5) subtract master bias from raw
-        if self.logger:
-            self.logger.info("Bias Subtraction: subtracting master bias from science...")
+            self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
         bias_corrected_sci=self.alg.bias_subtraction(rawdata,masterbias_data)
 
-        # 6) output bias-corrected science
-        if self.logger:
-            self.logger.info("Bias Subtraction: outputting bias-corrected science frame...")
-        #output
         
