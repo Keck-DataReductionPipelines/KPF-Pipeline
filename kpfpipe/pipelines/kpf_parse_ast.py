@@ -4,6 +4,7 @@ from ast import NodeVisitor, iter_fields, parse
 import _ast
 from collections.abc import Iterable
 from queue import Queue
+import os
 # from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
 
 from keckdrpframework.models.action import Action
@@ -24,6 +25,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         NodeVisitor.__init__(self)
         # instantiate the parameters dict
         self._params = None
+        # instantiate the environment dict
+        self._env = {}
         # store and load stacks
         # (implemented as lists; use append() and pop())
         self._store = list()
@@ -46,6 +49,9 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         Items are tuples (function, number of input args)
         """
         self._builtins[key] = (func, nargs)
+
+    def load_env_value(self, key, value):
+        self._env[key] = value
     
     def visit_Module(self, node):
         """
@@ -149,6 +155,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 else:
                     self.pipeline.logger.error(f"Name: No context or context has no config attribute")
                     raise Exception(f"Name: No context or context has no config attribute")
+            elif self._env.get(node.id):
+                value = self._env.get(node.id)
             else:
                 try:
                     value = self._params[node.id]
@@ -156,7 +164,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     # self.pipeline.logger.error(
                     #     f"Name {node.id} on line {node.lineno} of recipe not defined.")
                     raise RecipeError(
-                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                        f"Name {node.id} on line {node.lineno} of recipe not defined.  Recipe environment: {self._env}.  Python environment: {os.environ}")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
@@ -432,7 +440,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._compare_op_impl(node, "GtE", lambda x, y: x >= y)
     
     def visit_Is(self, node):
-        """ implement Lt comparison operator """
+        """ implement Is comparison operator """
         self._compare_op_impl(node, "Is", lambda x, y: x is y)
     
     def visit_IsNot(self, node):

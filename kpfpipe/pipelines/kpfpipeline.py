@@ -6,6 +6,7 @@ import importlib
 import configparser as cp
 import logging
 import glob
+from dotenv.main import load_dotenv
 
 from kpfpipe.logger import start_logger
 
@@ -54,6 +55,7 @@ class KPFPipeline(BasePipeline):
 
     def __init__(self, context: ProcessingContext):
         BasePipeline.__init__(self, context)
+        load_dotenv()
     
     def _register_recipe_builtins(self):
         """ register some built-in functions for the recipe to use """
@@ -65,6 +67,18 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.register_builtin('split', os.path.split, 1)
         self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
         self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
+
+    def _preload_env(self):
+        """ preload environment variables using dotenv """
+        """
+        env_values = dotenv_values()
+        for key in env_values:
+            self.context.logger.debug(f"_preload_env: {key} <- {env_values.get(key)}")
+            self._recipe_visitor.load_env_value(key, env_values.get(key))
+        """
+        for key in os.environ:
+            self.context.logger.debug(f"_preload_env: {key} <- {os.environ.get(key)}")
+            self._recipe_visitor.load_env_value(key, os.environ.get(key))
 
     def start(self, configfile: str) -> None:
         '''
@@ -81,7 +95,7 @@ class KPFPipeline(BasePipeline):
 
         self.logger = start_logger(self.name, configfile)
         self.logger.info('Logger started')
-        
+
         ## Setup argument
         try: 
             self.config = cfg.ConfigClass()
@@ -110,6 +124,12 @@ class KPFPipeline(BasePipeline):
             self._recipe_ast = ast.parse(fstr)
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
         self._register_recipe_builtins()
+        ## set up environment
+        try:
+            self._preload_env()
+        except Exception as e:
+            self.logger.error(f"KPF-Pipeline couldn't load environment due to exception {e}")
+        
         self._recipe_visitor.visit(self._recipe_ast)
         return Arguments(name="start_recipe_return")
 
