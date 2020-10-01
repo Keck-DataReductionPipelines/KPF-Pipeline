@@ -66,6 +66,5 @@ class BiasSubtraction(KPF0_Primitive):
         # 2) subtract master bias from raw
         if self.logger:
             self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
-        bias_corrected_sci=self.alg.bias_subtraction(rawdata,masterbias_data)
+        bias_corrected_raw=self.alg.bias_subtraction(rawdata,masterbias_data)
 
-        
