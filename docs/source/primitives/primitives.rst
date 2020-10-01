@@ -7,4 +7,6 @@ This list contains stable and functional primitives within the KPF-Pipeline
     :maxdepth: 2
 
     order_trace/order_trace.rst
-    
+    optimal_extraction/optimal_extraction.rst
+    radial_velocity/radial_velocity.rst
+   

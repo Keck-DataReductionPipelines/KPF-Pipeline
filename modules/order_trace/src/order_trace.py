@@ -37,16 +37,17 @@ class OrderTrace(KPF0_Primitive):
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            config_path = context.config_path['order_trace']
+            self.config_path = context.config_path['order_trace']
         except:
-            config_path = DEFAULT_CFG_PATH
-        self.config.read(config_path)
+            self.config_path = DEFAULT_CFG_PATH
+        self.config.read(self.config_path)
 
         # start a logger
-        self.logger = start_logger(self.__class__.__name__, config_path)
+        self.logger = None
+        # self.logger = start_logger(self.__class__.__name__, self.config_path)
         if not self.logger:
             self.logger = self.context.logger
-        self.logger.info('Loading config from: {}'.format(config_path))
+        self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup 
         self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
@@ -104,10 +105,14 @@ class OrderTrace(KPF0_Primitive):
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
         
-        self.input.create_extension('ORDER TRACE RESULT')
-        self.input.extension['ORDER TRACE RESULT'] = df
+        self.input.create_extension('ORDER_TRACE_RESULT')
+        self.input.extension['ORDER_TRACE_RESULT'] = df
 
-        self.input.header['ORDER TRACE RESULT']['POLY DEGREE'] = self.alg.get_poly_degree()
+        self.input.header['ORDER_TRACE_RESULT']['POLY_DEGREE'] = self.alg.get_poly_degree()
+
+        self.input.receipt_add_entry('OrderTrace', self.__module__, f'config_path={self.config_path}', 'PASS')
+        if self.logger:
+            self.logger.info("OrderTrace: Receipt written")
 
         if self.logger:
             self.logger.info("OrderTrace: Done!")

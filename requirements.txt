@@ -9,10 +9,15 @@ pytest
 python-dotenv
 pytest
 pytest-cov
-pytest-html
+coveralls
+barycorrpy
 
 # Documentation
 sphinx
 sphinx-rtd-theme
 sphinxcontrib-napoleon
+
+# Framework
+# --TODO-- tracking master for now. Need to settle on a release in the future 
+git+https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git@master
 
