@@ -1,0 +1,227 @@
+# test_recipe.py
+import sys, os, traceback
+import ast
+import tempfile
+
+sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
+
+from keckdrpframework.core.framework import Framework
+from keckdrpframework.models.arguments import Arguments
+from keckdrpframework.models.action import Action
+from keckdrpframework.models.processing_context import ProcessingContext
+from kpfpipe.pipelines.kpf_parse_ast import KpfPipelineNodeVisitor, RecipeError
+from kpfpipe.pipelines.kpfpipeline import KPFPipeline
+from kpfpipe.logger import start_logger
+
+basics_recipe = """# test recipe basics
+sum = 1 + 4
+dif = sum - 2.
+prod = 2 * 3
+div = prod / 3.
+
+snr_thresh = config.ARGUMENT.snr_threshold
+snr_thresh_subscript = config.ARGUMENT['snr_threshold']
+test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2., snr_thresh, 3.5, snr_thresh_subscript, 3.5)
+
+input_filename = config.ARGUMENT.input_filename
+
+if sum > snr_thresh:
+    bool1 = True
+else:
+    bool1 = False
+
+bool2 = (div == 42)
+test_primitive_validate_args(bool1, True, bool2, False)
+"""
+
+builtins_recipe = """# test recipe built-ins
+a = int(1.1)
+l = find_files('kpfpipe/pipelines/*.py')
+n = len(l)
+for file in l:
+    t, e = splitext(file)
+
+bool1 = not l
+test_primitive_validate_args(a, 1, n, 4, e, '.py', bool1, False)
+"""
+
+environment_recipe = """# test recipe environment
+test_data = KPFPIPE_TEST_DATA
+test_outputs = KPFPIPE_TEST_OUTPUTS
+test_data_bool = test_data != None
+test_outputs_bool = test_outputs != None
+test_primitive_validate_args(test_data_bool, True, test_outputs_bool, True)
+"""
+
+undefined_variable_recipe = """# test recipe with undefined variable
+b = a + 1
+"""
+
+bad_assignment_recipe = """# test recipe with bad assignment statement
+a, b = 19
+"""
+
+level0_from_to_recipe = """# test level0 fits reader recipe
+fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits"
+kpf0 = kpf0_from_fits(fname, data_type="NEID")
+result = to_fits(kpf0, "temp_level0.fits")
+"""
+
+level1_from_to_recipe = """# test level1 fits reader recipe
+fname = "../ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits"
+kpf1 = kpf1_from_fits(fname, data_type="NEID")
+result = to_fits(kpf1, "temp_level1.fits")
+"""
+
+optimal_extraction_recipe = """from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
+
+input_file_pattern = "filename"
+data_type = config.ARGUMENT.data_type
+stem_suffix = config.ARGUMENT.output_file_stem_suffix
+output_dir = config.ARGUMENT.output_dir
+flat_file_name = config.ARGUMENT.flat_file_name
+
+for input_file in find_files(input_file_pattern):
+    _, short_file = split(input_file)
+    stem, ext = splitext(short_file)
+    output_file = output_dir + '/' + stem + stem_suffix + ext
+    data = kpf0_from_fits(input_file, data_type=data_type)
+    flat = kpf0_from_fits(flat_file_name, data_type=KPF)
+    data = OptimalExtraction(data, flat)
+    result = to_fits(data, output_file)
+
+"""
+
+experimental_recipe = """l = [1, 2, 3]
+# invoke_subrecipe("examples/test1.recipe")
+"""
+
+class KpfPipelineForTesting(KPFPipeline):
+    """
+    Test pipeline class extending KpfPipeline
+    """
+
+    def __init__(self, context: ProcessingContext):
+        """ constructor """
+        KPFPipeline.__init__(self, context)
+        self.event_table['test_primitive_validate_args'] = ("test_primitive_validate_args", "processing", None)
+
+    def test_primitive_validate_args(self, action: Action, context: ProcessingContext):
+        """
+        for each pair of arguments, validate that they are equal
+        """
+        args = action.args
+        if len(args) % 2 != 0:
+            assert False, f"test_primitive_validate_args called with an odd number of arguments, {len(args)}"
+        arg_iter = iter(args)
+        while True:
+            try:
+                arg1 = next(arg_iter)
+                arg2 = next(arg_iter)
+            except StopIteration:
+                break
+            except Exception as e:
+                assert False, f"Unexpected exception in test_primitive_validate_args: {e}"
+            assert arg1 == arg2, f"values didn't match as expected, {arg1} vs {arg2}"
+
+# This is the default framework configuration file path
+framework_config = 'configs/framework.cfg'
+framework_logcfg= 'configs/framework_logger.cfg'
+
+pipe_config = "examples/default_simple.cfg"
+
+def run_recipe(recipe: str, pipe_config: str=pipe_config):
+    """
+    This is the code that runs the given recipe.
+    It mimics the kpf framework/pipeline startup code in cli.py, but writes
+    the recipe string into a temporary file before invoking the framework
+    with start_recipe as the initial event.
+    The framework is put in testing mode so that it passes exceptions
+    on to this testing code.  That we can test the proper handling of
+    recipe errors, e.g. undefined variables.
+    """
+    pipe = KpfPipelineForTesting
+
+    # Setup a pipeline logger
+    # This is to differentiate between the loggers of framework and pipeline
+    # and individual modules.
+    # The configs related to the logger is under the section [LOGGER]
+
+    # Try to initialize the framework 
+    try:
+        framework = Framework(pipe, framework_config, testing=True)
+        # Overwrite the framework logger with this instance of logger
+        # using framework default logger creates some obscure problem
+        """
+        framework.logger = start_logger('DRPFrame', framework_logcfg)
+        """
+        framework.pipeline.start(pipe_config)
+    except Exception as e:
+        print("Failed to initialize framework, exiting ...", e)
+        traceback.print_exc()
+        # sys.exit(1)
+
+    # python code
+    with tempfile.NamedTemporaryFile(mode='w+') as f:
+        f.write(recipe)
+        f.seek(0)
+        arg = Arguments(name="start_recipe_args", recipe=f.name)
+        framework.append_event('start_recipe', arg)
+        framework.main_loop()
+
+def test_recipe_basics():
+    try:
+        run_recipe(basics_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_basics: unexpected exception {e}"
+
+def test_recipe_builtins():
+    try:
+        run_recipe(builtins_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_builtins: unexpected exception {e}"
+
+def test_recipe_environment():
+    try:
+        run_recipe(environment_recipe)
+    except Exception as e:
+        assert False, f"test_recipe_environment: unexpected exception {e}"
+
+def test_recipe_undefined_variable():
+    try:
+        run_recipe(undefined_variable_recipe)
+    except RecipeError:
+        pass
+    except Exception as e:
+        assert False, f"Unexpected error: {e}"
+    else:
+        assert False, "test_recipe_undefined_variable should have raised an exception, but didn't"
+
+def test_recipe_bad_assignment():
+    try:
+        run_recipe(bad_assignment_recipe)
+    except RecipeError:
+        pass
+    except Exception as e:
+        assert False, f"Unexpected error: {e}"
+    else:
+        assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
+
+# def test_recipe_optimal_extraction():
+#     try:
+#         run_recipe(optimal_extraction_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_optimal_extraction: unexpected exception {e}"
+
+# def test_recipe_experimental():
+#     try:
+#         run_recipe(experimental_recipe)
+#     except Exception as e:
+#         assert False, f"test_recipe_experimental: unexpected exception {e}"
+
+def main():
+    test_recipe_basics()
+    test_recipe_builtins()
+    test_recipe_environment()
+    test_recipe_undefined_variable()
+    test_recipe_bad_assignment()

@@ -1,0 +1,8 @@
+from modules.order_trace.src.order_trace import OrderTrace
+
+input_file = config.ARGUMENT.input_file
+data_type = config.ARGUMENT.data_type
+
+data = kpf0_from_fits(input_file, data_type=data_type)
+data = OrderTrace(data)
+result = to_fits(data, config.ARGUMENT.output_file)

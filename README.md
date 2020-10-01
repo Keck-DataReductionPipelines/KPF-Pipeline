@@ -1,6 +1,7 @@
 # Data Reduction Pipeline for the Keck Planet Finder Spectrograph
 
 [![Documentation Status](https://readthedocs.com/projects/california-planet-search-kpf-pipeline/badge/?version=latest&token=c97d33303c445e56bffba50b137c3cbcd39ed1fa5f6d356bb70a7fb9f064d517)](https://california-planet-search-kpf-pipeline.readthedocs-hosted.com/en/latest/?badge=latest)
+[![Coverage Status](https://coveralls.io/repos/github/California-Planet-Search/KPF-Pipeline/badge.svg?branch=coverage&t=yrAuJs)](https://coveralls.io/github/California-Planet-Search/KPF-Pipeline?branch=coverage)
 
 To install this package, you first need to download
 [KeckDRPFramework](https://github.com/Keck-DataReductionPipelines/KeckDRPFramework),
@@ -22,7 +23,4 @@ To install, clone the repository and navigate into it
 
     git clone https://github.com/California-Planet-Search/KPF-Pipeline.git
 
-Since this branch is still on develop, a github page cannot be set up yet for
-the documentation. So, this branch contains the .html build of the documentaion
-from sphinx. To see  the documentation, navigate into `docs` and open `index.html` 
-with a browswer of your choice.
+Documentation is avaialble on [ReadTheDocs](https://california-planet-search-kpf-pipeline.readthedocs-hosted.com/en/latest)
