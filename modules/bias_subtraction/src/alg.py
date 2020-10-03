@@ -1,6 +1,9 @@
 #packages
 #Subtracting 2D array, function to subtract master bias frame from raw data image
 
+from kpfpipe.models.level0 import KPF0
+from keckdrpframework.models.arguments import Arguments
+
 class BiasSubtraction:
     """
     The BiasSubtraction class performs master bias frame subtraction from a raw science frame. 
@@ -26,10 +29,9 @@ class BiasSubtraction:
     def bias_subtraction(self):
         """
         Steps:
-            Reads in bias frame data
-            Reads in raw science data
+            Reads in master bias frame
+            Reads in raw science
             Checks whether both data arrays have same dimensions, prints "equal" or "not equal"
-            Stacks, creates average of bias frames element-wise - final average results is master bias
             Subtracts master bias array values from raw array values
             Returns array of bias-corrected science frame
         
@@ -40,14 +42,14 @@ class BiasSubtraction:
             masterbias (str): The string to master bias .fits file - the result of combining/averaging several bias frames
 
         Returns:
-            raw_bcorrect (array):
+            raw_bcorrect (array): bias corrected "raw" data (data no longer raw)
         """
-        biasdata=(self.masterbias).data
-        rawdata=(self.rawimage).data
     #check to see if both matrices have the same dimensions, Cindy's recommendation
-        if biasdata.shape==rawdata.shape:
+        if self.rawimage.data.shape==self.masterbias.data.shape:
             print ("Bias .fits Dimensions Equal, Check Passed")
-        if biasdata.shape!=rawdata.shape:
-            print ("Bias .fits Dimensions NOT Equal! Check Failed")
-        raw_bcorrect=rawdata-biasdata
-        return raw_bcorrect
+        if self.rawimage.data.shape!=self.masterbias.data.shape:
+            raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
+        #do I need to do KPF0 here?
+        raw_bcorrect=KPF0()
+        raw_bcorrect.data=self.rawimage.data-self.masterbias.data
+        return Arguments(raw_bcorrect)
