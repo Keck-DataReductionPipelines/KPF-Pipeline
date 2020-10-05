@@ -56,13 +56,18 @@ class BiasSubtraction(KPF0_Primitive):
         #Perform - primitive's action
     def _perform(self) -> None:
 
-        # 1) stack bias files using util fxn, creates master bias
-        #if self.logger:
-            #self.logger.info("Bias Subtraction: creating master bias...")
-        #masterbias_data=frame_combine(biases_data)
+        # 1) get raw data from file
 
-        # 2) subtract master bias from raw
+        rawdata=KPF0.from_fits(self.rawdata,self.data_type)
+        self.logger.info(f'file: {rawdata}, obj.data_type is {type(obj.data)}')
+
+        # 2) get bias data from file
+        
+        masterbias=KPF0.from_fits(self.masterbias,self.data_type)
+        self.logger.info(f'file: {masterbias}, obj.data_type is {type(obj.data)}')
+
+        # 3) subtract master bias from raw
         if self.logger:
             self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
-        bias_corrected_raw=self.alg.bias_subtraction(self.rawdata,self.masterbias)
+        bias_corrected_raw=self.alg.bias_subtraction(rawdata,masterbias)
 
