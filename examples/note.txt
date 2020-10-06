@@ -1,0 +1,17 @@
+the following lists recipe/config examples for KPF pipeline, (kpf is run under folder KPF-Pipeline)
+
+the instrument data is stored at ownCloud/KPF-Pipeline-TestData where ownCloud is the folder at the same level of KPF-Pipeline and KeckDRPFramework. 
+
+
+- perform order_trace, optimal extraction and radial velocity for NEID (create folder test_results/neid under KPF-Pipeline to contain the results)
+kpf examples/test_neid.recipe examples/default_neid.cfg
+
+- perform order_trace and optimal extraction for PARAS (create folder test_results/paras under KPF-Pipeline to hold the results)
+kpf examples/test_paras.recipe examples/default_paras.cfg
+
+Note:
+1. test_neid.recipe is the master recipe for NEID and it invokes subrecipes test_order_trace.recipe, test_optimal_extraction.recipe,
+and test_neid_radial_velocity.recipe.
+2. test_paras.recipe is teh master recipe for PARAS and it invokes subrecipes test_order_trace.recipe and test_optimal_extraction.recipe.
+3. default_recipe_test_neid.cfg and default_recipe_test_paras.cfg are the configuration files used for recipe test,
+   test_order_trace_recipe.py, test_optimal_extraction.recipe and test_radial_velocity_recipe.py.

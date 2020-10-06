@@ -5,3 +5,4 @@ Module Order Trace
    :maxdepth: 2
 
    alg_order_trace.rst
+   primitive_order_trace.rst
