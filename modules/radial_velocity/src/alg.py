@@ -5,11 +5,12 @@ from astropy import constants as const
 import warnings
 import datetime
 import pandas as pd
-from modules.radial_velocity.src.alg_rv_init import RadialVelocityInit
+from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVelCorrection
 
 LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
+LIGHT_SPEED_M = const.c.value  # light speed in m/s
 SEC_TO_JD = 1.0 / 86400.0
 FIT_G = fitting.LevMarLSQFitter()
 
@@ -23,7 +24,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     Args:
         spectrum_data (numpy.ndarray): 2D data containing reduced 1D Data for all orders from optimal extraction.
         header (fits.header.Header): Header of HDU associated with `spectrum_data`.
-        init_rv (dict): A dict instance, created by ``RadialVelocityInit``, containing the init values
+        init_rv (dict): A dict instance, created by ``RadialVelocityAlgInit``, containing the init values
             based on the settings in the configuration file for radial velocity computation.
         wave_cal (numpy.ndarray): Wavelength calibration for each order of `spectrum_data`.
         config (configparser.ConfigParser): Config context.
@@ -33,9 +34,9 @@ class RadialVelocityAlg(RadialVelocityBase):
         spectrum_data (numpy.ndarray): From parameter `spectrum_data`.
         wave_cal (numpy.ndarray): From parameter `wave_cal`.
         header (fits.header.Header): From parameter `header`.
-        rv_config (dict): A dict instance, created by ``RadialVelocityInit``,  containing the values defined in
+        rv_config (dict): A dict instance, created by ``RadialVelocityAlgInit``,  containing the values defined in
             radial velocity related configuration.
-        init_data (dict): A dict instance, created by ``RadialVelocityInit``,  containing the values defined in and
+        init_data (dict): A dict instance, created by ``RadialVelocityAlgInit``,  containing the values defined in and
             derived from radial velocity related configuration.
         velocity_loop (numpy.ndarray): Velocity steps for cross correlation computation.
         velocity_steps (int): Total number in `velocity_loop`.
@@ -51,6 +52,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
         TypeError: If there is type error for `spectrum_data`.
+        TypeEoor: If there is type error for `header`.
         TypeError: If there is type error for `wave_cal`.
         Exception: If there is init error for radial velocity calculation.
 
@@ -67,6 +69,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         if not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
+        if header is None:
+            raise TypeError('data header type error')
         if wave_cal is not None and not isinstance(wave_cal, np.ndarray):
             raise TypeError('wave calibration data type error')
         if 'data' not in init_rv or not init_rv['status']:
@@ -82,10 +86,10 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, star_rv, step
         # air_to_vacuum, step_range, mask_width
-        self.rv_config = init_data[RadialVelocityInit.RV_CONFIG]
-        self.velocity_loop = init_data[RadialVelocityInit.VELOCITY_LOOP]    # loop of velocities for rv finding
-        self.velocity_steps = init_data[RadialVelocityInit.VELOCITY_STEPS]  # total steps in velocity_loop
-        self.mask_line = init_data[RadialVelocityInit.MASK_LINE]       # def_mask,
+        self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
+        self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
+        self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
+        self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
 
         self.obs_jd = None
         ny, nx = np.shape(self.spectrum_data)
@@ -95,8 +99,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.spectrum_order = ny
         self.start_x_pos = 0
         self.end_x_pos = nx
-        self.spectro = self.rv_config[RadialVelocityInit.SPEC].lower() if RadialVelocityInit.SPEC in self.rv_config \
-            else 'neid'
+        self.spectro = self.rv_config[RadialVelocityAlgInit.SPEC].lower() \
+            if RadialVelocityAlgInit.SPEC in self.rv_config else 'neid'
 
     def get_spectrum(self):
         """Get spectrum information.
@@ -190,15 +194,36 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         """
         if self.spectro == 'neid' and 'SSBZ100' in self.header:
+            """
+            # recompute zb and compare the value in header
+            rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
+                                RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                                RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
+                                RadialVelocityAlgInit.OBSLON,
+                                RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV]
+            rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
+            obs_time_jd = self.get_obs_time()
+            bc_corr = RVBaryCentricVelCorrection.get_zb_from_bc_corr(rv_config_bc, self.spectro, obs_time_jd)
+
+            zb_header = float(self.header['SSBZ100'])
+            speed_header = zb_header * LIGHT_SPEED_M
+            retstr = "jd: {}  vel (get_BC_vel): {} zb (get_BC_vel): {} zb (header): {}, vel (header): {} diff: {} per: {}".format(
+                obs_time_jd, bc_corr[0], bc_corr[1], zb_header, speed_header, (bc_corr[0]-speed_header),
+                (bc_corr[0]-speed_header)*100/speed_header)
+
+            print(retstr)
+            return None
+            """
             return float(self.header['SSBZ100'])
+
         obs_time_jd = self.get_obs_time()
         if obs_time_jd is None:
             return default
 
-        rv_config_bc_key = [RadialVelocityInit.RA, RadialVelocityInit.DEC,
-                            RadialVelocityInit.PMRA, RadialVelocityInit.PMDEC,
-                            RadialVelocityInit.PARALLAX, RadialVelocityInit.OBSLAT, RadialVelocityInit.OBSLON,
-                            RadialVelocityInit.OBSALT, RadialVelocityInit.STAR_RV]
+        rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
+                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                            RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
+                            RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV]
 
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
@@ -306,7 +331,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         wavecal_all_orders = self.wavelength_calibration(spectrum_x)
 
         for ord_idx in range(self.spectrum_order):
-            self.d_print(ord_idx, ' ', end="")
+            # self.d_print(ord_idx, ' ', end="")
+            self.d_print('order ', ord_idx, info=True)
             wavecal = wavecal_all_orders[ord_idx, :]
 
             if np.any(wavecal != 0.0):
@@ -484,7 +510,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                   cross correlation summation values along *g_x*.
 
         """
-        rv_guess = self.rv_config[RadialVelocityInit.STAR_RV]
+        rv_guess = self.rv_config[RadialVelocityAlgInit.STAR_RV]
         g_init = models.Gaussian1D(amplitude=-1e7, mean=rv_guess, stddev=5.0)
         velocities = result_ccf[self.spectrum_order + 1, :]
         ccf = result_ccf[self.spectrum_order + self.ROWS_FOR_ANALYSIS - 1, :]
@@ -506,7 +532,12 @@ class RadialVelocityAlg(RadialVelocityBase):
             radial velocity is stored as the value of attribute `CCF-RVC`.
             
         """
-        results = pd.DataFrame(ccf)
+
+        ccf_table = {}
+        for i in range(self.velocity_steps):
+            ccf_table['vel-'+str(i)] = ccf[:, i]
+        results = pd.DataFrame(ccf_table)
+        # results = pd.DataFrame(ccf)
         _, rv_result, _, _ = self.fit_ccf(ccf)
 
         def f_decimal(num):
@@ -528,8 +559,10 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             results.attrs['Date'] = str(datetime.datetime.now())
             results.attrs['CCF-RVC'] = f_decimal(rv_result)+' Baryc RV (km/s)'
-            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityInit.STAR_RV])
-            results.attrs['CCFSTEP'] = str(self.rv_config[RadialVelocityInit.STEP])
+            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityAlgInit.STAR_RV])
+            results.attrs['CCFSTEP'] = str(self.rv_config[RadialVelocityAlgInit.STEP])
+            results.attrs['STARTORD'] = str(self.start_order)
+            results.attrs['ENDORDER'] = str(self.end_order)
 
         return results
 
@@ -585,11 +618,11 @@ class RadialVelocityAlg(RadialVelocityBase):
         return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd}
 
     @staticmethod
-    def result_test(target_file, data_result):
+    def result_test(target_data, data_result):
         """Check if 2D data is consistent with that from a reference fits.
 
         Args:
-            target_file (str): File path of the reference file.
+            target_data (numpy.ndarray): Array of data to compare to.
             data_result (numpy.ndarray): Array of data to be checked.
 
         Returns;
@@ -605,7 +638,6 @@ class RadialVelocityAlg(RadialVelocityBase):
                 }
 
         """
-        target_data = fits.getdata(target_file)
         t_y, t_x = np.shape(target_data)
         r_y, r_x = np.shape(data_result)
 
@@ -633,3 +665,5 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                       ' points and max difference of last row ' + str(diff_max_rv)}
 
         return {'result': 'ok'}
+
+

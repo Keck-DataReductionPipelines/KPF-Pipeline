@@ -40,6 +40,7 @@ class OrderTraceAlg:
         data (numpy.ndarray): 2D spectral data.
         config (configparser.ConfigParser): config context.
         logger (logging.Logger): Instance of logging.Logger.
+        data_range (list): data of area [x1, x2, y1, y2] to be processed
 
     Attributes:
         logger (logging.Logger): Instance of logging.Logger.
@@ -57,23 +58,37 @@ class OrderTraceAlg:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
         TypeError: If there is type error for `data`.
         Exception: If the size of `data` is less than 20 pixels by 20 pixels.
-
+        Exception: if there is wrong setting for `data_range`.
     """
 
     FIT_ERROR_TH = 2.5
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None, logger=None):
+    def __init__(self, data, config=None, logger=None, data_range=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
+        if data_range is not None and (not isinstance(data_range, list) or len(data_range) != 4):
+            raise Exception('data range is set wrongly')
 
         ny, nx = np.shape(data)
         if ny <= 20 and nx <= 20:
             raise Exception('image data size is too small for order trace extraction')
 
+        if data_range is not None:
+            x1 = min(data_range[0], data_range[1])
+            x2 = max(data_range[0], data_range[1])
+            y1 = min(data_range[2], data_range[3])
+            y2 = max(data_range[2], data_range[3])
+            if x1 < 0 or x2 > nx or y1 < 0 or y2 > ny:
+                raise Exception('data range is set wrongly')
+            self.data_range = [y1, y2, x1, x2]
+        else:
+            self.data_range = [0, ny, 0, nx]
+
         self.logger = logger
-        self.flat_data = data
+        self.flat_data = data[self.data_range[0]:self.data_range[1], self.data_range[2]:self.data_range[3]]
+        self.original_size = [ny, nx]
         p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
         self.instrument = p_config.get('instrument', '') if p_config is not None else ''
         ins = self.instrument.upper()
@@ -288,6 +303,12 @@ class OrderTraceAlg:
                     }
 
         """
+        def overlap_segment(a_seg, b_seg):
+            if a_seg[0] >= b_seg[1] or a_seg[1] <= b_seg[0]:
+                return None
+            else:
+                return [max(a_seg[0], b_seg[0]), min(a_seg[1], b_seg[1])]
+
         # flat data array and dimension
         image_data, n_col, n_row = self.get_spectral_data()
 
@@ -299,19 +320,28 @@ class OrderTraceAlg:
         rows_str = self.get_config_value('rows_to_reset', '')
         cols_str = self.get_config_value('cols_to_reset', '')
 
+        o_row, o_col = self.original_size
+        s_row, s_col = self.data_range[0], self.data_range[2]
+
         rows_to_reset = None
         if rows_str:
             rows_list = json.loads(rows_str)
             if isinstance(rows_list, list):
                 if all([isinstance(r, list) and len(r) == 2 for r in rows_list]):
-                    rows_to_reset = [r if r[0] >= 0 else [r[0]+n_row, r[1]+n_row] for r in rows_list]
+                    rows_to_reset = [overlap_segment(([r[0]-s_row, r[1]-s_row])
+                                                     if r[0] >= 0 else ([r[0]+o_row-s_row, r[1]+o_row-s_row]),
+                                                     [0, n_row]) for r in rows_list]
+                    rows_to_reset = [r for r in rows_to_reset if r is not None]
 
         cols_to_reset = None
         if cols_str:
             cols_list = json.loads(cols_str)
             if isinstance(cols_list, list):
                 if all([isinstance(c, list) and len(c) == 2 for c in cols_list]):
-                    cols_to_reset = [c if c[0] >= 0 else [c[0]+n_col, c[1]+n_col] for c in cols_list]
+                    cols_to_reset = [overlap_segment(([c[0]-s_col, c[1]-s_col])
+                                                     if c[0] >= 0 else ([c[0]+o_col-s_col, c[1]+o_col-s_col]),
+                                                     [0, n_col]) for c in cols_list]
+                    cols_to_reset = [c for c in cols_to_reset if c is not None]
 
         self.d_print('rows_to_reset:', rows_to_reset)
         self.d_print('cols to reset:', cols_to_reset)
@@ -1988,9 +2018,9 @@ class OrderTraceAlg:
 
         cluster_h = poly_coeffs[cluster_no, power+4] - poly_coeffs[cluster_no, power+3]
         avg_pwidth = self.find_mean_from_histogram(np.array(prev_widths), c_range=[0, cluster_h],
-                                                  bin_no=max(int(cluster_h//width_th), 1), cut_at=width_default)
+                                                   bin_no=max(int(cluster_h//width_th), 1), cut_at=width_default)
         avg_nwidth = self.find_mean_from_histogram(np.array(next_widths), c_range=[0, cluster_h],
-                                                  bin_no=max(int(cluster_h//width_th), 1), cut_at=width_default)
+                                                   bin_no=max(int(cluster_h//width_th), 1), cut_at=width_default)
 
         # self.values_at_width(avg_pwidth, avg_nwidth, cluster_points[cluster_no, center_x], center_x)
 
@@ -2145,7 +2175,6 @@ class OrderTraceAlg:
         else:
             gaussian_center = gaussian_fit.mean.value
             width = gaussian_fit.stddev.value * sigma
-            print("center offset at ", xs, ' is: ',  abs(gaussian_fit.mean.value - center_y))
 
         return gaussian_fit, width, gaussian_center
 
@@ -2848,8 +2877,11 @@ class OrderTraceAlg:
         if cluster_widths is None or cluster_coeffs is None:
             return None
 
-        power = self.get_poly_degree()
         total_row = np.shape(cluster_coeffs)[0]
+        if total_row <= 1:
+            return None
+
+        power = self.get_poly_degree()
         trace_table = {}
         column_names = ['Coeff'+str(i) for i in range(power+1)]
         for i in range(power+1):
@@ -2863,7 +2895,12 @@ class OrderTraceAlg:
         trace_table['X1'] = cluster_coeffs[1:, power+1].astype(int)
         trace_table['X2'] = cluster_coeffs[1:, power+2].astype(int)
 
-        return pd.DataFrame(trace_table)
+        df = pd.DataFrame(trace_table)
+        df.attrs['STARTROW'] = self.data_range[0]
+        df.attrs['ENDROW'] = self.data_range[1] - 1
+        df.attrs['STARTCOL'] = self.data_range[2]
+        df.attrs['ENDCOL'] = self.data_range[3] - 1
+        return df
 
     @staticmethod
     def float_to_string(afloat):
