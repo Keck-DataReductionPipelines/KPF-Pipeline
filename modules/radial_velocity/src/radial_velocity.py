@@ -87,40 +87,6 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 
 class RadialVelocity(KPF1_Primitive):
-    """Radial velocity primitive.
-
-    This module defines class RadialVelocity and methods to perform radial velocity calculation for KPF pipeline.
-
-    Args:
-        action (Action): action.args contains the positional and named arguments passed in the pipeline action:
-
-            - action.args[0] (KPF1): Instance of KPF1 containing data from optimal extraction.
-            - action.args[1] (dict): Result from the init work made by RadialVelocityInit which makes mask lines
-              and velocity steps based on star and module associated configuration for further radial velocity
-              computation.
-            - action.args['input_ref']: (???, optional): level 2 data model containing cross correlation values as a
-              reference for scaling the result of cross correlation in radial velocity computation.
-            - action.args['order_name']: (str, optional): Order name for level 1 data.
-            - action.args['start_order']: (int, optional): Start order of the data. Defaults to None.
-            - action.args['end_order']: (int, optional): End order of the data. Defaults to None.
-
-        context (ProcessingContext): context.config_path contains the path of the config file defined for the module.
-
-    Attributes:
-        input (KPF1): Instance of KPF1 containing data from optimal extraction.
-        rv_init (dict): Result from radial velocity init.
-        sci (str): name of the order to be processed.
-        start_order (int): Index of first order to be processed.
-        end_order (int): Index of last order to be processed.
-        config_path (str): Path of config file for radial velocity module.
-        config (configparser.ConfigParser): Config context.
-        logger (logging.Logger): Instance of logging.Logger.
-        spectrum_data (numpy.ndarray): Reduced 1D data of all orders from optimal extraction.
-        wave_cal (numpy.ndarray): wavelength calibration data.
-        header (fits.header.Header): Fits header of HDU associated with `spectrum_data`
-        ref_ccf (numpy.ndarray): Reference of cross correlation values for scaling the computation of cross correlation.
-        alg (RadialVelocityAlg): Instance of RadialVelocityAlg.
-    """
 
     default_agrs_val = {
         'order_name': 'SCI1'

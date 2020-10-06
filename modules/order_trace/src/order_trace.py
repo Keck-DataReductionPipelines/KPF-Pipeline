@@ -77,29 +77,6 @@ DEFAULT_CFG_PATH = 'modules/order_trace/configs/default.cfg'
 
 
 class OrderTrace(KPF0_Primitive):
-    """class OrderTrace.
-
-        Args:
-            action (Action): action.args contains positional arguments and named arguments as follows,
-
-                - action.args[0] (kpfpipe.models.level0.KPF0): Instance of KPF0 containing image data for order trace
-                  extraction.
-                - action.args['data_row_range'] (list, optional): Row range of the level 0 data to be processed.
-                  Defaults to None.
-
-            context (ProcessingContext): context.config_path contains the path of the config file defined for the module.
-
-        Attributes:
-            input (KPF0): Instance of KPF0 data from flat fits for order trace processing.
-            flat_data (numpy.array):  2D spectral data.
-            row_range (list): Row range of the data to be processed.
-            config_path (str): Path of config file for order trace.
-            config (configparser.ConfigParser): Config context.
-            logger (logging.Logger): Instance of logging.Logger.
-            alg (OrderTraceAlg): Instance of OrderTraceAlg.
-
-
-    """
     def __init__(self, 
                  action: Action,
                  context: ProcessingContext) -> None:
