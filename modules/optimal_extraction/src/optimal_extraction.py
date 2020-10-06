@@ -93,39 +93,6 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 
 class OptimalExtraction(KPF0_Primitive):
-    """ Optimal extraction primitive
-
-    This module defines class `OptimalExtraction` and methods to perform optimal extraction for KPF pipeline.
-
-    Args:
-        action (Action): action.args contains positional arguments and named arguments passed to the pipeline action,
-
-            - action.args[0] (KPF0): Instance of KPF0 containing spectrum data for optimal extraction.
-            - action.args[1] (KPF0): Instance of KPF0 containing flat data and order trace result.
-            - action.args[2] (str):  File path for the file containing optimal extraction results in terms of
-              level 1 data.
-            - action.args['order_name'] (str, optional): Name of the order to be processed. Default to 'SCI1'.
-            - action.args['start_order'] (int, optional): First order to be processed. Defaults to 0.
-            - action.args['max_result_order']: (int, optional): Total orders to be processed, Defaults to -1.
-            - action.args['rectification_method']: (str, optional): Rectification method for rectifying the curved
-              order. Defaults to 'norect', meaning no rectification.
-            - action.args['wavecal_fits']: (str, optional): Path of the fits file containing wavelength calibration
-              data. Defaults to None.
-
-        context (ProcessingContext): context.config_path contains the path of the config file defined for the module.
-
-    Attributes:
-        input_spectrum (KPF0): Instance of KPF0 data for processing.
-        input_flat (KPF0):  Instance of KPF0 containing flat data and order trace result.
-        ouput_data_file (str): File path for the output.
-        order_name (str): Name of the order to be processed.
-        start_order (int): Index of first order to be processed.
-        max_result_order (int): total orders to be processed.
-        rectification_method (int): Rectification method.
-        wavecal_fits (str): Path of the fits file with wavelength calibration data.
-        alg (modules.order_trace.src.alg.OptimalExtractionAlg): Instance of `OptimalExtractionAlg` which
-             has operation codes for the computation of optimal extraction.
-    """
 
     OrderMap = {
                     'PARAS': {
