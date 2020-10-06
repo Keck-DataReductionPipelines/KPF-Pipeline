@@ -63,18 +63,7 @@ DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
 
 class RadialVelocityInit(KPF_Primitive):
-    """ Radial velocity init primitive
 
-    This module defines class RadialVelocityInit and methods to perform the initial setting for the radial velocity
-    computation.
-
-    Attributes:
-        config_path (str): Path of config file for order trace.
-        config (configparser.ConfigParser): Config context.
-        logger (logging.Logger): Instance of logging.Logger.
-        alg_rv_init (RadialVelocityAlgInit): Instance of RadialVelocityAlgInit.
-
-    """
     def __init__(self,
                  action: Action,
                  context: ProcessingContext) -> None:
