@@ -12,8 +12,8 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.bias_subtraction.src.alg import BiasSubtraction
-from modules.utils.frame_combine import frame_combine
+from modules.bias_subtraction.src.alg import FlatFielding
+#from modules.utils.frame_combine import frame_combine
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/flat_fielding/configs/default.cfg'
@@ -27,7 +27,9 @@ class FlatFielding(KPF0_Primitive):
 
         #Input argument
         #self.input=action.args[0]
-        self.rawdata=self.input.data
+        self.rawdata=self.action.args[0]
+        self.masterflat=self.action.args[1]
+        self.data_type=self.action.args[2]
         
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -47,22 +49,24 @@ class FlatFielding(KPF0_Primitive):
         self.alg=FlatFielding(self.rawimage,self.masterflat,config=self.config,logger=self.logger)
 
         #Preconditions
-        """
-        Potential preconditions:
-        """
+       
         #Postconditions
         
         #Perform - primitive's action
     def _perform(self) -> None:
 
-        # 1) stack flat files using util fxn, creates master flat (prelim, this function will become more nuanced)
-        if self.logger:
-            self.logger.info("Flat Division: creating master flat...")
-        masterflat_data=frame_combine(flats_data)
+        # 1) get raw data from file
 
-        # 2) divide raw by master flat
-        if self.logger:
-            self.logger.info("Flat Division: dividing raw image by master flat...")
-        flat_corrected_raw=self.alg.flat_fielding(rawdata,masterflat_data)
+        rawdata=KPF0.from_fits(self.rawdata,self.data_type)
+        self.logger.info(f'file: {rawdata}, rawdata.data_type is {type(rawdata.data)}')
 
+        # 2) get flat data from file
         
+        masterflat=KPF0.from_fits(self.masterflat,self.data_type)
+        self.logger.info(f'file: {masterflat}, masterflat.data_type is {type(masterflat.data)}')
+
+        # 3) divide raw by master flat
+        if self.logger:
+            self.logger.info("Flat fielding: dividing raw image by flat frame...")
+        flat_corrected_raw=self.alg.flat_fielding(rawdata,masterflat)
+

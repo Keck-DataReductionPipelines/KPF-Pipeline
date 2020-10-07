@@ -59,12 +59,12 @@ class BiasSubtraction(KPF0_Primitive):
         # 1) get raw data from file
 
         rawdata=KPF0.from_fits(self.rawdata,self.data_type)
-        self.logger.info(f'file: {rawdata}, obj.data_type is {type(obj.data)}')
+        self.logger.info(f'file: {rawdata}, rawdata.data_type is {type(rawdata.data)}')
 
         # 2) get bias data from file
         
         masterbias=KPF0.from_fits(self.masterbias,self.data_type)
-        self.logger.info(f'file: {masterbias}, obj.data_type is {type(obj.data)}')
+        self.logger.info(f'file: {masterbias}, masterbias.data_type is {type(masterbias.data)}')
 
         # 3) subtract master bias from raw
         if self.logger:
