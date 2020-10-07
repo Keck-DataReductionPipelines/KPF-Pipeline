@@ -101,7 +101,7 @@ class RVBaryCentricVelCorrection:
             jds = np.arange(days_period, dtype=float) + start_jd if days_period else [start_jd]
             zb_list = list()
             for jd in jds:
-                bc = get_BC_vel(JDUTC=jd,
+                bc_obj = get_BC_vel(JDUTC=jd,
                                 ra=rv_config[RVBaryCentricVelCorrection.RA],
                                 dec=rv_config[RVBaryCentricVelCorrection.DEC],
                                 pmra=rv_config[RVBaryCentricVelCorrection.PMRA],
@@ -110,9 +110,11 @@ class RVBaryCentricVelCorrection:
                                 lat=rv_config[RVBaryCentricVelCorrection.LAT],
                                 longi=rv_config[RVBaryCentricVelCorrection.LON],
                                 alt=rv_config[RVBaryCentricVelCorrection.ALT],
-                                rv=rv_config[RVBaryCentricVelCorrection.RV],
-                                leap_update=True)[0][0]
+                                rv=rv_config[RVBaryCentricVelCorrection.RV])
+                                # leap_update=False)
+                bc = bc_obj[0][0]
                 if bc:
+                    # zb_list.append(bc)
                     zb_list.append(bc/LIGHT_SPEED_M)
                 else:
                     zb_list.append(None)

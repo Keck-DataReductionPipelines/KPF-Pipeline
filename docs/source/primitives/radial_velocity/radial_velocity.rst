@@ -9,4 +9,5 @@ Module Radial Veloctiy
    alg_rv_mask_line.rst
    alg_rv_barycentric_corr.rst
    alg_rv_base.rst
-
+   primitive_radial_velocity.rst
+   primitive_rv_init.rst

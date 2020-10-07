@@ -79,3 +79,6 @@ class RadialVelocityBase:
         """
         self.enable_debug_print(filename is not None)
         self.debug_output = filename
+
+    def get_instrument(self):
+        return self.instrument.upper()
