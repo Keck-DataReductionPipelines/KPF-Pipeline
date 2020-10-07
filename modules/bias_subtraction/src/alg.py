@@ -53,3 +53,4 @@ class BiasSubtraction:
         raw_bcorrect=KPF0()
         raw_bcorrect.data=self.rawimage.data-self.masterbias.data
         return Arguments(raw_bcorrect)
+
