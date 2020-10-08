@@ -1,3 +1,54 @@
+"""
+This module defines class 'BiasSubtraction,' which inherits from KPF0_Primitive and provides methods
+    to perform the event 'bias subtraction' in the recipe.
+
+    Attributes:
+        BiasSubtraction
+    
+    Description:
+        * Method '__init__':
+            BiasSubtraction constructor
+            The following arguments are passed to '__init__':
+
+                - 'action (keckdrpframework.models.action.Action)': 'action.args' contains
+                positional arguments and keyword arguments passed by the 'BiasSubtraction' event issued in the recipe:
+
+                    - 'action.args[0] (kpfpipe.models.level0.KPF0)': Instance of 'KPF0' containing raw image data
+                    - 'action.args[1] (kpfpipe.models.level0.KPF0)': Instance of 'KPF0' containing master bias data
+                    - 'action.args[2] (kpfpipe.models.level0.KPF0)': Instance of 'KPF0' containing the instrument/data type
+
+                - 'context (keckdrpframework.models.processing_context.ProcessingContext)': 'context.config_path'
+                contains the path of the config file defined for the 'bias_subtraction' module in the master config
+                file associated with the recipe.
+
+            The following attributes are defined to initialize the object:
+                
+                - 'rawdata (kpfpipe.models.level0.KPF0)': Instance of 'KPF0',  assigned by 'actions.args[0]'
+                - 'masterbias (kpfpipe.models.level0.KPF0)': Instance of 'KPF0',  assigned by 'actions.args[1]'
+                - 'data_type (kpfpipe.models.level0.KPF0)': Instance of 'KPF0',  assigned by 'actions.args[2]'
+                - 'config_path (str)': Path of config file for the computation of bias subtraction.
+                - 'config (configparser.ConfigParser)': Config context.
+                - 'logger (logging.Logger)': Instance of logging.Logger
+                - 'alg (modules.bias_subtraction.src.alg.BiasSubtraction)': Instance of 'BiasSubtraction,' which has operation
+                codes for bias subtraction.
+
+        * Method '_perform':
+
+                -   BiasSubtraction returns the bias-corrected raw data, L0 object
+    Usage:
+        For the recipe, the bias subtraction event is issued like the following:
+
+            :
+            raw_file=find_files('input location')
+            raw_min_bias=BiasSubtraction(raw_file, master_result_data, 'NEID')
+            :
+
+        where 'raw_file' is a L0 raw data file.
+
+"""
+
+
+
 # Standard dependencies
 import configparser
 import numpy as np
