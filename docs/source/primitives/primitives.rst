@@ -9,4 +9,5 @@ This list contains stable and functional primitives within the KPF-Pipeline
     order_trace/order_trace.rst
     optimal_extraction/optimal_extraction.rst
     radial_velocity/radial_velocity.rst
+    bias_subtraction/bias_subtraction.rst
    
