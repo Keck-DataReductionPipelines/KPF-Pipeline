@@ -40,7 +40,7 @@
 
             :
             raw_file=find_files('input location')
-            raw_min_flat=FlatFielding(raw_file, master_result_data, 'NEID')
+            raw_div_flat=FlatFielding(raw_file, master_result_data, 'NEID')
             :
 
         where 'raw_file' is a L0 raw data file.
@@ -65,7 +65,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.bias_subtraction.src.alg import FlatFielding
+from modules.flat_fielding.src.alg import FlatFielding
 #from modules.utils.frame_combine import frame_combine
 
 # Global read-only variables
@@ -98,7 +98,7 @@ class FlatFielding(KPF0_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        #Bias subtraction algorithm setup
+        #Flat Fielding algorithm setup
         self.alg=FlatFielding(self.rawimage,self.masterflat,config=self.config,logger=self.logger)
 
         #Preconditions
