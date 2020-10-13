@@ -4,29 +4,28 @@ from keckdrpframework.models.arguments import Arguments
 class FlatFielding:
     """
     The FlatFielding class performs master flat frame division on a raw science frame. 
-    Steps include:
-        - Reads in master flat
-        - Reads in raw image
-        - Checks whether both data arrays have the same dimensions, prints "equal" or raises error
-        - Divides raw image by master flat 
-        - Returns array of flat-corrected raw data
 
     Args:
-        rawimage (array): The FITS raw data
-        masterflat (array): The FITS master flat data
-
-    Attributes:
+        rawimage (np.ndarray): The FITS raw data
+        config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
-        
+    
+    Attributes:
+        rawimage (np.ndarray): From parameter 'rawimage'.
+    
     Raises:
         Exception: If raw image and flat frame don't have the same dimensions
-
-    Returns:
-        raw_flatcorrect: The flat-corrected data
     """
 
     def __init__(self,rawimage,config=None, logger=None):
-        
+        """
+        Inits FlatFielding class with raw data, config, logger.
+
+        Args:
+            rawimage (np.ndarray): The FITS raw data
+            config (configparser.ConfigParser, optional): Config context. Defaults to None.
+            logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
+        """
         self.rawimage=rawimage
         self.config=config
         self.logger=logger
@@ -36,11 +35,11 @@ class FlatFielding:
             Divides L0 data by master flat.
             In pipeline terms: inputs two L0 files, outputs one L0 file. 
 
-        Raises:
-            Exception: If raw image and flat frame don't have the same dimensions
+        Args:
+            masterflat (np.ndarray): The FITS master flat data.
 
-        Returns:
-            raw_flatcorrect: The flat-corrected data
+        Raises:
+            Exception: If raw image and flat frame don't have the same dimensions.
         """
 
         if self.rawimage.data.shape==masterflat.data.shape:
@@ -51,6 +50,10 @@ class FlatFielding:
         self.rawimage.data=self.rawimage.data/self.masterflat.data
 
     def get(self):
-        
+        """Returns flat-corrected raw image result.
+
+        Returns:
+            self.rawimage: The now flat-corrected data
+        """
         return self.rawimage
     
