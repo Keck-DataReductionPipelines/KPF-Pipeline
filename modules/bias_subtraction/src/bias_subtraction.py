@@ -1,5 +1,5 @@
 """
-This module defines class 'BiasSubtraction,' which inherits from KPF0_Primitive and provides methods
+    This module defines class 'BiasSubtraction,' which inherits from KPF0_Primitive and provides methods
     to perform the event 'bias subtraction' in the recipe.
 
     Attributes:
@@ -7,8 +7,8 @@ This module defines class 'BiasSubtraction,' which inherits from KPF0_Primitive 
     
     Description:
         * Method '__init__':
-            BiasSubtraction constructor
-            The following arguments are passed to '__init__':
+            
+            BiasSubtraction constructor, the following arguments are passed to '__init__':
 
                 - 'action (keckdrpframework.models.action.Action)': 'action.args' contains
                 positional arguments and keyword arguments passed by the 'BiasSubtraction' event issued in the recipe:
@@ -64,7 +64,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.bias_subtraction.src.alg import BiasSubtractionAlg
+from modules.bias_subtraction.src.alg import BiasSubtraction
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
@@ -100,10 +100,9 @@ class BiasSubtraction(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         #Bias subtraction algorithm setup
-        # """
-        # option 1
-        self.alg=BiasSubtractionAlg(self.rawdata,self.config,self.logger)
-        # """
+
+        self.alg=BiasSubtraction(self.rawdata,self.config,self.logger)
+
         #Preconditions
 
         #Postconditions
@@ -117,9 +116,3 @@ class BiasSubtraction(KPF0_Primitive):
         # option 1
         self.alg.bias_subtraction(self.masterbias)
         return Arguments(self.alg.get())
-
-        """
-        #option 2 (no alg file)
-        self.rawdata.data=self.rawdata.data-self.masterbias.data
-        return Arguments(self.rawdata)
-        """

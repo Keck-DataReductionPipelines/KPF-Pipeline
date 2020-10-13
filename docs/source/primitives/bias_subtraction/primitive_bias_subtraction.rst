@@ -1,5 +1,5 @@
 Bias Subtraction Primitive
-=============================
+======================
 
 .. module:: modules
     :noindex:
