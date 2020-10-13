@@ -4,7 +4,7 @@
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 
-class BiasSubtractionAlg:
+class BiasSubtraction:
     """
     The BiasSubtraction class performs master bias frame subtraction from a raw science frame. 
     Steps include:
