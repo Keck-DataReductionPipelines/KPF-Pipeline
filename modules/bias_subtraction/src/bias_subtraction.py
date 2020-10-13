@@ -64,19 +64,19 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.bias_subtraction.src.alg import BiasSubtraction
-#from modules.utils.frame_combine import frame_combine
+from modules.bias_subtraction.src.alg import BiasSubtractionAlg
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
 
 class BiasSubtraction(KPF0_Primitive):
 
-    def __init__(self, action:Action, context:ProcessingContext) -> None:
+    def __init__(self, 
+                action:Action, 
+                context:ProcessingContext) -> None:
 
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
-        self.logger=start_logger(self.__class__.__name__, config_path)
 
         #Input arguments
         self.rawdata=self.action.args[0]
@@ -86,20 +86,24 @@ class BiasSubtraction(KPF0_Primitive):
         #Input configuration
         self.config=configparser.ConfigParser()
         try:
-            config_path=context.config_path['bias_subtraction']
+            self.config_path=context.config_path['bias_subtraction']
         except:
-            config_path = DEFAULT_CFG_PATH
-        self.config.read(config_path)
+            self.config_path = DEFAULT_CFG_PATH
+        self.config.read(self.config_path)
+
 
         #Start logger
-        self.logger=start_logger(self.__class__.__name__,config_path)
+        self.logger=None
+        #self.logger=start_logger(self.__class__.__name__,config_path)
         if not self.logger:
             self.logger=self.context.logger
-        self.logger.info('Loading config from: {}'.format(config_path))
+        self.logger.info('Loading config from: {}'.format(self.config_path))
 
         #Bias subtraction algorithm setup
-        self.alg=BiasSubtraction(self.rawimage,self.masterbias,config=self.config,logger=self.logger)
-
+        # """
+        # option 1
+        self.alg=BiasSubtractionAlg(self.rawdata,self.config,self.logger)
+        # """
         #Preconditions
 
         #Postconditions
@@ -107,18 +111,15 @@ class BiasSubtraction(KPF0_Primitive):
         #Perform - primitive's action
     def _perform(self) -> None:
 
-        # 1) get raw data from file
-
-        rawdata=KPF0.from_fits(self.rawdata,self.data_type)
-        self.logger.info(f'file: {rawdata}, rawdata.data_type is {type(rawdata.data)}')
-
-        # 2) get bias data from file
-        
-        masterbias=KPF0.from_fits(self.masterbias,self.data_type)
-        self.logger.info(f'file: {masterbias}, masterbias.data_type is {type(masterbias.data)}')
-
-        # 3) subtract master bias from raw
+        # 1) subtract master bias from raw
         if self.logger:
             self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
-        bias_corrected_raw=self.alg.bias_subtraction(rawdata,masterbias)
+        # option 1
+        self.alg.bias_subtraction(self.masterbias)
+        return Arguments(self.alg.get())
 
+        """
+        #option 2 (no alg file)
+        self.rawdata.data=self.rawdata.data-self.masterbias.data
+        return Arguments(self.rawdata)
+        """
