@@ -35,8 +35,9 @@
         * Method `_perform`:
 
                 -   BiasSubtraction returns the bias-corrected raw data, L0 object
+    
     Usage:
-        For the recipe, the bias subtraction event is issued like the following:
+        For the recipe, the bias subtraction event is issued like the following::
 
             :
             raw_file_name=find_files(`input location`)

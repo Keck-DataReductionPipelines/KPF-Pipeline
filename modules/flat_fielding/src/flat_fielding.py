@@ -7,8 +7,7 @@
     
     Description:
         * Method `__init__`:
-            FlatFielding constructor
-            The following arguments are passed to `__init__`:
+            FlatFielding constructor, the following arguments are passed to `__init__`:
 
                 - `action (keckdrpframework.models.action.Action)`: `action.args` contains
                 positional arguments and keyword arguments passed by the `FlatFielding` event issued in the recipe:
@@ -21,7 +20,7 @@
                 contains the path of the config file defined for the `flat_fielding` module in the master config
                 file associated with the recipe.
 
-            The following attributes are defined to initialize the object:
+            and the following attributes are defined to initialize the object:
                 
                 - `rawdata (kpfpipe.models.level0.KPF0)`: Instance of `KPF0`,  assigned by `actions.args[0]`
                 - `masterflat (kpfpipe.models.level0.KPF0)`: Instance of `KPF0`,  assigned by `actions.args[1]`
@@ -34,9 +33,10 @@
 
         * Method `_perform`:
 
-                -   FlatFielding returns the flat-corrected raw data, L0 object
+            FlatFielding returns the flat-corrected raw data, L0 object, in an `Arguments` object.
+    
     Usage:
-        For the recipe, the flat fielding event is issued like the following:
+        For the recipe, the flat fielding event is issued like the following::
 
             :
             raw_file_name=find_files(`input location`)
