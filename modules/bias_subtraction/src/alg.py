@@ -4,7 +4,7 @@
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 
-class BiasSubtraction:
+class BiasSubtractionAlg:
     """
     The BiasSubtraction class performs master bias frame subtraction from a raw science frame. 
     Steps include:
@@ -31,13 +31,14 @@ class BiasSubtraction:
     """
 
 
-    def __init__(self,rawimage,masterbias,config=None, logger=None):
+    def __init__(self,rawimage,config=None, logger=None):
         
         self.rawimage=rawimage
-        self.masterbias=masterbias
+        self.config=config
         self.logger=logger
 
-    def bias_subtraction(self):
+#make bias subtraction just a function, takes 
+    def bias_subtraction(self,masterbias):
         """
             Subtracts bias data from raw data.
             In pipeline terms: inputs two L0 files, outputs one L0 file. 
@@ -48,10 +49,12 @@ class BiasSubtraction:
         Raises:
             Exception: If raw image and bias frame don't have the same dimensions
         """
-        if self.rawimage.data.shape==self.masterbias.data.shape:
+        if self.rawimage.data.shape==masterbias.data.shape:
             print ("Bias .fits Dimensions Equal, Check Passed")
-        if self.rawimage.data.shape!=self.masterbias.data.shape:
+        else:
             raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
-        raw_bcorrect=KPF0()
-        raw_bcorrect.data=self.rawimage.data-self.masterbias.data
-        return Arguments(raw_bcorrect)
+        self.rawimage.data=self.rawimage.data-masterbias.data
+    
+    def get(self):
+
+        return self.rawimage

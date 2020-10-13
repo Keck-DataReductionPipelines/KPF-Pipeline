@@ -25,13 +25,13 @@ class FlatFielding:
         raw_flatcorrect: The flat-corrected data
     """
 
-    def __init__(self,rawimage,masterflat,config=None, logger=None):
+    def __init__(self,rawimage,config=None, logger=None):
         
         self.rawimage=rawimage
-        self.masterflat=masterflat
+        self.config=config
         self.logger=logger
 
-    def flat_fielding(self):
+    def flat_fielding(self,masterflat):
         """
             Divides L0 data by master flat.
             In pipeline terms: inputs two L0 files, outputs one L0 file. 
@@ -43,13 +43,14 @@ class FlatFielding:
             raw_flatcorrect: The flat-corrected data
         """
 
-        if self.rawimage.data.shape==self.masterflat.data.shape:
+        if self.rawimage.data.shape==masterflat.data.shape:
             print ("Flat .fits Dimensions Equal, Check Passed")
-        if self.rawimage.data.shape!=self.masterflat.data.shape:
+        else:
             raise Exception("Flat .fits Dimensions NOT Equal! Check Failed")
-        #do I need to do KPF0 here?
-        raw_flatcorrect=KPF0()
-        raw_flatcorrect.data=self.rawimage.data/self.masterflat.data
-        return Arguments(raw_flatcorrect)
+    
+        self.rawimage.data=self.rawimage.data/self.masterflat.data
 
+    def get(self):
+        
+        return self.rawimage
     

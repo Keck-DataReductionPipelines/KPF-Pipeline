@@ -48,9 +48,6 @@
 """
 
 
-
-
-
 import configparser
 import numpy as np
 
@@ -76,7 +73,6 @@ class FlatFielding(KPF0_Primitive):
 
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
-        self.logger=start_logger(self.__class__.__name__, config_path)
 
         #Input argument
         #self.input=action.args[0]
@@ -99,7 +95,9 @@ class FlatFielding(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(config_path))
 
         #Flat Fielding algorithm setup
-        self.alg=FlatFielding(self.rawimage,self.masterflat,config=self.config,logger=self.logger)
+
+        #Option 1
+        self.alg=FlatFielding(self.rawdata,config=self.config,logger=self.logger)
 
         #Preconditions
        
@@ -108,18 +106,17 @@ class FlatFielding(KPF0_Primitive):
         #Perform - primitive's action
     def _perform(self) -> None:
 
-        # 1) get raw data from file
-
-        rawdata=KPF0.from_fits(self.rawdata,self.data_type)
-        self.logger.info(f'file: {rawdata}, rawdata.data_type is {type(rawdata.data)}')
-
-        # 2) get flat data from file
-        
-        masterflat=KPF0.from_fits(self.masterflat,self.data_type)
-        self.logger.info(f'file: {masterflat}, masterflat.data_type is {type(masterflat.data)}')
-
-        # 3) divide raw by master flat
+         
+        #Option 1:
         if self.logger:
-            self.logger.info("Flat fielding: dividing raw image by flat frame...")
-        flat_corrected_raw=self.alg.flat_fielding(rawdata,masterflat)
+            self.logger.info("Flat-fielding: dividing raw image by master flat")
+        flat_result=self.alg(self.masterflat)
+        return Arguments(self.alg.get())
+
+
+        """
+        #Option 2 (no alg file):
+        self.rawdata.data =self.rawdata.data/self.masterbias.data
+        return Arguments (self.rawdata)
+        """
 
