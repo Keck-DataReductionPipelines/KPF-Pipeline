@@ -26,6 +26,24 @@ class BiasSubtraction(KPF0_Primitive):
     Args:
         KPF0_Primitive: Parent class
 
+    Args:
+        KPF0_Primitive: Parent class
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe:
+
+            `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
+            `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
+
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
+
+    Attributes:
+        rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`            
+        masterbias (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
+        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+        config_path (str): Path of config file for the computation of bias subtraction.
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger
+        alg (modules.bias_subtraction.src.alg.BiasSubtraction): Instance of `BiasSubtraction,` which has operation codes for bias subtraction.
+
     """
     def __init__(self, 
                 action:Action, 
@@ -42,15 +60,6 @@ class BiasSubtraction(KPF0_Primitive):
 
             context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
 
-        Attributes:
-            rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`
-            masterbias (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
-            data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
-            config_path (str): Path of config file for the computation of bias subtraction.
-            config (configparser.ConfigParser): Config context.
-            logger (logging.Logger): Instance of logging.Logger
-            alg (modules.bias_subtraction.src.alg.BiasSubtraction): Instance of `BiasSubtraction,` which has operation
-                codes for bias subtraction.
         """
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
@@ -95,11 +104,11 @@ class BiasSubtraction(KPF0_Primitive):
         Returns the bias-corrected raw data, L0 object.
 
         Returns:
-            Level 0, bias-corrected, raw observation data in Arguments
+            Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
         """
         # 1) subtract master bias from raw
         if self.logger:
             self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
-        # option 1
+
         self.alg.bias_subtraction(self.masterbias)
         return Arguments(self.alg.get())
