@@ -6,7 +6,9 @@ from keckdrpframework.models.arguments import Arguments
 
 class BiasSubtraction:
     """
-    The BiasSubtraction class performs master bias frame subtraction from a raw observation frame. 
+    Bias subtraction calculation.
+
+    This module defines 'BiasSubtraction' and methods to perform bias subtraction by subtracting a master bias frame from the raw data frame.  
 
     Args:
         rawimage (np.ndarray): The FITS raw data
@@ -55,6 +57,6 @@ class BiasSubtraction:
         """Returns bias-corrected raw image result.
 
         Returns:
-            self.rawimage: The now-bias-corrected data
+            self.rawimage: The bias-corrected data
         """
         return self.rawimage
