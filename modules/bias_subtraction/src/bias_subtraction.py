@@ -25,14 +25,7 @@ class BiasSubtraction(KPF0_Primitive):
 
     Args:
         KPF0_Primitive: Parent class
-
-    Args:
-        KPF0_Primitive: Parent class
-        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe:
-
-            `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
-            `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
-
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe.
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
 
     Attributes:
