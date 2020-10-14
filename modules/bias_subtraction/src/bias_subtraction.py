@@ -91,7 +91,8 @@ class BiasSubtraction(KPF0_Primitive):
         #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
-        Performs bias subtraction by calling method 'bias_subtraction' from BiasSubtraction, returns the bias-corrected raw data, L0 object
+        Performs bias subtraction by calling method 'bias_subtraction' from BiasSubtraction.
+        Returns the bias-corrected raw data, L0 object.
 
         Returns:
             Level 0, bias-corrected, raw observation data in Arguments
