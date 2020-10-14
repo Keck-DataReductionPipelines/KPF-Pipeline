@@ -3,7 +3,9 @@ from keckdrpframework.models.arguments import Arguments
 
 class FlatFielding:
     """
-    The FlatFielding class performs master flat frame division on a raw science frame. 
+    Flat division calculation.
+
+    This module defines 'FlatFielding' and methods to perform flat-fielding by dividing a raw data frame by a master flat frame.  
 
     Args:
         rawimage (np.ndarray): The FITS raw data
@@ -53,7 +55,7 @@ class FlatFielding:
         """Returns flat-corrected raw image result.
 
         Returns:
-            self.rawimage: The now flat-corrected data
+            self.rawimage: The flat-corrected data
         """
         return self.rawimage
     
