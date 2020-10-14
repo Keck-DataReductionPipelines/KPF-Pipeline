@@ -1,3 +1,4 @@
+
 import configparser
 import numpy as np
 
@@ -12,22 +13,56 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.bias_subtraction.src.alg import BiasSubtraction
-from modules.utils.frame_combine import frame_combine
+from modules.flat_fielding.src.alg import FlatFielding
+#from modules.utils.frame_combine import frame_combine
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/flat_fielding/configs/default.cfg'
 
 class FlatFielding(KPF0_Primitive):
-    def __init__(self, action:Action, context:ProcessingContext) -> None:
+    """
+    This module defines class `FlatFielding,` which inherits from `KPF0_Primitive` and provides methods 
+    to perform the event `flat fielding` in the recipe.
 
+    Args:
+        KPF0_Primitive: Parent class
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `FlatFielding` event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `flat_fielding` module in master config file associated with recipe.
+
+    Attributes:
+        rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`
+        masterflat (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
+        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+        config_path (str): Path of config file for the computation of flat fielding.
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger
+        alg (modules.flat_fielding.src.alg.FlatFielding): Instance of `FlatFielding,` which has operation codes for flat fielding.
+
+
+    """
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
+         
+        """
+        FlatFielding constructor.
+
+        Args:
+            action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `FlatFielding` event issued in recipe:
+
+                `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
+                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master flat data
+                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
+
+            context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `flat_fielding` module in master config file associated with recipe.
+
+       """ 
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
-        self.logger=start_logger(self.__class__.__name__, config_path)
-
+        
         #Input argument
         #self.input=action.args[0]
-        self.rawdata=self.input.data
+        self.rawdata=self.action.args[0]
+        self.masterflat=self.action.args[1]
+        self.data_type=self.action.args[2]
         
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -43,26 +78,27 @@ class FlatFielding(KPF0_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        #Bias subtraction algorithm setup
-        self.alg=FlatFielding(self.rawimage,self.masterflat,config=self.config,logger=self.logger)
+        #Flat Fielding algorithm setup
+
+        #Option 1
+        self.alg=FlatFielding(self.rawdata,config=self.config,logger=self.logger)
 
         #Preconditions
-        """
-        Potential preconditions:
-        """
+        
         #Postconditions
         
-        #Perform - primitive's action
+        #Perform - primitive`s action
     def _perform(self) -> None:
+        """
+        Primitive action - perform flat division by calling method `flat_fielding` from FlatFielding.
+        Returns the flat-corrected raw data, L0 object.
 
-        # 1) stack flat files using util fxn, creates master flat (prelim, this function will become more nuanced)
+        Returns:
+            Arguments object(np.ndarray): Level 0, flat-corrected, raw observation data
+        """
+
+        #Option 1:
         if self.logger:
-            self.logger.info("Flat Division: creating master flat...")
-        masterflat_data=frame_combine(flats_data)
-
-        # 2) divide raw by master flat
-        if self.logger:
-            self.logger.info("Flat Division: dividing raw image by master flat...")
-        flat_corrected_raw=self.alg.flat_fielding(rawdata,masterflat_data)
-
-        
+            self.logger.info("Flat-fielding: dividing raw image by master flat")
+        flat_result=self.alg(self.masterflat)
+        return Arguments(self.alg.get())
