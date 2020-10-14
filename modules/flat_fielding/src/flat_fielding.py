@@ -20,13 +20,42 @@ from modules.flat_fielding.src.alg import FlatFielding
 DEFAULT_CFG_PATH = 'modules/flat_fielding/configs/default.cfg'
 
 class FlatFielding(KPF0_Primitive):
+    """
+    This module defines class `FlatFielding,` which inherits from KPF0_Primitive and provides methods 
+    to perform the event `flat fielding` in the recipe.
+
+    Args:
+        KPF0_Primitive: Parent class
+
+    """
     def __init__(self, action:Action, context:ProcessingContext) -> None:
-       """
-        FlatFielding constructer
+         
+        """
+        FlatFielding constructor.
+
+        Args:
+            action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `FlatFielding` event issued in recipe:
+
+                `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
+                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master flat data
+                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
+
+            context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `flat_fielding` module in master config file associated with recipe.
+
+        Attributes:
+            rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`
+            masterflat (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
+            data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+            config_path (str): Path of config file for the computation of flat fielding.
+            config (configparser.ConfigParser): Config context.
+            logger (logging.Logger): Instance of logging.Logger
+            alg (modules.bias_subtraction.src.alg.BiasSubtraction): Instance of `FlatFielding,` which has operation
+                codes for flat fielding.
+
        """ 
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
-
+        
         #Input argument
         #self.input=action.args[0]
         self.rawdata=self.action.args[0]
@@ -62,10 +91,11 @@ class FlatFielding(KPF0_Primitive):
         """
         #Perform - primitive`s action
     def _perform(self) -> None:
-        """Primitive action - perform flat division by calling method `flat_fielding` from FlatFielding
+        """Primitive action - perform flat division by calling method `flat_fielding` from FlatFielding.
+        Returns the flat-corrected raw data, L0 object.
 
         Returns:
-            Level 0, flat-corrected, raw observation data
+            Level 0, flat-corrected, raw observation data in Arguments
         """
 
         #Option 1:
