@@ -21,7 +21,7 @@ DEFAULT_CFG_PATH = 'modules/flat_fielding/configs/default.cfg'
 
 class FlatFielding(KPF0_Primitive):
     """
-    This module defines class `FlatFielding,` which inherits from KPF0_Primitive and provides methods 
+    This module defines class `FlatFielding,` which inherits from `KPF0_Primitive` and provides methods 
     to perform the event `flat fielding` in the recipe.
 
     Args:
@@ -84,13 +84,9 @@ class FlatFielding(KPF0_Primitive):
         self.alg=FlatFielding(self.rawdata,config=self.config,logger=self.logger)
 
         #Preconditions
-        """
-        Check for some necessary pre conditions
-        """
+        
         #Postconditions
-        """
-        Check for some necessary post conditions
-        """
+        
         #Perform - primitive`s action
     def _perform(self) -> None:
         """

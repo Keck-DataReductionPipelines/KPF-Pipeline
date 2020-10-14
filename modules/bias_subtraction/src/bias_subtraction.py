@@ -20,7 +20,7 @@ from modules.bias_subtraction.src.alg import BiasSubtraction
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
 
 class BiasSubtraction(KPF0_Primitive):
-    """This module defines class `BiasSubtraction,` which inherits from KPF0_Primitive and provides methods
+    """This module defines class `BiasSubtraction,` which inherits from `KPF0_Primitive` and provides methods
     to perform the event `bias subtraction` in the recipe.
 
     Args:
@@ -90,13 +90,9 @@ class BiasSubtraction(KPF0_Primitive):
         self.alg=BiasSubtraction(self.rawdata,self.config,self.logger)
 
         #Preconditions
-        """
-        Check for some necessary pre conditions
-        """
+        
         #Postconditions
-        """
-        Check for some necessary post conditions
-        """
+        
         #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
