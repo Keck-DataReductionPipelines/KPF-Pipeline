@@ -22,14 +22,16 @@ class FrameCombinePrimitive(KPF0_Primitive):
     def _perform(self):
         #loop here through L0 objects
         arrays_list=[]
+        #overwrites first iterated file with the combination of it+the rest
+        master_frame=None
         self.logger.info(f'L0_names: {self.L0_names}')
         for name in self.L0_names:
             obj=KPF0.from_fits(name,self.data_type)
+            if not master_frame:
+                master_frame=obj
             arrays_list.append(obj.data)
             self.logger.info(f'file: {name}, obj.data_type is {type(obj.data)}')
         data=np.dstack(arrays_list)
-        #create level0 object, assign master_frame
-        master_frame = KPF0()
         #assuming all data will be 2D arrays
         master_frame.data=np.mean(data,2)
 

@@ -1,3 +1,4 @@
+
 # Standard dependencies
 import configparser
 import numpy as np
@@ -14,18 +15,47 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.bias_subtraction.src.alg import BiasSubtraction
-#from modules.utils.frame_combine import frame_combine
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
 
 class BiasSubtraction(KPF0_Primitive):
+    """This module defines class `BiasSubtraction,` which inherits from `KPF0_Primitive` and provides methods
+    to perform the event `bias subtraction` in the recipe.
 
-    def __init__(self, action:Action, context:ProcessingContext) -> None:
+    Args:
+        KPF0_Primitive: Parent class
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
 
+    Attributes:
+        rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`            
+        masterbias (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
+        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+        config_path (str): Path of config file for the computation of bias subtraction.
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger
+        alg (modules.bias_subtraction.src.alg.BiasSubtraction): Instance of `BiasSubtraction,` which has operation codes for bias subtraction.
+
+    """
+    def __init__(self, 
+                action:Action, 
+                context:ProcessingContext) -> None:
+        """
+        BiasSubtraction constructor.
+
+        Args:
+            action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe:
+
+                `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
+                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data
+                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
+
+            context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
+
+        """
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
-        self.logger=start_logger(self.__class__.__name__, config_path)
 
         #Input arguments
         self.rawdata=self.action.args[0]
@@ -35,39 +65,39 @@ class BiasSubtraction(KPF0_Primitive):
         #Input configuration
         self.config=configparser.ConfigParser()
         try:
-            config_path=context.config_path['bias_subtraction']
+            self.config_path=context.config_path['bias_subtraction']
         except:
-            config_path = DEFAULT_CFG_PATH
-        self.config.read(config_path)
+            self.config_path = DEFAULT_CFG_PATH
+        self.config.read(self.config_path)
+
 
         #Start logger
-        self.logger=start_logger(self.__class__.__name__,config_path)
+        self.logger=None
+        #self.logger=start_logger(self.__class__.__name__,config_path)
         if not self.logger:
             self.logger=self.context.logger
-        self.logger.info('Loading config from: {}'.format(config_path))
+        self.logger.info('Loading config from: {}'.format(self.config_path))
 
         #Bias subtraction algorithm setup
-        self.alg=BiasSubtraction(self.rawimage,self.masterbias,config=self.config,logger=self.logger)
+
+        self.alg=BiasSubtraction(self.rawdata,self.config,self.logger)
 
         #Preconditions
-
+        
         #Postconditions
         
         #Perform - primitive's action
     def _perform(self) -> None:
+        """Primitive action - 
+        Performs bias subtraction by calling method 'bias_subtraction' from BiasSubtraction.
+        Returns the bias-corrected raw data, L0 object.
 
-        # 1) get raw data from file
-
-        rawdata=KPF0.from_fits(self.rawdata,self.data_type)
-        self.logger.info(f'file: {rawdata}, obj.data_type is {type(obj.data)}')
-
-        # 2) get bias data from file
-        
-        masterbias=KPF0.from_fits(self.masterbias,self.data_type)
-        self.logger.info(f'file: {masterbias}, obj.data_type is {type(obj.data)}')
-
-        # 3) subtract master bias from raw
+        Returns:
+            Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
+        """
+        # 1) subtract master bias from raw
         if self.logger:
             self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
-        bias_corrected_raw=self.alg.bias_subtraction(rawdata,masterbias)
 
+        self.alg.bias_subtraction(self.masterbias)
+        return Arguments(self.alg.get())

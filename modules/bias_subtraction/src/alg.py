@@ -6,50 +6,57 @@ from keckdrpframework.models.arguments import Arguments
 
 class BiasSubtraction:
     """
-    The BiasSubtraction class performs master bias frame subtraction from a raw science frame. 
-    Working on file input and export.
-    
+    Bias subtraction calculation.
+
+    This module defines 'BiasSubtraction' and methods to perform bias subtraction by subtracting a master bias frame from the raw data frame.  
+
     Args:
-        rawimage
-        masterbias
-        config
-        logger
+        rawimage (np.ndarray): The FITS raw data
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger.
     
     Attributes:
-        logger
-
+        rawimage (np.ndarray): From parameter 'rawimage'.
+    
+    Raises:
+        Exception: If raw image and bias frame don't have the same dimensions
     """
 
-    def __init__(self,rawimage,masterbias,config=None, logger=None):
-        
+
+    def __init__(self,rawimage,config=None, logger=None):
+        """Inits BiasSubtraction class with raw data, config, logger.
+
+        Args:
+            rawimage (np.ndarray): The FITS raw data
+            config (configparser.ConfigParser, optional): Config context. Defaults to None.
+            logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
+        """
         self.rawimage=rawimage
-        self.masterbias=masterbias
+        self.config=config
         self.logger=logger
 
-    def bias_subtraction(self):
+#make bias subtraction just a function, takes 
+    def bias_subtraction(self,masterbias):
         """
-        Steps:
-            Reads in master bias frame
-            Reads in raw science
-            Checks whether both data arrays have same dimensions, prints "equal" or "not equal"
-            Subtracts master bias array values from raw array values
-            Returns array of bias-corrected science frame
-        
-            In pipeline terms: inputs two L0 files, outputs one L0 file
-    
+            Subtracts bias data from raw data.
+            In pipeline terms: inputs two L0 files, produces one L0 file. 
+
         Args:
-            rawimage (str): The string to the raw science frame .fits file
-            masterbias (str): The string to master bias .fits file - the result of combining/averaging several bias frames
+            masterbias (np.ndarray): The FITS master bias data.
+
+        Raises:
+            Exception: If raw image and bias frame don't have the same dimensions.
+        """
+        if self.rawimage.data.shape==masterbias.data.shape:
+            print ("Bias .fits Dimensions Equal, Check Passed")
+        else:
+            raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
+        self.rawimage.data=self.rawimage.data-masterbias.data
+    
+    def get(self):
+        """Returns bias-corrected raw image result.
 
         Returns:
-            raw_bcorrect (array): bias corrected "raw" data (data no longer raw)
+            self.rawimage: The bias-corrected data
         """
-    #check to see if both matrices have the same dimensions, Cindy's recommendation
-        if self.rawimage.data.shape==self.masterbias.data.shape:
-            print ("Bias .fits Dimensions Equal, Check Passed")
-        if self.rawimage.data.shape!=self.masterbias.data.shape:
-            raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
-        #do I need to do KPF0 here?
-        raw_bcorrect=KPF0()
-        raw_bcorrect.data=self.rawimage.data-self.masterbias.data
-        return Arguments(raw_bcorrect)
+        return self.rawimage
