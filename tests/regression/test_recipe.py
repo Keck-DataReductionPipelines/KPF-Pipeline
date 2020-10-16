@@ -3,7 +3,9 @@
 Tests of the recipe mechanisms
 """
 
-from tests.helpers.testing_helpers import run_recipe
+from kpfpipe.tools.recipe_test_unit import run_recipe
+from kpfpipe.pipelines.kpf_parse_ast import RecipeError
+import pytest
 
 basics_recipe = """# test recipe basics
 snr_thresh = config.ARGUMENT.snr_threshold
@@ -92,24 +94,14 @@ def test_recipe_environment():
         assert False, f"test_recipe_environment: unexpected exception {e}"
 
 def test_recipe_undefined_variable():
-    try:
+    with pytest.raises(RecipeError) as excinfo:
         run_recipe(undefined_variable_recipe)
-    except RecipeError:
-        pass
-    except Exception as e:
-        assert False, f"Unexpected error: {e}"
-    else:
-        assert False, "test_recipe_undefined_variable should have raised an exception, but didn't"
+    assert "Name a on line 2 of recipe not defined" in str(excinfo.value)
 
 def test_recipe_bad_assignment():
-    try:
+    with pytest.raises(RecipeError) as excinfo:
         run_recipe(bad_assignment_recipe)
-    except RecipeError:
-        pass
-    except Exception as e:
-        assert False, f"Unexpected error: {e}"
-    else:
-        assert False, "test_recipe_bad_assignment should have raised an exception, but didn't"
+    assert "Error during assignment" in str(excinfo.value)
 
 # def test_recipe_experimental():
 #     try:

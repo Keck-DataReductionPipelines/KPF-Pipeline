@@ -20,7 +20,7 @@ class KpfPipelineForTesting(KPFPipeline):
     def __init__(self, context: ProcessingContext):
         """ constructor """
         KPFPipeline.__init__(self, context)
-        self.event_table['test_primitive_validate_args'] = ("test_primitive_validate_args", "processing", None)
+        self.event_table['test_primitive_validate_args'] = ("test_primitive_validate_args", "processing", "resume_recipe")
 
     @staticmethod
     def test_primitive_validate_args(action: Action, context: ProcessingContext):
