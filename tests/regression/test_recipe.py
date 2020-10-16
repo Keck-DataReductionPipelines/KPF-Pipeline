@@ -5,6 +5,7 @@ Tests of the recipe mechanisms
 
 from kpfpipe.tools.recipe_test_unit import run_recipe
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
+import tempfile
 import pytest
 
 basics_recipe = """# test recipe basics
@@ -20,6 +21,11 @@ for a in [1, 2, 3]:
     div = prod / 3.
 
     test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2., snr_thresh, 3.5, snr_thresh_subscript, 3.5)
+    test_primitive_validate_args(sum > dif, dif < sum, sum >= dif, dif <= sum, sum != dif, not sum == dif)
+
+    uadd = +3
+    usub = -3
+    test_primitive_validate_args(uadd, 3, uadd + usub, 0)
 
     if sum > snr_thresh:
         bool1 = True
@@ -71,6 +77,16 @@ kpf1 = kpf1_from_fits(fname, data_type="NEID")
 result = to_fits(kpf1, "temp_level1.fits")
 """
 
+subrecipe_sub_recipe = """# subrecipe to invoke from main
+b = 42
+test_primitive_validate_args(a, b)
+"""
+
+subrecipe_main_recipe = """# test subrecipe handling
+a = 42
+invoke_subrecipe("{}")
+"""
+
 experimental_recipe = """l = [1, 2, 3]
 # invoke_subrecipe("examples/test1.recipe")
 """
@@ -103,6 +119,13 @@ def test_recipe_bad_assignment():
         run_recipe(bad_assignment_recipe)
     assert "Error during assignment" in str(excinfo.value)
 
+def test_recipe_subrecipe():
+    with tempfile.NamedTemporaryFile(mode='w+') as f:
+        f.write(subrecipe_sub_recipe)
+        f.seek(0)
+        run_recipe(subrecipe_main_recipe.format(f.name))
+
+
 # def test_recipe_experimental():
 #     try:
 #         run_recipe(experimental_recipe)
@@ -115,3 +138,4 @@ def main():
     test_recipe_environment()
     test_recipe_undefined_variable()
     test_recipe_bad_assignment()
+    test_subrecipe()
