@@ -32,8 +32,13 @@ for a in [1, 2, 3]:
     else:
         bool1 = False
 
-    bool2 = (div == 42)
-    test_primitive_validate_args(bool1, True, bool2, False)
+    if sum < snr_thresh:
+        bool2 = True
+    else:
+        bool2 = False
+    
+    bool3 = (div == 42)
+    test_primitive_validate_args(bool1, True, bool2, False, bool3, False)
 """
 
 builtins_recipe = """# test recipe built-ins
