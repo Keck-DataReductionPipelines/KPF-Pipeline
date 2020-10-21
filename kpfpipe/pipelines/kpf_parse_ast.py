@@ -238,6 +238,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 # reset the node visited states for all nodes
                 # underneath this "for" loop to set up for the
                 # next iteration of the loop.
+                self.pipeline.logger.debug("For: resetting visited states before looping")
                 for subnode in node.body:
                     self.reset_visited_states(subnode)
                 # iterate by updating current_arg (and the arg iterator)
