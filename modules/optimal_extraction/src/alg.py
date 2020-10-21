@@ -1491,6 +1491,7 @@ class OptimalExtractionAlg:
         data_df = self.write_data_to_dataframe(out_data)
         return {'optimal_extraction_result': data_df}
 
+    """
     @staticmethod
     def result_test(target_file, data_result):
         target_data = fits.getdata(target_file)
@@ -1517,7 +1518,8 @@ class OptimalExtractionAlg:
                     return {'result': 'error', 'msg': 'data is not the same at ' + str(diff_idx.size) + ' points'}
 
         return {'result': 'ok'}
-
+    """
+    """
     @staticmethod
     def update_wavecal_from_existing_L1(fiber, wave_key, L1_wave_data, header, data_obj, header_obj,
                                         wave_start_order=0):
@@ -1527,5 +1529,5 @@ class OptimalExtractionAlg:
         header_obj[wave_key] = header[wave_key]
         header_obj[fiber+'_FLUX']['SSBZ100'] = header['PRIMARY']['SSBZ100']
         header_obj[fiber+'_FLUX']['SSBJD100'] = header['PRIMARY']['SSBJD100']
-
+    """
 
