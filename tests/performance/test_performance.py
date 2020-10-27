@@ -10,12 +10,14 @@ from dotenv import load_dotenv
 from kpfpipe.tools.recipe_test_unit import run_recipe
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 
+neid_config = "examples/default_recipe_test_neid.cfg"
+pipe_config = "examples/default_simple.cfg"
 
 neid_recipe = """test_data_dir = KPFPIPE_TEST_DATA + '/NEIDdata' 
 data_type = config.ARGUMENT.data_type
 output_dir = config.ARGUMENT.output_dir
 
-input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
+input_flat_file_pattern = config.ARGUMENT.input_flat_file_pattern
 input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
 input_lev1_prefix = config.ARGUMENT.input_lev1_file_prefix
 
@@ -125,7 +127,7 @@ def execution_time_limit(time_limit=None):
 # =============================================================================
 @execution_time_limit(time_limit=None)
 def test_neid_recipe():
-    run_recipe(neid_recipe)
+    run_recipe(neid_recipe, neid_config)
 
 
 if __name__ == '__main__':
