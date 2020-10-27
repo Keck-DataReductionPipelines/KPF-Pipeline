@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from kpfpipe.tools.recipe_test_unit import run_recipe
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 
-neid_config = "examples/default_recipe_test_neid.cfg"
+neid_config = "examples/test_neid.cfg"
 pipe_config = "examples/default_simple.cfg"
 
 neid_recipe = """test_data_dir = KPFPIPE_TEST_DATA + '/NEIDdata' 
