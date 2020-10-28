@@ -84,11 +84,19 @@ class OptimalExtractionAlg:
 
     X = 0
     Y = 1
+    HORIZONTAL = 0
     NORMAL = 0
     VERTICAL = 1
     NoRECT = 2
     OPTIMAL = 'optimal'
     SUM = 'sum'
+    V_UP = 0
+    H_RIGHT = 1
+    V_DOWN = 2
+    H_LEFT = 3
+    V1 = 'v_1'
+    V2 = 'v_2'
+
     rectifying_method = ['normal rectification', 'vertical rectification', 'no rectification' ]
 
     def __init__(self, flat_data, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
@@ -103,7 +111,7 @@ class OptimalExtractionAlg:
         if not isinstance(spectrum_header, fits.header.Header):
             raise TypeError('flux header type error, cannot construct object from OptionalExtractionAlg')
         if not isinstance(order_trace_header, dict) and not isinstance(order_trace_header, fits.header.Header):
-            raise TypeError('type: ' + type(order_trace_header) +
+            raise TypeError('type: ' + str(type(order_trace_header)) +
                             ' flux header type error, cannot construct object from OptionalExtractionAlg')
 
         self.logger = logger
@@ -113,6 +121,7 @@ class OptimalExtractionAlg:
         rows, cols = np.shape(self.flat_flux)
         self.dim_width = cols
         self.dim_height = rows
+
         self.poly_order = order_trace_header['POLY_DEG'] if 'POLY_DEG' in order_trace_header else 3
         p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
         self.instrument = p_config.get('instrument', '') if p_config is not None else ''
@@ -280,6 +289,19 @@ class OptimalExtractionAlg:
                     print(out_str, end=end)
 
     def t_print(self, *args):
+        """ Print out message with time stamp.
+
+        Args:
+            *args: Variable length argument list to print including the time stamp.
+
+        Returns:
+            This function handles the time stamp related print-out to the logger defined in the config file.
+        """
+        """
+        if self.is_time_profile:
+            out_str = ' '.join([str(item) for item in args])
+            print(out_str)
+        """
         if self.is_time_profile and self.logger:
             out_str = ' '.join([str(item) for item in args])
             self.logger.info(out_str)
@@ -384,7 +406,7 @@ class OptimalExtractionAlg:
 
         # x_output_step in sync with x_step,
         input_widths = np.array([self.get_input_pos(y_o, sampling_rate[self.Y])
-                                                            for y_o in range(-lower_width, upper_width)])
+                                 for y_o in range(-lower_width, upper_width)])
         input_x = np.floor(x_step).astype(int)
 
         for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
@@ -399,7 +421,7 @@ class OptimalExtractionAlg:
                 if sum_extraction is True:
                     out_data[i][0, o_x] = np.sum(data_group[i][y_input, x_i])
                 else:
-                    out_data[i][y_input_idx , o_x] = data_group[i][y_input, x_i]
+                    out_data[i][y_input_idx, o_x] = data_group[i][y_input, x_i]
 
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
@@ -464,6 +486,9 @@ class OptimalExtractionAlg:
         x_output_step = self.get_output_pos(x_step, sampling_rate[self.X]).astype(int)
         y_mid = np.polyval(coeffs, x_step)          # spectral trace value at mid point
 
+        # y_output_step = np.arange(0, output_y_dim+1, dtype=int)
+        # y_step = self.get_input_pos(y_output_step, sampling_rate[self.Y])  # y step in input domain
+
         if direction == self.NORMAL:
             y_norm_step = self.poly_normal(x_step, coeffs, sampling_rate[self.Y])   # curve norm along x in input domain
         else:
@@ -487,43 +512,54 @@ class OptimalExtractionAlg:
         total_data_group = len(data_group)
         out_data = [np.zeros((y_size, output_x_dim)) for _ in range(0, total_data_group)]
 
-        input_upper_corners = np.zeros((upper_width+1, x_step.size, 2))
-        input_lower_corners = np.zeros((lower_width+1, x_step.size, 2))
-        input_upper_corners[0] = corners_at_mid.copy()
-        input_lower_corners[0] = corners_at_mid.copy()
+        all_input_corners = np.zeros((upper_width + lower_width + 1, x_step.size, 2))    # for x & y
+        all_input_corners[lower_width] = corners_at_mid.copy()
 
         for o_y in range(1, upper_width+1):
-            next_upper_corners = self.go_vertical(input_upper_corners[o_y-1], y_norm_step, 1)
-            input_upper_corners[o_y] = next_upper_corners
+            next_upper_corners = self.go_vertical(all_input_corners[lower_width+o_y-1], y_norm_step, 1)
+            all_input_corners[lower_width+o_y] = next_upper_corners
 
         for o_y in range(1, lower_width+1):
-            next_lower_corners = self.go_vertical(input_lower_corners[o_y-1], y_norm_step, -1)
-            input_lower_corners[o_y] = next_lower_corners
+            next_lower_corners = self.go_vertical(all_input_corners[lower_width-o_y+1], y_norm_step, -1)
+            all_input_corners[lower_width-o_y] = next_lower_corners
 
-        s_x = 0
-        for o_x in x_output_step[0:-1]:               # o_x: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
-            for o_y in range(0, upper_width):
-                input_corners = input_upper_corners[o_y:o_y+2, s_x:s_x+2].reshape((4, 2))[[0, 2, 3, 1]]
-                for i in range(0, total_data_group):
-                    flux = self.compute_output_flux(input_corners, data_group[i], input_x_dim, input_y_dim,
-                                                    direction)
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += flux
-                    else:
-                        out_data[i][lower_width+o_y, o_x] = flux
+        v2_borders = None
 
-            for o_y in range(0, lower_width):
-                input_corners = input_lower_corners[o_y:o_y+2, s_x:s_x+2].reshape((4, 2))[[2, 0, 1, 3]]
-                for i in range(0, total_data_group):
-                    flux = self.compute_output_flux(input_corners, data_group[i], input_x_dim, input_y_dim,
-                                                    direction)
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += flux
-                    else:
-                        out_data[i][lower_width-o_y-1, o_x] = flux
-            s_x += 1
+        upper_pixels = list(range(lower_width, upper_width + lower_width))
+        lower_pixels = list(range(lower_width - 1, -1, -1))
+        for i, o_x in enumerate(x_output_step[0: -1]):
+            # if i % 100 == 0:
+            #    print(i, end=" ")
+             if direction == self.NORMAL or direction == self.VERTICAL:
+                if i == 0:
+                    v1_borders = self.collect_v_borders(all_input_corners, i)
+                else:
+                    v1_borders = v2_borders
 
-        # self.d_print(' ')
+                v2_borders = self.collect_v_borders(all_input_corners, i+1)
+                h_borders = self.collect_h_borders(v1_borders, v2_borders)
+
+                # each border: vertex_1, vertex_2, direction, intersect_with_borders={direction, pos, loc}
+                for pixel_list in [upper_pixels, lower_pixels]:
+                    for o_y in pixel_list:
+                        borders = [
+                                v1_borders[o_y].copy(), h_borders[o_y+1].copy(),
+                                v2_borders[o_y].copy(), h_borders[o_y].copy()
+                            ]
+
+                        # adjust v1 and v2 in clockwise direction
+                        for n in [self.V_DOWN, self.H_LEFT]:
+                            borders[n][self.V1],  borders[n][self.V2] = borders[n][self.V2], borders[n][self.V1]
+                        # stime = time.time()
+                        flux = self.compute_flux_for_output_pixel(borders, data_group, total_data_group)
+                        # self.time_check(stime, "time for one output flux ")
+                        for n in range(0, total_data_group):
+                            if sum_extraction is True:
+                                out_data[n][0, o_x] += flux[n]
+                            else:
+                                out_data[n][o_y, o_x] = flux[n]
+                # self.time_check(ctime, 'time for one column output ')
+        # print(' ')
 
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
@@ -531,6 +567,249 @@ class OptimalExtractionAlg:
                        'out_data': [out_data[i] for i in range(0, total_data_group)]}
 
         return result_data
+
+    def intersect_cell_borders(self, vertex_1, vertex_2):
+        """ Find out the intersection of a line segment with the horizontal and vertical grid lines of the
+            input pixels.
+
+        Args:
+            vertex_1 (list): End point 1 of the line segment.
+            vertex_2 (list): Eng point 2 of the line segment.
+
+        Returns:
+            dict: A dict instance containing the intersect information, like::
+
+                {
+                    'min_cell_x': int
+                        # min x of the cell coverage of the line segment.
+                    'max_cell_x': int
+                        # max x of the cell coverage of the line segment.
+                    'min_cell_y': int
+                        # min y of the cell coverage of the line segment.
+                    'max_cell_y': int
+                        # max y of the cell coverage of the line segment.
+                    'v_borders': dict
+                        # collection of intersection with vertical grid lines, like:
+                        {
+                            <grid_line_x_position>:
+                            {
+                                'direction': VERTICAL,
+                                'pos': float,
+                                      # intersected position along y axis.
+                                'axis_idx': self.X
+                                      # coordinate index in 'loc' of the grid line.
+                                'loc': list,
+                                      # cell location of the intersected position.
+                            }
+                            :
+                        }
+
+                    'h_borders': dict
+                        # collection of intersection with horizontal grid lines, like:
+                         {
+                            <grid_line_y_position>:
+                            {
+                                'direction': HORIZONTAL,
+                                'pos': float,
+                                        # intersected position along x axis.
+                                'axis_idx': self.Y
+                                        # coordinate index in 'loc' of the grid line.
+                                'loc': list,
+                                        # cell location of the intersected position.
+                            }
+                            :
+                        }
+                }
+
+        """
+        x_ends = [vertex_1[self.X], vertex_2[self.X]]
+        y_ends = [vertex_1[self.Y], vertex_2[self.Y]]
+
+        x_min = min(x_ends[0], x_ends[1])
+        x_max = max(x_ends[0], x_ends[1])
+        y_min = min(y_ends[0], y_ends[1])
+        y_max = max(y_ends[0], y_ends[1])
+        y_dim, x_dim = np.shape(self.spectrum_flux)
+        min_cell_x = max(0, math.floor(x_min))
+        max_cell_x = min(x_dim, math.ceil(x_max))
+        min_cell_y = max(0, math.floor(y_min))
+        max_cell_y = min(y_dim, math.ceil(y_max))
+
+        h_borders = dict()
+        v_borders = dict()
+
+        # def make_border(direct, pos, pos_cells):
+        # pos could be fractional, loc falls on the position increment by one
+        def make_border(direction, loc, pos):
+            if direction == self.VERTICAL:
+                loc_x = loc
+                loc_y = math.floor(pos)
+                axis_idx = self.X
+            else:
+                loc_y = loc
+                loc_x = math.floor(pos)
+                axis_idx = self.Y
+
+            new_border = {'direction': direction, 'pos': pos, 'axis_idx': axis_idx,  'loc': [loc_x, loc_y]}
+            return new_border
+
+        def intersect_xline(x1, x3, y3, x4, y4):
+            if y3 == y4:        # vertial x line interact with horozontal line
+                return y3
+            if x1 == x3:        # one end meets the vertical line
+                return y3
+            if x1 == x4:
+                return y4
+
+            c_xy = x3 * y4 - x4 * y3
+            den = (x3 - x4)
+            num_y = x1 * (y3 - y4) + c_xy      # x1*(x3-x4) + x3*y4-x4*y3
+            return num_y/den
+
+        def intersect_yline(y1, x3, y3, x4, y4):
+            if x3 == x4:       # horizontal y line interacts with vertical line
+                return x3
+            if y1 == y3:
+                return x3
+            if y1 == y4:
+                return x4
+
+            c_xy = x3 * y4 - x4 * y3
+            den = y3 - y4
+            num_x = y1 * (x3 - x4) - c_xy       # y1*(x4-x3)+x3*y4-x4*y3
+            return num_x/den
+
+        # end_xy = x_ends[0]*y_ends[1]-x_ends[1]*y_ends[0]   # x3*y4-x4*y3
+        # find intersection with vertical cell border (vertical cell line)
+        for c_x in range(min_cell_x, max_cell_x+1):
+            if x_min <= c_x <= x_max:
+                if x_ends[0] != x_ends[1]:          # not a vertical line overlapping cell border
+                    y_p = intersect_xline(c_x, x_ends[0], y_ends[0], x_ends[1], y_ends[1])
+
+                    i_border = make_border(self.VERTICAL, c_x, y_p)
+                    v_borders[c_x] = i_border
+
+        # find intersection with horizontal cell border (horizontal cell line)
+        for c_y in range(min_cell_y, max_cell_y+1):
+            if y_min <= c_y <= y_max:
+                if y_ends[0] != y_ends[1]:          # not a horizontal line overlapping cell border
+                    x_p = intersect_yline(c_y, x_ends[0], y_ends[0], x_ends[1], y_ends[1])
+
+                    i_border = make_border(self.HORIZONTAL, c_y, x_p)
+                    h_borders[c_y] = i_border
+
+        intersect_borders = {
+                    'orig_v1': vertex_1,
+                    'orig_v2': vertex_2,
+                    'min_cell_x': min_cell_x,
+                    'max_cell_x': max_cell_x,
+                    'min_cell_y': min_cell_y,
+                    'max_cell_y': max_cell_y,
+                    'v_borders': v_borders,
+                    'h_borders': h_borders
+            }
+        return intersect_borders
+
+    def collect_v_borders(self, corners: np.ndarray, start_idx: int):
+        """ Collect vertical borders of output pixels.
+
+        Find vertical borders of the rectified cells along either normal or vertical direction
+        from the order trace.
+
+        Args:
+            corners (list): A set of corners of rectified cells along the normal or vertical
+                direction of the order.
+            start_idx (int): Starting index of corners of the polygon representing the rectified
+                output cell.
+
+        Returns:
+            list: Collection of all vertical borders along either normal or vertical direction
+            from an order trace, like::
+
+                [
+                    {
+                        'v1': list   # end point 1 of a border
+                        'v2': list   # end point 2 of a border
+                        'direction': VERTICAL
+                        'intersect_with_borders': dict
+                                     # grid line intersection of the border,
+                                     # see 'intersect_cell_borders' for the detail
+                    }
+                    :
+                ]
+
+        """
+
+        all_borders = list()
+        total_borders = np.shape(corners)[0] - 1
+
+        for idx in range(total_borders):
+            vertex_1 = [corners[idx, start_idx, self.X], corners[idx, start_idx, self.Y]]
+            vertex_2 = [corners[idx+1, start_idx, self.X], corners[idx+1, start_idx, self.Y]]
+
+            v1 = self.V1
+            v2 = self.V2
+
+            border = {
+                    v1: vertex_1,
+                    v2: vertex_2,
+                    'direction': self.VERTICAL,
+                    'intersect_with_borders': self.intersect_cell_borders(vertex_1, vertex_2)
+            }
+
+            all_borders.append(border)
+
+        return all_borders
+
+    def collect_h_borders(self, v1_borders, v2_borders):
+        """Collect horizontal borders of the output pixels.
+
+        Find horizontal borders of the rectified cells along either normal or vertical direction from the order trace.
+
+        Args:
+            v1_borders: Left side of vertical borders of the rectified cells collected by
+                        :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+            v2_borders: Right side of vertical borders of the rectified cells collected by
+                        :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+
+        Returns:
+            list: Collection of all horizontal borders along either normal or vertical direction
+            from an order trace, like::
+
+                [
+                    {
+                        'v1': list,   # end point 1 of a border
+                        'v2': list,   # end point 2 of a border
+                        'direction': HORIZONTAL,
+                        'intersect_with_borders': dict,
+                                      # grid line intersection of the border,
+                                      # see 'intersect_cell_borders' for the detail
+                    }
+                    :
+                ]
+
+        """
+        all_borders = list()
+        total_borders = len(v1_borders) + 1
+        v1 = self.V1
+        v2 = self.V2
+
+        for idx in range(total_borders):
+            if idx < (total_borders - 1):
+                vertex_1 = v1_borders[idx][v1]
+                vertex_2 = v2_borders[idx][v1]
+            else:
+                vertex_1 = v1_borders[idx-1][v2]
+                vertex_2 = v2_borders[idx-1][v2]
+
+            border = {
+                    v1: vertex_1,
+                    v2: vertex_2,
+                    'direction': self.HORIZONTAL,
+                    'intersect_with_borders': self.intersect_cell_borders(vertex_1, vertex_2)
+            }
+            all_borders.append(border)
+        return all_borders
 
     def get_flux_from_order(self, coeffs, widths, x_range, in_data, flat_flux, s_rate=1, norm_direction=None):
         """  Collect the data along the order by either rectifying the pixels or not.
@@ -548,7 +827,8 @@ class OptimalExtractionAlg:
         Parameters:
             coeffs (numpy.ndarray): Polynomial coefficients starting from higher order.
             widths (numpy.ndarray): Bottom and top edges of the orders.
-            x_range (numpy.ndarray): Horizontal coverage of the order in terms of two ends along x axis.
+            x_range (numpy.ndarray): Horizontal coverage of the order in terms of
+                two ends along x axis.
             in_data (numpy.ndarray): 2D spectral data.
             flat_flux (numpy.ndarray): 2D flat data.
             s_rate (Union[list, float], optional): sampling rate from input domain to output domain for 2D data.
@@ -556,8 +836,8 @@ class OptimalExtractionAlg:
             norm_direction(int, optional): Rectification method. Defaults to None.
 
                 - None: no rectification.
-                - VERTICAL: pixels at the north and south direction along the order are collected to
-                  be rectified.
+                - VERTICAL: pixels at the north and south direction along the order are
+                  collected to be rectified.
                 - NORMAL: pixels at the normal direction of the order are collected to be rectified.
 
         Returns:
@@ -565,12 +845,13 @@ class OptimalExtractionAlg:
 
                 {
                     'order_data': numpy.ndarray
-                            # extracted spectrum data from the order using rectification or not.
+                        # extracted spectrum data from the order using rectification # or not.
                     'order_flat': numpy.ndarray
-                            # extracted flat data from the order using rectification or not.
+                        # extracted flat data from the order using rectification or not.
                     'data_height': int        # height of 'order_data'.
                     'data_width': int         # width of 'order_data'.
-                    'out_y_center': int       # y center position where 'order_data' is located.
+                    'out_y_center': int
+                        # y center position where 'order_data' is located.
                 }
 
         Raises:
@@ -595,7 +876,6 @@ class OptimalExtractionAlg:
 
         if norm_direction > self.NoRECT or norm_direction < self.NORMAL:
             raise Exception("invalid rectification method")
-
         if norm_direction is None or norm_direction == self.NoRECT:
             flux_results = self.collect_data_from_order(coeffs, widths, x_range, [in_data, flat_flux], s_rate,
                                                         sum_extraction=False)
@@ -667,7 +947,6 @@ class OptimalExtractionAlg:
         #        w_data[0, x] = np.sum(num) / np.sum(dem)
 
         return {'extraction': w_data}
-
 
     @staticmethod
     def summation_extraction(s_data):
@@ -802,225 +1081,77 @@ class OptimalExtractionAlg:
 
         return new_pos
 
-    def compute_output_flux(self, input_corners, input_data, input_x_dim, input_y_dim, vertical_normal):
-        """ Compute weighted flux covered by a polygon area.
+    def compute_flux_for_output_pixel(self, borders, input_data, total_data_group):
+        """ Compute weighted flux covered by one output pixel.
 
-        Compute the flux within a polygon using polygon clipping algorithm if the polygon corners are collected in
-        normal direction or checking the area coverage of each pixel inside the polygon if the polygon corners are
-        collected in vertical direction.
+            Compute the weighted flux per spectrum data and flat data covered for the area of one output pixel.
+            The area is represented by polygon borders and the polygon is collected in either normal direction or
+            vertical direction to the order. The weight depends on the area overlap between the output pixel and the
+            input pixel.
 
-        Args:
-            input_corners(numpy.ndarray): Polygon corners at input domain in counterclockwise order.
-            input_data(numpy.ndarray): Input data.
-            input_x_dim(int): Width of input data
-            input_y_dim(int): Height of input data
-            vertical_normal(int): the method regarding how the corners are collected, NORMAL or VERTICAL.
+            Args:
+                borders(list): Borders of the coverage of one output pxiel.
+                input_data(list): Input data group. each element is numpy.ndarray.
+                total_data_group(int): total data group
 
-        Returns:
-            float : Flux value for the polygon.
+            Returns:
+                list : Flux value on observation data and flat data for the area covered by one output pixel.
 
         """
+        x_1 = min([border['intersect_with_borders']['min_cell_x'] for border in borders])
+        x_2 = max([border['intersect_with_borders']['max_cell_x'] for border in borders])
+        y_1 = min([border['intersect_with_borders']['min_cell_y'] for border in borders])
+        y_2 = max([border['intersect_with_borders']['max_cell_y'] for border in borders])
 
-        x_list = input_corners[:, self.X]
-        y_list = input_corners[:, self.Y]
-
-        x_1 = max(0, math.floor(np.amin(x_list)))
-        x_2 = min(input_x_dim, math.ceil(np.amax(x_list)))
-        y_1 = max(0, math.floor(np.amin(y_list)))
-        y_2 = min(input_y_dim, math.ceil(np.amax(y_list)))
-
-        if vertical_normal == self.VERTICAL:
-            flux_vertical, total_area_vertical = self.compute_flux_from_vertical_clipping(input_corners,
-                                                                                          [x_1, x_2, y_1, y_2],
-                                                                                          input_data)
-            return flux_vertical
-
-        flux_polygon, total_area_polygon = self.compute_flux_from_polygon_clipping(input_corners,
-                                                                                   [x_1, x_2, y_1, y_2],
-                                                                                   input_data)
+        flux_polygon, total_area_polygon = self.compute_flux_from_polygon_clipping2(borders,
+                                                                [x_1, x_2, y_1, y_2], input_data, total_data_group)
         return flux_polygon
 
-    def compute_flux_from_polygon_clipping(self, poly_corners, border_points, input_data):
-        """ Compute flux on pixels covered by one polygon formed in the normal direction of the order.
+    def compute_flux_from_polygon_clipping2(self, borders, clipper_borders, input_data, total_data_group):
+        """ Compute flux on pixels covered by one polygon formed in the normal or vertical direction of the order.
 
-        Collect pixels covered by the specified polygon and compute weighted summation on the pixels.
+        Collect input pixels covered by the output pixel and compute weighted summation on the input pixels.
 
         Args:
-            poly_corners (numpy.ndarray): Corners of the polygon.
-            border_points (list): Area covered by `poly_corners`, i.e. *[<left_x>, <right_x>, <bottom_y>, <top_y>]*.
-            input_data (numpy.ndarray): Imaging data - spectrum data or flat data.
+            borders(list): Borders of the coverage of one output pxiel.
+            clipper_borders (list): Rectangular area covered by the clipper boundaries.
+            input_data (list): Imaging data - list of numpy.ndarray containing spectrum data and flat data.
+            total_data_group (int): total data group.
 
         Returns:
-            tuple: Weighted summation of flux over the polygon,
+            tuple: Weighted summation of flux for spectrum data and flat data over the area covered by
+            the output pixel.
 
-                * **flux** (*float*): Weighted summation of the flux over the polygon.
-                * **total_area** (*float*): Total overlapping area between the collected pixels and the polygon.
-
+            * **flux** (*list*): Weighted summation of the flux for spectrum and flat data.
+            * **total_area** (*float*): Total overlapping area between the collected pixels and the output pixel.
         """
-        x_1, x_2, y_1, y_2 = border_points
+        x_1, x_2, y_1, y_2 = clipper_borders
         total_area = 0.0
-        flux = 0.0
+        flux = np.zeros(total_data_group)
+
+        # print('poly borders: ', borders)
+        # print('clipper: ', x_1, x_2, y_1, y_2)
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
-                if input_data[y, x] != 0.0:
-                    new_corners = self.polygon_clipping(poly_corners, [[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
-                    area = self.polygon_area(new_corners)
-                    total_area += area
-                    flux += area * input_data[y, x]
-
+                # stime = time.time()
+                # if len([d_group[y, x] for d_group in input_data if d_group[y, x] != 0.0]) > 0:
+                new_corners = self.polygon_clipping2(borders, [[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
+                area = self.polygon_area(new_corners)
+                total_area += area
+                for n in range(total_data_group):
+                    if input_data[n][y, x] != 0.0:
+                        flux[n] += area * input_data[n][y, x]
+                    # print('x, y = ', x, y, ' area = ', area)
+                # self.time_check(stime, 'time for one clipper pixel ')
+        # print('total_area = ', total_area, ' flux=', flux)
         new_flux = flux/total_area
         return new_flux, total_area
 
-    def compute_flux_from_vertical_clipping(self, poly_corners, border_points, input_data):
-        """ Compute flux on pixels covered by specified polygon formed in the vertical direction of the order.
-
-        Collect pixels covered by the specified polygon and compute weighted summation on the pixels.
-        The computation is made to be more efficient than that of
-        :func:`~alg.OptimalExtractionAlg.compute_flux_from_polygon_clipping()`
-        due to that two sides of the polygon are formed in the vertical direction.
-
-        Args:
-            poly_corners (numpy.ndarray): Corners of the polygon.
-            border_points (list): Area covered by `poly_corners`, i.e. *[<left_x>, <right_x>, <bottom_y>, <top_y>]*.
-            input_data (numpy.ndarray): Imaging data - spectrum data or flat data.
-
-        Returns:
-            tuple: Weighted summation of flux over the polygon,
-
-                * **flux** (*float*): Flux of weighted summation of the flux over the polygon.
-                * **total_area** (*float*): Total overlapping area between the collected pixels and the polygon.
-
-        """
-        # make mark on vertical grid line
-        x1, x2, y1, y2 = border_points  # grid boundary of poly_corners
-        y_grid = np.arange(y1, y2+1, dtype=float)
-
-        border_x1 = np.amin(poly_corners[:, self.X])        # x range of poly_corners,
-        border_x2 = np.amax(poly_corners[:, self.X])
-        border_x = np.arange(math.floor(border_x1), math.ceil(border_x2)+1, dtype=float)  # horizontal coverage along x
-        border_x[0] = border_x1 if border_x1 != border_x[0] else border_x[0]
-        border_x[-1] = border_x2 if border_x2 != border_x[-1] else border_x[-1]
-
-        # y top and bottom ends of poly_corners at each point in border_x
-        d_x = border_x2 - border_x1
-        bottom_y = ((border_x - border_x1)*poly_corners[3, self.Y] + (border_x2 - border_x)*poly_corners[0, self.Y])/d_x
-        top_y = ((border_x-border_x1)*poly_corners[2, self.Y] + (border_x2 - border_x)*poly_corners[1, self.Y])/d_x
-
-        mark_y = []
-        for i in range(len(border_x)):
-            # vertical coverage at each point in border_x
-            border_y = np.arange(math.floor(bottom_y[i]), math.ceil(top_y[i])+1, dtype=float)
-            border_y[0] = bottom_y[i]
-            border_y[-1] = top_y[i]
-            mark_y.append(border_y)
-
-        rows, cols = (y2-y1, x2-x1)
-        cell_corners = [[list() for _ in range(cols)] for _ in range(rows)]  # corners in each cell starting from x1, y1
-
-        for x_ni in range(np.size(border_x)-1):
-            # collect corners & points_at_borders: [<point at border 1>, <point at border 2>]
-
-            y_line1 = mark_y[x_ni]
-            y_line2 = mark_y[x_ni+1]
-            sy1 = np.where((y_line1 - y_grid[0]) >= 0)[0][0]            # first index in y_line1 covered by y_grid
-            y_line1_sy = np.where((y_grid - y_line1[sy1]) <= 0)[0][-1]  # first index from y_grid
-            sy2 = np.where((y_line2 - y_grid[0]) >= 0)[0][0]            # first index in y_line2 covered by y_grid
-            y_line2_sy = np.where((y_grid - y_line2[sy2]) <= 0)[0][-1]  # first index from y_grid
-            ey1 = np.where((y_line1 - y_grid[-1]) < 0)[0][-1]           # last index in y_line1 covered by y_grid
-            y_line1_ey = np.where((y_line1[ey1] - y_grid) >= 0)[0][-1]  # last index from y_grid
-            ey2 = np.where((y_line2 - y_grid[-1]) < 0)[0][-1]           # last index in y_line2 covered by y_grid
-            y_line2_ey = np.where((y_line2[ey2] - y_grid) >= 0)[0][-1]  # last index from y_grid
-
-            min_sy_idx = min(y_line1_sy, y_line2_sy)   # y index on y_grid
-            max_ey_idx = max(y_line1_ey, y_line2_ey)
-
-            # collect the intersect points at y position in y_grid & border points in the cell starting from the same y
-            v_cell_info = [{'inter_points': list(), 'border_points': [list(), list()]} for _ in y_grid]
-            for y_idx in range(min_sy_idx, max_ey_idx+1):
-                if min(y_line1[sy1], y_line2[sy2]) < y_grid[y_idx] < max(y_line1[sy1], y_line2[sy2]):
-                    x_inter = (abs(y_grid[y_idx] - y_line1[sy1]) * border_x[x_ni+1] +
-                               abs(y_line2[sy2] - y_grid[y_idx]) * border_x[x_ni])/abs(y_line1[sy1]-y_line2[sy2])
-                    if y_line1[sy1] < y_line2[sy2]:   # line1 is lower
-                        v_cell_info[y_idx]['inter_points'] = [border_x[x_ni], x_inter]
-                    else:
-                        v_cell_info[y_idx]['inter_points'] = [x_inter, border_x[x_ni+1]]
-                if min(y_line1[ey1], y_line2[ey2]) < y_grid[y_idx] < max(y_line1[ey1], y_line2[ey2]):
-                    x_inter = (abs(y_grid[y_idx] - y_line1[ey1]) * border_x[x_ni+1] +
-                               abs(y_line2[ey2] - y_grid[y_idx]) * border_x[x_ni])/abs(y_line1[ey1]-y_line2[ey2])
-                    if y_line1[ey1] < y_line2[ey2]:
-                        v_cell_info[y_idx]['inter_points'] = [x_inter, border_x[x_ni+1]]
-                    else:
-                        v_cell_info[y_idx]['inter_points'] = [border_x[x_ni], x_inter]
-            if y_line1[sy1] > y_grid[y_line1_sy]:
-                v_cell_info[y_line1_sy]['border_points'][0] = [border_x[x_ni], y_line1[sy1]]
-            if y_line2[sy2] > y_grid[y_line2_sy]:
-                v_cell_info[y_line2_sy]['border_points'][1] = [border_x[x_ni+1], y_line2[sy2]]
-
-            if y_line1[ey1] > y_grid[y_line1_ey]:
-                v_cell_info[y_line1_ey]['border_points'][0] = [border_x[x_ni], y_line1[ey1]]
-            if y_line2[ey2] > y_grid[y_line2_ey]:
-                v_cell_info[y_line2_ey]['border_points'][1] = [border_x[x_ni+1], y_line2[ey2]]
-
-            bottom_p = [[border_x[x_ni], y_line1[sy1]], [border_x[x_ni+1], y_line2[sy2]]]
-            if y_line1_sy < y_line2_sy:
-                bottom_p[1] = bottom_p[0]
-            elif y_line1_sy > y_line2_sy:
-                bottom_p[0] = bottom_p[1]
-
-            top_p = [[border_x[x_ni], y_line1[ey1]], [border_x[x_ni+1], y_line2[ey2]]]
-            if y_line1_ey > y_line2_ey:
-                top_p[1] = top_p[0]
-            elif y_line2_ey > y_line1_ey:
-                top_p[0] = top_p[1]
-
-            for y_idx in range(min_sy_idx, max_ey_idx):
-                corners = list()
-                corners.append(bottom_p[0])
-                if (len(v_cell_info[y_idx]['border_points'][0]) > 0) and \
-                   (v_cell_info[y_idx]['border_points'][0] != bottom_p[0]):
-                    corners.append(v_cell_info[y_idx]['border_points'][0])
-
-                y_c = y_grid[y_idx+1]
-                if len(v_cell_info[y_idx+1]['inter_points']) > 0:
-                    corners.append([v_cell_info[y_idx+1]['inter_points'][0], y_c])
-                    corners.append([v_cell_info[y_idx+1]['inter_points'][1], y_c])
-                else:
-                    corners.extend([[border_x[x_ni], y_c], [border_x[x_ni+1], y_c]])
-
-                next_bottom = [corners[-2], corners[-1]]  # the last two corners just added
-
-                if (len(v_cell_info[y_idx]['border_points'][1]) > 0) and \
-                   (v_cell_info[y_idx]['border_points'][1] != corners[-1]):
-                    corners.append(v_cell_info[y_idx]['border_points'][1])
-
-                if bottom_p[1] != corners[-1] and bottom_p[1] != corners[0]:
-                    corners.append(bottom_p[1])
-                bottom_p = next_bottom
-
-                cell_corners[y_idx][x_ni] = corners
-
-            cell_corners[max_ey_idx][x_ni] = [bottom_p[0], top_p[0], top_p[1], bottom_p[1]]
-
-        total_area = 0.0
-        flux = 0.0
-        for y in range(rows):
-            for x in range(cols):
-                if len(cell_corners[y][x]) == 0 or input_data[y1+y, x1+x] == 0:
-                    continue
-
-                # corners = np.array(cell_corners[y][x])-np.array([x1, y1])
-                corners = np.array(cell_corners[y][x])
-                area = self.polygon_area(corners)
-                total_area += area
-                flux += area * input_data[y1+y, x1+x]
-
-        return flux, total_area
-
-    def polygon_clipping(self, poly_points, clipper_points, clipper_size):
+    def polygon_clipping2(self, borders, clipper_points, clipper_size):
         """ Clip a polygon by an area enclosed by a set of straight lines of 2D domain.
 
         Args:
-            poly_points (numpy.ndarray): Corners of polygon in counterclockwise order.
+            borders(list): Borders of the coverage of one output pixel in counterclockwise order.
             clipper_points (list): Corners of clipping area in counterclockwise order.
             clipper_size (int): Total sides of the clipping area.
 
@@ -1028,31 +1159,41 @@ class OptimalExtractionAlg:
             numpy.ndarray: Corners of the polygon after clipping in counterclockwise order.
 
         """
+        new_poly_borders = [b.copy() for b in borders]
 
-        new_poly_points = [[poly_points[i, 0], poly_points[i, 1]] for i in range(clipper_size)]
+        # print('\nclipper_points: ', clipper_points)
+        # do clipping on each side of the clipper
         for i in range(clipper_size):
             k = (i+1) % clipper_size
-            new_poly_points = self.clip(new_poly_points, clipper_points[i][0], clipper_points[i][1],
-                                        clipper_points[k][0], clipper_points[k][1])
+            # print('\ni = ', i )
+            new_poly_borders = self.clip2(new_poly_borders, clipper_points[i][0], clipper_points[i][1],
+                                          clipper_points[k][0], clipper_points[k][1], i)
+            # for b in new_poly_borders:
+            #    print(b)
 
-        new_corners = self.remove_duplicate_point(new_poly_points)
+        new_corners = self.remove_duplicate_point2(new_poly_borders)
+        # print('\n new corners: ', new_corners)
         return np.array(new_corners)
 
     @staticmethod
-    def remove_duplicate_point(corners):
+    def remove_duplicate_point2(borders):
         """ Remove the duplicate points from a list of corner points of a polygon.
 
         Args:
-            corners (list): Corner points of a polygon.
+            borders (list): Borders of a polygon.
 
         Returns:
             list: Corner points of the polygon.
 
         """
         new_corners = []
-        for c in corners:
-            if c not in new_corners:
-                new_corners.append(c)
+        for b in borders:
+            v1 = b[OptimalExtractionAlg.V1]
+            v2 = b[OptimalExtractionAlg.V2]
+            if v1 not in new_corners:
+                new_corners.append(v1)
+            if v2 not in new_corners:
+                new_corners.append(v2)
 
         return new_corners
 
@@ -1075,57 +1216,109 @@ class OptimalExtractionAlg:
 
         return abs(area)/2
 
-    def clip(self, poly_points, x1, y1, x2, y2):
+    def clip2(self, poly_borders, x1, y1, x2, y2, clipper_direction):
         """ Clipping a polygon by a vector on 2D domain.
 
-        Some corners of the polygons, `poly_points`, are replaced by the intersection points between the vector and
-        the polygon after clipping.
+        The end points in the borders of the polygons, `poly_borders`, may be replaced by the intersected points
+        between the clipping vector and the polygon borders.
 
         Args:
-            poly_points (list): List of corners of the polygon.
-                Each corner is a list containing values for x and y coordinates.
+            poly_borders (list): List of borders of the polygon.
+                Each border is a dict instance as described in :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+                or :func:`~alg.OptimalExtractionAlg.collect_h_borders()`.
             x1 (int): x of end point 1 of the vector.
             y1 (int): y of end point 1 of the vector.
             x2 (int): x of end point 2 of the vector.
             y2 (int): y of end point 2 of the vector.
+            clipper_direction (int): Clipping vector direction.
 
         Returns:
-            list: Updated corners of the polygon after being clipped by the vector.
+            list: Updated borders of the polygon after being clipped by the vector.
 
         """
-        new_points = []
-        poly_size = len(poly_points)
+        poly_size = len(poly_borders)
+        new_poly_borders = list()
+
+        def set_pos(border_pos, point_pos, is_bigger_inside=True):
+            p_pos = 0
+            if point_pos > border_pos:
+                p_pos = -1 if is_bigger_inside else 1
+            elif point_pos < border_pos:
+                p_pos = 1 if is_bigger_inside else -1
+            return p_pos
+
+        # pick the reserved one if two intersection points are found
+        def get_intersect_point(border_set, clipper_at, clipper_axis):
+            p_axis = self.X if clipper_axis == self.Y else self.Y
+            if clipper_at in border_set:
+                res_point = [0.0, 0.0]
+                res_point[p_axis] = border_set[clipper_at]['pos']
+                res_point[clipper_axis] = clipper_at
+                return res_point
+            else:
+                return None
+
+        v1 = self.V1
+        v2 = self.V2
 
         for i in range(poly_size):
-            k = (i+1) % poly_size
+            p_border = poly_borders[i]
 
-            ix = poly_points[i][0]
-            iy = poly_points[i][1]
-            kx = poly_points[k][0]
-            ky = poly_points[k][1]
+            i_idx = v1
+            k_idx = v2
+            ix, iy = p_border[i_idx][0], p_border[i_idx][1]
+            kx, ky = p_border[k_idx][0], p_border[k_idx][1]
 
-            # position of first point w.r.t. clipper line
-            i_pos = (x2 - x1) * (iy - y1) - (y2 - y1) * (ix - x1)
-            # position of second point w.r.t. clipper line
-            k_pos = (x2 - x1) * (ky - y1) - (y2 - y1) * (kx - x1)
+            intersect_borders = p_border['intersect_with_borders']
+            v_borders = intersect_borders['v_borders']
+            h_borders = intersect_borders['h_borders']
 
-            if i_pos < 0 and k_pos < 0:             # both are inside, take the second
-                new_points.append([kx, ky])
-            elif i_pos >= 0 and k_pos < 0:          # only the second is inside, take the intersect and the second one
-                if i_pos == 0:
-                    new_points.append([ix, iy])
+            if clipper_direction == self.V_UP or clipper_direction == self.V_DOWN:
+                i_pos = set_pos(x1, ix, clipper_direction == self.V_UP)
+                k_pos = set_pos(x1, kx, clipper_direction == self.V_UP)
+            else:
+                i_pos = set_pos(y1, iy, clipper_direction == self.H_LEFT)
+                k_pos = set_pos(y1, ky, clipper_direction == self.H_LEFT)
+
+            if i_pos <= 0 and k_pos <= 0:                 # from inside|border to inside|border, keep the border
+                new_poly_borders.append(p_border)
+            # from outside to inside or inside to outside, replace outside with clipped pt.
+            elif (i_pos > 0 and k_pos < 0) or (i_pos < 0 and k_pos > 0):
+                if x1 == x2:
+                    i_point = get_intersect_point(v_borders, x1, self.X)
+                else:           # y1 == y2
+                    i_point = get_intersect_point(h_borders, y1, self.Y)
+
+                if i_point is not None:
+                    if i_pos > 0:
+                        p_border[i_idx] = i_point      # clipping point
+                    else:
+                        p_border[k_idx] = i_point
+                    new_poly_borders.append(p_border)
                 else:
-                    intersect_p = self.line_intersect(x1, y1, x2, y2, ix, iy, kx, ky)
-                    new_points.append([intersect_p[0], intersect_p[1]])
-                new_points.append([kx, ky])
-            elif i_pos < 0 and k_pos >= 0:          # onlyt the first inside,  take the intersect
-                if k_pos == 0:
-                    new_points.append([kx, ky])
-                else:
-                    intersect_p = self.line_intersect(x1, y1, x2, y2, ix, iy, kx, ky)
-                    new_points.append([intersect_p[0], intersect_p[1]])
+                    print("no intersect found ", x1, x2, y1, y2)
 
-        return new_points
+        new_poly_size = len(new_poly_borders)
+        ret_poly_borders = list()
+
+        for i in range(new_poly_size):
+            k = (i+1) % new_poly_size
+            p1 = new_poly_borders[i][v2]
+            p2 = new_poly_borders[k][v1]
+
+            ret_poly_borders.append(new_poly_borders[i])
+
+            if p1 != p2:
+                intersect_borders = self.intersect_cell_borders(p1, p2)
+                a_border = {
+                        v1: p1,
+                        v2: p2,
+                        'direction': -1,
+                        'intersect_with_borders': intersect_borders
+                }
+                ret_poly_borders.append(a_border)
+
+        return ret_poly_borders
 
     @staticmethod
     def line_intersect(x1, y1, x2, y2, x3, y3, x4, y4):
@@ -1293,14 +1486,15 @@ class OptimalExtractionAlg:
                 result = self.summation_extraction(order_flux.get('order_data'))
             if 'extraction' in result:
                 self.fill_2d_with_data(result.get('extraction'), out_data, idx_out)
-
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
         self.d_print(" ")
         data_df = self.write_data_to_dataframe(out_data)
         return {'optimal_extraction_result': data_df}
 
+    """
     @staticmethod
-    def result_test(target_data, data_result):
+    def result_test(target_file, data_result):
+        target_data = fits.getdata(target_file)
         t_y, t_x = np.shape(target_data)
         r_y, r_x = np.shape(data_result)
 
@@ -1324,13 +1518,16 @@ class OptimalExtractionAlg:
                     return {'result': 'error', 'msg': 'data is not the same at ' + str(diff_idx.size) + ' points'}
 
         return {'result': 'ok'}
-
+    """
+    """
     @staticmethod
-    def update_wavecal_from_existing_L1(fiber, wave_key, L1_wave_data, header, data_obj, header_obj, wave_start_order = 0):
+    def update_wavecal_from_existing_L1(fiber, wave_key, L1_wave_data, header, data_obj, header_obj,
+                                        wave_start_order=0):
         wave_end_order = min(np.shape(data_obj[fiber][1, :, :])[0] + wave_start_order,
                              np.shape(L1_wave_data[fiber][1, :, :])[0])
         data_obj[fiber][1, :, :] = L1_wave_data[fiber][1, wave_start_order:wave_end_order, :]
         header_obj[wave_key] = header[wave_key]
         header_obj[fiber+'_FLUX']['SSBZ100'] = header['PRIMARY']['SSBZ100']
         header_obj[fiber+'_FLUX']['SSBJD100'] = header['PRIMARY']['SSBJD100']
+    """
 
