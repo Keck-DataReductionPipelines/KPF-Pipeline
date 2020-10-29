@@ -447,6 +447,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     def visit_IsNot(self, node):
         """ implement IsNot comparison operator """
         self._compare_op_impl(node, "IsNot", lambda x, y: not (x is y))
+
+    def visit_In(self, node):
+        """ implement In comparison operator """
+        self._compare_op_impl(node, "In", lambda x, y: x in y)
     
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
 
