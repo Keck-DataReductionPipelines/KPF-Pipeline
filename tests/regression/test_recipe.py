@@ -38,7 +38,11 @@ for a in [1, 2, 3]:
         bool2 = False
     
     bool3 = (div == 42)
-    test_primitive_validate_args(bool1, True, bool2, False, bool3, False)
+
+    s = 'panama'
+    bool4 = 'nam' in s
+    bool5 = 'man' in s
+    test_primitive_validate_args(bool1, True, bool2, False, bool3, False, bool4, True, bool5, False)
 """
 
 builtins_recipe = """# test recipe built-ins
@@ -92,9 +96,11 @@ a = 42
 invoke_subrecipe("{}")
 """
 
-experimental_recipe = """l = [1, 2, 3]
-# invoke_subrecipe("examples/test1.recipe")
-"""
+# experimental_recipe = """s = 'panama'
+# t = 'nam' in s
+# f = 'man' in s
+# test_primitive_validate_args(t, True, f, False)
+# """
 
 def test_recipe_basics():
     try:
