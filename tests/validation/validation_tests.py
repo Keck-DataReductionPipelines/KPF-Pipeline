@@ -1,5 +1,12 @@
 """Scientific validation/verification tests go here."""
 
+import numpy as np
+from astropy.io import fits
+import matplotlib.pyplot as plt
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # Tests below are dummy tests to test the test framework. We will need to construct a test and 
 # corresponding reference data to compare.
