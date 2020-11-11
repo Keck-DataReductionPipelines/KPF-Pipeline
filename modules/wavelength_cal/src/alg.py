@@ -24,7 +24,7 @@ class LFCWaveCalibration:
     """
     def __init__(self, LFCData, row, config=None, logger=None): #maybe add row as well
         """
-    Inits LFCWaveCalibration class with LFC data, row, config, logger.
+        Inits LFCWaveCalibration class with LFC data, row, config, logger.
 
         Args:
             LFCData (np.ndarray): The FITS LFCData
@@ -39,17 +39,18 @@ class LFCWaveCalibration:
 
     #file loaded in
 
-    def peak_detect():
+    def peak_detect(self):
         """Finds peaks given specific row of data and various thresholds peaks must surpass. 
 
         Returns:
-            [type]: [description]
+            peakxcoords: X-coordinates of found peaks
+            peakxhts: Y-coordinates (heights) of found peaks
         """
         peakxcoords,properties=peak(calflux[self.row],distance=10,threshold=50,height=0) #row of data, tester uses calflux[40]
         peakhts=properties["peak_heights"]
         return peakxcoords,peakhts
 
-    def approx_fit(peakxs,peakys): #currently gaussian
+    def approx_fit(self,peakxs,peakys): #currently gaussian
         """Approximates gaussians to peaks.
 
         Args:
@@ -68,9 +69,8 @@ class LFCWaveCalibration:
             out=func.fit(calflux[self.row][i-wavehalf:i+wavehalf],pars,x=x)
             #iterating through every curve to get overlapping fit
 
-    def poly_fit():
-        """ Fits polynomial to spectrum.
+    #     def poly_fit(self):
+    #     """ Fits polynomial to spectrum.
+    #     Args:
+    #     """
 
-        Args:
-
-        """

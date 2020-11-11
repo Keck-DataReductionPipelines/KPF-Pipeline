@@ -48,6 +48,9 @@ class WaveCalibrate(KPF0_Primitive):
         KPF0_Primitive.__init__(self,action,context)
 
         #Input arguments
+        self.LFCdata=self.action.args[0]
+        self.row=self.action.args[1]
+        #self.data_type=self.action.args[2]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -80,4 +83,22 @@ class WaveCalibrate(KPF0_Primitive):
 
         Returns:
         """
+
+        #1 peak detection
+        if self.logger:
+            self.logger.info("Wavelength Calibration: detecting LFC peaks ")
+
+        self.alg.peak_detect()
+
+        #2 approximation gaussian to peaks
+        if self.logger:
+            self.logger.info("Wavelength Calibration: approximating gaussian fit to peaks")
+
+        self.alg.approx_fit(peakxcoordinates, peakycoordinates)
+
+        #3 fit polynomial 
+        if self.logger:
+            self.logger.info("Wavelength Calibration: fitting order-by-order polynomial sol'n ")
+ 
+        self.alg.poly_fit()
 
