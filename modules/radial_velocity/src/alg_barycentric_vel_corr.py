@@ -40,7 +40,7 @@ class RVBaryCentricVelCorrection:
     """ longitude of the observatory, East (+ve) and West (-ve) (degree) """
     ALT = 'obsalt'
     """ altitude of the observatory (meter) """
-    RV = 'star_rv'
+    RV = 'start_rv'
     """ star radial velocity (km/s) """
 
     def __init__(self):

@@ -11,3 +11,5 @@ Module Radial Veloctiy
    alg_rv_base.rst
    primitive_radial_velocity.rst
    primitive_rv_init.rst
+   primitive_rv_reweighting.rst
+   primitive_rv_reweighting_ref.rst

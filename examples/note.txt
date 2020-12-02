@@ -2,16 +2,32 @@ the following lists recipe/config examples for KPF pipeline, (kpf is run under f
 
 the instrument data is stored at ownCloud/KPF-Pipeline-TestData where ownCloud is the folder at the same level of KPF-Pipeline and KeckDRPFramework. 
 
+The recipe and config pairs to perform order trace, optimal extraction, radial velocity for different instruments are listed as below:
 
-- perform order_trace, optimal extraction and radial velocity for NEID (create folder test_results/neid under KPF-Pipeline to contain the results)
-kpf examples/test_neid.recipe examples/default_neid.cfg
+- kpf examples/test_neid.recipe  examples/default_neid.cfg => perform order_trace, optimal extraction and radial velocity for NEID on target Tau Ceti
+  master recipe: test_neid.recipe
+  subrecipes: test_order_trace.recipe, test_optimal_extraction.recipe, test_neid_radial_velocity.recipe
+  note: create folder test_results/neid under KPF-Pipeline to contain the results
 
-- perform order_trace and optimal extraction for PARAS (create folder test_results/paras under KPF-Pipeline to hold the results)
-kpf examples/test_paras.recipe examples/default_paras.cfg
+- kpf examples/test_neid_reweight.recipe  examples/default_neid.cfg => perform radial velocity and reweight ccf orders for NEID on target Tau Ceti
+  for NEID on target Tau Ceti
+  master recipe: test_neid_reweight.recipe
+  subrecipes: test_neid_radial_velocity_reweight.recipe by doing reweighting ccf orders while computing radial velocity or
+	      test_neid_radial_velocity_reweight_2.recipe by doing reweighting ccf orders after after radial velocity is complete. 
+  note: create folder test_results/neid under KPF-Pipeline to contain the results    
 
-Note:
-1. test_neid.recipe is the master recipe for NEID and it invokes subrecipes test_order_trace.recipe, test_optimal_extraction.recipe,
-and test_neid_radial_velocity.recipe.
-2. test_paras.recipe is teh master recipe for PARAS and it invokes subrecipes test_order_trace.recipe and test_optimal_extraction.recipe.
-3. default_recipe_test_neid.cfg and default_recipe_test_paras.cfg are the configuration files used for recipe test,
-   test_order_trace_recipe.py, test_optimal_extraction.recipe and test_radial_velocity_recipe.py.
+- kpf examples/test_paras.recipe examples/default_paras.cfg =>  perform order_trace and optimal extraction for PARAS
+  master recipe: test_paras.recipe
+  subrecipes: test_order_trace.recipe, test_optimal_extraction.recipe
+  notes: create folder test_results/paras under KPF-Pipeline to hold the results
+
+- kpf examples/test_neid_hd127334.recipe examples/default_neid_hd127334.cfg => perform radial velocity and reweight ccf orders on level 1 data
+  for NEID on target H127334.
+  master recipe: test_neid_hd127334.recipe
+  subrecipe: neid_radial_velocity_hd127334.recipe by doing reweighting ccf orders while computing radial velocity or
+             test_neid_radial_velocity_hd127334_2.recipe by doing reweighting ccf orders on level 2 data after radial velocity is complete. 
+  note: create folder test_results/neid_hd127334  under KPF-Pipeline to contain the results
+
+- default_recipe_test_neid.cfg and default_recipe_test_paras.cfg are the configuration files used for recipe test,
+  tests/regression/test_order_trace_recipe.py, tests/regression/test_optimal_extraction.recipe and tests/regression/test_radial_velocity_recipe.py.
+
