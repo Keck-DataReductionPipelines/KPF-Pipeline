@@ -5,6 +5,7 @@ from astropy import constants as const
 import warnings
 import datetime
 import pandas as pd
+import math
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVelCorrection
@@ -48,6 +49,9 @@ class RadialVelocityAlg(RadialVelocityBase):
         start_x_pos (int): First position on x axis to be processed.
         end_x_pos (int): Last position on x axis to be processed.
         spectro (str): Name of instrument or spectrograph.
+        reweighting_ccf_method (str): Method of reweighting ccf orders. Method of `ratio` or `ccf` is to scale ccf
+            of an order based on a number from a ratio table or the mean of the ratio of a template ccf and current
+            ccf of the same order.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -84,12 +88,13 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.header = header
         self.init_data = init_data
 
-        # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, star_rv, step
+        # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, start_rv, step
         # air_to_vacuum, step_range, mask_width
         self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
         self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
+        self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF]
 
         self.obs_jd = None
         ny, nx = np.shape(self.spectrum_data)
@@ -200,7 +205,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                 RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
                                 RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
                                 RadialVelocityAlgInit.OBSLON,
-                                RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV]
+                                RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.START_RV]
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
             obs_time_jd = self.get_obs_time()
             bc_corr = RVBaryCentricVelCorrection.get_zb_from_bc_corr(rv_config_bc, self.spectro, obs_time_jd)
@@ -223,12 +228,13 @@ class RadialVelocityAlg(RadialVelocityBase):
         rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                             RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
                             RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
-                            RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV]
+                            RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.START_RV]
 
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
         bc_corr = RVBaryCentricVelCorrection.get_zb_from_bc_corr(rv_config_bc, self.spectro, obs_time_jd)
         return bc_corr[0]
+
 
     def wavelength_calibration(self, spectrum_x):
         """Wavelength calibration extraction.
@@ -314,9 +320,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.set_order_range(start_order, end_order)
         self.set_x_range(start_x, end_x)
 
-        new_w_ccf = None if ref_ccf is None \
-            else ref_ccf[self.start_order + order_diff:self.end_order + order_diff + 1, :]
-
         s_x = self.start_x_pos
         e_x = self.end_x_pos
 
@@ -336,9 +339,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             wavecal = wavecal_all_orders[ord_idx, :]
 
             if np.any(wavecal != 0.0):
-                w_ccf = new_w_ccf[ord_idx, :] if new_w_ccf is not None else None
                 result_ccf[ord_idx, :] = \
-                    self.cross_correlate_by_mask_shift(wavecal, new_spectrum[ord_idx, :], zb, w_ccf)
+                    self.cross_correlate_by_mask_shift(wavecal, new_spectrum[ord_idx, :], zb)
             else:
                 self.d_print("all wavelength zero")
 
@@ -346,15 +348,13 @@ class RadialVelocityAlg(RadialVelocityBase):
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
 
-    def cross_correlate_by_mask_shift(self, wave_cal, spectrum, zb, weigh_ccf_ord=None):
+    def cross_correlate_by_mask_shift(self, wave_cal, spectrum, zb):
         """Cross correlation by the shifted mask line and the spectrum data of one order for each velocity step.
 
         Args:
             wave_cal (numpy.ndarray): Wavelength calibration associated with `spectrum`.
             spectrum (numpy.ndarray): Reduced 1D spectrum data of one order from optimal extraction computation.
             zb (float): Redshift at the observation time.
-            weigh_ccf_ord (numpy.ndarray, optional): The reference spectrum data of the associated order for scaling
-                the computed cross correlation result. Defaults to None.
 
         Returns:
             numpy.ndarray: Cross correlation result of one order at all velocity steps. Please refer to `Returns` of
@@ -367,7 +367,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         # made some fix on line_index. the original calculation may miss some pixels at the edges while
         # finding the overlap between the wavelength range of the pixels and the maximum wavelength range of
         # the mask line
-        # from the orginal
+        # from the original
         line_index = np.where((line.get('bc_corr_start') > np.min(wave_cal)) &
                               (line.get('bc_corr_end') < np.max(wave_cal)))[0]
         # line_index = np.where((line.get('bc_corr_end') > np.min(wave_cal)) &
@@ -460,11 +460,6 @@ class RadialVelocityAlg(RadialVelocityBase):
 
             ccf[c] = np.nansum(spectrum * mask_spectra_doppler_shifted)
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            if weigh_ccf_ord is None:
-                weigh_ccf_ord = ccf.copy()
-            ccf *= np.nanmean(weigh_ccf_ord / ccf)
         return ccf
 
     def analyze_ccf(self, ccf, row_for_analysis=None):
@@ -474,6 +469,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         Args:
             ccf (numpy.ndarray): A container storing cross correlation values of all orders at each velocity step.
+            total_order (int): Total order to analyze.
             row_for_analysis (numpy.ndarray): Rows for analysis. Defaults to None, meaning skipping the first row.
 
         Returns:
@@ -485,20 +481,31 @@ class RadialVelocityAlg(RadialVelocityBase):
         if row_for_analysis is None:
             row_for_analysis = np.arange(1, self.spectrum_order, dtype=int)
         # skip order 0
-        ccf[self.spectrum_order + self.ROWS_FOR_ANALYSIS - 1, :] = np.sum(ccf[row_for_analysis, :], axis=0)
+        ccf[self.spectrum_order + self.ROWS_FOR_ANALYSIS - 1, :] = np.nansum(ccf[row_for_analysis, :], axis=0)
         return ccf
 
-    def fit_ccf(self, result_ccf, velocity_cut=100.0):
+    def get_rv_guess(self):
+        return self.get_rv_estimation(self.header, self.init_data)
+
+    @staticmethod
+    def get_rv_estimation(hdu_header, init_data):
+        rv_guess = hdu_header['QRV'] if 'QRV' in hdu_header\
+            else init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.START_RV]
+        return rv_guess
+
+    @staticmethod
+    def fit_ccf(result_ccf, rv_guess, velocities, velocity_cut=100.0):
         """Gaussian fitting to the values of cross correlation vs. velocity steps.
 
         Find the radial velocity from the summation of cross correlation values over orders by the use of
         Gaussian fitting and starting from a guessed value.
 
         Args:
-            result_ccf (numpy.ndarray): 2D array containing the cross correlation values of all orders and the
-                summation over orders. Please refer to `Returns` of :func:`~alg.RadialVelocityAlg.get_rv_on_spectrum()`.
+            result_ccf (numpy.ndarray): 1D array containing summation the summation of cross correlation data over
+                orders. Please refer to `Returns` of :func:`~alg.RadialVelocityAlg.get_rv_on_spectrum()`.
+            rv_guess (float): Approximation of radial velocity.
+            velocities (np.array): An array of velocity steps.
             velocity_cut (float, optional): Range limit around the guessed radial velocity. Defaults to 100.0 (km/s).
-
         Returns:
             tuple: Gaussian fitting mean and values for the fitting,
 
@@ -510,10 +517,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                   cross correlation summation values along *g_x*.
 
         """
-        rv_guess = self.rv_config[RadialVelocityAlgInit.STAR_RV]
         g_init = models.Gaussian1D(amplitude=-1e7, mean=rv_guess, stddev=5.0)
-        velocities = result_ccf[self.spectrum_order + 1, :]
-        ccf = result_ccf[self.spectrum_order + self.ROWS_FOR_ANALYSIS - 1, :]
+        ccf = result_ccf
         i_cut = (velocities >= rv_guess - velocity_cut) & (velocities <= rv_guess + velocity_cut)
         g_x = velocities[i_cut]
         g_y = ccf[i_cut] - np.nanmedian(ccf)
@@ -538,7 +543,9 @@ class RadialVelocityAlg(RadialVelocityBase):
             ccf_table['vel-'+str(i)] = ccf[:, i]
         results = pd.DataFrame(ccf_table)
         # results = pd.DataFrame(ccf)
-        _, rv_result, _, _ = self.fit_ccf(ccf)
+        _, rv_result, _, _ = self.fit_ccf(
+            ccf[self.spectrum_order+RadialVelocityAlg.ROWS_FOR_ANALYSIS-1, :],
+            self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP])
 
         def f_decimal(num):
             return "{:.10f}".format(num)
@@ -557,9 +564,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                         else:
                             results.attrs[key] = ref_head[key]
         else:
-            results.attrs['Date'] = str(datetime.datetime.now())
+            results.attrs['CCFJDSUM'] = self.get_obs_time()
             results.attrs['CCF-RVC'] = f_decimal(rv_result)+' Baryc RV (km/s)'
-            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityAlgInit.STAR_RV])
+            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityAlgInit.START_RV])
             results.attrs['CCFSTEP'] = str(self.rv_config[RadialVelocityAlgInit.STEP])
             results.attrs['STARTORD'] = str(self.start_order)
             results.attrs['ENDORDER'] = str(self.end_order)
@@ -581,8 +588,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             order_diff (int, optional): Order difference between spectrum data and the
                 reference data, i.e. <order in ref> = `order_diff` + <order in spectrum>.
                 Defaults to 0.
-            ref_ccf (numpy.ndarray, optional): Reference of cross correlation values for scaling the computation
-                of cross correlation.
+            ref_ccf (numpy.ndarray, optional): Reference of cross correlation values or ratio table for scaling the
+                computation of cross correlation. The dimension of ref_ccf is the same as that of the computed ccf.
             print_progress (str, optional):  Print debug information to stdout if it is provided as empty string
                 or to a file path, `print_progress`,  if it is non empty string, or no print is made if it is None.
                 Defaults to None.
@@ -608,62 +615,149 @@ class RadialVelocityAlg(RadialVelocityBase):
         """
         self.add_file_logger(print_progress)
         self.d_print('computing radial velocity ... ')
-        ccf, msg = self.get_rv_on_spectrum(ref_ccf, start_x, end_x, start_order, end_order, order_diff)
 
+        ccf, msg = self.get_rv_on_spectrum(ref_ccf, start_x, end_x, start_order, end_order, order_diff)
         if ccf is None:
             raise Exception(msg)
+
+        if ref_ccf is not None:
+            ccf = self.reweight_ccf(ccf, self.spectrum_order, ref_ccf, self.reweighting_ccf_method,
+                                    s_order=start_order)
 
         analyzed_ccf = self.analyze_ccf(ccf)
         df = self.output_ccf_to_dataframe(analyzed_ccf)
         return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd}
 
     @staticmethod
-    def result_test(target_data, data_result):
-        """Check if 2D data is consistent with that from a reference fits.
+    def is_good_reweighting_method(method, for_ratio=False):
+        return method in ['ccf_max', 'ccf_mean'] if for_ratio else method in ['ccf_max', 'ccf_mean', 'ccf_steps']
+
+    @staticmethod
+    def make_reweighting_ratio_table(order_val, s_idx, e_idx, reweighting_method, max_ratio=1.0, output_csv=''):
+        """Make the ratio table from the given CCF orders
 
         Args:
-            target_data (numpy.ndarray): Array of data to compare to.
-            data_result (numpy.ndarray): Array of data to be checked.
+            order_val (numpy.ndarray): CCF orders.
+            s_idx (int): The starting index that the first row of `order_val` is associated with.
+            e_idx (int):  The last index of the CCF order to be collected from `order_val`.
+            reweighting_method (str): Reweight methods for making the ratio table, **ccf_max** is to make the ratio
+                based on 95 percentile CCF value of each order, and **ccf_mean** is to make the ratio based on the mean
+                of the CCF value of each order.
+            max_ratio (float, optional): Maximum ratio number in the ratio table. Defaults to 1.0.
+            output_csv (str, optional): Output the ratio table into a .csv file. Default to no output.
 
-        Returns;
+        Returns:
+            pandas.Dataframe: ratio table in DataFrame format containing two columns. The first column is the order
+            index from `s_idx` to `e_idx` and the second column is the ratio for the order of the first column.
 
-            dict:  Comparison result between the data and the reference data, like::
-
-                {
-                    'result': 'ok'              # if the data is consistent with the reference.
-                }
-                {
-                    'result': 'error',          # if the data is not the same as the reference.
-                    'msg': <reason message>
-                }
-
+        Raises:
+            Exception: invalid reweighting method to build the ratio table.
         """
-        t_y, t_x = np.shape(target_data)
-        r_y, r_x = np.shape(data_result)
+        if not RadialVelocityAlg.is_good_reweighting_method(reweighting_method, for_ratio=True):
+            raise Exception('invalid reweighting method to build the ratio table')
 
-        if t_y != r_y or t_x != r_x:
-            return {'result': 'error', 'msg': 'dimension is not the same'}
+        row_val = order_val[np.arange(0, e_idx-s_idx+1, dtype=int), :]
+        row_val = np.where((row_val < 0.0), 0.0, row_val)
 
-        not_nan_data_idx = np.argwhere(~np.isnan(data_result))
-        not_nan_target_idx = np.argwhere(~np.isnan(target_data))
+        if reweighting_method == 'ccf_max':
+            t_val = np.nanpercentile(row_val, 95, axis=1)
+        elif reweighting_method == 'ccf_mean':
+            t_val = np.nanmean(row_val, axis=1)
 
-        if np.size(not_nan_data_idx) != np.size(not_nan_target_idx):
-            return {'result': 'error', 'msg': 'NaN data different'}
-        elif np.size(not_nan_data_idx) != 0:
-            if not (np.array_equal(not_nan_data_idx, not_nan_target_idx)):
-                return {'result': 'error', 'msg': 'NaN data different'}
+        t_val = np.where(np.isnan(t_val), 0.0, t_val)
+
+        if max_ratio is not None:
+            max_t_val = np.max(t_val)
+            if max_t_val != 0.0:
+                t_val = (t_val/max_t_val) * max_ratio
+        ratio_table = {'order': np.arange(s_idx, e_idx + 1, dtype=int),
+                       'ratio': t_val}
+
+        df = pd.DataFrame(ratio_table)
+        if output_csv:
+            df.to_csv(output_csv, index=False)
+
+        return df
+
+    @staticmethod
+    def reweight_ccf(crt_rv, total_order, reweighting_table_or_ccf, reweighting_method, s_order=0,
+                     do_analysis=False, velocities=None):
+        """Reweighting ccf orders.
+
+        Reweight the CCF ordres based on the given CCF ratios or CCF orders from the observation template.
+
+        Args:
+            crt_rv (numpy.ndarray): CCF orders.
+            total_order (int): Total orders for reweighting. It is in default from the first row of `crt_rv`.
+            reweighting_table_or_ccf (numpy.ndarray): Ratios among CCF orders or CCF data from the observation template.
+            reweighting_method (str): Reweighting methods, **ccf_max**, **ccf_mean**, or **ccf_steps**.
+            s_order (int, optional): The start order index for reweighting. This is used to select the row from `crt_rv`
+                in case the order index column is included in `reweighting_table_or_ccf`. Defaults to 0.
+            do_analysis (bool, optional): Do summation on the weighted ccf orders as what
+                :func:`~alg.RadialVelocityAlg.analysis_ccf()` dose on CCF orders. Defaults to False.
+            velocities (np.ndarray, optional): 1D array consisting of the velocity loop for cross-correlation
+                computation. Used when `do_analysis` is **True**. Defaults to None.
+
+         Returns:
+             numpy.ndarray: 2D array containing Reweighted CCF orders and the velocity loop and the CCF summation
+                from CCF orders at the last two rows.
+
+        Raises:
+            Exception: no valid reference data from observation template
+            Exception: invalid reweighting method
+        """
+
+        # the order index of crt_rv and reweighting_table_or_ccf are aligned
+
+        if reweighting_table_or_ccf is None:
+            raise Exception("no valid data from observation template")
+        if not reweighting_method or not RadialVelocityAlg.is_good_reweighting_method(reweighting_method):
+            raise Exception("invalid reweighting method")
+
+        ny, nx = np.shape(crt_rv)
+
+        total_order = min(total_order, ny)
+
+        if reweighting_method == 'ccf_max' or reweighting_method == 'ccf_mean':
+            # if the ratio table containing a column of order index, using s_order to select the ratio with
+            # order index from s_order to s_order+total_order-1
+            if np.shape(reweighting_table_or_ccf)[1] >= 2:
+                s_order = 0 if s_order is None else s_order
+                e_order = s_order + total_order - 1
+                c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_order)&
+                                 (reweighting_table_or_ccf[:, 0] <= e_order))[0]
+                tval = reweighting_table_or_ccf[c_idx, -1]
+                crt_rv = crt_rv[c_idx, :]
+                total_order = np.size(tval)
             else:
-                not_nan_target = target_data[~np.isnan(target_data)]
-                not_nan_data = data_result[~np.isnan(data_result)]
-                diff_idx = np.where(not_nan_target - not_nan_data)[0]
+                tval = reweighting_table_or_ccf[0:total_order, -1]
 
-                if diff_idx.size > 0:
-                    diff_val = not_nan_target - not_nan_data
-                    diff_max = np.amax(diff_val[diff_idx])
-                    diff_max_rv = np.amax(data_result[r_y-1, :] - target_data[t_y - 1, :])
-                    return {'result': 'error', 'msg': 'data is not the same at ' + str(diff_idx.size) +
-                                                      ' points and max difference of last row ' + str(diff_max_rv)}
+            new_crt_rv = np.zeros((total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
+            max_index = np.where(tval == np.max(tval))[0]       # the max from ratio table, 1.0 if ratio max is 1.0
+            oval = np.nanpercentile(crt_rv[0:total_order], 95, axis=1) if reweighting_method == 'ccf_max' \
+                else np.nanmean(crt_rv[0:total_order], axis=1)  # max or mean from each order
 
-        return {'result': 'ok'}
+            oval_at_index = oval[max_index]                     # value from oder of max_index
+            if oval_at_index == 0.0:      # order of max_index has value 0.0, skip reweighting, returns all zeros
+                return new_crt_rv
+            oval = oval/oval_at_index     # ratio of orders before reweighting, order of max_index is 1.0
+            for order in range(total_order):
+                if oval[order] != 0.0:
+                    new_crt_rv[order, :] = crt_rv[order, :] * tval[order]/oval[order]
+        elif reweighting_method == 'ccf_steps':             # assume crt_rv and reweighting ccf cover the same orders
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                new_crt_rv = np.zeros((total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
+                for order in range(total_order):
+                    if np.size(np.where(crt_rv[order, :] != 0.0)[0]) > 0:
+                        new_crt_rv[order, :] = crt_rv[order, :] * \
+                                           np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
+        if do_analysis:
+            row_for_analysis = np.arange(1, total_order, dtype=int)
+            new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS -1, :] = \
+                            np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
+            if velocities is not None and np.size(velocities) == nx:
+                new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 2, :] = velocities
+        return new_crt_rv
 
 
