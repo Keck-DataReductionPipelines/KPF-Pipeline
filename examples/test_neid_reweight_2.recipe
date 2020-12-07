@@ -12,4 +12,4 @@ order_name = config.ARGUMENT.order_name
 reweighting_method = config.ARGUMENT.reweighting_method
 reweight_ccf = KPFPIPE_TEST_DATA + config.ARGUMENT.reweighting_ratio_csv
 
-invoke_subrecipe("./examples/test_neid_radial_velocity_reweight.recipe")
+invoke_subrecipe("./examples/test_neid_radial_velocity_reweight_2.recipe")
