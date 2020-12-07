@@ -10,4 +10,4 @@ total_order = config.ARGUMENT.total_order
 
 order_name = config.ARGUMENT.order_name
 
-invoke_subrecipe("./examples/test_neid_radial_velocity_hd127334.recipe")
+invoke_subrecipe("./examples/test_neid_radial_velocity_hd127334_2.recipe")
