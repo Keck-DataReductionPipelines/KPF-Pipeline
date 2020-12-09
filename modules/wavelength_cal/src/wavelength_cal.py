@@ -13,15 +13,15 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.wavelength_cal.src.alg import peak_detect
-from modules.wavelength_cal.src.alg import approx_fit
+from modules.wavelength_cal.src.alg import LFCWaveCalibration
 
+# Global read-only variables
 DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
 
 class WaveCalibrate(KPF0_Primitive):
     """
-    This module defines class 'WaveCalibrate,' which inherits from KPF0_Primitive and provides methods
-    to perform the event 'LFC wavelength calibration' in the recipe.
+    This module defines class `WaveCalibrate,` which inherits from KPF0_Primitive and provides methods
+    to perform the event `LFC wavelength calibration` in the recipe.
 
     Args:
         KPF0_Primitive: Parent class
@@ -29,28 +29,31 @@ class WaveCalibrate(KPF0_Primitive):
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
 
     Attributes:
-        config_path (str):
+        LFCData (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[0]`
+        config_path (str): Path of config file for LFC wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
         alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
     """
     def __init__(self, 
-                action:Action, 
+                action:Action,
                 context:ProcessingContext) -> None:
         """
         WaveCalibrate constructor.
 
         Args:
-            action (Action): [description]
-            context (ProcessingContext): [description]
+            action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
+              
+                `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing Laser Frequency Comb (LFC) data
+
+            context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
 
         #Input arguments
         self.LFCdata=self.action.args[0]
-        self.row=self.action.args[1]
-        #self.data_type=self.action.args[2]
+        #self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -68,7 +71,7 @@ class WaveCalibrate(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
 
-        #Algorithm setup
+        #Wavelength calibration algorithm setup
 
         self.alg=LFCWaveCalibration(self.LFCData,self.row,self.config,self.logger)
 
@@ -79,24 +82,20 @@ class WaveCalibrate(KPF0_Primitive):
     #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
-        Performs wavelength calibration by calling method '' from LFCWaveCalibration.
+        Performs wavelength calibration by calling methods 'peak_detect' and 'poly_fit' from LFCWaveCalibration.
 
         Returns:
+            [Insert](): Wavelength solution 
         """
+        #return will be to_fits in recipe
 
-        #1 peak detection
+        #1 peak detection & gaussian fit
         if self.logger:
-            self.logger.info("Wavelength Calibration: detecting LFC peaks ")
+            self.logger.info("Wavelength Calibration: detecting LFC peaks")
 
         self.alg.peak_detect()
 
-        #2 approximation gaussian to peaks
-        if self.logger:
-            self.logger.info("Wavelength Calibration: approximating gaussian fit to peaks")
-
-        self.alg.approx_fit(peakxcoordinates, peakycoordinates)
-
-        #3 fit polynomial 
+        #2 fit polynomial 
         if self.logger:
             self.logger.info("Wavelength Calibration: fitting order-by-order polynomial sol'n ")
  
