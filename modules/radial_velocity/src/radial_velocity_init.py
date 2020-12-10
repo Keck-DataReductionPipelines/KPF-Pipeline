@@ -78,7 +78,7 @@ class RadialVelocityInit(KPF_Primitive):
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            self.config_path = context.config_path('radial_velocity_init')
+            self.config_path = context.config_path['radial_velocity']
         except:
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
