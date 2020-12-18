@@ -1,6 +1,7 @@
 import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
+import scipy
 from scipy.signal import find_peaks as peak
 from scipy.optimize import curve_fit as cv
 #from lmfit.models import GaussianModel #fit type can be changed
@@ -8,6 +9,9 @@ from scipy.optimize import curve_fit as cv
 
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
+from scipy.optimize.minpack import curve_fit
+from numpy.polynomial.polynomial import Polynomial
+from numpy.polynomial.legendre import Legendre
 
 class LFCWaveCalibration:
     """
@@ -18,32 +22,42 @@ class LFCWaveCalibration:
    Args:
         config (configparser.ConfigParser, optional): Config context. Defaults to None.
         logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
-        LFCData (array): FITS laser frequency comb data
+        LFCData (np.ndarray): FITS laser frequency comb data
+        f0 (np.float): Frequency offset of LFC, in Hertz
+        f_rep (np.float): Frequency rate of LFC, in Hertz
+        min_wave (np.float): Minimum value of wavelength range, in Angstroms
+        max_wave (np.float): Maximum value of wavelength range, in Angstroms
 
     Attributes:
-        logger (logging.Logger): Instance of logging.Logger.
-
+        
     Raises:
         
 
     """
-    def __init__(self, LFCData, f0, f_rep,config=None, logger=None): #maybe add row as well
+    #possible raises: lfcdata isn't in right format
+    def __init__(self, LFCData, f0, f_rep, min_wave,max_wave,config=None, logger=None): #maybe add row as well
         """
         Inits LFCWaveCalibration class with LFC data, config, logger.
 
         Args:
-            LFCData (np.ndarray): The FITS LFCData
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
-            logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
+            logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
+            LFCData (np.ndarray): FITS laser frequency comb data
+            f0 (np.float): Frequency offset of LFC, in Hertz
+            f_rep (np.float): Frequency rate of LFC, in Hertz
+            min_wave (np.float): Minimum value of wavelength range, in Angstroms
+            max_wave (np.float): Maximum value of wavelength range, in Angstroms
+
         """
         self.LFCData=LFCData
+        self.ThAr=ThAr
         self.f0=f0
         self.f_rep=f_rep
+        self.min_wave=min_wave
+        self.max_wave=max_wave
+        self.fit_order=fit_order
         self.config=config
         self.logger=logger
-
-    #file loaded in
-    #load in specifically calflux?
 
     def peak_detect(self):
         #algorithm from PyReduce
@@ -64,30 +78,29 @@ class LFCWaveCalibration:
         Returns:
             n (np.int): Number of peaks found
             new_peaks (np.ndarray): X-coordinate of each found peak
-            peakhts (np.ndarray): Y-coordinate of each found peak (peak height)
+            props(dict): Further peak properties, i.e. peak heights
         """
-        width = lfc_peak_width
-        height = np.ma.median(self.LFCdata)
-        peaks, _ = peak(self.LFCdata, height=height, width=width)
-        distance = np.median(np.diff(peaks)) // 4
-        peaks, props = peak(self.LFCdata, height=height, distance=distance, width=width)
-        peakhts=props["peak_heights"]
-
+        c=self.LFCData-np.ma.min(self.LFCData)
+        height = np.ma.median(c)
+        peaks, props = peak(c, height=height)
+        distance=np.median(np.diff(peaks))//4
+        peaks, props = peak(c, height=height,distance=distance)
+    
         # Fit peaks with gaussian to get accurate position
         new_peaks = peaks.astype(float)
         width = np.mean(np.diff(peaks)) // 2
         for j, p in enumerate(peaks):
             idx = p + np.arange(-width, width + 1, 1)
-            idx = np.clip(idx, 0, len(data) - 1).astype(int)
+            idx = np.clip(idx, 0, len(c) - 1).astype(int)
 
-            coef= gauss_fit(np.arange(len(idx)), self.LFCdata[idx])
+            coef= gauss_fit(np.arange(len(idx)), c[idx])
             new_peaks[j] = coef[1] + p - width
 
         n = np.arange(len(peaks))
 
-        return n, new_peaks, peakhts
+        return n, new_peaks, props
 
-    def gauss_fit(x, y):
+    def gauss_fit(self,x, y):
         """ 
         Simple gaussian fit: gauss = A * exp(-(x-mu)**2/(2*sig**2)) + offset
 
@@ -100,7 +113,7 @@ class LFCWaveCalibration:
         """
         x = np.ma.compressed(x)
         y = np.ma.compressed(y)
-        gauss = gaussvalue
+        gauss = gauss_value
         i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
         p0 = [y[i], x[i], 1, np.min(y)]
 
@@ -110,7 +123,7 @@ class LFCWaveCalibration:
 
         return popt
 
-    def gauss_value(x, a, mu, sig, const):
+    def gauss_value(self,x, a, mu, sig, const):
         """Gaussian function.
 
         Args:
@@ -125,30 +138,91 @@ class LFCWaveCalibration:
         """
         return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
 
-    # def calc_LFC_modes(self):
-    #     #need f0 and f_rep fed in in recipe?
-    #     #c = speed of light
-    #     nlines=
-    #     fn=self.f0+(nlines*f_rep)
-    #     ln=c*1e13/fn
+    def comb_gen(self,mode_nos):
+        """Generates comb wavelengths.
+
+        Args:
+            mode_nos (np.ndarray): Evenly spaced mode lines
+
+        Returns:
+            ln_ang (np.ndarray): Comb wavelengths, in angstroms
+        """
+
+        fn=self.f0+(mode_nos*self.f_rep)
+        ln=scipy.constants.c/fn
+        ln_ang=ln/(1e-10)
+
+        return ln_ang
+
+    def mode_nos(self):
+        """Generates comb lines.
+
+        Returns:
+            comb_lines_ang(np.ndarray): Comb wavelengths, in angstroms
+            mode_nos(np.ndarray): Evenly spaced mode lines
+        """
+        mode_start=np.int((((scipy.constants.c*1e10)/self.min_wave)-self.f0)/self.f_rep)
+        mode_end=np.int((((scipy.constants.c*1e10)/self.max_wave)-self.f0)/self.f_rep)
+
+        mode_nos=np.arange(mode_start,mode_end,-1)
+        comb_lines_ang=comb_gen(mode_nos,self.f0,self.f_rep)
+
+        return comb_lines_ang, mode_nos
 
 
-    # def poly_fit(self,peakxs,peakys):
-    #     """Fits order to polynomial.
+    def mode_match(self,comb_lines_ang,peaks):
+        #peak_hght from find_peaks
+        """Finds corresponding mode numbers to peaks.
 
-    #     Args:
-    #         peakxs (np.ndarray): X-coordinates of peaks
-    #         peakys (np.ndarray): Y-coordinates of peaks (peak heights)
+        Args:
+            comb_lines_ang(np.ndarray): Comb wavelengths, in angstroms
+            peaks (np.ndarray): Peak x-coordinates
 
-    #     Returns:
-    #     """
-        
-    # def get(self):
-    #     """Returns LFC wavelength solution.
+        Returns:
+            idx(np.int): Corresponding index
+        """
+        idx=(np.abs(comb_lines_ang-peaks[0])).argmin()
+        return idx
 
-    #     Returns:
-    #         wavesoln: LFC wavelength solution.
-    #     """
-    #     return wavesoln
+    def poly_fit(self,comb_lines_ang,peaks,idx):
+        """Fits order to polynomial.
+
+        Args:
+            comb_lines_ang(np.ndarray): Comb wavelengths, in angstroms
+            peaks (np.ndarray): Peak x-coordinates
+            idx(np.int): Corresponding index
+            
+        Returns:
+            wave_soln_leg(np.polynomial): Legendre polynomial-fit wavelength solution
+            wave_soln_poly(np.Polynomial): Regular polynomial-fit wavelength solution
+        """
+        wavelengths=comb_lines_ang[idx:(idx+len(peaks))]
+        #polynomial
+        polyfit=Polynomial.fit(peaks,wavelengths,self.fit_order)
+        #legendre
+        legfit=Legendre.fit(peaks,wavelengths,self.fit_order)
+
+        x_coords=np.arange(len(peaks))
+        wave_soln_leg=legfit(x_coords)
+        wave_soln_poly=polyfit(x_coords)
+        return wave_soln_leg,wave_soln_poly,wavelengths
+    
+
+    def residuals(self,comb_lines_ang,idx,wave_soln,peaks):
+        """Calculates residuals.
+
+        Args:
+            wave_soln (np.Polynomial): Polynomial-fit wavelength solution
+            peaks (np.ndarray): Peak x-coordinates
+
+        Returns:
+            std_resid(): Standard deviation of residuals
+        """
+        wavelengths=comb_lines_ang[idx:(idx+len(peaks))]
+        new_pos=wave_soln[peaks]
+        residual =((new_pos-wavelengths)*scipy.constants.c)/wavelengths
+        std_resid=np.std(residual)
+        return std_resid
+
 
 
