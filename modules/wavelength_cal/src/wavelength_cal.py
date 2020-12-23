@@ -30,6 +30,11 @@ class WaveCalibrate(KPF0_Primitive):
 
     Attributes:
         LFCData (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[0]`
+        f0 (np.float): Instance of `KPF0`, assigned by `actions.args[1]`
+        f_rep (np.float): Instance of `KPF0`, assigned by `actions.args[2]`
+        min_wave (np.float): Instance of `KPF0`, assigned by `actions.args[3]`
+        max_wave (np.float): Instance of `KPF0`, assigned by `actions.args[4]`
+        fit_order(np.int): Instance of `KPF0`, assigned by `actions.args[5]`
         config_path (str): Path of config file for LFC wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
@@ -45,6 +50,11 @@ class WaveCalibrate(KPF0_Primitive):
             action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
               
                 `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing Laser Frequency Comb (LFC) data
+                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing initial frequency
+                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing repetition frequency
+                `action.args[3]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing minimum wavelength of wavelength range
+                `action.args[4]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing maximum wavelength of wavelength range
+                `action.args[5]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing polynomial-fit order
 
             context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
@@ -73,7 +83,7 @@ class WaveCalibrate(KPF0_Primitive):
 
         #Wavelength calibration algorithm setup
 
-        self.alg=LFCWaveCalibration(self.LFCData,self.row,self.config,self.logger)
+        self.alg=LFCWaveCalibration(self.f0,self.f_rep,self.config,self.logger)
 
         #Preconditions
        
@@ -85,19 +95,38 @@ class WaveCalibrate(KPF0_Primitive):
         Performs wavelength calibration by calling methods 'peak_detect' and 'poly_fit' from LFCWaveCalibration.
 
         Returns:
-            [Insert](): Wavelength solution 
+            wave_soln (np.Polynomial): Wavelength solution 
         """
         #return will be to_fits in recipe
-
-        #1 peak detection & gaussian fit
+    
+        #1 mode_nos
         if self.logger:
-            self.logger.info("Wavelength Calibration: detecting LFC peaks")
+            self.logger.info("Wavelength Calibration: Generating comb lines")
+        clines_ang= self.alg.mode_nos(self.min_wave,self.max_wave,self.f0,self.f_rep)
 
-        self.alg.peak_detect()
+        #output comb_lines_ang to steps 3,4,5
 
-        #2 fit polynomial 
+        #2 peak detection & gaussian fit
         if self.logger:
-            self.logger.info("Wavelength Calibration: fitting order-by-order polynomial sol'n ")
- 
-        self.alg.poly_fit()
+            self.logger.info("Wavelength Calibration: Detecting LFC peaks")
+        peaks,props=self.alg.peak_detect(self.LFCData)
+        #output peaks to steps 4,5,6, and props
 
+        #3 mode match
+        if self.logger:
+            self.logger.info("Wavelength Calibration: Fitting mode numbers to corresponding peaks")
+        idx=self.alg.mode_match(clines_ang,peaks)
+        #output idx for step 5,6
+
+        #4 fit polynomial 
+        if self.logger:
+            self.logger.info("Wavelength Calibration: Fitting order-by-order polynomial sol'n")
+        wave_soln=self.alg.poly_fit(self.fit_order,clines_ang,peaks,idx)
+        #output wave_soln_leg or wave_soln_poly to step 6
+
+        #5 residuals 
+        if self.logger:
+            self.logger.info("Wavelength Calibration: Calculating residual standard deviation")
+        self.alg.residuals(clines_ang,idx,wave_soln,peaks)
+
+        #need to add Return Arguments(wave_soln)
