@@ -26,6 +26,8 @@ class LFCWaveCalibration:
         f_rep (np.float): Frequency rate of LFC, in Hertz
 
     Attributes:
+        f0 (np.float): From parameter 'f0'
+        f_rep (np.float): From parameter 'f_rep'
         
     Raises:
         
@@ -211,6 +213,4 @@ class LFCWaveCalibration:
         residual =((new_pos-wavelengths)*scipy.constants.c)/wavelengths
         std_resid=np.std(residual)
         return std_resid
-
-
 
