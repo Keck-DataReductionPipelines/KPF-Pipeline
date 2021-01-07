@@ -5,10 +5,11 @@ class FlatFielding:
     """
     Flat division calculation.
 
-    This module defines 'FlatFielding' and methods to perform flat-fielding by dividing a raw data frame by a master flat frame.  
+    This module defines 'FlatFielding' and methods to perform flat-fielding by dividing a raw data frame by a master
+    flat frame.
 
     Args:
-        rawimage (np.ndarray): The FITS raw data
+        rawimage (np.ndarray): The FITS raw data.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
     
@@ -19,7 +20,7 @@ class FlatFielding:
         Exception: If raw image and flat frame don't have the same dimensions
     """
 
-    def __init__(self,rawimage,config=None, logger=None):
+    def __init__(self, rawimage, config=None, logger=None):
         """
         Inits FlatFielding class with raw data, config, logger.
 

@@ -22,9 +22,16 @@
                     - `action.args['order_name'] (str, optional)`: Order name associated with the level 1 data.
                       Defaults to 'SCI1'.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
-                      Defaults to None.
+                      Defaults to None. The number means the order relative to the first one if it is greater
+                      than or equal to 0, otherwise it means the order relative to the last one.
                     - `action.args['end_order'] (int, optional)`: Index of the last order to be processed.
-                      Defaults to None.
+                      Defaults to None. The number has the same meaning as that of `action.args['start_order']`.
+                    - `action.args['start_x'](int, optional)`: Index of start x position. Default to None.
+                      The number means the position relative to the first pixel of the same order
+                      if it is greater than or equal to 0, otherwise it means the position relative to the last
+                      pixel.
+                    - `action.args['end_x'](int, optional)`: Index of end x position, Default to None.
+                      The number has the same meaning as that of `action.args['start_x']`.
                     - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference for
                       reweighting ccf orders. Defaults to None.
 
@@ -39,6 +46,8 @@
                 - `sci (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `end_order (int)`: Index of the last order to be processed.
+                - `start_x (int)`: Start x position associated with `action.args['start_x']`.
+                - `end_x (int)`: End x position associated with `action.args['end_x']`.
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
@@ -113,8 +122,10 @@ class RadialVelocity(KPF1_Primitive):
 
         self.sci = action.args['order_name'] if 'order_name' in args_keys and action.args['order_name'] is not None\
             else self.default_args_val['order_name']
-        self.start_order = action.args['start_order'] if 'start_order' in args_keys else None
-        self.end_order = action.args['end_order'] if 'end_order' in args_keys else None
+        self.start_order = int(action.args['start_order']) if 'start_order' in args_keys else None
+        self.end_order = int(action.args['end_order']) if 'end_order' in args_keys else None
+        self.start_x = int(action.args['start_x']) if 'start_x' in args_keys else None
+        self.end_x = int(action.args['end_x']) if 'end_x' in args_keys else None
         is_kpf_type = action.args['is_kpf_type'] if 'is_kpf_type' in args_keys else True
 
         # input configuration
@@ -154,8 +165,7 @@ class RadialVelocity(KPF1_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.input, KPF1) and \
-            (self.start_order is None  or self.end_order is None or self.start_order <= self.end_order) and \
-            (self.ref_ccf is None or isinstance(self.ref_ccf, np.ndarray))
+                  (self.ref_ccf is None or isinstance(self.ref_ccf, np.ndarray))
 
         return success
 
@@ -176,33 +186,26 @@ class RadialVelocity(KPF1_Primitive):
         """
 
         _, nx, ny = self.alg.get_spectrum()
-        s_order = -1
-        e_order = -1
-        s_x_pos = -1
-        e_x_pos = -1
 
         if self.alg.get_instrument() == 'NEID':
             if self.rv_init['data']['rv_config']['starname'] != 'HD 127334':
-                s_order = 3
-                e_order = min(82, np.shape(self.spectrum_data)[0]-1)
-            s_x_pos = 600
-            e_x_pos = nx - s_x_pos
+                s_order = 3 if self.start_order is None else self.start_order
+                e_order = min(82, np.shape(self.spectrum_data)[0]-1) if self.end_order is None else self.end_order
+            else:
+                s_order = 0 if self.start_order is None else self.start_order
+                e_order = 116 if self.end_order is None else self.end_order
+            s_x_pos = 600 if self.start_x is None else self.start_x
+            e_x_pos = nx - 600 if self.end_x is None else self.end_x
         elif self.alg.get_instrument() == 'HARPS':
-            s_order = 0
-            e_order = 69
-            s_x_pos = 500
-            e_x_pos = 3500
-
-        if s_order == -1:
-            if self.start_order is not None:
-                s_order = self.start_order
-            if self.end_order is not None:
-                e_order = self.end_order
+            s_order = 0 if self.start_order is None else self.start_order
+            e_order = 69 if self.end_order is None else self.end_order
+            s_x_pos = 500 if self.start_x  is None else self.start_x
+            e_x_pos = 3500 if self.end_x is None else self.end_x
         else:
-            if self.start_order is not None and e_order >= self.start_order > s_order:
-                s_order = self.start_order
-            if self.end_order is not None and e_order > self.end_order >= s_order:
-                e_order = self.end_order
+            s_x_pos = self.start_x
+            e_x_pos = self.end_x
+            s_order = self.start_order
+            e_order = self.end_order
 
         if self.logger:
             self.logger.info("RadialVelocity: Start crorss correlation to find radial velocity... ")
