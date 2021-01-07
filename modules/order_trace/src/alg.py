@@ -24,6 +24,7 @@ class OrderTraceAlg:
 
     This module defines class 'OrderTraceAlg' and methods to extract order trace from 2D spectral fits image.
     The extraction steps include
+
         - locate clusters: smooth the image and convert image pixels to be either black or white ('1' or '0').
         - form clusters: find cluster units (each unit containing connected pixels with value '1').
         - clean the clusters: remove noisy clusters, trim noise from the clusters, split the clusters and clean the
@@ -40,7 +41,6 @@ class OrderTraceAlg:
         data (numpy.ndarray): 2D spectral data.
         config (configparser.ConfigParser): config context.
         logger (logging.Logger): Instance of logging.Logger.
-        data_range (list): data of area [x1, x2, y1, y2] to be processed
 
     Attributes:
         logger (logging.Logger): Instance of logging.Logger.
@@ -58,38 +58,27 @@ class OrderTraceAlg:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
         TypeError: If there is type error for `data`.
         Exception: If the size of `data` is less than 20 pixels by 20 pixels.
-        Exception: if there is wrong setting for `data_range`.
     """
 
     FIT_ERROR_TH = 2.5
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None, logger=None, data_range=None):
+    def __init__(self, data, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
-        if data_range is not None and (not isinstance(data_range, list) or len(data_range) != 4):
-            raise Exception('data range is set wrongly')
 
         ny, nx = np.shape(data)
         if ny <= 20 and nx <= 20:
             raise Exception('image data size is too small for order trace extraction')
 
-        if data_range is not None:
-            x1 = min(data_range[0], data_range[1])
-            x2 = max(data_range[0], data_range[1])
-            y1 = min(data_range[2], data_range[3])
-            y2 = max(data_range[2], data_range[3])
-            if x1 < 0 or x2 > nx or y1 < 0 or y2 > ny:
-                raise Exception('data range is set wrongly')
-            self.data_range = [y1, y2, x1, x2]
-        else:
-            self.data_range = [0, ny, 0, nx]
-
-        self.logger = logger
-        self.flat_data = data[self.data_range[0]:self.data_range[1], self.data_range[2]:self.data_range[3]]
-        self.original_size = [ny, nx]
         p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
+
+        # get data range from config file if it is defined in.
+        self.data_range = [0, ny - 1, 0, nx - 1]
+        self.logger = logger
+        self.flat_data = data
+        self.original_size = [ny, nx]
         self.instrument = p_config.get('instrument', '') if p_config is not None else ''
         ins = self.instrument.upper()
         self.config_param = config[ins] if ins and config.has_section(ins) else p_config
@@ -140,6 +129,36 @@ class OrderTraceAlg:
                 return self.config_param.get(param, default)
         else:
             return default
+
+    def set_data_range(self, data_range=None):
+        """Set data range to be processed
+
+        Args:
+            data_range (list): Area of the data, [x1, x2, y1, y2], to be processed. The column (or the row) is counted
+                            relatively from the first column (or the first row) in case the number is not less than
+                            0, otherwise the column (or the row) is counted from the last one.
+
+        Returns:
+            list: Data range position relative to the first column and first row of the raw image.
+        """
+
+        _, nx, ny = self.get_spectral_data()
+        if data_range is None or (not isinstance(data_range, list)) or len(data_range) != 4:
+            self.data_range = [0, ny - 1, 0, nx - 1]
+        else:
+            x1, x2 = sorted([data_range[i] if data_range[i] >= 0 else (nx + data_range[i]) for i in [0, 1]])
+            y1, y2 = sorted([data_range[i] if data_range[i] >= 0 else (ny + data_range[i]) for i in [2, 3]])
+            self.data_range = [y1, y2, x1, x2]
+
+        self.flat_data = self.flat_data[self.data_range[0]: (self.data_range[1] + 1),
+                                        self.data_range[2]: (self.data_range[3] + 1)]
+        return self.data_range
+
+    def get_data_range(self):
+        if self.data_range is None:
+            self.set_data_range()
+        return self.data_range
+
 
     def get_poly_degree(self):
         """Order of polynomial for order trace fitting.
@@ -284,12 +303,16 @@ class OrderTraceAlg:
         pos = np.where(imm > 0)
         return imm, pos[1], pos[0]
 
-    def locate_clusters(self):
+    def locate_clusters(self, img_rows_to_reset=None, img_cols_to_reset=None):
         """ Find cluster pixels from 2D data array.
 
         Perform smoothing method tpconvert the pixels to be 1 and 0 and find cluster pixels.
         Cluster pixels mean a set of pixels with value 1 and each pixel connects to at least one neighbor pixel
         in vertical, horizontal or in diagonal direction.
+
+        Args:
+            img_rows_to_reset (list, optional): collection of rows to be reest.
+            img_cols_to_reset (list, optional): collection of columns to be reest.
 
         Returns:
             dict: result of formed clusters, like::
@@ -317,12 +340,15 @@ class OrderTraceAlg:
         noise = self.get_config_value('locate_cluster_noise', 0.0)
         mask = self.get_config_value('cluster_mask', 1)
 
-        rows_str = self.get_config_value('rows_to_reset', '')
-        cols_str = self.get_config_value('cols_to_reset', '')
+        rows_str = self.get_config_value('rows_to_reset', '') if img_rows_to_reset is None \
+            else json.dumps(img_rows_to_reset)
+        cols_str = self.get_config_value('cols_to_reset', '') if img_cols_to_reset is None \
+            else json.dumps(img_cols_to_reset)
 
         o_row, o_col = self.original_size
         s_row, s_col = self.data_range[0], self.data_range[2]
 
+        # adjust rows and cols to reset based on the data rage
         rows_to_reset = None
         if rows_str:
             rows_list = json.loads(rows_str)
@@ -721,9 +747,9 @@ class OrderTraceAlg:
 
                     {
                        <cluster_id_i> int: <cleaning status> dict,
-                                    # <cluster_id_i> is cluster id of i-th cluster.
-                                    # <cleaning status> is cleaning status for the cluster
-                                    # See Returns in handle_noisy_cluster()
+                                # <cluster_id_i> is cluster id of i-th cluster.
+                                # <cleaning status> is cleaning status for the cluster
+                                # See Returns in handle_noisy_cluster()
                        :
                     }
 
@@ -2044,9 +2070,9 @@ class OrderTraceAlg:
                 [[<background_value_below_trace>_i, <background_value_above_trace>_i], .., ]
                 where
                     <background_value_below_trace>_i (float):
-                                        # background value below the trace at i-th x location.
+                                # background value below the trace at i-th x location.
                     <background_value_abobe_trace>_i (float):
-                                        # background value above the trace at i-th x location.
+                                # background value above the trace at i-th x location.
 
         """
 
@@ -2150,8 +2176,8 @@ class OrderTraceAlg:
         Fit the x, y set of data using Gaussian and find the width by looking at sigma of the Gaussian fit.
 
         Parameters:
-            x_set (np.ndarray): x data set.
-            y_set (np.ndarray): y data set.
+            x_set (numpy.ndarray): x data set.
+            y_set (numpy.ndarray): y data set.
             center_y (float): Estimation of y value at the center from `x_set`.
             xs (int): x location for `center_y`.
             sigma (float, optional): Magnitude of standard deviation to get the width. Defaults to 3.0.
@@ -2897,9 +2923,10 @@ class OrderTraceAlg:
 
         df = pd.DataFrame(trace_table)
         df.attrs['STARTROW'] = self.data_range[0]
-        df.attrs['ENDROW'] = self.data_range[1] - 1
+        df.attrs['ENDROW'] = self.data_range[1]
         df.attrs['STARTCOL'] = self.data_range[2]
-        df.attrs['ENDCOL'] = self.data_range[3] - 1
+        df.attrs['ENDCOL'] = self.data_range[3]
+        df.attrs['POLY_DEG'] = self.get_poly_degree()
         return df
 
     @staticmethod
@@ -2944,31 +2971,38 @@ class OrderTraceAlg:
         self.enable_debug_print(filename is not None)
         self.debug_output = filename
 
-    def extract_order_trace(self, power_for_width_estimation: int = -1, show_time: bool = False,
-                            print_debug: str = None):
+    def extract_order_trace(self, power_for_width_estimation: int = -1, data_range = None, show_time: bool = False,
+                            print_debug: str = None, rows_to_reset = None, cols_to_reset = None):
         """ Order trace extraction.
 
         The order trace extraction includes the steps to smooth the image, locate the clusters, form clusters,
         remove and trim noisy clusters, merge the clusters to form order traces, model the order trace using polynomial
         fit and find the top and bottom widths along the traces.
 
-        Parameters:
+        Args:
             power_for_width_estimation (int): Degree of polynomial fit for trace width estimation. Defaults to -1.
+            data_range (list): Area of the data, `x1, x2, y1, y2`, to be processed,
+                where *x1*, *y1* and *x2*, *y2* are the corner coordinates of the area.
+                *x1*, *x2* or *y1*, *y2* respectively represents the horizontal or vertical position relative to
+                the first column or row of the image when it is greater than or equal to 0, otherwise
+                the position relative to the last column or the last row.
             show_time (bool, optional): Show running time if True. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
                 a file with path `print_debug` if it is non empty string, or no print if it is None.
                 Defaults to None.
+            rows_to_reset (list, optional): Collection of rows to reset. Default to None.
+            cols_to_reset (list, optional): Collection of columns to reset. Default to None.
 
         Returns:
             dict: order trace extraction and analysis result, like::
 
                 {
                     'order_trace_result': Padas.DataFrame,
-                                            # table storing coefficients of polynomial
-                                            # fit, bottom/top width, and left/right boundary.
-                    'cluster_index': numpy.ndarray,  # Array of cluster id on cluster pixels.
-                    'cluster_x': numpy.ndarray,      # Array of x coordinates of cluster pixels.
-                    'cluster_y': numpy.ndarray       # Array of y coordinates of cluster pixels.
+                                          # table storing coefficients of polynomial
+                                          # fit, bottom/top width, and left/right boundary.
+                    'cluster_index': numpy.ndarray, # Array of cluster id of cluster pixels.
+                    'cluster_x': numpy.ndarray, # Array of x coordinates of cluster pixels.
+                    'cluster_y': numpy.ndarray  # Array of y coordinates of cluster pixels.
                 }
 
         """
@@ -2976,10 +3010,12 @@ class OrderTraceAlg:
         self.enable_time_profile(show_time)
         self.add_file_logger(print_debug)
 
+        self.set_data_range(data_range)
+
         t_start = time.time()
         # locate cluster
         self.d_print("*** locate cluster", info=True)
-        cluster_xy = self.locate_clusters()
+        cluster_xy = self.locate_clusters(rows_to_reset, cols_to_reset)
         t_start = self.time_check(t_start, '*** locate cluster: ')
 
         # assign cluster id and do basic cleaning
