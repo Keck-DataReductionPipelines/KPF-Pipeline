@@ -16,9 +16,10 @@
 
                     - `action.args[0] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing image data for order
                       trace extraction.
-                    - `action.args['data_row_range'] (list, optional)`: Row range of the level 0 data to be processed.
-                      If the number is less than 0, it stands for the position relative to the last row of the image.
-                    - `action.args['data_col_range'] (list, optional)`: column range of the level 0 data to be
+                    - `action.args['data_row_range'] (list, optional)`: Row coverage of the level 0 data to be
+                      processed. If the number is less than 0, it stands for the position relative to the last row
+                      of the image.
+                    - `action.args['data_col_range'] (list, optional)`: Column coverage of the level 0 data to be
                       processed. If the number is less than 0, it stands for the position relative to the last column
                       of the image.
 
