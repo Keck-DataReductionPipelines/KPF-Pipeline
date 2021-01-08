@@ -109,10 +109,10 @@ class OrderTrace(KPF0_Primitive):
             self.col_range = self.find_range(action.args['data_col_range'], col)
 
         if 'cols_to_reset' in args_keys and action.args['cols_to_reset'] is not None:
-            self.cols_to_reset =action.args['cols_to_reset']
+            self.cols_to_reset = action.args['cols_to_reset']
 
         if 'rows_to_reset' in args_keys and action.args['rows_to_reset'] is not None:
-            self.rows_to_reset =action.args['rows_to_reset']
+            self.rows_to_reset = action.args['rows_to_reset']
 
         self.flat_data = self.input.data
         # input configuration
@@ -132,7 +132,6 @@ class OrderTrace(KPF0_Primitive):
 
         # Order trace algorithm setup
         self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
-
 
     def _pre_condition(self) -> bool:
         """
@@ -172,7 +171,6 @@ class OrderTrace(KPF0_Primitive):
             self.logger.info("OrderTrace: assigning cluster id and cleaning...")
         x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
-        power = self.alg.get_poly_degree()
         # 3) advanced cleaning and border cleaning
         if self.logger:
             self.logger.info("OrderTrace: advanced cleaning...")
