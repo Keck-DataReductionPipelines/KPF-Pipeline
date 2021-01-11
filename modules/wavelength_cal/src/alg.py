@@ -128,37 +128,22 @@ class LFCWaveCalibration:
         """
         return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
 
-    def comb_gen(self,mode_nos):
-        """Generates comb wavelengths.
-
-        Args:
-            mode_nos (np.ndarray): Evenly spaced mode lines
-
-        Returns:
-            comb_lines_ang (np.ndarray): Comb wavelengths, in angstroms
+    def comb_gen(self,min_wave,max_wave):
         """
 
-        fn=self.f0+(mode_nos*self.f_rep)
-        ln=scipy.constants.c/fn
-        ln_ang=ln/(1e-10)
-
-        return ln_ang
-
-    def mode_nos(self,min_wave,max_wave):
-        """Generates comb lines.
-
-        Returns:
-            comb_lines_ang(np.ndarray): Comb wavelengths, in angstroms
-            mode_nos(np.ndarray): Evenly spaced mode lines
+        Args:
+            min_wave (np.float): Minimum of wavelength range
+            max_wave (np.float): Maximum of wavelength range
         """
         mode_start=np.int((((scipy.constants.c*1e10)/min_wave)-self.f0)/self.f_rep)
         mode_end=np.int((((scipy.constants.c*1e10)/max_wave)-self.f0)/self.f_rep)
-
         mode_nos=np.arange(mode_start,mode_end,-1)
-        comb_lines_ang=comb_gen(mode_nos,self.f0,self.f_rep)
+
+        fxn=self.f0+(mode_nos*self.f_rep)
+        ln=scipy.constants.c/fxn
+        comb_lines_ang=ln/(1e10)
 
         return comb_lines_ang
-
 
     def mode_match(self,comb_lines_ang,peaks):
         #peak_hght from find_peaks
@@ -213,4 +198,3 @@ class LFCWaveCalibration:
         residual =((new_pos-wavelengths)*scipy.constants.c)/wavelengths
         std_resid=np.std(residual)
         return std_resid
-
