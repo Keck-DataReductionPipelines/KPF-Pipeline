@@ -104,7 +104,7 @@ class WaveCalibrate(KPF0_Primitive):
         #1 mode_nos
         if self.logger:
             self.logger.info("Wavelength Calibration: Generating comb lines")
-        clines_ang= self.alg.mode_nos(self.min_wave,self.max_wave,self.f0,self.f_rep)
+        clines_ang= self.alg.comb_gen(self.min_wave,self.max_wave)
 
         #output comb_lines_ang to steps 3,4,5
 
@@ -129,6 +129,6 @@ class WaveCalibrate(KPF0_Primitive):
         #5 residuals 
         if self.logger:
             self.logger.info("Wavelength Calibration: Calculating residual standard deviation")
-        self.alg.residuals(clines_ang,idx,wave_soln,peaks)
+        resids=self.alg.residuals(clines_ang,idx,wave_soln,peaks)
 
         return Arguments(self.alg.poly_fit())
