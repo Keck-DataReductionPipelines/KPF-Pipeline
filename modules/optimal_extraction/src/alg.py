@@ -123,6 +123,11 @@ class OptimalExtractionAlg:
         self.dim_height = rows
 
         self.poly_order = order_trace_header['POLY_DEG'] if 'POLY_DEG' in order_trace_header else 3
+
+        # origin of the image
+        self.origin = [ order_trace_header['STARTCOL'] if 'STARTCOL' in order_trace_header else 0,
+                        order_trace_header['STARTROW'] if 'STARTROW' in order_trace_header else 0]
+
         p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
         self.instrument = p_config.get('instrument', '') if p_config is not None else ''
         ins = self.instrument.upper()
@@ -139,6 +144,7 @@ class OptimalExtractionAlg:
         self.is_debug = True if self.logger else False
         self.debug_output = None
         self.is_time_profile = False
+        self.total_orderlettes = None
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -206,6 +212,17 @@ class OptimalExtractionAlg:
         if idx >= self.total_order or idx < 0:
             idx = 0
         return self.order_xrange[idx, :]
+
+    def get_total_orderlettes(self):
+        """Get the total orderlettes of the order trace.
+
+        Returns:
+            int: total orderlettes
+        """
+        if self.total_orderlettes is None:
+            self.total_orderlettes = self.get_config_value('total_orderlettes', 1)
+
+        return self.total_orderlettes
 
     def get_spectrum_size(self):
         """ Get the dimension of the spectrum data.
@@ -386,16 +403,18 @@ class OptimalExtractionAlg:
         x_step = self.get_input_pos(x_output_step, sampling_rate[self.X])    # x step in input domain
 
         # x step compliant to xrange
-        x_step = x_step[np.where(np.logical_and(x_step >= xrange[0], x_step <= xrange[1]))[0]]
+        x_o = self.origin[self.X]
+        x_step = x_step[np.where(np.logical_and(x_step >= (xrange[0]+x_o), x_step <= (xrange[1]+x_o)))[0]]
         x_output_step = self.get_output_pos(x_step, sampling_rate[self.X]).astype(int)
 
-        y_mid = np.polyval(coeffs, x_step)                                    # y position of spectral trace
+        y_mid = np.polyval(coeffs, x_step-x_o) + self.origin[self.Y]  # y position of spectral trace
         v_border = np.array([np.amax(y_mid), np.amin(y_mid)])
         # the vertical position to locate the order in output domain
         y_output_mid = math.floor(np.mean(v_border)*sampling_rate[self.Y])    # a number, output y center
         # self.d_print('y_output_mid: ', y_output_mid)
 
         output_widths = self.get_output_pos(widths, sampling_rate[self.Y]).astype(int)  # width of output
+        # output_widths = np.around(self.get_output_pos(widths, sampling_rate[self.Y])).astype(int)
         upper_width = min(output_widths[1], output_y_dim - 1 - y_output_mid)
         lower_width = min(output_widths[0], y_output_mid)
         # self.d_print('no rectify: width at output: ', upper_width, lower_width)
@@ -423,6 +442,7 @@ class OptimalExtractionAlg:
                 else:
                     out_data[i][y_input_idx, o_x] = data_group[i][y_input, x_i]
 
+        # out data starting from origin [0, 0] contains the reduced flux associated with the data range
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
                        'dim': [output_y_dim, output_x_dim],
@@ -482,17 +502,21 @@ class OptimalExtractionAlg:
         x_step = self.get_input_pos(x_output_step, sampling_rate[self.X])  # x step in input domain
 
         # x step compliant to xrange
-        x_step = x_step[np.where(np.logical_and(x_step >= xrange[0], x_step <= (xrange[1]+1)))[0]]
+        x_o = self.origin[self.X]
+        x_step = x_step[np.where(np.logical_and(x_step >= (xrange[0]+x_o), x_step <= (xrange[1]+x_o+1)))[0]]
         x_output_step = self.get_output_pos(x_step, sampling_rate[self.X]).astype(int)
-        y_mid = np.polyval(coeffs, x_step)          # spectral trace value at mid point
+
+        y_mid = np.polyval(coeffs, x_step-x_o) + self.origin[self.Y]      # spectral trace value at mid point
 
         # y_output_step = np.arange(0, output_y_dim+1, dtype=int)
         # y_step = self.get_input_pos(y_output_step, sampling_rate[self.Y])  # y step in input domain
 
         if direction == self.NORMAL:
-            y_norm_step = self.poly_normal(x_step, coeffs, sampling_rate[self.Y])   # curve norm along x in input domain
+            # curve norm along x in input domain
+            y_norm_step = self.poly_normal(x_step-x_o, coeffs, sampling_rate[self.Y])
         else:
-            y_norm_step = self.vertical_normal(x_step, sampling_rate[self.Y])   # vertical norm along x in input domain
+            # vertical norm along x in input domain
+            y_norm_step = self.vertical_normal(x_step-x_o, sampling_rate[self.Y])
 
         v_border = np.array([np.amax(y_mid), np.amin(y_mid)])
         # self.d_print('v_border: ', v_border)
@@ -505,7 +529,7 @@ class OptimalExtractionAlg:
         lower_width = min(output_widths[0], y_output_mid)
         self.d_print('rectify: width at output: ', upper_width, lower_width)
 
-        corners_at_mid = np.vstack((x_step, y_mid)).T
+        corners_at_mid = np.vstack((x_step, y_mid)).T     # for x and y in data range, relative to 2D origin [0, 0]
         # self.d_print('corners_at_mid: ', corners_at_mid)
 
         y_size = 1 if sum_extraction is True else (upper_width+lower_width)
@@ -527,7 +551,7 @@ class OptimalExtractionAlg:
 
         upper_pixels = list(range(lower_width, upper_width + lower_width))
         lower_pixels = list(range(lower_width - 1, -1, -1))
-        for i, o_x in enumerate(x_output_step[0: -1]):
+        for i, o_x in enumerate(x_output_step[0:-1]):    # for x output associated with the data range
             # if i % 100 == 0:
             #    print(i, end=" ")
              if direction == self.NORMAL or direction == self.VERTICAL:
@@ -550,27 +574,21 @@ class OptimalExtractionAlg:
                         # adjust v1 and v2 in clockwise direction
                         for n in [self.V_DOWN, self.H_LEFT]:
                             borders[n][self.V1],  borders[n][self.V2] = borders[n][self.V2], borders[n][self.V1]
-                        # stime = time.time()
                         flux = self.compute_flux_for_output_pixel(borders, data_group, total_data_group)
-                        # self.time_check(stime, "time for one output flux ")
                         for n in range(0, total_data_group):
                             if sum_extraction is True:
                                 out_data[n][0, o_x] += flux[n]
                             else:
                                 out_data[n][o_y, o_x] = flux[n]
-                # self.time_check(ctime, 'time for one column output ')
-        # print(' ')
 
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
                        'dim': [output_y_dim, output_x_dim],
                        'out_data': [out_data[i] for i in range(0, total_data_group)]}
-
         return result_data
 
     def intersect_cell_borders(self, vertex_1, vertex_2):
-        """ Find out the intersection of a line segment with the horizontal and vertical grid lines of the
-            input pixels.
+        """Find out the intersection of a line segment with the horizontal and vertical grid lines.
 
         Args:
             vertex_1 (list): End point 1 of the line segment.
@@ -1380,6 +1398,8 @@ class OptimalExtractionAlg:
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
         df_result.attrs['DIMWIDTH'] = dim_width
+        df_result.attrs['FROMIMGX'] = self.origin[self.X]
+        df_result.attrs['FROMIMGY'] = self.origin[self.Y]
 
         return df_result
 
@@ -1460,10 +1480,7 @@ class OptimalExtractionAlg:
         dim_width, dim_height = self.get_spectrum_size()
         total_order = self.get_spectrum_order()
         if order_set is None:
-            if self.instrument and self.get_instrument().upper() == 'NEID':
-                order_set = np.arange(0, total_order, 2, dtype=int)
-            else:
-                order_set = np.arange(0, total_order, dtype=int)
+            order_set = np.arange(0, total_order, self.get_total_orderlettes(), dtype=int)
 
         out_data = np.zeros((order_set.size, dim_width))
 

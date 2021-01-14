@@ -103,7 +103,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.end_order = ny-1
         self.spectrum_order = ny
         self.start_x_pos = 0
-        self.end_x_pos = nx
+        self.end_x_pos = nx-1
         self.spectro = self.rv_config[RadialVelocityAlgInit.SPEC].lower() \
             if RadialVelocityAlgInit.SPEC in self.rv_config else 'neid'
 
@@ -121,39 +121,46 @@ class RadialVelocityAlg(RadialVelocityBase):
         ny, nx = np.shape(self.spectrum_data)
         return self.spectrum_data, nx, ny
 
-    def set_order_range(self, lower_order=-1, upper_order=-1):
+    def set_order_range(self, lower_order=None, upper_order=None):
         """Set the order range for radial velocity calculation.
 
         Args:
-            lower_order (int, optional): Start order to be processed. Defaults to -1, meaning no change.
-            upper_order (int, optional): End order to be processed. Defaults to -1, meaning no change.
+            lower_order (int, optional): Start order to be processed. Defaults to None, meaning no change.
+            upper_order (int, optional): End order to be processed. Defaults to None, meaning no change.
 
         """
-        if lower_order >= 0:
-            self.start_order = lower_order
-        if upper_order >= 0:
-            self.end_order = upper_order
+
+        _, _, ny = self.get_spectrum()
+
+        if lower_order is not None:
+            self.start_order = lower_order if lower_order >= 0 else (ny + lower_order)
+        if upper_order is not None:
+            self.end_order = upper_order if upper_order >= 0 else (ny + upper_order)
 
         if self.end_order < self.start_order:
-            self.end_order = self.start_order
+            self.start_order, self.end_order = self.end_order, self.start_order
 
         self.spectrum_order = self.end_order - self.start_order + 1
 
-    def set_x_range(self, x1=-1, x2=-1):
+    def set_x_range(self, x1=None, x2=None):
         """Set the x range for radial velocity calculation.
 
         Args:
-            x1 (int, optional): Start x position. Defaults to -1, meaning no change.
-            x2 (int, optional): End x position. Defaults to -1, meaning no change.
+            x1 (int, optional): Start x position. Defaults to None, meaning no change.
+            x2 (int, optional): End x position. Defaults to None, meaning no change.
 
         """
-        if x1 >= 0:
-            self.start_x_pos = x1
-        if x2 >= 0:
-            self.end_x_pos = x2
+
+        _, nx, _ = self.get_spectrum()
+
+        if x1 is not None:
+            self.start_x_pos = x1 if x1 >= 0 else (nx + x1)
+
+        if x2 is not None:
+            self.end_x_pos = x2 if x2 >= 0 else (nx + x2)
 
         if self.end_x_pos < self.start_x_pos:
-            self.end_x_pos = self.start_x_pos
+            self.end_x_pos, self.start_x_pos = self.start_x_pos, self.end_x_pos
 
     def get_obs_time(self, default=None):
         """Get Observation time in Julian Date format.
@@ -279,7 +286,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         return wave_cals
 
-    def get_rv_on_spectrum(self, ref_ccf=None, start_x=-1, end_x=-1, start_order=-1, end_order=-1, order_diff=0):
+    def get_rv_on_spectrum(self, ref_ccf=None, start_x=None, end_x=None, start_order=None, end_order=None,
+                           order_diff=0):
         """Radial velocity analysis.
 
         Compute radial velocity of all orders based on level 1 data, wavelength calibration,
@@ -288,10 +296,17 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         Args:
             ref_ccf (array, optional): Reference to scale the cross correlation results. Defaults to None. 
-            start_x (int, optional): Start horizontal position of the data to be processed. Defaults to -1.
-            end_x (int, optional): End horizontal position of the data to be processed. Defaults to -1.
-            start_order (int, optional): Start order of the data to be processed. Defaults to -1.
-            end_order (int, optional): End order of the data to be processed. Defaults to -1.
+            start_x (int, optional): Start horizontal position of the data to be processed. Defaults to None.
+                                    The number means the position relative to the first pixel of the same order
+                                    if it is greater than or equal to 0, otherwise it means the position relative to
+                                    the last pixel.
+            end_x (int, optional): End horizontal position of the data to be processed. Defaults to None.
+                                The number has the same meaning as that of `start_x`.
+            start_order (int, optional): Start order of the data to be processed. Defaults to Noe.
+                                The number means the order relative to the first one if it is greater than or equal
+                                to 0, otherwise it means the order relative to the last one.
+            end_order (int, optional): End order of the data to be processed. Defaults to None.
+                                The number has the same meaning as that of `start_order`.
             order_diff (int, optional): The offset alignment between the spectrum data and reference data,
                     i.e. <order in `ref_ccf`> = `order_diff` + <order in spectrum>. Defaults to 0.
 
@@ -321,15 +336,15 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.set_x_range(start_x, end_x)
 
         s_x = self.start_x_pos
-        e_x = self.end_x_pos
+        e_x = self.end_x_pos+1
 
         spectrum, nx, ny = self.get_spectrum()
         spectrum_x = np.arange(nx)[s_x:e_x]
 
         s_order = self.start_order
-        e_order = s_order + self.spectrum_order - 1
+        e_order = self.end_order+1
 
-        new_spectrum = spectrum[s_order:e_order + 1, s_x:e_x]
+        new_spectrum = spectrum[s_order:e_order, s_x:e_x]
         result_ccf = np.zeros([self.spectrum_order + self.ROWS_FOR_ANALYSIS, self.velocity_steps])
         wavecal_all_orders = self.wavelength_calibration(spectrum_x)
 
@@ -573,7 +588,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         return results
 
-    def compute_rv_by_cc(self, start_x=-1, end_x=-1, start_order=-1, end_order=-1,
+    def compute_rv_by_cc(self, start_x=None, end_x=None, start_order=None, end_order=None,
                          order_diff=0, ref_ccf=None, print_progress=None):
         """Compute radial velocity by using cross correlation method.
 
@@ -581,10 +596,17 @@ class RadialVelocityAlg(RadialVelocityBase):
         and output the result in both numpy array and Pandas DataFrame styles.
 
         Args:
-            start_x (int, optional): Start horizontal (x) position of the data. Defaults to -1.
-            end_x (int, optional): End horizontal (x) position of the data. Defaults to -1.
-            start_order (int, optional): Start order of the data. Defaults to -1.
-            end_order (int, optional): End order of the data. Defaults to -1.
+            start_x (int, optional): Start horizontal (x) position of the data. Defaults to None.
+                            The number means the position relative to the first pixel of the same order
+                            if it is greater than or equal to 0, otherwise it means the position relative to the last
+                            pixel.
+            end_x (int, optional): End horizontal (x) position of the data. Defaults to None.
+                            The number has the same meaning as that of `start_x`.
+            start_order (int, optional): Start order of the data. Defaults to None.
+                            The number means the order relative to the first one if it is greater than or equal to 0,
+                            otherwise it means the order relative to the last one.
+            end_order (int, optional): End order of the data. Defaults to None.
+                            The number has the same meaning as that of `start_order`.
             order_diff (int, optional): Order difference between spectrum data and the
                 reference data, i.e. <order in ref> = `order_diff` + <order in spectrum>.
                 Defaults to 0.
