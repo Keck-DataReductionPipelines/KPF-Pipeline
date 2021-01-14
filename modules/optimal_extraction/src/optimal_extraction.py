@@ -96,10 +96,10 @@ class OptimalExtraction(KPF0_Primitive):
 
     OrderMap = {
                     'PARAS': {
-                            'total_order_name': 1, 'first_order': {'SCI1': 0}
+                            'first_order': {'SCI1': 0}, 'wave_start_order': {'SCI1': 0}
                     },
                     'NEID': {
-                            'total_order_name': 2, 'first_order': {'SCI1': 0}, 'wave_start_order': {'SCI1': 7}
+                            'first_order': {'SCI1': 0}, 'wave_start_order': {'SCI1': 7}
                     }
                 }
     default_agrs_val = {
@@ -193,7 +193,7 @@ class OptimalExtraction(KPF0_Primitive):
         assert(ins in self.OrderMap.keys())
 
         order_info = self.OrderMap[ins]
-        total_order_name = order_info['total_order_name'] if 'total_order_name' in order_info else 1
+        total_order_name = self.alg.get_total_orderlettes()
         total_spectrum_order = self.alg.get_spectrum_order()
         assert(self.order_name in order_info['first_order'])
 
@@ -233,7 +233,8 @@ class OptimalExtraction(KPF0_Primitive):
         wave_data = None
         wave_header = None
 
-        kpf1_wave = KPF1.from_fits(self.wavecal_fits, ins)
+        # kpf1_wave = KPF1.from_fits(self.wavecal_fits, ins)
+        kpf1_wave =  level1_sample
         if self.order_name in kpf1_wave.data.keys() and level1_sample.data[self.order_name] is not None:
             wave_data = kpf1_wave.data[self.order_name][1, :, :]
             wave_header = kpf1_wave.header[self.order_name + '_WAVE']
@@ -243,7 +244,9 @@ class OptimalExtraction(KPF0_Primitive):
         if wave_data is not None and wave_header is not None:
             # wavecal header is empty or data is empty
             order_info = self.OrderMap[ins]
-            wave_start = order_info['wave_start_order'][self.order_name] \
+            # extract wave calibration starting from the first order + the order diff. between the order trace table
+            # and the L1 sample data.
+            wave_start = self.start_order+order_info['wave_start_order'][self.order_name] \
                 if self.order_name in order_info['wave_start_order'] else 0
             wave_end = min(wave_start + total_order, np.shape(wave_data)[0])
             level1_obj.data[self.order_name][1, 0:(wave_end-wave_start), :] = wave_data[wave_start:wave_end, :]

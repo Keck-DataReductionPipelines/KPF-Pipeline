@@ -1,0 +1,27 @@
+test_data_dir = KPFPIPE_TEST_DATA + '/NEIDdata' 
+data_type = config.ARGUMENT.data_type
+output_dir = config.ARGUMENT.output_dir
+
+input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
+input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
+input_lev1_prefix = config.ARGUMENT.input_lev1_file_prefix
+
+obs_list = config.ARGUMENT.obs_list
+flat_stem_suffix = config.ARGUMENT.output_flat_suffix
+lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
+lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
+
+max_result_order = config.ARGUMENT.max_result_order
+start_result_order = config.ARGUMENT.start_result_order
+rect_method = config.ARGUMENT.rectification_method
+order_name = config.ARGUMENT.order_name
+
+row_range = config.ARGUMENT.row_range
+col_range = config.ARGUMENT.col_range
+
+rv_start_order = config.ARGUMENT.rv_start_order
+rv_end_order = config.ARGUMENT.rv_end_order
+
+invoke_subrecipe("./examples/data_range_test/test_order_trace_part.recipe")
+invoke_subrecipe("./examples/data_range_test/test_optimal_extraction_part.recipe")
+invoke_subrecipe("./examples/data_range_test/test_neid_radial_velocity_part.recipe")
