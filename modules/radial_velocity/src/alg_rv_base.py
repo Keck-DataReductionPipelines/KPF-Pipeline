@@ -1,5 +1,5 @@
 import configparser
-
+from modules.Utils.config_parser import ConfigHandler
 
 class RadialVelocityBase:
     """Base class for Radial Velocity related classes.
@@ -14,7 +14,7 @@ class RadialVelocityBase:
     Attributes:
         logger (logging.Logger): From parameter `logger`.
         instrument (str): Instrument name.
-        config_param (configparser.SectionProxy): Instance representing the section defined in the configuration file.
+        config_param (ConfigHandler): Instance representing the section defined in the configuration file.
         is_debug (bool): A flag indicating if doing the logging or displaying the debugging information.
         debug_output (str): File path of the file that the debug information is printed to. The printing goes to
             standard output if it is an  empty string or no printing is made if it is None.
@@ -23,10 +23,10 @@ class RadialVelocityBase:
 
     def __init__(self, config=None, logger=None):
         self.logger = logger
-        p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
-        self.instrument = p_config.get('instrument', '') if p_config is not None else ''
+        p_config = ConfigHandler(config, 'PARAM')
+        self.instrument = p_config.get_config_value('instrument', '')
         ins = self.instrument.upper()
-        self.config_param = config[ins] if ins and config.has_section(ins) else p_config
+        self.config_param = ConfigHandler(config, ins, p_config)  # section of instrument or 'PARAM'
 
         self.is_debug = bool(self.logger)
         self.debug_output = None

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_rv_mask_line import RadialVelocityMaskLine
 from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVelCorrection
+from modules.Utils.config_parser import ConfigHandler
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -144,8 +145,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         config_star = None
         if star_config_file is not None:
             f_config = configparser.ConfigParser()
-            if len(f_config.read(self.test_data_dir + star_config_file)) > 0 and f_config.has_section(star_name):
-                config_star = f_config[star_name]
+            l = len(f_config.read(self.test_data_dir + star_config_file))
+            s_config = f_config.read(self.test_data_dir + star_config_file)
+            config_star = ConfigHandler(s_config, star_name)
 
         star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX)
 
@@ -272,7 +274,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         Args:
             prop (str): Name of the parameter to be searched.
             default (Union[int, float, str, bool], optional): Default value for the searched parameter.
-            config (configparser.SectionProxy): External config, such as star config for NEID.
+            config (ConfigHandler): External config, such as star config for NEID.
         Returns:
             Union[int, float, str, bool]: Value for the searched parameter.
 
@@ -280,6 +282,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if config is None:
             config = self.config_param
 
+        return config.get_config_value(prop, default)
+
+        """
         if config is not None:
             if isinstance(default, bool):
                 return config.getboolean(prop, default)
@@ -290,6 +295,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             else:
                 return config.get(prop, default)
         return default
+        """
 
     def get_reweighting_ccf_method(self, default_method='ccf_max'):
         """ Get the ccf reweighting method.

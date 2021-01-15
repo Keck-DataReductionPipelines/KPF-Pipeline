@@ -6,6 +6,8 @@ from astropy.modeling import models, fitting
 import csv
 import time
 import pandas as pd
+from configparser import ConfigParser
+from modules.Utils.config_parser import ConfigHandler
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -45,9 +47,9 @@ class OrderTraceAlg:
     Attributes:
         logger (logging.Logger): Instance of logging.Logger.
         instrument (str): Imaging instrument.
-        config_param (configparser.SectionProxy): Related to 'PARAM' section or section associated with the instrument
+        config_param (ConfigHandler): Related to 'PARAM' section or section associated with the instrument
             if it is defined in the config file.
-        config_logger (configparser.SectionProxy): Related to 'LOGGER' section defined in the config file.
+        config_logger (ConfigHandler): Related to 'LOGGER' section defined in the config file.
         flat_data (numpy.ndarray): Numpy array storing 2d image data.
         debug_output (str): File path for the file that the debug information is printed to. The printing goes to
             standard output if it is an empty string or no printing is made if it is None.
@@ -56,7 +58,7 @@ class OrderTraceAlg:
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
-        TypeError: If there is type error for `data`.
+        TypeError: If there is type error for `data` or `config`.
         Exception: If the size of `data` is less than 20 pixels by 20 pixels.
     """
 
@@ -67,23 +69,26 @@ class OrderTraceAlg:
     def __init__(self, data, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
+        if not isinstance(config, ConfigParser):
+            raise TypeError('config type error, cannot construct object from OrderTraceAlg')
 
         ny, nx = np.shape(data)
         if ny <= 20 and nx <= 20:
             raise Exception('image data size is too small for order trace extraction')
 
-        p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
 
         # get data range from config file if it is defined in.
         self.data_range = [0, ny - 1, 0, nx - 1]
         self.logger = logger
         self.flat_data = data
         self.original_size = [ny, nx]
-        self.instrument = p_config.get('instrument', '') if p_config is not None else ''
+
+        config_h = ConfigHandler(config, 'PARAM')
+        self.instrument = config_h.get_config_value('instrument', '')
         ins = self.instrument.upper()
-        self.config_param = config[ins] if ins and config.has_section(ins) else p_config
-        self.config_logger = config['LOGGER'] if config is not None and config.has_section('LOGGER') else None
-        self.debug_output = None
+        self.config_param = ConfigHandler(config, ins, config_h)  # section of instrument or 'PARAM'
+        self.config_logger = ConfigHandler(config, 'LOGGER') # section of 'LOGGER'
+
         self.is_time_profile = False
         self.is_debug = True if self.logger else False
 
@@ -109,7 +114,7 @@ class OrderTraceAlg:
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
 
-        Search the value of the specified property fom config section. The default value is returned if no found.
+        Search the value of the specified property from config section. The default value is returned if no found.
 
         Args:
             param (str): Name of the parameter to be searched.
@@ -119,16 +124,8 @@ class OrderTraceAlg:
             int/float/str: Value for the searched parameter.
 
         """
+        return self.config_param.get_config_value(param, default)
 
-        if self.config_param is not None:
-            if isinstance(default, int):
-                return self.config_param.getint(param, default)
-            elif isinstance(default, float):
-                return self.config_param.getfloat(param, default)
-            else:
-                return self.config_param.get(param, default)
-        else:
-            return default
 
     def set_data_range(self, data_range=None):
         """Set data range to be processed
