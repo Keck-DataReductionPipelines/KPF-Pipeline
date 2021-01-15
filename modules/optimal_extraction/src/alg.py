@@ -5,6 +5,7 @@ import time
 import pandas as pd
 from astropy.io import fits
 import re
+from modules.Utils.config_parser import ConfigHandler
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -61,7 +62,7 @@ class OptimalExtractionAlg:
         dim_width (int): Width of spectrum data/flat data.
         dim_height (int): Height of spectrum data/flat data.
         poly_order (int): Polynomial order for the approximation made on the order trace.
-        config_param (configparser.SectionProxy): Related to 'PARAM' section or the section associated with
+        config_param (ConfigHandler): Related to 'PARAM' section or the section associated with
             the instrument if it is defined in the config file.
         order_trace (numpy.ndarrary): Order trace results from order trace module including polynomial coefficients,
             top/bottom edges and  area coverage of the order trace.
@@ -128,10 +129,10 @@ class OptimalExtractionAlg:
         self.origin = [ order_trace_header['STARTCOL'] if 'STARTCOL' in order_trace_header else 0,
                         order_trace_header['STARTROW'] if 'STARTROW' in order_trace_header else 0]
 
-        p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
-        self.instrument = p_config.get('instrument', '') if p_config is not None else ''
+        config_h = ConfigHandler(config, 'PARAM')
+        self.instrument = config_h.get_config_value('instrument', '')
         ins = self.instrument.upper()
-        self.config_param = config[ins] if ins and config.has_section(ins) else p_config
+        self.config_param = ConfigHandler(config, ins, config_h)  # section of instrument or 'PARAM'
         self.total_order = np.shape(order_trace_data)[0]
         if isinstance(order_trace_data, pd.DataFrame):
             self.order_trace = order_trace_data.values
@@ -159,15 +160,9 @@ class OptimalExtractionAlg:
             Union[int, float, str]: Value for the searched parameter.
 
         """
-        if self.config_param is not None:
-            if isinstance(default, int):
-                return self.config_param.getint(prop, default)
-            elif isinstance(default, float):
-                return self.config_param.getfloat(prop, default)
-            else:
-                return self.config_param.get(prop, default)
-        else:
-            return default
+        print("prop: ", prop, " value:", self.config_param.get_config_value(prop, default))
+        return self.config_param.get_config_value(prop, default)
+
 
     def get_order_edges(self, idx=0):
         """ Get the top and bottom edges of the specified order.
@@ -1507,44 +1502,4 @@ class OptimalExtractionAlg:
         self.d_print(" ")
         data_df = self.write_data_to_dataframe(out_data)
         return {'optimal_extraction_result': data_df}
-
-    """
-    @staticmethod
-    def result_test(target_file, data_result):
-        target_data = fits.getdata(target_file)
-        t_y, t_x = np.shape(target_data)
-        r_y, r_x = np.shape(data_result)
-
-        if t_y != r_y or t_x != r_x:
-            return {'result': 'error', 'msg': 'dimension is not the same'}
-
-        not_nan_data_idx = np.argwhere(~np.isnan(data_result))
-        not_nan_target_idx = np.argwhere(~np.isnan(target_data))
-
-        if np.size(not_nan_data_idx) != np.size(not_nan_target_idx):
-            return {'result': 'error', 'msg': 'NaN data different'}
-        elif np.size(not_nan_data_idx) != 0:
-            if not (np.array_equal(not_nan_data_idx, not_nan_target_idx)):
-                return {'result': 'error', 'msg': 'NaN data different'}
-            else:
-                not_nan_target = target_data[~np.isnan(target_data)]
-                not_nan_data = data_result[~np.isnan(data_result)]
-                diff_idx = np.where(not_nan_target - not_nan_data)[0]
-
-                if diff_idx.size > 0:
-                    return {'result': 'error', 'msg': 'data is not the same at ' + str(diff_idx.size) + ' points'}
-
-        return {'result': 'ok'}
-    """
-    """
-    @staticmethod
-    def update_wavecal_from_existing_L1(fiber, wave_key, L1_wave_data, header, data_obj, header_obj,
-                                        wave_start_order=0):
-        wave_end_order = min(np.shape(data_obj[fiber][1, :, :])[0] + wave_start_order,
-                             np.shape(L1_wave_data[fiber][1, :, :])[0])
-        data_obj[fiber][1, :, :] = L1_wave_data[fiber][1, wave_start_order:wave_end_order, :]
-        header_obj[wave_key] = header[wave_key]
-        header_obj[fiber+'_FLUX']['SSBZ100'] = header['PRIMARY']['SSBZ100']
-        header_obj[fiber+'_FLUX']['SSBJD100'] = header['PRIMARY']['SSBJD100']
-    """
 
