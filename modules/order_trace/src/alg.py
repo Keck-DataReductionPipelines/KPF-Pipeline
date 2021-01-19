@@ -76,7 +76,6 @@ class OrderTraceAlg:
         if ny <= 20 and nx <= 20:
             raise Exception('image data size is too small for order trace extraction')
 
-
         # get data range from config file if it is defined in.
         self.data_range = [0, ny - 1, 0, nx - 1]
         self.logger = logger
@@ -88,7 +87,7 @@ class OrderTraceAlg:
         ins = self.instrument.upper()
         self.config_param = ConfigHandler(config, ins, config_h)  # section of instrument or 'PARAM'
         self.config_logger = ConfigHandler(config, 'LOGGER') # section of 'LOGGER'
-
+        self.debug_output = None
         self.is_time_profile = False
         self.is_debug = True if self.logger else False
 
@@ -126,7 +125,6 @@ class OrderTraceAlg:
         """
         return self.config_param.get_config_value(param, default)
 
-
     def set_data_range(self, data_range=None):
         """Set data range to be processed
 
@@ -155,7 +153,6 @@ class OrderTraceAlg:
         if self.data_range is None:
             self.set_data_range()
         return self.data_range
-
 
     def get_poly_degree(self):
         """Order of polynomial for order trace fitting.
