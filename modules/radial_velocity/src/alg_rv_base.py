@@ -1,6 +1,7 @@
 import configparser
 from modules.Utils.config_parser import ConfigHandler
 
+
 class RadialVelocityBase:
     """Base class for Radial Velocity related classes.
 

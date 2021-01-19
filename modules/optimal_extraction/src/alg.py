@@ -132,7 +132,8 @@ class OptimalExtractionAlg:
         config_h = ConfigHandler(config, 'PARAM')
         self.instrument = config_h.get_config_value('instrument', '')
         ins = self.instrument.upper()
-        self.config_param = ConfigHandler(config, ins, config_h)  # section of instrument or 'PARAM'
+        # section of instrument or 'PARAM'
+        self.config_param = ConfigHandler(config, ins, config_h)
         self.total_order = np.shape(order_trace_data)[0]
         if isinstance(order_trace_data, pd.DataFrame):
             self.order_trace = order_trace_data.values
@@ -160,9 +161,7 @@ class OptimalExtractionAlg:
             Union[int, float, str]: Value for the searched parameter.
 
         """
-        print("prop: ", prop, " value:", self.config_param.get_config_value(prop, default))
         return self.config_param.get_config_value(prop, default)
-
 
     def get_order_edges(self, idx=0):
         """ Get the top and bottom edges of the specified order.

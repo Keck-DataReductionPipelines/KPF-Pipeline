@@ -12,8 +12,6 @@ load_dotenv()
 pytest_dir = '/radial_velocity_test/for_pytest/'
 result_lev2_dir = '/NEIDdata/TAUCETI_20191217/L2/'
 result_data = os.getenv('KPFPIPE_TEST_DATA') + pytest_dir + 'neid_optimal_norm_fraction_023129_'
-# result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/radial_velocity/results/NEID/for_width_3/rv_output' + \
-#             'neid_optimal_norm_fraction_023129_'
 
 rv_fits = 'radial_velocity'
 s_order = 20

@@ -120,6 +120,7 @@ class OrderTrace(KPF0_Primitive):
             self.config_path = context.config_path['order_trace']
         except:
             self.config_path = DEFAULT_CFG_PATH
+
         self.config.read(self.config_path)
 
         # start a logger
