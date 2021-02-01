@@ -44,7 +44,12 @@ The recipe and config pairs to perform order trace, optimal extraction, radial v
   purpose: preform order trace, optimal extraction and radial velocity by specifying the data range and the order range.
   master recipe: test_neid_part.recipe
   subrecipe: test_order_trace_part.recipe, test_optimal_extraction_part.recipe, test_neid_radial_velocity_part.recipe
-  note: create folder test_result/neid_data_range under KPF-Pipeline to contain the results
+  note: create folder test_results/neid_data_range under KPF-Pipeline to contain the results
+
+- kpf examples/test_bc.recipe examples/default_bc.cfg
+  purpose: preform barycentric correction event by either taking the observaton configuration by using radial velocity init or from a configuration defined in default_bc.cfg (MODULE/barycentric_correction).
+  master recipe: test_bc.recipe
+  note: create folder test_results/neid under KPF-Pipeline to contain the results
 
 - default_recipe_test_neid.cfg, default_recipe_test_paras.cfg, and default_neid_hd127334.cfg are the configuration files used for recipe test,
   tests/regression/test_order_trace_recipe.py, tests/regression/test_optimal_extraction.recipe, tests/regression/test_radial_velocity_recipe.py and
