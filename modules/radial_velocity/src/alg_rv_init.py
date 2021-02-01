@@ -7,7 +7,7 @@ import json
 from dotenv import load_dotenv
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_rv_mask_line import RadialVelocityMaskLine
-from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVelCorrection
+from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
 from modules.Utils.config_parser import ConfigHandler
 
 # Pipeline dependencies
@@ -36,8 +36,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         rv_config (dict): A dict instance containing the values defined in radial velocity configuration file or star
             configuration file if there is. The instance includes the following keys (these are constants defined
             in the source):
-                `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, `T`,
+
+                `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, `STAR_RV`,
                 `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`, `AIR_TO_VACUUM`, `STEP_RANGE`.
+
         mask_path (str): Mask file path.
         velocity_loop (numpy.ndarray): Evenly spaced velocity steps.
         velocity_steps (int): Total steps in `velocity_loop`.
@@ -51,7 +53,11 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             percentile) or the mean ccf among selected orders from  the template observation and `ccf_steps`
             which scales the ccf of each order based on the mean of the ratio between current ccf over all velocity
             steps and that of the same order from the template observation.
-
+        bc_jd (float): Observation time in Julian Date format. Defaults to None.
+        bc_corr_path (str, optional): Path of csv file storing a list of redshift data from Barycentric correction
+            over a period of time. Defaults to None.
+        bc_corr_output (str, optional): Path of csv file to contain the redshift results from Barycentric correction
+            over a period of time. Defaults to None for no output.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -64,7 +70,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     STARNAME = 'starname'
     SPEC = 'instrument'
     STAR_CONFIG_FILE = 'star_config_file'
-    START_RV = 'start_rv'         # km/s
+    STAR_RV = 'star_rv'        # km/s    # star rv (could be an estimation)
     OBSLON = 'obslon'           # degree
     OBSLAT = 'obslat'           # degree
     OBSALT = 'obsalt'           # meters
@@ -87,8 +93,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     VELOCITY_LOOP = 'velocity_loop'
     VELOCITY_STEPS = 'velocity_steps'
     MASK_LINE = 'mask_line'
+    ZB_RANGE = 'zb_range'
 
-    def __init__(self, config=None, logger=None):
+    def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None):
         RadialVelocityBase.__init__(self, config, logger)
         if self.config_param is None or self.config_param.get_section() is None:
             raise Exception("No config is set")
@@ -98,15 +105,20 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if not os.path.isdir(self.test_data_dir):
             raise Exception('no test data directory found')
 
-        # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, start_rv, step,
-        # air_to_vacuum, step_range, mask_width
+        # instrument, starname, ra, dec, pm_ra, pm_dec, parallax, obslon, obslan, obsalt, star_rv, step,
+        # step_range, air_to_vacuum, mask_width
+        # star_config_file, default_mask
         self.rv_config = dict()
-        self.mask_path = None
-        self.velocity_loop = None   # loop of velocities for rv finding
-        self.velocity_steps = None  # total steps in velocity_loop
-        self.zb_range = None
-        self.mask_line = None       # def_mask,
+        self.mask_path = None       # from init_star_config()
+        self.velocity_loop = None   # loop of velocities for rv finding, from get_velocity_loop(), get_step_range()
+        self.velocity_steps = None  # total steps in velocity_loop, from get_velocity_steps(), get_velocity_loop()
+        self.zb_range = None        # redshift min and max, from get_redshift_range()
+        self.mask_line = None       # def_mask, from get_mask_line(), get_redshift_range()
         self.reweighting_ccf_method = None  # reweighting ccf orders method
+        self.bc_jd = bc_time       # starting time for Barycentric correction calculation in Julian Data format.
+        self.bc_corr_path = bc_corr_path
+        self.bc_corr_output = bc_corr_output
+        self.bc_period = bc_period
 
     @staticmethod
     def ret_status(msg='ok'):
@@ -138,8 +150,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if star_name is None:
             return self.ret_status(self.STARNAME + not_defined)
 
-        self.rv_config[self.STARNAME] = star_name
-        self.rv_config[self.SPEC] = self.instrument or 'neid'
+        self.rv_config[self.STARNAME] = star_name                       # in rv_config
+        self.rv_config[self.SPEC] = self.instrument or 'neid'           # in rv_config
         star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
 
         config_star = None
@@ -148,7 +160,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if len(f_config.read(self.test_data_dir + star_config_file)) == 1:
                 config_star = ConfigHandler(f_config, star_name)
 
-        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX)
+        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX)  # in rv_config
 
         for star_key in star_info:
             k_val = self.get_rv_config_value(star_key, config_star)
@@ -194,7 +206,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             The following attributes and values are updated,
 
                 * `rv_config`: values of `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`,
-                  `START_RV`, `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`,  `AIR_TO_VACUUM`, `STEP_RANGE`.
+                  `STAR_RV`, `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`,  `AIR_TO_VACUUM`, `STEP_RANGE`.
                 * `velocity_steps`
                 * `velocity_loop`
                 * `zb_range`
@@ -207,7 +219,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if not ret['status']:
             return self.ret_status(ret['msg'])
 
-        rv_keys = (self.START_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID)
+        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID) # in rv_config
         for rv_k in rv_keys:
             val = self.get_rv_config_value(rv_k)
             if val is None:
@@ -215,12 +227,12 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             else:
                 self.rv_config[rv_k] = float(val)
 
-        self.rv_config[self.AIR_TO_VACUUM] = self.get_rv_config_value(self.AIR_TO_VACUUM, default=False)
+        self.rv_config[self.AIR_TO_VACUUM] = self.get_rv_config_value(self.AIR_TO_VACUUM, default=False) # in rv_config
         self.get_reweighting_ccf_method()
         self.get_step_range()
-        self.get_velocity_loop()   # based on step_range and step, start_rv in rv_config
+        self.get_velocity_loop()   # based on step_range and step, star_rv in rv_config
         self.get_velocity_steps()  # based on velocity_loop
-        self.get_redshift_range(self.test_data_dir)         # get redshift from barycentric velocity correction
+        self.get_redshift_range()  # get redshift from barycentric velocity correction
         self.get_mask_line()       # based on mask_path, velocity loop and mask_width/vacuum_to_air
         return self.ret_status()
 
@@ -283,7 +295,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         return config.get_config_value(prop, default)
 
-
     def get_reweighting_ccf_method(self, default_method='ccf_max'):
         """ Get the ccf reweighting method.
 
@@ -323,7 +334,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if self.velocity_loop is None:
             v_range = self.get_step_range()
             self.velocity_loop = np.arange(v_range[0], v_range[1]) * self.rv_config[self.STEP] + \
-                self.rv_config[self.START_RV]
+                self.rv_config[self.STAR_RV]
         return self.velocity_loop
 
     def get_velocity_steps(self):
@@ -339,14 +350,15 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.velocity_steps = len(vel_loop)
         return self.velocity_steps
 
-    def get_redshift_range(self, data_dir=None, jd_time=2458591.5, period=380):
+    def get_redshift_range(self, bc_path=None, jd_time=None, period=None, bc_output=None):
         """ Get redshift range by using Barycentric velocity correction over a period of time.
 
         Args:
-            data_dir (str): Test data directory. Defaults to None.
-            jd_time (float, optional): Starting time for the period in Julian Date format.
-                Defaults to 2458591.5 (Apr-18-2019).
+            bc_path (str): The path of barycentric correction data over a period. Defaults to None.
+            jd_time (float, optional): Starting time for the period in Julian Date format. Defaults to None.
+                For example,  2458591.5 is for Apr-18-2019.
             period (int, optional): Period of days. Defaults to 380 (days).
+            bc_output (str): The path of the output for Barycentric correction results.
 
         Returns:
             numpy.ndarray: Minimum and maximum redshift over a period of time. The first number
@@ -354,15 +366,16 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         """
         rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.OBSLAT,
-                            self.OBSLON, self.OBSALT, self.START_RV]
+                            self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC]
 
         if self.zb_range is None:
-            rv_config_bc = dict()
-            for k in rv_config_bc_key:
-                rv_config_bc[k] = self.rv_config[k]
-            rv_bc_corr = RVBaryCentricVelCorrection()
-            self.zb_range = rv_bc_corr.get_zb_long(rv_config_bc, jd_time, period,
-                                                   instrument=self.rv_config[self.SPEC], data_dir=data_dir)
+            rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
+            rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc)
+            bc_path = bc_path or self.bc_corr_path
+            bc_output = bc_output or self.bc_corr_output
+            jd_time = jd_time or self.bc_jd
+            period = period or self.bc_period
+            self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
         return self.zb_range
 
     def get_mask_line(self):
@@ -386,8 +399,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         if self.mask_line is None:
             zb_range = self.get_redshift_range()
-            rv_maskline = RadialVelocityMaskLine()
-            self.mask_line = rv_maskline.get_mask_line(self.mask_path, self.get_velocity_loop(),
+            rv_mask_line = RadialVelocityMaskLine()
+            self.mask_line = rv_mask_line.get_mask_line(self.mask_path, self.get_velocity_loop(),
                                                        zb_range, self.rv_config[self.MASK_WID],
                                                        self.rv_config[self.AIR_TO_VACUUM])
 
@@ -405,8 +418,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         init_data = dict()
         # star, spectrograph, ra, dec, pm_ra, pm_dec, parallax, obslat, obslon, obsalt,
-        # start_rv in rv_config, mask_width, step, step_range
-        collection = [self.RV_CONFIG, self.MASK_LINE, self.VELOCITY_STEPS, self.VELOCITY_LOOP, self.REWEIGHTING_CCF]
+        # star_rv in rv_config, mask_width, step, step_range
+        collection = [self.RV_CONFIG, self.MASK_LINE, self.VELOCITY_STEPS,
+                      self.VELOCITY_LOOP, self.REWEIGHTING_CCF,
+                      self.ZB_RANGE]
 
         attrs = self.__dict__.keys()
         for c in collection:

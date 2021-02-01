@@ -52,7 +52,7 @@ def init_radial_velocity():
     config_neid = configparser.ConfigParser()
     config_neid['PARAM'] = {
         'starname': 'Tau Ceti',
-        'start_rv': -20,
+        'star_rv': -20,
         'obslon': -111.600562,
         'obslat': 31.958092,
         'obsalt': 2091.0,

@@ -38,7 +38,7 @@
             and the following attributes are defined to initialize the object,
 
                 - `input_spectrum (kpfpipe.models.level0.KPF0)`: Instance of `KPF0`, assigned by `actions.args[0]`.
-                - `input_flat (kpfpipe.models.level0.KPF0):  Instance of `KPF0`, assigned by `actions.args[1]`.
+                - `input_flat (kpfpipe.models.level0.KPF0)`:  Instance of `KPF0`, assigned by `actions.args[1]`.
                 - `order_name (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `max_result_order (int)`: Total orders to be processed.
