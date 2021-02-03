@@ -11,13 +11,13 @@ The recipe and config pairs to perform order trace, optimal extraction, radial v
   note: create folder test_results/neid under KPF-Pipeline to contain the results
 
 - kpf examples/test_neid_reweight.recipe  examples/default_neid.cfg
-  purpose: perform radial velocity and reweight ccf orders on level 1 data for NEID on target Tau Ceti
+  purpose: Reweight ccf orders while performing radial velocity for NEID on target Tau Ceti
   master recipe: test_neid_reweight.recipe
   subrecipes: test_neid_radial_velocity_reweight.recipe => computing radial velocity plus reweighting ccf orders based the given template observation.
   note: create folder test_results/neid under KPF-Pipeline to contain the results    
 
 - kpf examples/test_neid_reweight_2.recipe  examples/default_neid.cfg
-  purpose: find the template observation and reweight ccf orders on level 2 data  for NEID on target Tau Ceti
+  purpose: find the template observation and reweight ccf orders on level 2 data resulted from radial valocity computation for NEID on target Tau Ceti
   master recipe: test_neid_reweight.recipe
   subrecipes: test_neid_radial_velocity_reweight_2.recipe => finding the template observation and doing reweighting ccf orders on level 2 data after RV with no reweighting.
   note: create folder test_results/neid under KPF-Pipeline to contain the results
