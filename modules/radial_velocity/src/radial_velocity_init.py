@@ -108,7 +108,6 @@ class RadialVelocityInit(KPF_Primitive):
         self.bc_period = pd if pd is not None else 380
 
         # barycentric correction default period: 380 day, start date: apr-18-2019
-        self.bc_start_jd = st
         self.bc_data = action.args['bc_corr_path'] if 'bc_corr_path' in args_keys else None
         self.bc_output_data = None
 
