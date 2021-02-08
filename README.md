@@ -24,4 +24,3 @@ To install, clone the repository and navigate into it
     git clone https://github.com/California-Planet-Search/KPF-Pipeline.git
 
 Documentation is available on [ReadTheDocs](https://california-planet-search-kpf-pipeline.readthedocs-hosted.com/en/latest)
-
