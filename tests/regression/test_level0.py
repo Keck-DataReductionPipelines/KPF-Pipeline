@@ -116,8 +116,6 @@ def test_exceptions():
         # overwriting without setting overwrite to True
         data.read(os.path.join(fpath, f), 'NEID')
         
-    assert False
-
 if __name__ == '__main__':
     pass
     
