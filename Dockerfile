@@ -9,6 +9,11 @@ ENV COVERALLS_REPO_TOKEN=VDoVzb4ly0tzpBlgpp3oXsrZd39BZk30D
 ENV PYTHONPATH=$PYTHONPATH:/code/KPF-Pipeline
 ENV PYTHONHASHSEED=0
 
+# turn off built-in Python multithreading
+ENV MKL_NUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+ENV OMP_NUM_THREADS=1
+
 # setup the working directory
 RUN mkdir /code && \
     mkdir /code/KPF-Pipeline && \
