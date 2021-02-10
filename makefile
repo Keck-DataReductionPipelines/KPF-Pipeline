@@ -1,5 +1,4 @@
 init: 
-	git fetch; git pull
 	mkdir -p logs
 
 update: 
@@ -17,7 +16,7 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 regression_tests:
-	pytest -n=8 --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -n=16 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
