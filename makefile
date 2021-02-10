@@ -16,8 +16,12 @@ clean: clear
 	find . -name '*.pyc' -exec rm -f {} +
 	find . -name '*.pyo' -exec rm -f {} +
 
+docker:
+	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest make init regression_tests
+
 regression_tests:
-	pytest --workers auto --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest --workers 16 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
