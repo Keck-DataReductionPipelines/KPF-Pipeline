@@ -16,7 +16,7 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 regression_tests:
-	pytest -n=auto --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -n=8 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
