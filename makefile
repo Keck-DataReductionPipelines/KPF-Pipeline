@@ -1,5 +1,6 @@
 init: 
 	mkdir -p logs
+	pip3 install .
 
 update: 
 	pip3 install -r requirements.txt --upgrade
@@ -16,7 +17,7 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 regression_tests:
-	pytest -n=16 --max-worker-restart 3 --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -n=8 --max-worker-restart 3 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
