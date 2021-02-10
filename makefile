@@ -18,10 +18,10 @@ clean: clear
 
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
-	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest make init regression_tests
+	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
 
 regression_tests:
-	pytest -n 8 --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
