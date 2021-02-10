@@ -142,9 +142,9 @@ class RadialVelocityReweightingRef(KPF_Primitive):
             r_ccf = None
             if isinstance(f, str):
                 if msg:
-                    assert(os.path.exists(f), msg+':' + f + " doesn't exist")
+                    assert os.path.exists(f) == 1, msg+':' + f + " doesn't exist"
                 else:
-                    assert(os.path.exists(f))
+                    assert(os.path.exists(f) == 1)
                 if is_ratio:
                     ratio_pd = pd.read_csv(f)
                     r_ccf = ratio_pd.values
@@ -156,9 +156,9 @@ class RadialVelocityReweightingRef(KPF_Primitive):
                 r_ccf = pd.DataFrame(f).valuse if isinstance(f, fits.fitsrec.FITS_rec) else f
 
             if msg:
-                assert(r_ccf is not None,  msg)
+                assert r_ccf is not None,  msg
             else:
-                assert(r_ccf is not None)
+                assert r_ccf is not None
             return r_ccf
 
         ccf_ref = None
