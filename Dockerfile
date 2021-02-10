@@ -22,9 +22,6 @@ RUN mkdir /code && \
     apt-get --yes update && \
     apt install build-essential -y --no-install-recommends && \
     apt-get install --yes git && \
-    ulimit -n 4096 && \
-    ulimit -u 1048576 && \
-    ulimit -s unlimited && \
     cd /code
     # # Clone the KeckDRPFramework repository 
     # git clone https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git && \
