@@ -16,13 +16,13 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 regression_tests:
-	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -n=16 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
-	pytest --pyargs tests.performance
+	pytest -n=16 --pyargs tests.performance
 
 validation_tests:
-	pytest --pyargs tests.validation
+	pytest -n=16 --pyargs tests.validation
 
 .PHONY: init
