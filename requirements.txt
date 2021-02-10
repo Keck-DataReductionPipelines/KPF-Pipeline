@@ -10,7 +10,6 @@ pytest
 python-dotenv
 pytest
 pytest-cov
-pytest-xdist
 coveralls
 barycorrpy
 
