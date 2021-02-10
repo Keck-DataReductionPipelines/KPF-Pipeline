@@ -194,6 +194,6 @@ def test_neid_reweight_ccf():
                                                 'ccf_max', s_order=ratio_s_index,  do_analysis=True)
         reweigted_ccf_ref = fits.open(reweighted_ref)
         is_equal, msg = np_equal(reweighting_ccf, reweigted_ccf_ref[0].data, "not equal to the reweighting ref")
-        raise
+        
         assert is_equal, msg
         
