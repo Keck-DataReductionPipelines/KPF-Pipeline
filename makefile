@@ -1,6 +1,6 @@
 init: 
 	mkdir -p logs
-	pip3 install .
+	pip3 install -r requirements.txt .
 
 update: 
 	pip3 install -r requirements.txt --upgrade
@@ -21,7 +21,7 @@ docker:
 	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest make init regression_tests
 
 regression_tests:
-	pytest --workers 16 --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -n 16 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
