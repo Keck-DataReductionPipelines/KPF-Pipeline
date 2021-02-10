@@ -4,11 +4,9 @@ env:
 
 language: python
 services:
-- docker
+  - docker
 install:
-- git fetch
-- git pull
-- docker build --tag kpf-drp:latest .
+  - docker build --tag kpf-drp:latest .
 notifications:
   slack: false
   email: false
