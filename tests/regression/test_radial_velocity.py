@@ -7,6 +7,8 @@ from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 import configparser
 import os
 import pandas as pd
+from astropy.time import Time
+
 load_dotenv()
 
 pytest_dir = '/radial_velocity_test/for_pytest/'
@@ -52,7 +54,7 @@ def init_radial_velocity():
     config_neid = configparser.ConfigParser()
     config_neid['PARAM'] = {
         'starname': 'Tau Ceti',
-        'start_rv': -20,
+        'star_rv': -20,
         'obslon': -111.600562,
         'obslat': 31.958092,
         'obsalt': 2091.0,
@@ -69,7 +71,8 @@ def init_radial_velocity():
         'air_to_vacuum': True,
         'header_date_obs': 'DATE-OBS'
     }
-    rv_init = RadialVelocityAlgInit(config_neid)
+
+    rv_init = RadialVelocityAlgInit(config_neid, bc_time=Time("2019-04-18").jd)
 
     return rv_init, config_neid
 

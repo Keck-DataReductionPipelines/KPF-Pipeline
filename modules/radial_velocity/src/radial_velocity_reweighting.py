@@ -189,7 +189,7 @@ class RadialVelocityReweighting(KPF1_Primitive):
                                                 self.reweighting_method, s_order=self.ccf_start_index,
                                                 do_analysis=True, velocities=velocities)
 
-        rv_est = self.rv_init['data']['rv_config'][RadialVelocityAlgInit.START_RV]
+        rv_est = self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STAR_RV]
         if self.lev1_input is None:       # TBD: data type containing ccf, change to an instance of level 2 data later
             self.lev1_input = KPF1()
         else:

@@ -8,7 +8,7 @@ import pandas as pd
 import math
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
-from modules.radial_velocity.src.alg_barycentric_vel_corr import RVBaryCentricVelCorrection
+from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
 
 LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
@@ -88,7 +88,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.header = header
         self.init_data = init_data
 
-        # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, start_rv, step
+        # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, star_rv, step
         # air_to_vacuum, step_range, mask_width
         self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
@@ -212,19 +212,14 @@ class RadialVelocityAlg(RadialVelocityBase):
                                 RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
                                 RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
                                 RadialVelocityAlgInit.OBSLON,
-                                RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.START_RV]
+                                RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV, 
+                                RadialVelocityAlgInit.SPEC]
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
             obs_time_jd = self.get_obs_time()
-            bc_corr = RVBaryCentricVelCorrection.get_zb_from_bc_corr(rv_config_bc, self.spectro, obs_time_jd)
+            bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
+            tmp_zb_from_corr = bc_corr[0]
 
-            zb_header = float(self.header['SSBZ100'])
-            speed_header = zb_header * LIGHT_SPEED_M
-            retstr = "jd: {}  vel (get_BC_vel): {} zb (get_BC_vel): {} zb (header): {}, vel (header): {} diff: {} per: {}".format(
-                obs_time_jd, bc_corr[0], bc_corr[1], zb_header, speed_header, (bc_corr[0]-speed_header),
-                (bc_corr[0]-speed_header)*100/speed_header)
-
-            print(retstr)
-            return None
+            print("from barycorrpy: ", tmp_zb_from_corr, " from header:", self.header['SSBZ100'])
             """
             return float(self.header['SSBZ100'])
 
@@ -235,13 +230,12 @@ class RadialVelocityAlg(RadialVelocityBase):
         rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                             RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
                             RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
-                            RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.START_RV]
-
+                            RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV,
+                            RadialVelocityAlgInit.SPEC]
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
-        bc_corr = RVBaryCentricVelCorrection.get_zb_from_bc_corr(rv_config_bc, self.spectro, obs_time_jd)
+        bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
         return bc_corr[0]
-
 
     def wavelength_calibration(self, spectrum_x):
         """Wavelength calibration extraction.
@@ -505,7 +499,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     @staticmethod
     def get_rv_estimation(hdu_header, init_data):
         rv_guess = hdu_header['QRV'] if 'QRV' in hdu_header\
-            else init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.START_RV]
+            else init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
         return rv_guess
 
     @staticmethod
@@ -581,7 +575,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             results.attrs['CCFJDSUM'] = self.get_obs_time()
             results.attrs['CCF-RVC'] = f_decimal(rv_result)+' Baryc RV (km/s)'
-            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityAlgInit.START_RV])
+            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityAlgInit.STAR_RV])
             results.attrs['CCFSTEP'] = str(self.rv_config[RadialVelocityAlgInit.STEP])
             results.attrs['STARTORD'] = str(self.start_order)
             results.attrs['ENDORDER'] = str(self.end_order)
