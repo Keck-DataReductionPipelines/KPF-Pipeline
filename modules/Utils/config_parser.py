@@ -10,7 +10,7 @@ class ConfigHandler():
         default (ConfigHandler): An instance of ConfigHandler in case `section` not found. Defaults to None.
 
     Attributes:
-        config_param (configparser.SectionProxy): Instance containing the property-value pairs associated with
+        config_param (configparser.SectionProxy): Instance of dict containing the property-value pairs associated with
         `section` in `config`
     """
     def __init__(self, config, section=None, default=None):

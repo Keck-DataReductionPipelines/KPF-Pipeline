@@ -1,0 +1,41 @@
+from modules.barycentric_correction.src.barycentric_correction import BarycentricCorrection
+from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
+input_path = config.ARGUMENT.input_dir
+output_path = config.ARGUMENT.output_dir + 'bc_test_default_config_time.csv'
+
+start_time = config.ARGUMENT.start_time
+period = config.ARGUMENT.period
+obs_list = config.ARGUMENT.obs_list
+rectification = config.ARGUMENT.rectification_method
+L1_prefix = config.ARGUMENT.lev1_prefix
+
+L1_file_prefix = input_path + L1_prefix
+L1 = config.ARGUMENT.lev1_suffix
+
+L1_dataset = []
+L1_files = []
+
+for code in obs_list:
+	L1_file = L1_file_prefix + code + '_' + rectification + L1 + '.fits'
+	if find_files(L1_file):
+		lev1_data = kpf1_from_fits(L1_file)
+		L1_dataset = L1_dataset + [lev1_data]
+		L1_files = L1_files + [L1_file]
+
+# bc_config = RadialVelocityInit(start_time=start_time, period=period)['data']['rv_config']
+bc_config = None
+result = BarycentricCorrection(bc_config = bc_config, start_time=start_time, period = period, 
+			bc_corr_path=input_path, bc_corr_output=output_path, dataset=L1_dataset)
+
+i = 0
+for L1_data in L1_dataset:
+	L1_file = L1_files[i]
+	if find_files(L1_file):
+		result = to_fits(L1_data, L1_file)
+	i = i+1
+	
+
+
+	
+
+
