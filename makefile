@@ -1,6 +1,11 @@
 init: 
 	mkdir -p logs
 
+	# turn off built-in Python multithreading
+	export MKL_NUM_THREADS=1
+	export NUMEXPR_NUM_THREADS=1
+	export OMP_NUM_THREADS=1
+
 update: 
 	pip3 install -r requirements.txt --upgrade
 
