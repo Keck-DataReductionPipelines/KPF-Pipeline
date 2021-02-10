@@ -1,4 +1,5 @@
 init: 
+	git fetch; git pull
 	mkdir -p logs
 
 update: 
