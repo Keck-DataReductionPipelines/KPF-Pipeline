@@ -6,6 +6,8 @@ language: python
 services:
 - docker
 install:
+- git fetch
+- git pull
 - docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
 notifications:
   slack: false
