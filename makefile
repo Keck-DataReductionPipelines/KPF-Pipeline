@@ -21,7 +21,7 @@ docker:
 	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest make init regression_tests
 
 regression_tests:
-	pytest -n 16 --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -n 8 --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
