@@ -19,3 +19,5 @@ order_name = config.ARGUMENT.order_name
 invoke_subrecipe("./examples/test_order_trace.recipe")
 invoke_subrecipe("./examples/test_optimal_extraction.recipe")
 invoke_subrecipe("./examples/test_neid_radial_velocity.recipe")
+#invoke_subrecipe("./examples/test_neid_radial_velocity_reweight.recipe")
+#invoke_subrecipe("./examples/test_neid_radial_velocity_reweight_2.recipe")
