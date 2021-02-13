@@ -6,15 +6,21 @@ from modules.radial_velocity.src.alg import RadialVelocityAlg
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 import configparser
 import os
+import pandas as pd
+from astropy.time import Time
+
 load_dotenv()
 
-result_data = os.getenv('KPFPIPE_TEST_DATA') + '/radial_velocity_test/for_pytest/neid_optimal_norm_fraction_023129_'
-# result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/radial_velocity/results/NEID/for_width_3/rv_output' + \
-#             'neid_optimal_norm_fraction_023129_'
+pytest_dir = '/radial_velocity_test/for_pytest/'
+result_lev2_dir = '/NEIDdata/TAUCETI_20191217/L2/'
+result_data = os.getenv('KPFPIPE_TEST_DATA') + pytest_dir + 'neid_optimal_norm_fraction_023129_'
 
 rv_fits = 'radial_velocity'
 s_order = 20
 e_order = 24
+
+ratio_s_index = 10
+ratio_e_index = 89
 
 
 def get_result_from_rv_fits(file_path: str):
@@ -65,7 +71,8 @@ def init_radial_velocity():
         'air_to_vacuum': True,
         'header_date_obs': 'DATE-OBS'
     }
-    rv_init = RadialVelocityAlgInit(config_neid)
+
+    rv_init = RadialVelocityAlgInit(config_neid, bc_time=Time("2019-04-18").jd)
 
     return rv_init, config_neid
 
@@ -156,3 +163,35 @@ def test_neid_compute_rv_by_cc():
         if target_data is not None:
             is_equal, msg = np_equal(target_data, rv_result.get('ccf_ary'), "compute radial velocity on neid: ")
             assert is_equal, msg
+
+
+def test_neid_make_reweighting_ratio_table():
+    rv_file = os.getenv('KPFPIPE_TEST_DATA') + result_lev2_dir + 'neidL2_20191217T030724.fits'
+    table_ref = os.getenv('KPFPIPE_TEST_DATA') + pytest_dir + 'ccf_ratio_030724_' \
+                + str(ratio_s_index) + '_' + str(ratio_e_index) + '.csv'
+    if os.path.exists(rv_file) and os.path.exists(table_ref):
+        hdulist = fits.open(rv_file)
+        ccf_data = hdulist[12].data
+        ratio_df = RadialVelocityAlg.make_reweighting_ratio_table(ccf_data[ratio_s_index:ratio_e_index+1, :],
+                        ratio_s_index, ratio_e_index, 'ccf_max', max_ratio=1.0)
+        df_from_ref = pd.read_csv(table_ref)
+        is_equal, msg = np_equal(ratio_df.values, df_from_ref.values, "not equal to the ratio table")
+        assert is_equal, msg
+
+
+def test_neid_reweight_ccf():
+    rv_file = os.getenv('KPFPIPE_TEST_DATA') + result_lev2_dir + 'neidL2_20191217T023129.fits'
+    reweighting_ratio_tbl = os.getenv('KPFPIPE_TEST_DATA') + pytest_dir + 'ccf_ratio_030724_' \
+                + str(ratio_s_index) + '_' + str(ratio_e_index) + '.csv'
+    reweighted_ref = os.getenv('KPFPIPE_TEST_DATA') + pytest_dir + 'reweighted_ccf_'\
+                + str(ratio_s_index) + '_' + str(ratio_e_index) + '.fits'
+    if os.path.exists(rv_file) and os.path.exists(reweighting_ratio_tbl) and os.path.exists(reweighted_ref):
+        hdulist = fits.open(rv_file)
+        ccf_data = (hdulist[12].data)[ratio_s_index:ratio_e_index+1, :]
+        total_order = ratio_e_index - ratio_s_index + 1
+        ratio_df = pd.read_csv(reweighting_ratio_tbl)
+        reweighting_ccf = RadialVelocityAlg.reweight_ccf(ccf_data, total_order, ratio_df.values,
+                                                'ccf_max', s_order=ratio_s_index,  do_analysis=True)
+        reweigted_ccf_ref = fits.open(reweighted_ref)
+        is_equal, msg = np_equal(reweighting_ccf, reweigted_ccf_ref[0].data, "not equal to the reweighting ref")
+        assert is_equal, msg

@@ -1,0 +1,15 @@
+test_data_dir = KPFPIPE_TEST_DATA + '/NEIDdata' 
+data_type = config.ARGUMENT.data_type
+output_dir = config.ARGUMENT.output_dir
+
+lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
+lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
+
+s_order = 3
+e_order = 82
+rect_method = config.ARGUMENT.rectification_method
+order_name = config.ARGUMENT.order_name
+reweighting_method = config.ARGUMENT.reweighting_method
+reweight_ccf = KPFPIPE_TEST_DATA + config.ARGUMENT.reweighting_ratio_csv
+
+invoke_subrecipe("./examples/test_neid_radial_velocity_reweight_2.recipe")
