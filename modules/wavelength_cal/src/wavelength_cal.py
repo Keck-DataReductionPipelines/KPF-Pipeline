@@ -31,11 +31,6 @@ class WaveCalibrate(KPF0_Primitive):
     Attributes:
         LFCData (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[0]`
         data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
-        f0 (np.float): Instance of `KPF0`, assigned by `actions.args[2]`
-        f_rep (np.float): Instance of `KPF0`, assigned by `actions.args[3]`
-        min_wave (np.float): Instance of `KPF0`, assigned by `actions.args[4]`
-        max_wave (np.float): Instance of `KPF0`, assigned by `actions.args[5]`
-        fit_order(np.int): Instance of `KPF0`, assigned by `actions.args[6]`
         config_path (str): Path of config file for LFC wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
@@ -52,11 +47,6 @@ class WaveCalibrate(KPF0_Primitive):
               
                 `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing Laser Frequency Comb (LFC) data
                 `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing data type
-                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing initial frequency
-                `action.args[3]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing repetition frequency
-                `action.args[4]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing minimum wavelength of wavelength range
-                `action.args[5]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing maximum wavelength of wavelength range
-                `action.args[6]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing polynomial-fit order
 
             context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
@@ -65,7 +55,7 @@ class WaveCalibrate(KPF0_Primitive):
 
         #Input arguments
         self.LFCdata=self.action.args[0]
-        #self.data_type=self.action.args[1]
+        self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -84,8 +74,7 @@ class WaveCalibrate(KPF0_Primitive):
 
 
         #Wavelength calibration algorithm setup
-
-        self.alg=LFCWaveCalibration(self.f0,self.f_rep,self.config,self.logger)
+        self.alg=LFCWaveCalibration(self.LFCData,self.config,self.logger)
 
         #Preconditions
        
@@ -101,34 +90,54 @@ class WaveCalibrate(KPF0_Primitive):
         """
         #return will be to_fits in recipe
     
-        #1 mode_nos
+        #step 1 - order list
+        if self.logger:
+            self.logger.info("Wavelength Calibration: Generating list of light-filled orders")
+        orders=self.alg.order_list()
+
+        #step 2 - get fits data from correct exts
+        if self.logger:
+            self.logger.info("Wavelength Calibration: Getting light and ThAr extensions")
+        flux,thar=self.alg.get_fits.ext(self.LFCData)
+
+        #step 3 - mode_nos
         if self.logger:
             self.logger.info("Wavelength Calibration: Generating comb lines")
-        clines_ang= self.alg.comb_gen(self.min_wave,self.max_wave)
+        clines_ang= self.alg.comb_gen()
 
-        #output comb_lines_ang to steps 3,4,5
-
-        #2 peak detection & gaussian fit
+        #step 4 - peak detection & gaussian fit
         if self.logger:
             self.logger.info("Wavelength Calibration: Detecting LFC peaks")
-        peaks,props=self.alg.peak_detect(self.LFCData)
-        #output peaks to steps 4,5,6, and props
+        ns,all_peaks_exact,all_peaks_approx=[],[],[]
+        for order in orders:
+            n,peaks_exact,peaks_approx,comb_len=self.alg.peak_detect(flux,order)
+            ns.append(n)
+            all_peaks_exact.append(peaks_exact)
+            all_peaks_approx.append(peaks_approx)
 
-        #3 mode match
+        #step 5 - mode match
         if self.logger:
             self.logger.info("Wavelength Calibration: Fitting mode numbers to corresponding peaks")
-        idx=self.alg.mode_match(clines_ang,peaks)
-        #output idx for step 5,6
+        all_idx=[]
+        for order,peaks in zip(orders,all_peaks_exact):
+            idx=self.alg.mode_match(clines_ang,peaks,comb_len,thar,order)
+            all_idx.append(idx)
 
-        #4 fit polynomial 
+        #step 6 - fit polynomial 
         if self.logger:
             self.logger.info("Wavelength Calibration: Fitting order-by-order polynomial sol'n")
-        wave_soln=self.alg.poly_fit(self.fit_order,clines_ang,peaks,idx)
-        #output wave_soln_leg or wave_soln_poly to step 6
+        all_leg,all_wls=[],[]
+        for idx,peaks in zip(all_idx,all_peaks_exact):
+            leg,wavelengths=self.alg.poly_fit(comb_len,clines_ang,peaks,idx,self.fit_order)
+            all_leg.append(leg)
+            all_wls.append(wavelengths)
 
-        #5 residuals 
+        #step 7 - errors 
         if self.logger:
-            self.logger.info("Wavelength Calibration: Calculating residual standard deviation")
-        resids=self.alg.residuals(clines_ang,idx,wave_soln,peaks)
+            self.logger.info("Wavelength Calibration: Calculating standard error")
+        errors=[]
+        for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
+            std_error=self.alg.error_calc(wavelengths,idx,leg,peaks)
+            errors.append(std_error)
 
         return Arguments(self.alg.poly_fit())
