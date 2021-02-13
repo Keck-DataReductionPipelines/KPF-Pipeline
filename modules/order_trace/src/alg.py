@@ -6,6 +6,8 @@ from astropy.modeling import models, fitting
 import csv
 import time
 import pandas as pd
+from configparser import ConfigParser
+from modules.Utils.config_parser import ConfigHandler
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -24,6 +26,7 @@ class OrderTraceAlg:
 
     This module defines class 'OrderTraceAlg' and methods to extract order trace from 2D spectral fits image.
     The extraction steps include
+
         - locate clusters: smooth the image and convert image pixels to be either black or white ('1' or '0').
         - form clusters: find cluster units (each unit containing connected pixels with value '1').
         - clean the clusters: remove noisy clusters, trim noise from the clusters, split the clusters and clean the
@@ -40,14 +43,13 @@ class OrderTraceAlg:
         data (numpy.ndarray): 2D spectral data.
         config (configparser.ConfigParser): config context.
         logger (logging.Logger): Instance of logging.Logger.
-        data_range (list): data of area [x1, x2, y1, y2] to be processed
 
     Attributes:
         logger (logging.Logger): Instance of logging.Logger.
         instrument (str): Imaging instrument.
-        config_param (configparser.SectionProxy): Related to 'PARAM' section or section associated with the instrument
+        config_param (ConfigHandler): Related to 'PARAM' section or section associated with the instrument
             if it is defined in the config file.
-        config_logger (configparser.SectionProxy): Related to 'LOGGER' section defined in the config file.
+        config_logger (ConfigHandler): Related to 'LOGGER' section defined in the config file.
         flat_data (numpy.ndarray): Numpy array storing 2d image data.
         debug_output (str): File path for the file that the debug information is printed to. The printing goes to
             standard output if it is an empty string or no printing is made if it is None.
@@ -56,44 +58,35 @@ class OrderTraceAlg:
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
-        TypeError: If there is type error for `data`.
+        TypeError: If there is type error for `data` or `config`.
         Exception: If the size of `data` is less than 20 pixels by 20 pixels.
-        Exception: if there is wrong setting for `data_range`.
     """
 
     FIT_ERROR_TH = 2.5
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None, logger=None, data_range=None):
+    def __init__(self, data, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
-        if data_range is not None and (not isinstance(data_range, list) or len(data_range) != 4):
-            raise Exception('data range is set wrongly')
+        if not isinstance(config, ConfigParser):
+            raise TypeError('config type error, cannot construct object from OrderTraceAlg')
 
         ny, nx = np.shape(data)
         if ny <= 20 and nx <= 20:
             raise Exception('image data size is too small for order trace extraction')
 
-        if data_range is not None:
-            x1 = min(data_range[0], data_range[1])
-            x2 = max(data_range[0], data_range[1])
-            y1 = min(data_range[2], data_range[3])
-            y2 = max(data_range[2], data_range[3])
-            if x1 < 0 or x2 > nx or y1 < 0 or y2 > ny:
-                raise Exception('data range is set wrongly')
-            self.data_range = [y1, y2, x1, x2]
-        else:
-            self.data_range = [0, ny, 0, nx]
-
+        # get data range from config file if it is defined in.
+        self.data_range = [0, ny - 1, 0, nx - 1]
         self.logger = logger
-        self.flat_data = data[self.data_range[0]:self.data_range[1], self.data_range[2]:self.data_range[3]]
+        self.flat_data = data
         self.original_size = [ny, nx]
-        p_config = config['PARAM'] if config is not None and config.has_section('PARAM') else None
-        self.instrument = p_config.get('instrument', '') if p_config is not None else ''
+
+        config_h = ConfigHandler(config, 'PARAM')
+        self.instrument = config_h.get_config_value('instrument', '')
         ins = self.instrument.upper()
-        self.config_param = config[ins] if ins and config.has_section(ins) else p_config
-        self.config_logger = config['LOGGER'] if config is not None and config.has_section('LOGGER') else None
+        self.config_param = ConfigHandler(config, ins, config_h)  # section of instrument or 'PARAM'
+        self.config_logger = ConfigHandler(config, 'LOGGER') # section of 'LOGGER'
         self.debug_output = None
         self.is_time_profile = False
         self.is_debug = True if self.logger else False
@@ -120,7 +113,7 @@ class OrderTraceAlg:
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
 
-        Search the value of the specified property fom config section. The default value is returned if no found.
+        Search the value of the specified property from config section. The default value is returned if no found.
 
         Args:
             param (str): Name of the parameter to be searched.
@@ -130,16 +123,36 @@ class OrderTraceAlg:
             int/float/str: Value for the searched parameter.
 
         """
+        return self.config_param.get_config_value(param, default)
 
-        if self.config_param is not None:
-            if isinstance(default, int):
-                return self.config_param.getint(param, default)
-            elif isinstance(default, float):
-                return self.config_param.getfloat(param, default)
-            else:
-                return self.config_param.get(param, default)
+    def set_data_range(self, data_range=None):
+        """Set data range to be processed
+
+        Args:
+            data_range (list): Area of the data, [x1, x2, y1, y2], to be processed. The column (or the row) is counted
+                            relatively from the first column (or the first row) in case the number is not less than
+                            0, otherwise the column (or the row) is counted from the last one.
+
+        Returns:
+            list: Data range position relative to the first column and first row of the raw image.
+        """
+
+        _, nx, ny = self.get_spectral_data()
+        if data_range is None or (not isinstance(data_range, list)) or len(data_range) != 4:
+            self.data_range = [0, ny - 1, 0, nx - 1]
         else:
-            return default
+            x1, x2 = sorted([data_range[i] if data_range[i] >= 0 else (nx + data_range[i]) for i in [0, 1]])
+            y1, y2 = sorted([data_range[i] if data_range[i] >= 0 else (ny + data_range[i]) for i in [2, 3]])
+            self.data_range = [y1, y2, x1, x2]
+
+        self.flat_data = self.flat_data[self.data_range[0]: (self.data_range[1] + 1),
+                                        self.data_range[2]: (self.data_range[3] + 1)]
+        return self.data_range
+
+    def get_data_range(self):
+        if self.data_range is None:
+            self.set_data_range()
+        return self.data_range
 
     def get_poly_degree(self):
         """Order of polynomial for order trace fitting.
@@ -284,12 +297,16 @@ class OrderTraceAlg:
         pos = np.where(imm > 0)
         return imm, pos[1], pos[0]
 
-    def locate_clusters(self):
+    def locate_clusters(self, img_rows_to_reset=None, img_cols_to_reset=None):
         """ Find cluster pixels from 2D data array.
 
         Perform smoothing method tpconvert the pixels to be 1 and 0 and find cluster pixels.
         Cluster pixels mean a set of pixels with value 1 and each pixel connects to at least one neighbor pixel
         in vertical, horizontal or in diagonal direction.
+
+        Args:
+            img_rows_to_reset (list, optional): collection of rows to be reest.
+            img_cols_to_reset (list, optional): collection of columns to be reest.
 
         Returns:
             dict: result of formed clusters, like::
@@ -317,12 +334,15 @@ class OrderTraceAlg:
         noise = self.get_config_value('locate_cluster_noise', 0.0)
         mask = self.get_config_value('cluster_mask', 1)
 
-        rows_str = self.get_config_value('rows_to_reset', '')
-        cols_str = self.get_config_value('cols_to_reset', '')
+        rows_str = self.get_config_value('rows_to_reset', '') if img_rows_to_reset is None \
+            else json.dumps(img_rows_to_reset)
+        cols_str = self.get_config_value('cols_to_reset', '') if img_cols_to_reset is None \
+            else json.dumps(img_cols_to_reset)
 
         o_row, o_col = self.original_size
         s_row, s_col = self.data_range[0], self.data_range[2]
 
+        # adjust rows and cols to reset based on the data rage
         rows_to_reset = None
         if rows_str:
             rows_list = json.loads(rows_str)
@@ -721,9 +741,9 @@ class OrderTraceAlg:
 
                     {
                        <cluster_id_i> int: <cleaning status> dict,
-                                    # <cluster_id_i> is cluster id of i-th cluster.
-                                    # <cleaning status> is cleaning status for the cluster
-                                    # See Returns in handle_noisy_cluster()
+                                # <cluster_id_i> is cluster id of i-th cluster.
+                                # <cleaning status> is cleaning status for the cluster
+                                # See Returns in handle_noisy_cluster()
                        :
                     }
 
@@ -2028,87 +2048,6 @@ class OrderTraceAlg:
                 'avg_pwidth': avg_pwidth,
                 'avg_nwidth': avg_nwidth}
 
-    def find_background_around(self, cluster_no: int, poly_coeffs: np.ndarray, cluster_points: np.ndarray,
-                               sorted_idx_per_ypos: dict):
-        """Find the background data below and above the specified cluster.
-
-        Args:
-            cluster_no (int): cluster id of the cluster to find.
-            poly_coeffs (numpy.ndarray): Polynomial fitting information and the covered area of all clusters.
-            cluster_points (numpy.ndarray): Cluster points along the trace based on the polynomial fitting.
-            sorted_idx_per_ypos (dict): Sorted index of cluster id based on y position.
-
-        Returns:
-            numpy.ndarray: background data above and below the cluster along x direction, like::
-
-                [[<background_value_below_trace>_i, <background_value_above_trace>_i], .., ]
-                where
-                    <background_value_below_trace>_i (float):
-                                        # background value below the trace at i-th x location.
-                    <background_value_abobe_trace>_i (float):
-                                        # background value above the trace at i-th x location.
-
-        """
-
-        curve_width = self.get_config_value('order_width_th', 7)
-        data, nx, ny = self.get_spectral_data()
-        total_cluster = np.shape(poly_coeffs)[0]-1
-        power = self.get_poly_degree()
-
-        # index_pos = self.get_sorted_index(poly_coeffs, cluster_no, power, nx//2)  ???
-        crt_idx = sorted_idx_per_ypos['idx']
-        sorted_index = sorted_idx_per_ypos['index_v_pos']
-
-        # background before peak and after peak
-        backgrounds = np.zeros((2, nx))
-        prev_idx = crt_idx - 1 if crt_idx > 1 else crt_idx
-        next_idx = crt_idx + 1 if crt_idx < total_cluster else crt_idx
-        three_clusters = np.array([cluster_no, sorted_index[prev_idx], sorted_index[next_idx]])
-        min_x = int(np.amax(poly_coeffs[three_clusters, power+1]))
-        max_x = int(np.amin(poly_coeffs[three_clusters, power+2]))
-
-        crt_peak_y = cluster_points[cluster_no]
-
-        prev_peak_y = cluster_points[sorted_index[crt_idx - 1]] if crt_idx > 1 \
-            else np.where((cluster_points[sorted_index[1]] - 2 * curve_width) < 0, 0,
-                          (cluster_points[sorted_index[1]] - 2 * curve_width))
-        next_peak_y = cluster_points[sorted_index[crt_idx + 1]] if crt_idx < total_cluster \
-            else np.where((cluster_points[total_cluster] + 2 * curve_width) > (ny-1), ny-1,
-                          (cluster_points[total_cluster] + 2 * curve_width))
-
-        prev_mid = ((crt_peak_y+prev_peak_y)//2).astype(int)
-        total_prev_data = (crt_peak_y - prev_peak_y) + 1
-        collect_prev_no = (total_prev_data * 0.2).astype(int)//2
-        collect_prev_no = np.where(collect_prev_no >= 1, collect_prev_no, 1)
-
-        next_mid = ((crt_peak_y+next_peak_y)//2).astype(int)
-        total_next_data = (next_peak_y - crt_peak_y) + 1
-        collect_next_no = (total_next_data * 0.2).astype(int)//2
-        collect_next_no = np.where(collect_next_no >= 1, collect_next_no, 1)
-
-        for x in range(min_x, max_x+1):
-            data_collected = data[max(prev_mid[x]-collect_prev_no[x], 0):min(prev_mid[x]+collect_prev_no[x]+1, ny), x]
-
-            hist, bin_edge = np.histogram(data_collected, bins=4)
-            max_hist_idx = np.argmax(hist)
-            data_idx = np.where(np.logical_and(data_collected >= bin_edge[max_hist_idx],
-                                               data_collected <= bin_edge[max_hist_idx+1]))[0]
-            backgrounds[0, x] = np.mean(data_collected[data_idx])
-
-            data_collected = data[max(0, next_mid[x]-collect_next_no[x]):min(next_mid[x]+collect_next_no[x]+1, ny), x]
-            hist, bin_edge = np.histogram(data_collected, bins=4)
-            max_hist_idx = np.argmax(hist)
-            data_idx = np.where(np.logical_and(data_collected >= bin_edge[max_hist_idx],
-                                               data_collected <= bin_edge[max_hist_idx+1]))[0]
-            backgrounds[1, x] = np.mean(data_collected[data_idx])
-
-        for i in range(0, 2):
-            if min_x > 0:
-                backgrounds[i, 0:min_x] = backgrounds[i, min_x]
-            if max_x < nx-1:
-                backgrounds[i, max_x+1:] = backgrounds[i, max_x]
-        return backgrounds
-
     @staticmethod
     def mirror_data(x_set: np.ndarray, y_set: np.ndarray, mirror_side: int):
         """Mirror y value to the left or right side of x_set.
@@ -2150,8 +2089,8 @@ class OrderTraceAlg:
         Fit the x, y set of data using Gaussian and find the width by looking at sigma of the Gaussian fit.
 
         Parameters:
-            x_set (np.ndarray): x data set.
-            y_set (np.ndarray): y data set.
+            x_set (numpy.ndarray): x data set.
+            y_set (numpy.ndarray): y data set.
             center_y (float): Estimation of y value at the center from `x_set`.
             xs (int): x location for `center_y`.
             sigma (float, optional): Magnitude of standard deviation to get the width. Defaults to 3.0.
@@ -2391,137 +2330,6 @@ class OrderTraceAlg:
             errors[c] = error
 
         return poly_all, errors
-
-    def curve_fitting_on_peaks(self, crt_coeffs: np.ndarray):
-        """
-        Polynomial fit on the peaks of spectral data along the cluster.
-
-        Args:
-            crt_coeffs (numpy.ndarray): Array contains coefficients of polynomial fit on cluster pixels and the area
-                of all clusters.
-
-        Returns:
-            dict: containing polynomial fit on cluster peaks, like::
-
-                {
-                    'coeffs': numpy.ndarray,
-                                        # Coefficients of polynomial fit on cluster peaks
-                                        # and the area of the clusters.
-                    'peak_pixels': numpy.ndarray,
-                                        # Peak points (y) of all clusters along x axis.
-                    'cluster_pixels': numpy.ndarray,
-                                        # Cluster points (y) of all clusters along x axis.
-                                        # Please see Results of get_cluster_points().
-                    'errors': numpy.ndarray
-                                        # Arrays contains the error from the polynomial
-                                        # fit on cluster peaks.
-                }
-
-        """
-
-        power = self.get_poly_degree()
-        all_cluster_points = self.get_cluster_points(crt_coeffs)
-        cluster_pixels_at_peaks = self.get_cluster_peak_pixels(all_cluster_points, crt_coeffs)
-        s = np.shape(crt_coeffs)
-
-        peak_coeffs = crt_coeffs.copy()
-        errors = np.zeros(s[0])
-
-        for c in range(1, s[0]):
-            s_x = int(peak_coeffs[c, power+1])
-            e_x = int(peak_coeffs[c, power+2]+1)
-            x_set = np.arange(s_x, e_x, dtype=int)
-            y_set = cluster_pixels_at_peaks[c, s_x:e_x]
-            peak_coeffs[c, 0:power+1] = np.polyfit(x_set, y_set, power)
-            errors[c] = math.sqrt(np.square(np.polyval(peak_coeffs[c, 0:power+1], x_set) - y_set).mean())
-
-        return {'coeffs': peak_coeffs, 'peak_pixels': cluster_pixels_at_peaks, 'cluster_piexls': all_cluster_points,
-                'errors': errors}
-
-    def get_cluster_peak_pixels(self, cluster_pixels: np.ndarray, poly_coeffs: np.ndarray):
-        """Get the peak location for every cluster along x direction
-
-        Args:
-            cluster_pixels (numpy.ndarray):  Cluster points (y values) of all clusters along x axis. Please see
-                `Returns` of :func:`~alg.OrderTraceAlg.get_cluster_points()`.
-            poly_coeffs (numpy.ndarray): Array contains coefficients of polynomial fit on cluster pixels and the area
-                of all clusters.
-
-        Returns:
-            numpy.ndarray: Peak points (y values) of all clusters along x axis. Each row includes peak points
-            for one cluster.
-
-        """
-        power = self.get_poly_degree()
-        spectral_data, nx, ny = self.get_spectral_data()
-
-        # get distance between two fitting curves (from cluster_pixels)
-        size = np.shape(cluster_pixels)
-        v_dists = self.get_cluster_distance_at_x(cluster_pixels, poly_coeffs)
-        all_peak_pixels = np.zeros((size[0], size[1]), dtype=int)
-
-        # get peaks for every cluster within min_x and max_x range
-        for c in range(1, size[0]):
-            s_x = int(poly_coeffs[c, power+1])
-            e_x = int(poly_coeffs[c, power+2]+1)
-            for x in range(s_x, e_x):
-                s_y = int(max((cluster_pixels[c, x] - v_dists[c]), 0))
-                e_y = int(min((cluster_pixels[c, x] + v_dists[c]), (ny-1)))+1
-                s_data = spectral_data[s_y:e_y, x]
-                idx = np.argmax(s_data)
-                all_peak_pixels[c, x] = idx+s_y
-
-        return all_peak_pixels
-
-    def get_cluster_distance_at_x(self, cluster_pixels: np.ndarray, coeffs: np.array, x_loc: int = None):
-        """Vertical distance between every two clusters at x location, x_loc.
-
-        Calculate the vertical distance of every neighboring clusters based on the given cluster pixels
-        at x location, `x_loc`. The cluster is sorted first based on the y position at `x_loc`.
-
-        Args:
-            cluster_pixels (numpy.ndarray): Cluster position (y values) along x axis. It could be cluster points from
-                the polynomial fit per cluster pixels or cluster peaks.
-            coeffs (numpy.ndarray): Coeffients of polynomial fit and area of the clusters.
-            x_loc (int, optional): x position for distance calculation. Defaults to None.
-
-        Returns:
-            numpy.ndarray: Distances between the neighboring clusters, like::
-
-                 '''
-                 Assume peak_width is the return, then
-                 peak_width[1] is distance between the first cluster and second cluster.
-                 peak_width[2] is distance between the second cluster and third cluster.
-                 etc.
-
-                 The order of the clusters is based on y position of the clusters.
-                 '''
-        """
-        power = self.get_poly_degree()
-        _, nx, _ = self.get_spectral_data()
-
-        x_center = x_loc if x_loc is not None else nx//2
-        y_at_center = cluster_pixels[:, x_center]
-
-        s = np.shape(coeffs)
-        x_exist = np.zeros(s[0], dtype=bool)
-        x_exist[np.where(np.logical_and(x_center >= coeffs[:, power+1], x_center <= coeffs[:, power+2]))[0]] = 1
-
-        y_sort_idx = np.argsort(y_at_center)
-        y_at_center_sorted = y_at_center[y_sort_idx]
-        x_exist_sorted = x_exist[y_sort_idx]
-        curve_width = self.get_config_value('order_width_th', 7.0)
-        peak_width = np.ones(s[0], dtype=float) * curve_width
-
-        # distance between (1st, 2nd), (2nd, 3rd) ... (last to the 2nd, last) clusters
-        for c in range(1, s[0]-1):
-            if x_exist_sorted[c] and x_exist_sorted[c+1]:
-                peak_width[y_sort_idx[c]] = abs(y_at_center_sorted[c+1] - y_at_center_sorted[c])//2
-
-        peak_width[0] = peak_width[1]
-        peak_width[-1] = peak_width[-2]
-
-        return peak_width
 
     @staticmethod
     def common_member(a: list, b: list):
@@ -2778,73 +2586,6 @@ class OrderTraceAlg:
 
         return imm
 
-    @staticmethod
-    def rms_of_polys(poly_coeff1: np.ndarray, poly_coeff2: np.ndarray, power: int):
-        """Root mean square of difference between two polynomial fitting.
-
-        Args:
-            poly_coeff1 (numpy.ndarray): Coefficients of polynomial fit and area information of first cluster.
-            poly_coeff2 (numpy.ndarray): Coefficients of polynomial fit and area information of second cluster.
-            power (int): Degree of polynomial fit to the cluster.
-
-        Returns:
-            numpy.ndarray: Root mean square of difference between two polynomial fitting on all clusters.
-
-        """
-
-        total_cluster = np.shape(poly_coeff1)[0]-1
-        rms = np.zeros(total_cluster+1)
-        for c in range(1, total_cluster+1):
-            x_set = np.arange(int(poly_coeff1[c, power+1]), int(poly_coeff1[c, power+2])+1)
-            y1_clusters = np.polyval(poly_coeff1[c, 0:power+1], x_set)
-            y2_clusters = np.polyval(poly_coeff2[c, 0:power+1], x_set)
-            rms[c] = np.sqrt(np.mean((y1_clusters - y2_clusters)**2))
-        return rms
-
-    def write_cluster_info_to_csv(self, cluster_widths: list, cluster_coeffs: np.ndarray, csv_file: str):
-        """Write the coefficients of  polynomial fit, area and top/bottom widths of clusters to a csv file.
-
-        Args:
-            cluster_widths (list): Array contains the top and bottom widths of clusters, like::
-
-                [
-                    {
-                        'top edge': float,      # top width of first cluster,
-                        'bottom edge': float    # bottom width of first cluster
-                    }, ....,
-                    {
-                        'top edge': float,     # top width of last cluster,
-                        'bottom edge': float   # bottom width of last cluster
-                    }
-                ]
-
-            cluster_coeffs (numpy.ndarray): Array contains coefficients of polynomial fit and the area of the clusters.
-            csv_file (str): Filename of csv file to write to.
-
-        Returns:
-            None.
-
-        """
-        power = self.get_poly_degree()
-        sorted_index = self.sort_cluster_in_y(cluster_coeffs)
-
-        with open(csv_file, mode='w') as result_file:
-            result_writer = csv.writer(result_file)
-            for i in range(1, len(sorted_index)):
-                idx = sorted_index[i]           # cluster id
-                c_widths = cluster_widths[idx-1]
-                prev_width = c_widths.get('bottom_edge')
-                next_width = c_widths.get('top_edge')
-
-                row_data = list()
-                for t in range(power, -1, -1):  # from lower degree to higher degree
-                    row_data.append(cluster_coeffs[idx, t])
-                row_data.append(self.float_to_string(prev_width))    # bottom width
-                row_data.append(self.float_to_string(next_width))    # top width
-                row_data.append(int(cluster_coeffs[idx, power+1]))    # left x
-                row_data.append(int(cluster_coeffs[idx, power+2]))    # right x
-
-                result_writer.writerow(row_data)
 
     def write_cluster_info_to_dataframe(self, cluster_widths: list, cluster_coeffs: np.ndarray):
         """Write the coefficients of polynomial fit, area and top/bottom widths of order trace to DataFrame object.
@@ -2897,9 +2638,10 @@ class OrderTraceAlg:
 
         df = pd.DataFrame(trace_table)
         df.attrs['STARTROW'] = self.data_range[0]
-        df.attrs['ENDROW'] = self.data_range[1] - 1
+        df.attrs['ENDROW'] = self.data_range[1]
         df.attrs['STARTCOL'] = self.data_range[2]
-        df.attrs['ENDCOL'] = self.data_range[3] - 1
+        df.attrs['ENDCOL'] = self.data_range[3]
+        df.attrs['POLY_DEG'] = self.get_poly_degree()
         return df
 
     @staticmethod
@@ -2944,31 +2686,38 @@ class OrderTraceAlg:
         self.enable_debug_print(filename is not None)
         self.debug_output = filename
 
-    def extract_order_trace(self, power_for_width_estimation: int = -1, show_time: bool = False,
-                            print_debug: str = None):
+    def extract_order_trace(self, power_for_width_estimation: int = -1, data_range = None, show_time: bool = False,
+                            print_debug: str = None, rows_to_reset = None, cols_to_reset = None):
         """ Order trace extraction.
 
         The order trace extraction includes the steps to smooth the image, locate the clusters, form clusters,
         remove and trim noisy clusters, merge the clusters to form order traces, model the order trace using polynomial
         fit and find the top and bottom widths along the traces.
 
-        Parameters:
+        Args:
             power_for_width_estimation (int): Degree of polynomial fit for trace width estimation. Defaults to -1.
+            data_range (list): Area of the data, `x1, x2, y1, y2`, to be processed,
+                where *x1*, *y1* and *x2*, *y2* are the corner coordinates of the area.
+                *x1*, *x2* or *y1*, *y2* respectively represents the horizontal or vertical position relative to
+                the first column or row of the image when it is greater than or equal to 0, otherwise
+                the position relative to the last column or the last row.
             show_time (bool, optional): Show running time if True. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
                 a file with path `print_debug` if it is non empty string, or no print if it is None.
                 Defaults to None.
+            rows_to_reset (list, optional): Collection of rows to reset. Default to None.
+            cols_to_reset (list, optional): Collection of columns to reset. Default to None.
 
         Returns:
             dict: order trace extraction and analysis result, like::
 
                 {
                     'order_trace_result': Padas.DataFrame,
-                                            # table storing coefficients of polynomial
-                                            # fit, bottom/top width, and left/right boundary.
-                    'cluster_index': numpy.ndarray,  # Array of cluster id on cluster pixels.
-                    'cluster_x': numpy.ndarray,      # Array of x coordinates of cluster pixels.
-                    'cluster_y': numpy.ndarray       # Array of y coordinates of cluster pixels.
+                                          # table storing coefficients of polynomial
+                                          # fit, bottom/top width, and left/right boundary.
+                    'cluster_index': numpy.ndarray, # Array of cluster id of cluster pixels.
+                    'cluster_x': numpy.ndarray, # Array of x coordinates of cluster pixels.
+                    'cluster_y': numpy.ndarray  # Array of y coordinates of cluster pixels.
                 }
 
         """
@@ -2976,10 +2725,12 @@ class OrderTraceAlg:
         self.enable_time_profile(show_time)
         self.add_file_logger(print_debug)
 
+        self.set_data_range(data_range)
+
         t_start = time.time()
         # locate cluster
         self.d_print("*** locate cluster", info=True)
-        cluster_xy = self.locate_clusters()
+        cluster_xy = self.locate_clusters(rows_to_reset, cols_to_reset)
         t_start = self.time_check(t_start, '*** locate cluster: ')
 
         # assign cluster id and do basic cleaning

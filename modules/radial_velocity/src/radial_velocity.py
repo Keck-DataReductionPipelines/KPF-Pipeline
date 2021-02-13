@@ -19,15 +19,21 @@
                     - `action.args[1] (dict)`: Result from the init work made by `RadialVelocityInit` which makes
                       mask lines and velocity steps based on star and other module associated configuration for
                       radial velocity computation.
-                    - `action.args['input_ref']`: (???, optional): Instance of level 2 data containing cross
-                      correlation values as a reference for scaling the result of cross correlation from radial velocity
-                      computation.
-                    - `action.args['order_name']`: (str, optional): Order name associated with the level 1 data.
+                    - `action.args['order_name'] (str, optional)`: Order name associated with the level 1 data.
                       Defaults to 'SCI1'.
-                    - `action.args['start_order']`: (int, optional): Index of the first order to be processed.
-                      Defaults to None.
-                    - `action.args['end_order']`: (int, optional): Index of the last order to be processed.
-                      Defaults to None.
+                    - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
+                      Defaults to None. The number means the order relative to the first one if it is greater
+                      than or equal to 0, otherwise it means the order relative to the last one.
+                    - `action.args['end_order'] (int, optional)`: Index of the last order to be processed.
+                      Defaults to None. The number has the same meaning as that of `action.args['start_order']`.
+                    - `action.args['start_x'](int, optional)`: Index of start x position. Default to None.
+                      The number means the position relative to the first pixel of the same order
+                      if it is greater than or equal to 0, otherwise it means the position relative to the last
+                      pixel.
+                    - `action.args['end_x'](int, optional)`: Index of end x position, Default to None.
+                      The number has the same meaning as that of `action.args['start_x']`.
+                    - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference for
+                      reweighting ccf orders. Defaults to None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of radial velocity in the master
@@ -40,6 +46,8 @@
                 - `sci (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `end_order (int)`: Index of the last order to be processed.
+                - `start_x (int)`: Start x position associated with `action.args['start_x']`.
+                - `end_x (int)`: End x position associated with `action.args['end_x']`.
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
@@ -47,8 +55,8 @@
                   with `action.args[0]`.
                 - `wave_cal (numpy.ndarray)`: Wavelength calibration data, associated with `action.args[0]`.
                 - `header (fits.header.Header)`: Fits header of HDU associated with `spectrum_data`.
-                - `ref_ccf (numpy.ndarray)`: Reference of cross correlation values for scaling the computation of
-                  cross correlation, associated with `action.args['input_ref']`.
+                - `ref_ccf (numpy.ndarray)`: Reference or ratio of cross correlation values for scaling the computation
+                  of cross correlation, associated with `action.args['input_ref']`.
                 - `alg (RadialVelocityAlg)`: Instance of RadialVelocityAlg which has operation codes for the
                   computation of radial velocity.
 
@@ -70,7 +78,8 @@
 
 import configparser
 import numpy as np
-
+import os
+import pandas as pd
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level1 import KPF1_Primitive
@@ -83,7 +92,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 from modules.radial_velocity.src.alg import RadialVelocityAlg
 
-DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
 
 class RadialVelocity(KPF1_Primitive):
@@ -98,14 +107,26 @@ class RadialVelocity(KPF1_Primitive):
         # Initialize parent class
         KPF1_Primitive.__init__(self, action, context)
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
-
         self.input = action.args[0]
         self.rv_init = action.args[1]
-        input_ref = action.args['input_ref'] if 'input_ref' in args_keys else None
+        self.ref_ccf = None
+
+        if 'input_ref' in args_keys:
+            if isinstance(action.args['input_ref'], np.ndarray):
+                self.ref_ccf = action.args['input_ref']
+            elif isinstance(action.args['input_ref'], pd.DataFrame):
+                self.ref_ccf = action.arg['input_ref'].values
+            elif isinstance(action.args['input_ref'], str) and os.path.exists(action.args['input_ref']):
+                ratio_df = pd.read_csv(action.args['input_ref'])
+                self.ref_ccf = ratio_df.values
+
         self.sci = action.args['order_name'] if 'order_name' in args_keys and action.args['order_name'] is not None\
             else self.default_args_val['order_name']
-        self.start_order = action.args['start_order'] if 'start_order' in args_keys else None
-        self.end_order = action.args['end_order'] if 'end_order' in args_keys else None
+        self.start_order = int(action.args['start_order']) if 'start_order' in args_keys else None
+        self.end_order = int(action.args['end_order']) if 'end_order' in args_keys else None
+        self.start_x = int(action.args['start_x']) if 'start_x' in args_keys else None
+        self.end_x = int(action.args['end_x']) if 'end_x' in args_keys else None
+        is_kpf_type = action.args['is_kpf_type'] if 'is_kpf_type' in args_keys else True
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -124,12 +145,15 @@ class RadialVelocity(KPF1_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         data = self.input.data if hasattr(self.input, 'data') else None
-        header = self.input.header if hasattr(self.input, 'header') else None
         self.spectrum_data = self.input.data[self.sci][0, :, :] if data and self.sci in data else None
         self.wave_cal = self.input.data[self.sci][1, :, :] if data and self.sci in data else None
-        self.header = self.input.header[self.sci+'_FLUX'] if header and (self.sci + '_FLUX') in header else None
-
-        self.ref_ccf = input_ref.data if hasattr(input_ref, 'data') else None   # TBD: based on level 2 data
+        header = self.input.header if hasattr(self.input, 'header') else None
+        self.header = None
+        if header:
+            if not is_kpf_type:
+                self.header = header['PRIMARY']
+            elif (self.sci + '_FLUX') in header:
+                self.header = header[self.sci + '_FLUX']
 
         # Order trace algorithm setup
         self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init, wave_cal=self.wave_cal,
@@ -141,7 +165,7 @@ class RadialVelocity(KPF1_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.input, KPF1) and \
-            (self.start_order is None  or self.end_order is None or self.start_order <= self.end_order)
+                  (self.ref_ccf is None or isinstance(self.ref_ccf, np.ndarray))
 
         return success
 
@@ -162,32 +186,26 @@ class RadialVelocity(KPF1_Primitive):
         """
 
         _, nx, ny = self.alg.get_spectrum()
-        s_order = -1
-        e_order = -1
-        s_x_pos = -1
-        e_x_pos = -1
 
         if self.alg.get_instrument() == 'NEID':
-            s_order = 3
-            e_order = min(82, np.shape(self.spectrum_data)[0]-1)
-            s_x_pos = 600
-            e_x_pos = nx - s_x_pos
+            if self.rv_init['data']['rv_config']['starname'] != 'HD 127334':
+                s_order = 3 if self.start_order is None else self.start_order
+                e_order = min(82, np.shape(self.spectrum_data)[0]-1) if self.end_order is None else self.end_order
+            else:
+                s_order = 0 if self.start_order is None else self.start_order
+                e_order = 116 if self.end_order is None else self.end_order
+            s_x_pos = 600 if self.start_x is None else self.start_x
+            e_x_pos = nx - 600 if self.end_x is None else self.end_x
         elif self.alg.get_instrument() == 'HARPS':
-            s_order = 0
-            e_order = 69
-            s_x_pos = 500
-            e_x_pos = 3500
-
-        if s_order == -1:
-            if self.start_order is not None:
-                s_order = self.start_order
-            if self.end_order is not None:
-                e_order = self.end_order
+            s_order = 0 if self.start_order is None else self.start_order
+            e_order = 69 if self.end_order is None else self.end_order
+            s_x_pos = 500 if self.start_x  is None else self.start_x
+            e_x_pos = 3500 if self.end_x is None else self.end_x
         else:
-            if self.start_order is not None and e_order >= self.start_order > s_order:
-                s_order = self.start_order
-            if self.end_order is not None and e_order > self.end_order >= s_order:
-                e_order = self.end_order
+            s_x_pos = self.start_x
+            e_x_pos = self.end_x
+            s_order = self.start_order
+            e_order = self.end_order
 
         if self.logger:
             self.logger.info("RadialVelocity: Start crorss correlation to find radial velocity... ")
