@@ -3,7 +3,7 @@ FROM python:3.6-slim
 
 ENV KPFPIPE_TEST_DATA=/data
 ENV KPFPIPE_TEST_OUTPUTS=/outputs
-ENV COVERALLS_REPO_TOKEN=mX4VKMQS2HHM0jGm7qkBUNRtueI8omokr
+ENV COVERALLS_REPO_TOKEN=YLrA2Q2Af7VGwyULXbs0KujYSjUBdn2jP
 
 # install this way to fix paths in coverage report
 ENV PYTHONPATH=$PYTHONPATH:/code/KPF-Pipeline
