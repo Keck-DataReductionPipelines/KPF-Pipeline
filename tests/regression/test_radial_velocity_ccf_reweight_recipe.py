@@ -22,7 +22,7 @@ for f in all_lev2_files:
                         ccf_hdu_index=12)
 """
 
-radial_velocity_neid_reweighting_config = "examples/default_neid_hd127334.cfg"
+radial_velocity_neid_reweighting_config = "examples/default_recipe_neid_hd127334.cfg"
 
 def test_recipe_radial_velocity_neid():
     recipe_test(radial_velocity_neid_reweighting_recipe, radial_velocity_neid_reweighting_config)

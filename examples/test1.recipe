@@ -1,7 +1,0 @@
-from modules.order_trace.src.order_trace import OrderTrace
-
-file = '../ownCloud/KPF-Pipeline-TestData/order_trace_test/paras.flatA.fits'
-
-data = kpf0_from_fits(file, data_type="PARAS")
-data = OrderTrace(data)
-result = to_fits(data, 'test_result.fits')
