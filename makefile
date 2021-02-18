@@ -1,5 +1,6 @@
 init: 
 	mkdir -p logs
+	pip3 install -r requirements.txt .
 
 update: 
 	pip3 install -r requirements.txt --upgrade
@@ -14,6 +15,10 @@ clean: clear
 	rm -f -r .pytest_cache
 	find . -name '*.pyc' -exec rm -f {} +
 	find . -name '*.pyo' -exec rm -f {} +
+
+docker:
+	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
 
 regression_tests:
 	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
