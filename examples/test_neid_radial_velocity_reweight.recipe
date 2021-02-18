@@ -1,6 +1,11 @@
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 
+s_order = 3
+e_order = 82
+reweighting_method = config.ARGUMENT.reweighting_method
+reweight_ccf = KPFPIPE_TEST_DATA + config.ARGUMENT.reweighting_ratio_csv
+
 rv_init = RadialVelocityInit()
 input_lev1_pattern = output_dir + '*' + '_' + str(rect_method) + lev1_stem_suffix + '.fits'
 ref_ccf = output_dir + 'ccf_ratio_table.csv'
