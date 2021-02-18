@@ -112,7 +112,7 @@ class KPFPipeline(BasePipeline):
 
         # Add useful attributes onto the self.context object
         self.context.arg = arg
-        self.context.config = self.config
+        # self.context.config = self.config
 
         self.logger.info('Finished initializing Pipeline')
 
