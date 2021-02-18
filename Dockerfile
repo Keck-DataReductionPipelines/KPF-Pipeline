@@ -7,6 +7,12 @@ ENV COVERALLS_REPO_TOKEN=YLrA2Q2Af7VGwyULXbs0KujYSjUBdn2jP
 
 # install this way to fix paths in coverage report
 ENV PYTHONPATH=$PYTHONPATH:/code/KPF-Pipeline
+ENV PYTHONHASHSEED=0
+
+# turn off built-in Python multithreading
+ENV MKL_NUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+ENV OMP_NUM_THREADS=1
 
 # setup the working directory
 RUN mkdir /code && \
