@@ -115,7 +115,6 @@ def test_exceptions():
     with pytest.raises(IOError):
         # overwriting without setting overwrite to True
         data.read(os.path.join(fpath, f), 'NEID')
-        
 
 
 if __name__ == '__main__':
