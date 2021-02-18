@@ -4,4 +4,5 @@ Module Order Trace
 .. toctree::
    :maxdepth: 2
 
-   alg.rst
+   alg_order_trace.rst
+   primitive_order_trace.rst

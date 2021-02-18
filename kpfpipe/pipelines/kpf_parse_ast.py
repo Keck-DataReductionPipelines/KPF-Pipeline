@@ -1,15 +1,16 @@
 # kpf_parse_ast.py
 
-from ast import NodeVisitor, iter_fields
+from ast import NodeVisitor, iter_fields, parse
 import _ast
 from collections.abc import Iterable
-from collections import deque
 from queue import Queue
+import os
 # from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
 
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
+import configparser as cp
 
 class RecipeError(Exception):
     """ Special recipe exception """
@@ -24,6 +25,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         NodeVisitor.__init__(self)
         # instantiate the parameters dict
         self._params = None
+        # instantiate the environment dict
+        self._env = {}
         # store and load stacks
         # (implemented as lists; use append() and pop())
         self._store = list()
@@ -37,6 +40,18 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._reset_visited_states = False
         # value returned by primitive executed by framework
         self.call_output = None
+        self._builtins = {}
+        self.subrecipe_depth = 0
+
+    def register_builtin(self, key, func, nargs):
+        """
+        Register a function so that it can be called from a recipe without using the framework
+        Items are tuples (function, number of input args)
+        """
+        self._builtins[key] = (func, nargs)
+
+    def load_env_value(self, key, value):
+        self._env[key] = value
     
     def visit_Module(self, node):
         """
@@ -48,22 +63,22 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_started', False)
-            setattr(node, 'kpf_completed', False)
             for item in node.body:
                 self.visit(item)
-            self._params = None # let storage get collected
+            if self.subrecipe_depth == 0:
+                self._params = None # let storage get collected
             return
+        self.pipeline.logger.info(f"Module: subrecipe_depth = {self.subrecipe_depth}")
         if not getattr(node, 'kpf_started', False):
-            self.pipeline.logger.debug("Module")
-            self._params = {}
+            if self.subrecipe_depth == 0:
+                self._params = {}
             setattr(node, 'kpf_started', True)
-        if not getattr(node, 'kpf_completed', False):
-            for item in node.body:
-                self.visit(item)
-                if self.awaiting_call_return:
-                    return
+        for item in node.body:
+            self.visit(item)
+            if self.awaiting_call_return:
+                return
+        if self.subrecipe_depth == 0:
             self._params = None # let allocated memory get collected
-            setattr(node, 'kpf_completed', True)
 
     def visit_ImportFrom(self, node):
         """
@@ -132,24 +147,24 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.pipeline.logger.debug(f"Name is storing {node.id}")
             self._store.append(node.id)
         elif isinstance(node.ctx, _ast.Load):
-            """
-            if not hasattr(self._params, node.id):
-                self.pipeline.logger.error(
-                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
-                raise RecipeError(
-                    f"Name {node.id} on line {node.lineno} of recipe not defined.")
-            value = self._params.get(node.id)
-            """
             if node.id == "None":
                 value = None
+            elif node.id == "config":
+                if self.pipeline != None and hasattr(self.pipeline, "config"):
+                    value = self.pipeline.config
+                else:
+                    self.pipeline.logger.error(f"Name: No context or context has no config attribute")
+                    raise Exception(f"Name: No context or context has no config attribute")
+            elif self._env.get(node.id):
+                value = self._env.get(node.id)
             else:
                 try:
                     value = self._params[node.id]
                 except KeyError:
-                    self.pipeline.logger.error(
-                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                    # self.pipeline.logger.error(
+                    #     f"Name {node.id} on line {node.lineno} of recipe not defined.")
                     raise RecipeError(
-                        f"Name {node.id} on line {node.lineno} of recipe not defined.")
+                        f"Name {node.id} on line {node.lineno} of recipe not defined.  Recipe environment: {self._env}.  Python environment: {os.environ}")
             self.pipeline.logger.debug(f"Name is loading {value} from {node.id}")
             self._load.append(value)
         else:
@@ -184,24 +199,37 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     params['target'] = target             
                 loadQSizeBefore = len(self._load)
                 self.visit(node.iter)
-                args = deque()
+                args = []
+                if len(self._load) - loadQSizeBefore == 1:
+                    item = self._load.pop()
+                    if isinstance(item, Iterable):
+                        self.pipeline.logger.debug(f"For: Popping first list item, {item}, of type {type(item)}")
+                        args = item
+                    else:
+                        args.insert(0, item)
                 while len(self._load) > loadQSizeBefore:
-                    args.appendleft(self._load.pop())
-                # TODO: can this be made simpler?
+                    # pick up any additional items
+                    item = self._load.pop()
+                    self.pipeline.logger.debug(f"For: next list item is {item} of type {type(item)}")
+                    args.insert(0, item)
                 args_iter = iter(list(args))
-                current_arg = next(args_iter)
+                try:
+                    current_arg = next(args_iter)
+                    self.pipeline.logger.debug(f"For: first call to next returned {current_arg} of type {type(current_arg)}")
+                except StopIteration:
+                    current_arg = None
                 params['args_iter'] = args_iter
                 params['current_arg'] = current_arg
                 setattr(node, 'kpf_params', params)
                 setattr(node, 'kpf_started', True)
-                self.pipeline.logger.info(f"Starting For loop on recipe line {node.lineno} with arg {current_arg}")
             else:
                 params = getattr(node, 'kpf_params', None)
                 assert(params is not None)
                 target = params.get('target')
                 args_iter = params.get('args_iter')
                 current_arg = params.get('current_arg')
-            while True:
+            while current_arg is not None:
+                self.pipeline.logger.debug(f"For: in while loop with current_arg {current_arg}, type {type(current_arg)}")
                 self._params[target] = current_arg
                 for subnode in node.body:
                     self.visit(subnode)
@@ -210,6 +238,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 # reset the node visited states for all nodes
                 # underneath this "for" loop to set up for the
                 # next iteration of the loop.
+                self.pipeline.logger.debug("For: resetting visited states before looping")
                 for subnode in node.body:
                     self.reset_visited_states(subnode)
                 # iterate by updating current_arg (and the arg iterator)
@@ -266,9 +295,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 setattr(node, 'kpf_completed_values', True)
             while num_store_targets > 0 and len(self._load) > loadQSizeBefore:
                 target = self._store.pop()
-                self._params[target] = self._load.pop()
+                self.pipeline.logger.debug(f"Assign: assignment target is {target}")
+                if target == '_':
+                    self._load.pop() # discard
+                else:
+                    self._params[target] = self._load.pop()
+                    self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}, type: {self._params[target].__class__.__name__}")
                 num_store_targets -= 1
-                self.pipeline.logger.info(f"Assign: {target} <- {self._params[target]}")
             had_error = False
             while len(self._store) > storeQSizeBefore:
                 had_error = True
@@ -320,9 +353,9 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """ implement USub """
         self._unary_op_impl(node, "USub", lambda x : -x)
 
-    def visit_UNot(self, node):
+    def visit_Not(self, node):
         """ implement UNot """
-        self._unary_op_impl(node, "UNot", lambda x : not x)
+        self._unary_op_impl(node, "Not", lambda x : not x)
 
     # BinOp and the binary operators
 
@@ -385,7 +418,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_Eq(self, node):
         """ implement Eq comparison operator """
-        self._comopare_op_impl(node, "Eq", lambda x, y: x == y)
+        self._compare_op_impl(node, "Eq", lambda x, y: x == y)
     
     def visit_NotEq(self, node):
         """ implement NotEq comparison operator """
@@ -408,19 +441,23 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._compare_op_impl(node, "GtE", lambda x, y: x >= y)
     
     def visit_Is(self, node):
-        """ implement Lt comparison operator """
+        """ implement Is comparison operator """
         self._compare_op_impl(node, "Is", lambda x, y: x is y)
     
     def visit_IsNot(self, node):
         """ implement IsNot comparison operator """
         self._compare_op_impl(node, "IsNot", lambda x, y: not (x is y))
+
+    def visit_In(self, node):
+        """ implement In comparison operator """
+        self._compare_op_impl(node, "In", lambda x, y: x in y)
     
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
 
     def visit_Call(self, node):
         """
         Implement function call
-        The arguments are pulled from the _load stack into a deque.
+        The arguments are pulled from the _load stack into a list.
         Targets are put on the _store stack.
         After the call has been pushed to the framework's event queue,
         we set our awaiting_call_return flag and return.  That flag
@@ -438,9 +475,26 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             for arg in node.args:
                 self.visit(arg)
             return
-        if not getattr(node, 'kpf_completed', False):
+        self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}; kpf_completed is {getattr(node, 'kpf_completed', False)}")
+        if node.func.id == 'invoke_subrecipe':
+            subrecipe = getattr(node, '_kpf_subrecipe', None)
+            if not subrecipe:
+                self.pipeline.logger.debug(f"invoke_subrecipe: opening and parsing recipe file {node.args[0].s}")
+                # TODO: do some argument checking here
+                with open(node.args[0].s) as f:
+                    fstr = f.read()
+                    subrecipe = parse(fstr)
+                node._kpf_subrecipe = subrecipe
+            else:
+                self.pipeline.logger.debug(f"invoke_subrecipe: found existing subrecipe of type {type(subrecipe)}")
+            saved_depth = self.subrecipe_depth
+            self.subrecipe_depth = self.subrecipe_depth + 1
+            self.visit(subrecipe)
+            self.subrecipe_depth = saved_depth
+            if self.awaiting_call_return:
+                return
+        elif not getattr(node, 'kpf_completed', False):
             if not self.returning_from_call:
-                self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}")
                 # Build and queue up the called function and arguments
                 # as a pipeline event.
                 # The "next_event" item in the event_table, populated
@@ -453,16 +507,35 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     self.visit(kwnode)
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
-                event_args = Arguments(name=node.func.id+"_args", **kwargs)
-                # add positional arguments
-                for argnode in node.args:
-                    self.visit(argnode)
-                    event_args.append(self._load.pop())
-                self.context.push_event(node.func.id, event_args)
-                self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
-                #
-                self.awaiting_call_return = True
-                return
+                if node.func.id in self._builtins.keys():
+                    func, nargs = self._builtins[node.func.id]
+                    if len(node.args) != nargs:
+                        self.pipeline.logger.error(f"Call to {node.func.id} takes exactly {nargs} args, got {len(node.args)} on recipe line {node.lineno}")
+                        raise RecipeError(f"Call to {node.func.id} takes exactly one arg, got {len(node.args)} on recipe line {node.lineno}")
+                    arglist = []
+                    for ix in range(nargs-1, -1, -1): # down through range because _load is a LIFO stack
+                        self.visit(node.args[ix])
+                        arglist.append(self._load.pop())
+                    results = func(*arglist, **kwargs)
+                    if isinstance(results, tuple):
+                        self.pipeline.logger.debug(f"Call (builtin): returned tuple, unpacking")
+                        for item in results:
+                            self.pipeline.logger.debug(f"Call (builtin): appending {item} of type {type(item)} to _load")
+                            self._load.append(item)
+                    else:
+                        self.pipeline.logger.debug(f"Call (builtin): appending {results} of type {type(results)} to _load")
+                        self._load.append(results)
+                else:
+                    event_args = Arguments(name=node.func.id+"_args", **kwargs)
+                    # add positional arguments
+                    for argnode in node.args:
+                        self.visit(argnode)
+                        event_args.append(self._load.pop())
+                    self.context.append_event(node.func.id, event_args)
+                    self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
+                    #
+                    self.awaiting_call_return = True
+                    return
             else:
                 # returning from a call (pipeline event):
                 # Get any returned values, stored by resume_recipe() in self.call_output,
@@ -572,8 +645,15 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         self.pipeline.logger.debug(f"List")
         if not getattr(node, "kpf_completed", False):
+            l = []
+            loadDepth = len(self._load)
             for elt in node.elts:
                 self.visit(elt)
+                if len(self._load) > loadDepth:
+                    l.append(self._load.pop())
+                else:
+                    raise RecipeException("List: expected item to append to list, but none was found")
+            self._load.append(l)
             setattr(node, "kpf_completed", True)
     
     def visit_Tuple(self, node):
@@ -638,6 +718,51 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             if self.awaiting_call_return:
                 return
             setattr(node, 'kpf_complted', True)
+    
+    def visit_Attribute(self, node):
+        """ Attribute node -- handle dictionary attribute """
+        if self._reset_visited_states:
+            return
+        self.visit(node.value)
+        obj = self._load.pop()
+        if isinstance(node.ctx, _ast.Load):
+            try:
+                value = obj.getValue(node.attr)
+                # print(f"Attribute: value is {type(value)}: {value}")
+            except (KeyError, AttributeError):
+                self.pipeline.logger.error(
+                    f"Object {obj} on line {node.lineno} of recipe has no attribute {node.attr}.")
+                raise RecipeError(
+                    f"Object {obj} on line {node.lineno} of recipe has no attribute {node.attr}.")
+            self.pipeline.logger.debug(f"Name is loading {value} from {node.attr}")
+            self._load.append(value)
+        elif isinstance(node.ctx, _ast.Store):
+            self.pipeline.logger.error(
+                f"Assigning to dictionary attribute on line {node.lineno} not supported")
+            raise RecipeError(
+                f"Assigning to dictionary attribute on line {node.lineno} not supported")
+    
+    def visit_Subscript(self, node):
+        """ Subscript node """
+        if self._reset_visited_states:
+            return
+        if isinstance(node.ctx, _ast.Load):
+            self.visit(node.value)
+            value = self._load.pop()
+            self.visit(node.slice)
+            sliceName = self._load.pop()
+            self._load.append(value[sliceName])
+        elif isinstance(node.ctx, _astStore):
+            self.pipeline.logger.error(
+                f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
+            raise RecipeError(
+                f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
+    
+    def visit_Index(self, node):
+        """ Index node """
+        if self._reset_visited_states:
+            return
+        self.visit(node.value)
 
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""
