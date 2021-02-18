@@ -103,10 +103,17 @@ class KPFPipeline(BasePipeline):
             arg = self.config._sections['ARGUMENT']
         except KeyError:
             raise IOError('cannot find [ARGUMENT] section in config')
-        self.context.arg = arg
 
         ## Setup primitive-specific configs:
-        self.context.config_path = self.config._sections['MODULES']
+        try:
+            self.context.config_path = self.config._sections['MODULE_CONFIGS']
+        except KeyError:
+            raise IOError('cannot find [MODULE_CONFIGS] section in config')
+
+        # Add useful attributes onto the self.context object
+        self.context.arg = arg
+        self.context.config = self.config
+
         self.logger.info('Finished initializing Pipeline')
 
     def start_recipe(self, action, context):
