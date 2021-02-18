@@ -17,7 +17,7 @@ from kpfpipe.models.base_model import KPFDataModel
 
 class KPF0(KPFDataModel):
     """
-    The level 1 KPF data. Initialized with empty fields
+    The level 0 KPF data. Initialized with empty fields
 
     Attributes:
         data (numpy.ndarray): 2D numpy array storing raw image
@@ -36,6 +36,8 @@ class KPF0(KPFDataModel):
         Constructor
         """
         KPFDataModel.__init__(self)
+        self.level = 0
+
         # level 0 contain only 1 array
         self.data: np.ndarray = None
         self.variance: np.ndarray = None

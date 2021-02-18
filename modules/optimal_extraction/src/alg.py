@@ -1,53 +1,144 @@
 import configparser
 import numpy as np
-import json
-from scipy import linalg, ndimage
 import math
-from astropy.modeling import models, fitting
-import csv
 import time
 import pandas as pd
 from astropy.io import fits
 import re
+from modules.Utils.config_parser import ConfigHandler
 
 # Pipeline dependencies
-from kpfpipe.logger import start_logger
-from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.models.level0 import KPF0
+# from kpfpipe.logger import start_logger
+# from kpfpipe.primitives.level0 import KPF0_Primitive
+# from kpfpipe.models.level0 import KPF0
 
 
 class OptimalExtractionAlg:
     """
-    This module defines class 'OptimalExtractionAlg' and methods to perform the optimal extraction from 2D spectrum to
-    1D spectrum. Prior to the step of optimal extraction, the order trace is either rectified or not. It the order is
-    rectified, the pixels in either vertical direction or normal direction along the trace are collected and rectified
-    column by column.
+    This module defines class 'OptimalExtractionAlg' and methods to perform the optimal or summation
+    extraction which reduces 2D spectrum to 1D spectrum for each order. The process includes 2 steps.
+    In the first step, the flux of each order from both spectral data and flat data is
+    processed and output to a new data set by using either rectification method or not.
+    The second step performs either the optimal or summation extraction to reduce the output data of
+    the first step into 1D data for each order.
+
+    For the first step, the pixels along the normal or vertical direction of the order trace are collected and
+    processed column by column in 3 types of methods,
+
+        - no rectification method: collecting the pixels within the edge size along the north-up direction
+          of the order and taking the pixel flux in full to result the output pixel.
+        - vertical rectification method: collecting the pixels within the edge size along the north-up direction
+          of the order and performing fractional summation over the collected pixels to result the output pixel.
+          The output pixel coverage is based on the vector along the vertical direction and
+          the weighting for the fractional summation is based on the overlapping between the collected pixels
+          and the output pixel.
+        - normal rectification method: collecting the pixels within the edge size along the normal direction
+          of the order and performing fractional summation over the collected pixels to result the output pixel.
+          The output pixel coverage is based on the vector along the normal direction and the weighting for the
+          fractional summation is based on the overlapping between the collected pixels and the output pixel.
+
+    For the second step, either optimal or summation extraction is performed to reduce the 2D data along each order
+    into 1D data. By using optimal extraction, the output pixel of the first step from the spectrum data are weighted
+    and summed up column by column and the weighting is based on the associated output pixel of the first
+    step from the flat data. By using summation extraction, the pixels are summed up directly.
+
+
+    Args:
+        flat_data (numpy.ndarray): 2D flat data.
+        spectrum_data (numpy.ndarray): 2D spectrum data.
+        spectrum_header (fits.header.Header): fits header of spectrum data.
+        order_trace_data (Union[numpy.ndarray, pandas.DataFrame]): order trace data including polynomial coeffients,
+            top/bottom edges and area coverage of the order trace.
+        order_trace_header (dict): fits header of order trace extension.
+        config (configparser.ConfigParser, optional): config context. Defautls to None.
+        logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
+
+    Attributes:
+        logger (logging.Logger): Instance of logging.Logger.
+        instrument (str): Imaging instrument.
+        flat_flux (numpy.ndarray): Numpy array storing 2d flat data.
+        spectrum_flux (numpy.ndarray): Numpy array storing 2d spectrum data for optimal extraction.
+        spectrum_header (fits.header.Header): Header of the fits for spectrum data.
+        dim_width (int): Width of spectrum data/flat data.
+        dim_height (int): Height of spectrum data/flat data.
+        poly_order (int): Polynomial order for the approximation made on the order trace.
+        config_param (ConfigHandler): Related to 'PARAM' section or the section associated with
+            the instrument if it is defined in the config file.
+        order_trace (numpy.ndarrary): Order trace results from order trace module including polynomial coefficients,
+            top/bottom edges and  area coverage of the order trace.
+        total_order (int): Total order in order trace object.
+        order_coeffs (numpy.ndarray): Polynomial coefficients for order trace from higher to lower order.
+        order_edges (numpy.ndarray): Bottom and top edges along order trace.
+        order_xrange (numpy.ndarray): Left and right boundary of order trace.
+        debug_output (str): File path for the file that the debug information is printed to. The printing goes to
+            standard output if it is an empty string or no printing is made if it is None.
+        is_time_profile (bool): Print out the time status while running.
+        is_debug (bool): Print out the debug information while running.
+
+    Raises:
+        AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
+        TypeError: If there is type error for `flat_data`, `spectrum_data`, or `order_trace_data`.
+        TypeError: If there is type error for `spectrum_header` or `order_trace_header`.
+        Exception: If the order size between spectrum data and order trace data is not the same.
+
     """
 
     X = 0
     Y = 1
+    HORIZONTAL = 0
     NORMAL = 0
     VERTICAL = 1
     NoRECT = 2
+    OPTIMAL = 'optimal'
+    SUM = 'sum'
+    V_UP = 0
+    H_RIGHT = 1
+    V_DOWN = 2
+    H_LEFT = 3
+    V1 = 'v_1'
+    V2 = 'v_2'
 
-    def __init__(self, flat_data, spectrum_data, config=None, logger=None):
+    rectifying_method = ['normal rectification', 'vertical rectification', 'no rectification' ]
+
+    def __init__(self, flat_data, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
+                 config=None, logger=None):
+
+        if not isinstance(flat_data, np.ndarray):
+            raise TypeError('flat data type error, cannot construct object from OptionalExtractionAlg')
+        if not isinstance(spectrum_data, np.ndarray):
+            raise TypeError('flux data type error, cannot construct object from OptionalExtractionAlg')
+        if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
+            raise TypeError('flux data type error, cannot construct object from OptionalExtractionAlg')
+        if not isinstance(spectrum_header, fits.header.Header):
+            raise TypeError('flux header type error, cannot construct object from OptionalExtractionAlg')
+        if not isinstance(order_trace_header, dict) and not isinstance(order_trace_header, fits.header.Header):
+            raise TypeError('type: ' + str(type(order_trace_header)) +
+                            ' flux header type error, cannot construct object from OptionalExtractionAlg')
+
         self.logger = logger
-        self.flat_flux = flat_data.data
-        self.spectrum_flux = spectrum_data.data
-        self.original_spectrum_flux = self.spectrum_flux.copy()
-        self.spectrum_header = spectrum_data.header['PRIMARY']
-
+        self.flat_flux = flat_data
+        self.spectrum_flux = spectrum_data
+        self.spectrum_header = spectrum_header
         rows, cols = np.shape(self.flat_flux)
         self.dim_width = cols
         self.dim_height = rows
 
-        self.poly_order = flat_data.header['ORDER TRACE RESULT']['POLY DEGREE']
-        self.config_param = config['PARAM'] if (config is not None and config.has_section('PARAM')) else None
-        self.config_logger = config['LOGGER'] if (config is not None and config.has_section('LOGGER')) else None
-        self.order_trace = flat_data.order_trace_result
+        self.poly_order = order_trace_header['POLY_DEG'] if 'POLY_DEG' in order_trace_header else 3
 
-        order_trace = flat_data.order_trace_result
-        self.total_order = np.shape(order_trace)[0]
+        # origin of the image
+        self.origin = [ order_trace_header['STARTCOL'] if 'STARTCOL' in order_trace_header else 0,
+                        order_trace_header['STARTROW'] if 'STARTROW' in order_trace_header else 0]
+
+        config_h = ConfigHandler(config, 'PARAM')
+        self.instrument = config_h.get_config_value('instrument', '')
+        ins = self.instrument.upper()
+        # section of instrument or 'PARAM'
+        self.config_param = ConfigHandler(config, ins, config_h)
+        self.total_order = np.shape(order_trace_data)[0]
+        if isinstance(order_trace_data, pd.DataFrame):
+            self.order_trace = order_trace_data.values
+        else:
+            self.order_trace = np.array(order_trace_data)
         self.order_coeffs = np.flip(self.order_trace[:, 0:self.poly_order+1], axis=1)
         self.order_edges = None
         self.order_xrange = None
@@ -55,22 +146,34 @@ class OptimalExtractionAlg:
         self.is_debug = True if self.logger else False
         self.debug_output = None
         self.is_time_profile = False
+        self.total_orderlettes = None
 
-    def get_config_value(self, property: str, default=''):
-        """
-        get defined value from the config file
-        """
-        if self.config_param is not None:
-            if isinstance(default, int):
-                return self.config_param.getint(property, default)
-            elif isinstance(default, float):
-                return self.config_param.getfloat(property, default)
-            else:
-                return self.config_param.get(property, default)
-        else:
-            return default
+    def get_config_value(self, prop, default=''):
+        """ Get defined value from the config file.
 
-    def get_order_edges(self, idx: int = 0):
+        Search the value of the specified property fom config section. The default value is returned if not found.
+
+        Args:
+            prop (str): Name of the parameter to be searched.
+            default (Union[int, float, str], optional): Default value for the searched parameter.
+
+        Returns:
+            Union[int, float, str]: Value for the searched parameter.
+
+        """
+        return self.config_param.get_config_value(prop, default)
+
+    def get_order_edges(self, idx=0):
+        """ Get the top and bottom edges of the specified order.
+
+        Args:
+            idx (int, optional): Index of the order in the order trace array. Defaults to zero.
+
+        Returns:
+            numpy.ndarray: Bottom and top edges of the order, `idx`. The first in the array is the bottom edge,
+            and the second in the array is the top edge.
+
+        """
         if self.order_edges is None:
             trace_col = np.shape(self.order_trace)[1]
             if trace_col >= self.poly_order+3:
@@ -82,7 +185,17 @@ class OptimalExtractionAlg:
             idx = 0
         return self.order_edges[idx, :]
 
-    def get_order_xrange(self, idx: int = 0):
+    def get_order_xrange(self, idx=0):
+        """ Get the left and right x boundaries of the specified order.
+
+        Args:
+            idx (int, optional): Index of the order in the order trace array. Defaults to zero.
+
+        Returns:
+            numpy.ndarray: Left and right boundaries of order, `idx`. The first in the array is the left end,
+            and the second in the array is the right end.
+
+        """
         if self.order_xrange is None:
             trace_col = np.shape(self.order_trace)[1]
             if trace_col >= self.poly_order + 5:
@@ -94,22 +207,83 @@ class OptimalExtractionAlg:
             idx = 0
         return self.order_xrange[idx, :]
 
+    def get_total_orderlettes(self):
+        """Get the total orderlettes of the order trace.
+
+        Returns:
+            int: total orderlettes
+        """
+        if self.total_orderlettes is None:
+            self.total_orderlettes = self.get_config_value('total_orderlettes', 1)
+
+        return self.total_orderlettes
+
     def get_spectrum_size(self):
+        """ Get the dimension of the spectrum data.
+
+        Returns:
+            tuple: Dimension of the data,
+
+                * (*int*): Width of the data.
+                * (*int*): Height of the data.
+
+        """
         return self.dim_width, self.dim_height
 
     def get_spectrum_order(self):
+        """ Get the total order of the order trace or the spectrum data.
+
+        Returns:
+            int: The total order.
+
+        """
         return self.total_order
 
-    def enable_debug_print(self, to_print=True):
+    def get_instrument(self):
+        """ Get imaging instrument.
+
+        Returns:
+            str: Instrument name.
         """
-        enable or disable debug printing
+        return self.instrument
+
+    def enable_debug_print(self, to_print=True):
+        """ Enable or disable debug printing.
+
+        Args:
+            to_print (bool, optional): Print out the debug information of the execution. Defaults to False.
+
+        Returns:
+            None.
+
         """
         self.is_debug = to_print or bool(self.logger)
 
     def enable_time_profile(self, is_time=False):
+        """ Enable or disable time profiling printing.
+
+        Args:
+            is_time (bool, optional): Print out the time of the execution. Defaults to False.
+
+        Returns:
+            None.
+
+        """
         self.is_time_profile = is_time
 
     def d_print(self, *args, end='\n', info=False):
+        """ Print out running status to logger or debug information to a file.
+
+        Args:
+            *args: Variable length argument list to print.
+            end (str, optional): Specify what to print at the end.
+            info (bool): Print out for information level, not for debug level.
+
+        Returns:
+            This function handles the print-out to the logger defined in the config file or other file as specified in
+            :func:`~alg.OptimalExtractionAlg.add_file_logger()`.
+
+        """
         if self.is_debug:
             out_str = ' '.join([str(item) for item in args])
             if self.logger:
@@ -126,13 +300,32 @@ class OptimalExtractionAlg:
                     print(out_str, end=end)
 
     def t_print(self, *args):
+        """ Print out message with time stamp.
+
+        Args:
+            *args: Variable length argument list to print including the time stamp.
+
+        Returns:
+            This function handles the time stamp related print-out to the logger defined in the config file.
+        """
+        """
+        if self.is_time_profile:
+            out_str = ' '.join([str(item) for item in args])
+            print(out_str)
+        """
         if self.is_time_profile and self.logger:
             out_str = ' '.join([str(item) for item in args])
             self.logger.info(out_str)
 
-    def update_spectrum_flux(self, bleeding_cure_file: str = None):
-        """
-        update the spectrum flux per specified bleeding cure file or  'nan_pixels' set in config file
+    def update_spectrum_flux(self, bleeding_cure_file=None):
+        """ Update the spectrum flux per specified bleeding cure file or 'nan_pixels' set in config file.
+
+        Args:
+            bleeding_cure_file (str, optional): Filename of bleeding cure file if there is. Defaults to None.
+
+        Returns:
+            None.
+
         """
         if bleeding_cure_file is not None:
             correct_data, correct_header = fits.getdata(bleeding_cure_file, header=True)
@@ -158,20 +351,32 @@ class OptimalExtractionAlg:
                         c_idx = [int(x_idx[i]) if x_idx[i] else (0 if i == 0 else self.dim_width) for i in range(2)]
                         self.spectrum_flux[r_idx[0]:r_idx[1], c_idx[0]:c_idx[1]] = np.nan
 
-    def collect_data_from_order(self, coeffs: np.ndarray, widths: np.ndarray, xrange: np.ndarray,
-                                data_group: list, s_rate=[1, 1], sum_extraction=True):
-        """
-        collect the spectral data per order by polynomial fit
-        Parameters:
-            coeffs (array): polynomial coefficients starting from zero order
-            widths (array): lower and upper edges of the order
-            xrange (array):  x coverage of the order in terms of two ends at x axis
-            data_group (list): set of input data from various sources such as spectral data and flat data
-            s_rate (list or number): sampling rate from input domain to output domain for 2D data
-            sum_extraction(bool): flag to indicate if performing summation on collected data column by column
+    def collect_data_from_order(self, coeffs, widths, xrange, data_group, s_rate=1, sum_extraction=True):
+        """ Collect the spectral data along the order per polynomial fit data and no rectification.
+
+        Args:
+            coeffs (numpy.ndarray): Polynomial coefficients starting from higher order.
+            widths (numpy.ndarray): Bottom and top edges of the order, i.e. `widths[0]` & `widths[1]`.
+            xrange (numpy.ndarray):  Horizontal coverage of the order in terms of two ends along x axis.
+            data_group (list): Set of input data from various sources such as spectral data and flat data.
+            s_rate (Union[list, float], optional): Sampling rate from input domain to output domain for 2D data.
+                Defaults to 1.
+            sum_extraction(bool, optioanl): Flag to indicate if performing summation on collected data
+                column by column. Defaults to False.
 
         Returns:
-            spectral_info (dict): information of the order including dimension and the data
+            dict: Information of non rectified data from the order including the dimension, like::
+
+                {
+                    'y_center': int
+                        # the vertical position where to locate the order in output domain
+                    'width': list
+                        # adjusted bottom and top edges, i.e. [<bottom edge>, <top edge>]
+                    'dim': list
+                        # dimension of data in 'out_data', [<x_dimension>, <y_dimension>]
+                    'out_data': list
+                        # collected flux based the data set from input parameter data_group
+                }
 
         """
 
@@ -180,7 +385,7 @@ class OptimalExtractionAlg:
         if type(s_rate).__name__ == 'list':
             sampling_rate.extend(s_rate)
         else:
-            sampling_rate.append([s_rate, s_rate])
+            sampling_rate.extend([s_rate, s_rate])
 
         output_x_dim = input_x_dim * sampling_rate[self.X]
         output_y_dim = input_y_dim * sampling_rate[self.Y]
@@ -192,49 +397,46 @@ class OptimalExtractionAlg:
         x_step = self.get_input_pos(x_output_step, sampling_rate[self.X])    # x step in input domain
 
         # x step compliant to xrange
-        x_step = x_step[np.where(np.logical_and(x_step >= xrange[0], x_step <= xrange[1]))[0]]
+        x_o = self.origin[self.X]
+        x_step = x_step[np.where(np.logical_and(x_step >= (xrange[0]+x_o), x_step <= (xrange[1]+x_o)))[0]]
         x_output_step = self.get_output_pos(x_step, sampling_rate[self.X]).astype(int)
 
-        y_mid = np.polyval(coeffs, x_step)                            # y position of spectral trace
+        y_mid = np.polyval(coeffs, x_step-x_o) + self.origin[self.Y]  # y position of spectral trace
         v_border = np.array([np.amax(y_mid), np.amin(y_mid)])
         # the vertical position to locate the order in output domain
-        y_output_mid = self.get_output_pos(np.mean(v_border), sampling_rate[self.Y])
+        y_output_mid = math.floor(np.mean(v_border)*sampling_rate[self.Y])    # a number, output y center
         # self.d_print('y_output_mid: ', y_output_mid)
 
         output_widths = self.get_output_pos(widths, sampling_rate[self.Y]).astype(int)  # width of output
+        # output_widths = np.around(self.get_output_pos(widths, sampling_rate[self.Y])).astype(int)
         upper_width = min(output_widths[1], output_y_dim - 1 - y_output_mid)
         lower_width = min(output_widths[0], y_output_mid)
-        self.d_print('edges of order at output: ', upper_width, lower_width)
+        # self.d_print('no rectify: width at output: ', upper_width, lower_width)
 
         y_size = 1 if sum_extraction is True else (upper_width+lower_width)
         total_data_group = len(data_group)
         out_data = [np.zeros((y_size, output_x_dim)) for _ in range(0, total_data_group)]
 
         # x_output_step in sync with x_step,
-        s_x = 0
-        for o_x in x_output_step:               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
+        input_widths = np.array([self.get_input_pos(y_o, sampling_rate[self.Y])
+                                 for y_o in range(-lower_width, upper_width)])
+        input_x = np.floor(x_step).astype(int)
+
+        for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
             # if o_x % 1000 == 0:
             #    self.d_print(o_x, end=" ")
-            for o_y in range(0, upper_width):
-                y_i = int(math.floor(y_mid[s_x]+o_y))
-                x_i = int(math.floor(x_step[s_x]))
-                for i in range(0, total_data_group):
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += data_group[i][y_i, x_i]
-                    else:
-                        out_data[i][lower_width+o_y, o_x] = data_group[i][y_i, x_i]
 
-            for o_y in range(0, lower_width):
-                y_i = int(math.floor(y_mid[s_x]-o_y-1))
-                x_i = int(math.floor(x_step[s_x]))
-                for i in range(0, total_data_group):
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += data_group[i][y_i, x_i]
-                    else:
-                        out_data[i][lower_width-o_y-1, o_x] = data_group[i][y_i, x_i]
+            x_i = input_x[s_x]
+            y_input = np.floor(input_widths + y_mid[s_x]).astype(int)
+            y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
+            y_input = y_input[y_input_idx]
+            for i in range(0, total_data_group):
+                if sum_extraction is True:
+                    out_data[i][0, o_x] = np.sum(data_group[i][y_input, x_i])
+                else:
+                    out_data[i][y_input_idx, o_x] = data_group[i][y_input, x_i]
 
-            s_x += 1
-
+        # out data starting from origin [0, 0] contains the reduced flux associated with the data range
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
                        'dim': [output_y_dim, output_x_dim],
@@ -242,24 +444,38 @@ class OptimalExtractionAlg:
 
         return result_data
 
-    def rectify_spectrum_curve(self, coeffs: np.ndarray, widths: np.ndarray, xrange: np.ndarray,
-                               data_group: list, s_rate=[1, 1], sum_extraction: bool = True, direction: int = NORMAL):
-        """
-        Rectify the order trace by collecting the pixels in vertical or normal direction of the order
+    def rectify_spectrum_curve(self, coeffs, widths, xrange, data_group, s_rate=1, sum_extraction=True,
+                               direction=NORMAL):
+        """ Rectify the order trace based on the pixel collection method.
 
         Parameters:
-            coeffs (array): polynomial coefficients starting from zero order
-            widths (array): lower and upper edges of the order
-            xrange (array):  x coverage of the order in terms of two ends at x axis
-            data_group (list): set of input data from various sources such as spectral data and flat data
-            s_rate (list or number): sampling rate from input domain to output domain for 2D data
-            sum_extraction(bool): flag to indicate if performing summation on collected data column by column
-            direction (int): data collection method for rectification.
-                             NORMAL: collect data along the normal direction of the order
-                             VERTICAL: collect data along the vertical direction
+            coeffs (numpy.ndarray): Polynomial coefficients starting from higher order.
+            widths (numpy.ndarray): Bottom and top edges of the order.
+            xrange (numpy.ndarray):  Horizontal coverage of the order in terms of two ends along x axis.
+            data_group (list): Set of input data from various sources such as spectral data and flat data.
+            s_rate (list or number, optional): Sampling rate from input domain to output domain for 2D data.
+                Defaults to 1.
+            sum_extraction(bool, optional): Flag to indicate if performing summation on collected data
+                column by column. Defaults to True.
+            direction (int, optional): Types of data collection methods for rectification.
+                Defualts to NORMAL.
+
+                - NORMAL: collect data along the normal direction of the order.
+                - VERTICAL: collect data along the vertical direction of the order.
 
         Returns:
-            spectral_info (dict): information of straightened order including dimension and the data
+            dict:  Information of rectified data from the order including the dimension, like::
+
+                {
+                    'y_center': int
+                        # the vertical position where to locate the order in output domain.
+                    'width': list
+                         # adjusted bottom and top edges, i.e. [<bottom edge>, <top edge>].
+                    'dim': list
+                        # dimension of data in 'out_data', [<x_dimension>, <y_dimension>].
+                    'out_data': list
+                        # collected data based the data set from parameter 'data_group'.
+                }
 
         """
 
@@ -268,7 +484,7 @@ class OptimalExtractionAlg:
         if type(s_rate).__name__ == 'list':
             sampling_rate.extend(s_rate)
         else:
-            sampling_rate.append([s_rate, s_rate])
+            sampling_rate.extend([s_rate, s_rate])
 
         output_x_dim = input_x_dim * sampling_rate[self.X]
         output_y_dim = input_y_dim * sampling_rate[self.Y]
@@ -280,113 +496,398 @@ class OptimalExtractionAlg:
         x_step = self.get_input_pos(x_output_step, sampling_rate[self.X])  # x step in input domain
 
         # x step compliant to xrange
-        x_step = x_step[np.where(np.logical_and(x_step >= xrange[0], x_step <= (xrange[1]+1)))[0]]
+        x_o = self.origin[self.X]
+        x_step = x_step[np.where(np.logical_and(x_step >= (xrange[0]+x_o), x_step <= (xrange[1]+x_o+1)))[0]]
         x_output_step = self.get_output_pos(x_step, sampling_rate[self.X]).astype(int)
-        y_mid = np.polyval(coeffs, x_step)          # spectral trace value at mid point
+
+        y_mid = np.polyval(coeffs, x_step-x_o) + self.origin[self.Y]      # spectral trace value at mid point
+
+        # y_output_step = np.arange(0, output_y_dim+1, dtype=int)
+        # y_step = self.get_input_pos(y_output_step, sampling_rate[self.Y])  # y step in input domain
 
         if direction == self.NORMAL:
-            y_norm_step = self.poly_normal(x_step, coeffs, sampling_rate[self.Y])   # curve norm along x in input domain
+            # curve norm along x in input domain
+            y_norm_step = self.poly_normal(x_step-x_o, coeffs, sampling_rate[self.Y])
         else:
-            y_norm_step = self.vertical_normal(x_step, sampling_rate[self.Y])   # vertical norm along x in input domain
+            # vertical norm along x in input domain
+            y_norm_step = self.vertical_normal(x_step-x_o, sampling_rate[self.Y])
 
         v_border = np.array([np.amax(y_mid), np.amin(y_mid)])
         # self.d_print('v_border: ', v_border)
         # the vertical position to locate the order in output domain
-        y_output_mid = self.get_output_pos(np.mean(v_border), sampling_rate[self.Y])
+        y_output_mid = math.floor(np.mean(v_border)*sampling_rate[self.Y])
         # self.d_print('y_output_mid: ', y_output_mid)
 
         output_widths = self.get_output_pos(widths, sampling_rate[self.Y]).astype(int)  # width of output
         upper_width = min(output_widths[1], output_y_dim - 1 - y_output_mid)
         lower_width = min(output_widths[0], y_output_mid)
-        self.d_print('width at output: ', upper_width, lower_width)
+        self.d_print('rectify: width at output: ', upper_width, lower_width)
 
-        corners_at_mid = np.vstack((x_step, y_mid)).T
+        corners_at_mid = np.vstack((x_step, y_mid)).T     # for x and y in data range, relative to 2D origin [0, 0]
         # self.d_print('corners_at_mid: ', corners_at_mid)
 
         y_size = 1 if sum_extraction is True else (upper_width+lower_width)
         total_data_group = len(data_group)
         out_data = [np.zeros((y_size, output_x_dim)) for _ in range(0, total_data_group)]
 
-        input_upper_corners = np.zeros((upper_width+1, x_step.size, 2))
-        input_lower_corners = np.zeros((lower_width+1, x_step.size, 2))
-        input_upper_corners[0] = corners_at_mid.copy()
-        input_lower_corners[0] = corners_at_mid.copy()
+        all_input_corners = np.zeros((upper_width + lower_width + 1, x_step.size, 2))    # for x & y
+        all_input_corners[lower_width] = corners_at_mid.copy()
 
         for o_y in range(1, upper_width+1):
-            next_upper_corners = self.go_vertical(input_upper_corners[o_y-1], y_norm_step, 1)
-            input_upper_corners[o_y] = next_upper_corners
+            next_upper_corners = self.go_vertical(all_input_corners[lower_width+o_y-1], y_norm_step, 1)
+            all_input_corners[lower_width+o_y] = next_upper_corners
 
         for o_y in range(1, lower_width+1):
-            next_lower_corners = self.go_vertical(input_lower_corners[o_y-1], y_norm_step, -1)
-            input_lower_corners[o_y] = next_lower_corners
+            next_lower_corners = self.go_vertical(all_input_corners[lower_width-o_y+1], y_norm_step, -1)
+            all_input_corners[lower_width-o_y] = next_lower_corners
 
-        s_x = 0
-        for o_x in x_output_step[0:-1]:               # o_x: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
-            # if o_x % 100 == 0:
-            #    print(o_x, end=" ")
-            for o_y in range(0, upper_width):
-                input_corners = input_upper_corners[o_y:o_y+2, s_x:s_x+2].reshape((4, 2))[[0, 2, 3, 1]]
-                for i in range(0, total_data_group):
-                    flux = self.compute_output_flux(input_corners, data_group[i], input_x_dim, input_y_dim,
-                                                    direction)
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += flux
-                    else:
-                        out_data[i][lower_width+o_y, o_x] = flux
+        v2_borders = None
 
-            for o_y in range(0, lower_width):
-                input_corners = input_lower_corners[o_y:o_y+2, s_x:s_x+2].reshape((4, 2))[[2, 0, 1, 3]]
-                for i in range(0, total_data_group):
-                    flux = self.compute_output_flux(input_corners, data_group[i], input_x_dim, input_y_dim,
-                                                    direction)
-                    if sum_extraction is True:
-                        out_data[i][0, o_x] += flux
-                    else:
-                        out_data[i][lower_width-o_y-1, o_x] = flux
-            s_x += 1
+        upper_pixels = list(range(lower_width, upper_width + lower_width))
+        lower_pixels = list(range(lower_width - 1, -1, -1))
+        for i, o_x in enumerate(x_output_step[0:-1]):    # for x output associated with the data range
+            # if i % 100 == 0:
+            #    print(i, end=" ")
+             if direction == self.NORMAL or direction == self.VERTICAL:
+                if i == 0:
+                    v1_borders = self.collect_v_borders(all_input_corners, i)
+                else:
+                    v1_borders = v2_borders
 
-        # self.d_print(' ')
+                v2_borders = self.collect_v_borders(all_input_corners, i+1)
+                h_borders = self.collect_h_borders(v1_borders, v2_borders)
+
+                # each border: vertex_1, vertex_2, direction, intersect_with_borders={direction, pos, loc}
+                for pixel_list in [upper_pixels, lower_pixels]:
+                    for o_y in pixel_list:
+                        borders = [
+                                v1_borders[o_y].copy(), h_borders[o_y+1].copy(),
+                                v2_borders[o_y].copy(), h_borders[o_y].copy()
+                            ]
+
+                        # adjust v1 and v2 in clockwise direction
+                        for n in [self.V_DOWN, self.H_LEFT]:
+                            borders[n][self.V1],  borders[n][self.V2] = borders[n][self.V2], borders[n][self.V1]
+                        flux = self.compute_flux_for_output_pixel(borders, data_group, total_data_group)
+                        for n in range(0, total_data_group):
+                            if sum_extraction is True:
+                                out_data[n][0, o_x] += flux[n]
+                            else:
+                                out_data[n][o_y, o_x] = flux[n]
 
         result_data = {'y_center': y_output_mid,
                        'width': [upper_width, lower_width],
                        'dim': [output_y_dim, output_x_dim],
                        'out_data': [out_data[i] for i in range(0, total_data_group)]}
-
         return result_data
 
-    def get_flux_from_order(self, coeffs: np.ndarray, widths: np.ndarray, x_range: np.ndarray, in_data: np.ndarray,
-                            flat_flux: np.ndarray, s_rate: list = [1, 1], norm_direction: int = None):
-        """
-        Collect the data around the order with either rectifying the pixels or not.
-        If the rectification method is specified, the pixels along the order are selected depending on the edge size
-        (i.e. widths) and the edge direction (i.e. norm_direction). With that, the pixels appearing at
-        either vertical or normal direction of the order are weighted and summed up. The weighting for each pixel
-        is determined based on the area of that pixel contributing to the pixel after rectification.
-        If no rectification method is specified, the pixels along the vertical direction the order are collected
-        in full depending on the edge size only.
+    def intersect_cell_borders(self, vertex_1, vertex_2):
+        """Find out the intersection of a line segment with the horizontal and vertical grid lines.
 
-        Parameters:
-            coeffs (array): polynomial coefficients starting from zero order
-            widths (array): lower and upper edges of the orders
-            x_range (array): x coverage of the order in terms of two ends at x axis
-            in_data (array): 2D spectral data
-            flat_flux (array): 2D flat data
-            s_rate (list or number): sampling rate from input domain to output domain
-            norm_direction(int): rectification method. optional.
-                                 None: no rectification.
-                                 VERTICAL: pixels at  the north and south direction along the order are collected to
-                                           be rectified.
-                                 NORMAL: pixels at the normal direction of the order are collected to be rectified.
+        Args:
+            vertex_1 (list): End point 1 of the line segment.
+            vertex_2 (list): Eng point 2 of the line segment.
 
         Returns:
-            out (dict): information related to the order data, like
-                        {'order_data': <2D data>, 'order_flat': <2D data>,
-                         'data_height': <height of the order data>,
-                         'data_width': <width of the order data>,
-                         'out_y_center': <y center position where the 2D result data is located>
+            dict: A dict instance containing the intersect information, like::
+
+                {
+                    'min_cell_x': int
+                        # min x of the cell coverage of the line segment.
+                    'max_cell_x': int
+                        # max x of the cell coverage of the line segment.
+                    'min_cell_y': int
+                        # min y of the cell coverage of the line segment.
+                    'max_cell_y': int
+                        # max y of the cell coverage of the line segment.
+                    'v_borders': dict
+                        # collection of intersection with vertical grid lines, like:
+                        {
+                            <grid_line_x_position>:
+                            {
+                                'direction': VERTICAL,
+                                'pos': float,
+                                      # intersected position along y axis.
+                                'axis_idx': self.X
+                                      # coordinate index in 'loc' of the grid line.
+                                'loc': list,
+                                      # cell location of the intersected position.
+                            }
+                            :
                         }
+
+                    'h_borders': dict
+                        # collection of intersection with horizontal grid lines, like:
+                         {
+                            <grid_line_y_position>:
+                            {
+                                'direction': HORIZONTAL,
+                                'pos': float,
+                                        # intersected position along x axis.
+                                'axis_idx': self.Y
+                                        # coordinate index in 'loc' of the grid line.
+                                'loc': list,
+                                        # cell location of the intersected position.
+                            }
+                            :
+                        }
+                }
+
+        """
+        x_ends = [vertex_1[self.X], vertex_2[self.X]]
+        y_ends = [vertex_1[self.Y], vertex_2[self.Y]]
+
+        x_min = min(x_ends[0], x_ends[1])
+        x_max = max(x_ends[0], x_ends[1])
+        y_min = min(y_ends[0], y_ends[1])
+        y_max = max(y_ends[0], y_ends[1])
+        y_dim, x_dim = np.shape(self.spectrum_flux)
+        min_cell_x = max(0, math.floor(x_min))
+        max_cell_x = min(x_dim, math.ceil(x_max))
+        min_cell_y = max(0, math.floor(y_min))
+        max_cell_y = min(y_dim, math.ceil(y_max))
+
+        h_borders = dict()
+        v_borders = dict()
+
+        # def make_border(direct, pos, pos_cells):
+        # pos could be fractional, loc falls on the position increment by one
+        def make_border(direction, loc, pos):
+            if direction == self.VERTICAL:
+                loc_x = loc
+                loc_y = math.floor(pos)
+                axis_idx = self.X
+            else:
+                loc_y = loc
+                loc_x = math.floor(pos)
+                axis_idx = self.Y
+
+            new_border = {'direction': direction, 'pos': pos, 'axis_idx': axis_idx,  'loc': [loc_x, loc_y]}
+            return new_border
+
+        def intersect_xline(x1, x3, y3, x4, y4):
+            if y3 == y4:        # vertial x line interact with horozontal line
+                return y3
+            if x1 == x3:        # one end meets the vertical line
+                return y3
+            if x1 == x4:
+                return y4
+
+            c_xy = x3 * y4 - x4 * y3
+            den = (x3 - x4)
+            num_y = x1 * (y3 - y4) + c_xy      # x1*(x3-x4) + x3*y4-x4*y3
+            return num_y/den
+
+        def intersect_yline(y1, x3, y3, x4, y4):
+            if x3 == x4:       # horizontal y line interacts with vertical line
+                return x3
+            if y1 == y3:
+                return x3
+            if y1 == y4:
+                return x4
+
+            c_xy = x3 * y4 - x4 * y3
+            den = y3 - y4
+            num_x = y1 * (x3 - x4) - c_xy       # y1*(x4-x3)+x3*y4-x4*y3
+            return num_x/den
+
+        # end_xy = x_ends[0]*y_ends[1]-x_ends[1]*y_ends[0]   # x3*y4-x4*y3
+        # find intersection with vertical cell border (vertical cell line)
+        for c_x in range(min_cell_x, max_cell_x+1):
+            if x_min <= c_x <= x_max:
+                if x_ends[0] != x_ends[1]:          # not a vertical line overlapping cell border
+                    y_p = intersect_xline(c_x, x_ends[0], y_ends[0], x_ends[1], y_ends[1])
+
+                    i_border = make_border(self.VERTICAL, c_x, y_p)
+                    v_borders[c_x] = i_border
+
+        # find intersection with horizontal cell border (horizontal cell line)
+        for c_y in range(min_cell_y, max_cell_y+1):
+            if y_min <= c_y <= y_max:
+                if y_ends[0] != y_ends[1]:          # not a horizontal line overlapping cell border
+                    x_p = intersect_yline(c_y, x_ends[0], y_ends[0], x_ends[1], y_ends[1])
+
+                    i_border = make_border(self.HORIZONTAL, c_y, x_p)
+                    h_borders[c_y] = i_border
+
+        intersect_borders = {
+                    'orig_v1': vertex_1,
+                    'orig_v2': vertex_2,
+                    'min_cell_x': min_cell_x,
+                    'max_cell_x': max_cell_x,
+                    'min_cell_y': min_cell_y,
+                    'max_cell_y': max_cell_y,
+                    'v_borders': v_borders,
+                    'h_borders': h_borders
+            }
+        return intersect_borders
+
+    def collect_v_borders(self, corners: np.ndarray, start_idx: int):
+        """ Collect vertical borders of output pixels.
+
+        Find vertical borders of the rectified cells along either normal or vertical direction
+        from the order trace.
+
+        Args:
+            corners (list): A set of corners of rectified cells along the normal or vertical
+                direction of the order.
+            start_idx (int): Starting index of corners of the polygon representing the rectified
+                output cell.
+
+        Returns:
+            list: Collection of all vertical borders along either normal or vertical direction
+            from an order trace, like::
+
+                [
+                    {
+                        'v1': list   # end point 1 of a border
+                        'v2': list   # end point 2 of a border
+                        'direction': VERTICAL
+                        'intersect_with_borders': dict
+                                     # grid line intersection of the border,
+                                     # see 'intersect_cell_borders' for the detail
+                    }
+                    :
+                ]
+
         """
 
+        all_borders = list()
+        total_borders = np.shape(corners)[0] - 1
+
+        for idx in range(total_borders):
+            vertex_1 = [corners[idx, start_idx, self.X], corners[idx, start_idx, self.Y]]
+            vertex_2 = [corners[idx+1, start_idx, self.X], corners[idx+1, start_idx, self.Y]]
+
+            v1 = self.V1
+            v2 = self.V2
+
+            border = {
+                    v1: vertex_1,
+                    v2: vertex_2,
+                    'direction': self.VERTICAL,
+                    'intersect_with_borders': self.intersect_cell_borders(vertex_1, vertex_2)
+            }
+
+            all_borders.append(border)
+
+        return all_borders
+
+    def collect_h_borders(self, v1_borders, v2_borders):
+        """Collect horizontal borders of the output pixels.
+
+        Find horizontal borders of the rectified cells along either normal or vertical direction from the order trace.
+
+        Args:
+            v1_borders: Left side of vertical borders of the rectified cells collected by
+                        :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+            v2_borders: Right side of vertical borders of the rectified cells collected by
+                        :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+
+        Returns:
+            list: Collection of all horizontal borders along either normal or vertical direction
+            from an order trace, like::
+
+                [
+                    {
+                        'v1': list,   # end point 1 of a border
+                        'v2': list,   # end point 2 of a border
+                        'direction': HORIZONTAL,
+                        'intersect_with_borders': dict,
+                                      # grid line intersection of the border,
+                                      # see 'intersect_cell_borders' for the detail
+                    }
+                    :
+                ]
+
+        """
+        all_borders = list()
+        total_borders = len(v1_borders) + 1
+        v1 = self.V1
+        v2 = self.V2
+
+        for idx in range(total_borders):
+            if idx < (total_borders - 1):
+                vertex_1 = v1_borders[idx][v1]
+                vertex_2 = v2_borders[idx][v1]
+            else:
+                vertex_1 = v1_borders[idx-1][v2]
+                vertex_2 = v2_borders[idx-1][v2]
+
+            border = {
+                    v1: vertex_1,
+                    v2: vertex_2,
+                    'direction': self.HORIZONTAL,
+                    'intersect_with_borders': self.intersect_cell_borders(vertex_1, vertex_2)
+            }
+            all_borders.append(border)
+        return all_borders
+
+    def get_flux_from_order(self, coeffs, widths, x_range, in_data, flat_flux, s_rate=1, norm_direction=None):
+        """  Collect the data along the order by either rectifying the pixels or not.
+
+        The data collection is based on the following 2 types of methods,
+
+            - rectification method: the pixels along the order are selected depending on the edge size
+              (i.e. `widths`) and the direction (i.e. `norm_direction`). With that, all pixels appearing at
+              either vertical or normal direction of the order are collected, weighted and summed up.
+              The weighting for each pixel is based on the area of that pixel contributing to the pixel
+              after rectification.
+            - no rectification method: the pixels along the vertical direction of the order are collected
+              in full depending on the edge size.
+
+        Parameters:
+            coeffs (numpy.ndarray): Polynomial coefficients starting from higher order.
+            widths (numpy.ndarray): Bottom and top edges of the orders.
+            x_range (numpy.ndarray): Horizontal coverage of the order in terms of
+                two ends along x axis.
+            in_data (numpy.ndarray): 2D spectral data.
+            flat_flux (numpy.ndarray): 2D flat data.
+            s_rate (Union[list, float], optional): sampling rate from input domain to output domain for 2D data.
+                Defaults to 1.
+            norm_direction(int, optional): Rectification method. Defaults to None.
+
+                - None: no rectification.
+                - VERTICAL: pixels at the north and south direction along the order are
+                  collected to be rectified.
+                - NORMAL: pixels at the normal direction of the order are collected to be rectified.
+
+        Returns:
+            dict: Information related to the order data, like::
+
+                {
+                    'order_data': numpy.ndarray
+                        # extracted spectrum data from the order using rectification # or not.
+                    'order_flat': numpy.ndarray
+                        # extracted flat data from the order using rectification or not.
+                    'data_height': int        # height of 'order_data'.
+                    'data_width': int         # width of 'order_data'.
+                    'out_y_center': int
+                        # y center position where 'order_data' is located.
+                }
+
+        Raises:
+            AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
+            Exception: If there is unmatched data size between spectrum data and flat data.
+            Exception: If the size of polynomial coefficients is not enough for the order it represents for.
+            Exception: If bottom or top edge is missing.
+            Exception: If the left or right border is missing.
+            Exception: If the rectification method is invalid.
+
+        """
+        if np.shape(in_data) != np.shape(flat_flux):
+            raise Exception("unmatched data size between spectrum data and flat data")
+        if np.size(coeffs) != (self.poly_order+1):
+            raise Exception("polynomial coefficient error")
+
+        if np.size(widths) < 2:
+            raise Exception("bottom or top edge is missing")
+
+        if np.size(x_range) < 2:
+            raise Exception("left or right border is missing")
+
+        if norm_direction > self.NoRECT or norm_direction < self.NORMAL:
+            raise Exception("invalid rectification method")
         if norm_direction is None or norm_direction == self.NoRECT:
             flux_results = self.collect_data_from_order(coeffs, widths, x_range, [in_data, flat_flux], s_rate,
                                                         sum_extraction=False)
@@ -403,21 +904,38 @@ class OptimalExtractionAlg:
                 'out_y_center': flux_results.get('y_center')}
 
     @staticmethod
-    def optimal_extraction(s_data: np.ndarray, f_data: np.ndarray, data_height: int,
-                           data_width: int, y_center: int):
-        """
-        Do optimal extraction from 2D data to 1D data on collected pixels along the order
+    def optimal_extraction(s_data, f_data, data_height, data_width):
+        """ Do optimal extraction on collected pixels along the order.
 
-        Parameters:
-            s_data (array): 2D spectral data collected for one order
-            f_data (array): 2D flat data collected for one order
-            data_height (int); height of the 2D data for optimal extraction
-            data_width (int): width of the 2D data for optimal extraction
-            y_center (int): y position where the 1D result is located in the output domain
+        This optimal extraction method does the calculation based on the variance of the spectrum data and the
+        weighting based on the flat data.
 
-         Returns:
-            out (array): 1D data result of optimal extraction
+        Args:
+            s_data (numpy.ndarray): 2D spectral data collected for one order.
+            f_data (numpy.ndarray): 2D flat data collected for one order.
+            data_height (int): Height of the 2D data for optimal extraction.
+            data_width (int): Width of the 2D data for optimal extraction.
+
+        Returns:
+            dict: Information of optimal extraction result, like::
+
+                {
+                    'extraction': numpy.ndarray   # optimal extraction result.
+                }
+
+        Raises:
+            AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
+            Exception: If there is unmatched size between collected order data and associated flat data.
+            Exception: If the data size doesn't match to the given dimension.
+
         """
+
+        if np.shape(s_data) != np.shape(f_data):
+            raise Exception("unmatched size between collected order data and associated flat data")
+
+        if np.shape(s_data)[0] != data_height or np.shape(s_data)[1] != data_width:
+            raise Exception("unmatched data size with the given dimension")
+
         w_data = np.zeros((1, data_width))
 
         # taking weighted summation on spectral data of each column,
@@ -440,59 +958,40 @@ class OptimalExtractionAlg:
         #        dem = np.power(p_data, 2) / d_var
         #        w_data[0, x] = np.sum(num) / np.sum(dem)
 
-        return {'order_data': s_data, 'order_flat': f_data, 'extraction': w_data,
-                'y_center': y_center}
+        return {'extraction': w_data}
 
     @staticmethod
-    def optimal_extraction_weight_only(s_data: np.ndarray, f_data: np.ndarray, data_width: int, y_center: int):
-        """
-        Do optimal extraction from 2D data to 1D data on collected pixels along the order column. The formula
-        that comprises the extraction algorithm mainly calculates the weighted summation over the collected pixels and
-        the weighting is determined by the ratio between flat data of each pixel  over the summation of those at the
-        same column. Currently, this function is not in use for optimal extraction.
+    def summation_extraction(s_data):
+        """ Spectrum extraction by summation on collected pixels (rectified or non-rectified)
 
-        Parameters:
-            s_data (array): 2D spectral data collected for one order
-            f_data (array): 2D flat data collected for one order
-            data_width (int): width of the 2D data for optimal extraction
-            y_center (int): y position where the 1D result is located in the output domain
+        Args:
+            s_data (numpy.ndarray): Collected data for spectrum extraction.
 
-         Returns:
-            out (array): 1D data result of optimal extraction
-        """
-        w_data = np.zeros((1, data_width))
+        Returns:
+            dict: Information related to the order data, like::
 
-        # taking weighted summation on spectral data for each column,
-        # the weight is based on flat data.
+                {
+                    'extraction': numpy.ndarray   # optimal extraction result.
+                }
 
-        w_sum = np.sum(f_data, axis=0)
-        non_zero_idx = np.where(w_sum != 0.0)[0]
-        w_data[0, non_zero_idx] = np.sum(s_data[:, non_zero_idx]*f_data[:, non_zero_idx], axis=0)/w_sum[non_zero_idx]
-
-        return {'order_data': s_data, 'order_flat': f_data, 'extraction': w_data,
-                'y_center': y_center}
-
-    @staticmethod
-    def summation_extraction(s_data: np.ndarray, y_center: int):
-        """
-        Spectrum extraction by summation on collected pixels (rectified or non-rectified)
         """
         out_data = np.sum(s_data, axis=0)
 
-        return {'order_data': s_data, 'extraction': out_data, 'y_center': y_center}
+        return {'extraction': out_data}
 
     @staticmethod
-    def fill_2d_with_data(from_data: np.ndarray, to_data: np.ndarray, to_pos: int, from_pos: int = 0):
-        """
-        Fill a band of 2D data into another band of 2D to the vertical position in 'to_data'
+    def fill_2d_with_data(from_data, to_data, to_pos, from_pos=0):
+        """ Fill a band of 2D data into another 2D container starting from and to specified vertical positions.
 
-        Parameters:
-            from_data(array): band of data to be copied from
-            to_data(array): 2D area to copy the data to
-            to_pos(number): the vertical position in 'to_data' where 'from_data' is copied to
-            from_pos(number): the vertical position in 'from_data' where the data is copied from. The default is 0.
+        Args:
+            from_data (numpy.ndarray): Band of data to be copied from.
+            to_data (numpy.ndarray): 2D area to copy the data to.
+            to_pos (int): The vertical position of `to_data` where `from_data` is copied to.
+            from_pos (int): the vertical position of `from_data` where the data is copied from. The default is 0.
+
         Returns:
-            out (array): 2D data with 'from_data' filled in.
+            numpy.ndarray: 2D data with `from_data` filled in.
+
         """
 
         to_y_dim = np.shape(to_data)[0]
@@ -506,9 +1005,16 @@ class OptimalExtractionAlg:
         return to_data
 
     @staticmethod
-    def vertical_normal(pos_x: np.ndarray, sampling_rate: float):
-        """
-        Calculate the vertical vector at the specified x position per vertical sampling rate
+    def vertical_normal(pos_x, sampling_rate):
+        """ Calculate the vertical vector at the specified x position per vertical sampling rate.
+
+        Args:
+            pos_x (numpy.ndarray): x position.
+            sampling_rate (float): Vertical sampling rate.
+
+        Returns:
+            numpy.ndarray: Vertical vector at position `pos_x`.
+
         """
 
         v_norms = np.zeros((pos_x.size, 2))
@@ -518,9 +1024,17 @@ class OptimalExtractionAlg:
         return v_norms
 
     @staticmethod
-    def poly_normal(pos_x: np.ndarray, coeffs: np.ndarray, sampling_rate: int = 1):
-        """
-        Calculate the normal vector at the specified x position per vertical sampling rate
+    def poly_normal(pos_x, coeffs, sampling_rate=1):
+        """ Calculate the normal vector at the specified x position per vertical sampling rate.
+
+        Args:
+            pos_x (numpy.ndarray): x position.
+            coeffs (numpy.ndarray): Coefficients of the polynomial fit to the order from higher order to lower.
+            sampling_rate (int, optional): Vertical sampling rate. Defaults to 1.
+
+        Returns:
+            numpy.ndarray: Normal vectors at positions in `pos_x`.
+
         """
 
         d_coeff = np.polyder(coeffs)
@@ -533,266 +1047,179 @@ class OptimalExtractionAlg:
         return v_norms
 
     @staticmethod
-    def get_input_pos(output_pos: np.ndarray, s_rate: float):
-        """
-        Get associated position at input domain per output position and sampling rate
+    def get_input_pos(output_pos, s_rate):
+        """ Get associated position of input domain per output position and sampling rate.
 
-        Parameters:
-            output_pos (array): position on output domain
-            s_rate (number): sampling ratio between input domain and output domain, input*s_rate = output
+        Args:
+            output_pos (numpy.ndarray): Position of output domain.
+            s_rate (flat): Sampling ratio between input domain and output domain, i.e. *input*s_rate = output*.
 
         Returns:
-            out (array): position on input domain
-        """
+            numpy.ndarray: Position of input domain.
 
+        """
         return output_pos/s_rate
 
     @staticmethod
     def get_output_pos(input_pos: np.ndarray, s_rate: float):
-        """
-        get the associated output position per input position and sampling rate
+        """ Get associated output position per input position and sampling rate.
 
-        Parameters:
-            input_pos (array): position on input domain
-            s_rate (float): sampling rate
+        Args:
+            input_pos (numpy.ndarray): Position of input domain.
+            s_rate (float): Sampling rate.
 
         Returns:
-            out (array): position on output domain
-        """
+            numpy.ndarray: Position of output domain.
 
+        """
         if isinstance(input_pos, np.ndarray):
             return np.floor(input_pos*s_rate)     # position at output cell domain is integer based
-        else:
-            return math.floor(input_pos*s_rate)
 
     @staticmethod
-    def go_vertical(crt_pos: np.ndarray, norm: np.ndarray, direction: int = 1):
-        """
-        Get 2D position from current position by traversing in given direction (or reverse direction)
+    def go_vertical(crt_pos, norm, direction=1):
+        """ Get new positions by starting from a set of positions and traversing along the specified direction.
 
-        Parameters:
-            crt_pos (array): current position
-            norm (array): vector of unit length
-            direction (number): traverse in given or reverse direction
+        Args:
+            crt_pos (numpy.ndarray): Current positions.
+            norm (numpy.ndarray): Vector to traverse.
+            direction (int, optional): Traverse direction. Defaults to 1.
 
         Returns:
-            out (array): new position at given (or reverse) direction
+            numpy.ndarray: New position at given traversing direction.
+
         """
 
         new_pos = crt_pos + direction * norm
 
         return new_pos
 
-    def compute_output_flux(self, input_corners: np.ndarray, input_data: np.ndarray, input_x_dim: int, input_y_dim: int,
-                            vertical_normal: int):
+    def compute_flux_for_output_pixel(self, borders, input_data, total_data_group):
+        """ Compute weighted flux covered by one output pixel.
+
+            Compute the weighted flux per spectrum data and flat data covered for the area of one output pixel.
+            The area is represented by polygon borders and the polygon is collected in either normal direction or
+            vertical direction to the order. The weight depends on the area overlap between the output pixel and the
+            input pixel.
+
+            Args:
+                borders(list): Borders of the coverage of one output pxiel.
+                input_data(list): Input data group. each element is numpy.ndarray.
+                total_data_group(int): total data group
+
+            Returns:
+                list : Flux value on observation data and flat data for the area covered by one output pixel.
+
         """
-        compute the flux within a polygon using polygon clipping algorithm if the polygon corners are collected in
-        normal direction or checking the area coverage of each pixel inside the polygon if the polygon corners are
-        collected in vertical direction.
+        x_1 = min([border['intersect_with_borders']['min_cell_x'] for border in borders])
+        x_2 = max([border['intersect_with_borders']['max_cell_x'] for border in borders])
+        y_1 = min([border['intersect_with_borders']['min_cell_y'] for border in borders])
+        y_2 = max([border['intersect_with_borders']['max_cell_y'] for border in borders])
 
-        Parameters:
-            input_corners(array): polygon corners at input domain in counterclockwise order
-            input_data(array): input data
-            input_x_dim(number): width of input data
-            input_y_dim(number): height of input data
-            vertical_normal(int): the method how the corners are collected, NORMAL or VERTICAL
-        Returns:
-            flux(number): flux value
-        """
-
-        x_list = input_corners[:, self.X]
-        y_list = input_corners[:, self.Y]
-
-        x_1 = max(0, math.floor(np.amin(x_list)))
-        x_2 = min(input_x_dim, math.ceil(np.amax(x_list)))
-        y_1 = max(0, math.floor(np.amin(y_list)))
-        y_2 = min(input_y_dim, math.ceil(np.amax(y_list)))
-
-        if vertical_normal == self.VERTICAL:
-            flux_vertical, total_area_vertical = self.compute_flux_from_vertical_clipping(input_corners,
-                                                                                          [x_1, x_2, y_1, y_2],
-                                                                                          input_data)
-            return flux_vertical
-
-        flux_polygon, total_area_polygon = self.compute_flux_from_polygon_clipping(input_corners,
-                                                                                   [x_1, x_2, y_1, y_2],
-                                                                                   input_data)
+        flux_polygon, total_area_polygon = self.compute_flux_from_polygon_clipping2(borders,
+                                                                [x_1, x_2, y_1, y_2], input_data, total_data_group)
         return flux_polygon
 
-    def compute_flux_from_polygon_clipping(self, poly_corners: np.ndarray, border_points: list, input_data: np.ndarray):
-        x_1, x_2, y_1, y_2 = border_points
+    def compute_flux_from_polygon_clipping2(self, borders, clipper_borders, input_data, total_data_group):
+        """ Compute flux on pixels covered by one polygon formed in the normal or vertical direction of the order.
+
+        Collect input pixels covered by the output pixel and compute weighted summation on the input pixels.
+
+        Args:
+            borders(list): Borders of the coverage of one output pxiel.
+            clipper_borders (list): Rectangular area covered by the clipper boundaries.
+            input_data (list): Imaging data - list of numpy.ndarray containing spectrum data and flat data.
+            total_data_group (int): total data group.
+
+        Returns:
+            tuple: Weighted summation of flux for spectrum data and flat data over the area covered by
+            the output pixel.
+
+            * **flux** (*list*): Weighted summation of the flux for spectrum and flat data.
+            * **total_area** (*float*): Total overlapping area between the collected pixels and the output pixel.
+        """
+        x_1, x_2, y_1, y_2 = clipper_borders
         total_area = 0.0
-        flux = 0.0
+        flux = np.zeros(total_data_group)
+
+        # print('poly borders: ', borders)
+        # print('clipper: ', x_1, x_2, y_1, y_2)
         for x in range(x_1, x_2):
             for y in range(y_1, y_2):
-                if input_data[y, x] != 0.0:
-                    new_corners = self.polygon_clipping(poly_corners, [[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
-                    area = self.polygon_area(new_corners)
-                    total_area += area
-                    flux += area * input_data[y, x]
-
-        return flux, total_area
-
-    def compute_flux_from_vertical_clipping(self, poly_corners: np.ndarray, border_points: list,
-                                            input_data: np.ndarray):
-        # make mark on vertical grid line
-        x1, x2, y1, y2 = border_points  # grid boundary of poly_corners
-        y_grid = np.arange(y1, y2+1, dtype=float)
-
-        border_x1 = np.amin(poly_corners[:, self.X])        # x range of poly_corners,
-        border_x2 = np.amax(poly_corners[:, self.X])
-        border_x = np.arange(math.floor(border_x1), math.ceil(border_x2)+1, dtype=float)  # horizontal coverage along x
-        border_x[0] = border_x1 if border_x1 != border_x[0] else border_x[0]
-        border_x[-1] = border_x2 if border_x2 != border_x[-1] else border_x[-1]
-
-        # y top and bottom ends of poly_corners at each point in border_x
-        d_x = border_x2 - border_x1
-        bottom_y = ((border_x - border_x1)*poly_corners[3, self.Y] + (border_x2 - border_x)*poly_corners[0, self.Y])/d_x
-        top_y = ((border_x-border_x1)*poly_corners[2, self.Y] + (border_x2 - border_x)*poly_corners[1, self.Y])/d_x
-
-        mark_y = []
-        for i in range(len(border_x)):
-            # vertical coverage at each point in border_x
-            border_y = np.arange(math.floor(bottom_y[i]), math.ceil(top_y[i])+1, dtype=float)
-            border_y[0] = bottom_y[i]
-            border_y[-1] = top_y[i]
-            mark_y.append(border_y)
-
-        rows, cols = (y2-y1, x2-x1)
-        cell_corners = [[None for _ in range(cols)] for _ in range(rows)]  # corners in each cell starting from x1, y1
-
-        for x_ni in range(np.size(border_x)-1):
-            # collect corners & points_at_borders: [<point at border 1>, <point at border 2>]
-
-            y_line1 = mark_y[x_ni]
-            y_line2 = mark_y[x_ni+1]
-            sy1 = np.where((y_line1 - y_grid[0]) >= 0)[0][0]            # first index in y_line1 covered by y_grid
-            y_line1_sy = np.where((y_grid - y_line1[sy1]) <= 0)[0][-1]  # first index from y_grid
-            sy2 = np.where((y_line2 - y_grid[0]) >= 0)[0][0]            # first index in y_line2 covered by y_grid
-            y_line2_sy = np.where((y_grid - y_line2[sy2]) <= 0)[0][-1]  # first index from y_grid
-            ey1 = np.where((y_line1 - y_grid[-1]) < 0)[0][-1]           # last index in y_line1 covered by y_grid
-            y_line1_ey = np.where((y_line1[ey1] - y_grid) >= 0)[0][-1]  # last index from y_grid
-            ey2 = np.where((y_line2 - y_grid[-1]) < 0)[0][-1]           # last index in y_line2 covered by y_grid
-            y_line2_ey = np.where((y_line2[ey2] - y_grid) >= 0)[0][-1]  # last index from y_grid
-
-            min_sy_idx = min(y_line1_sy, y_line2_sy)   # y index on y_grid
-            max_ey_idx = max(y_line1_ey, y_line2_ey)
-
-            # collect the intersect points at y position in y_grid & border points in the cell starting from the same y
-            v_cell_info = [{'inter_points': None, 'border_points': [None, None]} for _ in y_grid]
-            for y_idx in range(min_sy_idx, max_ey_idx+1):
-                if min(y_line1[sy1], y_line2[sy2]) < y_grid[y_idx] < max(y_line1[sy1], y_line2[sy2]):
-                    x_inter = (abs(y_grid[y_idx] - y_line1[sy1]) * border_x[x_ni+1] +
-                               abs(y_line2[sy2] - y_grid[y_idx]) * border_x[x_ni])/abs(y_line1[sy1]-y_line2[sy2])
-                    if y_line1[sy1] < y_line2[sy2]:   # line1 is lower
-                        v_cell_info[y_idx]['inter_points'] = [border_x[x_ni], x_inter]
-                    else:
-                        v_cell_info[y_idx]['inter_points'] = [x_inter, border_x[x_ni+1]]
-                if min(y_line1[ey1], y_line2[ey2]) < y_grid[y_idx] < max(y_line1[ey1], y_line2[ey2]):
-                    x_inter = (abs(y_grid[y_idx] - y_line1[ey1]) * border_x[x_ni+1] +
-                               abs(y_line2[ey2] - y_grid[y_idx]) * border_x[x_ni])/abs(y_line1[ey1]-y_line2[ey2])
-                    if y_line1[ey1] < y_line2[ey2]:
-                        v_cell_info[y_idx]['inter_points'] = [x_inter, border_x[x_ni+1]]
-                    else:
-                        v_cell_info[y_idx]['inter_points'] = [border_x[x_ni], x_inter]
-            if y_line1[sy1] > y_grid[y_line1_sy]:
-                v_cell_info[y_line1_sy]['border_points'][0] = [border_x[x_ni], y_line1[sy1]]
-            if y_line2[sy2] > y_grid[y_line2_sy]:
-                v_cell_info[y_line2_sy]['border_points'][1] = [border_x[x_ni+1], y_line2[sy2]]
-
-            if y_line1[ey1] > y_grid[y_line1_ey]:
-                v_cell_info[y_line1_ey]['border_points'][0] = [border_x[x_ni], y_line1[ey1]]
-            if y_line2[ey2] > y_grid[y_line2_ey]:
-                v_cell_info[y_line2_ey]['border_points'][1] = [border_x[x_ni+1], y_line2[ey2]]
-
-            bottom_p = [[border_x[x_ni], y_line1[sy1]], [border_x[x_ni+1], y_line2[sy2]]]
-            if y_line1_sy < y_line2_sy:
-                bottom_p[1] = bottom_p[0]
-            elif y_line1_sy > y_line2_sy:
-                bottom_p[0] = bottom_p[1]
-
-            top_p = [[border_x[x_ni], y_line1[ey1]], [border_x[x_ni+1], y_line2[ey2]]]
-            if y_line1_ey > y_line2_ey:
-                top_p[1] = top_p[0]
-            elif y_line2_ey > y_line1_ey:
-                top_p[0] = top_p[1]
-
-            for y_idx in range(min_sy_idx, max_ey_idx):
-                corners = list()
-                corners.append(bottom_p[0])
-                if (v_cell_info[y_idx]['border_points'][0] is not None) and \
-                   (v_cell_info[y_idx]['border_points'][0] != bottom_p[0]):
-                    corners.append(v_cell_info[y_idx]['border_points'][0])
-
-                y_c = y_grid[y_idx+1]
-                if v_cell_info[y_idx+1]['inter_points'] is not None:
-                    corners.append([v_cell_info[y_idx+1]['inter_points'][0], y_c])
-                    corners.append([v_cell_info[y_idx+1]['inter_points'][1], y_c])
-                else:
-                    corners.extend([[border_x[x_ni], y_c], [border_x[x_ni+1], y_c]])
-
-                next_bottom = [corners[-2], corners[-1]]  # the last two corners just added
-
-                if (v_cell_info[y_idx]['border_points'][1] is not None) and \
-                   (v_cell_info[y_idx]['border_points'][1] != corners[-1]):
-                    corners.append(v_cell_info[y_idx]['border_points'][1])
-
-                if bottom_p[1] != corners[-1] and bottom_p[1] != corners[0]:
-                    corners.append(bottom_p[1])
-                bottom_p = next_bottom
-
-                cell_corners[y_idx][x_ni] = corners
-
-            cell_corners[max_ey_idx][x_ni] = [bottom_p[0], top_p[0], top_p[1], bottom_p[1]]
-
-        total_area = 0.0
-        flux = 0.0
-        for y in range(rows):
-            for x in range(cols):
-                if cell_corners[y][x] is None or input_data[y1+y, x1+x] == 0:
-                    continue
-
-                # corners = np.array(cell_corners[y][x])-np.array([x1, y1])
-                corners = np.array(cell_corners[y][x])
-                area = self.polygon_area(corners)
+                # stime = time.time()
+                # if len([d_group[y, x] for d_group in input_data if d_group[y, x] != 0.0]) > 0:
+                new_corners = self.polygon_clipping2(borders, [[x, y], [x, y+1], [x+1, y+1], [x+1, y]], 4)
+                area = self.polygon_area(new_corners)
                 total_area += area
-                flux += area * input_data[y1+y, x1+x]
+                for n in range(total_data_group):
+                    if input_data[n][y, x] != 0.0:
+                        flux[n] += area * input_data[n][y, x]
+                    # print('x, y = ', x, y, ' area = ', area)
+                # self.time_check(stime, 'time for one clipper pixel ')
+        # print('total_area = ', total_area, ' flux=', flux)
+        new_flux = flux/total_area
+        return new_flux, total_area
 
-        return flux, total_area
+    def polygon_clipping2(self, borders, clipper_points, clipper_size):
+        """ Clip a polygon by an area enclosed by a set of straight lines of 2D domain.
 
-    def polygon_clipping(self, poly_points: np.ndarray, clipper_points: list, clipper_size: int):
+        Args:
+            borders(list): Borders of the coverage of one output pixel in counterclockwise order.
+            clipper_points (list): Corners of clipping area in counterclockwise order.
+            clipper_size (int): Total sides of the clipping area.
+
+        Returns:
+            numpy.ndarray: Corners of the polygon after clipping in counterclockwise order.
+
         """
-        New polygon points after performing the clipping based on the specified clipping area
-        """
+        new_poly_borders = [b.copy() for b in borders]
 
-        new_poly_points = [[poly_points[i, 0], poly_points[i, 1]] for i in range(clipper_size)]
+        # print('\nclipper_points: ', clipper_points)
+        # do clipping on each side of the clipper
         for i in range(clipper_size):
             k = (i+1) % clipper_size
-            new_poly_points = self.clip(new_poly_points, clipper_points[i][0], clipper_points[i][1],
-                                        clipper_points[k][0], clipper_points[k][1])
+            # print('\ni = ', i )
+            new_poly_borders = self.clip2(new_poly_borders, clipper_points[i][0], clipper_points[i][1],
+                                          clipper_points[k][0], clipper_points[k][1], i)
+            # for b in new_poly_borders:
+            #    print(b)
 
-        new_corners = self.remove_duplicate_point(new_poly_points)
+        new_corners = self.remove_duplicate_point2(new_poly_borders)
+        # print('\n new corners: ', new_corners)
         return np.array(new_corners)
 
     @staticmethod
-    def remove_duplicate_point(corners: np.ndarray):
-        """
-        Remove the duplicate points from a list of corner points
-        """
+    def remove_duplicate_point2(borders):
+        """ Remove the duplicate points from a list of corner points of a polygon.
 
+        Args:
+            borders (list): Borders of a polygon.
+
+        Returns:
+            list: Corner points of the polygon.
+
+        """
         new_corners = []
-        for c in corners:
-            if c not in new_corners:
-                new_corners.append(c)
+        for b in borders:
+            v1 = b[OptimalExtractionAlg.V1]
+            v2 = b[OptimalExtractionAlg.V2]
+            if v1 not in new_corners:
+                new_corners.append(v1)
+            if v2 not in new_corners:
+                new_corners.append(v2)
 
         return new_corners
 
     @staticmethod
-    def polygon_area(corners: np.ndarray):
-        """
-        Calculate the polygon area per polygon corners
-        """
+    def polygon_area(corners):
+        """ Calculate the polygon area per polygon corners.
 
+        Args:
+            corners (numpy.ndarray): Corners of a polygon.
+
+        Returns:
+            float: Area of the polygon.
+
+        """
         polygon_size = np.shape(corners)[0]
         area = 0.0
         for i in range(polygon_size):
@@ -801,56 +1228,149 @@ class OptimalExtractionAlg:
 
         return abs(area)/2
 
-    def clip(self, poly_points: np.ndarray, x1: int, y1: int, x2: int, y2: int):
-        """
-        Polygon clipping
-        """
+    def clip2(self, poly_borders, x1, y1, x2, y2, clipper_direction):
+        """ Clipping a polygon by a vector on 2D domain.
 
-        new_points = []
-        poly_size = len(poly_points)
+        The end points in the borders of the polygons, `poly_borders`, may be replaced by the intersected points
+        between the clipping vector and the polygon borders.
+
+        Args:
+            poly_borders (list): List of borders of the polygon.
+                Each border is a dict instance as described in :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+                or :func:`~alg.OptimalExtractionAlg.collect_h_borders()`.
+            x1 (int): x of end point 1 of the vector.
+            y1 (int): y of end point 1 of the vector.
+            x2 (int): x of end point 2 of the vector.
+            y2 (int): y of end point 2 of the vector.
+            clipper_direction (int): Clipping vector direction.
+
+        Returns:
+            list: Updated borders of the polygon after being clipped by the vector.
+
+        """
+        poly_size = len(poly_borders)
+        new_poly_borders = list()
+
+        def set_pos(border_pos, point_pos, is_bigger_inside=True):
+            p_pos = 0
+            if point_pos > border_pos:
+                p_pos = -1 if is_bigger_inside else 1
+            elif point_pos < border_pos:
+                p_pos = 1 if is_bigger_inside else -1
+            return p_pos
+
+        # pick the reserved one if two intersection points are found
+        def get_intersect_point(border_set, clipper_at, clipper_axis):
+            p_axis = self.X if clipper_axis == self.Y else self.Y
+            if clipper_at in border_set:
+                res_point = [0.0, 0.0]
+                res_point[p_axis] = border_set[clipper_at]['pos']
+                res_point[clipper_axis] = clipper_at
+                return res_point
+            else:
+                return None
+
+        v1 = self.V1
+        v2 = self.V2
 
         for i in range(poly_size):
-            k = (i+1) % poly_size
+            p_border = poly_borders[i]
 
-            ix = poly_points[i][0]
-            iy = poly_points[i][1]
-            kx = poly_points[k][0]
-            ky = poly_points[k][1]
+            i_idx = v1
+            k_idx = v2
+            ix, iy = p_border[i_idx][0], p_border[i_idx][1]
+            kx, ky = p_border[k_idx][0], p_border[k_idx][1]
 
-            # position of first point w.r.t. clipper line
-            i_pos = (x2 - x1) * (iy - y1) - (y2 - y1) * (ix - x1)
-            # position of second point w.r.t. clipper line
-            k_pos = (x2 - x1) * (ky - y1) - (y2 - y1) * (kx - x1)
+            intersect_borders = p_border['intersect_with_borders']
+            v_borders = intersect_borders['v_borders']
+            h_borders = intersect_borders['h_borders']
 
-            if i_pos < 0 and k_pos < 0:             # both are inside, take the second
-                new_points.append([kx, ky])
-            elif i_pos >= 0 and k_pos < 0:          # only the second is inside, take the intersect and the second one
-                if i_pos == 0:
-                    new_points.append([ix, iy])
+            if clipper_direction == self.V_UP or clipper_direction == self.V_DOWN:
+                i_pos = set_pos(x1, ix, clipper_direction == self.V_UP)
+                k_pos = set_pos(x1, kx, clipper_direction == self.V_UP)
+            else:
+                i_pos = set_pos(y1, iy, clipper_direction == self.H_LEFT)
+                k_pos = set_pos(y1, ky, clipper_direction == self.H_LEFT)
+
+            if i_pos <= 0 and k_pos <= 0:                 # from inside|border to inside|border, keep the border
+                new_poly_borders.append(p_border)
+            # from outside to inside or inside to outside, replace outside with clipped pt.
+            elif (i_pos > 0 and k_pos < 0) or (i_pos < 0 and k_pos > 0):
+                if x1 == x2:
+                    i_point = get_intersect_point(v_borders, x1, self.X)
+                else:           # y1 == y2
+                    i_point = get_intersect_point(h_borders, y1, self.Y)
+
+                if i_point is not None:
+                    if i_pos > 0:
+                        p_border[i_idx] = i_point      # clipping point
+                    else:
+                        p_border[k_idx] = i_point
+                    new_poly_borders.append(p_border)
                 else:
-                    intersect_p = self.line_intersect(x1, y1, x2, y2, ix, iy, kx, ky)
-                    new_points.append([intersect_p[0], intersect_p[1]])
-                new_points.append([kx, ky])
-            elif i_pos < 0 and k_pos >= 0:          # onlyt the first inside,  take the intersect
-                if k_pos == 0:
-                    new_points.append([kx, ky])
-                else:
-                    intersect_p = self.line_intersect(x1, y1, x2, y2, ix, iy, kx, ky)
-                    new_points.append([intersect_p[0], intersect_p[1]])
+                    print("no intersect found ", x1, x2, y1, y2)
 
-        return new_points
+        new_poly_size = len(new_poly_borders)
+        ret_poly_borders = list()
+
+        for i in range(new_poly_size):
+            k = (i+1) % new_poly_size
+            p1 = new_poly_borders[i][v2]
+            p2 = new_poly_borders[k][v1]
+
+            ret_poly_borders.append(new_poly_borders[i])
+
+            if p1 != p2:
+                intersect_borders = self.intersect_cell_borders(p1, p2)
+                a_border = {
+                        v1: p1,
+                        v2: p2,
+                        'direction': -1,
+                        'intersect_with_borders': intersect_borders
+                }
+                ret_poly_borders.append(a_border)
+
+        return ret_poly_borders
 
     @staticmethod
-    def line_intersect(x1: float, y1: float, x2: float, y2: float, x3: float, y3: float, x4: float, y4: float):
+    def line_intersect(x1, y1, x2, y2, x3, y3, x4, y4):
+        """ Find the intersection of two lines on 2D by assuming there is the intersetion between these 2 lines.
+
+        Args:
+            x1 (int): x of end point 1 of line 1.
+            y1 (int): y of end point 1 of line 1.
+            x2 (int): x of end point 2 of line 1.
+            y2 (int): y of end point 2 of line 1.
+            x3 (int): x of end point 1 of line 2.
+            y3 (int): y of end point 1 of line 2.
+            x4 (int): x of end point 2 of line 2.
+            y4 (int): y of end point 2 of line 2.
+
+        Returns:
+            list: Intersect point containing values of x and y coordinates.
+
+        """
         den = (x1-x2)*(y3-y4) - (x3-x4)*(y1-y2)
         num_x = (x1*y2 - x2*y1) * (x3 - x4) - (x1 - x2) * (x3*y4 - x4*y3)
         num_y = (x1*y2 - x2*y1) * (y3 - y4) - (y1 - y2) * (x3*y4 - x4*y3)
 
         return [num_x/den, num_y/den]
 
-    def write_data_to_dataframe(self, result_data: np.ndarray):
-        """
-        Write optimal extraction result to Pandas DataFrame Object
+    def write_data_to_dataframe(self, result_data):
+        """ Write optimal extraction result to an instance of Pandas DataFrame.
+
+        Args:
+            result_data (numpy.ndarray): Optimal extraction result.  Each row of the array corresponds to the reduced
+                1D data of one order.
+
+        Returns:
+            Pandas.DataFrame: Instance of DataFrame containing the extraction result plus the following attributes:
+
+                - *MJD-OBS*: modified Julian date of the observation.
+                - *EXPTIME*: exposure time of the observation.
+                - *TOTALORD*: total order in the result data.
+                - *DIMWIDTH*: Width of the order in the result data.
+
         """
         header_keys = list(self.spectrum_header.keys())
 
@@ -864,51 +1384,89 @@ class OptimalExtractionAlg:
         exptime = self.spectrum_header['EXPTIME'] if 'EXPTIME' in header_keys else 600.0
 
         total_order, dim_width = np.shape(result_data)
+        # result_table = {'order_'+str(i): result_data[i, :] for i in range(total_order) }
+        # df_result = pd.DataFrame(result_table)
         df_result = pd.DataFrame(result_data)
         df_result.attrs['MJD-OBS'] = mjd
+        df_result.attrs['OBSJD'] = mjd + 2400000.5
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
         df_result.attrs['DIMWIDTH'] = dim_width
+        df_result.attrs['FROMIMGX'] = self.origin[self.X]
+        df_result.attrs['FROMIMGY'] = self.origin[self.Y]
 
         return df_result
 
     def time_check(self, t_start, step_msg):
+        """Count and display the execution time.
+
+        Args:
+            t_start (float): Start time to count.
+            step_msg (str): Message to print.
+
+        Returns:
+            float: End of time.
+
+        """
         t_end = time.time()
         self.t_print(step_msg, (t_end - t_start), 'sec.')
         return t_end
 
-    def add_file_logger(self, filename: str = None):
+    def add_file_logger(self, filename=None):
+        """ Add file to log debug information.
+
+        Args:
+            filename (str, optional): Filename of the log file. Defaults to None.
+
+        Returns:
+            None.
+
+        """
         self.enable_debug_print(filename is not None)
         self.debug_output = filename
 
-    def extract_spectrum(self, rectification_method: int = NoRECT, extraction_method: str = 'optimal',
-                         order_set: np.ndarray = None,
-                         show_time: bool = False,
-                         print_debug: str = None,
-                         bleeding_file: str = None):
-        """
-        Optimal extraction from 2D flux to 1D. Rectification step is optional.
+    def extract_spectrum(self, rectification_method=NoRECT, extraction_method=OPTIMAL,
+                         order_set=None,
+                         show_time=False,
+                         print_debug=None,
+                         bleeding_file=None):
+        """ Optimal extraction from 2D flux to 1D. Rectification step is optional.
 
-        Parameters:
-            rectification_method (int):
-                    OptimalExtractionAlg.NoRECT: no rectification. (the fastest computation)
-                    OptimalExtractionAlg.VERTICAL: pixels at  the north-up direction along the order are collected
-                                                    to be rectified.
-                    OptimalExtractionAlg.NORMAL: pixels at the normal direction of the order are collected to
-                                                    be rectified.
-            extraction_method (str): extraction method.
-                                    'optimal' for optimal extraction or
-                                    'sum' for summation on extraction.
-            order_set (array): set of order to extract.
-            show_time (bool):  show running time of the step
-            print_debug (str): print development debug information to stdout or a file (not to logger)
-                                     <filepath>: print to the file specified or print to stdout if empty string
-                                     None:  no print out
-            bleeding_file (str): bleeding cure file
+        Args:
+            rectification_method (int): There are three methods used to collect pixels from orders of spectrum data
+                and flat dta for optimal extraction,
+
+                - OptimalExtractionAlg.NoRECT: Pixels at the north-up direction along the order are collected.
+                  No rectification. (the fastest computation).
+                - OptimalExtractionAlg.VERTICAL: Pixels at the north-up direction along the order are collected
+                  to be rectified.
+                - OptimalExtractionAlg.NORMAL: Pixels at the normal direction of the order are collected to
+                  be rectified.
+            extraction_method (str, optional): There are two extraction methods performing extraction on collected
+                flux along the order. Defaults to OPTIMAL.
+
+                - OptimalExtractionAlg.OPTIMAL (i.e. 'optimal'): for optimal extraction.
+                - OptimalExtractionAlg.SUM (i.e. 'sum'): for summation extraction.
+
+            order_set (numpy.ndarray, optional): Set of orders to extract. Defaults to None for all orders.
+            show_time (bool, optional):  Show running time of the steps. Defaults to False.
+            print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
+                a file with path `print_debug` if it is non empty string, or no print if it is None.
+                Defaults to None.
+            bleeding_file (str, optioanl): Bleeding cure file, such as that for PARAS data. Defaults to None.
 
         Returns:
-            out (array): 1D spectrum data
+            dict: Optimal extraction result from 2D spectrum data, like::
+
+                    {
+                        'optimal_extraction_result':  Padas.DataFrame
+                                    # table storing optimal extraction result.
+                                    # each row of the table containing the optimal extraction
+                                    # result for one order.
+                    }
+
         """
+
         self.add_file_logger(print_debug)
         self.enable_time_profile(show_time)
         self.update_spectrum_flux(bleeding_file)
@@ -916,51 +1474,31 @@ class OptimalExtractionAlg:
         dim_width, dim_height = self.get_spectrum_size()
         total_order = self.get_spectrum_order()
         if order_set is None:
-            order_set = np.arange(0, total_order, dtype=int)
+            order_set = np.arange(0, total_order, self.get_total_orderlettes(), dtype=int)
 
         out_data = np.zeros((order_set.size, dim_width))
 
-        self.d_print("do ", extraction_method, ' on ', order_set.size, ' orders', info=True)
+        self.d_print("do ", self.rectifying_method[rectification_method], extraction_method,
+                     ' on ', order_set.size, ' orders', info=True)
 
         t_start = time.time()
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             self.d_print(c_order, ' edges: ', self.get_order_edges(c_order),
-                         ' xrange: ', self.get_order_xrange(c_order), end=" ")
+                         ' xrange: ', self.get_order_xrange(c_order), end=" ", info=True)
             order_flux = self.get_flux_from_order(self.order_coeffs[c_order], self.get_order_edges(c_order),
                                                   self.get_order_xrange(c_order), self.spectrum_flux, self.flat_flux,
                                                   norm_direction=rectification_method)
-
-            # check element with nan np.argwhere(np.isnan(order_flux.get('order_data'))), paras data has nan in spectrum
             result = dict()
             if 'optimal' in extraction_method:
                 result = self.optimal_extraction(order_flux.get('order_data'), order_flux.get('order_flat'),
-                                                 order_flux.get('data_height'), order_flux.get('data_width'),
-                                                 order_flux.get('out_y_center'))
+                                                 order_flux.get('data_height'), order_flux.get('data_width'))
             elif 'sum' in extraction_method:
-                result = self.summation_extraction(order_flux.get('order_data'), order_flux.get('out_y_center'))
+                result = self.summation_extraction(order_flux.get('order_data'))
             if 'extraction' in result:
                 self.fill_2d_with_data(result.get('extraction'), out_data, idx_out)
-
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
         self.d_print(" ")
         data_df = self.write_data_to_dataframe(out_data)
-
         return {'optimal_extraction_result': data_df}
 
-    @staticmethod
-    def result_test(target_file: str, data_result: np.ndarray):
-        target_data = fits.getdata(target_file)
-        t_y, t_x = np.shape(target_data)
-        r_y, r_x = np.shape(data_result)
-
-        if t_y != r_y or t_x != r_x:
-            return {'result': 'error', 'msg': 'dimension is not the same'}
-
-        diff_data = target_data - data_result
-        diff_idx = np.where((diff_data != 0.0) & (~np.isnan(diff_data)))[0]
-
-        if diff_idx.size > 0:
-            return {'result': 'error', 'msg': 'data is not the same at '+diff_idx.tostring()}
-
-        return {'result': 'ok'}

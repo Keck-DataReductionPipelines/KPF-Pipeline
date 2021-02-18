@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import git
 import datetime
+import hashlib
 
 # Pipeline dependencies
 from kpfpipe.models.metadata.receipt_columns import *
@@ -121,6 +122,9 @@ class KPFDataModel:
         # list of auxiliary extensions 
         self.extension: dict = {}
 
+        # level of data model
+        self.level = None # set in each derived class
+
 # =============================================================================
 # I/O related methods
     @classmethod
@@ -198,6 +202,18 @@ class KPFDataModel:
                 # the provided data_type is not recognized, ie.
                 # not in the self.read_methods list
                 raise IOError('cannot recognize data type {}'.format(data_type))
+
+        # compute MD5 sum of source file and write it into a receipt entry for tracking.
+        # Note that MD5 sum has known security vulnerabilities, but we are only using
+        # this to ensure data integrity, and there is no known reason for someone to try
+        # to hack astronomical data files.  If something more secure is is needed,
+        # substitute hashlib.sha256 for hashlib.md5
+        md5 = hashlib.md5()
+        with open(fn, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                md5.update(chunk)
+        self.receipt_add_entry('from_fits', self.__module__, f'md5_sum={md5.hexdigest()}', 'PASS')
+
     
     def to_fits(self, fn:str) -> None:
         """
@@ -249,7 +265,7 @@ class KPFDataModel:
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, Mod: str, param: str, status: str) -> None:
+    def receipt_add_entry(self, Mod: str, mod_path: str, param: str, status: str) -> None:
         '''
         Add an entry to the receipt
 
@@ -268,13 +284,14 @@ class KPFDataModel:
         try:
             git_commit_hash = repo.head.object.hexsha
             git_branch = repo.active_branch.name
+            git_tag = str(repo.tags[-1])
         except TypeError:  # expected if running in testing env
             git_commit_hash = ''
             git_branch = ''
-
+            git_tag = ''
         # add the row to the bottom of the table
-        row = [time, '---', git_branch, git_commit_hash, \
-               Mod, '---', '---', param, status]
+        row = [time, git_tag, git_branch, git_commit_hash, \
+               Mod, str(self.level), mod_path, param, status]
         self.receipt.loc[len(self.receipt)] = row
 
     def receipt_info(self):

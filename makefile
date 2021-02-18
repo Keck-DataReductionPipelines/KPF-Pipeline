@@ -1,7 +1,6 @@
 init: 
-	pip3 install -r requirements.txt
-	python3 setup.py install
 	mkdir -p logs
+	pip3 install -r requirements.txt .
 
 update: 
 	pip3 install -r requirements.txt --upgrade
@@ -17,7 +16,18 @@ clean: clear
 	find . -name '*.pyc' -exec rm -f {} +
 	find . -name '*.pyo' -exec rm -f {} +
 
-test:
-	pytest --ignore=kpfpipe/tests/test_recipe.py --cov --cov-report xml
+docker:
+	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
+
+regression_tests:
+	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
+	coveralls
+
+performance_tests:
+	pytest --pyargs tests.performance
+
+validation_tests:
+	pytest --pyargs tests.validation
 
 .PHONY: init

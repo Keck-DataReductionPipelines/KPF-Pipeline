@@ -1,0 +1,14 @@
+Module Radial Veloctiy
+=========================
+
+.. toctree::
+   :maxdepth: 2
+
+   alg_radial_velocity.rst
+   alg_rv_init.rst
+   alg_rv_mask_line.rst
+   alg_rv_base.rst
+   primitive_radial_velocity.rst
+   primitive_rv_init.rst
+   primitive_rv_reweighting.rst
+   primitive_rv_reweighting_ref.rst
