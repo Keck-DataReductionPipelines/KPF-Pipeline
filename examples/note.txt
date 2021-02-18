@@ -28,7 +28,7 @@
 
 - kpf examples/test_bc.recipe examples/default_bc.cfg
   purpose: preform barycentric correction event by either taking the observaton configuration by using radial velocity init or
-           from a configuration defined in default_bc.cfg (barycentric_correction in section 'MODULES').
+           from a configuration defined in default_bc.cfg (barycentric_correction in section 'MODULE_CONFIGS').
   master recipe: test_bc.recipe
   note: create folder test_results/neid under KPF-Pipeline to contain the results
 
