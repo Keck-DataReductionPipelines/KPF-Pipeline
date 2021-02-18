@@ -35,9 +35,9 @@ The ``default_simple.cfg`` configuration contains::
     # file
     [ARGUMENT]
 
-    [MODULES]
+    [MODULE_CONFIGS]
 
-Note that the sections ``[ARGUMENT]`` and ``[MODULES]`` are empty, since 
+Note that the sections ``[ARGUMENT]`` and ``[MODULE_CONFIGS]`` are empty, since 
 the module we are executing does not require any of these settings.
 However, the sections must still be present in the configuration file
 for the pipeline to be properly initialized.
