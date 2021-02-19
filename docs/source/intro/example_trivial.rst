@@ -3,7 +3,7 @@ Running a Simple Module
 
 In the ``/examples`` directory, you should find several pairs of recipe
 and configuration files. For now, we focus on a recipe file, ``simple.recipe``,
-and a configuraton file, ``deffault_simple.cfg``. 
+and a configuraton file, ``docs_simple.cfg``. 
 
 The ``simple.recipe`` contains two lines::
 
@@ -14,7 +14,7 @@ This states that the ``KPFModExample``,
 located at ``modules/Trivial/KPFM_Trivial.py``, is running as the
 only module in this pipeline. 
 
-The configuration file, ``default_simple.cfg``,  contains::
+The configuration file, ``docs_simple.cfg``,  contains::
 
     # Pipeline logger configurations
     [LOGGER]
@@ -23,7 +23,7 @@ The configuration file, ``default_simple.cfg``,  contains::
     log_level = info
     log_verbose = True
 
-    # file
+    # for recipe
     [ARGUMENT]
 
     [MODULE_CONFIGS]
@@ -35,7 +35,7 @@ for the pipeline to be properly initialized.
 
 To run this pair of files, execute the following command::
 
-    kpf examples/simple.recipe examples/default_simple.cfg 
+    kpf examples/simple.recipe examples/docs_simple.cfg 
 
 If everything runs smoothly, you should see the following
 printed to terminal::
