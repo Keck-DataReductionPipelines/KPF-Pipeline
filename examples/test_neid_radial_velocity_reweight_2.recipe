@@ -3,6 +3,10 @@ from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
 
+s_order = 3
+e_order = 82
+reweighting_method = config.ARGUMENT.reweighting_method
+
 rv_init = RadialVelocityInit()
 
 input_lev1_pattern = output_dir + '*' + '_' + str(rect_method) + lev1_stem_suffix + '.fits'
