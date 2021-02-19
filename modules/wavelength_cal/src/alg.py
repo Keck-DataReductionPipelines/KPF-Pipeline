@@ -48,8 +48,6 @@ class LFCWaveCalibration:
             max_wave (np.int): Maximum wavelength of wavelength range, in Angstroms. Pulled from config file.
             min_wave (np.int): Minimum wavelength of wavelength range, in Angstroms. Pulled from config file.
             fit_order (np.int): Order of fitting polynomial. Pulled from config file.
-            LFCLight (str): Name of flux extension in FITS file. Pulled from config file.
-            WaveSoln (str): Name of ThAr extension in FITS file. Pulled from config file.
             min_order (np.int): Minimum order with coherent light/flux in flux extension. Pulled from config file.
             max_order (np.int): Maximum order with coherent light/flux in flux extension. Pulled from config file.
         """
@@ -59,12 +57,59 @@ class LFCWaveCalibration:
         self.max_wave=configpull.get_config_value('max_wave','')
         self.min_wave=configpull.get_config_value('min_wave','')
         self.fit_order=configpull.get_config_value('fit_order','')
-        self.LFCLight=configpull.get_config_value('LFCLight','')
-        self.WaveSoln=configpull.get_config_value('WaveSoln','')
         self.min_order=configpull.get_config_value('min_order','')
         self.max_order=configpull.get_config_value('max_order','')
         self.config=config
         self.logger=logger
+
+        # self.LFCLight=configpull.get_config_value('LFCLight','')
+        # self.WaveSoln=configpull.get_config_value('WaveSoln','')
+
+    def run_wave_cal(self,flux,master):
+        """Runs wavelength calibration algorithm with necessary repetitions for looping through orders.
+
+        Args:
+            flux (np.ndarray): Flux spectrum data
+            master (np.ndarray): Master calibration data
+
+        Returns:
+            all_wls(np.ndarray): Wavelengths 
+        """
+        orders=self.order_list()
+
+        #flux,thar=self.get_fits_ext(LFCData)
+
+        comb_lines_ang=self.comb_gen()
+
+        ns=[]
+        all_peaks_exact=[]
+        all_peaks_approx=[]
+        all_peak_hts=[]
+        for order in orders:
+            n,peaks_exact,peaks_approx,comb_len,peakhts=self.peak_detect(flux,order)
+            ns.append(n)
+            all_peaks_exact.append(peaks_exact)
+            all_peaks_approx.append(peaks_approx)
+            all_peak_hts.append(peakhts)
+
+        all_idx=[]
+        for order,peaks in zip(orders,all_peaks_exact):
+            idx=self.mode_match(comb_lines_ang,peaks,comb_len,master,order)
+            all_idx.append(idx)
+
+        all_leg=[]
+        all_wls=[]
+        for idx,peaks in zip(all_idx,all_peaks_exact):
+            leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks,idx)
+            all_leg.append(leg)
+            all_wls.append(wavelengths)
+
+        errors=[]
+        for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
+            std_error=self.error_calc(wavelengths.idx,leg,peaks)
+            errors.append(std_error)
+
+        return all_leg
 
     def order_list(self):
         """Creates list of orders with light for algorithm to iterate through.
@@ -74,24 +119,6 @@ class LFCWaveCalibration:
         """
         order_list=np.arange(self.min_order,self.max_order,1)
         return order_list
-
-    def get_fits_ext(self,LFCData):
-        """Gets flux and ThAr data from FITS file.
-
-        Returns:
-            flux(np.ndarray): Flux data.
-            thar(np.ndarray): Thorium-Argon solution.
-        """
-        flux=LFCData[self.LFCLight].data
-
-        #for NEID - temporary
-        flux[:,435:455] = 0
-        flux[48,1933:1938] = 0
-        flux[48,48:56] = 0
-        #end of - for NEID
-
-        thar=LFCData[self.WaveSoln].data
-        return flux,thar
 
     def peak_detect(self,flux,order):
         #algorithm from PyReduce
@@ -117,7 +144,14 @@ class LFCWaveCalibration:
             comb_len(np.int): Number of comb lines.
             
         """
+        #for NEID - temporary until linelist creation
+    #     flux[:,435:455] = 0
+    #     flux[48,1933:1938] = 0
+    #     flux[48,48:56] = 0
+    #     #end of - for NEID
+
         comb=flux[order] #loop through orders
+
         c = comb - np.ma.min(comb)
         height = np.ma.median(c)
         peaks, properties = signal.find_peaks(c, height=height)

@@ -1,8 +1,11 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
-lfc_file=find_files(KPFPIPE_TEST_DATA+'/NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits')
-lfc=kpf0_from_fits(lfc_file)
-lfc_data = lfc['CALFLUX'].data
+master_file=
+lfc_file_name=find_files('INSERT_L1')
 
-wave_soln=WaveCalibrate(lfc_data,'NEID',f0,frep,wavemin,wavemax,poly)
-wave_soln=to_fits(wave_soln, KPFPIPE_TEST_OUTPUTS + '/TestWaveSoln.fits')
+lfc_data=kpf1_from_fits(lfc_file_name,data_type='NEID')
+master_data=kpf1_from_fits(master_file,data_type='NEID')
+
+wave_soln=WaveCalibrate(lfc_data,master_data,data_type='NEID')
+
+wave_soln=to_fits(wave_soln, 'INSERT_L1')

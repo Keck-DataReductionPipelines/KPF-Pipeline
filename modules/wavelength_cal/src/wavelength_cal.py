@@ -1,11 +1,12 @@
 # Standard dependencies
 import configparser
 import numpy as np
+import pandas as pd
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.models.level0 import KPF0
+from kpfpipe.models.level1 import KPF1
 
 # External dependencies
 from keckdrpframework.models.action import Action
@@ -29,8 +30,9 @@ class WaveCalibrate(KPF0_Primitive):
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
 
     Attributes:
-        LFCData (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[0]`
-        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
+        l1_obj (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[0]`
+        master_wavelength (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[1]`
+        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
         config_path (str): Path of config file for LFC wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
@@ -45,8 +47,9 @@ class WaveCalibrate(KPF0_Primitive):
         Args:
             action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
               
-                `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing Laser Frequency Comb (LFC) data
-                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing data type
+                `action.args[0] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing Laser Frequency Comb (LFC)
+                `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master file
+                `action.args[2] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing data type
 
             context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
@@ -54,8 +57,9 @@ class WaveCalibrate(KPF0_Primitive):
         KPF0_Primitive.__init__(self,action,context)
 
         #Input arguments
-        self.LFCdata=self.action.args[0]
-        self.data_type=self.action.args[1]
+        self.l1_obj=self.action.args[0]
+        self.master_wavelength=self.action.args[1]
+        self.data_type=self.action.args[2]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -74,7 +78,7 @@ class WaveCalibrate(KPF0_Primitive):
 
 
         #Wavelength calibration algorithm setup
-        self.alg=LFCWaveCalibration(self.LFCData,self.config,self.logger)
+        self.alg=LFCWaveCalibration(self.config,self.logger)
 
         #Preconditions
        
@@ -83,61 +87,25 @@ class WaveCalibrate(KPF0_Primitive):
     #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
-        Performs wavelength calibration by calling methods 'peak_detect' and 'poly_fit' from LFCWaveCalibration.
+        Performs wavelength calibration by calling method 'run_wave_cal' from alg.py.
 
         Returns:
-            wave_soln (np.Polynomial): Wavelength solution 
+            wave_per_pix (np.ndarray): Wavelengths per pixel 
         """
-        #return will be to_fits in recipe
-    
-        #step 1 - order list
+        # 1. extract extensions (calflux and sciwave) 
         if self.logger:
-            self.logger.info("Wavelength Calibration: Generating list of light-filled orders")
-        orders=self.alg.order_list()
+            self.logger.info("Wavelength Calibration: Extracting CALFLUX and master calibration data")
+        calflux=self.l1_obj['CAL'][0].data #0 referring to 'flux'
+        master_data=self.master_wavelength['MASTER'].data 
 
-        #step 2 - get fits data from correct exts
+        # 2. run wavecal
         if self.logger:
-            self.logger.info("Wavelength Calibration: Getting light and ThAr extensions")
-        flux,thar=self.alg.get_fits.ext(self.LFCData)
+            self.logger.info("Wavelength Calibration: Running wavelength calibration")
+        wave_per_pix=self.alg.run_wave_cal(calflux,master_data)
 
-        #step 3 - mode_nos
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Generating comb lines")
-        clines_ang= self.alg.comb_gen()
+        # 3. overwrite calwave with wavelength calibration output (wavelength per pixel)
+        self.l1_obj['CAL'][1].data=wave_per_pix
 
-        #step 4 - peak detection & gaussian fit
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Detecting LFC peaks")
-        ns,all_peaks_exact,all_peaks_approx=[],[],[]
-        for order in orders:
-            n,peaks_exact,peaks_approx,comb_len=self.alg.peak_detect(flux,order)
-            ns.append(n)
-            all_peaks_exact.append(peaks_exact)
-            all_peaks_approx.append(peaks_approx)
 
-        #step 5 - mode match
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Fitting mode numbers to corresponding peaks")
-        all_idx=[]
-        for order,peaks in zip(orders,all_peaks_exact):
-            idx=self.alg.mode_match(clines_ang,peaks,comb_len,thar,order)
-            all_idx.append(idx)
 
-        #step 6 - fit polynomial 
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Fitting order-by-order polynomial sol'n")
-        all_leg,all_wls=[],[]
-        for idx,peaks in zip(all_idx,all_peaks_exact):
-            leg,wavelengths=self.alg.poly_fit(comb_len,clines_ang,peaks,idx,self.fit_order)
-            all_leg.append(leg)
-            all_wls.append(wavelengths)
-
-        #step 7 - errors 
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Calculating standard error")
-        errors=[]
-        for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
-            std_error=self.alg.error_calc(wavelengths,idx,leg,peaks)
-            errors.append(std_error)
-
-        return Arguments(self.alg.poly_fit())
+        #return Arguments(wave_per_pix)
