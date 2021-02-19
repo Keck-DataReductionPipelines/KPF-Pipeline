@@ -1,19 +1,20 @@
 Running a Simple Module
 =======================
 
-In the ``/example`` directory, you shoudl find two pairs of recipe
-and configuration files. For now, we focus on: ``recipe_simple.py``
-and ``deffault_simple.cfg``
+In the ``/examples`` directory, you should find several pairs of recipe
+and configuration files. For now, we focus on a recipe file, ``simple.recipe``,
+and a configuraton file, ``docs_simple.cfg``. 
 
-The ``recipe_simple.py`` contains a single line::
+The ``simple.recipe`` contains two lines::
 
-    context.push_event('KPFModExample', action.args)
+    from modules.Trivial.KPFM_Trivial import KPFModExample
+    KPFModExample()
 
 This states that the ``KPFModExample``,
 located at ``modules/Trivial/KPFM_Trivial.py``, is running as the
 only module in this pipeline. 
 
-The ``default_simple.cfg`` configuration contains::
+The configuration file, ``docs_simple.cfg``,  contains::
 
     # Pipeline logger configurations
     [LOGGER]
@@ -22,58 +23,40 @@ The ``default_simple.cfg`` configuration contains::
     log_level = info
     log_verbose = True
 
-    # Framework related configurations
-    [FRAMEWORK]
-    config_path = configs/framework.cfg
-    log_config = configs/framework_logger.cfg
-
-    # Pipeline parameters
-    [PIPELINE]
-    pipeline_name = KPF-Pipe
-    mod_search_path = modules
-
-    # file
+    # for recipe
     [ARGUMENT]
 
-    [MODULES]
+    [MODULE_CONFIGS]
 
-Note that the sections ``[ARGUMENT]`` and ``[MODULES]`` are empty, since 
-the module we are executing does not require any of these settings.
-However, the sections must still be present in the configuration file
+Note that sections ``[ARGUMENT]`` and ``[MODULE_CONFIGS]`` are empty, since 
+the module we are executing does not need any of these settings.
+However, the sections must still exist in the configuration file
 for the pipeline to be properly initialized.
 
-To run this pairs of files, execute the following command::
+To run this pair of files, execute the following command::
 
-    kpf examples/recipe_simple.py examples/default_simple.cfg 
+    kpf examples/simple.recipe examples/docs_simple.cfg 
 
 If everything runs smoothly, you should see the following
 printed to terminal::
 
+    2021-02-03 18:23:17:DRPF:INFO:
+    2021-02-03 18:23:17:DRPF:INFO: Initialization Framework cwd=<KPF-Pipeline directory>
     [KPF-Pipe][INFO]:Logger started
-    2020-02-02 17:02:25:KPF-Pipe:INFO: Logger started
-    [KPF-Pipe][INFO]:Finished initializting Pipeline
-    2020-02-02 17:02:25:KPF-Pipe:INFO: Finished initializting Pipeline
-    [DRPFrame][INFO]:Event to action ('evaluate_recipe', 'evaluating_recipe', None)
-    2020-02-02 17:02:25:DRPFrame:INFO: Event to action ('evaluate_recipe', 'evaluating_recipe', None)
-    [DRPFrame][INFO]:Framework main loop started
-    2020-02-02 17:02:25:DRPFrame:INFO: Framework main loop started
-    [DRPFrame][INFO]:Executing action evaluate_recipe
-    2020-02-02 17:02:25:DRPFrame:INFO: Executing action evaluate_recipe
-    [DRPFrame][INFO]:Action evaluate_recipe done
-    2020-02-02 17:02:25:DRPFrame:INFO: Action evaluate_recipe done
-    [DRPFrame][INFO]:Event to action ('KPFModExample', 'EXAMPLE', None)
-    2020-02-02 17:02:25:DRPFrame:INFO: Event to action ('KPFModExample', 'EXAMPLE', None)
-    [DRPFrame][INFO]:Executing action KPFModExample
-    2020-02-02 17:02:25:DRPFrame:INFO: Executing action KPFModExample
-    [KPFModExample] missing log configuration.. not starting logger
-    [KPFModExample] Performed!
-    [DRPFrame][INFO]:Action KPFModExample done
-    2020-02-02 17:02:26:DRPFrame:INFO: Action KPFModExample done
-    [DRPFrame][INFO]:Event to action ('exit_loop', 'exiting...', None)
-    2020-02-02 17:02:26:DRPFrame:INFO: Event to action ('exit_loop', 'exiting...', None)
-    [DRPFrame][INFO]:Executing action exit_loop
-    2020-02-02 17:02:26:DRPFrame:INFO: Executing action exit_loop
+    [KPF-Pipe][INFO]:Finished initializing Pipeline
+    2021-02-03 18:23:17:DRPF:INFO: Framework main loop started
+    [KPF-Pipe][INFO]:Module: subrecipe_depth = 0
+    [KPF-Pipe][INFO]:Added KPFModExample from modules.Trivial.KPFM_Trivial to event_table
+    [KPF-Pipe][INFO]:Queued KPFModExample with args "name": KPFModExample_args; awaiting return.
+    2021-02-03 18:23:17:DRPF:INFO: Event completed: name start_recipe, action start_recipe, arg name undef, recurr False
     [KPF-Pipe][INFO]:exiting pipeline...
-    2020-02-02 17:02:26:KPF-Pipe:INFO: exiting pipeline...
+    2021-02-03 18:23:17:DRPF:INFO: Event failed: name exit, action exit_loop, arg name undef, recurr False
+    [KPFModExample] missing log configuration...not starting a new logger
+    [KPFModExample] Performed!
+    2021-02-03 18:23:17:DRPF:INFO: Event failed: name KPFModExample, action KPFModExample, arg name KPFModExample_args, recurr False
+    [KPF-Pipe][INFO]:Module: subrecipe_depth = 0
+    2021-02-03 18:23:17:DRPF:INFO: Event completed: name resume_recipe, action resume_recipe, arg name KPFModExample_args, recurr False
+    2021-02-03 18:23:18:DRPF:INFO: No new events - do nothing
+    2021-02-03 18:23:18:DRPF:INFO: Exiting main loop
 
-Continue to :doc:`logging` for explainations on what these messages mean
+Continue to :doc:`logging` for explanations on what these messages mean.
