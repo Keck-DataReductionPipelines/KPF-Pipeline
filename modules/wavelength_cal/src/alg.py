@@ -145,10 +145,10 @@ class LFCWaveCalibration:
             
         """
         #for NEID - temporary until linelist creation
-    #     flux[:,435:455] = 0
-    #     flux[48,1933:1938] = 0
-    #     flux[48,48:56] = 0
-    #     #end of - for NEID
+        flux[:,435:455] = 0
+        flux[48,1933:1938] = 0
+        flux[48,48:56] = 0
+        #end of - for NEID
 
         comb=flux[order] #loop through orders
 
