@@ -106,6 +106,4 @@ class WaveCalibrate(KPF0_Primitive):
         # 3. overwrite calwave with wavelength calibration output (wavelength per pixel)
         self.l1_obj['CAL'][1].data=wave_per_pix
 
-
-
         #return Arguments(wave_per_pix)
