@@ -31,7 +31,9 @@ The configuration file, ``docs_simple.cfg``,  contains::
 Note that sections ``[ARGUMENT]`` and ``[MODULE_CONFIGS]`` are empty, since 
 the module we are executing does not need any of these settings.
 However, the sections must still exist in the configuration file
-for the pipeline to be properly initialized.
+for the pipeline to be properly initialized. 
+
+For more detail regarding the structure of KPF Pipeline configuration file, please refer to :doc:`config`. 
 
 To run this pair of files, execute the following command::
 
