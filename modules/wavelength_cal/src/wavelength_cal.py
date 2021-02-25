@@ -47,7 +47,7 @@ class WaveCalibrate(KPF0_Primitive):
         Args:
             action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
               
-                `action.args[0] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing Laser Frequency Comb (LFC)
+                `action.args[0] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing level 1 file
                 `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master file
                 `action.args[2] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing data type
 
@@ -87,23 +87,26 @@ class WaveCalibrate(KPF0_Primitive):
     #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
-        Performs wavelength calibration by calling method 'run_wave_cal' from alg.py.
+        Performs wavelength calibration by calling method 'run_wave_cal' from alg.py, and saves result in FITS extensions.
 
         Returns:
-            wave_per_pix (np.ndarray): Wavelengths per pixel 
+            Level 1 data, containing wavelength-per-pixel result.
         """
         # 1. extract extensions (calflux and sciwave) 
         if self.logger:
             self.logger.info("Wavelength Calibration: Extracting CALFLUX and master calibration data")
-        calflux=self.l1_obj['CAL'][0].data #0 referring to 'flux'
-        master_data=self.master_wavelength['MASTER'].data 
+        calflux=self.l1_obj.data['CAL'][0,:,:]#0 referring to 'flux'
+        master_data=self.master_wavelength.data['MASTER']
 
         # 2. run wavecal
         if self.logger:
             self.logger.info("Wavelength Calibration: Running wavelength calibration")
         wave_per_pix=self.alg.run_wave_cal(calflux,master_data)
 
-        # 3. overwrite calwave with wavelength calibration output (wavelength per pixel)
-        self.l1_obj['CAL'][1].data=wave_per_pix
+        # 3. write in -wave with wavelength calibration output (wavelength per pixel)
+        for prefix in ['CAL','SCI1','SKY']:
+            self.l1_obj.data[prefix][1,:,:]=wave_per_pix
+            #should [1,:,:] be replaced with something like [1,self.min_order,self.max_order]?
 
-        #return Arguments(wave_per_pix)
+        return Arguments(self.l1_obj)
+
