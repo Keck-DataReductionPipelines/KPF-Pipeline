@@ -25,7 +25,6 @@ class LFCWaveCalibration:
    Args:
         config (configparser.ConfigParser, optional): Config context. Defaults to None.
         logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
-        LFCData (.FITS file): The FITS file with flux and solution extensions.
 
     Attributes:
         config_param(ConfigHandler): Instance representing pull from config file.
@@ -66,14 +65,17 @@ class LFCWaveCalibration:
         # self.WaveSoln=configpull.get_config_value('WaveSoln','')
 
     def run_wave_cal(self,flux,master):
-        """Runs wavelength calibration algorithm with necessary repetitions for looping through orders.
+        """Runs wavelength calibration algorithm with necessary repetitions for looping through orders: 
+        Begins with assembling list of orders to run algorithm on; 
+        generates comb lines for eventual wavelength mapping; detects peaks in each order spectrum; generates 
+        corresponding indeces to fit wavelengths to comb lines; fits results to polynomial/Legendre; calculates standard error.
 
         Args:
             flux (np.ndarray): Flux spectrum data
             master (np.ndarray): Master calibration data
 
         Returns:
-            all_wls(np.ndarray): Wavelengths 
+            all_wls(np.ndarray): Legendre-fit wavelength solution
         """
         orders=self.order_list()
 
@@ -81,28 +83,21 @@ class LFCWaveCalibration:
 
         comb_lines_ang=self.comb_gen()
 
-        ns=[]
-        all_peaks_exact=[]
-        all_peaks_approx=[]
-        all_peak_hts=[]
+        ns,all_peaks_exact,all_peaks_approx,all_peak_hts=[],[],[],[]
         for order in orders:
             n,peaks_exact,peaks_approx,comb_len,peakhts=self.peak_detect(flux,order)
             ns.append(n)
-            all_peaks_exact.append(peaks_exact)
-            all_peaks_approx.append(peaks_approx)
-            all_peak_hts.append(peakhts)
+            all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx);all_peak_hts.append(peakhts)
 
         all_idx=[]
         for order,peaks in zip(orders,all_peaks_exact):
             idx=self.mode_match(comb_lines_ang,peaks,comb_len,master,order)
             all_idx.append(idx)
 
-        all_leg=[]
-        all_wls=[]
+        all_leg,all_wls=[],[]
         for idx,peaks in zip(all_idx,all_peaks_exact):
             leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks,idx)
-            all_leg.append(leg)
-            all_wls.append(wavelengths)
+            all_leg.append(leg);all_wls.append(wavelengths)
 
         errors=[]
         for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
@@ -232,12 +227,11 @@ class LFCWaveCalibration:
             
         Returns:
             wave_soln_leg(np.polynomial): Legendre polynomial-fit wavelength solution
-            wave_soln_poly(np.Polynomial): Regular polynomial-fit wavelength solution
             wavelengths(np.ndarray): Wavelengths of comb lines, correlated with peaks 
         """
         wavelengths=comb_lines_ang[idx:(idx+len(peaks))]
         #polynomial
-        polyfit=Polynomial.fit(peaks,wavelengths,self.fit_order)
+        #polyfit=Polynomial.fit(peaks,wavelengths,self.fit_order)
         #legendre
         legfit=Legendre.fit(peaks,wavelengths,self.fit_order)
 
@@ -257,7 +251,7 @@ class LFCWaveCalibration:
             peaks (np.ndarray): Peak x-coordinates (requires approximate, integer peaks)
 
         Returns:
-            std_resid(): Standard deviation of residuals
+            std_error(): Standard error of polynomial fit per order
         """
         new_pos=wave_soln[peaks]
         residual = ((new_pos - wavelengths)*scipy.constants.c)/wavelengths
