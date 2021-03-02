@@ -21,7 +21,7 @@ there might be no key/value defined under the section but the section header is 
 	[ARGUMENT]
 
 	# the path of the configuration file for the module 
-	[MODELE_CONFIGS]
+	[MODULE_CONFIGS]
 
 
 The section ``LOGGER`` contains key/value pairs for the logging configuration for KPF Pipeline, i.e. the second logging source listed in :doc:`logging`.  
