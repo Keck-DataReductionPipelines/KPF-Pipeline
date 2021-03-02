@@ -149,4 +149,4 @@ def main():
     test_recipe_environment()
     test_recipe_undefined_variable()
     test_recipe_bad_assignment()
-    test_subrecipe()
+    test_recipe_subrecipe()
