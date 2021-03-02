@@ -8,8 +8,8 @@ l1_file_names=output_dir + lev0_flat_stem + '_' + lev0_stem + '_' + str(rect_met
 #same path as optimal extraction output l1 file
 
 for l1_file in find_files(l1_file_names):     
-    lfc_data=kpf1_from_fits(l1_file,data_type='NEID')
-    wave_soln=WaveCalibrate(lfc_data,master_data,data_type='NEID')
+    lfc_data=kpf1_from_fits(l1_file,data_type='KPF')
+    wave_soln=WaveCalibrate(lfc_data,master_data,data_type='KPF')
     result=to_fits(wave_soln,l1_file)
 
 
