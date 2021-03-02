@@ -79,13 +79,13 @@ class LFCWaveCalibration:
         """
         orders=self.order_list()
 
-        #flux,thar=self.get_fits_ext(LFCData)
-
         comb_lines_ang=self.comb_gen()
+
+        comb_len=self.comb_len(flux)
 
         ns,all_peaks_exact,all_peaks_approx,all_peak_hts=[],[],[],[]
         for order in orders:
-            n,peaks_exact,peaks_approx,comb_len,peakhts=self.peak_detect(flux,order)
+            n,peaks_exact,peaks_approx,peakhts=self.peak_detect(flux,order)
             ns.append(n)
             all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx);all_peak_hts.append(peakhts)
 
@@ -115,6 +115,19 @@ class LFCWaveCalibration:
         order_list=np.arange(self.min_order,self.max_order,1)
         return order_list
 
+    def comb_len(self,flux):
+        """Generates number of comb lines, to be used by other functions.
+
+        Args:
+            flux (np.ndarray): Flux spectrum data
+
+        Returns:
+            comb_len(np.int): Number of comb lines.
+        """
+        comb=flux[self.min_order]
+        comb_len=len(comb)
+        return comb_len
+
     def peak_detect(self,flux,order):
         #algorithm from PyReduce
         #PyReduce notes:
@@ -136,7 +149,6 @@ class LFCWaveCalibration:
             n (np.ndarray): Array of number of peaks. 
             new_peaks (np.ndarray): X-coordinate of each found peak.
             peaks (np.ndarray): Approximate x-coordinate of each found peak.
-            comb_len(np.int): Number of comb lines.
             
         """
         #for NEID - temporary until linelist creation
@@ -178,8 +190,7 @@ class LFCWaveCalibration:
             new_peaks[j] = coef[1] + p - width
 
         n = np.arange(len(peaks))
-        comb_len=len(comb)
-        return n, new_peaks, peaks, comb_len
+        return n, new_peaks, peaks
 
     def comb_gen(self):
         """Generates comb lines for mapping flux.
