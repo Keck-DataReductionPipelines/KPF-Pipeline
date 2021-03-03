@@ -1,14 +1,22 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
-master_path=test_data_dir + master_file_name
-#master_data=kpf1_from_fits(master_file,data_type='KPF')
+####
+KPFPIPE_TEST_DATA="/Users/paminabby/ownCloud2/KPF-Pipeline-TestData"
+test_data_dir = KPFPIPE_TEST_DATA
+master_file_name=config.ARGUMENT.master_file_name
+input_lev1_file_prefix=config.ARGUMENT.input_lev1_file_prefix
+####
 
-l1_file_names=output_dir + lev0_flat_stem + '_' + lev0_stem + '_' + str(rect_method) + lev1_stem_suffix + '.fits'
+master_path=test_data_dir + master_file_name
+
+#master_data=kpf1_from_fits(master_file,data_type='NEID')
+
+l1_file_names=test_data_dir + input_lev1_file_prefix + '*.fits'
 
 for l1_file in find_files(l1_file_names):     
-    lfc_data=kpf1_from_fits(l1_file,data_type='KPF')
-    wave_soln=WaveCalibrate(lfc_data,master_path,data_type='KPF')
-    result=to_fits(wave_soln,l1_file)
+    lfc_data=kpf1_from_fits(l1_file,data_type='NEID')
+    wave_soln=WaveCalibrate(lfc_data,master_path,data_type='NEID')
+    result=to_fits(wave_soln,"/Users/paminabby/Desktop/test_run/test.fits")
 
 
 

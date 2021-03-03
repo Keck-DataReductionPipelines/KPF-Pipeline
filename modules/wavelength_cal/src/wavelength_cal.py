@@ -19,7 +19,7 @@ from modules.wavelength_cal.src.alg import LFCWaveCalibration
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
 
-class WaveCalibrate(KPF0_Primitive):
+class WaveCalibrate(KPF1_Primitive):
     """
     This module defines class `WaveCalibrate,` which inherits from KPF0_Primitive and provides methods
     to perform the event `LFC wavelength calibration` in the recipe.
