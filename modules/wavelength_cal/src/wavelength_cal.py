@@ -96,7 +96,9 @@ class WaveCalibrate(KPF0_Primitive):
         if self.logger:
             self.logger.info("Wavelength Calibration: Extracting CALFLUX and master calibration data")
         calflux=self.l1_obj.data['CAL'][0,:,:]#0 referring to 'flux'
-        master_data=self.master_wavelength.data['MASTER']
+        
+        #master_data=self.master_wavelength.data['MASTER']
+        master_data=self.alg.get_master_data(self.master_wavelength)
 
         # 2. run wavecal
         if self.logger:
