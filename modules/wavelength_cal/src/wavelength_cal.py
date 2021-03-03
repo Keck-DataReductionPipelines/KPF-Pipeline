@@ -5,7 +5,7 @@ import pandas as pd
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
-from kpfpipe.primitives.level0 import KPF0_Primitive
+from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.models.level1 import KPF1
 
 # External dependencies
