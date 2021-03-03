@@ -116,7 +116,16 @@ class WaveCalibrate(KPF1_Primitive):
         for prefix in ['CAL','SCI1','SKY']:
             if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
                 self.l1_obj.data[prefix][1,:,:]=wave_per_pix
-            #should [1,:,:] be replaced with something like [1,self.min_order,self.max_order]?
+
+        if self.l1_obj is not None:
+            self.l1_obj.receipt_add_entry('WaveCalibrate', self.__module__,
+                                          f'config_path={self.config_path}', 'PASS')
+        if self.logger:
+            self.logger.info("WaveCalibrate: Receipt written")
+
+        if self.logger:
+            self.logger.info("WaveCalibrate: Done!")
+        #should [1,:,:] be replaced with something like [1,self.min_order,self.max_order]?
 
         return Arguments(self.l1_obj)
 
