@@ -51,18 +51,16 @@ class LFCWaveCalibration:
             max_order (np.int): Maximum order with coherent light/flux in flux extension. Pulled from config file.
         """
         configpull=ConfigHandler(config,'PARAM')
-        self.f0=configpull.get_config_value('f0','')
-        self.f_rep=configpull.get_config_value('f_rep','')
-        self.max_wave=configpull.get_config_value('max_wave','')
-        self.min_wave=configpull.get_config_value('min_wave','')
-        self.fit_order=configpull.get_config_value('fit_order','')
-        self.min_order=configpull.get_config_value('min_order','')
-        self.max_order=configpull.get_config_value('max_order','')
+        self.f0=float(configpull.get_config_value('f0',''))
+        self.f_rep=float(configpull.get_config_value('f_rep',''))
+        self.max_wave=int(configpull.get_config_value('max_wave',''))
+        self.min_wave=int(configpull.get_config_value('min_wave',''))
+        self.fit_order=int(configpull.get_config_value('fit_order',''))
+        self.min_order=int(configpull.get_config_value('min_order',''))
+        self.max_order=int(configpull.get_config_value('max_order',''))
         self.config=config
         self.logger=logger
 
-        # self.LFCLight=configpull.get_config_value('LFCLight','')
-        # self.WaveSoln=configpull.get_config_value('WaveSoln','')
     def get_master_data(self,master_path):
         """Temporary function to pull master data from master calibration file - will be removed once L1 is updated
         and permanent master file is created.
@@ -100,11 +98,11 @@ class LFCWaveCalibration:
 
         comb_len=self.comb_len(flux)
 
-        ns,all_peaks_exact,all_peaks_approx,all_peak_hts=[],[],[],[]
+        ns,all_peaks_exact,all_peaks_approx=[],[],[]
         for order in orders:
-            n,peaks_exact,peaks_approx,peakhts=self.peak_detect(flux,order)
+            n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
             ns.append(n)
-            all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx);all_peak_hts.append(peakhts)
+            all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx)
 
         all_idx=[]
         for order,peaks in zip(orders,all_peaks_exact):
@@ -116,10 +114,11 @@ class LFCWaveCalibration:
             leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks,idx)
             all_leg.append(leg);all_wls.append(wavelengths)
 
-        errors=[]
-        for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
-            std_error=self.error_calc(wavelengths.idx,leg,peaks)
-            errors.append(std_error)
+        # errors=[]
+        # for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
+        #     print(f"wls: {len(wavelengths)}, idx: {idx}, peaks: {len(peaks)}, leg: {len(leg)}")
+        #     std_error=self.error_calc(wavelengths,idx,leg,peaks)
+        #     errors.append(std_error)
 
         return all_leg
 

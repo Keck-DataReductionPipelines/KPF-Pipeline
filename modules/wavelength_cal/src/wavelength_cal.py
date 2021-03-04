@@ -38,6 +38,11 @@ class WaveCalibrate(KPF1_Primitive):
         logger (logging.Logger): Instance of logging.Logger
         alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
     """
+
+    default_args_val = {
+            'data_type': 'KPF'
+        }
+
     def __init__(self, 
                 action:Action,
                 context:ProcessingContext) -> None:
@@ -54,12 +59,14 @@ class WaveCalibrate(KPF1_Primitive):
             context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
         #Initialize parent class
-        KPF0_Primitive.__init__(self,action,context)
+        KPF1_Primitive.__init__(self,action,context)
 
         #Input arguments
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+
         self.l1_obj=self.action.args[0]
         self.master_wavelength=self.action.args[1]
-        self.data_type=self.action.args[2]
+        self.data_type = self.get_args_value('data_type', action.args, args_keys)
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -112,3 +119,10 @@ class WaveCalibrate(KPF1_Primitive):
 
         return Arguments(self.l1_obj)
 
+    def get_args_value(self, key: str, args: Arguments, args_keys: list):
+        v = None
+        if key in args_keys and args[key] is not None:
+            v = args[key]
+        else:
+            v = self.default_args_val[key]
+        return v
