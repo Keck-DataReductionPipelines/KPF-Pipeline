@@ -51,13 +51,13 @@ class LFCWaveCalibration:
             max_order (np.int): Maximum order with coherent light/flux in flux extension. Pulled from config file.
         """
         configpull=ConfigHandler(config,'PARAM')
-        self.f0=float(configpull.get_config_value('f0',''))
-        self.f_rep=float(configpull.get_config_value('f_rep',''))
-        self.max_wave=int(configpull.get_config_value('max_wave',''))
-        self.min_wave=int(configpull.get_config_value('min_wave',''))
-        self.fit_order=int(configpull.get_config_value('fit_order',''))
-        self.min_order=int(configpull.get_config_value('min_order',''))
-        self.max_order=int(configpull.get_config_value('max_order',''))
+        self.f0=configpull.get_config_value('f0',-5e9)
+        self.f_rep=configpull.get_config_value('f_rep',20e9)
+        self.max_wave=configpull.get_config_value('max_wave',9300)
+        self.min_wave=configpull.get_config_value('min_wave',3800)
+        self.fit_order=configpull.get_config_value('fit_order',6)
+        self.min_order=configpull.get_config_value('min_order',25)
+        self.max_order=configpull.get_config_value('max_order',100)
         self.config=config
         self.logger=logger
 
@@ -119,6 +119,14 @@ class LFCWaveCalibration:
         #     print(f"wls: {len(wavelengths)}, idx: {idx}, peaks: {len(peaks)}, leg: {len(leg)}")
         #     std_error=self.error_calc(wavelengths,idx,leg,peaks)
         #     errors.append(std_error)
+
+        #padding to match original dimensions which is order by length: (order,length)
+        flux_shape=flux.shape
+        zeros=np.linspace(0,0,flux_shape[1])
+        for i in range(0,min_order):
+            all_leg.insert(i,zeros)
+        for i in range(max_order,flux_shape[0]):
+            all_leg.insert(i,zeros)
 
         return all_leg
 

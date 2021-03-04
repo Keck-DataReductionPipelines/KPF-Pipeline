@@ -21,18 +21,18 @@ DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
     """
-    This module defines class `WaveCalibrate,` which inherits from KPF0_Primitive and provides methods
+    This module defines class `WaveCalibrate,` which inherits from KPF1_Primitive and provides methods
     to perform the event `LFC wavelength calibration` in the recipe.
 
     Args:
-        KPF0_Primitive: Parent class
+        KPF1_Primitive: Parent class
         action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCalibration` event issued in recipe.
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
 
     Attributes:
-        l1_obj (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[0]`
-        master_wavelength (kpfpipe.models.level0.KPF0): Instance of `KPF0`, assigned by `actions.args[1]`
-        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[0]`
+        master_wavelength (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[1]`
+        data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
         config_path (str): Path of config file for LFC wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
@@ -52,9 +52,9 @@ class WaveCalibrate(KPF1_Primitive):
         Args:
             action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
               
-                `action.args[0] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing level 1 file
-                `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master file
-                `action.args[2] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing data type
+                `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 file
+                `action.args[1] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing master file
+                `action.args[2] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data type
 
             context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
