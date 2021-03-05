@@ -270,7 +270,7 @@ class LFCWaveCalibration:
         #legendre
         legfit=Legendre.fit(peaks,wavelengths,self.fit_order)
 
-        x_coords=np.arange(len(peaks))
+        x_coords=np.arange(comb_len)
         wave_soln_leg=legfit(x_coords)
         #wave_soln_poly=polyfit(x_coords)
         return wave_soln_leg,wavelengths
