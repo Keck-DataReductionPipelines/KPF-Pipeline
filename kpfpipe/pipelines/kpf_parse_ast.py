@@ -882,7 +882,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 if len(self._load) > loadDepth:
                     l.append(self._load.pop())
                 else:
-                    raise RecipeException("List: expected item to append to list, but none was found")
+                    raise RecipeError("List: expected item to append to list, but none was found")
             self._load.append(l)
             setattr(node, "kpf_completed", True)
     
@@ -898,15 +898,25 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         _load stack, and then converting it into a tuple.
         """
         self.pipeline.logger.debug(f"Tuple")
-        self.visit_List(node)
         if self._reset_visited_states:
+            setattr(node, 'kpf_completed', False)
+            for elt in node.elts:
+                self.visit(elt)
             return
         if not getattr(node, "kpf_completed", False):
-            if not isinstance(self._load[len(self._load)-1], list):
-                raise RecipeError("visit_Tuple() expected a list on the _load stack, "
-                    f"but got {self._load[len(self._load)-s]}")
-            self._load.append(tuple(self._load.pop()))
-            setattr(node, "kpf_completed", True)
+            if isinstance(node.ctx, _ast.Store):
+                for elt in node.elts:
+                    self.visit(elt)
+            elif isinstance(node.ctx, _ast.Load):
+                self.visit_List(node)
+                if not isinstance(self._load[len(self._load)-1], list):
+                    raise RecipeError("visit_Tuple() expected a list on the _load stack, "
+                        f"but got {self._load[len(self._load)-s]}")
+                self._load.append(tuple(self._load.pop()))
+                setattr(node, "kpf_completed", True)
+            else:
+                raise RecipeError(
+                    f"visit_Tuple: on recipe line {node.lineno}, ctx is unexpected type: {type(node.ctx)}")
         
     def visit_NameConstant(self, node):
         """
