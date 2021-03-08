@@ -15,9 +15,11 @@ max_result_order = config.ARGUMENT.max_result_order
 start_result_order = config.ARGUMENT.start_result_order
 rect_method = config.ARGUMENT.rectification_method
 order_name = config.ARGUMENT.order_name
+master_file_name = config.ARGUMENT.master_file_name
 
 invoke_subrecipe("./examples/test_order_trace.recipe")
 invoke_subrecipe("./examples/test_optimal_extraction.recipe")
 invoke_subrecipe("./examples/test_neid_radial_velocity.recipe")
+#invoke_subrecipe(".examples/test_wave_cal.recipe")
 #invoke_subrecipe("./examples/test_neid_radial_velocity_reweight.recipe")
 #invoke_subrecipe("./examples/test_neid_radial_velocity_reweight_2.recipe")
