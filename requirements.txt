@@ -1,4 +1,4 @@
-astropy==3.2.3
+astropy==4.0.4
 pandas==1.0.4
 numpy==1.18.1
 lmfit==1.0.1
@@ -11,7 +11,7 @@ python-dotenv
 pytest
 pytest-cov
 coveralls
-barycorrpy
+barycorrpy>=0.4.0
 
 # Documentation
 sphinx
