@@ -42,7 +42,7 @@ This will prompt the use case message, which should be::
     kpf: error: the following arguments are required: recipe, config_file
 
 The two mandatory input arguments to ``kpf`` is: a ``recipe`` file and a
-``config`` configuration file. The recipe file is expected to be a ``.py`` script,
+``config`` configuration file. The recipe file is expected to be a ``.recipe`` script,
 while the ``config`` file is expected to be a ``.cfg`` file. See :doc:`example_trivial`
 for a basic example.
 
@@ -52,3 +52,5 @@ for a basic example.
 
     install_develop.rst
     example_trivial.rst
+    logging.rst
+    config.rst

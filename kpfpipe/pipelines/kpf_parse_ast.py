@@ -1,11 +1,10 @@
 # kpf_parse_ast.py
 
-from ast import NodeVisitor, iter_fields, parse
+from ast import NodeVisitor, parse
 import _ast
 from collections.abc import Iterable
 from queue import Queue
 import os
-# from kpfpipe.pipelines.FauxLevel0Primitives import read_data, Normalize, NoiseReduce, Spectrum1D
 
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
@@ -13,15 +12,58 @@ from keckdrpframework.models.processing_context import ProcessingContext
 import configparser as cp
 
 class RecipeError(Exception):
-    """ Special recipe exception """
+    """
+    RecipeError is raised whenever an error in the recipe or recipe processing is encountered.  The most
+    common reason for raising RecipeError is an error in the recipe itself, such as a typo or undefined
+    variable or function name, or the use of syntactic elements from Python that are not supported in
+    recipes.
+    """
 
 class KpfPipelineNodeVisitor(NodeVisitor):
     """
-    Node visitor to convert KPF pipeline recipes expressed in python syntax
-    into operations on the KPF Framework.
+    KpfPipelineNodeVisitor is a node visitor class derived from ast.NodeVisitor to convert KPF pipeline
+    recipes expressed in python syntax into operations on the KPF Framework.  This class implements
+    methods with names of the form visit_<syntax_element>, each of which handles the actual processing
+    of <syntax_element> instances found in a recipe.  ast.NodeVisitor implements visit(), which is the
+    code that calls the appropriate visit_<syntax_element> method, or generic_visit() if no such method
+    is found. For recipes containing only supported syntax elements, generic_visit() is never called.
+
+    There are three class member flags that keep the state of node walking across calls to data processing
+    primitives and loop iterations.  They are:
+
+    self.awaiting_call_return:
+        This flag is set just before the visit_Call() method returns, after queueing a data processing
+        primitive to run in the Framework.  Any node visiting method that can have a Call within it must
+        "return" immediately when this flag is set.  It is cleared by resume_recipe() after the Framework
+        finishes executing the called primitive.
+
+    self.returning_from_call:
+        This flag is set by resume_recipe() just before it starts walking the recipe syntax tree, which
+        starts from the top each time. (Each visit_<syntax_element> method is responsible for behaving
+        correctly in the face of these multiple "duplicate" calls, either by redoing work quickly, or by
+        saving state and results of work already done.  See the notes about the kpf_completed flag below.)
+        visit_Call() uses this flag to trigger the processing of the return value(s) from the data processing
+        primitive previously enqueued to the framework that resume_recipe() is following  This flag
+        distinguishes returning from a finished call from preparing for a new call.
+
+    self._reset_visited_states:
+        This flag is set by reset_visited_states(), which is called from visit_For() and potentially other
+        loop control methods to be implemented in the future.  It causes the visit_<syntax_element> methods
+        to reset their saved state to prepare for another iteration of a loop.
+
+    In addition, all visit_<syntax_element>() methods doing work that takes a significant amount of time
+    use an internal attribute, kpf_completed, to indicate that the work represented by that node and any of its children
+    has been completed, and as necessary the result has been stored in an attribute of the AST
+    node itself. Some visit_<syntax_element>() methods store additional state and parameters.  Those
+    behaviors are covered below in the method documentation.
     """
 
     def __init__(self, pipeline=None, context=None):
+        """
+        __init__() constructs an instance of the class that actually walks ("visits") the recipe nodes,
+        after they have been parsed into an Abstract Syntax Tree (AST).  The actual work of the pipeline
+        recipe is done by the various visit_<syntax_element> class methods.
+        """
         NodeVisitor.__init__(self)
         # instantiate the parameters dict
         self._params = None
@@ -45,8 +87,19 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def register_builtin(self, key, func, nargs):
         """
-        Register a function so that it can be called from a recipe without using the framework
-        Items are tuples (function, number of input args)
+        register_builtin() registers a function so that the function so registered can be
+        called from within a recipe directly, without using the Framework's event queue
+        mechanism.  This is useful for recipe support functions like converting floats to
+        ints and splitting strings.
+
+        Args:
+            key: the name of the built-in function as a string
+            func: the python function itself
+            nargs: the number of input args the function expects
+
+        Note:
+            Functions that can take a variable number of arguments are not supported by
+            the recipe parser.
         """
         self._builtins[key] = (func, nargs)
 
@@ -55,11 +108,18 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_Module(self, node):
         """
-        Module node
+        visit_Module() processes "module" node of a parsed recipe.
         A Module node is always at the top of an AST tree returned
-        by ast.parse(), and there is only one, so we initialize
-        or reset things here, and clean up (releasing allocated
-        memory) at the end.
+        by ast.parse(), and there is only one per recipe file.
+        The parameters dictionary self._params used to store the values of recipe variables
+        is initialized or reset things when processing the module node, and cleaned up
+        (releasing allocated memory) at the end.  Cleaning up has the
+        effect of freeing storage used by variables from a previous pipeline recipe.
+
+        The recipe parser supports invocation of sub-recipes through the
+        special-case function name "invoke_subrecipe()" (see visit_Call()).
+        Care is taken here to avoid reinitializing the parsing state when processing
+        the "module" node of a sub-recipe.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_started', False)
@@ -82,7 +142,23 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_ImportFrom(self, node):
         """
-        import primitives and add them to the pipeline's event_table
+        visit_ImportFrom() processes the "from ... import" statement in a recipe.  It causes the imported
+        function names to be added to the pipeline's event_table, and the paths in the "from" section to
+        be added to the Framework's module search path.  In combination, these two actions allow data
+        reduction pipeline primitives to be successfully run when they are invoked within a recipe.
+        The actual queueing of a pipeline primitive onto the Framework's event queue occurs in
+        visit_Call().
+
+        Note:
+            An "import" clause without a corresponding "from" clause is not supported in recipes, since it
+            would not provide a mechanism to represent a module search path.  A bare "import" clause would
+            want to call "visit_Import()", which this class does not implement, so generic_visit() would
+            be called instead.  generic_visit() logs and raises an error.
+
+        Note:
+            Because "from ... import" statements in subrecipes could be imported more than once if the
+            subrecipe is within a loop, inclusing of "from ... import" statements should only appear
+            in the primary recipe, not subrecipes.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -111,10 +187,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_alias(self, node):
         """
-        alias node
-        These only appear in import clauses
-        Implement by putting name and asname on _load stack as tuple.
-        ImportFrom handles the heavy lifting
+        visit_alias() processes an "as" alias node, which can only appear as part of
+        an "from ... import ... as ..." construct.  The "as" clause is parsed, but ignored,
+        and so should not be used in recipes.
+        visit_alias() puts the name and asname on the _load stack as a tuple.
+        visit_importFrom() handles the heavy lifting.
         Note: asname is currently not supported and is ignored.
         """
         if self._reset_visited_states:
@@ -127,18 +204,32 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_Name(self, node):
         """
-        Implementation of Name node
+        visit_Name() processes variable names encountered in a recipe.
         A Name can occur on either the left or right side of an assignment.
         If it's on the left side the context is Store, and the Name is the
-        variable name into which to store a value.  We push that variable name
-        on the _store stack.
+        variable name into which to store a value.  visit_Name() pushes that
+        variable name on the _store stack.
         If the Name is on the right side, e.g. as part of an expression,
-        we look up the name in our params dict, and push the corresponding
-        value on the _load stack.  If the name is not found, None is pushed
-        on the _load stack.
+        visit_Name() looks up the name in the params dict, and pushes the corresponding
+        value on the _load stack.  There are three special cases to be aware of.
+        If the name "None" is encountered, the value None is pushed on the _load stack.
+        If the name "config" is encountered, the config object is pushed on the _load
+        stack.  This object supports access to attributes, so a subsequent call to
+        visit_attribute(), which is provided from the "." in an expression like
+        "config.ARGUMENT", will work correctly to extract the ARGUMENT dictionary
+        from the config.
+        The name is looked up in an environment dictionary that has been preloaded
+        from the shell environment that invoked the framework and pipeline.
+        If none of the previous cases produced a successful match, the name is looked up
+        in the internal _params dictionary, which stores by name the values of variables
+        that have been previously encountered in the recipe on the left side of assignment
+        statements.  If the name is not found in any of the above places, an error is
+        logged and raised.
+        Note that "config" and keywords from the environment will hide variables defined
+        in recipes of the same name.
 
-        WARNING: The same instance of a Name can appear as different nodes in a AST,
-        so nothing should be stored in the node as a node-specific attribute.
+        Implementer note: The same instance of a Name can appear as different nodes
+        in an AST, so nothing should be stored in the node as a node-specific attribute.
         """
         if self._reset_visited_states:
             return
@@ -173,8 +264,31 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_For(self, node):
         """
-        Implement the For node
+        visit_For() processes the "for" node of an AST.
+        
+        Handling looping correctly in a recipe is made more complex because of
+        the need to support calls to data processing primitives within the loop,
+        which cause start_recipe() or resume_recipe() to stop walking the AST tree
+        nodes and return so that the Framework can run the primitive. When
+        resume_recipe() picks up walking the parse tree after the primitive returns,
+        it must be able to resume with the same state as when it was interrupted.
+        Furthermore, state flags and results of operations stored on the various nodes
+        within the loop must be appropriately reset for each iteration, and nesting of
+        loops must work correctly.
 
+        In addition to using node attributes as described in the documentation for
+        the class as a whole, visit_for() also uses the following attributes stored
+        on the AST node to keep track of the state of loop processing and loop
+        parameters.
+
+        kpf_started:
+            Processing has started for this "for" node and it's children, but has not
+            completed unless kpf_completed is also set.
+
+        kpf_params:
+            A local dictionary used to store the values of loop variables and assignment
+            targets.  The principal stored parameters are "target", "args_iter" and
+            "current_arg"
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -194,9 +308,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(node.target)
                 if self.awaiting_call_return:
                     return
-                if len(self._store) > storeQSizeBefore:
-                    target = self._store.pop()
-                    params['target'] = target             
+                target = self._store.pop() if len(self._store) > storeQSizeBefore else None
+                params['target'] = target 
                 loadQSizeBefore = len(self._load)
                 self.visit(node.iter)
                 args = []
@@ -253,14 +366,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_Assign(self, node):
         """
-        Assign one or more constant or calculated values to named variables
-        The variable names come from the _store stack, while the values
-        come from the _load stack.
-        Calls to visit() may set self._awaiting_call_return, in which case
-        we need to immediately return, and pick up where we left off later,
-        completing the assignment.  This typically happens when there is
-        a call to a processing primitive, which is queued up on the
-        framework's event queue.  See also resume_recipe().
+        visit_Assign() processes the assignment of one or more constant or calculated
+        values to named variables. The variable names to assign into come from the _store
+        stack, while the values come from the _load stack.
+        Calls to visit_call() may occur in the tree that is walked to generate the value to
+        be assigned, and therefore may set self._awaiting_call_return, in which case visit_Assign()
+        we need to immediately return, and pick up where we left off later, completing the
+        assignment.  See also visit_call() and resume_recipe().
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -320,10 +432,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_UnaryOp(self, node):
         """
-        implement UnaryOp
-        We don't support calls in unaryOp expressions, so we don't
-        bother guarding for self.awaiting_call_return here, nor in
-        the following Unary Operators
+        visit_UnaryOp() implements the UnaryOps "-x", "+x" and "not x".  The actual
+        work is done in the operator visitor method, e.g. visit_UAdd or visit_USub.
+
+        Implementor Note:
+            This implementation doesn't support calls within unaryOp expressions,
+            so we don't bother guarding for self.awaiting_call_return here, nor in
+            the Unary Operator methods.
         """
         if self._reset_visited_states:
             self.visit(node.operand)
@@ -346,22 +461,40 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._load.append(func(self._load.pop()))
 
     def visit_UAdd(self, node):
-        """ implement UAdd """
+        """ 
+        visit_UAdd() implements the operator for unary +, as in "+x" by invoking the internal
+        method _unary_op_impl() with an appropriate lambda function.
+        See also visit_UnaryOp().
+        """
         self._unary_op_impl(node, "UAdd", lambda x : x)
 
     def visit_USub(self, node):
-        """ implement USub """
+        """ 
+        visit_USub() implements the operator for unary -, as in "-x" by invoking the internal
+        method _unary_op_impl() with an appropriate lambda function.
+        See also visit_UnaryOp().
+        """
         self._unary_op_impl(node, "USub", lambda x : -x)
 
     def visit_Not(self, node):
-        """ implement UNot """
+        """ 
+        visit_Not() implements the operator for not, as in " not x" by invoking the internal
+        method _unary_op_impl() with an appropriate lambda function.
+        See also visit_UnaryOp().
+        """
         self._unary_op_impl(node, "Not", lambda x : not x)
 
     # BinOp and the binary operators
 
     def visit_BinOp(self, node):
         """
-        BinOp
+        visit_BinOp() implements binary operations, i.e. "x + y", "x - y", "x * y", "x / y".
+        The actual work is done in the operator visitor method, e.g. visit_Add or visit_Mult.
+
+        Implementor Note:
+            This implementation doesn't support calls within binOp expressions,
+            so we don't bother guarding for self.awaiting_call_return here, nor in
+            the binary operator methods.
         """
         if self._reset_visited_states:
             self.visit(node.right)
@@ -388,21 +521,68 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._load.append(func(self._load.pop(), self._load.pop()))
 
     def visit_Add(self, node):
-        """ implement the addition operator """
+        """ 
+        visit_Add() implements the binary addition operator by invoking the internal
+        method _binary_op_impl() with an appropriate lambda function.
+        See also visit_BinOp()
+        """
         self._binary_op_impl(node, "Add", lambda x, y: x + y)
 
     def visit_Sub(self, node):
-        """ implement the subtraction operator """
+        """ 
+        visit_Sub() implements the binary subtraction operator by invoking the internal
+        method _binary_op_impl() with an appropriate lambda function.
+        See also visit_BinOp()
+        """
         self._binary_op_impl(node, "Sub", lambda x, y: x - y)
     
     def visit_Mult(self, node):
-        """ implement the multiplication operator """
+        """ 
+        visit_Mult() implements the binary multiplication operator by invoking the internal
+        method _binary_op_impl() with an appropriate lambda function.
+        See also visit_BinOp()
+        """
         self._binary_op_impl(node, "Mult", lambda x, y: x * y)
     
     def visit_Div(self, node):
-        """ implement the division operator """
+        """ 
+        visit_Div() implements the binary division operator by invoking the internal
+        method _binary_op_impl() with an appropriate lambda function.
+        See also visit_BinOp()
+        """
         self._binary_op_impl(node, "Div", lambda x, y: x / y)
     
+    # Compare and comparison operators
+
+    def visit_Compare(self, node):
+        """
+        visit_Compare() implements comparison expressions, e.g. "x <= y".  It walks
+        the AST subtrees for the left and right side of the comparison, pushing the
+        corresponding values on the _load stack. It "visits" the comparison operator
+        itself, which results in popping off the values for the two sides and pushing
+        either "True" or "False" on the _load stack as a Bool.  See also the comparison
+        operators, e.g. visit_Eq(), visit_NotEq(), visit_Lt(), visit_LtE(), visit_Is(),
+        visit_IsNot(), visit_In().
+        """
+        if self._reset_visited_states:
+            setattr(node, 'kpf_completed', False)
+            for item in node.comparators:
+                self.visit(item)
+            self.visit(node.left)
+            for op in node.ops:
+                self.visit(op)
+            return
+        if not getattr(node, 'kpf_completed', False):
+            self.pipeline.logger.debug(f"Compare")
+            loadQSizeBefore = len(self._load)
+            # comparators before left because they're going on a stack, so left can be pulled first
+            for item in node.comparators:
+                self.visit(item)
+            self.visit(node.left)
+            for op in node.ops:
+                self.visit(op)
+            setattr(node, 'kpf_completed', True)
+
     # Comparison operators
 
     def _compare_op_impl(self, node, name, func):
@@ -417,58 +597,120 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._load.append(func(self._load.pop(), self._load.pop()))
 
     def visit_Eq(self, node):
-        """ implement Eq comparison operator """
+        """ 
+        visit_Eq() implements the equality comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "Eq", lambda x, y: x == y)
     
     def visit_NotEq(self, node):
-        """ implement NotEq comparison operator """
+        """ 
+        visit_NotEq() implements the inequality comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "NotEq", lambda x, y: x != y)
     
     def visit_Lt(self, node):
-        """ implement Lt comparison operator """
+        """ 
+        visit_Lt() implements the less than comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "Lt", lambda x, y: x < y)
     
     def visit_LtE(self, node):
-        """ implement LtE comparison operator """
+        """ 
+        visit_LtE() implements the less than or equal comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "LtE", lambda x, y: x <= y)
     
     def visit_Gt(self, node):
-        """ implement Gt comparison operator """
+        """ 
+        visit_Gt() implements the greater than comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        """
         self._compare_op_impl(node, "Gt", lambda x, y: x > y)
     
     def visit_GtE(self, node):
-        """ implement GtE comparison operator """
+        """ 
+        visit_GtE() implements the greater than or equal comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "GtE", lambda x, y: x >= y)
     
     def visit_Is(self, node):
-        """ implement Is comparison operator """
+        """ 
+        visit_Is() implements the "is" comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "Is", lambda x, y: x is y)
     
     def visit_IsNot(self, node):
-        """ implement IsNot comparison operator """
+        """ 
+        visit_Eq() implements the "is not" comparison operator by invoking
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        See also visit_Compare().
+        """
         self._compare_op_impl(node, "IsNot", lambda x, y: not (x is y))
 
     def visit_In(self, node):
-        """ implement In comparison operator """
+        """ 
+        visit_In() implements the "in" range comparison operator by invoking
+        See also visit_Compare().
+        the internal method _compare_op_impl() with an appropriate lambda function.
+        """
         self._compare_op_impl(node, "In", lambda x, y: x in y)
     
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
 
     def visit_Call(self, node):
         """
-        Implement function call
-        The arguments are pulled from the _load stack into a list.
-        Targets are put on the _store stack.
-        After the call has been pushed to the framework's event queue,
-        we set our awaiting_call_return flag and return.  That flag
-        causes immediate returns all the way up the call stack.
-        When the primitive has been run by the framework, the next
-        primitive will be our "resume_recipe", which will set the
-        returning_from_call flag and start traversing the AST tree
-        from the top again.  Because of the various kpf_completed
-        attributes set on nodes of the tree, processing will quickly
-        get back to here, where the output of the primitive will be
-        pushed on the _load stack, becoming the result of the call.
+        visit_Call() implements function call syntax.  The function can be one of several
+        built-in functions, or can enqueue a data processing primitive to be run in the
+        Framework.  In the latter case, it cooperates with return_recipe() to make available
+        to the recipe values returned from data processing primitives.
+
+        Whatever the function type, arguments are popped from the _load stack, and results
+        of the call are pushed back onto the _load stack.
+
+        If the function's name is the special case "invoke_subrecipe", the one expected
+        argument is a path to a recipe file. If it has not already been, it is parsed into
+        an abstract syntax tree (AST) and hung on the "call" tree node for future use.
+        The subtree is then "visited" just like any other subtree.  The head of the
+        subrecipe tree is a "module" node, as for all recipes.  See visit_module() for
+        more details on how subrecipes are handled.
+
+        If the name of the function to be called is not "invoke_subrecipe", the registry of
+        built-in functions is checked.  (See the documentation for "register_recipe_builtins()"
+        for a list of built-ins and their behavior.)
+
+        If the function name is not found among the registered built-ins, it is presumed to be
+        a data processing primitive to be run on the Keck framework.  The list of arguments
+        popped from the _load stack is wrapped in an Arguments class object, an event is
+        constructed containing the primitive name and the argument object.  That event is
+        appended to the Framework's priority event queue. The awaiting_call_return flag is set,
+        and visit_Call() immediately returns.  That flag causes an immediate return from each
+        of the visit_<syntax_element>() functions all the way up the call stack, and the
+        instance of start_recipe() or resume_recipe() at the top of the call stack also returns.
+        The Framework is then free to run the next queued event, which is the primitive named
+        in node being processed by this visit_Call().
+
+        When the primitive has been run by the framework, the next primitive will be
+        "resume_recipe", which will set the returning_from_call flag and start traversing the
+        previously saved AST tree from the top again.  Because of the various kpf_completed
+        attributes set on nodes of the tree, processing will quickly get back to here, with the
+        state of the various tree nodes the same as before.  resume_recipe() will have placed
+        the output of the primitive, which is an Arguments class object, on the class instance's
+        call_output property and set the returning_from_call flag.  visit_Call() will extract each
+        positional argument value from the Arguments object and push it onto the _load stack,
+        becoming the results of the call.  (Any keyword arguments in the Arguments object returned
+        from the primitive are ignored.)
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -508,6 +750,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     tup = self._load.pop()
                     kwargs[tup[0]] = tup[1]
                 if node.func.id in self._builtins.keys():
+                    # directly handle one of the registered built-in functions and push
+                    # the results on the _load stack
                     func, nargs = self._builtins[node.func.id]
                     if len(node.args) != nargs:
                         self.pipeline.logger.error(f"Call to {node.func.id} takes exactly {nargs} args, got {len(node.args)} on recipe line {node.lineno}")
@@ -526,6 +770,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                         self.pipeline.logger.debug(f"Call (builtin): appending {results} of type {type(results)} to _load")
                         self._load.append(results)
                 else:
+                    # Prepare arguments for and enqueue a data processing primitive to be executed
+                    # by the Framework, set the self.awaiting_call_return flag, and return.
                     event_args = Arguments(name=node.func.id+"_args", **kwargs)
                     # add positional arguments
                     for argnode in node.args:
@@ -551,9 +797,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_keyword(self, node):
         """
-        implement keyword as follows:
-        Since this only occurs in the context of keyword arguments in a
-        call signature, we can generate tuples of (keyword, value)
+        visit_keyword() implements the syntax of keyword arguments (as opposed to positional
+        arguments) within function calls.  It does so by generating tuples of (keyword, value),
+        generating the value by walking the corresponding AST subtree.  The resulting tuple is
+        stored on the _load stack, replacing the keyword name item.
         """
         if self._reset_visited_states:
             return
@@ -563,36 +810,15 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(f"keyword: {val}")
         self._load.append((node.arg, val))
 
-    def visit_Compare(self, node):
-        """
-        Implement Compare as follows:
-        visiting "left" and "comparators" puts values on the _load stack.
-        visiting "ops" evaluates some comparison operator, and puts the result
-        on the _load stack as a Bool.
-        """
-        if self._reset_visited_states:
-            setattr(node, 'kpf_completed', False)
-            for item in node.comparators:
-                self.visit(item)
-            self.visit(node.left)
-            for op in node.ops:
-                self.visit(op)
-            return
-        if not getattr(node, 'kpf_completed', False):
-            self.pipeline.logger.debug(f"Compare")
-            loadQSizeBefore = len(self._load)
-            # comparators before left because they're going on a stack, so left can be pulled first
-            for item in node.comparators:
-                self.visit(item)
-            self.visit(node.left)
-            for op in node.ops:
-                self.visit(op)
-            setattr(node, 'kpf_completed', True)
-
     def visit_If(self, node):
         """
-        Implementation of If
+        visit_If() implements conditional execution triggered by an "if" or "if ... else"
+        statement.
         Evaluate the test and visit one of the two branches, body or orelse.
+        
+        Note:
+            The python "if" expression, e.g. x = a if <condition> else b, is not
+            supported in recipes.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -636,7 +862,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_List(self, node):
         """
-        List node
+        visit_List() implements the "[<list item>, <list item>, ...]" list syntax from
+        Python.  It does this by visiting the tree node representing each list element in 
+        turn.  Visiting each node results in a new item pushed onto the _load stack.  After
+        visiting each subtree, the new items on the _load stack are popped and appended onto
+        a list object.  Finally, the list object is pushed onto the _load stack.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -658,21 +888,30 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_Tuple(self, node):
         """
-        Tuple node
+        visit_Tuple() implements the "(<tuple item>, <tuple item>, ...)" tuple syntax from
+        Python.  It does this by visiting the tree node representing each tuple element in 
+        turn.  Visiting each node results in a new item pushed onto the _load stack.  After
+        visiting each subtree, the new items on the _load stack are popped and appended onto
+        a list object.  Finally, the list object is pushed onto the _load stack.
+
+        Internally, the tuple is generated by calling visit_List() to build a list on the
+        _load stack, and then converting it into a tuple.
         """
-        if self._reset_visited_states:
-            setattr(node, 'kpf_completed', False)
-            return
         self.pipeline.logger.debug(f"Tuple")
+        self.visit_List(node)
+        if self._reset_visited_states:
+            return
         if not getattr(node, "kpf_completed", False):
-            for elt in node.elts:
-                self.visit(elt)
+            if not isinstance(self._load[len(self._load)-1], list):
+                raise RecipeError("visit_Tuple() expected a list on the _load stack, "
+                    f"but got {self._load[len(self._load)-s]}")
+            self._load.append(tuple(self._load.pop()))
             setattr(node, "kpf_completed", True)
         
     def visit_NameConstant(self, node):
         """
-        NameConstant
-        implement name constant by putting on the _load stack
+        visit_NameConstant() implements python NameConstant syntax element by pushing the value
+        on the _load stack.
         """
         if self._reset_visited_states:
             return
@@ -682,11 +921,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_Num(self, node):
         """
-        Num
-        implement numeric constant by putting it on the _load stack
-
-        NB: An instance of Num can appear as different nodes in the same AST,
-        so we can't store node specific information as an attribute.
+        visit_Num() implements a numeric constant by pushing it on the _load stack.
         """
         if self._reset_visited_states:
             return
@@ -696,8 +931,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_Str(self, node):
         """
-        Str node
-        TODO: I'm not sure what to do with a multiline comment expressed as Str
+        visit_Str() implements a string constant by pushing its value on the _load stack.
+        Multiline strings delimited by three double-quotes will result in string values
+        with embedded line breaks.  Multiple quoted strings with no separator character
+        e.g. comma, are not automatically concatenated, as would be in Python.
         """
         if self._reset_visited_states:
             return
@@ -707,7 +944,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def visit_Expr(self, node):
         """
-        Expr node
+        visit_Expr() implements an expression by pushing the resulting value on the _load
+        stack.  Expression syntax elements are produced by the AST parser only rarely in recipe
+        situations, for example when an expression stands alone, not as part of an assignment
+        statement.
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
@@ -720,7 +960,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             setattr(node, 'kpf_complted', True)
     
     def visit_Attribute(self, node):
-        """ Attribute node -- handle dictionary attribute """
+        """
+        visit_Attribute() implements the syntax e.g. of an object attribute access, e.g. "a.key".
+        It does so by getting the name of the attribute, and then testing to see of the object at
+        the top of the _load stack has an attribute of that name.  If it does, the value of the
+        attribute replaces the original object at the top of the _load stack.  If no such
+        attribute exists on the object, an message is logged and RecipeError is raised.
+        """
         if self._reset_visited_states:
             return
         self.visit(node.value)
@@ -743,7 +989,14 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 f"Assigning to dictionary attribute on line {node.lineno} not supported")
     
     def visit_Subscript(self, node):
-        """ Subscript node """
+        """
+        visit_Subscript() implements subscript syntax of the form a[i], where the subscript value
+        is a single index.  The behavior is to replace the object on the _load stack with the value
+        of the indexed item.  See also visit_Index().
+
+        Note:
+            Slice subscripts of the form a[i:j] are not supported.  
+        """
         if self._reset_visited_states:
             return
         if isinstance(node.ctx, _ast.Load):
@@ -759,13 +1012,22 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
     
     def visit_Index(self, node):
-        """ Index node """
+        """
+        visit_Index() doesn't do anything special.  It simply visits the subtree corresponding to the
+        index value.  That (or those) nodes will have the result of pushing some appropriate value onto
+        the _load stack.  visit_Index() doesn't need to alter that value in any way.  Typically
+        visit_Subscript() will use that value to perform the actual indexing operation.
+        """
         if self._reset_visited_states:
             return
         self.visit(node.value)
 
     def generic_visit(self, node):
-        """Called if no explicit visitor function exists for a node."""
+        """
+        generic_visit() is called if no explicit visitor function exists for a node.
+        It logs a message in the pipeline logger noting that the recipe contained an
+        unsupported syntax element, and then raises RecipeError with the same message.
+        """
         self.pipeline.logger.error(
             f"generic_visit: got unsupported node {node.__class__.__name__}")
         raise RecipeError(
@@ -773,8 +1035,12 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     
     def reset_visited_states(self, node):
         """
-        Resets kpf_completed and other attributes of this and all subnodes,
-        e.g. so that a for loop can iterate with a fresh start.
+        reset_visited_states() walks the tree below the node where the call is made after setting
+        the class member self._reset_visited_states.  Each visit_<syntax_element>, when called with
+        that flag set, should reset its state so that an enclosing loop can be properly executed again
+        with new parameters.
+
+        reset_visited_states() is called in visit_<> methods that control looping, such as visit_For()
         """
         self._reset_visited_states = True
         self.awaiting_call_return = False
