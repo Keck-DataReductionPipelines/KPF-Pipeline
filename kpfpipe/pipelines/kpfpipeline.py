@@ -116,15 +116,15 @@ class KPFPipeline(BasePipeline):
 
     # Modification: 
     name = 'KPF-Pipe'
-    event_table = {
-        """
+    """
         event_table (dictionary): table of actions known to framework. All primitives must be registered here.
         Data reduction primitives are registered into the event_table as part of the processing
         of the "from ... import" statement at the top of a recipe.
 
         The format of entries is:
             action_name: (name_of_callable, current_state, next_event_name)
-        """
+    """
+    event_table = {
         'start_recipe': ('start_recipe', 'starting recipe', None), 
         'resume_recipe': ('resume_recipe', 'resuming recipe', None),
         'to_fits': ('to_fits', 'processing', 'resume_recipe'),
