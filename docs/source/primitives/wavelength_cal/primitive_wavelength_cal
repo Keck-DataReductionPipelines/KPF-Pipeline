@@ -1,0 +1,8 @@
+Bias Subtraction Primitive
+======================
+
+.. module:: modules
+    :noindex:
+
+.. automodule:: modules.wavelength_cal.src.wavelength_cal
+    :members:
