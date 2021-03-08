@@ -114,7 +114,8 @@ class WaveCalibrate(KPF1_Primitive):
 
         # 3. write in -wave with wavelength calibration output (wavelength per pixel)
         for prefix in ['CAL','SCI1','SKY']:
-            self.l1_obj.data[prefix][1,:,:]=wave_per_pix
+            if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
+                self.l1_obj.data[prefix][1,:,:]=wave_per_pix
             #should [1,:,:] be replaced with something like [1,self.min_order,self.max_order]?
 
         return Arguments(self.l1_obj)
