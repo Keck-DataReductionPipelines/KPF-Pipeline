@@ -881,8 +881,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit(elt)
                 if len(self._load) > loadDepth:
                     l.append(self._load.pop())
-                else:
-                    raise RecipeException("List: expected item to append to list, but none was found")
             self._load.append(l)
             setattr(node, "kpf_completed", True)
     
