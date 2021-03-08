@@ -123,9 +123,9 @@ class LFCWaveCalibration:
         #padding to match original dimensions which is order by length: (order,length)
         flux_shape=flux.shape
         zeros=np.linspace(0,0,flux_shape[1])
-        for i in range(0,min_order):
+        for i in range(0,self.min_order):
             all_leg.insert(i,zeros)
-        for i in range(max_order,flux_shape[0]):
+        for i in range(self.max_order,flux_shape[0]):
             all_leg.insert(i,zeros)
 
         return all_leg
