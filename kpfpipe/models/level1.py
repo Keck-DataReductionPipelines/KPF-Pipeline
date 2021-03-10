@@ -343,7 +343,6 @@ class KPF1(KPFDataModel):
             label (str): label of the segment to be removed
         '''
         if label not in list(self.segments[fiber]['Label']):
-            import pdb;pdb.set_trace()
             raise ValueError('{} not found'.format(label))
         idx = self.segments[fiber].index[self.segments[fiber]['Label'] == label].tolist()
         self.segments[fiber] = self.segments[fiber].drop(idx, axis=0)
