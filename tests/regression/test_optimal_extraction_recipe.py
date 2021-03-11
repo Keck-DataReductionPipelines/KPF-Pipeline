@@ -34,7 +34,7 @@ for code in obs_list:
     lev0_stem, lev0_ext = splitext(short_lev0_file)
     lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
     output_lev1_file = output_dir + lev0_flat_stem + '_' + lev0_stem + '_' + str(rect_method) + '_recipe' + lev1_stem_suffix + '.fits'
-    op_data = OptimalExtraction(lev0_data, lev0_flat_data, output_lev1_file, order_name=order_name,
+    op_data = OptimalExtraction(lev0_data, lev0_flat_data, None, order_name=order_name, 
                                                 rectification_method=rect_method, max_result_order=max_result_order,
                                                 start_order=start_result_order, wavecal_fits=input_lev1_file)
 """

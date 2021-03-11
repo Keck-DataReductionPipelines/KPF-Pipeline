@@ -99,6 +99,7 @@ class LFCWaveCalibration:
         comb_len=self.comb_len(flux)
 
         ns,all_peaks_exact,all_peaks_approx=[],[],[]
+
         for order in orders:
             n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
             ns.append(n)
@@ -184,6 +185,7 @@ class LFCWaveCalibration:
         #end of - for NEID
 
         comb=flux_new[order] #loop through orders
+
 
         c = comb - np.ma.min(comb)
         height = np.ma.median(c)
