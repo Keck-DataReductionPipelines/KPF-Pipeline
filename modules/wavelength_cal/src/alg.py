@@ -101,9 +101,12 @@ class LFCWaveCalibration:
         ns,all_peaks_exact,all_peaks_approx=[],[],[]
 
         for order in orders:
-            n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
-            ns.append(n)
-            all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx)
+            try:
+                n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
+                ns.append(n)
+                all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx)
+            except:
+                continue
 
         all_idx=[]
         for order,peaks in zip(orders,all_peaks_exact):
@@ -197,25 +200,28 @@ class LFCWaveCalibration:
         new_peaks = peaks.astype(float)
         width = np.mean(np.diff(peaks)) // 2
         for j, p in enumerate(peaks):
-            idx = p + np.arange(-width, width + 1, 1)
-            idx = np.clip(idx, 0, len(c) - 1).astype(int)
+            try: 
+                idx = p + np.arange(-width, width + 1, 1)
+                idx = np.clip(idx, 0, len(c) - 1).astype(int)
+                
+                x = np.ma.compressed(np.arange(len(idx)))
+                y = np.ma.compressed(c[idx])
+                
+                def gauss_value(x, a, mu, sig, const):
+                    return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
             
-            x = np.ma.compressed(np.arange(len(idx)))
-            y = np.ma.compressed(c[idx])
-            
-            def gauss_value(x, a, mu, sig, const):
-                return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
-        
-            i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
-            p0 = [y[i], x[i], 1, np.min(y)]
+                i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
+                p0 = [y[i], x[i], 1, np.min(y)]
 
-            with np.warnings.catch_warnings():
-                np.warnings.simplefilter("ignore")
-                popt, _ = curve_fit(gauss_value, x, y, p0=p0)
-            
-            coef=popt
-            
-            new_peaks[j] = coef[1] + p - width
+                with np.warnings.catch_warnings():
+                    np.warnings.simplefilter("ignore")
+                    popt, _ = curve_fit(gauss_value, x, y, p0=p0)
+                
+                coef=popt
+                
+                new_peaks[j] = coef[1] + p - width
+            except:
+                pass
 
         n = np.arange(len(peaks))
         return n, new_peaks, peaks
