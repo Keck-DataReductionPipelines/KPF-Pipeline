@@ -1,0 +1,18 @@
+invoke_subrecipe("./examples/V1/common_args.recipe")
+
+# RecipeB: order trace, extraction (vertical rectification + sum), rv (weighting)
+lev1_wavelength_cal = False
+lev2_weight_rv = True
+rect_method = 'vertical'
+extract_method = 'sum'
+recipe_output_dir = output_dir + 'RecipeB/'
+lev1_output_suffix = '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix
+
+invoke_subrecipe("./examples/V1/test_order_trace.recipe")
+invoke_subrecipe("./examples/V1/test_optimal_extraction.recipe")
+if lev1_wavelength_cal:
+	invoke_subrecipe("./examples/V1/test_wave_cal.recipe")
+if lev2_weight_rv:
+	invoke_subrecipe("./examples/V1/test_neid_radial_velocity_reweight.recipe")
+else:
+	invoke_subrecipe("./examples/V1/test_neid_radial_velocity.recipe")
