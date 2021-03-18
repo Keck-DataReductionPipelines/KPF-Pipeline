@@ -28,10 +28,47 @@ Overview:
     "kpf2_from_fits". Other built-in functions that are available for use within recipes without external
     calls to the Framework are discussed in register_recipe_builtins() below.
 
+    Here is an example recipe to illustrate how the pipeline and recipe mechanism works::
+
+        from modules.order_trace.src.order_trace import OrderTrace
+    
+        test_data_dir = KPFPIPE_TEST_DATA + '/KPFdata' 
+        data_type = config.ARGUMENT.data_type
+        output_dir = config.ARGUMENT.output_dir
+        input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
+        flat_stem_suffix = config.ARGUMENT.output_flat_suffix
+
+        order_trace_flat_pattern = test_data_dir + input_flat_pattern
+        
+        for input_flat_file in find_files(order_trace_flat_pattern):
+            _, short_flat_file = split(input_flat_file)
+            flat_stem, flat_ext = splitext(short_flat_file)
+            output_lev0_file = output_dir + flat_stem + flat_stem_suffix + flat_ext
+            if not find_files(output_lev0_file):
+                flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
+                ot_data = OrderTrace(flat_data)
+                result = to_fits(ot_data, output_lev0_file)
+    
+    In the above recipe, notice that there are three primitives that need to be run by the Framework,
+    kpf0_from_fits (which reads a FITS file), OrderTrace and to_fits (which writes a FITS file).  Only
+    OrderTrace needs to appear on a from ... import line, since the other two are provided by the
+    pipeline.
+
+    The next five lines of the recipe define parameters, by referencing the KPFPIPE_TEST_DATA environment
+    variable, and by accessing the config. The "for" loop uses several built-in functions, including
+    find_files, split and splitext, which are defined elsewhere.
+
+    The last three lines of the recipe to the actual data reduction work, reading a FITS file into
+    a variable called "flat_data", calling the OrderTrace module, which returns its results into
+    the variable "ot_data", which is then written into a FITS file with a filename derived from the
+    input name.  In a more complete recipe, ot_data would be used as an input argument to another
+    data reduction processing step.
+    
     The following diagram shows the flow of the code between the Framework proper, the KPFPipeline recipe
-    support mechanisms and the data reduction primitives.  Calls to built-in functions such as find_files(),
-    int() and str() are handled directly within start_recipe and resume_recipe, and so are not shown in 
-    the diagram.
+    support mechanisms and the data reduction primitives for the above recipe.  Calls to the built-in
+    functions such as find_files(), int() and str() are handled directly within start_recipe and
+    resume_recipe, and so don't appear in the diagram.  In the diagram, "kpf_from_fits" is called
+    "from_fits" for simplicity.
 
 .. image:: FrameworkPipelineInteractions.*
 
