@@ -98,25 +98,32 @@ class LFCWaveCalibration:
 
         comb_len=self.comb_len(flux)
 
-        ns,all_peaks_exact,all_peaks_approx=[],[],[]
+        all_peaks_exact,all_peaks_approx=[],[]
+        all_leg,all_wls=[],[]
+        all_idx=[]
 
         for order in orders:
             try:
                 n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
-                ns.append(n)
-                all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx)
+                all_peaks_exact.append(peaks_exact)
+                all_peaks_approx.append(peaks_approx)
             except:
+                peaks_exact=np.zeros(100)
+                peaks_approx=np.zeros(100)
+                idx=self.mode_match(comb_lines_ang,peaks_exact,comb_len,master,order)
+                leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks_exact,idx)
+                all_leg.append(leg)
+                all_wls.append(wavelengths)
                 continue
 
-        all_idx=[]
         for order,peaks in zip(orders,all_peaks_exact):
             idx=self.mode_match(comb_lines_ang,peaks,comb_len,master,order)
             all_idx.append(idx)
 
-        all_leg,all_wls=[],[]
         for idx,peaks in zip(all_idx,all_peaks_exact):
             leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks,idx)
-            all_leg.append(leg);all_wls.append(wavelengths)
+            all_leg.append(leg)
+            all_wls.append(wavelengths)
 
         # errors=[]
         # for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
@@ -182,9 +189,9 @@ class LFCWaveCalibration:
         #converts NaNs to 0.0
         flux_new = np.where(np.isnan(flux), 0.0, flux) 
         #for NEID - temporary until linelist creation
-        flux_new[:,435:455] = 0
-        flux_new[48,1933:1938] = 0
-        flux_new[48,48:56] = 0
+        # flux_new[:,435:455] = 0
+        # flux_new[48,1933:1938] = 0
+        # flux_new[48,48:56] = 0
         #end of - for NEID
 
         comb=flux_new[order] #loop through orders
