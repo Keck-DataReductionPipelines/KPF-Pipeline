@@ -1,0 +1,44 @@
+***go to KPF-Pipeline, run the following to create folders under test_results to contain the results from each recipe running, 
+>./examples/V1/v1_init.sh
+or create foloder recipe_results, recipe_results/Recipe[A-F], recipe_results/RecipeAlpha[1-2], recipe_results/SimpleDemo under 
+KPF-Pipeline/examples/V1/ manually. 
+
+*** examples/V1 contains 
+- 6 master recipes under folder RecipeA-F with KPF-Pipleline V1 release, subrecipes for each module, the config file shared by all master recipes. 
+- 2 master recipes under folder RecipeAlph1 and RecipeAlpha2 for 2 alpha test cases and the config files. 
+
+*** Running the recipes:
+
+>cd  <KPF directory>/KPF-Pipeline/
+>kpf examples/V1/<Recipe Folder>/test_neid.recipe examples/V1/default_neid.cfg
+
+where <Recipe Folder> is RecipeA, RecipeB, RecipeC, RecipeD, RecipeE, RecipeF respectively for the recipe A, B, C, D, E, and F. 
+
+Event settings for Recipe A-F: 
+
+events     | Order trace    | Extraction                            | Wavelength calibration | Mask cross-correlation | RV
+settings   | Y/             | rect_method: vertical/ normal/norect  | Y/N                    |                        | Weighted/unweighted
+           | from <recipe x>| extract_method: sum/optimal           |                        |                        | 
+
+RecipeA    | Y              | norect,sum                            | N                      | Y                      | unweighted
+RecipeB    | from RecipeA   | rectified (vertical), sum             | N                      | Y                      | weighted
+RecipeC    | from RecipeA   | norect, sum                           | Y                      | Y                      | unweighted
+RecipeD    | from RecipeA   | rectified (vertical), sum             | Y                      | Y                      | unweighted
+RecipeE    | From RecipeA   | rectified (vertical), sum             | Y                      | Y                      | weighted
+RecipeF    | Y              | rectified (vertical), optimal         | Y                      | Y                      | weighted
+
+*** Running Alpha recipe 1:
+>cd <KPF directory>/KPF-Pipeline/
+>kpf examples/V1/RecipeAlpha1/test_neid_alpha_1.recipe examples/V1/RecipeAlpha1/default_neid_alpha_1.cfg
+
+*** Running Alpha recipe 2:
+>cd <KPF directory>/KPF-Pipeline/
+>kpf examples/V1/RecipeAlpha2/test_neid_alpha_2.recipe examples/V1/RecipeAlpha2/default_neid_alpha_2.cfg
+
+Event settings for alpha 1 and 2:
+
+Alpha 1    | Y              | norect,optimal                        | N                      | Y                      | unweighted
+Alpha 2    | from Alpha 1   | rectified (vertical), optimal         | N                      | Y                      | weighted
+
+
+  

@@ -249,7 +249,8 @@ class KPFDataModel:
             t = Table.from_pandas(table)
             hdu = fits.table_to_hdu(t)
             for key, value in self.header[name].items():
-                hdu.header.set(key, value)
+                hdu.header[key] = value           # value could be a single value or a 2-D tuple with (value, comment)
+                # hdu.header.set(key, value)
             hdu.name = name
             hdu_list.append(hdu)
 
