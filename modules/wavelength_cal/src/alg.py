@@ -98,22 +98,23 @@ class LFCWaveCalibration:
 
         comb_len=self.comb_len(flux)
 
-        ns,all_peaks_exact,all_peaks_approx=[],[],[]
+        all_leg,all_wls=[],[]
 
         for order in orders:
-            n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
-            ns.append(n)
-            all_peaks_exact.append(peaks_exact);all_peaks_approx.append(peaks_approx)
-
-        all_idx=[]
-        for order,peaks in zip(orders,all_peaks_exact):
-            idx=self.mode_match(comb_lines_ang,peaks,comb_len,master,order)
-            all_idx.append(idx)
-
-        all_leg,all_wls=[],[]
-        for idx,peaks in zip(all_idx,all_peaks_exact):
-            leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks,idx)
-            all_leg.append(leg);all_wls.append(wavelengths)
+            try:
+                n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
+                idx=self.mode_match(comb_lines_ang,peaks_exact,comb_len,master,order)
+                leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks_exact,idx)
+                all_leg.append(leg)
+                all_wls.append(wavelengths)
+            except ValueError:
+                #peaks_exact=np.zeros(100)
+                #peaks_approx=np.zeros(100)
+                #idx=self.mode_match(comb_lines_ang,peaks_exact,comb_len,master,order)
+                leg=np.zeros(flux.shape[1])
+                wavelengths=np.zeros(flux.shape[1])
+                all_leg.append(leg)
+                all_wls.append(wavelengths)
 
         # errors=[]
         # for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
@@ -179,9 +180,9 @@ class LFCWaveCalibration:
         #converts NaNs to 0.0
         flux_new = np.where(np.isnan(flux), 0.0, flux) 
         #for NEID - temporary until linelist creation
-        flux_new[:,435:455] = 0
-        flux_new[48,1933:1938] = 0
-        flux_new[48,48:56] = 0
+        # flux_new[:,435:455] = 0
+        # flux_new[48,1933:1938] = 0
+        # flux_new[48,48:56] = 0
         #end of - for NEID
 
         comb=flux_new[order] #loop through orders
@@ -197,25 +198,28 @@ class LFCWaveCalibration:
         new_peaks = peaks.astype(float)
         width = np.mean(np.diff(peaks)) // 2
         for j, p in enumerate(peaks):
-            idx = p + np.arange(-width, width + 1, 1)
-            idx = np.clip(idx, 0, len(c) - 1).astype(int)
+            try: 
+                idx = p + np.arange(-width, width + 1, 1)
+                idx = np.clip(idx, 0, len(c) - 1).astype(int)
+                
+                x = np.ma.compressed(np.arange(len(idx)))
+                y = np.ma.compressed(c[idx])
+                
+                def gauss_value(x, a, mu, sig, const):
+                    return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
             
-            x = np.ma.compressed(np.arange(len(idx)))
-            y = np.ma.compressed(c[idx])
-            
-            def gauss_value(x, a, mu, sig, const):
-                return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
-        
-            i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
-            p0 = [y[i], x[i], 1, np.min(y)]
+                i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
+                p0 = [y[i], x[i], 1, np.min(y)]
 
-            with np.warnings.catch_warnings():
-                np.warnings.simplefilter("ignore")
-                popt, _ = curve_fit(gauss_value, x, y, p0=p0)
-            
-            coef=popt
-            
-            new_peaks[j] = coef[1] + p - width
+                with np.warnings.catch_warnings():
+                    np.warnings.simplefilter("ignore")
+                    popt, _ = curve_fit(gauss_value, x, y, p0=p0)
+                
+                coef=popt
+                
+                new_peaks[j] = coef[1] + p - width
+            except:
+                pass
 
         n = np.arange(len(peaks))
         return n, new_peaks, peaks
