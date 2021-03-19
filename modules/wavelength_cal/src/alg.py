@@ -98,32 +98,23 @@ class LFCWaveCalibration:
 
         comb_len=self.comb_len(flux)
 
-        all_peaks_exact,all_peaks_approx=[],[]
         all_leg,all_wls=[],[]
-        all_idx=[]
 
         for order in orders:
             try:
                 n,peaks_exact,peaks_approx=self.peak_detect(flux,order)
-                all_peaks_exact.append(peaks_exact)
-                all_peaks_approx.append(peaks_approx)
-            except:
-                peaks_exact=np.zeros(100)
-                peaks_approx=np.zeros(100)
                 idx=self.mode_match(comb_lines_ang,peaks_exact,comb_len,master,order)
                 leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks_exact,idx)
                 all_leg.append(leg)
                 all_wls.append(wavelengths)
-                continue
-
-        for order,peaks in zip(orders,all_peaks_exact):
-            idx=self.mode_match(comb_lines_ang,peaks,comb_len,master,order)
-            all_idx.append(idx)
-
-        for idx,peaks in zip(all_idx,all_peaks_exact):
-            leg,wavelengths=self.poly_fit(comb_len,comb_lines_ang,peaks,idx)
-            all_leg.append(leg)
-            all_wls.append(wavelengths)
+            except ValueError:
+                #peaks_exact=np.zeros(100)
+                #peaks_approx=np.zeros(100)
+                #idx=self.mode_match(comb_lines_ang,peaks_exact,comb_len,master,order)
+                leg=np.zeros(flux.shape[1])
+                wavelengths=np.zeros(flux.shape[1])
+                all_leg.append(leg)
+                all_wls.append(wavelengths)
 
         # errors=[]
         # for wavelengths,idx,peaks,leg in zip(all_wls,all_idx,all_peaks_approx,all_leg):
