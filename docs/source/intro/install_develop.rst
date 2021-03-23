@@ -4,7 +4,7 @@ Installing from Develop or Feature Branches
 The ``master`` branch is considered the most stable (i.e less likely to
 run into a bug), but it may not be the most up-to-date. As the pipeline is
 developed, you may want to install the pipeline from ``develop`` branch
-or some feature branch intead.
+or some feature branch instead.
 
 As before, clone the repository and navigate into it::
 
