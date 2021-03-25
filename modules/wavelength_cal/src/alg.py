@@ -207,6 +207,7 @@ class LFCWaveCalibration:
                 
                 def gauss_value(x, a, mu, sig, const):
                     return a * np.exp(-((x - mu) ** 2) / (2 * sig)) + const
+
             
                 i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
                 p0 = [y[i], x[i], 1, np.min(y)]
@@ -220,6 +221,7 @@ class LFCWaveCalibration:
                 new_peaks[j] = coef[1] + p - width
             except:
                 pass
+
 
         n = np.arange(len(peaks))
         return n, new_peaks, peaks
