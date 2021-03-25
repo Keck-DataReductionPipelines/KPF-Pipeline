@@ -208,7 +208,7 @@ class RadialVelocityReweighting(KPF1_Primitive):
             rv_est, velocities)
 
         ccf_df.attrs['CCFJDSUM'] = self.jd
-        ccf_df.attrs['CCF-RVC'] = "{:.10f}".format(ccf_mean) + ' Baryc RV (km/s)'
+        ccf_df.attrs['CCF-RVC'] = ("{:.10f}".format(ccf_mean), ' Baryc RV (km/s)')
         ccf_df.attrs['CCFSTART'] = str(rv_est)
         ccf_df.attrs['CCFSTEP']  = str(self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STEP])
         ccf_df.attrs['STARTORD'] = str(self.ccf_start_index)

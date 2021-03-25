@@ -1,0 +1,24 @@
+from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
+from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
+
+invoke_subrecipe("./examples/V1/test_neid_radial_velocity.recipe")
+
+lev2_files_pattern = recipe_output_dir+'*' + lev2_stem_suffix+'.fits'
+all_lev2_files = find_files(lev2_files_pattern)
+
+ccf_ratio_file = recipe_output_dir + 'ccf_ratio_table.csv'
+total_order = end_order - start_order + 1
+
+if not find_files(ccf_ratio_file):
+        ratio_ref = RadialVelocityReweightingRef(all_lev2_files, reweighting_method, total_order, ccf_hdu_index=9, ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_order)
+else:
+        ratio_ref = RadialVelocityReweightingRef(ccf_ratio_file, reweighting_method, total_order, is_ratio_data=True)
+
+for f in all_lev2_files:
+	_, short_lev2 = split(f)
+	lev2_stem, lev2_ext = splitext(short_lev2)
+	reweighted_output = recipe_output_dir + lev2_stem + '_reweighted'+lev2_ext
+
+	if not find_files(reweighted_output):
+		reweighted_lev2 = RadialVelocityReweighting(f, reweighting_method, ratio_ref, total_order, rv_init, ccf_hdu_index=9, ccf_start_index=start_order)
+		result = to_fits(reweighted_lev2, reweighted_output)

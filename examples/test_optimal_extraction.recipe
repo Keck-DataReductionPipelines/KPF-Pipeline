@@ -25,7 +25,7 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 			op_data = OptimalExtraction(lev0_data, lev0_flat_data, None, order_name=orderlette_names, 
 					rectification_method=rect_method, 
 					extraction_method = extract_method,
-					wavecal_fits=wavecal_data, to_set_wavelength_cal= True)
+					wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
 
 			# build SCI1_FLUX and CAL_FLUX by two module instance
 			# op_data = OptimalExtraction(lev0_data, lev0_flat_data, None, order_name='SCI1',

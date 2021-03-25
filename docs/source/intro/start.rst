@@ -4,33 +4,28 @@ Getting Started
 This section contains topics about getting started with using 
 the ``KPF-Pipeline`` module.
 
-To install, clone the repository and navigate into it::
+First, download and install `Docker Desktop <https://www.docker.com/products/docker-desktop>`_ if you don't already have it.
+
+Then clone the repository and navigate into it::
 
     git clone https://github.com/California-Planet-Search/KPF-Pipeline.git
-
-One of the requirements of ``KPF-Pipe`` is the ``KeckDRPFramework``
-package. This package is not on PyPl, so we will install in from source.
-The current pipelineis setup such that the ``KeckDRPFramework``
-repository is expected to be at thesame directory level as ``KPF-Pipeline``.
-In other words, if you cloned '`KPF-Pipeline`' into a directory
-named ``MyProject``, your directory structure
-is expected to look like::
-
-    MyProject
-    ├── KPF-Pipeline
-    └── KeckDRPFramework
-
-Refer to `KeckDRPFramework
-<https://github.com/Keck-DataReductionPipelines/KeckDRPFramework>`_
-for Framework related issues.
-
-If you plan on building from branch ``master`` then simply
-use the provided ``makefile`` for package installation and setup::
-
     cd KPF-Pipeline
-    make
 
 .. warning:: Refer to :doc:`install_develop` for setting up other branches
+
+Build the package into a docker container::
+    
+    docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+
+Launch an interactive bash shell in the docker container::
+
+    docker run -it -v $OWNCLOUD_BASE/KPF-Pipeline-TestData:/data kpf-drp:latest bash
+    
+where ``$OWNCLOUD_BASE`` is the base path of your local ownCloud directory.
+
+Install the package once the container launches::
+
+    make init
 
 To run the pipeline, use the following command::
 
