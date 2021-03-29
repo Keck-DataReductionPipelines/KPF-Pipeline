@@ -4,7 +4,7 @@ KPF Pipeline
 Overview:
 ---------
 
-    The KPFPipeline is a mechanism conforming to the Pipeline definitions of the William O. Keck
+    The KPFPipeline is a mechanism conforming to the Pipeline definitions of the W.M. Keck
     Observatories' Keck Data Reduction Pipeline Framework (KeckDRPFramework).  However, it uses the
     Framework mechanisms in a novel way to provide needed additional flexibility through the use of
     "recipes". In the Framework, the focus is to enqueue and run a sequence of data reduction "primitives".
