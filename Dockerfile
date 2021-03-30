@@ -32,7 +32,7 @@ RUN mkdir /code && \
 
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
-ADD . /code/KPF-Pipeline
+# ADD . /code/KPF-Pipeline
 
 # Install the package
-RUN pip3 install -r requirements.txt
+# RUN pip3 install -r requirements.txt
