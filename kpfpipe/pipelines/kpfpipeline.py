@@ -25,24 +25,25 @@ from keckdrpframework.models.processing_context import ProcessingContext
 class KPFPipeline(BasePipeline):
     """
     Pipeline to Process KPF data using the KeckDRPFramework
-    
+
     Args:
         context (ProcessingContext): context class provided by the framework
-    
+
     Attributes:
-        event_table (dictionary): table of actions known to framework. All primitives must be registered here.
-    
-    Note: 
-        The correct operation of the recipe visitor depends on action.args being KpfArguments, which
-        is an extension (class derived from) the Keck DRPF Arguments class.  All pipeline primitives must use
-        KpfArguments rather than simply Arguments for their return values.  They will also get input arguments
-        packaged as KpfArguments. 
+        event_table (dictionary): Values are tuples, e.g. "action_name: (name_of_callable, current_state, next_event_name)"
     """
 
     # Modification: 
     name = 'KPF-Pipe'
+    """
+    event_table (dictionary): table of actions known to framework. All primitives must be registered here.
+    Data reduction primitives are registered into the event_table as part of the processing
+    of the "from ... import" statement at the top of a recipe.
+
+    The format of entries is:
+        action_name: (name_of_callable, current_state, next_event_name)
+    """
     event_table = {
-        # action_name: (name_of_callable, current_state, next_event_name)
         'start_recipe': ('start_recipe', 'starting recipe', None), 
         'resume_recipe': ('resume_recipe', 'resuming recipe', None),
         'to_fits': ('to_fits', 'processing', 'resume_recipe'),
@@ -57,8 +58,46 @@ class KPFPipeline(BasePipeline):
         BasePipeline.__init__(self, context)
         load_dotenv()
     
-    def _register_recipe_builtins(self):
-        """ register some built-in functions for the recipe to use """
+    def register_recipe_builtins(self):
+        """
+        register_recipe_builtins() registers some built-in functions for the recipe to use
+        without having to invoke them through the Framework's queue.  If additional built-in
+        functions are needed, this is the place to add them.
+        
+        The supported built-ins are:
+
+        int:
+            Same behavior as in Python
+
+        float:
+            Same behavior as in Python
+
+        str:
+            Same behavior as in Python
+
+        len:
+            Same behavior as in Python
+
+        find_files:
+            Same behavior as glob.glob in Python, which returns a list of files
+            that match the string pattern given as its argument.  In particular,
+            * expansion is supported.
+
+        split:
+            Same behavior as os.path.split in Python. It returns two strings,
+            the first representing the directories of a file path, and the second
+            representing the simple file name within the directory.
+
+        split_ext:
+            Same behavior as os.path.splitext in Python. It returns two strings,
+            the second being the file extension of a file path, including the dot,
+            and the first being everything else.
+
+        dirname:
+            Same behavior as os.path.dirname.  It returns the directory portion of
+            a file path, excluding the file name itself, with no trailing separator.
+
+        """
         self._recipe_visitor.register_builtin('int', int, 1)
         self._recipe_visitor.register_builtin('float', float, 1)
         self._recipe_visitor.register_builtin('str', str, 1)
@@ -68,8 +107,9 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
         self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
 
-    def _preload_env(self):
-        """ preload environment variables using dotenv """
+    def preload_env(self):
+        """
+        preload_env() preloads environment variables using dotenv """
         """
         env_values = dotenv_values()
         for key in env_values:
@@ -103,16 +143,27 @@ class KPFPipeline(BasePipeline):
             arg = self.config._sections['ARGUMENT']
         except KeyError:
             raise IOError('cannot find [ARGUMENT] section in config')
-        self.context.arg = arg
 
         ## Setup primitive-specific configs:
-        self.context.config_path = self.config._sections['MODULES']
+        try:
+            self.context.config_path = self.config._sections['MODULE_CONFIGS']
+        except KeyError:
+            raise IOError('cannot find [MODULE_CONFIGS] section in config')
+
+        # Add useful attributes onto the self.context object
+        self.context.arg = arg
+        self.context.pipe_config = self.config
+
         self.logger.info('Finished initializing Pipeline')
 
     def start_recipe(self, action, context):
         """
         Starts evaluating the recipe file (Python syntax) specified in context.config.run.recipe.
-        All actions are executed consecutively in the high priority queue
+        All actions are executed consecutively in the Framework's high priority queue.
+
+        Before starting processing the recipe, built-in functions available to recipes without
+        having to enqueue them to the Framework are registered, and values defined in the environment
+        are imported so that they are also available to recipes.
 
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
@@ -123,10 +174,10 @@ class KPFPipeline(BasePipeline):
             fstr = f.read()
             self._recipe_ast = ast.parse(fstr)
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
-        self._register_recipe_builtins()
+        self.register_recipe_builtins()
         ## set up environment
         try:
-            self._preload_env()
+            self.preload_env()
         except Exception as e:
             self.logger.error(f"KPF-Pipeline couldn't load environment due to exception {e}")
         
@@ -148,7 +199,9 @@ class KPFPipeline(BasePipeline):
 
     def resume_recipe(self, action: Action, context: ProcessingContext):
         """
-        Continues evaluating the recipe started in start_recipe().
+        Continues evaluating the recipe started in start_recipe().  resume_recipe() will run immediately
+        after each data processing primitive, and makes return values from the previous primitive, stored in an
+        Arguments class instance in action.args, available back to the recipe.
 
         Args:
             action (keckdrpframework.models.action.Action): Keck DRPF Action object

@@ -4,7 +4,7 @@
 
 ** The simple recipe and config pair for documentation:
 
-- kpf examples/simple.recipe examples/default_simple.cfg
+- kpf examples/simple.recipe examples/docs_simple.cfg
   Purpose: perform simple module test on KPFModExample from modules.Trivial.KPFM_Trivial
   note: this is the simple recipe and config example used in documentation, "Running a simple module".
 
@@ -28,7 +28,7 @@
 
 - kpf examples/test_bc.recipe examples/default_bc.cfg
   purpose: preform barycentric correction event by either taking the observaton configuration by using radial velocity init or
-           from a configuration defined in default_bc.cfg (barycentric_correction in section 'MODULES').
+           from a configuration defined in default_bc.cfg (barycentric_correction in section 'MODULE_CONFIGS').
   master recipe: test_bc.recipe
   note: create folder test_results/neid under KPF-Pipeline to contain the results
 
@@ -36,6 +36,7 @@
 - default_recipe_test_neid.cfg, default_recipe_test_paras.cfg, and default_recipe_neid_hd127334.cfg are the configuration files used for recipe test,
   tests/regression/test_order_trace_recipe.py, tests/regression/test_optimal_extraction.recipe, tests/regression/test_radial_velocity_recipe.py and
   tests/regression/test_radial_velocity_ccf_reweight_recipe.py. 
+- default_simple.cfg is the configuration file for tests/regression/test_recipe.py
 
 
 
