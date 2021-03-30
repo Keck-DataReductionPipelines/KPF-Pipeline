@@ -8,17 +8,31 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 	lev0_flat_stem, lev0_flat_ext = splitext(short_lev0_flat)
 	for code in obs_list:
 		input_lev0_file = test_data_dir + input_lev0_prefix + code + '.fits'
-		if input_lev1_prefix != '':
-			input_lev1_file = test_data_dir + input_lev1_prefix + code + '.fits'
-		else:
-			input_lev1_file = None
 		_, short_lev0_file = split(input_lev0_file)
 		lev0_stem, lev0_ext = splitext(short_lev0_file)
-		output_lev1_file = output_dir + lev0_flat_stem + '_' + lev0_stem + '_' + str(rect_method) + lev1_stem_suffix + '.fits'
+		output_lev1_file = output_dir + lev0_flat_stem + '_' + lev0_stem + \
+						'_' + rect_method + '_' + extract_method + \
+						op_tag + lev1_stem_suffix + '.fits'
 		if not find_files(output_lev1_file):
 			lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-			op_data = OptimalExtraction(lev0_data, lev0_flat_data, output_lev1_file, order_name=order_name, 
-						rectification_method=rect_method, 
-						wavecal_fits=input_lev1_file)
+			input_lev1_file = None
+			wavecal_data = None
+			
+			input_lev1_file = test_data_dir + input_lev1_prefix + code + '.fits'
+			wavecal_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
+			
+			# build SCI1_FLUX and CAL_FLUX by one module instance
+			op_data = OptimalExtraction(lev0_data, lev0_flat_data, None, order_name=orderlette_names, 
+					rectification_method=rect_method, 
+					extraction_method = extract_method,
+					wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
+
+			# build SCI1_FLUX and CAL_FLUX by two module instance
+			# op_data = OptimalExtraction(lev0_data, lev0_flat_data, None, order_name='SCI1',
+                        #                        rectification_method=rect_method,
+                        #                        wavecal_fits=wavecal_data)
+			# op_data = OptimalExtraction(lev0_data, lev0_flat_data, op_data, order_name='CAL',
+                        #                        rectification_method=rect_method,
+                        #                        wavecal_fits=wavecal_data)
 			result = to_fits(op_data, output_lev1_file)
 

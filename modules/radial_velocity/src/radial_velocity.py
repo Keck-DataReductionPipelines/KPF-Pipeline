@@ -189,8 +189,8 @@ class RadialVelocity(KPF1_Primitive):
 
         if self.alg.get_instrument() == 'NEID':
             if self.rv_init['data']['rv_config']['starname'] != 'HD 127334':
-                s_order = 3 if self.start_order is None else self.start_order
-                e_order = min(82, np.shape(self.spectrum_data)[0]-1) if self.end_order is None else self.end_order
+                s_order = 10 if self.start_order is None else self.start_order
+                e_order = min(89, np.shape(self.spectrum_data)[0]-1) if self.end_order is None else self.end_order
             else:
                 s_order = 0 if self.start_order is None else self.start_order
                 e_order = 116 if self.end_order is None else self.end_order

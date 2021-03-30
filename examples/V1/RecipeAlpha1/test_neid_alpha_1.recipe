@@ -1,0 +1,38 @@
+test_data_dir = KPFPIPE_TEST_DATA + '/NEIDdata' 
+data_type = config.ARGUMENT.data_type
+output_dir = config.ARGUMENT.output_dir
+
+input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
+input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
+input_lev1_prefix = config.ARGUMENT.input_lev1_file_prefix
+
+obs_list = config.ARGUMENT.obs_list
+flat_stem_suffix = config.ARGUMENT.output_flat_suffix
+lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
+lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
+
+max_result_order = config.ARGUMENT.max_result_order
+start_result_order = config.ARGUMENT.start_result_order
+rect_method = config.ARGUMENT.rectification_method
+extract_method = config.ARGUMENT.extraction_method
+order_name = config.ARGUMENT.order_name
+orderlette_names = config.ARGUMENT.orderlette_names
+reweighting_method = config.ARGUMENT.reweighting_method
+op_tag = config.ARGUMENT.op_tag
+
+master_file_name = config.ARGUMENT.master_file_name
+lev1_wavelength_cal = config.ARGUMENT.lev1_wavelength_cal
+lev2_weight_rv = config.ARGUMENT.lev2_weight_rv
+
+lev1_output_suffix = '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix
+recipe_output_dir = output_dir + 'RecipeAlpha1/'
+
+invoke_subrecipe("./examples/V1/test_order_trace.recipe")
+invoke_subrecipe("./examples/V1/test_optimal_extraction.recipe")
+if lev1_wavelength_cal:
+	invoke_subrecipe("./examples/V1/test_wave_cal.recipe")
+if lev2_weight_rv:
+	invoke_subrecipe("./examples/V1/test_neid_radial_velocity_reweight.recipe")
+else:
+	invoke_subrecipe("./examples/V1/test_neid_radial_velocity.recipe")
+

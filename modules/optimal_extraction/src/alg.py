@@ -146,7 +146,8 @@ class OptimalExtractionAlg:
         self.is_debug = True if self.logger else False
         self.debug_output = None
         self.is_time_profile = False
-        self.total_orderlettes = None
+        self.total_image_orderlettes = None
+        self.orderlette_names = None
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -206,17 +207,6 @@ class OptimalExtractionAlg:
         if idx >= self.total_order or idx < 0:
             idx = 0
         return self.order_xrange[idx, :]
-
-    def get_total_orderlettes(self):
-        """Get the total orderlettes of the order trace.
-
-        Returns:
-            int: total orderlettes
-        """
-        if self.total_orderlettes is None:
-            self.total_orderlettes = self.get_config_value('total_orderlettes', 1)
-
-        return self.total_orderlettes
 
     def get_spectrum_size(self):
         """ Get the dimension of the spectrum data.
@@ -975,7 +965,7 @@ class OptimalExtractionAlg:
                 }
 
         """
-        out_data = np.sum(s_data, axis=0)
+        out_data = np.sum(s_data, axis=0).reshape(1, -1)
 
         return {'extraction': out_data}
 
@@ -1391,6 +1381,7 @@ class OptimalExtractionAlg:
         df_result.attrs['OBSJD'] = mjd + 2400000.5
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
+        df_result.attrs['ORDEROFF'] = self.start_row_index()
         df_result.attrs['DIMWIDTH'] = dim_width
         df_result.attrs['FROMIMGX'] = self.origin[self.X]
         df_result.attrs['FROMIMGY'] = self.origin[self.Y]
@@ -1425,8 +1416,83 @@ class OptimalExtractionAlg:
         self.enable_debug_print(filename is not None)
         self.debug_output = filename
 
+    def get_total_orderlettes_from_image(self):
+        """ Get total orderlettes from level 0 image, defined in config
+
+        Returns:
+            int: total orderdelettes.
+        """
+        if self.total_image_orderlettes is None:
+            self.total_image_orderlettes = self.get_config_value("total_image_orderlettes", 1)
+
+        return self.total_image_orderlettes
+
+    def get_orderlette_names(self):
+        """ Get Orderlette names defined in config.
+
+        Returns:
+            list: list of orderlette names
+        """
+        if self.orderlette_names is None:
+            o_names_str = self.get_config_value('orderlette_names')
+            order_names = list()
+            if o_names_str is not None:
+                o_names = o_names_str.strip('][ ').split(',')
+                for o_nm in o_names:
+                    order_names.append(o_nm.strip("' "))
+
+                if len(order_names) == 0:
+                    order_names.append('SCI1')
+                self.orderlette_names = order_names
+
+        return self.orderlette_names
+
+    def get_orderlette_index(self, order_name:str):
+        """ Find the index of the order name in the orderlette name list.
+
+        Args:
+            order_name (str): Fiber name
+
+        Returns:
+            int: index of order name in the orderlette name list. If not existing, return is 0.
+
+        """
+        all_names = self.get_orderlette_names()
+        order_name_idx = all_names.index(order_name) if order_name in all_names else 0
+
+        return order_name_idx
+
+    def start_row_index(self):
+        """ The row index for the flux of the first oder in the output.
+
+        Returns:
+            int: the row index.
+        """
+        return self.get_config_value('start_order', 0)
+
+    def get_order_set(self, order_name=''):
+        """ Get the list of the trace index eligible for optimal extraction process.
+
+        Args:
+            order_name (str): Fiber name.
+
+        Returns:
+            list: list of the trace index.
+
+        """
+        orderlette_index = self.get_orderlette_index(order_name)
+        traces_per_order = self.get_total_orderlettes_from_image()
+
+        if orderlette_index < traces_per_order:
+            o_set = np.arange(orderlette_index, self.total_order, traces_per_order, dtype=int)
+        else:
+            o_set = np.array([])
+
+        return o_set
+
     def extract_spectrum(self, rectification_method=NoRECT, extraction_method=OPTIMAL,
                          order_set=None,
+                         order_name=None,
                          show_time=False,
                          print_debug=None,
                          bleeding_file=None):
@@ -1472,11 +1538,13 @@ class OptimalExtractionAlg:
         self.update_spectrum_flux(bleeding_file)
 
         dim_width, dim_height = self.get_spectrum_size()
-        total_order = self.get_spectrum_order()
-        if order_set is None:
-            order_set = np.arange(0, total_order, self.get_total_orderlettes(), dtype=int)
 
-        out_data = np.zeros((order_set.size, dim_width))
+        if order_set is None:
+            order_set = self.get_order_set(order_name)
+
+        start_row_at = self.start_row_index()
+        order_data_size = order_set.size + start_row_at if order_set.size > 0 else 0
+        out_data = np.zeros((order_data_size, dim_width))
 
         self.d_print("do ", self.rectifying_method[rectification_method], extraction_method,
                      ' on ', order_set.size, ' orders', info=True)
@@ -1496,7 +1564,7 @@ class OptimalExtractionAlg:
             elif 'sum' in extraction_method:
                 result = self.summation_extraction(order_flux.get('order_data'))
             if 'extraction' in result:
-                self.fill_2d_with_data(result.get('extraction'), out_data, idx_out)
+                self.fill_2d_with_data(result.get('extraction'), out_data, idx_out+start_row_at)
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
         self.d_print(" ")
         data_df = self.write_data_to_dataframe(out_data)
