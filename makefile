@@ -1,6 +1,6 @@
 init: 
 	mkdir -p logs
-	pip3 install -r requirements.txt .
+	pip3 install -r requirements.txt -e .
 
 update: 
 	pip3 install -r requirements.txt --upgrade
