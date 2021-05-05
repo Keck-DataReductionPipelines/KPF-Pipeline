@@ -25,7 +25,7 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=description, prog='kpf')
     parser.add_argument('recipe', type=str, help="Recipe file with list of actions to take.")
-    parser.add_argument('config_file', type=str, help="Run Configuration file")
+    parser.add_argument('config_file', type=str, help="Run configuration file")
 
     args = parser.parse_args(in_args[1:])
 
