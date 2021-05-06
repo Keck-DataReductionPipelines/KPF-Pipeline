@@ -14,7 +14,8 @@
   purpose: perform order_trace, optimal extraction and radial velocity for NEID on target Tau Ceti
   master recipe: test_neid.recipe
   subrecipes: test_order_trace.recipe, 
-	      test_optimal_extraction.recipe, 
+	      test_optimal_extraction.recipe, test_optimal_extraction_clip.recipe (faster spectral extraction by using clip file), 
+			or test_optimal_extraction_rect_clip.recipe (faster spectral extraction and creating rectification result by using clip file). 
 	      test_neid_radial_velocity.recipe (no ccf reweighting) or
               test_neid_radial_velocity_reweight.recipe (reweight ccf orders while performing radial velocity) or 
               test_neid_radial_velocity_reweight_2.recipe (reweight ccf orders after radial velocity is resolved)

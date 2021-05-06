@@ -6,3 +6,5 @@ Module Optimal Extraction
 
    alg_optimal_extraction.rst
    primitive_optimal_extraction.rst
+   primitive_order_rectification.rst
+
