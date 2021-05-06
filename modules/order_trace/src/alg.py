@@ -62,7 +62,7 @@ class OrderTraceAlg:
         Exception: If the size of `data` is less than 20 pixels by 20 pixels.
     """
 
-    FIT_ERROR_TH = 2.5
+    FIT_ERROR_TH = 2.5      # default set per NEID flat
     UPPER = 1
     LOWER = 0
 
@@ -172,6 +172,24 @@ class OrderTraceAlg:
         """
         return self.instrument
 
+    def get_fit_error_threshold(self):
+        """Get polynomial fitting mean square error threshold
+
+        Returns:
+            float: error threshold
+        """
+        error_th = self.get_config_value('fit_error_threshold', self.FIT_ERROR_TH)
+
+        return error_th
+
+    def get_sigma_for_width_fititng(self):
+        """Get the deviation number to estimate the width of the order
+
+        Returns:
+            float: number of sigma
+        """
+        return self.get_config_value("sigma_for_width_estimation", 3.0)
+
     def d_print(self, *args, end='\n', info=False):
         """Print out running status to logger or debug information to a file.
 
@@ -222,11 +240,12 @@ class OrderTraceAlg:
                 * **ny** (*int*): Height of the data.
 
         """
+        """
         try:
             assert self.flat_data.all()
         except AssertionError:
             return None
-
+        """
         ny, nx = np.shape(self.flat_data)
 
         return self.flat_data, nx, ny
@@ -773,9 +792,11 @@ class OrderTraceAlg:
         all_status = dict()
         _, nx, ny = self.get_spectral_data()
 
+        fit_error_th = self.get_fit_error_threshold()
+
         while True:
             p_info, errors, area = self.extract_order_from_cluster(next_idx, index_p, x_p, y_p)
-            if errors <= self.FIT_ERROR_TH:
+            if errors <= fit_error_th:
                 status = {'msg': 'same', 'cluster_id': next_idx,
                           'poly_fitting': {next_idx: {'errors': errors, 'coeffs': p_info, 'area': area}}}
             else:
@@ -1121,6 +1142,8 @@ class OrderTraceAlg:
 
         """
 
+        fit_error_th = self.get_fit_error_threshold()
+
         power = self.get_poly_degree()
         _, nx, ny = self.get_spectral_data()
 
@@ -1168,7 +1191,7 @@ class OrderTraceAlg:
                 y_ary = y_ary[sort_idx]
                 coeffs = np.polyfit(x_ary, y_ary, power)
                 errors = math.sqrt(np.square(np.polyval(coeffs, x_ary) - y_ary).mean())
-                if errors > self.FIT_ERROR_TH:
+                if errors > fit_error_th:
                     continue
 
             cluster_no += 1
@@ -1382,7 +1405,7 @@ class OrderTraceAlg:
                 * **merge_status** (*dict*): merge status, please see :func:`~alg.OrderTraceAlg.merge_fitting_curve()`
                   for the detail.
         """
-        merge_status = self.merge_fitting_curve(crt_coeffs, crt_index, crt_x, crt_y)
+        merge_status = self.merge_fitting_curve(crt_coeffs, crt_index, crt_x, crt_y, self.get_fit_error_threshold())
 
         if merge_status['status'] != 'nochange':
             next_x, next_y, next_index, convert_map = self.reorganize_index(merge_status['index'], crt_x, crt_y,
@@ -1940,7 +1963,7 @@ class OrderTraceAlg:
             if n < 1 or n > max_cluster_no or (np.where(index_t == n)[0]).size == 0:
                 cluster_widths.append({'top_edge': width_default, 'bottom_edge': width_default})
                 continue
-
+            # import pdb;pdb.set_trace()
             cluster_width_info = self.find_cluster_width_by_gaussian(n, cluster_coeffs, cluster_points)
             cluster_widths.append({'top_edge': cluster_width_info['avg_nwidth'],
                                    'bottom_edge': cluster_width_info['avg_pwidth']})
@@ -1993,7 +2016,7 @@ class OrderTraceAlg:
 
         x_range = np.array([min_x, max_x])
 
-        # compute the width along x direction every step
+        # compute the width along x direction at each step along the opposite sides of the center
         step = 100
         x_loc1 = np.arange(center_x, int(x_range[1])+1, step)
         x_loc2 = np.arange(center_x-step, int(x_range[0])-1, -step)
@@ -2003,6 +2026,8 @@ class OrderTraceAlg:
         next_widths = list()
         prev_centers = list()
         next_centers = list()
+        # max_upper = 0
+        # max_lower = 0
 
         for xs in x_loc:
             cluster_y = cluster_points[cluster_no, xs]
@@ -2023,7 +2048,8 @@ class OrderTraceAlg:
             new_x_set, new_y_set = self.mirror_data(x_set, y_set, 1)
             if new_x_set.size >= 3:
                 gaussian_fit_prev, prev_width, prev_center = \
-                    self.fit_width_by_gaussian(new_x_set, new_y_set, cluster_y, xs)
+                    self.fit_width_by_gaussian(new_x_set, new_y_set, cluster_y, xs, self.get_sigma_for_width_fititng())
+                # max_lower = (new_x_set.size//2 + 1) if (new_x_set.size//2 + 1) > max_upper else max_lower
                 prev_widths.append(prev_width)
                 prev_centers.append(prev_center)
 
@@ -2032,15 +2058,18 @@ class OrderTraceAlg:
             new_x_set, new_y_set = self.mirror_data(x_set, y_set, 0)
             if new_x_set.size >= 3:
                 gaussian_fit_next, next_width, next_center = \
-                    self.fit_width_by_gaussian(new_x_set, new_y_set, cluster_y, xs)
+                    self.fit_width_by_gaussian(new_x_set, new_y_set, cluster_y, xs, self.get_sigma_for_width_fititng())
+                # max_upper = (new_x_set.size//2 + 1) if (new_x_set.size//2 + 1) > max_upper else max_upper
                 next_widths.append(next_width)
                 next_centers.append(next_center)
 
         cluster_h = poly_coeffs[cluster_no, power+4] - poly_coeffs[cluster_no, power+3]
         avg_pwidth = self.find_mean_from_histogram(np.array(prev_widths), c_range=[0, cluster_h],
-                                                   bin_no=max(int(cluster_h//width_th), 1), cut_at=width_default)
+                                                   bin_no=max(int(cluster_h//width_th), 1),
+                                                   cut_at=width_default)
         avg_nwidth = self.find_mean_from_histogram(np.array(next_widths), c_range=[0, cluster_h],
-                                                   bin_no=max(int(cluster_h//width_th), 1), cut_at=width_default)
+                                                   bin_no=max(int(cluster_h//width_th), 1),
+                                                   cut_at=width_default)
 
         # self.values_at_width(avg_pwidth, avg_nwidth, cluster_points[cluster_no, center_x], center_x)
 
@@ -2108,6 +2137,7 @@ class OrderTraceAlg:
 
         gaussian_fit = FIT_G(g_init, x_set, y_set)
 
+        # max_w = x_set.size//2 + 1
         if abs(gaussian_fit.mean.value - center_y) <= 1.0:
             width = gaussian_fit.stddev.value*sigma
             gaussian_center = gaussian_fit.mean.value
@@ -2115,6 +2145,7 @@ class OrderTraceAlg:
             gaussian_center = gaussian_fit.mean.value
             width = gaussian_fit.stddev.value * sigma
 
+        # width = min(max_w, width)
         return gaussian_fit, width, gaussian_center
 
     @staticmethod
