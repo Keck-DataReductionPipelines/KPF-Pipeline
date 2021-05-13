@@ -74,7 +74,7 @@ class convert_frame():
 
 		f = fits.open(self.file)
 		npix, nlines = f[0].header['NAXIS1'], f[0].header['NAXIS2']
-		self.data = f[0].data[:,::-1] # flip so that the red is on the left (brighter bit is res)
+		self.data = f[0].data[::-1,:] # flip verticallly to fix orientation. blue is the brighter bit, should be on the right
 
 		prescan = 4 # KPF set detector prescan # pixels
 		self.ser_oscn, self.par_oscn, self.prescan = ser_oscn, par_oscn, prescan
@@ -137,7 +137,7 @@ class convert_frame():
 		# Return bin x, bin y, bin std
 		return bins, mean, std
 
-	def noise_check(self, sub_lines=list(range(1946,1953)), sub_pix=list(range(250,2000)), watts=500):
+	def noise_check(self, sub_lines=list(range(903,906)), sub_pix=list(range(1500,3250)), watts=500):
 		"""
 		quick check of noise in a random subset
 
@@ -233,8 +233,8 @@ if __name__=='__main__':
 	plt.show()
 
 	# plot calibration trace noise plots, watts set to 111
-	cf.noise_check(sub_lines=list(range(1914,1915)), 
-					sub_pix=list(range(500,2000)), 
+	cf.noise_check(sub_lines=list(range(3668,3669)), 
+					sub_pix=list(range(3200,4000)), 
 					watts=111) 
 	plt.show()
 
