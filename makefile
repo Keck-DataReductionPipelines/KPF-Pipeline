@@ -1,6 +1,6 @@
 init: 
 	mkdir -p logs
-	pip3 install -r requirements.txt .
+	pip3 install -r requirements.txt -e .
 
 update: 
 	pip3 install -r requirements.txt --upgrade
@@ -18,7 +18,7 @@ clean: clear
 
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
-	docker run -it -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
+	docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
 
 regression_tests:
 	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
