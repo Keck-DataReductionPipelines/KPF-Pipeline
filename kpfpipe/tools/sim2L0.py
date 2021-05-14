@@ -83,7 +83,7 @@ class convert_frame():
 		# fill into quadrant structure
 		ser_extra = ser_oscn + prescan
 		par_extra = par_oscn
-		L2 = self.bias*np.ones((4, nlines//2 + par_extra, npix//2 + ser_extra))   # npix and nlines defined per quadrant (halved above)
+		L2 = self.bias*np.ones((4, nlines//2 + par_extra, npix//2 + ser_extra),dtype=np.float32)   # npix and nlines defined per quadrant (halved above)
 		nlines_L2, npix_L2 = np.shape(L2)[1], np.shape(L2)[2]
 
 		L2[0, 0:nlines//2, prescan  :npix//2 + prescan]	   += self.data[0:nlines//2, 0:npix//2] # top left
@@ -106,7 +106,7 @@ class convert_frame():
 		hdu3 = fits.ImageHDU(data=self.L2[1],name='quad2')
 		hdu4 = fits.ImageHDU(data=self.L2[2],name='quad3')
 		hdu5 = fits.ImageHDU(data=self.L2[3],name='quad4')
-		hdu6 = fits.ImageHDU(data=np.zeros((self.nlines,self.npix)),name='FFI') # 4080x4080 is KPF image area for full frame
+		hdu6 = fits.ImageHDU(data=np.zeros((self.nlines,self.npix),dtype=np.float32),name='FFI') # 4080x4080 is KPF image area for full frame
 
 		new_hdul = fits.HDUList([hdu1, hdu2, hdu3, hdu4, hdu5, hdu6])
 		new_hdul.writeto(savename, overwrite=True)
