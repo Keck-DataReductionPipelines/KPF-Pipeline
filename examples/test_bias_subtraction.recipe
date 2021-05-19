@@ -1,11 +1,13 @@
 from modules.utils.frame_combine import FrameCombinePrimitive
+from modules.utils.orientation_ref_reader import OrientationReference
 from modules.bias_subtraction.src.bias_subtraction import BiasSubtraction 
+
+channel_keys = OrientationReference(channel_orientation_ref_path)
 
 bias_files=find_files(KPFPIPE_TEST_DATA+'/NEIDdata/BIAS/neidTemp*.fits')
 master_bias_data=FrameCombinePrimitive(bias_files, 'NEID')
-master_result = to_fits(master_bias_data, KPFPIPE_TEST_OUTPUTS + '/TestMasterBias.fits')
 
-raw_file_name=KPFPIPE_TEST_DATA+'/NEIDdata/TAUCETI_20191217/L0/neidTemp_2D20191217T023129.fits'
-raw_file=kpf0_from_fits(raw_file_name, data_type='NEID')
-raw_min_bias=BiasSubtraction(raw_file, master_bias_data, 'NEID')
-raw_min_bias=to_fits(raw_min_bias, KPFPIPE_TEST_OUTPUTS + '/TestRawMinusBias.fits')
+for frame in find_files(##raw_frame_dir##):
+    for key in channel_keys:
+        assembled_frame = BiasSubtraction(frame, key, master_bias_data, 'NEID')
+        assembled_frame = to_fits(assembled_frame, ##result_path_name##)
