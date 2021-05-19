@@ -1,5 +1,6 @@
 init: 
 	mkdir -p logs
+	mkdir -p outputs
 	pip3 install -r requirements.txt -e .
 
 update: 
