@@ -5,7 +5,7 @@ import pandas as pd
 from astropy.io import fits
 import re
 from modules.Utils.config_parser import ConfigHandler
-from memory_profiler import profile
+#from memory_profiler import profile
 import os
 
 # Pipeline dependencies
