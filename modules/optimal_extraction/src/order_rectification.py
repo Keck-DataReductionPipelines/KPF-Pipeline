@@ -1,15 +1,15 @@
 # Standard dependencies
 """
     This module defines class OptimalExtraction which inherits from `KPF0_Primitive` and provides methods to perform
-    the event on optimal extraction in the recipe.
+    the event on order rectification in the recipe.
 
     Attributes:
-        OptimalExtraction
+        OrderRectification
 
     Description:
         * Method `__init__`:
 
-            OptimalExtraction constructor, the following arguments are passed to `__init__`,
+            OrderRectification constructor, the following arguments are passed to `__init__`,
 
                 - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
                   keyword arguments passed by the `OptimalExtraction` event issued in the recipe:
@@ -18,26 +18,17 @@
                       optimal extraction.
                     - `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing flat data and order
                       trace result.
-                    - `action.args[2] (kpfpipe.models.level0.KPF0)`:  Instance of `KPF1` containing optimal
-                      extraction results. If not existing, it is None.
                     - `action.args['order_name'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
-                    - `action.args['max_result_order']: (int, optional)`: Total orders to be processed, Defaults to -1.
-                    - `action.args['rectification_method']: (str, optional)`: Rectification method, '`norect`',
+                    - `action.args['max_result_order'] (int, optional)`: Total orders to be processed, Defaults to -1.
+                    - `action.args['rectification_method'] (str, optional)`: Rectification method, '`norect`',
                       '`vertial`', or '`normal`', to rectify the curved order trace. Defaults to '`norect`',
                       meaning no rectification.
-                    - `action.args['extraction_method']: (str, optional)`: Extraction method, '`sum`',
-                      or '`optimal`', to extract and reducethe curved order trace, and 'rectonly' to rectify the curve
-                      with no reduction. Defaults to '`optimal`', meaning optimal extraction which produces 1-D flux
-                      for each order trace based on the spectrum
-                      data and its variance and the weighting based on the flat data instead of doing summation on
-                      the spectrum data directly.
-                    - `action.args['wavecal_fits']: (str|KPF1 optional)`: Path of the fits file or `KPF1` instance
-                      containing wavelength calibration data. Defaults to None.
-                    - `action.args['to_set_wavelength_cal']: (boolean, optional)`: if setting the wavelength calibration
-                      values from ``action.args['wavecal_fits']``. Defaults to False.
+                    - `action.args['clip_file'] (str, optional)`:  Prefix of clip file path. Defaults to None.
+                      Clip file is used to store the polygon clip data for the rectification method
+                      which is not NoRECT.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of optimal extraction in the master
@@ -52,31 +43,27 @@
                 - `max_result_order (int)`: Total orders to be processed.
                 - `rectification_method (int)`: Rectification method code as defined in `OptimalExtractionAlg`.
                 - `extraction_method (str)`: Extraction method code as defined in `OptimalExtractionAlg`.
-                - `wavecal_fits (str)`: Path of the fits file or `KPF1` instance with wavelength calibration data.
-                - `to_set_wavelength_cal`: Flag indicates if setting wavelength calibration data to wavelength
-                  calibration extension from ``wavecal_fits``.
                 - `config_path (str)`: Path of config file for optimal extraction.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
+                - `clip_file (str)`: Prefix of clip file path.
                 - `alg (modules.order_trace.src.alg.OptimalExtractionAlg)`: Instance of `OptimalExtractionAlg` which
                   has operation codes for the computation of optimal extraction.
 
-
         * Method `__perform`:
 
-            OptimalExtraction returns the result in `Arguments` object which contains a level 1 data object (`KPF1`)
-            with the optimal extraction results and the wavelength data tentatively transported from
-            `action.args['wavecal_fits']` if there is.
+            OrderRectification returns the result in `Arguments` object which contains a level 0 data object (`KPF0`)
+            with the rectification results replacing the raw image.
 
     Usage:
         For the recipe, the optimal extraction event is issued like::
 
             :
             lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-            op_data = OptimalExtraction(lev0_data, lev0_flat_data,
-                                        None, order_name=order_name,
+            op_data = OrderRectification(lev0_data, lev0_flat_data,
+                                        order_name=order_name,
                                         rectification_method=rect_method,
-                                        wavecal_fits=input_lev1_file)
+                                        clip_file="/clip/file/folder/fileprefix")
             :
 """
 
@@ -102,16 +89,12 @@ from modules.optimal_extraction.src.alg import OptimalExtractionAlg
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
-
-class OptimalExtraction(KPF0_Primitive):
+class OrderRectification(KPF0_Primitive):
     default_agrs_val = {
                     'order_name': 'SCI1',
                     'max_result_order': -1,
                     'start_order': 0,
-                    'rectification_method': 'norect',  # 'norect', 'normal', 'vertical'
-                    'extraction_method': 'optimal',
-                    'wavecal_fits': None,
-                    'to_set_wavelength_cal': False,
+                    'rectification_method': 'norect',  # 'norect', 'normal', 'vertical',
                     'clip_file': None
                 }
 
@@ -133,15 +116,12 @@ class OptimalExtraction(KPF0_Primitive):
         # action.args[1] is for level 0 flat with order trace result extension
         self.input_spectrum = action.args[0]  # kpf0 instance
         self.input_flat = action.args[1]      # kpf0 instance with flat data
-        self.output_level1 = action.args[2]   # kpf1 instance already exist or None
         self.order_name = self.get_args_value('order_name', action.args, args_keys)
         self.max_result_order = self.get_args_value("max_result_order", action.args, args_keys)
         self.start_order = self.get_args_value("start_order", action.args, args_keys)  # for the result of order trace
         self.rectification_method = self.get_args_value("rectification_method", action.args, args_keys)
-        self.extraction_method = self.get_args_value('extraction_method', action.args, args_keys)
-        self.wavecal_fits = self.get_args_value('wavecal_fits', action.args, args_keys) # providing wavelength calib.
-        self.to_set_wavelength_cal = self.get_args_value('to_set_wavelength_cal', action.args, args_keys) # set wave cal
-        self.clip_file = self.get_args_value('clip_file', action.args, args_keys)
+        self.extraction_method = OptimalExtractionAlg.NOEXTRACT
+        self.clip_file = self.get_args_value("clip_file", action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -160,7 +140,7 @@ class OptimalExtraction(KPF0_Primitive):
         # Order trace algorithm setup
         self.alg = OptimalExtractionAlg(self.input_flat.data,
                                         self.input_flat.header['DATA'],
-                                        self.input_spectrum.data,
+                                        self.input_spectrum.data if self.input_spectrum is not None else None,
                                         self.input_spectrum.header['DATA'] if self.input_spectrum is not None else None,
                                         self.input_flat.extension['ORDER_TRACE_RESULT'],
                                         self.input_flat.header['ORDER_TRACE_RESULT'],
@@ -174,8 +154,12 @@ class OptimalExtraction(KPF0_Primitive):
         Check for some necessary pre conditions
         """
         # input argument must be KPF0
-        success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0) and \
-                  'ORDER_TRACE_RESULT' in self.input_flat.extension
+
+        if self.input_flat is None:          # no flat, rectify spectrum
+            success = False
+        else:
+            success = (self.input_spectrum is None or isinstance(self.input_spectrum, KPF0)) and \
+                      isinstance(self.input_flat, KPF0) and 'ORDER_TRACE_RESULT' in self.input_flat.extension
 
         return success
 
@@ -196,109 +180,61 @@ class OptimalExtraction(KPF0_Primitive):
 
         """
         # rectification_method: OptimalExtractAlg.NoRECT(fastest) OptimalExtractAlg.VERTICAL, OptimalExtractAlg.NORMAL
-        # extraction_method: 'optimal' (default), 'sum'
+        # extraction_method: 'optimal' (default), 'sum', or 'rectonly'
+
+        # either the input spectrum or flat is already rectified
+        if self.input_spectrum is not None:
+            if OptimalExtractionAlg.RECTIFYKEY in self.input_spectrum.header['DATA']:
+                self.logger.info("OrderRectification: the order of the spectrum is rectified already")
+                return Arguments(self.input_spectrum)
+        else:
+            if OptimalExtractionAlg.RECTIFYKEY in self.input_flat.header['DATA']:
+                self.logger.info("OrderRectification: the order of the flat is rectified already")
+                return Arguments(self.input_flat)
 
         if self.logger:
-            self.logger.info("OptimalExtraction: rectifying and extracting order...")
-
-        ins = self.alg.get_instrument().upper()
-
-        kpf1_sample = None
-        if self.wavecal_fits is not None:     # get the header and wavecal from this fits
-            if isinstance(self.wavecal_fits, str):
-                kpf1_sample = KPF1.from_fits(self.wavecal_fits, ins)
-            elif isinstance(self.wavecal_fits, KPF1):
-                kpf1_sample = self.wavecal_fits
+            self.logger.info("OrderRectification: rectifying order...")
 
         all_order_names = self.order_name if type(self.order_name) is list else [self.order_name]
+        all_orders = []
         for order_name in all_order_names:
             o_set = self.alg.get_order_set(order_name)
             if o_set.size > 0 :
                 s_order = self.start_order if self.start_order is not None else 0
                 e_order = min((s_order + self.max_result_order), len(o_set)) \
-                    if (self.max_result_order is not None and self.max_result_order > 0) else len(o_set)
+                        if (self.max_result_order is not None and self.max_result_order > 0) else len(o_set)
 
                 o_set = o_set[s_order:e_order]
+            all_orders.extend(o_set)
 
-            opt_ext_result = self.alg.extract_spectrum(order_set=o_set)
+        all_orders = np.sort(all_orders)
 
-            assert('optimal_extraction_result' in opt_ext_result and
-                   isinstance(opt_ext_result['optimal_extraction_result'], pd.DataFrame))
+        opt_ext_result = self.alg.extract_spectrum(order_set=all_orders)
 
-            data_df = opt_ext_result['optimal_extraction_result']
-            self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
-                                                            order_name, self.output_level1)
-            self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample)
+        assert('optimal_extraction_result' in opt_ext_result and
+               isinstance(opt_ext_result['optimal_extraction_result'], pd.DataFrame))
 
-        if self.output_level1 is not None:
-            self.output_level1.receipt_add_entry('OptimalExtraction', self.__module__,
-                                                 f'orderlettes={" ".join(all_order_names)}', 'PASS')
+        data_df = opt_ext_result['optimal_extraction_result']
+        rect_on = opt_ext_result['rectification_on']
+
+        level0_obj = self.input_spectrum if rect_on == 'spectrum' else self.input_flat
+
+        self.update_level0_data(data_df, level0_obj)
+        level0_obj.receipt_add_entry('OrderRectification', self.__module__, f'order trace is rectified', 'PASS')
+
         if self.logger:
-            self.logger.info("OptimalExtraction: Receipt written")
+            self.logger.info("OrderRectification: Receipt written")
 
         if self.logger:
-            self.logger.info("OptimalExtraction: Done for orders " + " ".join(all_order_names) + "!")
+            self.logger.info("OrderRectification: Done for rectifying the flux!")
 
-        return Arguments(self.output_level1)
+        return Arguments(level0_obj)
 
-    def construct_level1_data(self, op_result, ins, level1_sample: KPF1, order_name: str, output_level1:KPF1):
-        update_primary_header = False if level1_sample is None or ins != 'NEID' else True
-        if output_level1 is not None:
-            kpf1_obj = output_level1
-        else:
-            kpf1_obj = KPF1()
-
-        if op_result is not None:
-            total_order, width = np.shape(op_result.values)
-        else:
-            total_order = 0
-
-        # if no data in op_result, not build data extension and the asssociated header
-        if total_order > 0:
-            kpf1_obj.data[order_name] = np.zeros((3, total_order, width))
-            kpf1_obj.data[order_name][0, :, :] = op_result.values
-            kpf1_obj.header[order_name+'_FLUX'] = {att: op_result.attrs[att] for att in op_result.attrs}
-        else:
-            kpf1_obj.data[order_name] = None
-            kpf1_obj.header[order_name + '_FLUX'] = {}
-
-        kpf1_obj.header[order_name+'_VARIANCE'] = {}
-        kpf1_obj.header[order_name+'_WAVE'] = {}
-
-        if update_primary_header and kpf1_obj.data[order_name] is not None:
-            sample_primary_header = level1_sample.header['PRIMARY']
-            if sample_primary_header is not None:
-                for h_key in ['SSBZ100', 'SSBJD100']:
-                    kpf1_obj.header[order_name + '_FLUX'][h_key] = sample_primary_header[h_key]
-
-        return kpf1_obj
-
-    def add_wavecal_to_level1_data(self, level1_obj: KPF1, order_name: str, level1_sample: KPF1):
-        if level1_sample is None or not order_name in level1_sample.data or level1_sample.data[order_name] is None or \
-                not order_name in level1_obj.data or level1_obj.data[order_name] is None:
-            return False
-
-        s, total_order, width = np.shape(level1_obj.data[order_name])
-        if s != 3:
-            return False
-
-        level1_obj.header[order_name + '_WAVE'] = {}
-        wave_header = level1_sample.header[order_name + '_WAVE']
-        if wave_header is None:
-            return False                    # header setting error
-
-        level1_obj.header[order_name + '_WAVE'] = wave_header
-        if not self.to_set_wavelength_cal:  # no data setting
-            return True
-
-        wave_data = level1_sample.data[order_name][1, :, :]
-        if wave_data is None:               # data setting error
-            return False
-
-        wave_start = 0
-        wave_end = min(np.shape(wave_data)[0], np.shape(level1_obj.data[order_name][1])[0])
-        level1_obj.data[order_name][1, wave_start:wave_end, :] = wave_data[wave_start:wave_end, :]
-        return True
+    def update_level0_data(self, data_result, lev0_obj):
+        # img_d = np.where(np.isnan(data_result.values), 0.0, data_result.values)
+        lev0_obj.data = data_result.values
+        for att in data_result.attrs:
+            lev0_obj.header['DATA'][att] = data_result.attrs[att]
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):
         if key in args_keys:
@@ -316,15 +252,6 @@ class OptimalExtraction(KPF0_Primitive):
                     method = OptimalExtractionAlg.NoRECT
             else:
                 method = OptimalExtractionAlg.NoRECT
-        elif key == 'extraction_method':
-            if v is not None and isinstance(v, str):
-                if 'sum' in v.lower():
-                    method = OptimalExtractionAlg.SUM
-                else:
-                    method = OptimalExtractionAlg.OPTIMAL
-            else:
-                method = OptimalExtractionAlg.OPTIMAL
+            return method
         else:
             return v
-
-        return method
