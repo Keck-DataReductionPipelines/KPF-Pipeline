@@ -19,7 +19,13 @@
 	      test_neid_radial_velocity.recipe (no ccf reweighting) or
               test_neid_radial_velocity_reweight.recipe (reweight ccf orders while performing radial velocity) or 
               test_neid_radial_velocity_reweight_2.recipe (reweight ccf orders after radial velocity is resolved)
-  note: create folder test_results/neid under KPF-Pipeline to contain the results
+
+  note: if using test_optimal_extraction.recipe:
+               create folder 'test_results/neid' under KPF-Pipeline to contain the lev0, lev1 and lev2 results if using test_optimal_extraction.recipe
+	if using test_optimal_extraction_clip.recipe or test_optimal_extraction_rect_clip.recipe:
+	       create folder 'test_results/neid/clip_np/vertical', 'test_results/neid/clip_np/normal' to contain polygonal clipping result and
+                      folder 'test_results/neid/tmp_flat_rect_obs_clip', 'test_results/neid/tmp_flat_rect_obs_rect' to contain lev0, lev1, and lev2 results and
+                      'ln -s ../clip_np' to link to the folder containing clipping results.
 
 - kpf examples/data_range_test/test_neid_part.recipe examples/data_range_test/defaiult_neid_part.cfg
   purpose: preform order trace, optimal extraction and radial velocity by specifying the data range and the order range.
