@@ -1,8 +1,10 @@
 #packages
-#Subtracting 2D array, function to subtract master bias frame from raw data image
+import numpy as np
 
+from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
+from modules.Utils.overscan_subtract import OverscanSubtraction as osub
 
 class BiasSubtraction:
     """
@@ -11,7 +13,7 @@ class BiasSubtraction:
     This module defines 'BiasSubtraction' and methods to perform bias subtraction by subtracting a master bias frame from the raw data frame.  
 
     Args:
-        rawimage (np.ndarray): The FITS raw data
+        rawimage (np.ndarray): The FITS raw data with image extensions
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
     
@@ -23,40 +25,51 @@ class BiasSubtraction:
     """
 
 
-    def __init__(self,rawimage,config=None, logger=None):
+    def __init__(self,config=None, logger=None):
         """Inits BiasSubtraction class with raw data, config, logger.
 
         Args:
-            rawimage (np.ndarray): The FITS raw data
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
-            logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
+            logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
         """
-        self.rawimage=rawimage
         self.config=config
         self.logger=logger
 
-#make bias subtraction just a function, takes 
-    def bias_subtraction(self,masterbias):
+        configpull = ConfigHandler(config,'PARAM')
+        self.ffi_exts = configpull.get_config_value('ffi_exts', [6,12])
+        # self.mode = configpull.get_config_value('overscan_mode', 1)
+        # self.overscan_pixels = configpull.get_config_value('overscan_pixels', 160)
+        # self.prescan_pixels = configpull.get_config_value('prescan_pixels', 0)
+        # self.paralscan_pixels = configpull.get_config_value('parallelscan_pixels',0)
+        
+    def get_ffi_exts(self):
+        return self.ffi_exts
+
+    def bias_subtraction(self,frame,masterbias):
         """
             Subtracts bias data from raw data.
             In pipeline terms: inputs two L0 files, produces one L0 file. 
 
         Args:
-            masterbias (np.ndarray): The FITS master bias data.
+            frame (np.ndarray): The raw, assembled FFI
+            masterbias (np.ndarray): The master bias data.
 
         Raises:
             Exception: If raw image and bias frame don't have the same dimensions.
         """
-        if self.rawimage.data.shape==masterbias.data.shape:
-            print ("Bias .fits Dimensions Equal, Check Passed")
+        if frame.data.shape==masterbias.data.shape:
+            frame.data = frame.data-masterbias.data
         else:
             raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
-        self.rawimage.data=self.rawimage.data-masterbias.data
     
-    def get(self):
-        """Returns bias-corrected raw image result.
+        raw_sub_bias = frame
 
-        Returns:
-            self.rawimage: The bias-corrected data
-        """
-        return self.rawimage
+        return raw_sub_bias
+
+    # def get(self):
+    #     """Returns bias-corrected raw image result.
+
+    #     Returns:
+    #         self.rawimage: The bias-corrected data
+    #     """
+    #     return self.rawimage

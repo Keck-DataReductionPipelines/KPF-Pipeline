@@ -15,6 +15,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.bias_subtraction.src.alg import BiasSubtraction
+from modules.Utils.overscan_subtract import OverscanSubtraction
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
@@ -32,6 +33,8 @@ class BiasSubtraction(KPF0_Primitive):
         rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`            
         masterbias (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
         data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+
+
         config_path (str): Path of config file for the computation of bias subtraction.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
@@ -48,8 +51,9 @@ class BiasSubtraction(KPF0_Primitive):
             action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe:
 
                 `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
-                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data
-                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
+                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing frame orientation key 
+                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data
+                `action.args[3]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
 
             context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
 
@@ -60,7 +64,14 @@ class BiasSubtraction(KPF0_Primitive):
         #Input arguments
         self.rawdata=self.action.args[0]
         self.masterbias=self.action.args[1]
-        self.data_type=self.action.args[2]
+        self.channel_no=self.action.args[2]
+        self.channel_orients=self.action.args[3]
+        self.ch_ffi_rows=self.action.args[4]
+        self.ch_ffi_cols=self.action.args[5]
+        self.channel_exts=self.action.args[6]
+        self.overscan_region=self.action.args[7]
+        self.overscan_method=self.action.args[8]
+        self.data_type=self.action.args[9]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -69,7 +80,6 @@ class BiasSubtraction(KPF0_Primitive):
         except:
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
-
 
         #Start logger
         self.logger=None
@@ -95,9 +105,31 @@ class BiasSubtraction(KPF0_Primitive):
         Returns:
             Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
         """
-        # 1) subtract master bias from raw
+    # ~pull correct extensions from raw file
         if self.logger:
-            self.logger.info("Bias Subtraction: subtracting master bias from raw image...")
+            self.logger.info("Bias Subtraction: Pulling bias frame extensions")
+        
+        frames_data = []
+        for ext in self.channel_exts:
+            data = self.rawdata[ext].data
+            frames_data.append(data)
+        frames_data = np.array(frames_data)
 
-        self.alg.bias_subtraction(self.masterbias)
-        return Arguments(self.alg.get())
+        ffi_exts = self.alg.get_ffi_exts()
+
+    # ~overscan subtraction (includes subtraction,flipping frame, etc) and bias sub
+
+        for frame_no in range(len(ffi_exts)):
+            single_frame_data = np.array_split(frames_data,len(ffi_exts))[frame_no]
+            if self.logger:
+                self.logger.info(f"Bias Subtraction: performing overscan subtraction for {frame_no+1} of {len(ffi_exts)}...") 
+            full_frame_img = OverscanSubtraction(single_frame_data, self.overscan_region, self.overscan_method, self.channel_orients)
+
+            if self.logger:
+                self.logger.info(f"Bias Subtraction: subtracting master bias from raw full frame image for {frame_no+1} of {len(ffi_exts)}...")
+            bias_subbed = self.alg.bias_subtraction(full_frame_img, self.masterbias)
+
+            self.rawdata[ffi_exts[frame_no]].data = bias_subbed
+
+        # ~save new file to original L0 file
+        return Arguments(self.rawdata)
