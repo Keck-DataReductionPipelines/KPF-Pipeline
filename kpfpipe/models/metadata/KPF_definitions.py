@@ -23,8 +23,8 @@ LEVEL0_HEADER_KEYWORDS = {
     'ELAPTIME': float,  # open shutter time (all coadds) (seconds)
 
     ## Observation location keywords
-    'OBSORIGIN':  str,    # Observatory name
-    'TELESCOPE':  str,    # telescope name
+    'OBORIGIN':  str,    # Observatory name
+    'TELESCOP':  str,    # telescope name
     'AIRMASS':  float,  # air mass
     'AZ':       str,  # telescope azimuth (deg)
     'EL':       str,  # telescope elevation (deg)
@@ -65,7 +65,7 @@ LEVEL0_HEADER_KEYWORDS = {
     'DISPPOS':  float,  # --TODO-- description 
     'ECHLPOS':  float,  # --TODO-- description 
     'FILNAME':  str,    # --TODO-- description 
-    'SLIT-NAME':str,    # --TODO-- description 
+    'SLIT-NAM':str,    # --TODO-- description 
     'STATEID':  int,    # unique ID assigned to all associated FITS file
     'STATENAM': str,    # user supplied name for STATEID
 
@@ -84,6 +84,7 @@ LEVEL0_HEADER_KEYWORDS = {
     'CTYPE1':   float,  # coordinate type and projection (RA-TAN)
     'CTYPE2':   float,  # coordiante type and projection (DEC-TAN)
     'RADECSYS': str,    # coordinate system
+    'NAXIS': int,       # number of dimensions
     'NAXIS1':   int,    # number of pixels in axis 1
     'NAXIS2':   int,    # number of pixels in axis 2
 

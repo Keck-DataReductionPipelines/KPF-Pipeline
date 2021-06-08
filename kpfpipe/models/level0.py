@@ -36,7 +36,6 @@ class KPF0(KPFDataModel):
         """
         Constructor
         """
-        # KPFDataModel.__init__(self)
         super().__init__()
         self.level = 0
         self.extensions = KPF_definitions.LEVEL0_EXTENSIONS.items()
@@ -45,7 +44,10 @@ class KPF0(KPFDataModel):
         # add level0 header keywords
         self.header_definitions = KPF_definitions.LEVEL0_HEADER_KEYWORDS.items()
         for key, value in self.header_definitions:
-            self.header[key] = value()
+            if key == 'NAXIS':
+                self.header[key] = 2
+            else:
+                self.header[key] = value()
 
         # add empty level0 extensions
         for key, value in self.extensions:
@@ -187,6 +189,6 @@ class KPF0(KPFDataModel):
             hdu_list.append(hdu)
 
         return hdu_list
-        
+    
 if __name__ == "__main__":
     pass

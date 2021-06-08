@@ -234,12 +234,12 @@ class KPFDataModel(object):
             hdu_list = gen_hdul()
         
         # handles receipt
-        t = Table.from_pandas(self.receipt)
-        hdu = fits.table_to_hdu(t)
-        for key, value in self.header['RECEIPT'].items():
-            hdu.header.set(key, value)
-        hdu.name = 'RECEIPT'
-        hdu_list.append(hdu)
+        # t = Table.from_pandas(self.receipt)
+        # hdu = fits.table_to_hdu(t)
+        # for key, value in self.header['RECEIPT'].items():
+        #     hdu.header.set(key, value)
+        # hdu.name = 'RECEIPT'
+        # hdu_list.append(hdu)
 
         # handles any auxiliary extensions
         for name, table in self.extension.items():
