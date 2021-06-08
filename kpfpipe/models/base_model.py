@@ -7,6 +7,7 @@ import sys
 import copy 
 import warnings
 import time
+from collections import OrderedDict
 
 # External dependencies
 import astropy
@@ -22,7 +23,7 @@ import hashlib
 # Pipeline dependencies
 from kpfpipe.models.metadata.receipt_columns import *
 
-class KPFDataModel:
+class KPFDataModel(object):
     '''The base class for all KPF data models.
 
     Warning: 
@@ -113,11 +114,7 @@ class KPFDataModel:
         '''
         self.filename: str = None
 
-        self.header: dict = {'PRIMARY': {}, 
-                             'RECEIPT': {}}
-
-        # Construct the receipt table
-        self.receipt: pd.DataFrame = pd.DataFrame(columns=RECEIPT_COL)
+        self.header: OrderedDict = {}
 
         # list of auxiliary extensions 
         self.extension: dict = {}
