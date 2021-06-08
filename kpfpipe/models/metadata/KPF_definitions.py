@@ -120,7 +120,7 @@ LEVEL1_HEADER_KEYWORDS = {
 }
 
 ## Header keywords required by level 2 data only
-LEVEL1_HEADER_KEYWORDS = {
+LEVEL2_HEADER_KEYWORDS = {
     ## Reference mask used for cross-correlation
     # --TODO-- missing
 
