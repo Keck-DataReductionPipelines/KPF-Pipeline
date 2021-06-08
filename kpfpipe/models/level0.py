@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe.models.base_model import KPFDataModel
+from kpfpipe.models.metadata import KPF_definitions
 
 class KPF0(KPFDataModel):
     """
@@ -35,40 +36,31 @@ class KPF0(KPFDataModel):
         """
         Constructor
         """
-        KPFDataModel.__init__(self)
+        # KPFDataModel.__init__(self)
+        super().__init__()
         self.level = 0
+        self.extensions = KPF_definitions.LEVEL0_EXTENSIONS.items()
+        python_types = KPF_definitions.FITS_TYPE_MAP
 
-        # level 0 contain only 1 array
-        self.data: np.ndarray = None
-        self.variance: np.ndarray = None
+        # add level0 header keywords
+        self.header_definitions = KPF_definitions.LEVEL0_HEADER_KEYWORDS.items()
+        for key, value in self.header_definitions:
+            self.header[key] = value()
+
+        # add empty level0 extensions
+        for key, value in self.extensions:
+            if key == 'PRIMARY':
+                atr = self.header
+            else:
+                atr = python_types[value]([])
+            setattr(self, key, atr)
 
         self.read_methods: dict = {
             'KPF':   self._read_from_KPF,
             'NEID':  self._read_from_NEID,
             'PARAS': self._read_from_PARAS
         }
-    
-    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
-        '''
-        Parse the HDUL based on NEID standards
 
-        Args:
-            hdul (fits.HDUList): List of HDUs parsed with astropy.
-
-        '''
-        for hdu in hdul:
-            this_header = hdu.header
-
-            # depending on the name of the HDU, store them with corresponding keys
-            if hdu.name == 'DATA':
-                self.header['DATA'] = this_header
-                self.data = np.asarray(hdu.data, dtype=np.float64)
-            elif hdu.name == 'VARIANCE':
-                self.header['VARIANCE'] = this_header
-                self.variance = np.asarray(hdu.data, dtype=np.float64)
-            else: 
-                raise KeyError('Unrecognized')
-    
     def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
         Parse the HDUL based on NEID standards
@@ -93,6 +85,28 @@ class KPF0(KPFDataModel):
                 # This HDU contains the 2D variance array
                 self.variance = hdu.data
                 self.header['VARIANCE'] = hdu.header
+
+
+    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
+        '''
+        Parse the HDUL based on NEID standards
+
+        Args:
+            hdul (fits.HDUList): List of HDUs parsed with astropy.
+
+        '''
+        for hdu in hdul:
+            this_header = hdu.header
+
+            # depending on the name of the HDU, store them with corresponding keys
+            if hdu.name == 'DATA':
+                self.header['DATA'] = this_header
+                self.data = np.asarray(hdu.data, dtype=np.float64)
+            elif hdu.name == 'VARIANCE':
+                self.header['VARIANCE'] = this_header
+                self.variance = np.asarray(hdu.data, dtype=np.float64)
+            else: 
+                raise KeyError('Unrecognized')
             
 
     def _read_from_PARAS(self, hdul: fits.HDUList,
@@ -152,26 +166,27 @@ class KPF0(KPFDataModel):
     def _create_hdul(self):
         '''
         Create an hdul in FITS format. 
-        This ise used by the base model for writing data context to file
+        This is used by the base model for writing data context to file
         '''
-        hdu_list: list = []
-        for name, header_keys in self.header.items():
-            if name == 'PRIMARY':
-                hdu = fits.PrimaryHDU()
-            elif name == 'DATA': 
-                hdu = fits.ImageHDU(data=self.data)
-            elif name == 'VARIANCE':
-                hdu = fits.ImageHDU(data=self.variance)
-            else: 
+        hdu_list = []
+        hdu_definitions = self.extensions
+        for key, value in hdu_definitions:
+            if key == 'PRIMARY':
+                head = fits.Header(cards=self.header)
+                hdu = fits.PrimaryHDU(header=head)
+            elif value == fits.ImageHDU:
+                data = getattr(self, key)
+                hdu = value(data=data)
+            elif value == fits.TableHDU:
+                table = Table.from_pandas(getattr(self, key))
+                hdu = fits.TableHDU.from_columns(table)
+            else:
+                print("Can't translate {} into a valid FITS format.".fotmat(type(getattr(self, key))))
                 continue
 
-            for key, value in header_keys.items():
-                hdu.header.set(key, value)
-            hdu.name = name
-
             hdu_list.append(hdu)
-        return hdu_list
 
+        return hdu_list
         
 if __name__ == "__main__":
     pass
