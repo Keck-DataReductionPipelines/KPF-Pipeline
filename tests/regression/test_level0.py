@@ -29,13 +29,13 @@ def test_aux():
     data = KPF0()
     data.create_extension('hello')
     # At this point only one extenion should exist
-    assert(len(data.extension) == 1)
-    assert('hello' in data.extension.keys())
+    assert(len(data.extra_extensions) == 1)
+    assert('hello' in data.extra_extensions.keys())
     assert('hello' in data.header.keys())
 
     data.del_extension('hello')
     # No extension should exist
-    assert(len(data.extension) == 0)
+    assert(len(data.extra_extensions) == 0)
     assert('hello' not in data.header.keys())
 
     # 
@@ -74,8 +74,8 @@ def test_from_NEID():
         data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
 
         assert(isinstance(data.data, np.ndarray))
-        assert(data.variance.shape == data.data.shape)
-    
+        assert(data.data.shape == data.variance.shape)
+
 def test_NEID2KPF():
     '''
     Check that data 
@@ -94,12 +94,10 @@ def test_NEID2KPF():
         # read the converted data
         data2 = KPF0.from_fits(to_path, 'KPF')
         # compare the data value of the two
-        assert(np.all(data2.data == data.data))
-        assert(np.all(data2.variance == data.variance))
+        assert(np.all(data2.GREEN_CCD == data.data))
+        assert(np.all(data2.RED_CCD == data.variance))
     # Clean up 
     shutil.rmtree('temp_level0')
-
-    # import tempfile
 
 def test_exceptions():
     

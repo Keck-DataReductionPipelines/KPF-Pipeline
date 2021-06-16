@@ -1,4 +1,5 @@
 
+from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 from astropy.time import Time
 from astropy.coordinates import Angle
 from astropy.io import fits
@@ -14,7 +15,7 @@ from collections import OrderedDict
 # mapping between fits extension data types and Python object data types
 FITS_TYPE_MAP = {fits.PrimaryHDU: OrderedDict,
                  fits.ImageHDU: np.array,
-                 fits.TableHDU: pd.DataFrame}
+                 fits.BinTableHDU: pd.DataFrame}
 
 ## Header keywords required by all levels of data
 LEVEL0_HEADER_KEYWORDS = {
@@ -141,20 +142,20 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'GREEN_AMP3': fits.ImageHDU,
                      'GREEN_AMP4': fits.ImageHDU,
                      'GREEN_CCD': fits.ImageHDU,
-                     'GREEN_RECEIPT': fits.TableHDU,
                      
                      'RED_AMP1': fits.ImageHDU,
                      'RED_AMP2': fits.ImageHDU,
                      'RED_AMP3': fits.ImageHDU,
                      'RED_AMP4': fits.ImageHDU,
                      'RED_CCD': fits.ImageHDU,
-                     'RED_RECEIPT': fits.TableHDU,
                      
                      'CA_HK': fits.ImageHDU,
                      'EXPMETER': fits.ImageHDU,
                      'GUIDECAM': fits.ImageHDU,
+
+                     'RECEIPT': fits.BinTableHDU,
                      
-                     'SOLAR_IRRADIANCE': fits.TableHDU}
+                     'SOLAR_IRRADIANCE': fits.BinTableHDU}
 
 # KPF level 1 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
@@ -175,10 +176,8 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'GREEN_SCI_WAVE3': fits.ImageHDU,
                      'GREEN_SKY_WAVE': fits.ImageHDU,
                      'GREEN_CAL_WAVE': fits.ImageHDU,
-                     'GREEN_TELLURIC': fits.TableHDU,
-                     'GREEN_SKY': fits.TableHDU,
-                     'GREEN_RECEIPT': fits.TableHDU,
-                     'GREEN_CONFIG': fits.TableHDU,
+                     'GREEN_TELLURIC': fits.BinTableHDU,
+                     'GREEN_SKY': fits.BinTableHDU,
                      
                      'RED_SCI_FLUX1': fits.ImageHDU,
                      'RED_SCI_FLUX2': fits.ImageHDU,
@@ -195,25 +194,24 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RED_SCI_WAVE3': fits.ImageHDU,
                      'RED_SKY_WAVE': fits.ImageHDU,
                      'RED_CAL_WAVE': fits.ImageHDU,
-                     'RED_TELLURIC': fits.TableHDU,
-                     'RED_SKY': fits.TableHDU,
-                     'RED_RECEIPT': fits.TableHDU,
-                     'RED_CONFIG': fits.TableHDU,
+                     'RED_TELLURIC': fits.BinTableHDU,
+                     'RED_SKY': fits.BinTableHDU,
                      
-                     'SOLAR_IRRADIANCE': fits.TableHDU}
+                     'RECEIPT': fits.BinTableHDU,
+                     'CONFIG': fits.BinTableHDU,
+                     
+                     'SOLAR_IRRADIANCE': fits.BinTableHDU}
 
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
 # and the fits data type as the values
 LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
-                     'GREEN_CCF': fits.ImageHDU,
-                     'GREEN_RECEIPT': fits.TableHDU,
-                     'GREEN_CONFIG': fits.TableHDU,
-                     
+                     'GREEN_CCF': fits.ImageHDU,                     
                      'RED_CCF': fits.ImageHDU,
-                     'RED_RECEIPT': fits.TableHDU,
-                     'RED_CONFIG': fits.TableHDU,
                      
-                     'RV': fits.TableHDU,
-                     'ACTIVITY': fits.TableHDU}
+                     'RECEIPT': fits.BinTableHDU,
+                     'CONFIG': fits.BinTableHDU,
+                     
+                     'RV': fits.BinTableHDU,
+                     'ACTIVITY': fits.BinTableHDU}
 
