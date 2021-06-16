@@ -15,6 +15,7 @@ import pandas as pd
 
 from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
+from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
 class KPF0(KPFDataModel):
     """
@@ -44,6 +45,7 @@ class KPF0(KPFDataModel):
         # add level0 header keywords
         self.header_definitions = KPF_definitions.LEVEL0_HEADER_KEYWORDS.items()
         for key, value in self.header_definitions:
+            # assume 2D image
             if key == 'NAXIS':
                 self.header[key] = 2
             else:
@@ -51,10 +53,10 @@ class KPF0(KPFDataModel):
 
         # add empty level0 extensions
         for key, value in self.extensions:
-            if key == 'PRIMARY':
-                atr = self.header
-            else:
+            if key not in ['PRIMARY', 'RECEIPT']:
                 atr = python_types[value]([])
+            else:
+                continue
             setattr(self, key, atr)
 
         self.read_methods: dict = {
@@ -72,22 +74,14 @@ class KPF0(KPFDataModel):
 
         '''
         for hdu in hdul:
-            if isinstance(hdu, fits.PrimaryHDU):
-                self.header['PRIMARY'] = hdu.header
-                # Primary HDU should not contain any data
-                if hdu.data is not None:
-                    raise ValueError('Detected data in Primary HDU')
-            
-            elif hdu.name == 'DATA':
-                # This HDU contains the 2D image array 
-                self.data = hdu.data
-                self.header['DATA'] = hdu.header
-            
-            elif hdu.name == 'VARIANCE':
-                # This HDU contains the 2D variance array
-                self.variance = hdu.data
-                self.header['VARIANCE'] = hdu.header
-
+            if isinstance(hdu, fits.ImageHDU):
+                setattr(self, hdu.name, hdu.data)
+            elif isinstance(hdu, fits.BinTableHDU):
+                table = Table(hdu.data).to_pandas()
+                setattr(self, hdu.name, table)
+            elif hdu.name != 'PRIMARY' and hdu.name != 'RECEIPT':
+                print("Unrecognized extension {}".format(hdu.name))
+                continue
 
     def _read_from_NEID(self, hdul: fits.HDUList) -> None:
         '''
@@ -101,14 +95,20 @@ class KPF0(KPFDataModel):
             this_header = hdu.header
 
             # depending on the name of the HDU, store them with corresponding keys
+            if hdu.name == 'PRIMARY':
+                self.header = this_header
+            # since KPF L0 data does not have equivilant 'data' and 'variance' 
+            # extensions we will put them into the GREEN_CCD and RED_CCD 
+            # extensions respectively. We will also populate the data and
+            # variance attributes here.
             if hdu.name == 'DATA':
-                self.header['DATA'] = this_header
-                self.data = np.asarray(hdu.data, dtype=np.float64)
+                self.GREEN_CCD = np.asarray(hdu.data, dtype=np.float64)
+                self.data = self.GREEN_CCD
             elif hdu.name == 'VARIANCE':
-                self.header['VARIANCE'] = this_header
-                self.variance = np.asarray(hdu.data, dtype=np.float64)
+                self.RED_CCD = np.asarray(hdu.data, dtype=np.float64)
+                self.variance = self.RED_CCD
             else: 
-                raise KeyError('Unrecognized')
+                raise KeyError('Unrecognized extension {}'.format(hdu.name))
             
 
     def _read_from_PARAS(self, hdul: fits.HDUList,
@@ -160,7 +160,7 @@ class KPF0(KPFDataModel):
             row = '|{:20s} |{:20s} |{:20s}\n'.format('Receipt', 'table', str(self.receipt.shape))
             head += row
         
-        for name, aux in self.extension.items():
+        for name, aux in self.extra_extensions.items():
             row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table', str(aux.shape))
             head += row
         print(head)
@@ -173,19 +173,19 @@ class KPF0(KPFDataModel):
         hdu_list = []
         hdu_definitions = self.extensions
         for key, value in hdu_definitions:
-            if key == 'PRIMARY':
+            if value == fits.PrimaryHDU:
                 head = fits.Header(cards=self.header)
                 hdu = fits.PrimaryHDU(header=head)
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
                 hdu = value(data=data)
-            elif value == fits.TableHDU:
+            elif value == fits.BinTableHDU:
                 table = Table.from_pandas(getattr(self, key))
-                hdu = fits.TableHDU.from_columns(table)
+                hdu = fits.table_to_hdu(table)
             else:
-                print("Can't translate {} into a valid FITS format.".fotmat(type(getattr(self, key))))
+                print("Can't translate {} into a valid FITS format.".format(type(getattr(self, key))))
                 continue
-
+            hdu.name = key
             hdu_list.append(hdu)
 
         return hdu_list

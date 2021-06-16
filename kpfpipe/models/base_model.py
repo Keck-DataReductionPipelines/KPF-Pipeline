@@ -79,7 +79,7 @@ class KPFDataModel(object):
                                         Time     ...  Module_Param Status
                 0  2020-06-22T15:42:18.360409     ...        input1   PASS
 
-        extension (dict): a dictionary of auxiliary extensions.
+        extra_extensions (dict): a dictionary of auxiliary extensions.
 
             This attribute stores any additional information that any primitive may wish to 
             record to FITS. Creating an auxiliary creates an empty pandas.DataFrame table, and
@@ -116,8 +116,11 @@ class KPFDataModel(object):
 
         self.header: OrderedDict = {}
 
-        # list of auxiliary extensions 
-        self.extension: dict = {}
+        self.receipt = pd.DataFrame([], columns=RECEIPT_COL)
+        self.RECEIPT = self.receipt
+
+        # list of auxiliary extensions
+        self.extra_extensions: dict = {}
 
         # level of data model
         self.level = None # set in each derived class
@@ -126,7 +129,7 @@ class KPFDataModel(object):
 # I/O related methods
     @classmethod
     def from_fits(cls, fn: str,
-                  data_type: str):
+                  data_type='KPF'):
         """Create a data instance from a file
 
         This method emplys the ``read`` method for reading the file. Refer to 
@@ -134,7 +137,7 @@ class KPFDataModel(object):
 
         Args: 
             fn (str): file path (relative to the repository)
-            data_type (str): instrument type of the file
+            data_type (str): (optional) instrument type of the file [default='KPF']
             
         Returns: 
             cls (data model class): the data instance containing the file content
@@ -179,19 +182,18 @@ class KPFDataModel(object):
         with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
             for hdu in hdu_list:
-                if isinstance(hdu, fits.BinTableHDU):
+                if isinstance(hdu, fits.PrimaryHDU):
+                    self.header = hdu.header
+                elif isinstance(hdu, fits.BinTableHDU):
                     t = Table.read(hdu)
-                    if hdu.name == 'RECEIPT':
+                    if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
-                        self.header['RECEIPT'] = hdu.header
-                        self.receipt = t.to_pandas()
-                
-                    else:
-                        if 'AUX' in hdu.header.keys():
-                            if hdu.header['AUX'] == True:
-                                # This is an auxiliary extension
-                                self.header[hdu.name] = hdu.header
-                                self.extension[hdu.name] = t.to_pandas()
+                        setattr(self, hdu.name.lower(), t.to_pandas())
+                    elif 'AUX' in hdu.header.keys():
+                        if hdu.header['AUX'] == True:
+                            # This is an auxiliary extension
+                            self.header[hdu.name] = hdu.header
+                            self.extension[hdu.name] = t.to_pandas()
             # Leave the rest of HDUs to level specific readers
             if data_type in self.read_methods.keys():
                 self.read_methods[data_type](hdu_list)
@@ -233,21 +235,12 @@ class KPFDataModel(object):
         else: 
             hdu_list = gen_hdul()
         
-        # handles receipt
-        # t = Table.from_pandas(self.receipt)
-        # hdu = fits.table_to_hdu(t)
-        # for key, value in self.header['RECEIPT'].items():
-        #     hdu.header.set(key, value)
-        # hdu.name = 'RECEIPT'
-        # hdu_list.append(hdu)
-
         # handles any auxiliary extensions
-        for name, table in self.extension.items():
+        for name, table in self.extra_extensions.items():
             t = Table.from_pandas(table)
             hdu = fits.table_to_hdu(t)
-            for key, value in self.header[name].items():
+            for key, value in self.header.items():
                 hdu.header[key] = value           # value could be a single value or a 2-D tuple with (value, comment)
-                # hdu.header.set(key, value)
             hdu.name = name
             hdu_list.append(hdu)
 
@@ -256,6 +249,8 @@ class KPFDataModel(object):
         for hdu in hdu_list:
             if 'OBS FILE' in hdu.header.keys():
                 del hdu.header['OBS FILE']
+            elif 'PRIMARY' in hdu.header.keys():
+                del hdu.header['PRIMARY']
 
         # finish up writing
         hdul = fits.HDUList(hdu_list)
@@ -263,7 +258,7 @@ class KPFDataModel(object):
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, Mod: str, mod_path: str, param: str, status: str) -> None:
+    def receipt_add_entry(self, Mod: str, mod_path: str, param: str, status: str, chip='all') -> None:
         '''
         Add an entry to the receipt
 
@@ -271,7 +266,7 @@ class KPFDataModel(object):
             Mod (str): Name of the module making this entry
             param (str): param to be recorded
             status (str): status to be recorded
-
+            chip (str): (optional) which ccd [default='all']
         '''
         
         # time of execution in ISO format
@@ -288,15 +283,21 @@ class KPFDataModel(object):
             git_branch = ''
             git_tag = ''
         # add the row to the bottom of the table
-        row = [time, git_tag, git_branch, git_commit_hash, \
+        row = [time, git_tag, git_branch, git_commit_hash, chip, \
                Mod, str(self.level), mod_path, param, status]
         self.receipt.loc[len(self.receipt)] = row
+        self.RECEIPT = self.receipt
 
-    def receipt_info(self):
+    def receipt_info(self, receipt_name):
         '''
         Print the short version of the receipt
+
+        Args:
+            receipt_name (string): name of the receipt
         '''
-        print(self.receipt[['Time', 'Module_Name', 'Status']])
+        rec = getattr(self, receipt_name)
+        msg = rec['Time', 'Module_Name', 'Status']
+        print(msg)
 
 # =============================================================================
 # Auxiliary related extension
@@ -312,7 +313,7 @@ class KPFDataModel(object):
         if ext_name in self.header.keys():
             raise NameError('name {} already exist as extension'.format(ext_name))
         
-        self.extension[ext_name] = pd.DataFrame()
+        self.extra_extensions[ext_name] = pd.DataFrame()
         self.header[ext_name] = {'AUX': True}
     
     def del_extension(self, ext_name: str):
@@ -323,10 +324,10 @@ class KPFDataModel(object):
             ext_name (str): extension name
             
         '''
-        if ext_name not in self.extension.keys():
+        if ext_name not in self.extra_extensions.keys():
             raise KeyError('extension {} could not be found'.format(ext_name))
         
-        del self.extension[ext_name]
+        del self.extra_extensions[ext_name]
         del self.header[ext_name]
 
 if __name__ == '__main__':
