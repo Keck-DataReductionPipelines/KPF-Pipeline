@@ -6,11 +6,9 @@ from keckdrpframework.models.arguments import Arguments
 class OrientationReference(KPF0_Primitive):
     """This utility reads in a reference .txt file with channel orientations. 
     """
-    def __init__(self,action,context):
-        """Initializes orientation-reference reading utility.
-        """
+    def __init__(self, action, context):
         KPF0_Primitive.__init__(self, action, context)
-        self.ref_path = self.action.args[0]
+        self.reference_path = self.action.args[0]
 
     def _perform(self):
         """Reads channel/image orientation .txt file and returns
@@ -35,7 +33,7 @@ class OrientationReference(KPF0_Primitive):
         4=overscan on right and bottom
 
         """
-        channel_ref = open(ref_path,'r')
+        channel_ref = open(self.reference_path,'r')
 
         channels = []
         keys = []
@@ -72,12 +70,19 @@ class OrientationReference(KPF0_Primitive):
         rows = list(map(int,rows))
         cols = list(map(int,cols))
         exts = list(map(int,exts))
+        tot_frames = len(channels)/max(channels)
 
-        if max(channels)!=len(channels):
-            tot_frames = len(channels)/max(channels)
+        if max(channels)==len(channels):
+            print (f'CCD reference file appears to show {max(channels)} amplifiers per CCD, of which there is {int(tot_frames)}')
+
+        elif max(channels)!=len(channels):
             if channels.count(max(channels)) == tot_frames:
                 print (f'CCD reference file appears to show {max(channels)} amplifiers per CCD, of which there are {int(tot_frames)}')
-        else:
-            raise TypeError('Irregular/incorrect channel list')
+         
+        elif max(channels)!=len(channels):
+            if channels.count(max(channels))!=tot_frames:
+                raise TypeError('Irregular/incorrect channel list')
 
-        return Arguments(channels),Arguments(keys),Arguments(rows),Arguments(cols),Arguments(exts)
+        all_output = channels,keys,rows,cols,exts
+
+        return Arguments(all_output)
