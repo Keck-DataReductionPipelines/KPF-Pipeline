@@ -1,13 +1,13 @@
-from modules.utils.frame_combine import FrameCombinePrimitive
-from modules.flat_fielding.src.flat_fielding import FlatFielding 
+from modules.flat_fielding.src.flat_fielding import FlatFielding
+from modules.Utils.frame_combine import FrameCombinePrimitive
 
-flat_files=find_files('input location')
-master_flat_data=FrameCombinePrimitive(flat_files, data_type)
-master_bias=find_files('input location')
-master_result_data=master_flat_data-master_bias
-master_result=to_fits(master_result_data, 'output location')
+all_flat_files = find_files(all_L0_flat_files_path)
+if master_flat_create = True:
+    master_flat_data = FrameCombinePrimitive(full_frame_flat,lev0_ffi_exts,'NEID')
+    master_flat_result = to_fits(master_flat_data,master_flat_path)
+if master_flat_create = False:
+    master_flat_data = find_files(master_flat_path)
 
-raw_file_name=find_files('input location')
-raw_file=kpf0_from_fits(raw_file_name, data_type)
-raw_div_flat=FlatFielding(raw_file, master_result_data, data_type)
-raw_div_flat=to_fits(raw_min_flat, 'output location')
+for raw_file in find_files(no_flat_L0_files_path):
+    final_raw_frames_file = FlatFielding(raw_file,master_flat_data,lev0_ffi_exts,'NEID')
+    result = to_fits(final_raw_frames_file,raw_file)
