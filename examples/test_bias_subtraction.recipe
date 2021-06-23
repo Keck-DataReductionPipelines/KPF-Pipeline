@@ -1,13 +1,22 @@
-from modules.utils.frame_combine import FrameCombinePrimitive
-from modules.utils.orientation_ref_reader import OrientationReference
-from modules.bias_subtraction.src.bias_subtraction import BiasSubtraction 
+from modules.bias_subtraction.src.bias_subtraction import BiasSubtract
+from modules.Utils.frame_combine import FrameCombinePrimitive
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
 
-channel_keys = OrientationReference(channel_orientation_ref_path)
+ref_output = OrientationReference(channel_orientation_ref_path)
 
-bias_files=find_files(KPFPIPE_TEST_DATA+'/NEIDdata/BIAS/neidTemp*.fits')
-master_bias_data=FrameCombinePrimitive(bias_files, 'NEID')
+for raw_file in find_files(all_L0_files_path):
+    L0_with_ffi = OverscanSubtraction(raw_file,overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'KPF')
+    L0_result = to_fits(L0_with_ffi,raw_file)
 
-for frame in find_files(##raw_frame_dir##):
-    for key in channel_keys:
-        assembled_frame = BiasSubtraction(frame, key, master_bias_data, 'NEID')
-        assembled_frame = to_fits(assembled_frame, ##result_path_name##)
+all_bias_files = find_files('/Users/paminabby/Desktop/neid_L0*.fits')
+if master_bias_create == True:
+    master_bias_data = FrameCombinePrimitive(all_bias_files,lev0_ffi_exts,'NEID')
+    master_bias_result = to_fits(master_bias_data,masterbias_path)
+if master_bias_create == False:
+    master_bias_data = find_files(masterbias_path)
+
+for raw_file in find_files(no_bias_L0_files_path):
+    #kpf0_from_fits(raw_file)
+    final_raw_frames_file = BiasSubtract(raw_file,master_bias_data,lev0_ffi_exts,'NEID')
+    result = to_fits(final_raw_frames_file,result_path_name+'final_bias_test.fits')

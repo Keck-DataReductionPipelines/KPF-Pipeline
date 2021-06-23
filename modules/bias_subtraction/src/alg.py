@@ -1,12 +1,15 @@
 #packages
 import numpy as np
+###
+from astropy.io import fits
+###
 
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 from modules.Utils.overscan_subtract import OverscanSubtraction as osub
 
-class BiasSubtraction:
+class BiasSubtractionAlg:
     """
     Bias subtraction calculation.
 
@@ -25,51 +28,49 @@ class BiasSubtraction:
     """
 
 
-    def __init__(self,config=None, logger=None):
+    def __init__(self,rawimage,ffi_exts,config=None, logger=None):
         """Inits BiasSubtraction class with raw data, config, logger.
 
         Args:
+            rawimage (np.ndarray): The FITS raw data.
+            ffi_exts (np.ndarray): The extensions in L0 FITS files where FFIs (full frame images) are stored.
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
             logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
         """
+        self.rawimage=rawimage
+        self.ffi_exts=ffi_exts
         self.config=config
         self.logger=logger
-
-        configpull = ConfigHandler(config,'PARAM')
-        self.ffi_exts = configpull.get_config_value('ffi_exts', [6,12])
-        # self.mode = configpull.get_config_value('overscan_mode', 1)
-        # self.overscan_pixels = configpull.get_config_value('overscan_pixels', 160)
-        # self.prescan_pixels = configpull.get_config_value('prescan_pixels', 0)
-        # self.paralscan_pixels = configpull.get_config_value('parallelscan_pixels',0)
         
-    def get_ffi_exts(self):
-        return self.ffi_exts
-
-    def bias_subtraction(self,frame,masterbias):
+    def bias_subtraction(self,masterbias):
         """
             Subtracts bias data from raw data.
             In pipeline terms: inputs two L0 files, produces one L0 file. 
 
         Args:
-            frame (np.ndarray): The raw, assembled FFI
             masterbias (np.ndarray): The master bias data.
 
         Raises:
             Exception: If raw image and bias frame don't have the same dimensions.
         """
-        if frame.data.shape==masterbias.data.shape:
-            frame.data = frame.data-masterbias.data
-        else:
-            raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
-    
-        raw_sub_bias = frame
+        ###for testing purposes###
+        #masterbias = fits.open(masterbias)
+        #masterbias = masterbias[1].data
+        # masterbias = np.zeros_like(frame)
+        ###
+        for no,ffi in enumerate(self.ffi_exts):
+            if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
+                print ("Bias .fits Dimensions Equal, Check Passed")
+            else:
+                raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
 
-        return raw_sub_bias
+            self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+            #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
 
-    # def get(self):
-    #     """Returns bias-corrected raw image result.
+    def get(self):
+        """Returns bias-corrected raw image result.
 
-    #     Returns:
-    #         self.rawimage: The bias-corrected data
-    #     """
-    #     return self.rawimage
+        Returns:
+            self.rawimage: The bias-corrected data.
+        """
+        return self.rawimage
