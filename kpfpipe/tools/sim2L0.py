@@ -4,243 +4,176 @@ import numpy as np
 import matplotlib.pylab as plt
 import os
 import glob
+import datetime
 from astropy.io import fits
 
-class convert_frame():
-	"""
-	Class to ingest full frame data (e.g. simulated data) and reformat to quadrant format and save
+plt.ion()
 
-	"""
-	def __init__(self,msmt_indx,path='.',ftype='.FITS', save=True,savepath='.',ser_oscn=156,par_oscn=160):
-		"""
-		inputs:
-			-------
-		msmt_indx: integer
-			Description: index of file to take from glob of path for all files with extension in ftypes, heritage from KPF CCD analysis code
-		path: string, optional
-			  Description: path to data folder, points from current working directory
-			  default: '.'
-		ftypes: string, optional
-			Description: the extension of data files to glob, case sensitive, Steve saves files as .FITS
+class ConvertFrame():
+	""" Convert Frame Class
+	
+	This class ingests full frame data (e.g. simulated data from Zemax) and reformats it to quadrant format
+	with a constant bias level and saves the final file
+
+	Args:
+		msmt_indx (integer): index of file to take from glob of path for all files with extension in ftypes, 
+			heritage from KPF CCD analysis code
+		path (str): path to data folder, points from current working directory, default: '.'
+		ftypes (str): the extension of data files to glob, case sensitive, Steve saves files as .FITS, 
 			default: 'FITS'
-		save: Boolean, optional
-			Description: If true, will save the output of the conversion
-			default: True
-		savepath: string, optional
-			  Description: path to save folder, points from current working directory
-			  default: '.'
-		ser_oscn: Integer, optional
-			Description: Number of serial overscan pixels to add to data
-			default: 156 (this is STA value)
-		par_oscn: Integer, optional
-			Description: Number of serial overscan pixels to add to data
-			default: 160 (this is STA value)
+		save (bool): If true, will save the output of the conversion, default:True
+		savepath (str): path to save folder, points from current working directory, default: '.'
+		ser_oscn (int): Number of serial overscan pixels to add to data, default: 156 (this is STA value)
+		par_oscn (int): Number of serial overscan pixels to add to data, default: 160 (this is STA value)
 
-		outputs:
-		-------
-		None
-		"""
-		cwd = os.getcwd()
-		self.files = glob.glob(cwd + os.sep + path + os.sep + '*' + ftype)
-		nFiles = len(self.files)
-		if nFiles == 0:
-			print("No matching files in %s"%(cwd + os.sep + path + os.sep));
-			return
-		if np.abs(msmt_indx) > nFiles:
-			raise TypeError('msmt_indx set to value greater that number of files in path')
+	Attributes:
+		files (list): List of files to consider
+		file (str): name of file to convert chosen by msmt_indx
 
-		# pick file
-		self.file = self.files[msmt_indx]
+	Raises:
+		TypeError: if msmt_indx is greater than nFiles in path
 
-		self.SIM_to_quad(ser_oscn, par_oscn)
-		savename = self.file.split(os.sep)[-1].strip(ftype) + '_quad.fits'
-		self.save_quad(savename)
-		#self.noise_check()
+	"""
+	def __init__(self,greenfile, redfile, dtype, ser_oscn=156,par_oscn=160, prescan=4, save=True, plot=False):
+		green_quads = self.sim_to_quad(greenfile, ser_oscn, par_oscn, prescan,plot=plot)
+		red_quads   = self.sim_to_quad(redfile, ser_oscn, par_oscn, prescan,plot=plot)
+
+		if save:
+			savename = '%s/KPF_simulated_L0_%s.fits' %(dtype, dtype)
+			hdr = self.make_header(ser_oscn, par_oscn, prescan)
+			self.save_quad(savename, green_quads, red_quads, hdr)
 
 		return
 
-	def SIM_to_quad(self,ser_oscn, par_oscn):
+	def sim_to_quad(self,filename, ser_oscn, par_oscn, prescan,plot=False):
 		"""
 		convert FFI to quadrants
 
-		ser_oscn: Integer, optional
-			Description: Number of serial overscan pixels to add to data
-			default: 156 (this is STA value)
-		par_oscn: Integer, optional
-			Description: Number of serial overscan pixels to add to data
-			default: 160 (this is STA value)
+		Args:
+			filename (str): name of file to convert including path
+			ser_oscn (int): Number of serial overscan pixels to add to data
+			par_oscn (int): Number of serial overscan pixels to add to data
+			prescan (int):  Numper of prescan pixels, KPF has 4
+
+		Attributes:
+			bias (int): bias level in counts to be added to frame
+			data (numpy.ndarray): 2D full frame image, nlines by npix
+			npix
+			nlines
+			quads
 		"""
-		self.bias=1000
+		# define constant bias level to add to frame (could change to add noise here)
+		self.bias=1000 
 
-		f = fits.open(self.file)
+		f = fits.open(filename)
 		npix, nlines = f[0].header['NAXIS1'], f[0].header['NAXIS2']
-		self.data = f[0].data[::-1,:] # flip verticallly to fix orientation. blue is the brighter bit, should be on the right
-
-		prescan = 4 # KPF set detector prescan # pixels
-		self.ser_oscn, self.par_oscn, self.prescan = ser_oscn, par_oscn, prescan
-		self.npix, self.nlines = npix, nlines 
+		self.npix, self.nlines = npix, nlines
+		data    = f[0].data[::-1,:] # flip verticallly to fix orientation. blue is the brighter bit, should be on the right
 
 		# fill into quadrant structure
-		ser_extra = ser_oscn + prescan
-		par_extra = par_oscn
-		L2 = self.bias*np.ones((4, nlines//2 + par_extra, npix//2 + ser_extra),dtype=np.float32)   # npix and nlines defined per quadrant (halved above)
-		nlines_L2, npix_L2 = np.shape(L2)[1], np.shape(L2)[2]
+		ser_total = npix//2 + ser_oscn + prescan
+		par_total = nlines//2 + par_oscn
+		quads = self.bias*np.ones((4, par_total, ser_total),dtype=np.float32)  
 
-		L2[0, 0:nlines//2, prescan  :npix//2 + prescan]	   += self.data[0:nlines//2, 0:npix//2] # top left
-		L2[1, 0:nlines//2, ser_oscn :npix//2 + ser_oscn]   += self.data[0:nlines//2, npix//2:]  # top right
-		L2[2, par_oscn:,   prescan  :npix//2 + prescan]    += self.data[nlines//2: , 0:npix//2]  # bottom left	
-		L2[3, par_oscn:,   ser_oscn :npix//2 + ser_oscn]   += self.data[nlines//2: , npix//2:]   # bottom right
+		quads[0, 0:nlines//2, prescan  :npix//2 + prescan]	  += data[0:nlines//2, 0:npix//2] # top left
+		quads[1, 0:nlines//2, ser_oscn :npix//2 + ser_oscn]   += data[0:nlines//2, npix//2:]  # top right
+		quads[2, par_oscn:,   prescan  :npix//2 + prescan]    += data[nlines//2: , 0:npix//2]  # bottom left	
+		quads[3, par_oscn:,   ser_oscn :npix//2 + ser_oscn]   += data[nlines//2: , npix//2:]   # bottom right
 
-		self.L2 = L2
+		if plot:
+			plt.figure(); plt.imshow(data); plt.title('simulated data frame')
+			fig,ax = plt.subplots(nrows=2,ncols=2)
+			q=0
+			for r in list(range(2)):
+				for c in list(range(2)):
+					ax[r,c].imshow(quads[q])
+					q+=1
 
-	def save_quad(self,savename):
+		return quads
+
+	def save_quad(self, savename, green_quads, red_quads, hdr):
 		"""
-		save quadrant version of simulated data
+		save quadrant version of simulated data to file
+
+		Args:
+			savename (str): name of the output file
+			green_quads (2D numpy.array): 2D full frame image of green ccd
+			red_quads (2D numpy.array): 2D full frame image of red ccd
+			hdr (astropy.io.fits.header.Header): header object
 		"""
-		hdr = fits.Header()
-		hdr['NOSCN_s'] = self.ser_oscn
-		hdr['NOSCN_p'] = self.par_oscn
-		hdr['NPSCN']   = self.prescan
 		hdu1 = fits.PrimaryHDU(header=hdr)
-		hdu2 = fits.ImageHDU(data=self.L2[0],name='quad1') # change to float 32
-		hdu3 = fits.ImageHDU(data=self.L2[1],name='quad2')
-		hdu4 = fits.ImageHDU(data=self.L2[2],name='quad3')
-		hdu5 = fits.ImageHDU(data=self.L2[3],name='quad4')
-		hdu6 = fits.ImageHDU(data=np.zeros((self.nlines,self.npix),dtype=np.float32),name='FFI') # 4080x4080 is KPF image area for full frame
+		hdu2 = fits.ImageHDU(data=green_quads[0],name='GREEN-AMP1') # change to float 32
+		hdu3 = fits.ImageHDU(data=green_quads[1],name='GREEN-AMP2')
+		hdu4 = fits.ImageHDU(data=green_quads[2],name='GREEN-AMP3')
+		hdu5 = fits.ImageHDU(data=green_quads[3],name='GREEN-AMP4')
+		hdu6 = fits.ImageHDU(data=np.zeros((self.nlines,self.npix),dtype=np.float32),name='GREEN-CCD') # 4080x4080 is KPF image area for full frame
+		hdu7 = fits.TableHDU(data=None, name='GREEN-RECEIPT')
+
+		hdu8 = fits.ImageHDU(data=red_quads[0],name='RED-AMP1') # change to float 32
+		hdu9 = fits.ImageHDU(data=red_quads[1],name='RED-AMP2')
+		hdu10 = fits.ImageHDU(data=red_quads[2],name='RED-AMP3')
+		hdu11 = fits.ImageHDU(data=red_quads[3],name='RED-AMP4')
+		hdu12 = fits.ImageHDU(data=np.zeros((self.nlines,self.npix),dtype=np.float32),name='RED-CCD') # 4080x4080 is KPF image area for full frame
+		hdu13 = fits.TableHDU(data=None, name='RED-RECEIPT')
+
+		hdu14 = fits.ImageHDU(data=np.zeros((100,100)), name='CA-HK')
+		hdu15 = fits.ImageHDU(data=np.zeros((100,100)), name='EXPMETER')
+		hdu16 = fits.ImageHDU(data=np.zeros((100,100)), name='GUIDECAM')
+		hdu17 = fits.ImageHDU(data=np.zeros((100,100)), name='SOLAR-IRRADIANCE')
 
 		new_hdul = fits.HDUList([hdu1, hdu2, hdu3, hdu4, hdu5, hdu6])
 		new_hdul.writeto(savename, overwrite=True)
 		
 
-	def bindat(self,x,y,nbins):
+	def make_header(self, ser_oscn, par_oscn, prescan):
 		"""
-		Bin Data
-
-		Inputs:
-		------
-		x, y, nbins
-
-		Returns:
-		--------
-		arrays: bins, mean, std  [nbins]
+		Args:
+			ser_oscn (int):  Number of serial overscan pixels to add to data
+			par_oscn (int):  Number of serial overscan pixels to add to data
+			prescan (int):  Numper of prescan pixels, KPF has 4
 		"""
-		# Create bins (nbins + 1)?
-		n, bins = np.histogram(x, bins=nbins)
-		sy, _ = np.histogram(x, bins=nbins, weights=y)
-		sy2, _ = np.histogram(x, bins=nbins, weights=y*y)
+		typemap = {'bool':bool, 'float':float, 'int':int,'string':str,'double':np.double,'DateTime':str,'':str} #datetime.datetime? for datetime? not worth it r.n.
+		hdr = fits.Header()
+		hdr['SOSCN'] = (str(ser_oscn), 'serial overscan')
+		hdr['POSCN'] = (str(par_oscn), 'parallel overscan')
+		hdr['PSCN']  = (str(prescan), 'parallel overscan')
 
-		# Calculate bin centers, mean, and std in each bin
-		bins = (bins[1:] + bins[:-1])/2
-		mean = sy / n
-		std = np.sqrt(sy2/n - mean*mean)
+		# load header
+		f = np.loadtxt('./KPF FITS Header Keywords - kpf_header.tsv', delimiter='	',dtype=str)
+		keys   = f[:,1]
+		values = f[:,3]
+		types  = f[:,5]
 
-		# Return bin x, bin y, bin std
-		return bins, mean, std
-
-	def noise_check(self, sub_lines=list(range(903,906)), sub_pix=list(range(1500,3250)), watts=500):
-		"""
-		quick check of noise in a random subset
-
-		defaults for file:
-		KPF_rays-1.0E+05_orders- 71-103_cal-incandescent_sci-incandescent_sky-incandescent_normalized_159_Red.FITS'
-
-		otherwise must redefine subset bounds
-		"""
-		#
-		# take sum of flux
-		dat_rcut  = self.data[sub_lines,:]
-		dat_crcut = dat_rcut[:,sub_pix]
-		dat_sub   = dat_crcut/watts
-
-		x = np.arange(len(dat_sub[0]))
-		vert_sum = np.sum(dat_sub,axis=0)
-		plt.figure()
-		plt.plot(x,vert_sum,'o')
-		out = self.bindat(x,vert_sum,nbins=30)
-		plt.errorbar(*out,zorder=100)
-		
-		# plot std vs mean again but in bins - show get same thing
-		plt.figure()
-		plt.plot(out[1],out[2],'o')
-		plt.xlabel('Mean')
-		plt.ylabel('STD')
-		plt.plot(out[1],out[2])
-		plt.plot(out[1],np.sqrt(out[1]))
-
-		#take out linear trend, plot histogram with std marked
-		m,b = np.polyfit(x,vert_sum,deg=1)
-		flat = np.mean(vert_sum) * vert_sum/(x*m+b)
-		mu = np.mean(flat)
-		std = np.std(flat)
-		exp = np.sqrt(mu)
-
-		plt.figure()
-		plt.hist(flat)
-		plt.vlines([mu - std/2, mu + std/2],0,550,color='r',ls='--',label='observed',zorder=150)
-		plt.vlines([mu - exp/2, mu + exp/2],0,550,color='k',ls='-',label='expected',zorder=150)
-		plt.ylim(0,550)
-		plt.xlabel('True Flux (# rays)')
-		plt.ylabel('Counts')
-		plt.legend()
+		for i, key in enumerate(keys):
+			if (len(key) > 0) & (i > 3):
+				try:
+					val, com = values[i].split('/')[0].replace("'","").strip(), values[i].split('/')[1].strip()
+					hdr[key] = (typemap[types[i]](val), com)
+				except IndexError:
+					try:
+						hdr[key] =typemap[types[i]](values[i].split('/')[0].replace("'","").strip())
+					except ValueError:
+						val= values[i].split('/')[0].replace("'","").strip()
+						hdr[key] = 0
+				except ValueError:
+						com= values[i].split('/')[0].replace("'","").strip()
+						hdr[key] = (0,com)
 
 
-	def noise_check_old():
-		"""
-		old noise check by taking std of whole image subset
-		"""
-		L2_sub = (self.L2[0, 1945:1955, 250:2000] - 1000)/500
-		x = np.arange(len(L2_sub[0]))
-		vert_sum = np.sum(L2_sub,axis=0)
-		vert_mean = np.mean(L2_sub,axis=0)
-		vert_std  = np.std(L2_sub,axis=0)
-
-		plt.figure()
-		plt.plot(vert_mean, vert_std,'o')
-
-		bin_mean, bin_std, sum_mean = [],[], []
-		# step through
-		nstep = 100
-		for j in x[::nstep]:
-			if j < len(L2_sub[0]) - nstep:
-				L2_subsub = L2_sub[:, j:j+nstep]
-				#L2_subsub = vert_sum[j:j+nstep]
-				sum_mean.append(np.sum(L2_subsub))
-				bin_mean.append(np.mean(L2_subsub))
-				bin_std.append(np.std(L2_subsub))
-
-		bin_mean, bin_std, sum_mean = np.array(bin_mean), np.array(bin_std), np.array(sum_mean)
-
-		plt.plot(bin_mean,bin_std,'o',label='binned mean + std')
-
-		# determine expectation
-		expect_std = np.sqrt(np.arange(np.min(vert_mean), np.max(vert_mean)))
-		plt.plot(np.arange(np.min(vert_mean), np.max(vert_mean)), expect_std,
-			'k-',label='18*sqrt(counts)')
-		plt.xlabel('Mean Counts')
-		plt.ylabel('Standard Deviation')
-		plt.legend()
+		return hdr
 
 
 if __name__=='__main__':
-	path = '.'
+	# convert frame, i set index=2 to pick the file used for noise calcs, will depend on directory contents
+	greenfile='./flat/KPF_rays-1.0E+05_orders-103-138_cal-incandescent_sci-incandescent_sky-incandescent_normalized_154_Green.FITS'
+	redfile = './flat/KPF_rays-1.0E+05_orders- 71-103_cal-incandescent_sci-incandescent_sky-incandescent_normalized_159_Red.FITS'
+	cf = ConvertFrame(greenfile,redfile,'flat',plot=False)
 
 	# convert frame, i set index=2 to pick the file used for noise calcs, will depend on directory contents
-	cf = convert_frame(2,path = path)
+	greenfile='./science/KPF_rays-1.0E+05_orders-103-138_cal-lfc_20GHz_sci-solar_Planck_sky-solar_Planck_RV_30000ms_normalized_193_Green.FITS'
+	redfile = './science/KPF_rays-1.0E+05_orders- 71-103_cal-lfc_20GHz_sci-solar_Planck_sky-solar_Planck_RV_30000ms_normalized_10018_Red.FITS'
+	cf = ConvertFrame(greenfile,redfile,'science',plot=True)
 
-	# can do plt.imshow(cf.data,aspect='auto') to figure out desired lines and pixels subset
-	# default is some science trace, watts defaulted at 500
-	cf.noise_check() 
-	plt.show()
-
-	# plot calibration trace noise plots, watts set to 111
-	cf.noise_check(sub_lines=list(range(3668,3669)), 
-					sub_pix=list(range(3200,4000)), 
-					watts=111) 
-	plt.show()
-
-	# run through and convert all files in folder
-	for i in range(4):
-		cf = convert_frame(i,path=path)
 
 
 
