@@ -2,6 +2,7 @@
 Level 0 Data Model
 """
 # Standard dependencies
+from collections import OrderedDict
 import os
 import copy
 
@@ -39,25 +40,26 @@ class KPF0(KPFDataModel):
         """
         super().__init__()
         self.level = 0
-        self.extensions = KPF_definitions.LEVEL0_EXTENSIONS.items()
+        self.extensions = KPF_definitions.LEVEL0_EXTENSIONS
         python_types = KPF_definitions.FITS_TYPE_MAP
+        
+        # add empty level0 extensions and empty headers for each extension
+        for key, value in self.extensions.items():
+            if key not in ['PRIMARY', 'RECEIPT']:
+                atr = python_types[value]([])
+                self.header[key] = OrderedDict()
+            else:
+                continue
+            setattr(self, key, atr)
 
-        # add level0 header keywords
+        # add level0 header keywords for PRIMARY header
         self.header_definitions = KPF_definitions.LEVEL0_HEADER_KEYWORDS.items()
         for key, value in self.header_definitions:
             # assume 2D image
             if key == 'NAXIS':
-                self.header[key] = 2
+                self.header['PRIMARY'][key] = 2
             else:
-                self.header[key] = value()
-
-        # add empty level0 extensions
-        for key, value in self.extensions:
-            if key not in ['PRIMARY', 'RECEIPT']:
-                atr = python_types[value]([])
-            else:
-                continue
-            setattr(self, key, atr)
+                self.header['PRIMARY'][key] = value()
 
         self.read_methods: dict = {
             'KPF':   self._read_from_KPF,
@@ -171,17 +173,27 @@ class KPF0(KPFDataModel):
         This is used by the base model for writing data context to file
         '''
         hdu_list = []
-        hdu_definitions = self.extensions
+        hdu_definitions = self.extensions.items()
         for key, value in hdu_definitions:
             if value == fits.PrimaryHDU:
-                head = fits.Header(cards=self.header)
+                head = fits.Header(cards=self.header[key])
                 hdu = fits.PrimaryHDU(header=head)
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
-                hdu = value(data=data)
+                ndim = len(data.shape)
+                self.header[key]['NAXIS'] = ndim
+                if ndim == 0:
+                    self.header[key]['NAXIS1'] = 0
+                else:
+                    for d in range(ndim):
+                        self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
+                head = fits.Header(cards=self.header[key])
+                hdu = value(data=data, header=head)
             elif value == fits.BinTableHDU:
                 table = Table.from_pandas(getattr(self, key))
-                hdu = fits.table_to_hdu(table)
+                self.header[key]['NAXIS1'] = len(table)
+                head = fits.Header(cards=self.header[key])
+                hdu = fits.BinTableHDU(data=table, header=head)
             else:
                 print("Can't translate {} into a valid FITS format.".format(type(getattr(self, key))))
                 continue
