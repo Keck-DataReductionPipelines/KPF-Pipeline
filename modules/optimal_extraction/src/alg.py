@@ -429,7 +429,7 @@ class OptimalExtractionAlg:
         if np.size(order_set) == 0:
             return self.extracted_flux_pixels
 
-        if self.extracted_flux_pixels is None:
+        if self.extracted_flux_pixels is None or np.size(order_set) > 0:
             order_edges = self.get_order_edges(order_set)
             max_lower_edge = np.amax(order_edges[:, 0])
             max_upper_edge = np.amax(order_edges[:, 1])
@@ -452,12 +452,12 @@ class OptimalExtractionAlg:
         """
 
         if self.extraction_method == OptimalExtractionAlg.OPTIMAL:
-            return self.optimal_extraction(out_data[self.SDATA], out_data[self.FDATA], height, 1)
+            return self.optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height], height, 1)
         elif self.extraction_method == OptimalExtractionAlg.SUM:
-            return self.summation_extraction(out_data[self.SDATA])
+            return self.summation_extraction(out_data[self.SDATA][0:height])
 
         # data_group should contain only the data set to be rectified.
-        return {'extraction': out_data[data_group[0]['idx']]}
+        return {'extraction': out_data[data_group[0]['idx']][0:height]}
 
     def compute_order_area(self, c_order, rectified_group,  output_x_dim, output_y_dim, s_rate, w_border=False):
         """
@@ -505,6 +505,7 @@ class OptimalExtractionAlg:
 
         gap = 2
         # get order information from poly clip file
+
         if self.rectification_method != self.NoRECT and poly_file and os.path.exists(poly_file):
             y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file)
         else:
@@ -512,15 +513,16 @@ class OptimalExtractionAlg:
             order_key = 'ORD_' + str(c_order)
             rectified_header = self.spectrum_header \
                 if len(rectified_group) > 0 and rectified_group[0]['idx'] == self.SDATA else self.flat_header
+
+            coeffs = self.order_coeffs[c_order]
+            # order location and size along y axis
+            y_mid = np.polyval(coeffs, x_step - x_o) + self.origin[self.Y]  # spectral trace value at mid point
+
             if self.rectification_method != self.NoRECT and len(rectified_group) > 0 and order_key in rectified_header:
                 order_info = rectified_header.get(order_key)
                 [y_output_mid, lower_width, upper_width] = [int(s) for s in order_info.split(',')]
             else:    # NoRect need the data of y_mid
-                coeffs = self.order_coeffs[c_order]
                 widths = self.get_order_edges(c_order)
-
-                # order location and size along y axis
-                y_mid = np.polyval(coeffs, x_step - x_o) + self.origin[self.Y]  # spectral trace value at mid point
                 # the central position of the order, a hint for locating the order in output domain
                 y_output_mid = math.floor(np.mean(np.array([np.amax(y_mid), np.amin(y_mid)])) * s_rate[self.Y])
                 # y_output_mid = math.floor(np.polyval(coeffs,  center_x - x_o) * s_rate[self.Y])
@@ -536,8 +538,8 @@ class OptimalExtractionAlg:
                     if y_output_mid < pre_y_center + pre_upper_width + lower_width + gap:
                         y_output_mid = pre_y_center + pre_upper_width + lower_width + gap
 
-                self.output_area_info.append({'y_center': y_output_mid, 'upper_width': upper_width,
-                                              'lower_width': lower_width})
+        self.output_area_info.append({'y_center': y_output_mid, 'upper_width': upper_width,
+                                      'lower_width': lower_width})
 
         return y_output_mid, lower_width, upper_width, y_mid, x_step, x_output_step, clip_areas
 
@@ -717,7 +719,6 @@ class OptimalExtractionAlg:
 
         flux_v = np.zeros(len(raw_group)) if len(raw_group) > 0 else None
         raw_data_group = [dt['data'] for dt in raw_group] if len(raw_group) > 0 else None
-
         for i, o_x in enumerate(x_output_step[0:-1]):  # for x output associated with the data range
             # if i % 100 == 0:
             #    print(i, end=" ")
@@ -739,16 +740,18 @@ class OptimalExtractionAlg:
                         if read_poly_file:
                             input_pixels = clip_areas[o_y][o_x]
                             flux_v.fill(0.0)
+                            total_area = 0
                             for i_p in input_pixels:
+                                total_area += i_p[2]
                                 for n in range(len(raw_group)):
                                     flux_v[n] += raw_group[n]['data'][i_p[1], i_p[0]] * i_p[2]
-                            flux = flux_v
+
+                            flux = flux_v/total_area if total_area != 0.0 else flux_v
                         else:
                             borders = [
                                 v1_borders[o_y].copy(), h_borders[o_y + 1].copy(),
                                 v2_borders[o_y].copy(), h_borders[o_y].copy()
                             ]
-
                             # adjust v1 and v2 in clockwise direction
                             for n in [self.V_DOWN, self.H_LEFT]:
                                 borders[n][self.V1], borders[n][self.V2] = borders[n][self.V2], borders[n][self.V1]
@@ -762,16 +765,17 @@ class OptimalExtractionAlg:
 
                         for n in range(len(raw_group)):
                             out_data[raw_group[n]['idx']][o_y, 0] = flux[n]
+
             for dt in rectified_group:
                 out_data[dt['idx']][0:y_size, 0] = dt['data'][y_output_widths + y_output_mid, o_x]
             extracted_result = self.extraction_handler(out_data, y_size, data_group)
             extracted_data[:, o_x:o_x + 1] = extracted_result['extraction']
 
         if self.output_clip_area:
-            self.write_clip_file(poly_file, y_output_mid, [upper_width, lower_width], clip_areas)
+            self.write_clip_file(poly_file, y_output_mid, [lower_width, upper_width], clip_areas)
 
         result_data = {'y_center': y_output_mid,
-                       'widths': [upper_width, lower_width],
+                       'widths': [lower_width, upper_width],
                        'extracted_data': extracted_data}
         return result_data
 
@@ -1334,7 +1338,7 @@ class OptimalExtractionAlg:
                     if input_data[n][y, x] != 0.0:
                         flux[n] += area * input_data[n][y, x]
 
-        new_flux = flux/total_area
+        new_flux = flux/total_area if total_area != 0.0 else flux
         return new_flux, total_area, clipped_areas
 
     def polygon_clipping2(self, borders, clipper_points, clipper_size):
@@ -1908,6 +1912,7 @@ class OptimalExtractionAlg:
         start_row_at = self.start_row_index()
         result_height = order_set.size + start_row_at if order_set.size > 0 else 0
 
+        # re-allocate the space to hold the rectified spectrum for the order
         self.allocate_memory_flux(order_set, 2)
         order_result = dict()
         self.output_area_info = list()
@@ -1923,6 +1928,7 @@ class OptimalExtractionAlg:
             #                                      self.get_order_xrange(c_order), data_group,
             #                                      c_order)
             # prepare out_data to contain rectification result
+
             order_result[c_order] = order_flux
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
@@ -1936,7 +1942,6 @@ class OptimalExtractionAlg:
                 order_result[c_order].get('out_y_center') - order_result[c_order].get('edges')[0]
             y_size = np.sum(order_result[c_order].get('edges')) if self.extraction_method == self.NOEXTRACT else 1
             self.fill_2d_with_data(order_result[c_order].get('extracted_data'), out_data, to_pos, 0, height=y_size)
-
             if self.extraction_method == self.NOEXTRACT:
                 order_rectification_result.append({"order": c_order, "rectification": order_result[c_order]})
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
