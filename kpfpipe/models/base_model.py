@@ -99,8 +99,8 @@ class KPFDataModel(object):
                 >>> data.create_extension('extension1', pd.DataFrame)
                 # Access the extension by using its name as the dict key
                 # Add a column called 'col1' to the Dataframe
-                >>> data.extension['extension1']['col1'] = [1, 2, 3]
-                >>> data.extension['extension1']
+                >>> data.extensions['extension1']['col1'] = [1, 2, 3]
+                >>> data.extensions['extension1']
                 col1
                 0     1
                 1     2
@@ -190,7 +190,9 @@ class KPFDataModel(object):
                     t = Table.read(hdu)
                     if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
-                        setattr(self, hdu.name.lower(), t.to_pandas())
+                        df = t.to_pandas()
+                        df = df.reindex(df.columns.union(RECEIPT_COL, sort=False), axis=1, fill_value='')
+                        setattr(self, hdu.name.lower(), df)
                     self.header[hdu.name] = hdu.header
                     setattr(self, hdu.name, t.to_pandas())
             # Leave the rest of HDUs to level specific readers
@@ -322,7 +324,11 @@ class KPFDataModel(object):
             ext_name (str): extension name
             
         '''
-        if ext_name not in self.extensions.keys():
+        base = KPFDataModel()
+        core_extensions = base.header.keys()
+        if ext_name in core_extensions:
+            raise KeyError('Can not remove any of the core extensions: {}'.format(core_extensions))
+        elif ext_name not in self.extensions.keys():
             raise KeyError('Extension {} could not be found'.format(ext_name))
         
         delattr(self, ext_name)

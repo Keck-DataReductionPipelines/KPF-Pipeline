@@ -195,7 +195,7 @@ class OrderTrace(KPF0_Primitive):
         assert(isinstance(df, pd.DataFrame))
         
         self.input.create_extension('ORDER_TRACE_RESULT')
-        self.input.extension['ORDER_TRACE_RESULT'] = df
+        self.input.extensions['ORDER_TRACE_RESULT'] = df
 
         for att in df.attrs:
             self.input.header['ORDER_TRACE_RESULT'][att] = df.attrs[att]

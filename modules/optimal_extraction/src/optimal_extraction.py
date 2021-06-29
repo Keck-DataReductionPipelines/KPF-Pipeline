@@ -157,7 +157,7 @@ class OptimalExtraction(KPF0_Primitive):
         # Order trace algorithm setup
         self.alg = OptimalExtractionAlg(self.input_flat.data, self.input_spectrum.data,
                                         self.input_spectrum.header['DATA'],
-                                        self.input_flat.extension['ORDER_TRACE_RESULT'],
+                                        self.input_flat.extensions['ORDER_TRACE_RESULT'],
                                         self.input_flat.header['ORDER_TRACE_RESULT'],
                                         config=self.config, logger=self.logger)
 
