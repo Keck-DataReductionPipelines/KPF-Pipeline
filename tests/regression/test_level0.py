@@ -22,23 +22,19 @@ def test_receipt():
 # =============================================================================
 # AUXILIARY
 
-def test_aux():
+def test_add():
     '''
-    Create and then delete an auxiliary extension 
+    Create and then delete a new extension 
     '''
     data = KPF0()
     data.create_extension('hello')
-    # At this point only one extenion should exist
-    assert(len(data.extra_extensions) == 1)
-    assert('hello' in data.extra_extensions.keys())
+    assert('hello' in data.extensions.keys())
     assert('hello' in data.header.keys())
+    assert('hello' in data.__dir__())
 
     data.del_extension('hello')
-    # No extension should exist
-    assert(len(data.extra_extensions) == 0)
     assert('hello' not in data.header.keys())
-
-    # 
+    assert('hello' not in data.__dir__())
 
 def test_aux_exceptions():
     '''
