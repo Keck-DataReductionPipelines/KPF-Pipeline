@@ -28,8 +28,8 @@ class KPF0(KPFDataModel):
         variance (numpy.ndarray): 2D numpy array storing pixel variance
         read_methods (dict): Dictionaries of supported parsers. 
         
-            These parsers are used by the base model to read in .fits files from other
-            instruments
+            These parsers are used by the base model to read in .fits files from
+            other instruments.
 
             Supported parsers: ``KPF``, ``NEID``, ``PARAS``
 
@@ -105,8 +105,8 @@ class KPF0(KPFDataModel):
 
         for hdu in hdul:
             this_header = hdu.header
-            # depending on the name of the HDU, store them with corresponding keys
-            # primary HDU is named 'DATA'
+            # depending on the name of the HDU, store them with corresponding 
+            # keys primary HDU is named 'DATA'
             if hdu.name == 'PRIMARY':
                 continue
             if hdu.name == 'DATA':
@@ -175,15 +175,19 @@ class KPF0(KPFDataModel):
             '='*80 + '\n'
         )
         if self.data is not None and self.variance is not None:
-            row = '|{:20s} |{:20s} |{:20s}\n'.format('Data', 'array', str(self.data.shape))
+            row = '|{:20s} |{:20s} |{:20s}\n'.format('Data', 'array', 
+                                                     str(self.data.shape))
             head += row
-            row = '|{:20s} |{:20s} |{:20s}\n'.format('Variance', 'array', str(self.variance.shape))
+            row = '|{:20s} |{:20s} |{:20s}\n'.format('Variance', 'array',
+                                                     str(self.variance.shape))
             head += row
-            row = '|{:20s} |{:20s} |{:20s}\n'.format('Receipt', 'table', str(self.receipt.shape))
+            row = '|{:20s} |{:20s} |{:20s}\n'.format('Receipt', 'table',
+                                                     str(self.receipt.shape))
             head += row
         
         for name, aux in self.extra_extensions.items():
-            row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table', str(aux.shape))
+            row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
+                                                     str(aux.shape))
             head += row
         print(head)
 
@@ -216,7 +220,8 @@ class KPF0(KPFDataModel):
                 head = fits.Header(cards=self.header[key])
                 hdu = fits.BinTableHDU(data=table, header=head)
             else:
-                print("Can't translate {} into a valid FITS format.".format(type(getattr(self, key))))
+                print("Can't translate {} into a valid FITS format."\
+                      .format(type(getattr(self, key))))
                 continue
             hdu.name = key
             hdu_list.append(hdu)
