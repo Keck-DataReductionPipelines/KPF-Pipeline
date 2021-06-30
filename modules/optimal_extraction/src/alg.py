@@ -110,6 +110,7 @@ class OptimalExtractionAlg:
         if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
             raise TypeError('flux data type error, cannot construct object from OptionalExtractionAlg')
         if not isinstance(spectrum_header, fits.header.Header):
+            print(spectrum_header)
             raise TypeError('flux header type error, cannot construct object from OptionalExtractionAlg')
         if not isinstance(order_trace_header, dict) and not isinstance(order_trace_header, fits.header.Header):
             raise TypeError('type: ' + str(type(order_trace_header)) +

@@ -12,6 +12,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.table import Table
 import numpy as np
+from numpy.lib.shape_base import get_array_prepare
 import pandas as pd
 
 from kpfpipe.models.base_model import KPFDataModel
@@ -40,16 +41,16 @@ class KPF0(KPFDataModel):
         """
         super().__init__()
         self.level = 0
-        self.extensions = KPF_definitions.LEVEL0_EXTENSIONS
-        python_types = KPF_definitions.FITS_TYPE_MAP
-        
+        extensions = copy.copy(KPF_definitions.LEVEL0_EXTENSIONS)
+        python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
         # add empty level0 extensions and empty headers for each extension
-        for key, value in self.extensions.items():
-            if key not in ['PRIMARY', 'RECEIPT']:
+        for key, value in extensions.items():
+            if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
                 atr = python_types[value]([])
                 self.header[key] = OrderedDict()
             else:
                 continue
+            self.create_extension(key, python_types[value])
             setattr(self, key, atr)
 
         # add level0 header keywords for PRIMARY header
@@ -69,7 +70,7 @@ class KPF0(KPFDataModel):
 
     def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
-        Parse the HDUL based on NEID standards
+        Parse the HDUL based on KPF standards
 
         Args:
             hdul (fits.HDUList): List of HDUs parsed with astropy.
@@ -78,14 +79,16 @@ class KPF0(KPFDataModel):
         for hdu in hdul:
             if isinstance(hdu, fits.ImageHDU):
                 setattr(self, hdu.name, hdu.data)
+                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif isinstance(hdu, fits.BinTableHDU):
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
+                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif hdu.name != 'PRIMARY' and hdu.name != 'RECEIPT':
                 print("Unrecognized extension {}".format(hdu.name))
                 continue
 
-    def _read_from_NEID(self, hdul: fits.HDUList) -> None:
+    def _read_from_NEID(self, hdul):
         '''
         Parse the HDUL based on NEID standards
 
@@ -93,25 +96,42 @@ class KPF0(KPFDataModel):
             hdul (fits.HDUList): List of HDUs parsed with astropy.
 
         '''
+        # clean out KPF extensions first
+        save_extensions = ['PRIMARY', 'RECEIPT', 'CONFIG']
+        existing = copy.copy(self.extensions)
+        for ext in existing.keys():
+            if ext not in save_extensions:
+                self.del_extension(ext)
+
         for hdu in hdul:
             this_header = hdu.header
-
             # depending on the name of the HDU, store them with corresponding keys
+            # primary HDU is named 'DATA'
             if hdu.name == 'PRIMARY':
-                self.header = this_header
-            # since KPF L0 data does not have equivilant 'data' and 'variance' 
-            # extensions we will put them into the GREEN_CCD and RED_CCD 
-            # extensions respectively. We will also populate the data and
-            # variance attributes here.
+                continue
             if hdu.name == 'DATA':
-                self.GREEN_CCD = np.asarray(hdu.data, dtype=np.float64)
-                self.data = self.GREEN_CCD
+                self.header['PRIMARY'] = this_header
+                self.create_extension('DATA', np.array)
+                self.data = hdu.data
+                self.DATA = self.data
             elif hdu.name == 'VARIANCE':
-                self.RED_CCD = np.asarray(hdu.data, dtype=np.float64)
-                self.variance = self.RED_CCD
-            else: 
+                self.header[hdu.name] = this_header
+                self.create_extension('VARIANCE', np.array)
+                self.variance = hdu.data
+                self.VARIANCE = self.variance
+            elif isinstance(hdu, fits.ImageHDU):
+                if hdu.name not in self.extensions.keys():
+                    self.create_extension(hdu.name, np.array)
+                setattr(self, hdu.name, hdu.data)
+                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
+            elif isinstance(hdu, fits.BinTableHDU):
+                if hdu.name not in self.extensions.keys():
+                    self.create_extension(hdu.name, pd.DataFrame)
+                table = Table(hdu.data).to_pandas()
+                setattr(self, hdu.name, table)
+                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
+            else:
                 raise KeyError('Unrecognized extension {}'.format(hdu.name))
-            
 
     def _read_from_PARAS(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
@@ -180,6 +200,7 @@ class KPF0(KPFDataModel):
                 hdu = fits.PrimaryHDU(header=head)
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
+                print(key, value)
                 ndim = len(data.shape)
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:

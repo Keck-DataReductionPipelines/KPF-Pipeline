@@ -23,6 +23,7 @@ import hashlib
 
 # Pipeline dependencies
 from kpfpipe.models.metadata.receipt_columns import *
+from kpfpipe.models.metadata.config_columns import *
 from kpfpipe.models.metadata.KPF_definitions import FITS_TYPE_MAP
 
 class KPFDataModel(object):
@@ -121,11 +122,15 @@ class KPFDataModel(object):
         self.header = OrderedDict()
         self.header['PRIMARY'] = OrderedDict()
         self.header['RECEIPT'] = OrderedDict()
+        self.header['CONFIG'] = OrderedDict()
 
         self.receipt = pd.DataFrame([], columns=RECEIPT_COL)
         self.RECEIPT = self.receipt
 
-        self.extensions = OrderedDict()
+        self.config = pd.DataFrame([], columns=CONFIG_COL)
+        self.CONFIG = self.config
+
+        self.extensions = OrderedDict(PRIMARY=fits.PrimaryHDU, RECEIPT=fits.BinTableHDU, CONFIG=fits.BinTableHDU)
 
         # level of data model
         self.level = None # set in each derived class
@@ -170,7 +175,7 @@ class KPFDataModel(object):
             required before calling this function
         
         """
-
+        print("Reading file {}".format(fn))
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
@@ -192,7 +197,8 @@ class KPFDataModel(object):
                         # Table contains the RECEIPT
                         df = t.to_pandas()
                         df = df.reindex(df.columns.union(RECEIPT_COL, sort=False), axis=1, fill_value='')
-                        setattr(self, hdu.name.lower(), df)
+                        setattr(self, hdu.name, df)
+                        setattr(self, hdu.name.lower(), getattr(self, hdu.name))
                     self.header[hdu.name] = hdu.header
                     setattr(self, hdu.name, t.to_pandas())
             # Leave the rest of HDUs to level specific readers
@@ -275,9 +281,17 @@ class KPFDataModel(object):
             git_branch = ''
             git_tag = ''
         # add the row to the bottom of the table
-        row = [time, git_tag, git_branch, git_commit_hash, chip, \
-               module, str(self.level), mod_path, param, status]
-        self.receipt.loc[len(self.receipt)] = row
+        row = {'Time': time,
+               'Code_Release': git_tag,
+               'Commit_Hash': git_commit_hash,
+               'Branch_Name': git_branch,
+               'Chip': chip,
+               'Module_Name': module,
+               'Module_Level': str(self.level),
+               'Module_Path': mod_path,
+               'Module_Param': param,
+               'Status': status}
+        self.receipt = self.receipt.append(row, ignore_index=True)
         self.RECEIPT = self.receipt
 
     def receipt_info(self, receipt_name):
@@ -308,10 +322,10 @@ class KPFDataModel(object):
             reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
 
         # check whether the extension already exist
-        if ext_name in self.header.keys():
+        if ext_name in self.extensions.keys():
             raise NameError('Name {} already exists as extension'.format(ext_name))
         
-        setattr(self, ext_name, ext_type())
+        setattr(self, ext_name, ext_type)
         self.header[ext_name] = {'AUX': True}
         self.extensions[ext_name] = reverse_map[ext_type]
 

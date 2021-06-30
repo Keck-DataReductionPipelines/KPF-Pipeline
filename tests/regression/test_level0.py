@@ -62,19 +62,9 @@ def test_aux_exceptions():
 fpath = os.environ['KPFPIPE_TEST_DATA'] + '/NEIDdata/TAUCETI_20191217/L0'
 flist = [f for f in os.listdir(fpath)][0:1]
     
-def test_from_NEID():
+def test_NEID():
     '''
-    Read all available level 0 data and check for data
-    '''
-    for f in flist:
-        data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
-
-        assert(isinstance(data.data, np.ndarray))
-        assert(data.data.shape == data.variance.shape)
-
-def test_NEID2KPF():
-    '''
-    Check that data 
+    Check that we can read and write NEID data using the KPF data model 
     '''
     # Make a temporary folder
     try:
@@ -88,10 +78,10 @@ def test_NEID2KPF():
         to_path = 'temp_level0/' + f
         data.to_fits(to_path)
         # read the converted data
-        data2 = KPF0.from_fits(to_path, 'KPF')
+        data2 = KPF0.from_fits(to_path, 'NEID')
         # compare the data value of the two
-        assert(np.all(data2.GREEN_CCD == data.data))
-        assert(np.all(data2.RED_CCD == data.variance))
+        assert(np.all(data2.data == data.data))
+        assert(np.all(data2.variance == data.variance))
     # Clean up 
     shutil.rmtree('temp_level0')
 
