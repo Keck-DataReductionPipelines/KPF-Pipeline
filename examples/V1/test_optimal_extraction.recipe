@@ -1,6 +1,6 @@
 from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
 
-lev0_flat_pattern = output_dir + '*' + flat_stem_suffix + '.fits'
+input_lev1_prefix = output_dir + '*' + flat_stem_suffix + '.fits'
 
 lev1_extraction_set = []
 for lev0_flat_file in find_files(lev0_flat_pattern):

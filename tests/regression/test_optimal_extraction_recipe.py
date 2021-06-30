@@ -55,7 +55,7 @@ order_name = config.ARGUMENT.order_name
 
 lev0_flat_file = flat_data_dir + 'stacked_2fiber_flat_L0.fits'
 
-lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type='KPF')
+lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type='NEID')
 _, short_lev0_flat = split(lev0_flat_file)
 lev0_flat_stem, lev0_flat_ext = splitext(short_lev0_flat)
 

@@ -162,7 +162,7 @@ class OptimalExtraction(KPF0_Primitive):
                                         self.input_flat.header['PRIMARY'],
                                         self.input_spectrum.data,
                                         self.input_spectrum.header['PRIMARY'] if self.input_spectrum is not None else None,
-                                        self.input_flat.extensions['ORDER_TRACE_RESULT'],
+                                        self.input_flat.ORDER_TRACE_RESULT,
                                         self.input_flat.header['PRIMARY'],
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
