@@ -10,3 +10,4 @@ for input_flat_file in find_files(order_trace_flat_pattern):
 		flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
 		ot_data = OrderTrace(flat_data)
 		result = to_fits(ot_data, output_lev0_file)
+
