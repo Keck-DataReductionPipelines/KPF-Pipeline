@@ -204,11 +204,14 @@ class OptimalExtraction(KPF0_Primitive):
         ins = self.alg.get_instrument().upper()
 
         kpf1_sample = None
+        kpf0_sample = None
         if self.wavecal_fits is not None:     # get the header and wavecal from this fits
             if isinstance(self.wavecal_fits, str):
                 kpf1_sample = KPF1.from_fits(self.wavecal_fits, ins)
             elif isinstance(self.wavecal_fits, KPF1):
                 kpf1_sample = self.wavecal_fits
+            elif isinstance(self.wavecal_fits, KPF0):
+                kpf0_sample = self.wavecal_fits
 
         all_order_names = self.order_name if type(self.order_name) is list else [self.order_name]
         for order_name in all_order_names:
@@ -228,7 +231,7 @@ class OptimalExtraction(KPF0_Primitive):
             data_df = opt_ext_result['optimal_extraction_result']
             self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
                                                             order_name, self.output_level1)
-            self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample)
+            self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
 
         if self.output_level1 is not None:
             self.output_level1.receipt_add_entry('OptimalExtraction', self.__module__,
@@ -273,17 +276,26 @@ class OptimalExtraction(KPF0_Primitive):
 
         return kpf1_obj
 
-    def add_wavecal_to_level1_data(self, level1_obj: KPF1, order_name: str, level1_sample: KPF1):
-        if level1_sample is None or not order_name in level1_sample.data or level1_sample.data[order_name] is None or \
-                not order_name in level1_obj.data or level1_obj.data[order_name] is None:
+    def add_wavecal_to_level1_data(self, level1_obj: KPF1, order_name: str, level1_sample: KPF1, level0_sample: KPF0):
+        if level1_sample is None and level0_sample is None:
             return False
 
-        s, total_order, width = np.shape(level1_obj.data[order_name])
-        if s != 3:
-            return False
+        if level1_sample is not None:
+            if order_name not in level1_sample.data or level1_sample.data[order_name] is None or \
+                    order_name not in level1_obj.data or level1_obj.data[order_name] is None:
+                return False
+            s, total_order, width = np.shape(level1_obj.data[order_name])
+            if s != 3:
+                return False
 
         level1_obj.header[order_name + '_WAVE'] = {}
-        wave_header = level1_sample.header[order_name + '_WAVE']
+        if level1_sample is not None:
+            wave_header = level1_sample.header[order_name + '_WAVE']
+        else:
+            wave_header = level0_sample.header['DATA']
+            if wave_header is not None:
+                wave_header['EXTNAME']= order_name + '_WAVE'
+
         if wave_header is None:
             return False                    # header setting error
 
@@ -291,7 +303,10 @@ class OptimalExtraction(KPF0_Primitive):
         if not self.to_set_wavelength_cal:  # no data setting
             return True
 
-        wave_data = level1_sample.data[order_name][1, :, :]
+        if level1_sample is not None:
+            wave_data = level1_sample.data[order_name][1, :, :]
+        else:
+            wave_data = level0_sample.data if self.alg.get_instrument() != 'KPF' else level0_sample.data*10000.0
         if wave_data is None:               # data setting error
             return False
 

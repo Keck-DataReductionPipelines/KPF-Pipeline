@@ -176,8 +176,10 @@ class RadialVelocityAlg(RadialVelocityBase):
             return self.get_obs_time_neid(default=default)
         elif self.spectro == 'harps':
             return self.get_obs_time_harps(default=default)
+        elif self.spectro == 'kpf':
+            return 2459351.0
         else:
-            return default
+            return None
 
     def get_obs_time_neid(self, default=None):
         if 'SSBJD100' in self.header:  # jd format
@@ -226,6 +228,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         obs_time_jd = self.get_obs_time()
         if obs_time_jd is None:
             return default
+        if self.spectro == 'kpf':
+            return 0.0
 
         rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                             RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
@@ -254,10 +258,17 @@ class RadialVelocityAlg(RadialVelocityBase):
             return self.wavelength_calibration_harps(spectrum_x)
         elif self.spectro == 'neid':
             return self.wavelength_calibration_neid(spectrum_x)
+        elif self.spectro == 'kpf':
+            return self.wavelength_calibration_kpf(spectrum_x)
         else:
             return None
 
     def wavelength_calibration_neid(self, spectrum_x: np.ndarray):
+        new_calibs = self.wave_cal[self.start_order:self.start_order+self.spectrum_order, spectrum_x]
+
+        return new_calibs
+
+    def wavelength_calibration_kpf(self, spectrum_x: np.ndarray):
         new_calibs = self.wave_cal[self.start_order:self.start_order+self.spectrum_order, spectrum_x]
 
         return new_calibs
@@ -323,7 +334,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             return None, 'observation jd time error'
 
         zb = self.get_redshift()
-        if not zb:
+        if zb is None:
             return None, 'redshift value error'
 
         self.set_order_range(start_order, end_order)
@@ -346,10 +357,15 @@ class RadialVelocityAlg(RadialVelocityBase):
             # self.d_print(ord_idx, ' ', end="")
             self.d_print('order ', ord_idx, info=True)
             wavecal = wavecal_all_orders[ord_idx, :]
-
             if np.any(wavecal != 0.0):
+                if wavecal[-1] < wavecal[0]:
+                    ordered_spec = np.flip(new_spectrum[ord_idx, :])
+                    ordered_wavecal = np.flip(wavecal)
+                else:
+                    ordered_spec = new_spectrum[ord_idx, :]
+                    ordered_wavecal = wavecal
                 result_ccf[ord_idx, :] = \
-                    self.cross_correlate_by_mask_shift(wavecal, new_spectrum[ord_idx, :], zb)
+                    self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
             else:
                 self.d_print("all wavelength zero")
 
@@ -395,7 +411,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         # new_line_center = line['center'][line_index]
         new_line_weight = line['weight'][line_index]
 
-        x_pixel_wave_start = (wave_cal + np.roll(wave_cal, 1)) / 2.0  # w[0]-(w[1]-w[0])/2, (w[0]+w[1]).....
+        x_pixel_wave_start = (wave_cal + np.roll(wave_cal, 1)) / 2.0  # w[0]-(w[1]-w[0])/2, (w[0]+w[1])/2.....
         x_pixel_wave_end = np.roll(x_pixel_wave_start, -1)            # (w[0]+w[1])/2,      (w[1]+w[2])/2....
 
         # pixel_wave_end = (wave_cal + np.roll(wave_cal,-1))/2.0      # from the original

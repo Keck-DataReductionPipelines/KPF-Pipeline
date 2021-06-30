@@ -1963,7 +1963,6 @@ class OrderTraceAlg:
             if n < 1 or n > max_cluster_no or (np.where(index_t == n)[0]).size == 0:
                 cluster_widths.append({'top_edge': width_default, 'bottom_edge': width_default})
                 continue
-            # import pdb;pdb.set_trace()
             cluster_width_info = self.find_cluster_width_by_gaussian(n, cluster_coeffs, cluster_points)
             cluster_widths.append({'top_edge': cluster_width_info['avg_nwidth'],
                                    'bottom_edge': cluster_width_info['avg_pwidth']})
@@ -2029,10 +2028,16 @@ class OrderTraceAlg:
         # max_upper = 0
         # max_lower = 0
 
+        max_gap = self.get_config_value('max_order_distance', 0)
+
         for xs in x_loc:
             cluster_y = cluster_points[cluster_no, xs]
             cluster_y_next = cluster_points[idx_v_post[idx+1], xs] if idx < max_cluster_no else ny-1
             cluster_y_prev = cluster_points[idx_v_post[idx-1], xs] if idx > 1 else 0
+
+            if max_gap != 0:
+                cluster_y_next = min(cluster_y + max_gap, cluster_y_next)
+                cluster_y_prev = max(cluster_y - max_gap, cluster_y_prev)
 
             if idx == 1 and idx < max_cluster_no:
                 cluster_y_prev = max(cluster_y - abs(cluster_y_next - cluster_y), 0)
@@ -2137,14 +2142,17 @@ class OrderTraceAlg:
 
         gaussian_fit = FIT_G(g_init, x_set, y_set)
 
-        # max_w = x_set.size//2 + 1
+        max_w = abs(x_set[0] - x_set[-1])//2
+        v_at_std = gaussian_fit.stddev.value*sigma
         if abs(gaussian_fit.mean.value - center_y) <= 1.0:
-            width = gaussian_fit.stddev.value*sigma
+            width = v_at_std
             gaussian_center = gaussian_fit.mean.value
         else:
             gaussian_center = gaussian_fit.mean.value
-            width = gaussian_fit.stddev.value * sigma
+            width = v_at_std  # need more consideration
 
+        # width = v_at_std if abs(v_at_std - max_w) < 1.0 else min(v_at_std, max_w)
+        # print(xs, v_at_std, max_w, width)
         # width = min(max_w, width)
         return gaussian_fit, width, gaussian_center
 
