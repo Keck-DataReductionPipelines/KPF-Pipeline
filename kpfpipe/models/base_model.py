@@ -34,8 +34,9 @@ class KPFDataModel(object):
         Based on the data level of your .fits file, used the appropriate
         level specific data model.
 
-    This is the base model for all KPF data models. Level specific data inherit from this 
-    class, so any attribute and method listed here applies to all data models.
+    This is the base model for all KPF data models. Level specific data inherit
+    from this class, so any attribute and method listed here applies to all data
+    models.
 
     Attributes:
         header (dict): a dictionary of headers of each extension (HDU)
@@ -130,10 +131,14 @@ class KPFDataModel(object):
         self.config = pd.DataFrame([], columns=CONFIG_COL)
         self.CONFIG = self.config
 
-        self.extensions = OrderedDict(PRIMARY=fits.PrimaryHDU, RECEIPT=fits.BinTableHDU, CONFIG=fits.BinTableHDU)
+        self.extensions = OrderedDict(PRIMARY=fits.PrimaryHDU,
+                                      RECEIPT=fits.BinTableHDU,
+                                      CONFIG=fits.BinTableHDU)
+
 
         # level of data model
         self.level = None # set in each derived class
+        self.read_methods = dict()
 
 # =============================================================================
 # I/O related methods
@@ -158,14 +163,13 @@ class KPFDataModel(object):
         # Return this instance
         return this_data
 
-    def read(self, fn, data_type, overwrite=False):
+    def read(self, fn, data_type):
         """Read the content of a .fits file and populate this 
         data structure. 
 
         Args: 
             fn (str): file path (relative to the repository)
             data_type (str): instrument type of the file
-            overwrite (bool): if this instance is not empty, specifies whether to overwrite
         
         Raises:
             IOError: when a invalid file is presented
@@ -179,12 +183,7 @@ class KPFDataModel(object):
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
-        
-        if not overwrite and self.filename is not None:
-            # This instance already contains data, and
-            # we don't want to overwrite 
-            raise IOError('Cannot overwrite existing data')
-        
+                
         self.filename = os.path.basename(fn)
         with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
@@ -196,7 +195,9 @@ class KPFDataModel(object):
                     if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
                         df = t.to_pandas()
-                        df = df.reindex(df.columns.union(RECEIPT_COL, sort=False), axis=1, fill_value='')
+                        df = df.reindex(df.columns.union(RECEIPT_COL,
+                                                         sort=False),
+                                                         axis=1, fill_value='')
                         setattr(self, hdu.name, df)
                         setattr(self, hdu.name.lower(), getattr(self, hdu.name))
                     self.header[hdu.name] = hdu.header
@@ -218,7 +219,8 @@ class KPFDataModel(object):
         with open(fn, 'rb') as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 md5.update(chunk)
-        self.receipt_add_entry('from_fits', self.__module__, f'md5_sum={md5.hexdigest()}', 'PASS')
+        self.receipt_add_entry('from_fits', self.__module__,
+                               f'md5_sum={md5.hexdigest()}', 'PASS')
 
     
     def to_fits(self, fn):
@@ -309,15 +311,18 @@ class KPFDataModel(object):
 # Auxiliary related extension
     def create_extension(self, ext_name, ext_type=pd.DataFrame):
         '''
-        Create an extension to be saved to FITS 
+        Create a new empty extension to be saved to FITS.
+        Will not overwrite an existing extensions
 
         Args:
             ext_name (str): extension name
-            ext_type (object): Python object type for this extension. Must be present in the kpfpipe.models.metadata.FITS_TYPE_MAP keys.
+            ext_type (object): Python object type for this extension. 
+                Must be present in kpfpipe.models.metadata.FITS_TYPE_MAP.keys().
 
         '''
         if ext_type not in FITS_TYPE_MAP.values():
-            raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, FITS_TYPE_MAP.values()))
+            raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, 
+                                                                                                FITS_TYPE_MAP.values()))
         else:
             reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
 
