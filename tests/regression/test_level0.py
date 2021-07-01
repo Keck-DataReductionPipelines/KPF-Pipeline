@@ -79,10 +79,11 @@ def test_NEID():
         data.to_fits(to_path)
         # read the converted data
         data2 = KPF0.from_fits(to_path, 'NEID')
+        print(data2.info())
         # compare the data value of the two
         assert(np.all(data2.data == data.data))
         assert(np.all(data2.variance == data.variance))
-    # Clean up 
+    # Clean up
     shutil.rmtree('temp_level0')
 
 def test_exceptions():
