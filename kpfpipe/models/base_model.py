@@ -189,7 +189,7 @@ class KPFDataModel(object):
             # This instance already contains data, and
             # we don't want to overwrite 
             raise IOError('Cannot overwrite existing data')
-            
+
         self.filename = os.path.basename(fn)
         with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
@@ -337,7 +337,7 @@ class KPFDataModel(object):
             raise NameError('Name {} already exists as extension'.format(ext_name))
         
         setattr(self, ext_name, ext_type)
-        self.header[ext_name] = {'AUX': True}
+        self.header[ext_name] = OrderedDict()
         self.extensions[ext_name] = reverse_map[ext_type]
 
     
