@@ -163,13 +163,14 @@ class KPFDataModel(object):
         # Return this instance
         return this_data
 
-    def read(self, fn, data_type):
+    def read(self, fn, data_type, overwrite=False):
         """Read the content of a .fits file and populate this 
         data structure. 
 
         Args: 
             fn (str): file path (relative to the repository)
             data_type (str): instrument type of the file
+            overwrite (bool): if this instance is not empty, specifies whether to overwrite
         
         Raises:
             IOError: when a invalid file is presented
@@ -183,7 +184,12 @@ class KPFDataModel(object):
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
-                
+
+        if not overwrite and self.filename is not None:
+            # This instance already contains data, and
+            # we don't want to overwrite 
+            raise IOError('Cannot overwrite existing data')
+            
         self.filename = os.path.basename(fn)
         with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 

@@ -97,6 +97,10 @@ def test_exceptions():
         # Invalid file extension
         data2.from_fits(os.path.join(fpath, f_naught), 'NEID')
 
+    with pytest.raises(IOError):
+        # overwriting without setting overwrite to True
+        data.read(os.path.join(fpath, f), 'NEID')
+        
 if __name__ == '__main__':
     pass
     
