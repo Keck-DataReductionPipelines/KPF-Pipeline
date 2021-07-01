@@ -44,7 +44,7 @@ class KPFDataModel(object):
             Header stores all header information from the FITS file. Since Each file is
             organized into extensions (HDUs), and Astropy parses each extension's 
             header cards into a dictionary, this attribute is structured as a dictionary
-            of dictionaries. The first layer is the name of the header, and the second layer 
+            of Astropy header objects. The first layer is the name of the header, and the second layer 
             is the name of the key.
             
             Note: 
@@ -121,9 +121,9 @@ class KPFDataModel(object):
         self.filename: str = None
 
         self.header = OrderedDict()
-        self.header['PRIMARY'] = OrderedDict()
-        self.header['RECEIPT'] = OrderedDict()
-        self.header['CONFIG'] = OrderedDict()
+        self.header['PRIMARY'] = fits.Header()
+        self.header['RECEIPT'] = fits.Header()
+        self.header['CONFIG'] = fits.Header()
 
         self.receipt = pd.DataFrame([], columns=RECEIPT_COL)
         self.RECEIPT = self.receipt
@@ -180,7 +180,6 @@ class KPFDataModel(object):
             required before calling this function
         
         """
-        print("Reading file {}".format(fn))
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
@@ -337,7 +336,7 @@ class KPFDataModel(object):
             raise NameError('Name {} already exists as extension'.format(ext_name))
         
         setattr(self, ext_name, ext_type)
-        self.header[ext_name] = OrderedDict()
+        self.header[ext_name] = fits.Header()
         self.extensions[ext_name] = reverse_map[ext_type]
 
     
