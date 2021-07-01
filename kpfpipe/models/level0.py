@@ -47,7 +47,7 @@ class KPF0(KPFDataModel):
         for key, value in extensions.items():
             if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
                 atr = python_types[value]([])
-                self.header[key] = OrderedDict()
+                self.header[key] = fits.Header()
             else:
                 continue
             self.create_extension(key, python_types[value])
@@ -91,6 +91,8 @@ class KPF0(KPFDataModel):
             elif hdu.name != 'PRIMARY' and hdu.name != 'RECEIPT':
                 print("Unrecognized extension {}".format(hdu.name))
                 continue
+            
+            self.header[hdu.name] = hdu.header
 
     def _read_from_NEID(self, hdul):
         '''
@@ -112,14 +114,12 @@ class KPF0(KPFDataModel):
             # depending on the name of the HDU, store them with corresponding 
             # keys primary HDU is named 'DATA'
             if hdu.name == 'PRIMARY':
-                continue
-            if hdu.name == 'DATA':
                 self.header['PRIMARY'] = this_header
+            elif hdu.name == 'DATA':
                 self.create_extension('DATA', np.array)
                 self.data = hdu.data
                 self.DATA = self.data
             elif hdu.name == 'VARIANCE':
-                self.header[hdu.name] = this_header
                 self.create_extension('VARIANCE', np.array)
                 self.variance = hdu.data
                 self.VARIANCE = self.variance
@@ -136,6 +136,8 @@ class KPF0(KPFDataModel):
                 setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             else:
                 raise KeyError('Unrecognized extension {}'.format(hdu.name))
+
+            self.header[hdu.name] = this_header
 
     def _read_from_PARAS(self, hdul: fits.HDUList,
                         force: bool=True) -> None:
@@ -192,7 +194,6 @@ class KPF0(KPFDataModel):
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
                                                         str(len(ext)))
                 head += row
-        print(head)
 
     def _create_hdul(self):
         '''
@@ -203,11 +204,10 @@ class KPF0(KPFDataModel):
         hdu_definitions = self.extensions.items()
         for key, value in hdu_definitions:
             if value == fits.PrimaryHDU:
-                head = fits.Header(cards=self.header[key])
+                head = self.header[key]
                 hdu = fits.PrimaryHDU(header=head)
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
-                print(key, value)
                 ndim = len(data.shape)
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
@@ -215,12 +215,12 @@ class KPF0(KPFDataModel):
                 else:
                     for d in range(ndim):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
-                head = fits.Header(cards=self.header[key])
+                head = self.header[key]
                 hdu = value(data=data, header=head)
             elif value == fits.BinTableHDU:
                 table = Table.from_pandas(getattr(self, key))
                 self.header[key]['NAXIS1'] = len(table)
-                head = fits.Header(cards=self.header[key])
+                head = self.header[key]
                 hdu = fits.BinTableHDU(data=table, header=head)
             else:
                 print("Can't translate {} into a valid FITS format."\
