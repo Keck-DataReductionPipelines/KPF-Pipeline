@@ -171,10 +171,10 @@ class KPF0(KPFDataModel):
             head_key += row
         print(head_key)
         head = '|{:20s} |{:20s} |{:20s} \n{:40}'.format(
-            'Data Name', 'Data Type', 'Data Dimension',
+            'Extension Name', 'Data Type', 'Data Dimension',
             '='*80 + '\n'
         )
-        if self.data is not None and self.variance is not None:
+        if 'DATA' in self.extensions and 'VARIANCE' in self.extensions:
             row = '|{:20s} |{:20s} |{:20s}\n'.format('Data', 'array', 
                                                      str(self.data.shape))
             head += row
@@ -185,10 +185,19 @@ class KPF0(KPFDataModel):
                                                      str(self.receipt.shape))
             head += row
         
-        for name, aux in self.extra_extensions.items():
-            row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
-                                                     str(aux.shape))
-            head += row
+        for name in self.extensions.keys():
+            if name == 'PRIMARY':
+                continue
+            
+            ext = getattr(self, name.upper())
+            if isinstance(ext, (np.ndarray, np.generic)):
+                row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'image',
+                                                        str(ext.shape))
+                head += row
+            elif isinstance(ext, pd.DataFrame):
+                row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
+                                                        str(len(ext)))
+                head += row
         print(head)
 
     def _create_hdul(self):
