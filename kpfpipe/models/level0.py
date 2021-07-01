@@ -66,7 +66,7 @@ class KPF0(KPFDataModel):
             'KPF':   self._read_from_KPF,
             'NEID':  self._read_from_NEID,
             'PARAS': self._read_from_PARAS
-        }
+        }        
 
     def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
@@ -78,9 +78,13 @@ class KPF0(KPFDataModel):
         '''
         for hdu in hdul:
             if isinstance(hdu, fits.ImageHDU):
+                if hdu.name not in self.extensions:
+                    self.create_extension(hdu.name, np.array)
                 setattr(self, hdu.name, hdu.data)
                 setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif isinstance(hdu, fits.BinTableHDU):
+                if hdu.name not in self.extensions:
+                    self.create_extension(hdu.name, pd.DataFrame)
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
                 setattr(self, hdu.name.lower(), getattr(self, hdu.name))
@@ -97,10 +101,10 @@ class KPF0(KPFDataModel):
 
         '''
         # clean out KPF extensions first
-        save_extensions = ['PRIMARY', 'RECEIPT', 'CONFIG']
+        core_extensions = ['PRIMARY', 'RECEIPT', 'CONFIG']
         existing = copy.copy(self.extensions)
         for ext in existing.keys():
-            if ext not in save_extensions:
+            if ext not in core_extensions:
                 self.del_extension(ext)
 
         for hdu in hdul:
@@ -174,22 +178,12 @@ class KPF0(KPFDataModel):
             'Extension Name', 'Data Type', 'Data Dimension',
             '='*80 + '\n'
         )
-        if 'DATA' in self.extensions and 'VARIANCE' in self.extensions:
-            row = '|{:20s} |{:20s} |{:20s}\n'.format('Data', 'array', 
-                                                     str(self.data.shape))
-            head += row
-            row = '|{:20s} |{:20s} |{:20s}\n'.format('Variance', 'array',
-                                                     str(self.variance.shape))
-            head += row
-            row = '|{:20s} |{:20s} |{:20s}\n'.format('Receipt', 'table',
-                                                     str(self.receipt.shape))
-            head += row
-        
+
         for name in self.extensions.keys():
             if name == 'PRIMARY':
                 continue
             
-            ext = getattr(self, name.upper())
+            ext = getattr(self, name)
             if isinstance(ext, (np.ndarray, np.generic)):
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'image',
                                                         str(ext.shape))
