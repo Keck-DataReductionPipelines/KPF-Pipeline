@@ -82,9 +82,6 @@ class ContNorm(KPF1_Primitive):
         #Continuum normalization algorithm setup
         self.alg=ContinuumNorm(self.config,self.logger)
 
-        #Preconditions
-
-        #Postconditions
 
     #Perform
     def _perform(self) -> None:
@@ -99,32 +96,9 @@ class ContNorm(KPF1_Primitive):
             afs_yfit: Y-values of fitted curve from alphashape method
 
         """
-
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting wavelength and flux data")
+        norm = alg.run_cont_norm(l1_obj)
 
-        flux=self.l1_obj.data['SCI'][0,:,:] #correct extension for sciflux?
-        wav=self.l1_obj.data['SCI'][1,:,:] #correct extension for sciwave?
-        dataframe = pd.DataFrame({'wav': np.array(wav,'d'), 'flux': np.array(flux,'d')}, columns=['wav','flux'])
+        return Arguments(norm)
 
-        if self.run_cont_norm == False:
-            if self.logger:
-                self.logger.info("Continuumm Normalization: Module skipped")
-            result = flux
-
-        if self.cont_norm_poly == True & self.cont_norm_alpha == True:
-            if self.logger:
-                self.logger.info("Continuum Normalization: Running both polynomial fitting and alphashape fitting")
-            poly_norm_spec, poly_yfit, afs_norm_spec, afs_yfit = self.alg.run_all_cont_norm(flux,dataframe)
-
-        if self.cont_norm_poly == False & self.cont_norm_alpha == True:
-            if self.logger:
-                self.logger.info("Continuum Normalization: Running alphashape fitting")
-            afs_norm_spec, afs_yfit = self.alg.run_all_cont_norm(flux,dataframe)
-
-        if self.cont_norm_poly == True & self.cont_norm_alpha == False:
-            if self.logger:
-                self.logger.info("Continuum Normalization: Running polynomial fitting")
-            poly_norm_spec, poly_yfit = self.alg.run_all_cont_norm(flux,dataframe)
-
-#could do something so just one run statement, then "if shape of result = x, result = afs"?
