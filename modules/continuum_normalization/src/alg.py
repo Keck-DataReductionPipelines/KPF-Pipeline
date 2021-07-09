@@ -1,15 +1,20 @@
-#import pylab as pl
-#import matplotlib.pyplot as plt
-import numpy as np
-from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline, interp1d
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import InterpolatedUnivariateSpline
+import matplotlib as mpl
+mpl.use('Agg')
+import astropy.io.fits as fits
+from matplotlib import gridspec
+#from AFS_modified import *
+import pyreduce
+import os
+import pickle
+import scipy.interpolate as inter
 import alphashape
 import shapely
-#from pathlib import Path
 from math import ceil
 from scipy import linalg
-from astropy.table import Table
-from astropy.io import fits
 
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0 
@@ -25,160 +30,170 @@ class ContinuumNorm:
     """
 
     def __init__(self, config=None, logger=None):
-        """Initializes ContinuumNorm class with rawspec, config, and logger.
+        """Initializes continuum normalization algorithm.
 
         Args:
+            mask_array_provided (boolean): Whether or not mask array is provided.
+            method (str): Method of continuum normalization within the following:
+                'spline','afs','polynomial','pyreduce','rassine'.
+            continuum_guess_provided (boolean): If initial guess of continuum normalization
+                is provided.
+            plot_results (boolean): Whether to plot results
+            n_iter (int): Number of iterations
+            n_order (int): Number of order in polynomial fit
+            ffrac (float): Percentile above which is considered as continuum
+            a (int): Radius of AFS circle (1/a)
+            d (float): Window width in AFS
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
-            logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
-        
-        Attributes:
-            min_order (np.int): Minimum order with coherent light/flux in flux extension. 
-                Pulled from config file.
-            max_order (np.int): Maximum order with coherent light/flux in flux extension. 
-                Pulled from config file.
-            flatspec_order (np.int): Degree for flatspec polynomial fitting. Pulled from config file.
-            iter (np.int): Number of iterations for Lowess smoothing. Pulled from config file.
-            f (np.float): Smoothing span. Pulled from config file.
-            a (np.int): Determines value of alpha divided by a. Should be a number between
-                3 and 12. Default value is 6. Pulled from config file.
-            q (np.float): Upper quantile q within each window will be used to fit a local
-                polynomial model. Pulled from config file.
-            d (np.float): The smoothing parameter for local polynomial regression, which is the 
-                proportion of neighboring points to be used when fitting at one point. 
-                Pulled from config file.
-            run_cont_norm (str): True or false, determines whether or not to run continuum normalization 
-                step in pipeline. Defaults to True.
-            cont_norm_poly (str): True or false, determines whether or not to run continuum normalization 
-                polynomial fitting. Defaults to True.
-            cont_norm_alpha (str): True or false, determines whether or not to run continuum normalization 
-                alphashape fitting. Defaults to True.
-
-
+            logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
         """
-        configpull=ConfigHandler(config,'PARAM')
-        self.min_order=configpull.get_config_value('min_order',0)
-        self.max_order=configpull.get_config_value('max_order',117)
-        self.flatspec_order=configpull.get_config_value('flatspec_order', 4)
-        self.iter=configpull.get_config_value('iter', 3)
-        self.f=configpull.get_config_value('f', 0.25)
-        self.a=configpull.get_config_value('a', 6)
-        self.q=configpull.get_config_value('q', 0.95)
-        self.d=configpull.get_config_value('d', 0.25)
-        self.run_cont_norm = configpull.get_config_value('run_cont_norm', True)
-        self.cont_norm_poly = configpull.get_config_value('cont_norm_poly', True)
-        self.cont_norm_alpha = configpull.get_config_value('cont_norm_alpha', True)
         self.config=config
         self.logger=logger
+        configpull=ConfigHandler(config,'PARAM')
+        self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
+        self.method=configpull.get_config_value('method','AFS')
+        self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
+        self.plot_results=configpull.get_config_value('plot_results',True)
+        self.n_iter=configpull.get_config_value('n_iter',5)
+        self.n_order=configpull.get_config_value('n_order',8)
+        self.ffrac=configpull.get_config_value('ffrac',0.98)
+        self.med_window=configpull.get_config_value('median_window',15)
+        self.std_window=configpull.get_config_value('std_window',15)
+        self.a=configpull.get_config_value('a',6)
+        self.d=configpull.get_config_value('d',.25)
 
-    def run_all_cont_norm(self, data, dataframe):
-        """Runs desired continuum normalization algorithms.
-
-        Args:
-            data (np.array): Flux spectrum data 
-            dataframe (pd.dataframe): Pandas dataframe of flux,wavelength
-
-        Returns:
-            poly_norm_spec: Polynomial method normalized spectrum
-            poly_yfit: Y-values of fitted polynomial from polynomial method 
-            afs_norm_spec: Alphashape method normalized spectrum
-            afs_yfit: Y-values of fitted curve from alphashape method 
-        """
-
-        if self.run_cont_norm == False:
-            result = data
-            return data
-
-        if self.run_cont_norm == True:
-            orders = order_list()
-
-            if self.cont_norm_poly == True & self.cont_norm_alpha == True:
-                    for order in orders:
-                        raw_spectrum = data[order]
-                        poly_norm_spec, poly_yfit = flatspec(raw_spectrum)
-                        afs_norm_spec, afs_yfit = AFS(dataframe)
-                        return poly_norm_spec, poly_yfit, afs_norm_spec, afs_yfit
-
-            if self.cont_norm_poly == False & self.cont_norm_alpha == True:
-                for order in orders:
-                        afs_norm_spec, afs_yfit = AFS(dataframe)
-                        return afs_norm_spec, afs_yfit
-
-            if self.cont_norm_poly == True & self.cont_norm_alpha == False:
-                for order in orders:
-                        raw_spectrum = data[order]
-                        poly_norm_spec, poly_yfit = flatspec(raw_spectrum)
-                        return poly_norm_spec, poly_yfit
-
-    def order_list(self):
-        """Creates list of orders with light for algorithm to iterate through.
-
-        Returns:
-            order_list(np.ndarray): List of orders with coherent light/flux.
-        """
-        order_list=np.arange(self.min_order,self.max_order,1)
-        return order_list
-
-    def flatspec(self, rawspec):
-        """
-        Polynomial fit model of spectrum.
+    def spline_fit(self,x,y,window):
+        """Perform spline fit.
 
         Args:
-            rawspec (np.ndarray): Raw spectrum data.
+            x (np.array): X-data to be splined (wavelength).
+            y (np.array): Y-data to be splined (flux).
+            window (float): Window value for breakpoint's number of samples.
 
         Returns:
-            normspec: Normalized spectrum
-            yfit: Y-values of polynomial fitted to spectrum envelope
+            ss (LSQUnivariateSpline): Spline-fit of data.
         """
+        breakpoint = np.linspace(np.min(x),np.max(x),int((np.max(x)-np.min(x))/window))
+        ss = inter.LSQUnivariateSpline(x,y,breakpoint[1:-1])
+        return ss
 
-        ffrac = .95 #get from config instead?
-        x = np.arange(0,len(rawspec),1)
+    def RunningMedian(self,flux):
+        """Generates running median array of flux input.
 
-        #plt.plot(x,rawspec)
-        #plt.show()
-        weight = rawspec/10
-        pos = np.where((np.isnan(rawspec)==False)&(np.isnan(weight)==False))[0]
-        coef = np.polyfit(x[pos],rawspec[pos],self.order)
+        Args:
+            flux (np.array): Array of flux data.
+
+        Returns:
+            flux_median (np.array): Array of running median fluxes.
+        """
+        flux_median = np.ones_like(flux)
+        for i in range(len(flux)):
+            flux_median[i] = np.nanmedian(flux[np.max([0,i-self.med_window]):np.min([len(flux),i+self.med_window])])
+        return flux_median
+
+    def RunningSTD(self,flux):
+        """Generates running standard deviation array of flux input.
+
+        Args:
+            flux (np.array): Array of flux data.
+            
+        Returns:
+            flux_std (np.array): Array of running standard deviations.
+        """
+        flux_std = np.ones_like(flux)
+        for i in range(len(flux)):
+            flux_std[i] = np.nanstd(flux[np.max([0,i-self.std_window]):np.min([len(flux),i+self.std_window])])
+        return flux_std
+
+    def flatspec(self,x,rawspec,weight):
+        """[summary]
+
+        Args:
+            x (np.array): Wavelength data.
+            rawspec (np.array): Flux data.
+            weight ([type]): [description]
+
+        Returns:
+            normspec np.array: Normalized flux data.
+            yfit (): 
+        """
+        pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
+
+        coef = np.polyfit(x[pos],rawspec[pos],self.n_order)
         poly = np.poly1d(coef)
         yfit = poly(x)
-        for i in range(8):
+
+        for i in range(self.n_iter):
             normspec = rawspec / yfit
-            pos = np.where((normspec >= ffrac))[0]#& (normspec <= 2.)
-            coef = np.polyfit(x[pos],rawspec[pos],i+2)
+
+            pos = np.where((normspec >= self.ffrac))[0]#& (normspec <= 2.)
+            #print('order',order)
+            coef = np.polyfit(x[pos],rawspec[pos],self.n_order)
             poly = np.poly1d(coef)
             yfit = poly(x)
-        
-        #pl.plot(rawspec,'k-')
-        #pl.plot(x,yfit,'b-')
-        #pl.show()
 
         normspec = rawspec / yfit
-        return normspec, yfit
 
-    def lowess_ag(self,x,y):
-        """Lowess smoother. Robust locally weighted regression. 
-        The lowess function fits a nonparametric regression curve to a scatterplot.
-        The arrays x and y contain an equal number of elements; each pair
-        (x[i],y[i]) defines a data point in the scatterplot. The function
-        returns the estimated (smooth) values of y. The smoothing span is given by f. 
-        A larger value for f will result in a smoother curve. The number of robustifying 
-        iterations is given by iter. The function will run faster with a smaller number of 
-        iterations. 
+        return normspec,yfit
+
+    def flatspec_spline(self,x,rawspec,weight):
+        """[summary]
 
         Args:
-            x (np.array): Wavelength values
-            y (np.array): Intensity values
+            x (np.array): Wavelength data.
+            rawspec (np.array): Flux data.
+            weight ([type]): [description]
 
         Returns:
-            yest: Estimated smoothed y values (intensity)
+            normspec np.array: Normalized flux data.
+            yfit (): 
+        """
+        pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
+
+        ss = spline_fit(x[pos],rawspec[pos],5.)
+        yfit = ss(x)
+
+        for i in range(self.n_iter):
+            normspec = rawspec / yfit
+
+            pos = np.where((normspec >= self.ffrac) & (yfit > 0))[0]#& (normspec <= 2.)
+
+            ss = spline_fit(x[pos],rawspec[pos],5.)
+            yfit = ss(x)
+
+        normspec = rawspec / yfit
+
+        return normspec,yfit
+
+# Alpha-shape Fitting to Spectrum algorithm (AFS) in Python using ryp2
+# Based on Xin's code here: https://github.com/xinxuyale/AFS/blob/master/functions/AFS.R
+# We used rpy2 package here
+
+    def lowess_ag(self, x, y,n_iter=3):
+        """Lowess smoother: Robust locally weighted regression.
+        The lowess function fits a nonparametric regression curve to a scatterplot.
+        The arrays x and y contain an equal number of elements; each pair
+        (x[i], y[i]) defines a data point in the scatterplot. The function returns
+        the estimated (smooth) values of y.The smoothing span is given by f. A larger 
+        value for f will result in a smoother curve. The number of robustifying 
+        iterations is given by iter. The function will run faster with a smaller number of iterations.
+
+        Args:
+            x (np.array): X-data points.
+            y (np.array): Y-data points.
+            n_iter (int): Number of iterations. Defaults to 3.
+
+        Returns:
+            yest (np.array): Smoothed values of Y.
         """
         n = len(x)
-        r = int(ceil(self.f * n)) 
-        h = [np.sort(np.abs(x - x[i]))[r] for i in range(n)]
+        r = int(ceil(self.d * n))
+        h = [np.sort(np.abs(x - x[i]))[r] for i in range(n)]#identify nearest neighbours
         w = np.clip(np.abs((x[:, None] - x[None, :]) / h), 0.0, 1.0)
         w = (1 - w ** 3) ** 3
         yest = np.zeros(n)
         delta = np.ones(n)
-        for iteration in range(self.iter):
+        for iteration in range(self.n_iter):
             for i in range(n):
                 weights = delta * w[:, i]
                 b = np.array([np.sum(weights * y), np.sum(weights * y * x)])
@@ -194,16 +209,19 @@ class ContinuumNorm:
 
         return yest
 
-    def AFS(self,order):
+    # Define AFS function
+    def AFS (self,order, q=0.95):
         """Algorithm for alpha-shape fitting to spectrum.
 
         Args:
-            order (np.int): Order of spectrum to remove blaze function. It is an n by 2 numpy array,
-            where n is number of pixels. Each row is the wavelength and intensity at each pixel
+            order (np.array): Order of spectrum to remove blaze function. Array of n x 2 shape,
+                where n is number of pixels. Each row is wavelength and intensity at each pixel.
+            q (float, optional): Refers to upper q quantile within each window to be used
+                to fit a local polynomial model. Defaults to 0.95.
 
         Returns:
-            order["intens"].values/y_final: Normalized spectrum
-            y_final: Y-values of curve fitted to spectrum envelope
+            order["intens"].values/y_final (np.array): 
+            y_final (np.array): Smoothed/alpha-shape-fitted flux data.
         """
         # Change the column names and format of the dataset.
         order.columns=["wv","intens"]
@@ -220,17 +238,12 @@ class ContinuumNorm:
         alpha= (order["wv"].max()-order["wv"].min())/self.a
 
         # This chunk of code detects loops in the boundary of the alpha shape.
-        # Ususally there is only one loop(polygon).
-        # Variable loop is a list.
+        # Ususally only one loop(polygon). Variable loop is a list.
         # The indices of the k-th loop are recorded in the k-th element of variable loop.
         loops=[]
         # Variable points is a list that represents all the sample point (lambda_i,y_i)
         points=[(order["wv"][i],order["intens"][i]) for i in range(order.shape[0])]
-        #tl=time()
         alpha_shape = alphashape.alphashape(points, 1/alpha)
-        #th=time()
-        # print("alphashape function takes ", th-tl)
-
 
         # Input Variables:
         # polygon: shapely polygon object
@@ -284,25 +297,14 @@ class ContinuumNorm:
                 b= Wa[index]
                 AS["intens"][i]= AS["intens"][a]+(AS["intens"][b]-AS["intens"][a])*((AS["wv"][i]-AS["wv"][a])/(AS["wv"][b]-AS["wv"][a]))
             else:
-            # AS=AS.drop(list(range(i, n)))
                 break
 
         # Run a local polynomial on tilde(AS_alpha), as described in step 3 of the AFS algorithm.
-        # Use the function loess_1d() to run a second order local polynomial.
-        # Variable y_result is the predicted output from input x
         x=AS["wv"].values
         y=AS["intens"].values
-        # covert x and y to R vectors
-        #x = robjects.FloatVector(list(x))
-        #y = robjects.FloatVector(list(y))
-        #df = robjects.DataFrame({"x": x, "y": y})
-        # run loess (haven't found a way to specify "control" parameters)
-        #loess_fit = r.loess("y ~ x", data=df, degree = 2, span = d, surface="direct")
 
-        B1 = lowess_ag(x, y, f=d, iter=3)
-        #B1 =r.predict(loess_fit, x)
-        # Add a new column called select to the matrix order.
-        # order["select"] records hat(y^(1)).
+        B1 = lowess_ag(x, y)
+
         select= order["intens"].values/B1
 
         order["select"]=select
@@ -325,15 +327,105 @@ class ContinuumNorm:
         # Run Loess for the last time
         x_2=order.iloc[index]["wv"].values
         y_2=order.iloc[index]["intens"].values
-        #x_2 = robjects.FloatVector(list(x_2))
-        #y_2 = robjects.FloatVector(list(y_2))
-        #df2 = robjects.DataFrame({"x_2": x_2, "y_2": y_2})
-        #loess_fit2 = r.loess("y_2 ~ x_2", data=df2, degree = 2, span = d,surface="direct")
-        #y_final= r.predict(loess_fit2, x)
-        y_final = lowess_ag(x_2,y_2,f = d, iter = 3)
+        y_final = lowess_ag(x_2,y_2)
         # Return the blaze-removed spectrum.
-        #result= order["intens"].values/y_final
 
         y_final = InterpolatedUnivariateSpline(x_2,y_final, k=2)(x)
         return order["intens"].values/y_final,y_final
 
+
+    def continuum_combined(self, wav, data, normalized, weight = None, mask_array = None, continuum_guess = None,output_dir = None):
+        """[summary]
+
+        Args:
+            wav ([type]): Wavelength data (sciwav)
+            data ([type]): Flux data (sciflux)
+            normalized (np.array): Zeros-array placeholder for normalized result.
+            weight ([type], optional): [description]. Defaults to None.
+            mask_array (np.array, optional): Mask array. Defaults to None.
+            continuum_guess ([type], optional): [description]. Defaults to None.
+            method (str, optional): Preferred continuum normalization method. Defaults to 'AFS'.
+            output_dir (str, optional): Directory/folder of output. Defaults to None.
+        """
+        if self.mask_array_provided == False:#no outlier or masked lines were provided, we perform outlier rejection ourselves
+            mask_array = np.zeros(np.shape(data),'i')
+
+        #lets remove outliers with sigma clipping
+        for i in range(np.shape(wav)[0]):
+            for i_iter in range(self.n_iter):
+                flux_med = np.nanmedian(data[i,:])
+                data[i,:] =data[i,:]/flux_med
+
+                flux_median = self.RunningMedian(data[i,:])
+
+                flux_std = self.RunningSTD(data[i,:])
+                bad = np.where((data[i,:]-flux_median)>3*flux_std)
+                mask_array[i,bad[0]] = 1
+
+                data[i,bad[0]] = np.nan
+                good = np.where(mask_array[i,:] == 0)[0]
+
+            if self.method == 'Spline':
+                wav[i,bad[0]] = np.nan
+                data[i,bad[0]] = np.nan
+                weight[i,bad[0]] = np.nan
+                normalized[i,:],trend = flatspec_spline(wav[i,:],data[i,:],weight[i,:])
+
+            if self.method == 'Polynomial':
+                wav[i,bad[0]] = np.nan
+                data[i,bad[0]] = np.nan
+                weight[i,bad[0]] = np.nan
+                normalized[i,:],trend = flatspec(wav[i,:],data[i,:],weight[i,:])
+
+            if self.method == 'AFS':
+                dataframe = pd.DataFrame({'wav': np.array(wav[i,good],'d'), 'flux': np.array(data[i,good],'d')}, columns=['wav','flux'])
+                normalized[i,good],trend_= AFS(dataframe)
+                trend_ =trend_ /np.max(trend_)*np.percentile(data[i,good],self.ffrac*100)
+                trend = np.zeros_like(normalized[i,:])
+                trend[good] = trend_
+
+            if self.method == 'pyreduce':
+                wav[i,bad[0]] = np.nan
+                data[i,bad[0]] = np.nan
+                weight[i,bad[0]] = np.nan
+                if self.continuum_guess_provided == False:
+                    _,trend_guess = flatspec_spline(wav[i,:],data[i,:],weight[i,:])
+                else: trend_guess=continuum_guess[i,:]
+
+                normalized[i,:] = trend_guess*1.8#np.ones_like(weight[i,:])*1.5#
+                trend_ = pyreduce.continuum_normalization.continuum_normalize(np.ma.array(data[i:i+1,:],mask = mask_array[i:i+1,:]), np.ma.array(wav[i:i+1,:],mask = mask_array[i:i+1,:]), np.ma.array(normalized[i:i+1,:],mask = mask_array[i:i+1,:]), np.ma.array(normalized[i:i+1,:]*0.1,mask = mask_array[i:i+1,:]), iterations=self.n_iter, scale_vert=1, plot=False, plot_title=None)
+                trend = trend_[0,:]
+                normalized[i,:] = data[i,:]/trend
+            if self.plot_results == True:
+                gs = gridspec.GridSpec(2,1 , height_ratios=[1.,1.])
+                fig, (ax, ax1) = plt.subplots(2,1, sharex=True,figsize=(12,8))
+                plt.subplots_adjust(bottom = 0.15, left = 0.15)
+                ax = plt.subplot(gs[0])
+                ax1 = plt.subplot(gs[1])
+                fig.subplots_adjust(hspace=1)
+                ax.plot(wav[i,good],data[i,good], color = 'blue')
+                ax.plot(wav[i,good],trend[good],color = 'orange')
+                ax1.plot(wav[i,good],normalized[i,good],color = 'blue')
+                plt.savefig('plots/'+output_dir+'/'+str(i)+'_'+self.method+'.png')
+                plt.close('all')
+                
+    def run_cont_norm(self,file_obj):
+        """Run continuum normalization algorithm.
+
+        Args:
+            file_obj (str): Opened FITS file.
+        Returns:
+            normalized (np.array): Normalized flux data.
+
+        """
+        #this is neid set up right now
+        #need to set up to get orderlets data
+        wav_i = file_obj[7].data
+        data_i = file_obj[1].data
+
+        weight = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
+        normalized = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
+        mask_array = np.zeros(np.shape(data_i[:,self.edge_clip:-self.edge_clip]),'i')
+        continuum_combined(wav_i[:,self.edge_clip:-self.edge_clip], data_i[:,self.edge_clip:-self.edge_clip], normalized, output_dir = self.output_dir, weight = weight)
+
+        return normalized
