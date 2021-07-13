@@ -36,7 +36,6 @@ class ContNorm(KPF1_Primitive):
         alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
 
     """
-
     def __init__(self, 
                 action:Action, 
                 context:ProcessingContext) -> None:
@@ -81,7 +80,6 @@ class ContNorm(KPF1_Primitive):
 
         #Continuum normalization algorithm setup
         self.alg=ContinuumNorm(self.config,self.logger)
-
 
     #Perform
     def _perform(self) -> None:
