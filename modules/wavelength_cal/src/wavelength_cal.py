@@ -110,7 +110,8 @@ class WaveCalibrate(KPF1_Primitive):
         # 2. run wavecal
         if self.logger:
             self.logger.info("Wavelength Calibration: Running wavelength calibration")
-        wave_per_pix=self.alg.run_wave_cal(calflux,master_data)
+        wave_per_pix=self.alg.open_and_run(calflux,master_data)
+
 
         # 3. write in -wave with wavelength calibration output (wavelength per pixel)
         for prefix in ['CAL','SCI1','SKY']:
@@ -125,7 +126,6 @@ class WaveCalibrate(KPF1_Primitive):
 
         if self.logger:
             self.logger.info("WaveCalibrate: Done!")
-        #should [1,:,:] be replaced with something like [1,self.min_order,self.max_order]?
 
         return Arguments(self.l1_obj)
 
