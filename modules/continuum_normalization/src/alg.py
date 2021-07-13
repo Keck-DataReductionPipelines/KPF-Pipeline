@@ -106,16 +106,16 @@ class ContinuumNorm:
         return flux_std
 
     def flatspec(self,x,rawspec,weight):
-        """[summary]
+        """Performs polynomial fitting for specified number of iterations.
 
         Args:
             x (np.array): Wavelength data.
             rawspec (np.array): Flux data.
-            weight ([type]): [description]
+            weight (np.array): Weighting for fitting.
 
         Returns:
-            normspec np.array: Normalized flux data.
-            yfit (): 
+            normspec (np.array): Normalized flux data.
+            yfit (np.array): Coefficients of polynomial fit.
         """
         pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
 
@@ -137,16 +137,16 @@ class ContinuumNorm:
         return normspec,yfit
 
     def flatspec_spline(self,x,rawspec,weight):
-        """[summary]
+        """Performs spline fit for specified number of iterations.
 
         Args:
             x (np.array): Wavelength data.
             rawspec (np.array): Flux data.
-            weight ([type]): [description]
+            weight (np.array): Weighting for fitting.
 
         Returns:
-            normspec np.array: Normalized flux data.
-            yfit (): 
+            normspec (np.array): Normalized flux data.
+            yfit (np.array): Coefficients of spline fit.
         """
         pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
 
@@ -220,7 +220,7 @@ class ContinuumNorm:
                 to fit a local polynomial model. Defaults to 0.95.
 
         Returns:
-            order["intens"].values/y_final (np.array): 
+            order["intens"].values/y_final (np.array): Normalized flux data.
             y_final (np.array): Smoothed/alpha-shape-fitted flux data.
         """
         # Change the column names and format of the dataset.
@@ -335,15 +335,15 @@ class ContinuumNorm:
 
 
     def continuum_combined(self, wav, data, normalized, weight = None, mask_array = None, continuum_guess = None,output_dir = None):
-        """[summary]
+        """Runs continuum normalization according to specified method.
 
         Args:
-            wav ([type]): Wavelength data (sciwav)
-            data ([type]): Flux data (sciflux)
+            wav (np.array): Wavelength data (sciwav)
+            data (np.array): Flux data (sciflux)
             normalized (np.array): Zeros-array placeholder for normalized result.
-            weight ([type], optional): [description]. Defaults to None.
+            weight (np.array): Weighting for fitting. Defaults to none.
             mask_array (np.array, optional): Mask array. Defaults to None.
-            continuum_guess ([type], optional): [description]. Defaults to None.
+            continuum_guess (np.array, optional): Continuum guess. Defaults to None.
             method (str, optional): Preferred continuum normalization method. Defaults to 'AFS'.
             output_dir (str, optional): Directory/folder of output. Defaults to None.
         """
@@ -410,13 +410,12 @@ class ContinuumNorm:
                 plt.close('all')
                 
     def run_cont_norm(self,file_obj):
-        """Run continuum normalization algorithm.
+        """Prepare and run entire continuum normalization algorithm.
 
         Args:
             file_obj (str): Opened FITS file.
         Returns:
             normalized (np.array): Normalized flux data.
-
         """
         #this is neid set up right now
         #need to set up to get orderlets data
