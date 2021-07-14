@@ -268,6 +268,7 @@ class BarycentricCorrectionAlg:
 
         """
 
+        # bc_obj = get_BC_vel(JDUTC=Time(jd, format='jd', scale='utc'),
         bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],
                             dec=obs_config[BarycentricCorrectionAlg.DEC],
