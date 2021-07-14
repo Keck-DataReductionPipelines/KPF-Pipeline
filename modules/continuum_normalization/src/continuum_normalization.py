@@ -9,7 +9,6 @@ from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.models.level1 import KPF1
 
 # External dependencies
-from modules.Utils.config_parser import ConfigHandler
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
@@ -36,9 +35,7 @@ class ContNorm(KPF1_Primitive):
         alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
 
     """
-    def __init__(self, 
-                action:Action, 
-                context:ProcessingContext) -> None:
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
         """
         ContNorm constructor.
 
@@ -56,7 +53,7 @@ class ContNorm(KPF1_Primitive):
 
         #input recipe arguments
         self.l1_obj=self.action.args[0]
-        self.data_type=self.action.args[1]
+        #self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -86,7 +83,6 @@ class ContNorm(KPF1_Primitive):
             norm: Normalized spectrum.
 
         """
-
         #extract extensions (for NEID: sciwave and sciflux)
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting SCIWAVE & SCIFLUX extensions")
@@ -96,10 +92,8 @@ class ContNorm(KPF1_Primitive):
         #run continuum normalization
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting wavelength and flux data")
-        norm = alg.run_cont_norm(sciwave,sciflux)
+        norm = self.alg.run_cont_norm(sciwave,sciflux)
 
         #write to fits file
-
-        print(norm)
         return Arguments(norm)
 
