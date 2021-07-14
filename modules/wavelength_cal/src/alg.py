@@ -57,7 +57,7 @@ class LFCWaveCalibration:
         self.max_wave=configpull.get_config_value('max_wave',9300)
         self.min_wave=configpull.get_config_value('min_wave',3800)
         self.fit_order=configpull.get_config_value('fit_order',9)
-        self.min_order=configpull.get_config_value('min_order',25)
+        self.min_order=configpull.get_config_value('min_order',50)
         self.max_order=configpull.get_config_value('max_order',100)
         self.n_sections=configpull.get_config_value('n_sections',20)
         self.config=config
@@ -126,7 +126,7 @@ class LFCWaveCalibration:
 
             new_peaks_section, peaks_section, peak_heights_section, \
                 gauss_coeffs_section \
-                    = find_peaks(comb[indices])
+                    = self.find_peaks(comb[indices])
 
             peak_heights = np.append(peak_heights, peak_heights_section)
 
@@ -209,7 +209,7 @@ class LFCWaveCalibration:
 
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
-            popt, _ = curve_fit(integrate_gaussian, x, y, p0=p0, maxfev=100000)
+            popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=100000)
 
         return popt
 
@@ -254,7 +254,7 @@ class LFCWaveCalibration:
         for j, p in enumerate(peaks):
             idx = p + np.arange(-width, width + 1, 1)
             idx = np.clip(idx, 0, len(c) - 1).astype(int)
-            coef = fit_gaussian(np.arange(len(idx)), c[idx])
+            coef = self.fit_gaussian(np.arange(len(idx)), c[idx])
             gauss_coeffs[:,j] = coef
             new_peaks[j] = coef[1] + p - width
 
@@ -618,8 +618,7 @@ class LFCWaveCalibration:
         
         return calflux
 
-    def fit_many_orders(
-    self, comb_all, thar_wavecal_all, comb_lines_angstrom, plt_path=None, print_update=False):
+    def fit_many_orders(self, comb_all, thar_wavecal_all, comb_lines_angstrom, plt_path=None, print_update=False):
         """
         Iteratively performs LFC wavelength calibration for all orders.
 
@@ -678,20 +677,20 @@ class LFCWaveCalibration:
             n_pixels = len(comb)
 
             # calculate, clip, and mode-match peaks
-            new_peaks, peaks, peak_heights, gauss_coeffs = find_peaks_in_order(
+            new_peaks, peaks, peak_heights, gauss_coeffs = self.find_peaks_in_order(
                 comb, plot_path=order_plt_path
             )
-            good_peak_idx = clip_peaks(
+            good_peak_idx = self.clip_peaks(
                 new_peaks, peaks, gauss_coeffs, peak_heights, 
                 plot_path=order_plt_path, print_update=print_update
             )
-            wls, lfc_modes = mode_match(
+            wls, lfc_modes = self.mode_match(
                 comb, new_peaks, good_peak_idx, thar_wavecal, comb_lines_angstrom, 
                 print_update=print_update
             )
 
             # calculate the wavelength solution for the order
-            polynomial_wls, leg_out = fit_polynomial(
+            polynomial_wls, leg_out = self.fit_polynomial(
                 wls, gauss_coeffs, good_peak_idx, n_pixels, new_peaks, 
                 plot_path=order_plt_path
             )
@@ -711,7 +710,7 @@ class LFCWaveCalibration:
                 plt.close()
 
             # compute RV precision for order
-            precision = calculate_rv_precision(
+            precision = self.calculate_rv_precision(
                 new_peaks, good_peak_idx, wls, leg_out, plot_path=order_plt_path, 
                 print_update=print_update
             )
@@ -747,21 +746,21 @@ class LFCWaveCalibration:
 
         return comb_lines_ang
 
-    def open_and_run(self, file, master_data):
+    def open_and_run(self, calflux, master_data):
     
         SAVEPLTS = '{}/diagnostic_plots'.format(os.getcwd())
         if not os.path.isdir(SAVEPLTS):
             os.makedirs(SAVEPLTS)
 
         # open data file
-        hdul = fits.open(file)
-        calflux = hdul['CALFLUX'].data
+        #hdul = fits.open(file)
+        #calflux = hdul['CALFLUX'].data
 
-        cl_ang = comb_gen()
+        cl_ang = self.comb_gen()
         
-        n_orders = max_order - self.min_order + 1
-        new_calflux = mask_array_neid(calflux,n_orders)
+        n_orders = self.max_order - self.min_order + 1
+        new_calflux = self.mask_array_neid(calflux,n_orders)
         
         # perform wavelength calibration
-        modenums_and_pixels = fit_many_orders(new_calflux, master_data, 
+        modenums_and_pixels = self.fit_many_orders(new_calflux, master_data, 
         cl_ang, print_update=True, plt_path=SAVEPLTS)
