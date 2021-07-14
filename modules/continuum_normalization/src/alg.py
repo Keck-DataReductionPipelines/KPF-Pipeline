@@ -20,7 +20,7 @@ from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0 
 from keckdrpframework.models.arguments import Arguments
 
-class ContinuumNorm:
+class ContNormAlg:
     """
     Continuum normalization module algorithm. Purpose is to measure and remove variability in blaze
     of stellar spectrum.
@@ -115,7 +115,7 @@ class ContinuumNorm:
 
         Returns:
             normspec (np.array): Normalized flux data.
-            yfit (np.array): Coefficients of polynomial fit.
+            yfit (np.array): Polynomial fit.
         """
         pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
 
@@ -146,7 +146,7 @@ class ContinuumNorm:
 
         Returns:
             normspec (np.array): Normalized flux data.
-            yfit (np.array): Coefficients of spline fit.
+            yfit (np.array): Spline fit.
         """
         pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
 
@@ -409,18 +409,19 @@ class ContinuumNorm:
                 plt.savefig('plots/'+output_dir+'/'+str(i)+'_'+self.method+'.png')
                 plt.close('all')
                 
-    def run_cont_norm(self,file_obj):
+    def run_cont_norm(self,wav_i,data_i):
         """Prepare and run entire continuum normalization algorithm.
 
         Args:
-            file_obj (str): Opened FITS file.
+            wav_i (np.array): Wavelength data.
+            data_i (np.array): Flux data.
         Returns:
             normalized (np.array): Normalized flux data.
         """
         #this is neid set up right now
         #need to set up to get orderlets data
-        wav_i = file_obj[7].data
-        data_i = file_obj[1].data
+        # wav_i = file_obj[7].data
+        # data_i = file_obj[1].data
 
         weight = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
         normalized = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
