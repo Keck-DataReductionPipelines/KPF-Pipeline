@@ -14,10 +14,10 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.continuum_normalization.src.alg import ContNormAlg
+from modules.cont_norm.src.alg import ContNormAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/continuum_normalization/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/cont_norm/configs/default.cfg'
 
 class ContNorm(KPF1_Primitive):
     """This module defines class `ContNorm` which inherits from KPF0_Primitive and provides methods
@@ -45,7 +45,7 @@ class ContNorm(KPF1_Primitive):
                 `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 spectrum
                 `action.args[1] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data type.
 
-            context (ProcessingContext): Contains path of config file defined for `continuum_normalization` module in master config file associated with recipe.
+            context (ProcessingContext): Contains path of config file defined for `cont_norm` module in master config file associated with recipe.
 
         """
         #Initialize parent class
@@ -58,7 +58,7 @@ class ContNorm(KPF1_Primitive):
         #Input configuration
         self.config=configparser.ConfigParser()
         try:
-            self.config_path=context.config_path['continuum_normalization']
+            self.config_path=context.config_path['cont_norm']
         except:
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
