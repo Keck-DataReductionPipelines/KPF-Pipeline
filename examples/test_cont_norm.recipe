@@ -5,7 +5,7 @@ resultloc = '/Users/paminabby/Desktop/cn_test/test1.fits'
 
 for file in find_files(startloc):
     data = kpf1_from_fits(file,data_type='NEID')
-    norm = ContNorm(data,data_type='NEID')
-    result = to_fits(norm,resultloc)
+    norm = ContNorm(data)
+    #result = to_fits(norm,resultloc)
 
 
