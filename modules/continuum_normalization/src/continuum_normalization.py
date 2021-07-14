@@ -15,7 +15,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.continuum_normalization.src.alg import ContinuumNorm
+from modules.continuum_normalization.src.alg import ContNormAlg
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/continuum_normalization/configs/default.cfg'
@@ -46,6 +46,7 @@ class ContNorm(KPF1_Primitive):
             action (Action): Contains positional arguments and keyword arguments passed by the `ContinuumNormalization` event issued in recipe:
               
                 `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 spectrum
+                `action.args[1] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data type.
 
             context (ProcessingContext): Contains path of config file defined for `continuum_normalization` module in master config file associated with recipe.
 
@@ -55,6 +56,7 @@ class ContNorm(KPF1_Primitive):
 
         #input recipe arguments
         self.l1_obj=self.action.args[0]
+        self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -64,13 +66,6 @@ class ContNorm(KPF1_Primitive):
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
 
-        ### check formatting
-        configpull=ConfigHandler(config,'PARAM')
-        self.run_cont_norm = configpull.get_config_value('run_cont_norm', True)
-        self.cont_norm_poly = configpull.get_config_value('cont_norm_poly', True)
-        self.cont_norm_alpha = configpull.get_config_value('cont_norm_alpha', True)
-        ###
-
         #Start logger
         self.logger=None
         #self.logger=start_logger(self.__class__.__name__,config_path)
@@ -79,24 +74,32 @@ class ContNorm(KPF1_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         #Continuum normalization algorithm setup
-        self.alg=ContinuumNorm(self.config,self.logger)
+        self.alg=ContNormAlg(self.config,self.logger)
 
     #Perform
     def _perform(self) -> None:
         """
         Primitive action - 
-        Performs continuum normalization by calling on ContinuumNorm in alg.
+        Performs continuum normalization by calling on ContNormAlg in alg.
 
         Returns:
-            poly_norm_spec: Polynomial method normalized spectrum
-            poly_yfit: Y-values of fitted polynomial from polynomial method 
-            afs_norm_spec: Alphashape method normalized spectrum
-            afs_yfit: Y-values of fitted curve from alphashape method
+            norm: Normalized spectrum.
 
         """
+
+        #extract extensions (for NEID: sciwave and sciflux)
+        if self.logger:
+            self.logger.info("Continuum Normalization: Extracting SCIWAVE & SCIFLUX extensions")
+        sciflux = self.l1_obj.data['SCI'][0,:,:]#0 referring to 'flux'
+        sciwave = self.l1_obj.data['SCI'][2,:,:]#2 referring to 'wave'
+
+        #run continuum normalization
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting wavelength and flux data")
-        norm = alg.run_cont_norm(l1_obj)
+        norm = alg.run_cont_norm(sciwave,sciflux)
 
+        #write to fits file
+
+        print(norm)
         return Arguments(norm)
 
