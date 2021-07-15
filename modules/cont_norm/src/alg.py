@@ -50,10 +50,10 @@ class ContNormAlg:
         self.config=config
         self.logger=logger
         configpull=ConfigHandler(config,'PARAM')
-        self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
+        # self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
         self.method=configpull.get_config_value('method','AFS')
-        self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
-        self.plot_results=configpull.get_config_value('plot_results',True)
+        # self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
+        # self.plot_results=configpull.get_config_value('plot_results',True)
         self.n_iter=configpull.get_config_value('n_iter',5)
         self.n_order=configpull.get_config_value('n_order',8)
         self.ffrac=configpull.get_config_value('ffrac',0.98)
@@ -303,7 +303,7 @@ class ContNormAlg:
         x=AS["wv"].values
         y=AS["intens"].values
 
-        B1 = lowess_ag(x, y)
+        B1 = self.lowess_ag(x, y)
 
         select= order["intens"].values/B1
 
@@ -327,7 +327,7 @@ class ContNormAlg:
         # Run Loess for the last time
         x_2=order.iloc[index]["wv"].values
         y_2=order.iloc[index]["intens"].values
-        y_final = lowess_ag(x_2,y_2)
+        y_final = self.lowess_ag(x_2,y_2)
         # Return the blaze-removed spectrum.
 
         y_final = InterpolatedUnivariateSpline(x_2,y_final, k=2)(x)
