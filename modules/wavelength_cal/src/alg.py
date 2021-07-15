@@ -81,7 +81,7 @@ class LFCWaveCalibration:
             
         return master_data
 
-    def find_peaks_in_order(self,comb, n_sections=20, plot_path=None):
+    def find_peaks_in_order(self,comb, plot_path=None):
         """
         Runs find_peaks on successive subsections of the comb lines and concatenates
         the output. The difference between adjacent peaks changes as a function
@@ -115,18 +115,14 @@ class LFCWaveCalibration:
         peak_heights = np.array([])
         gauss_coeffs = np.zeros((4,0))
 
-        for i in np.arange(n_sections):
+        for i in np.arange(self.n_sections):
 
-            if i == n_sections - 1:
-                indices = np.arange(i * n_pixels // n_sections, n_pixels)
+            if i == self.n_sections - 1:
+                indices = np.arange(i * n_pixels // self.n_sections, n_pixels)
             else:
-                indices = np.arange(
-                    i * n_pixels // n_sections, (i+1) * n_pixels // n_sections
-                )
+                indices = np.arange(i * n_pixels // self.n_sections, (i+1) * n_pixels // self.n_sections)
 
-            new_peaks_section, peaks_section, peak_heights_section, \
-                gauss_coeffs_section \
-                    = self.find_peaks(comb[indices])
+            new_peaks_section, peaks_section, peak_heights_section, gauss_coeffs_section = self.find_peaks(comb[indices])
 
             peak_heights = np.append(peak_heights, peak_heights_section)
 
@@ -137,10 +133,8 @@ class LFCWaveCalibration:
                 peaks = np.append(peaks, peaks_section)
 
             else:
-                new_peaks = np.append(
-                    new_peaks, new_peaks_section + i * n_pixels // n_sections
-                )
-                peaks = np.append(peaks, peaks_section + i * n_pixels // n_sections)
+                new_peaks = np.append(new_peaks, new_peaks_section + i * n_pixels // self.n_sections)
+                peaks = np.append(peaks, peaks_section + i * n_pixels // self.n_sections)
         
         if plot_path is not None:
             plt.figure()
@@ -158,7 +152,6 @@ class LFCWaveCalibration:
             plt.close()
 
         return new_peaks, peaks, peak_heights, gauss_coeffs
-
 
     def integrate_gaussian(self, x, a, mu, sig, const, int_width=0.5):
         """
@@ -182,11 +175,8 @@ class LFCWaveCalibration:
             float: the integrated value
         """
 
-        integrated_gaussian_val = a * 0.5 * (
-            erf((x - mu + int_width) / (np.sqrt(2) * sig)) - 
-            erf((x - mu - int_width) / (np.sqrt(2) * sig)) 
-        ) + (const * 2 * int_width)
-
+        integrated_gaussian_val = a * 0.5 * (erf((x - mu + int_width) / (np.sqrt(2) * sig)) - erf((x - mu - int_width) / (np.sqrt(2) * sig))) + (const * 2 * int_width)
+        
         return integrated_gaussian_val
 
     def fit_gaussian(self, x, y):
@@ -238,7 +228,7 @@ class LFCWaveCalibration:
 
         c = comb - np.ma.min(comb)
 
-        # #TODO: try to make this more indep of comb flux
+        # #todo: try to make this more indep of comb flux
         height = 3 * np.ma.median(c) # 0.5 * np.ma.median(c) works for whole chip
         peaks, properties = signal.find_peaks(c, height=height)
 
@@ -260,8 +250,7 @@ class LFCWaveCalibration:
 
         return new_peaks, peaks, peak_heights, gauss_coeffs
 
-    def clip_peaks(self, new_peaks, peaks, gauss_coeffs, peak_heights, 
-    print_update=False, plot_path=None):
+    def clip_peaks(self, new_peaks, peaks, gauss_coeffs, peak_heights, print_update=False, plot_path=None):
         """
         If fitted peak locations are move than 1 Angstrom from detected locations,
         remove them.
@@ -283,13 +272,7 @@ class LFCWaveCalibration:
         Returns: 
             np.array of int: indices of surviving peaks
         """
-
-        # sig = np.std(np.abs(gauss_coeffs[0,:] - peak_heights))
-        # good_peak_idx =np.where(
-        #     (np.abs(new_peaks - peaks) < 1) & 
-        #     (np.abs(gauss_coeffs[0,:] - peak_heights) < 10 * sig)
-        # )[0]
-        good_peak_idx =np.where(np.abs(new_peaks - peaks) < 1)
+        good_peak_idx =np.where(np.abs(new_peaks - peaks) < 1)[0]
 
         if print_update:
             print('{} peaks clipped'.format(len(peaks) - len(good_peak_idx)))
@@ -753,8 +736,8 @@ class LFCWaveCalibration:
             os.makedirs(SAVEPLTS)
 
         # open data file
-        #hdul = fits.open(file)
-        #calflux = hdul['CALFLUX'].data
+        # hdul = fits.open(file)
+        # calflux = hdul['CALFLUX'].data
 
         cl_ang = self.comb_gen()
         
