@@ -19,8 +19,8 @@ from modules.cont_norm.src.alg import ContNormAlg
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/cont_norm/configs/default.cfg'
 
-class ContNorm(KPF1_Primitive):
-    """This module defines class `ContNorm` which inherits from KPF0_Primitive and provides methods
+class ContinNorm(KPF1_Primitive):
+    """This module defines class `ContNorm` which inherits from KPF1_Primitive and provides methods
     to perform the event `Continuum Normalization` in the recipe.
 
     Args:
@@ -53,7 +53,7 @@ class ContNorm(KPF1_Primitive):
 
         #input recipe arguments
         self.l1_obj=self.action.args[0]
-        #self.data_type=self.action.args[1]
+        self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
