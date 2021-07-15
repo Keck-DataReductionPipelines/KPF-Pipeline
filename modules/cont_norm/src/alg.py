@@ -150,7 +150,7 @@ class ContNormAlg:
         """
         pos = np.where((np.isnan(rawspec)==False) & (np.isnan(weight)==False))[0]
 
-        ss = spline_fit(x[pos],rawspec[pos],5.)
+        ss = self.spline_fit(x[pos],rawspec[pos],5.)
         yfit = ss(x)
 
         for i in range(self.n_iter):
@@ -158,7 +158,7 @@ class ContNormAlg:
 
             pos = np.where((normspec >= self.ffrac) & (yfit > 0))[0]#& (normspec <= 2.)
 
-            ss = spline_fit(x[pos],rawspec[pos],5.)
+            ss = self.spline_fit(x[pos],rawspec[pos],5.)
             yfit = ss(x)
 
         normspec = rawspec / yfit
@@ -369,17 +369,17 @@ class ContNormAlg:
                 wav[i,bad[0]] = np.nan
                 data[i,bad[0]] = np.nan
                 weight[i,bad[0]] = np.nan
-                normalized[i,:],trend = flatspec_spline(wav[i,:],data[i,:],weight[i,:])
+                normalized[i,:],trend = self.flatspec_spline(wav[i,:],data[i,:],weight[i,:])
 
             if self.method == 'Polynomial':
                 wav[i,bad[0]] = np.nan
                 data[i,bad[0]] = np.nan
                 weight[i,bad[0]] = np.nan
-                normalized[i,:],trend = flatspec(wav[i,:],data[i,:],weight[i,:])
+                normalized[i,:],trend = self.flatspec(wav[i,:],data[i,:],weight[i,:])
 
             if self.method == 'AFS':
                 dataframe = pd.DataFrame({'wav': np.array(wav[i,good],'d'), 'flux': np.array(data[i,good],'d')}, columns=['wav','flux'])
-                normalized[i,good],trend_= AFS(dataframe)
+                normalized[i,good],trend_= self.AFS(dataframe)
                 trend_ =trend_ /np.max(trend_)*np.percentile(data[i,good],self.ffrac*100)
                 trend = np.zeros_like(normalized[i,:])
                 trend[good] = trend_
@@ -389,7 +389,7 @@ class ContNormAlg:
                 data[i,bad[0]] = np.nan
                 weight[i,bad[0]] = np.nan
                 if self.continuum_guess_provided == False:
-                    _,trend_guess = flatspec_spline(wav[i,:],data[i,:],weight[i,:])
+                    _,trend_guess = self.flatspec_spline(wav[i,:],data[i,:],weight[i,:])
                 else: trend_guess=continuum_guess[i,:]
 
                 normalized[i,:] = trend_guess*1.8#np.ones_like(weight[i,:])*1.5#
@@ -426,6 +426,6 @@ class ContNormAlg:
         weight = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
         normalized = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
         mask_array = np.zeros(np.shape(data_i[:,self.edge_clip:-self.edge_clip]),'i')
-        continuum_combined(wav_i[:,self.edge_clip:-self.edge_clip], data_i[:,self.edge_clip:-self.edge_clip], normalized, output_dir = self.output_dir, weight = weight)
+        self.continuum_combined(wav_i[:,self.edge_clip:-self.edge_clip], data_i[:,self.edge_clip:-self.edge_clip], normalized, output_dir = self.output_dir, weight = weight)
 
         return normalized
