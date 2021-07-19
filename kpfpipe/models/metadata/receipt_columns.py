@@ -3,6 +3,7 @@ RECEIPT_COL = [
     'Code_Release', 
     'Branch_Name',  
     'Commit_Hash',  
+    'Chip',
     'Module_Name',  
     'Module_Level', 
     'Module_Path',  
