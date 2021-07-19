@@ -159,11 +159,11 @@ class OptimalExtraction(KPF0_Primitive):
 
         # Order trace algorithm setup
         self.alg = OptimalExtractionAlg(self.input_flat.data,
-                                        self.input_flat.header['DATA'],
+                                        self.input_flat.header['PRIMARY'],
                                         self.input_spectrum.data,
-                                        self.input_spectrum.header['DATA'] if self.input_spectrum is not None else None,
-                                        self.input_flat.extension['ORDER_TRACE_RESULT'],
-                                        self.input_flat.header['ORDER_TRACE_RESULT'],
+                                        self.input_spectrum.header['PRIMARY'] if self.input_spectrum is not None else None,
+                                        self.input_flat.ORDER_TRACE_RESULT,
+                                        self.input_flat.header['PRIMARY'],
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
@@ -175,7 +175,7 @@ class OptimalExtraction(KPF0_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0) and \
-                  'ORDER_TRACE_RESULT' in self.input_flat.extension
+            'ORDER_TRACE_RESULT' in self.input_flat.extensions
 
         return success
 
