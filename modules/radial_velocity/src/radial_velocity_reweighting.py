@@ -195,7 +195,8 @@ class RadialVelocityReweighting(KPF1_Primitive):
         else:
             self.lev1_input.del_extension('CCF')
 
-        self.lev1_input.create_extension('CCF')
+        # self.lev1_input.create_extension('CCF')
+        self.lev1_input.create_extension('CCF', pd.DataFrame)
 
         # form DataFrame for extension 'CCF'
         ccf_table = {}
@@ -214,7 +215,8 @@ class RadialVelocityReweighting(KPF1_Primitive):
         ccf_df.attrs['STARTORD'] = str(self.ccf_start_index)
         ccf_df.attrs['ENDORDER'] = str(self.ccf_start_index+self.total_order-1)
 
-        self.lev1_input.extensions['CCF'] = ccf_df
+        # self.lev1_input.extensions['CCF'] = ccf_df
+        self.lev1_input.CCF = ccf_df
 
         for att in ccf_df.attrs:
             self.lev1_input.header['CCF'][att] = ccf_df.attrs[att]
