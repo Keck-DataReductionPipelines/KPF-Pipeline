@@ -214,8 +214,10 @@ class RadialVelocity(KPF1_Primitive):
         output_df = rv_results['ccf_df']
         assert(not output_df.empty and output_df.values.any())
 
-        self.input.create_extension('CCF')
-        self.input.extensions['CCF'] = output_df
+        # self.lev1_input.create_extension('CCF')
+        self.input.create_extension('CCF', pd.DataFrame)
+        self.input.CCF = output_df
+        # self.lev1_input.extensions['CCF'] = output_df
         for att in output_df.attrs:
             self.input.header['CCF'][att] = output_df.attrs[att]
         self.input.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')
