@@ -4,15 +4,13 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import InterpolatedUnivariateSpline
 import matplotlib as mpl
 mpl.use('Agg')
-import astropy.io.fits as fits
+from astropy.io import fits
 from matplotlib import gridspec
-#from AFS_modified import *
-import pyreduce
 import os
-import pickle
 import scipy.interpolate as inter
-import alphashape
-import shapely
+# import pyreduce
+# import alphashape
+# import shapely
 from math import ceil
 from scipy import linalg
 
@@ -20,7 +18,7 @@ from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0 
 from keckdrpframework.models.arguments import Arguments
 
-class ContNormAlg:
+class ContNormAlgg:
     """
     Continuum normalization module algorithm. Purpose is to measure and remove variability in blaze
     of stellar spectrum.
@@ -35,7 +33,7 @@ class ContNormAlg:
         Args:
             mask_array_provided (boolean): Whether or not mask array is provided.
             method (str): Method of continuum normalization within the following:
-                'spline','afs','polynomial','pyreduce','rassine'.
+                'Spline','AFS','Polynomial','Pyreduce'.
             continuum_guess_provided (boolean): If initial guess of continuum normalization
                 is provided.
             plot_results (boolean): Whether to plot results
@@ -47,13 +45,11 @@ class ContNormAlg:
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
             logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
         """
-        self.config=config
-        self.logger=logger
         configpull=ConfigHandler(config,'PARAM')
-        # self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
-        self.method=configpull.get_config_value('method','AFS')
-        # self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
-        # self.plot_results=configpull.get_config_value('plot_results',True)
+        self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
+        self.method=configpull.get_config_value('method','Spline')
+        self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
+        self.plot_results=configpull.get_config_value('plot_results',True)
         self.n_iter=configpull.get_config_value('n_iter',5)
         self.n_order=configpull.get_config_value('n_order',8)
         self.ffrac=configpull.get_config_value('ffrac',0.98)
@@ -61,6 +57,10 @@ class ContNormAlg:
         self.std_window=configpull.get_config_value('std_window',15)
         self.a=configpull.get_config_value('a',6)
         self.d=configpull.get_config_value('d',.25)
+        self.edge_clip=configpull.get_config_value('edge_clip',1000)
+        self.output_dir=configpull.get_config_value('output_dir','/Users/paminabby/Desktop/cn_test')
+        self.config=config
+        self.logger=logger
 
     def spline_fit(self,x,y,window):
         """Perform spline fit.
@@ -334,7 +334,7 @@ class ContNormAlg:
         return order["intens"].values/y_final,y_final
 
 
-    def continuum_combined(self, wav, data, normalized, weight = None, mask_array = None, continuum_guess = None,output_dir = None):
+    def continuum_combined(self, wav, data, normalized, weight = None, mask_array = None, continuum_guess = None):
         """Runs continuum normalization according to specified method.
 
         Args:
@@ -345,7 +345,6 @@ class ContNormAlg:
             mask_array (np.array, optional): Mask array. Defaults to None.
             continuum_guess (np.array, optional): Continuum guess. Defaults to None.
             method (str, optional): Preferred continuum normalization method. Defaults to 'AFS'.
-            output_dir (str, optional): Directory/folder of output. Defaults to None.
         """
         if self.mask_array_provided == False:#no outlier or masked lines were provided, we perform outlier rejection ourselves
             mask_array = np.zeros(np.shape(data),'i')
@@ -406,7 +405,7 @@ class ContNormAlg:
                 ax.plot(wav[i,good],data[i,good], color = 'blue')
                 ax.plot(wav[i,good],trend[good],color = 'orange')
                 ax1.plot(wav[i,good],normalized[i,good],color = 'blue')
-                plt.savefig('plots/'+output_dir+'/'+str(i)+'_'+self.method+'.png')
+                plt.savefig(self.output_dir+'/'+str(i)+'_'+self.method+'.png')
                 plt.close('all')
                 
     def run_cont_norm(self,wav_i,data_i):
@@ -426,6 +425,6 @@ class ContNormAlg:
         weight = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
         normalized = np.ones_like(data_i[:,self.edge_clip:-self.edge_clip])
         mask_array = np.zeros(np.shape(data_i[:,self.edge_clip:-self.edge_clip]),'i')
-        self.continuum_combined(wav_i[:,self.edge_clip:-self.edge_clip], data_i[:,self.edge_clip:-self.edge_clip], normalized, output_dir = self.output_dir, weight = weight)
+        self.continuum_combined(wav_i[:,self.edge_clip:-self.edge_clip], data_i[:,self.edge_clip:-self.edge_clip], normalized, weight = weight)
 
         return normalized
