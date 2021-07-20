@@ -2,6 +2,7 @@
 import configparser
 import numpy as np
 import pandas as pd
+from astropy.io import fits
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -14,10 +15,10 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.cont_norm.src.alg import ContNormAlg
+from modules.continuum_normalization.src.alg import ContNormAlgg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/cont_norm/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/continuum_normalization/configs/default.cfg'
 
 class ContinuumNorm(KPF1_Primitive):
     """This module defines class `ContNorm` which inherits from KPF1_Primitive and provides methods
@@ -53,7 +54,7 @@ class ContinuumNorm(KPF1_Primitive):
 
         #input recipe arguments
         self.l1_obj=self.action.args[0]
-        self.data_type=self.action.args[1]
+        # self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -71,7 +72,7 @@ class ContinuumNorm(KPF1_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         #Continuum normalization algorithm setup
-        self.alg=ContNormAlg(self.config,self.logger)
+        self.alg=ContNormAlgg(self.config,self.logger)
 
     #Perform
     def _perform(self) -> None:
@@ -83,17 +84,27 @@ class ContinuumNorm(KPF1_Primitive):
             norm: Normalized spectrum.
 
         """
+
         #extract extensions (for NEID: sciwave and sciflux)
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting SCIWAVE & SCIFLUX extensions")
-        sciflux = self.l1_obj.data['SCI'][0,:,:]#0 referring to 'flux'
-        sciwave = self.l1_obj.data['SCI'][2,:,:]#2 referring to 'wave'
+        sciflux = self.l1_obj.data['SCI1'][0,:,:]#0 referring to 'flux'
+        sciwave = self.l1_obj.data['SCI1'][2,:,:]#2 referring to 'wave'
 
         #run continuum normalization
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting wavelength and flux data")
         norm = self.alg.run_cont_norm(sciwave,sciflux)
 
+        #new fits creation
+        if self.logger:
+            self.logger.info("Continuum Normalization: Creating FITS for continuum normalization output storage")
+        # hdu = fits.PrimaryHDU()
+        # image = fits.ImageHDU(norm)
+        # hdul = fits.HDUList([hdu,image])
+        # hdul[0].name = 'PRIMARY'
+        # hdul[1].name = 'CONT_NORM_RES'
+
         #write to fits file
-        return Arguments(norm)
+        return Arguments(hdul)
 
