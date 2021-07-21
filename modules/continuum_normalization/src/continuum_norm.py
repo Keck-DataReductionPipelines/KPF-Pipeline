@@ -89,8 +89,7 @@ class ContinuumNorm(KPF1_Primitive):
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting SCIWAVE & SCIFLUX extensions")
         sciflux = self.l1_obj.data['SCI1'][0,:,:]#0 referring to 'flux'
-        sciwave = self.l1_obj.data['SCI1'][2,:,:]#2 referring to 'wave'
-
+        sciwave = self.l1_obj.data['SCI1'][1,:,:]#1 referring to 'wave'
         #run continuum normalization
         if self.logger:
             self.logger.info("Continuum Normalization: Extracting wavelength and flux data")
