@@ -47,7 +47,7 @@ class ContNormAlgg:
         """
         configpull=ConfigHandler(config,'PARAM')
         self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
-        self.method=configpull.get_config_value('method','Spline')
+        self.method=configpull.get_config_value('method','Polynomial')
         self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
         self.plot_results=configpull.get_config_value('plot_results',True)
         self.n_iter=configpull.get_config_value('n_iter',5)

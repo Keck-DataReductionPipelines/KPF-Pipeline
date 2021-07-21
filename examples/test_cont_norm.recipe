@@ -1,11 +1,11 @@
 from modules.continuum_normalization.src.continuum_norm import ContinuumNorm
 
 startloc = '/Users/paminabby/Desktop/KPF/ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
-resultloc = '/Users/paminabby/Desktop/cn_test/test1.fits'
+#resultloc = '/Users/paminabby/Desktop/cn_test/test1.fits'
 
 for file in find_files(startloc):
     data = kpf1_from_fits(file,data_type='NEID')
     norm = ContinuumNorm(data)
-    result = to_fits(norm,resultloc)
+    #result = to_fits(norm,resultloc)
 
 

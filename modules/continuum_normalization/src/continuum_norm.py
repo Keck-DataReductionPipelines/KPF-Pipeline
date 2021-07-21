@@ -99,12 +99,8 @@ class ContinuumNorm(KPF1_Primitive):
         #new fits creation
         if self.logger:
             self.logger.info("Continuum Normalization: Creating FITS for continuum normalization output storage")
-        # hdu = fits.PrimaryHDU()
-        # image = fits.ImageHDU(norm)
-        # hdul = fits.HDUList([hdu,image])
-        # hdul[0].name = 'PRIMARY'
-        # hdul[1].name = 'CONT_NORM_RES'
-
-        #write to fits file
-        return Arguments(hdul)
+            #in progress
+            #write to fits file
+            
+        #return Arguments(hdul)
 
