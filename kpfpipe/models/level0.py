@@ -166,7 +166,7 @@ class KPF0(KPFDataModel):
         if self.filename is not None:
             print('File name: {}'.format(self.filename))
         else: 
-            print('Empty KPF0 Data product')
+            print('Empty {:s} Data product'.format(self.__class__.__name__))
         # a typical command window is 80 in length
         head_key = '|{:20s} |{:20s} \n{:40}'.format(
             'Header Name', '# Cards',
