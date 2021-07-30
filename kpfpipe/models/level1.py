@@ -17,50 +17,11 @@ from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
 from kpfpipe.models.level0 import KPF0
 
-MAPPING = {
-    # Order:  (header-key, dimension, data-key)
-    'PRIMARY' : ('PRIMARY', None, None),
-    'SCIFLUX' : ('SCI1_FLUX', 0, 'SCI1'),
-    'SKYFLUX' : ('SKY_FLUX', 0, 'SKY'),
-    'CALFLUX' : ('CAL_FLUX', 0, 'CAL'),
-    'SCIVAR'  : ('SCI1_VARIANCE', 2, 'SCI1'),
-    'SKYVAR'  : ('SKY_VARIANCE', 2, 'SKY'),
-    'CALVAR'  : ('CAL_VARIANCE', 2, 'CAL'),
-    'SCIWAVE' : ('SCI1_WAVE', 1, 'SCI1'),
-    'SKYWAVE' : ('SKY_WAVE', 1, 'SKY'),
-    'CALWAVE' : ('CAL_WAVE', 1, 'CAL'),
-}
-
 class KPF1(KPF0):
     '''
-    The level 1 KPF data. Initialize with empty fields
+    The level 1 KPF data. Initialize with empty fields.
+    Attributes inherited from KPF0
 
-    Attributes:
-        data (dict): A dictionary of 5 orderlettes' 1D extracted spectrum.
-
-            This is the attribute of the instance that contains all image data.
-            The keys are the name of each orderlette, and the values are image data
-            asscoaited with that orderlette. 
-            
-            Each image data is a stack by row by column 3D numpy array. The first dimension
-            (stack) is fixed at 3. The first stack is the 1D extracted spectrum (2D ndarray),
-            the second stack is the wavelength calibration, and the 3rd stack is the pixel variance.
-            The second dimension (row) specifies a 1D extracted spectrum, and each row is an order.
-
-            There are five orderlettes (valid keys to the dict) in total:
-                - ``CAL``: Calibration fiber
-                - ``SKY``: Sky fiber
-                - ``SCI1``: Science fiber 1
-                - ``SCI2``: Science fiber 2
-                - ``SCI3``: Science fiber 3
-
-
-        read_methods (dict): Dictionaries of supported parsers. 
-        
-            These parsers are used by the base model to read in .fits files from other
-            instruments
-
-            Supported parsers: ``KPF``, ``NEID``
     '''
 
     def __init__(self):

@@ -258,17 +258,19 @@ class OptimalExtraction(KPF0_Primitive):
 
         # if no data in op_result, not build data extension and the asssociated header
         if total_order > 0:
-            kpf1_obj.data[order_name] = np.zeros((3, total_order, width))
-            kpf1_obj.data[order_name][0, :, :] = op_result.values
+            setattr(kpf1_obj, order_name, np.zeros((3, total_order, width)))
+            data = getattr(kpf1_obj, order_name)
+            data[0, :, :] = op_result.values
+            setattr(kpf1_obj, order_name, data)
             kpf1_obj.header[order_name+'_FLUX'] = {att: op_result.attrs[att] for att in op_result.attrs}
         else:
-            kpf1_obj.data[order_name] = None
+            setattr(kpf1_obj, order_name, None)
             kpf1_obj.header[order_name + '_FLUX'] = {}
 
         kpf1_obj.header[order_name+'_VARIANCE'] = {}
         kpf1_obj.header[order_name+'_WAVE'] = {}
 
-        if update_primary_header and kpf1_obj.data[order_name] is not None:
+        if update_primary_header and getattr(kpf1_obj, order_name) is not None:
             sample_primary_header = level1_sample.header['PRIMARY']
             if sample_primary_header is not None:
                 for h_key in ['SSBZ100', 'SSBJD100']:
@@ -281,10 +283,10 @@ class OptimalExtraction(KPF0_Primitive):
             return False
 
         if level1_sample is not None:
-            if order_name not in level1_sample.data or level1_sample.data[order_name] is None or \
-                    order_name not in level1_obj.data or level1_obj.data[order_name] is None:
+            if order_name not in level1_sample.extensions.keys() or getattr(level1_sample, order_name) is None or \
+                    order_name not in level1_obj.extensions.keys() or getattr(level1_obj, order_name) is None:
                 return False
-            s, total_order, width = np.shape(level1_obj.data[order_name])
+            s, total_order, width = np.shape(getattr(level1_obj, order_name))
             if s != 3:
                 return False
 
@@ -304,15 +306,16 @@ class OptimalExtraction(KPF0_Primitive):
             return True
 
         if level1_sample is not None:
-            wave_data = level1_sample.data[order_name][1, :, :]
+            wave_data = getattr(level1_sample, order_name)[1, :, :]
         else:
-            wave_data = level0_sample.data if self.alg.get_instrument() != 'KPF' else level0_sample.data*10000.0
+            wave_data = getattr(level0_sample, order_name) if self.alg.get_instrument() != 'KPF' else getattr(level0_sample, order_name)*10000.0
         if wave_data is None:               # data setting error
             return False
 
         wave_start = 0
-        wave_end = min(np.shape(wave_data)[0], np.shape(level1_obj.data[order_name][1])[0])
-        level1_obj.data[order_name][1, wave_start:wave_end, :] = wave_data[wave_start:wave_end, :]
+        wave_end = min(np.shape(wave_data)[0], np.shape(getattr(level1_obj, order_name)[1])[0])
+        wave_arr = getattr(level1_obj, order_name)
+        wave_arr[1, wave_start:wave_end, :] = wave_data[wave_start:wave_end, :]
         return True
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):

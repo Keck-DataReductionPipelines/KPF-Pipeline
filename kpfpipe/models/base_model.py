@@ -84,14 +84,15 @@ class KPFDataModel(object):
                                         Time     ...  Module_Param Status
                 0  2020-06-22T15:42:18.360409     ...        input1   PASS
 
-        extensions (dict): a dictionary of  extensions.
+        extensions (dict): a dictionary of extensions.
 
             This attribute stores any additional information that any primitive may wish to 
             record to FITS. Creating an extension creates an empty extension of the given type and
             one may modify it directly. Creating an extension will also create a new key-value 
             pair in header, so that one can write header keywords to the extension. When writing to
             FITS extensions are stored in the FITS data type as specified in 
-            kpfpipe.me=odels.metadata.KPF_definitions.FITS_TYPE_MAP (image or binary table). Whitespace is not
+            kpfpipe.models.metadata.KPF_definitions.FITS_TYPE_MAP (image or binary table). Whitespace or 
+            any symbols that may be interpreted by Python as an operator (e.g. -) are not
             allowed in extension names.
 
             Examples:
@@ -100,10 +101,10 @@ class KPFDataModel(object):
                 # Add an extension
                 # A unique name is required
                 >>> data.create_extension('extension1', pd.DataFrame)
-                # Access the extension by using its name as the dict key
+                # Access the extension by using its name as an attribute
                 # Add a column called 'col1' to the Dataframe
-                >>> data.extensions['extension1']['col1'] = [1, 2, 3]
-                >>> data.extensions['extension1']
+                >>> data.extension1['col1'] = [1, 2, 3]
+                >>> data.extension1['extension1']
                 col1
                 0     1
                 1     2
@@ -112,7 +113,7 @@ class KPFDataModel(object):
                 >>> data.header['extension1']['key'] = 'value'
                 # delete the extension we just made
                 >>> data.del_extension['extension1']
-
+        config (DataFrame): two-column dataframe that stores each line of the input configuration file
     '''
 
     def __init__(self):
