@@ -102,12 +102,6 @@ class KPF0(KPFDataModel):
             hdul (fits.HDUList): List of HDUs parsed with astropy.
 
         '''
-        # clean out KPF extensions first
-        core_extensions = ['PRIMARY', 'RECEIPT', 'CONFIG']
-        existing = copy.copy(self.extensions)
-        for ext in existing.keys():
-            if ext not in core_extensions:
-                self.del_extension(ext)
 
         for hdu in hdul:
             this_header = hdu.header
@@ -208,6 +202,8 @@ class KPF0(KPFDataModel):
                 hdu = fits.PrimaryHDU(header=head)
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
+                if data is None:
+                    data = np.array([])
                 ndim = len(data.shape)
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
@@ -227,7 +223,10 @@ class KPF0(KPFDataModel):
                       .format(type(getattr(self, key))))
                 continue
             hdu.name = key
-            hdu_list.append(hdu)
+            if hdu.name == 'PRIMARY':
+                hdu_list.insert(0, hdu)
+            else:
+                hdu_list.append(hdu)
 
         return hdu_list
     

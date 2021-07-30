@@ -13,6 +13,7 @@ from collections import OrderedDict
 import astropy
 from astropy.io import fits
 from astropy.io.fits import verify
+from astropy.io.fits.hdu.image import PrimaryHDU
 from astropy.time import Time
 from astropy.table import Table
 import numpy as np
@@ -130,6 +131,9 @@ class KPFDataModel(object):
 
         self.config = pd.DataFrame([], columns=CONFIG_COL)
         self.CONFIG = self.config
+
+        self.primary = OrderedDict()
+        self.PRIMARY = self.primary
 
         self.extensions = OrderedDict(PRIMARY=fits.PrimaryHDU,
                                       RECEIPT=fits.BinTableHDU,
@@ -256,10 +260,10 @@ class KPFDataModel(object):
                 del hdu.header['OBS FILE']
             elif 'PRIMARY' in hdu.header.keys():
                 del hdu.header['PRIMARY']
-
+            
         # finish up writing
         hdul = fits.HDUList(hdu_list)
-        hdul.writeto(fn, overwrite=True, output_verify='silentfix')
+        hdul.writeto(fn, overwrite=True)#, output_verify='silentfix')
 
 # =============================================================================
 # Receipt related members
@@ -332,7 +336,7 @@ class KPFDataModel(object):
             reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
 
         # check whether the extension already exist
-        if ext_name in self.extensions.keys():
+        if ext_name in self.extensions.keys() and ext_name in self.__dir__():
             raise NameError('Name {} already exists as extension'.format(ext_name))
         
         setattr(self, ext_name, ext_type)
