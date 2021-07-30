@@ -144,9 +144,8 @@ class RadialVelocity(KPF1_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-        data = self.input.data if hasattr(self.input, 'data') else None
-        self.spectrum_data = self.input.data[self.sci][0, :, :] if data and self.sci in data else None
-        self.wave_cal = self.input.data[self.sci][1, :, :] if data and self.sci in data else None
+        self.spectrum_data = getattr(self.input, self.sci+'_FLUX') if hasattr(self.input, self.sci+'_FLUX') else None
+        self.wave_cal = getattr(self.input, self.sci+'_WAVE') if hasattr(self.input, self.sci+'_WAVE') else None
         header = self.input.header if hasattr(self.input, 'header') else None
         self.header = None
         if header:

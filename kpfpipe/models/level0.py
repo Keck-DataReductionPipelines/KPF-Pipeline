@@ -21,11 +21,10 @@ from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
 class KPF0(KPFDataModel):
     """
-    The level 0 KPF data. Initialized with empty fields
+    The level 0 KPF data. Initialized with empty fields.
+    Attributes inherited from KPFDataModel, additional attributes below.
 
     Attributes:
-        data (numpy.ndarray): 2D numpy array storing raw image
-        variance (numpy.ndarray): 2D numpy array storing pixel variance
         read_methods (dict): Dictionaries of supported parsers. 
         
             These parsers are used by the base model to read in .fits files from
