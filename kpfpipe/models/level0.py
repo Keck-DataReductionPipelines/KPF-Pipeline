@@ -165,6 +165,7 @@ class KPF0(KPFDataModel):
             'Header Name', '# Cards',
             '='*80 + '\n'
         )
+
         for key, value in self.header.items():
             row = '|{:20s} |{:20} \n'.format(key, len(value))
             head_key += row
@@ -187,7 +188,8 @@ class KPF0(KPFDataModel):
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
                                                         str(len(ext)))
                 head += row
-
+        print(head)
+        
     def _create_hdul(self):
         '''
         Create an hdul in FITS format. 
