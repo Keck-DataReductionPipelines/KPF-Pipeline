@@ -2,6 +2,7 @@
 KPF Level 1 Data Model
 '''
 # Standard dependencies
+from collections import OrderedDict
 import os
 import copy
 
@@ -32,11 +33,12 @@ class KPF1(KPF0):
 
         self.level = 1
 
-        extensions = copy.copy(KPF_definitions.LEVEL1_EXTENSIONS)
+        self.extensions = copy.copy(KPF_definitions.LEVEL1_EXTENSIONS)
         self.header_definitions = KPF_definitions.LEVEL1_HEADER_KEYWORDS.items()
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
+        self.header = OrderedDict()
 
-        for key, value in extensions.items():
+        for key, value in self.extensions.items():
             if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
                 atr = python_types[value]([])
                 self.header[key] = fits.Header()
@@ -56,5 +58,3 @@ class KPF1(KPF0):
             'KPF':  self._read_from_KPF,
             'NEID': self._read_from_NEID
         }
-
-
