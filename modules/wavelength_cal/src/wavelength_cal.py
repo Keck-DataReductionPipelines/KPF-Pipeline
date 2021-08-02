@@ -103,20 +103,24 @@ class WaveCalibrate(KPF1_Primitive):
         if self.logger:
             self.logger.info("Wavelength Calibration: Extracting CALFLUX and master calibration data")
         calflux=self.l1_obj.data['CAL'][0,:,:]#0 referring to 'flux'
-        
+        calflux = np.nan_to_num(calflux)
+
         #master_data=self.master_wavelength.data['MASTER']
         master_data=self.alg.get_master_data(self.master_wavelength)
+
+        #get header info
+        comb_f0=float(self.l1_obj.header['PRIMARY']['LFCF0'])
+        comb_fr=float(self.l1_obj.header['PRIMARY']['LFCFR'])
 
         # 2. run wavecal
         if self.logger:
             self.logger.info("Wavelength Calibration: Running wavelength calibration")
-        wave_per_pix=self.alg.open_and_run(calflux,master_data)
-
-
+        wl_soln=self.alg.open_and_run(calflux,master_data,comb_f0,comb_fr)
+        print(wl_soln)
         # 3. write in -wave with wavelength calibration output (wavelength per pixel)
         for prefix in ['CAL','SCI1','SKY']:
             if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
-                self.l1_obj.data[prefix][1,:,:]=wave_per_pix
+                self.l1_obj.data[prefix][1,:,:]=wl_soln
 
         if self.l1_obj is not None:
             self.l1_obj.receipt_add_entry('WaveCalibrate', self.__module__,
