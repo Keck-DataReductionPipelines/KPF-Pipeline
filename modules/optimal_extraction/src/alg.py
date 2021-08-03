@@ -1669,7 +1669,7 @@ class OptimalExtractionAlg:
                     order_names.append(o_nm.strip("' "))
 
                 if len(order_names) == 0:
-                    order_names.append('SCI1')
+                    order_names.append('SCI')
                 self.orderlette_names = order_names
 
         return self.orderlette_names
