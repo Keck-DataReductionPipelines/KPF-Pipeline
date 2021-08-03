@@ -156,6 +156,7 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'GUIDECAM': fits.ImageHDU,
 
                      'RECEIPT': fits.BinTableHDU,
+                     'CONFIG': fits.BinTableHDU,
                      
                      'SOLAR_IRRADIANCE': fits.BinTableHDU}
 
