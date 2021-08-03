@@ -36,7 +36,6 @@ class KPF1(KPF0):
         self.extensions = copy.copy(KPF_definitions.LEVEL1_EXTENSIONS)
         self.header_definitions = KPF_definitions.LEVEL1_HEADER_KEYWORDS.items()
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
-        self.header = OrderedDict()
 
         for key, value in self.extensions.items():
             if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
@@ -46,6 +45,14 @@ class KPF1(KPF0):
                 continue
             self.create_extension(key, python_types[value])
             setattr(self, key, atr)
+
+        header_keys = self.header.keys()
+        del_keys = []
+        for key in header_keys:
+            if key not in self.extensions.keys():
+                del_keys.append(key)
+        for key in del_keys:
+            del self.header[key]
 
         for key, value in self.header_definitions:
             # assume 2D image

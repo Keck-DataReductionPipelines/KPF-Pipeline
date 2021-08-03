@@ -44,6 +44,7 @@ class KPF0(KPFDataModel):
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
         # add empty level0 extensions and empty headers for each extension
         for key, value in extensions.items():
+            print(key, value)
             if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
                 atr = python_types[value]([])
                 self.header[key] = fits.Header()
