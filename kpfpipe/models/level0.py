@@ -121,13 +121,11 @@ class KPF0(KPFDataModel):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, np.array)
                 setattr(self, hdu.name, hdu.data)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif isinstance(hdu, fits.BinTableHDU):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, pd.DataFrame)
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             else:
                 raise KeyError('Unrecognized extension {}'.format(hdu.name))
 
