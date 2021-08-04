@@ -89,7 +89,7 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 class RadialVelocityReweighting(KPF1_Primitive):
 
     default_agrs_val = {
-        'order_name': 'SCI1'
+        'order_name': 'SCI'
     }
 
     def __init__(self,
