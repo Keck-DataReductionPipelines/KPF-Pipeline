@@ -19,7 +19,7 @@
                     - `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing flat data and order
                       trace result.
                     - `action.args['order_name'] (str|list, optional)`: Name or list of names of the order to be
-                      processed. Defaults to 'SCI1'.
+                      processed. Defaults to 'SCI'.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
                     - `action.args['max_result_order'] (int, optional)`: Total orders to be processed, Defaults to -1.
@@ -91,7 +91,7 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 class OrderRectification(KPF0_Primitive):
     default_agrs_val = {
-                    'order_name': 'SCI1',
+                    'order_name': 'SCI',
                     'max_result_order': -1,
                     'start_order': 0,
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical',
