@@ -78,15 +78,13 @@ class KPF0(KPFDataModel):
         for hdu in hdul:
             if isinstance(hdu, fits.ImageHDU):
                 if hdu.name not in self.extensions:
-                    self.create_extension(hdu.name, np.array)
+                    self.create_extension(hdu.name, np.ndarray)
                 setattr(self, hdu.name, hdu.data)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif isinstance(hdu, fits.BinTableHDU):
                 if hdu.name not in self.extensions:
                     self.create_extension(hdu.name, pd.DataFrame)
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif hdu.name != 'PRIMARY' and hdu.name != 'RECEIPT':
                 print("Unrecognized extension {}".format(hdu.name))
                 continue

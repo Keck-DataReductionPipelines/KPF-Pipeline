@@ -278,7 +278,7 @@ class KPFDataModel(object):
             
         # finish up writing
         hdul = fits.HDUList(hdu_list)
-        hdul.writeto(fn, overwrite=True)#, output_verify='silentfix')
+        hdul.writeto(fn, overwrite=True, output_verify='silentfix')
 
 # =============================================================================
 # Receipt related members

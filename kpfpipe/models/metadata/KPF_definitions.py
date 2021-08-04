@@ -164,6 +164,9 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 # as a dictionary with the name of the extensions as keys
 # and the fits data type as the values
 LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
+                     'RECEIPT': fits.BinTableHDU,
+                     'CONFIG': fits.BinTableHDU,
+
                      'GREEN_SCI_FLUX1': fits.ImageHDU,
                      'GREEN_SCI_FLUX2': fits.ImageHDU,
                      'GREEN_SCI_FLUX3': fits.ImageHDU,
@@ -199,20 +202,17 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RED_CAL_WAVE': fits.ImageHDU,
                      'RED_TELLURIC': fits.BinTableHDU,
                      'RED_SKY': fits.BinTableHDU,
-                     
-                     'RECEIPT': fits.BinTableHDU,
-                     'CONFIG': fits.BinTableHDU
                     }
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
 # and the fits data type as the values
 LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
-                     'GREEN_CCF': fits.ImageHDU,                     
-                     'RED_CCF': fits.ImageHDU,
-                     
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
-                     
+                    
+                     'GREEN_CCF': fits.ImageHDU,                     
+                     'RED_CCF': fits.ImageHDU,
+
                      'RV': fits.BinTableHDU,
                      'ACTIVITY': fits.BinTableHDU}
 
