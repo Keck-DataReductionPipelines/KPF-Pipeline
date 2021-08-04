@@ -145,6 +145,22 @@ class KPFDataModel(object):
         self.level = None # set in each derived class
         self.read_methods = dict()
 
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        if key in self.extensions:
+            setattr(self, key, value)
+        else:
+            data_type = type(value)
+            self.create_extension(key, data_type)
+            setattr(self, key, value)
+
+    def __delitem__(self, key):
+        del self.header[key]
+        del self.extensions[key]
+        delattr(self, key)
+
 # =============================================================================
 # I/O related methods
     @classmethod

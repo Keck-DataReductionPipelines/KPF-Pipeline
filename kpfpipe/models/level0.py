@@ -111,12 +111,10 @@ class KPF0(KPFDataModel):
                 self.header['PRIMARY'] = this_header
             elif hdu.name == 'DATA':
                 self.create_extension('DATA', np.array)
-                self.data = hdu.data
-                self.DATA = self.data
+                self.DATA = hdu.data
             elif hdu.name == 'VARIANCE':
                 self.create_extension('VARIANCE', np.array)
-                self.variance = hdu.data
-                self.VARIANCE = self.variance
+                self.VARIANCE = hdu.data
             elif isinstance(hdu, fits.ImageHDU):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, np.array)
