@@ -157,9 +157,7 @@ class KPFDataModel(object):
             setattr(self, key, value)
 
     def __delitem__(self, key):
-        del self.header[key]
-        del self.extensions[key]
-        delattr(self, key)
+        self.del_extension(key)
 
 # =============================================================================
 # I/O related methods
