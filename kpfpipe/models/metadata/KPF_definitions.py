@@ -14,7 +14,7 @@ from collections import OrderedDict
 
 # mapping between fits extension data types and Python object data types
 FITS_TYPE_MAP = {fits.PrimaryHDU: OrderedDict,
-                 fits.ImageHDU: np.ndarray,
+                 fits.ImageHDU: np.array,
                  fits.BinTableHDU: pd.DataFrame}
 
 ## Header keywords required by all levels of data

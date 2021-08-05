@@ -5,6 +5,7 @@ Level 0 Data Model
 from collections import OrderedDict
 import os
 import copy
+import warnings
 
 # External dependencies
 import astropy
@@ -45,7 +46,10 @@ class KPF0(KPFDataModel):
         # add empty level0 extensions and empty headers for each extension
         for key, value in extensions.items():
             if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
-                atr = python_types[value]([])
+                if python_types[value] == np.ndarray:
+                    atr = np.array([])
+                else:    
+                    atr = python_types[value]([])
                 self.header[key] = fits.Header()
             else:
                 continue
@@ -86,7 +90,7 @@ class KPF0(KPFDataModel):
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
             elif hdu.name != 'PRIMARY' and hdu.name != 'RECEIPT':
-                print("Unrecognized extension {}".format(hdu.name))
+                warnings.warn("Unrecognized extension {} of type {}".format(hdu.name, type(hdu)))
                 continue
             
             self.header[hdu.name] = hdu.header
@@ -107,14 +111,16 @@ class KPF0(KPFDataModel):
             if hdu.name == 'PRIMARY':
                 self.header['PRIMARY'] = this_header
             elif hdu.name == 'DATA':
-                self.create_extension('DATA', np.ndarray)
-                self.DATA = hdu.data
+                self.create_extension('DATA', np.array)
+                self.data = hdu.data
+                self.DATA = self.data
             elif hdu.name == 'VARIANCE':
-                self.create_extension('VARIANCE', np.ndarray)
-                self.VARIANCE = hdu.data
+                self.create_extension('VARIANCE', np.array)
+                self.variance = hdu.data
+                self.VARIANCE = self.variance
             elif isinstance(hdu, fits.ImageHDU):
                 if hdu.name not in self.extensions.keys():
-                    self.create_extension(hdu.name, np.ndarray)
+                    self.create_extension(hdu.name, np.array)
                 setattr(self, hdu.name, hdu.data)
             elif isinstance(hdu, fits.BinTableHDU):
                 if hdu.name not in self.extensions.keys():
@@ -122,7 +128,9 @@ class KPF0(KPFDataModel):
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
             else:
-                raise KeyError('Unrecognized extension {}'.format(hdu.name))
+                warnings.warn('Unrecognized NEID extension {} of type {}'.format(hdu.name, type(hdu)))
+                continue
+                # raise KeyError('Unrecognized NEID extension {} of type {}'.format(hdu.name, type(hdu)))
 
             self.header[hdu.name] = this_header
 
@@ -198,8 +206,10 @@ class KPF0(KPFDataModel):
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
                 if data is None:
-                    data = np.array([])
-                ndim = len(data.shape)
+                    ndim = 0
+                    # data = np.array([])
+                else:
+                    ndim = len(data.shape)
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
                     self.header[key]['NAXIS1'] = 0
@@ -207,7 +217,7 @@ class KPF0(KPFDataModel):
                     for d in range(ndim):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
                 head = self.header[key]
-                hdu = value(data=data, header=head)
+                hdu = fits.ImageHDU(data=data, header=head)
             elif value == fits.BinTableHDU:
                 table = Table.from_pandas(getattr(self, key))
                 self.header[key]['NAXIS1'] = len(table)
