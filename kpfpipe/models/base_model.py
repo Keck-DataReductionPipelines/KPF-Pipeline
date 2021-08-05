@@ -146,18 +146,18 @@ class KPFDataModel(object):
         self.read_methods = dict()
 
     def __getitem__(self, key):
-        return getattr(self, key)
+        return getattr(self, key.upper())
 
     def __setitem__(self, key, value):
-        if key in self.extensions:
-            setattr(self, key, value)
+        if key.upper() in self.extensions:
+            setattr(self, key.upper(), value)
         else:
             data_type = type(value)
-            self.create_extension(key, data_type)
-            setattr(self, key, value)
+            self.create_extension(key.upper(), data_type)
+            setattr(self, key.upper(), value)
 
     def __delitem__(self, key):
-        self.del_extension(key)
+        self.del_extension(key.upper())
 
 # =============================================================================
 # I/O related methods
@@ -345,19 +345,20 @@ class KPFDataModel(object):
 
         '''
         if ext_type not in FITS_TYPE_MAP.values():
-            raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, 
-                                                                                                FITS_TYPE_MAP.values()))
-        else:
-            reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
+            if ext_type == np.ndarray:
+                ext_type = np.array
+            else:
+                raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, 
+                                                                                                  FITS_TYPE_MAP.values()))
+        reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
 
         # check whether the extension already exist
         if ext_name in self.extensions.keys() and ext_name in self.__dir__():
             raise NameError('Name {} already exists as extension'.format(ext_name))
-        
-        setattr(self, ext_name, ext_type)
+
+        setattr(self, ext_name, None)
         self.header[ext_name] = fits.Header()
         self.extensions[ext_name] = reverse_map[ext_type]
-
     
     def del_extension(self, ext_name):
         '''
