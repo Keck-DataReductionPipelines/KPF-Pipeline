@@ -5,7 +5,7 @@ import sys
 import shutil
 from dotenv import load_dotenv
 
-from kpfpipe.models.level1 import *
+from kpfpipe.models.level2 import *
 
 # Load .env file for test path 
 load_dotenv()
@@ -34,16 +34,16 @@ def test_NEID2KPF():
 
     for f in flist:
         # read NEID data and convert to KPF data
-        data = KPF1.from_fits(os.path.join(fpath, f), 'NEID')
+        data = KPF2.from_fits(os.path.join(fpath, f), 'NEID')
         to_path = 'temp/' + f
         data.to_fits(to_path)
         # read the converted data
-        data2 = KPF1.from_fits(to_path, 'KPF')
+        data2 = KPF2.from_fits(to_path, 'KPF')
         # compare the data value of the two
         for key in data2.extensions.keys():
             if key not in data.extensions.keys() or key == 'RECEIPT':
                 continue
-            value = getattr(data2, key)
+            value = data2[key]
             if value is None:
                 assert(getattr(data, key) is None)
             elif isinstance(value, pd.DataFrame):
@@ -56,7 +56,7 @@ def test_NEID2KPF():
 
 def test_io_exception():
 
-    data = KPF1()
+    data = KPF2()
     with pytest.raises(FileNotFoundError):
         # file does not exist 
         data.read('not_exist.fits', 'NEID')
@@ -67,7 +67,7 @@ def test_io_exception():
         path = path.split('.')[0] # remove the '.fit' from extension
         data.read(path, 'NEID')
     
-    data = KPF1()
+    data = KPF2()
     path = os.path.join(fpath, flist[0])
     data.read(path, 'NEID')
 
