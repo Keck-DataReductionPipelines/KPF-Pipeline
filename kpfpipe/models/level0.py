@@ -5,6 +5,7 @@ Level 0 Data Model
 from collections import OrderedDict
 import os
 import copy
+import warnings
 
 # External dependencies
 import astropy
@@ -21,11 +22,10 @@ from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
 class KPF0(KPFDataModel):
     """
-    The level 0 KPF data. Initialized with empty fields
+    The level 0 KPF data. Initialized with empty fields.
+    Attributes inherited from KPFDataModel, additional attributes below.
 
     Attributes:
-        data (numpy.ndarray): 2D numpy array storing raw image
-        variance (numpy.ndarray): 2D numpy array storing pixel variance
         read_methods (dict): Dictionaries of supported parsers. 
         
             These parsers are used by the base model to read in .fits files from
@@ -46,7 +46,10 @@ class KPF0(KPFDataModel):
         # add empty level0 extensions and empty headers for each extension
         for key, value in extensions.items():
             if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
-                atr = python_types[value]([])
+                if python_types[value] == np.ndarray:
+                    atr = np.array([])
+                else:    
+                    atr = python_types[value]([])
                 self.header[key] = fits.Header()
             else:
                 continue
@@ -79,17 +82,15 @@ class KPF0(KPFDataModel):
         for hdu in hdul:
             if isinstance(hdu, fits.ImageHDU):
                 if hdu.name not in self.extensions:
-                    self.create_extension(hdu.name, np.array)
+                    self.create_extension(hdu.name, np.ndarray)
                 setattr(self, hdu.name, hdu.data)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif isinstance(hdu, fits.BinTableHDU):
                 if hdu.name not in self.extensions:
                     self.create_extension(hdu.name, pd.DataFrame)
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif hdu.name != 'PRIMARY' and hdu.name != 'RECEIPT':
-                print("Unrecognized extension {}".format(hdu.name))
+                warnings.warn("Unrecognized extension {} of type {}".format(hdu.name, type(hdu)))
                 continue
             
             self.header[hdu.name] = hdu.header
@@ -102,12 +103,6 @@ class KPF0(KPFDataModel):
             hdul (fits.HDUList): List of HDUs parsed with astropy.
 
         '''
-        # clean out KPF extensions first
-        core_extensions = ['PRIMARY', 'RECEIPT', 'CONFIG']
-        existing = copy.copy(self.extensions)
-        for ext in existing.keys():
-            if ext not in core_extensions:
-                self.del_extension(ext)
 
         for hdu in hdul:
             this_header = hdu.header
@@ -127,15 +122,15 @@ class KPF0(KPFDataModel):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, np.array)
                 setattr(self, hdu.name, hdu.data)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             elif isinstance(hdu, fits.BinTableHDU):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, pd.DataFrame)
                 table = Table(hdu.data).to_pandas()
                 setattr(self, hdu.name, table)
-                setattr(self, hdu.name.lower(), getattr(self, hdu.name))
             else:
-                raise KeyError('Unrecognized extension {}'.format(hdu.name))
+                warnings.warn('Unrecognized NEID extension {} of type {}'.format(hdu.name, type(hdu)))
+                continue
+                # raise KeyError('Unrecognized NEID extension {} of type {}'.format(hdu.name, type(hdu)))
 
             self.header[hdu.name] = this_header
 
@@ -166,12 +161,13 @@ class KPF0(KPFDataModel):
         if self.filename is not None:
             print('File name: {}'.format(self.filename))
         else: 
-            print('Empty KPF0 Data product')
+            print('Empty {:s} Data product'.format(self.__class__.__name__))
         # a typical command window is 80 in length
         head_key = '|{:20s} |{:20s} \n{:40}'.format(
             'Header Name', '# Cards',
             '='*80 + '\n'
         )
+
         for key, value in self.header.items():
             row = '|{:20s} |{:20} \n'.format(key, len(value))
             head_key += row
@@ -194,7 +190,8 @@ class KPF0(KPFDataModel):
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
                                                         str(len(ext)))
                 head += row
-
+        print(head)
+        
     def _create_hdul(self):
         '''
         Create an hdul in FITS format. 
@@ -208,7 +205,11 @@ class KPF0(KPFDataModel):
                 hdu = fits.PrimaryHDU(header=head)
             elif value == fits.ImageHDU:
                 data = getattr(self, key)
-                ndim = len(data.shape)
+                if data is None:
+                    ndim = 0
+                    # data = np.array([])
+                else:
+                    ndim = len(data.shape)
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
                     self.header[key]['NAXIS1'] = 0
@@ -216,7 +217,7 @@ class KPF0(KPFDataModel):
                     for d in range(ndim):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
                 head = self.header[key]
-                hdu = value(data=data, header=head)
+                hdu = fits.ImageHDU(data=data, header=head)
             elif value == fits.BinTableHDU:
                 table = Table.from_pandas(getattr(self, key))
                 self.header[key]['NAXIS1'] = len(table)
@@ -227,7 +228,10 @@ class KPF0(KPFDataModel):
                       .format(type(getattr(self, key))))
                 continue
             hdu.name = key
-            hdu_list.append(hdu)
+            if hdu.name == 'PRIMARY':
+                hdu_list.insert(0, hdu)
+            else:
+                hdu_list.append(hdu)
 
         return hdu_list
     

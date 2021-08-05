@@ -13,6 +13,7 @@ from collections import OrderedDict
 import astropy
 from astropy.io import fits
 from astropy.io.fits import verify
+from astropy.io.fits.hdu.image import PrimaryHDU
 from astropy.time import Time
 from astropy.table import Table
 import numpy as np
@@ -83,14 +84,15 @@ class KPFDataModel(object):
                                         Time     ...  Module_Param Status
                 0  2020-06-22T15:42:18.360409     ...        input1   PASS
 
-        extensions (dict): a dictionary of  extensions.
+        extensions (dict): a dictionary of extensions.
 
             This attribute stores any additional information that any primitive may wish to 
             record to FITS. Creating an extension creates an empty extension of the given type and
             one may modify it directly. Creating an extension will also create a new key-value 
             pair in header, so that one can write header keywords to the extension. When writing to
             FITS extensions are stored in the FITS data type as specified in 
-            kpfpipe.me=odels.metadata.KPF_definitions.FITS_TYPE_MAP (image or binary table). Whitespace is not
+            kpfpipe.models.metadata.KPF_definitions.FITS_TYPE_MAP (image or binary table). Whitespace or 
+            any symbols that may be interpreted by Python as an operator (e.g. -) are not
             allowed in extension names.
 
             Examples:
@@ -99,10 +101,10 @@ class KPFDataModel(object):
                 # Add an extension
                 # A unique name is required
                 >>> data.create_extension('extension1', pd.DataFrame)
-                # Access the extension by using its name as the dict key
+                # Access the extension by using its name as an attribute
                 # Add a column called 'col1' to the Dataframe
-                >>> data.extensions['extension1']['col1'] = [1, 2, 3]
-                >>> data.extensions['extension1']
+                >>> data.extension1['col1'] = [1, 2, 3]
+                >>> data.extension1['extension1']
                 col1
                 0     1
                 1     2
@@ -111,7 +113,7 @@ class KPFDataModel(object):
                 >>> data.header['extension1']['key'] = 'value'
                 # delete the extension we just made
                 >>> data.del_extension['extension1']
-
+        config (DataFrame): two-column dataframe that stores each line of the input configuration file
     '''
 
     def __init__(self):
@@ -131,6 +133,9 @@ class KPFDataModel(object):
         self.config = pd.DataFrame([], columns=CONFIG_COL)
         self.CONFIG = self.config
 
+        self.primary = OrderedDict()
+        self.PRIMARY = self.primary
+
         self.extensions = OrderedDict(PRIMARY=fits.PrimaryHDU,
                                       RECEIPT=fits.BinTableHDU,
                                       CONFIG=fits.BinTableHDU)
@@ -139,6 +144,20 @@ class KPFDataModel(object):
         # level of data model
         self.level = None # set in each derived class
         self.read_methods = dict()
+
+    def __getitem__(self, key):
+        return getattr(self, key.upper())
+
+    def __setitem__(self, key, value):
+        if key.upper() in self.extensions:
+            setattr(self, key.upper(), value)
+        else:
+            data_type = type(value)
+            self.create_extension(key.upper(), data_type)
+            setattr(self, key.upper(), value)
+
+    def __delitem__(self, key):
+        self.del_extension(key.upper())
 
 # =============================================================================
 # I/O related methods
@@ -256,7 +275,7 @@ class KPFDataModel(object):
                 del hdu.header['OBS FILE']
             elif 'PRIMARY' in hdu.header.keys():
                 del hdu.header['PRIMARY']
-
+            
         # finish up writing
         hdul = fits.HDUList(hdu_list)
         hdul.writeto(fn, overwrite=True, output_verify='silentfix')
@@ -326,19 +345,20 @@ class KPFDataModel(object):
 
         '''
         if ext_type not in FITS_TYPE_MAP.values():
-            raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, 
-                                                                                                FITS_TYPE_MAP.values()))
-        else:
-            reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
+            if ext_type == np.ndarray:
+                ext_type = np.array
+            else:
+                raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, 
+                                                                                                  FITS_TYPE_MAP.values()))
+        reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
 
         # check whether the extension already exist
-        if ext_name in self.extensions.keys():
+        if ext_name in self.extensions.keys() and ext_name in self.__dir__():
             raise NameError('Name {} already exists as extension'.format(ext_name))
-        
-        setattr(self, ext_name, ext_type)
+
+        setattr(self, ext_name, None)
         self.header[ext_name] = fits.Header()
         self.extensions[ext_name] = reverse_map[ext_type]
-
     
     def del_extension(self, ext_name):
         '''
