@@ -39,6 +39,8 @@ class ConfigHandler():
         if self.config_param is not None:
             if isinstance(default, int):
                 return self.config_param.getint(param, default)
+            elif isinstance(default, bool):
+                return self.config_param.getboolean(param, default)
             elif isinstance(default, float):
                 return self.config_param.getfloat(param, default)
             else:
