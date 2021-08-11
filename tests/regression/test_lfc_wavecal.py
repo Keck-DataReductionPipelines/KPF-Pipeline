@@ -102,4 +102,13 @@ def test_rv_acc(filepath:str):
         precision_cm_s = algg.calculate_rv_precision(new_peaks,good_peak_idx,wls,leg_out)
         assert precision_cm_s < 100, "RV error is greater than 1 m/s"
 
+def test_alg():
+    test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
+    test_file = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
+    test_run_alg(test_file)
+
+def test_rv():
+    test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
+    test_file = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
+    test_rv_acc(test_file)
 
