@@ -17,7 +17,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.wavelength_cal.src.alg import LFCWaveCalibration
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default_recipe_neid.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
     """
@@ -66,6 +66,8 @@ class WaveCalibrate(KPF1_Primitive):
 
         self.l1_obj=self.action.args[0]
         self.master_wavelength=self.action.args[1]
+        self.f0_key = self.action.args[2]
+        self.frep_key = self.action.args[3]
         self.data_type = self.get_args_value('data_type', action.args, args_keys)
 
         #Input configuration
@@ -99,37 +101,66 @@ class WaveCalibrate(KPF1_Primitive):
         Returns:
             Level 1 data, containing wavelength-per-pixel result.
         """
-        # 1. extract extensions (calflux and sciwave) 
+        # 1. extracting master data
         if self.logger:
-            self.logger.info("Wavelength Calibration: Extracting CALFLUX and master calibration data")
-        calflux=self.l1_obj.data['CAL'][0,:,:]#0 referring to 'flux'
-        calflux = np.nan_to_num(calflux)
-
-        #master_data=self.master_wavelength.data['MASTER']
+            self.logger.info("Wavelength Calibration: Extracting master data")  
         master_data=self.alg.get_master_data(self.master_wavelength)
-
-        #get header info
-        comb_f0=float(self.l1_obj.header['PRIMARY']['LFCF0'])
-        comb_fr=float(self.l1_obj.header['PRIMARY']['LFCFR'])
-
-        # 2. run wavecal
+        # master_data = self.master_wavelength.data['SCI1'][1,:,:]
+        # 2. get comb frequency values
         if self.logger:
-            self.logger.info("Wavelength Calibration: Running wavelength calibration")
-        wl_soln=self.alg.open_and_run(calflux,master_data,comb_f0,comb_fr)
-        print(wl_soln)
-        # 3. write in -wave with wavelength calibration output (wavelength per pixel)
-        for prefix in ['CAL','SCI1','SKY']:
-            if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
-                self.l1_obj.data[prefix][1,:,:]=wl_soln
+            self.logger.info("Wavelength Calibration: Getting comb frequency values ")
 
+        print ('f0 key and frep keys:', type(self.f0_key), type(self.frep_key))
+
+        if self.f0_key:
+            if type(self.f0_key) == str:
+                comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
+                print("comb_f0:",comb_f0)
+            if type(self.f0_key) == float:
+                comb_f0 = self.f0_key
+                print("comb_f0:",comb_f0)
+            # else:
+            #     raise ValueError('F_0 incorrectly formatted')
+        else:
+            raise ValueError('F_0 value not found')
+
+        if self.frep_key:
+            if type(self.frep_key) == str:
+                comb_fr = float(self.l1_obj.header['PRIMARY'][self.frep_key])
+                print("comb_fr:",comb_fr)
+            if type(self.frep_key) == float:
+                comb_fr = self.frep_key
+                print("comb_fr:",comb_fr)
+            # else:
+            #     raise ValueError('F_Rep incorrectly formatted')
+        else:
+            raise ValueError('F_Rep value not found')
+
+        # 2. starting loop
+        if self.logger:
+            self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
+
+        for prefix in ['CAL']: #change to recipe config: 'orderlette_names' 
+            if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
+                self.logger.info("Wavelength Calibration: Running {prefix}")
+                if self.logger:
+                    self.logger.info("Wavelength Calibration: Extracting flux")
+                flux = self.l1_obj.data[prefix][0,:,:]#0 referring to 'flux'
+                flux = np.nan_to_num(flux)
+                if self.logger:
+                    self.logger.info("Wavelength Calibration: Running algorithm")  
+                wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr)
+                if self.logger:
+                    self.logger.info("Wavelength Calibration: Saving solution output")  
+                self.l1_obj.data[prefix][1,:,:]=wl_soln
         if self.l1_obj is not None:
-            self.l1_obj.receipt_add_entry('WaveCalibrate', self.__module__,
+            self.l1_obj.receipt_add_entry('Wavelength Calibration', self.__module__,
                                           f'config_path={self.config_path}', 'PASS')
         if self.logger:
-            self.logger.info("WaveCalibrate: Receipt written")
+            self.logger.info("Wavelength Calibration: Receipt written")
 
         if self.logger:
-            self.logger.info("WaveCalibrate: Done!")
+            self.logger.info("Wavelength Calibration: Done!")
 
         return Arguments(self.l1_obj)
 
@@ -140,3 +171,4 @@ class WaveCalibrate(KPF1_Primitive):
         else:
             v = self.default_args_val[key]
         return v
+
