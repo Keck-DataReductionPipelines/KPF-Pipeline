@@ -33,8 +33,7 @@ class LFCWaveCalibration:
         config_param(ConfigHandler): Instance representing pull from config file.
         
     """
-    #possible raises: lfcdata isn't in right format
-    def __init__(self, config=None, logger=None): #maybe add row as well
+    def __init__(self, config=None, logger=None): 
         """
         Inits LFCWaveCalibration class with LFC data, config, logger.
 
@@ -53,16 +52,15 @@ class LFCWaveCalibration:
             n_sections (np.int): Number of sections to divide the comb into. Pulled from config file.
         """
         configpull=ConfigHandler(config,'PARAM')
-        #self.f0=configpull.get_config_value('f0',-5e9)
-        #self.f_rep=configpull.get_config_value('f_rep',20e9)
         self.max_wave=configpull.get_config_value('max_wave',9300)
         self.min_wave=configpull.get_config_value('min_wave',3800)
         self.fit_order=configpull.get_config_value('fit_order',9)
         self.min_order=configpull.get_config_value('min_order',50)
         self.max_order=configpull.get_config_value('max_order',100)
         self.n_sections=configpull.get_config_value('n_sections',20)
-        #self.clip_peaks=configpull.get_config_value('clip_peaks',False)
+        #self.clip_peaks_opt=configpull.get_config_value('clip_peaks',False)
         self.skip_orders=configpull.get_config_value('skip_orders',None)
+        self.save_diagnostics=configpull.get_config_value('save_diagnostics',False)
         self.config=config
         self.logger=logger
 
@@ -513,7 +511,6 @@ class LFCWaveCalibration:
             plt.savefig('{}/labeled_line_locs.png'.format(plot_path), dpi=250)
             plt.close()
 
-
         if print_update:
             print(
                 '{} LFC modes not detected'.format(peak_mode_num - n_clipped_peaks)
@@ -552,19 +549,12 @@ class LFCWaveCalibration:
         # fitted_heights = gauss_coeffs[0,:][good_peak_idx]
         # weights = np.sqrt(fitted_heights)
 
-        leg_out = Legendre.fit(
-            new_peaks[good_peak_idx], wls, self.fit_order
-        )#, w=weights)
+        leg_out = Legendre.fit(new_peaks[good_peak_idx], wls, self.fit_order)
 
         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
         if plot_path is not None:
 
-            # interpolate and plot difference
-            # interpolated_ground_truth = np.interp(
-            #     np.arange(n_pixels), new_peaks[good_peak_idx], wls
-            # )
-            # interpolate and plot difference
             s = InterpolatedUnivariateSpline(new_peaks[good_peak_idx], wls)
             interpolated_ground_truth = s(np.arange(n_pixels))
 
@@ -762,6 +752,7 @@ class LFCWaveCalibration:
             new_peaks, peaks, peak_heights, gauss_coeffs = self.find_peaks_in_order(
                 comb, plot_path=order_plt_path
             )
+            #if self.clip_peaks_opt == True:
             good_peak_idx = self.clip_peaks(
                 comb, new_peaks, peaks, gauss_coeffs, peak_heights,thar_wavecal,
                 comb_lines_angstrom,plot_path=order_plt_path, print_update=print_update
@@ -832,19 +823,17 @@ class LFCWaveCalibration:
 
     def open_and_run(self, calflux, master_data, f0, f_rep):
     
-        SAVEPLOTS = '{}/diagnostic_plots'.format(os.getcwd())
-        if not os.path.isdir(SAVEPLOTS):
-            os.makedirs(SAVEPLOTS)
+        if type(self.save_diagnostics) == str:
+            SAVEPLOTS = ('{}/%s' % self.save_diagnostics).format(os.getcwd())
+            if not os.path.isdir(SAVEPLOTS):
+                os.makedirs(SAVEPLOTS)
+        if self.save_diagnostics == False:
+            SAVEPLOTS = None
 
-        print('calflux:',calflux)
-        print('thar:', master_data)
         cl_ang = self.comb_gen(f0, f_rep)
-        #print('cl_ang:',cl_ang)
         order_list = self.remove_orders()
-        #print('order_list:',order_list)
         n_orders = len(order_list)
         new_calflux = self.mask_array_neid(calflux,n_orders)
-        #print("newcal:", new_calflux)
         # perform wavelength calibration
         poly_soln = self.fit_many_orders(new_calflux, master_data, cl_ang, order_list, print_update=True, plt_path=SAVEPLOTS)
 
