@@ -49,7 +49,7 @@ def start_alg():
     lfc_start = LFCWaveCalibration(config=config_vals)
     return test_comb,test_thar,lfc_start
 
-def test_run_alg(filepath:str):
+def test_run_alg():
     config_vals = configparser.ConfigParser()
     config_vals['PARAM'] = {
         'min_wave': 3800,
@@ -61,6 +61,8 @@ def test_run_alg(filepath:str):
         'skip_orders': [84,85,86]
     }
     combs,thars,algg = start_alg()
+    test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
+    filepath = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
     f0,frep = f0_and_frep(filepath)
     #make order list
     orders = algg.remove_orders()
@@ -77,7 +79,7 @@ def test_run_alg(filepath:str):
     cl_ang = algg.comb_gen(f0,frep)
     poly_soln = algg.fit_many_orders(combs,thars,cl_ang,orders)
     
-def test_rv_acc(filepath:str):
+def test_rv_acc():
     config_vals = configparser.ConfigParser()
     config_vals['PARAM'] = {
         'min_wave': 3800,
@@ -89,6 +91,8 @@ def test_rv_acc(filepath:str):
         'skip_orders': [84,85,86]
     }
     combs,thars,algg = start_alg()
+    test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
+    filepath = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
     f0,frep = f0_and_frep(filepath)
     #make order list
     orders = algg.remove_orders()
@@ -102,13 +106,4 @@ def test_rv_acc(filepath:str):
         precision_cm_s = algg.calculate_rv_precision(new_peaks,good_peak_idx,wls,leg_out)
         assert precision_cm_s < 100, "RV error is greater than 1 m/s"
 
-def test_alg():
-    test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    test_file = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
-    test_run_alg(test_file)
-
-def test_rv():
-    test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    test_file = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
-    test_rv_acc(test_file)
 
