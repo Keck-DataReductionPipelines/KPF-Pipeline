@@ -1,13 +1,12 @@
 #packages
 import numpy as np
-###
+import matplotlib.pyplot as plt
 from astropy.io import fits
 ###
 
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
-from modules.Utils.overscan_subtract import OverscanSubtraction as osub
 
 class BiasSubtractionAlg:
     """
@@ -41,6 +40,7 @@ class BiasSubtractionAlg:
         self.ffi_exts=ffi_exts
         self.config=config
         self.logger=logger
+        #self.imagesize=
         
     def bias_subtraction(self,masterbias):
         """
@@ -74,3 +74,31 @@ class BiasSubtractionAlg:
             self.rawimage: The bias-corrected data.
         """
         return self.rawimage
+
+    def quicklook(self,masterbias,imagesize=(10,10)):
+        """Runs quicklook-version of algorithm for quicklook pipeline.
+
+        Args:
+            masterbias (np.ndarray): The FITS master bias data
+        """
+        #plot of images (master bias and raw image)
+
+        plt.figure(figsize=imagesize)
+        plt.title('Master Bias Frame')
+        plt.imshow(masterbias.data,aspect='auto')
+
+        for no,ffi in enumerate(self.ffi_exts):
+            plt.figure(figsize=imagesize)#size/layout up to config ideally
+            plt.title('Raw Frame')
+            plt.imshow(self.rawimage[ffi].data,aspect='auto')
+            
+            plt.figure(figsize=imagesize)
+            plt.title('Bias-Corrected L0 Image')
+            plt.imshow(self.rawimage[ffi].data-masterbias[no+1],aspect='auto')
+        #mean of counts (Std) in reference range
+
+
+        #raise flag when counts are significantly diff from master bias
+        
+
+        #identify bad pixels
