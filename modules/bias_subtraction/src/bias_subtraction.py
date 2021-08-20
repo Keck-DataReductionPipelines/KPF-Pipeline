@@ -67,6 +67,7 @@ class BiasSubtract(KPF0_Primitive):
         self.masterbias=self.action.args[1]
         self.ffi_exts=self.action.args[2]
         self.data_type=self.action.args[3]
+        self.quicklook=self.action.args[4] #True or False
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -101,11 +102,17 @@ class BiasSubtract(KPF0_Primitive):
             Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
         """
 
-        if self.logger:
-            self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
-        bias_subbed = self.alg.bias_subtraction(self.masterbias)
-        return Arguments(self.alg.get())
+        if self.quicklook == False:
+            if self.logger:
+                self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
+            bias_subbed = self.alg.bias_subtraction(self.masterbias)
+            return Arguments(self.alg.get())
         
+        if self.quicklook == True:
+            if self.logger:
+                self.logger.info('Bias Subtraction: running quicklook algorithm')
+            self.alg.quicklook(self.masterbias)
+
         # for frame_no in range(len(self.ffi_exts)):
         #     if self.logger:
         #         self.logger.info(f"Bias Subtraction: subtracting master bias from raw full frame image for {frame_no+1} of {len(self.ffi_exts)}...")
