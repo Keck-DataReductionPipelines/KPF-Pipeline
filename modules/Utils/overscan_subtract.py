@@ -172,10 +172,20 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return full_frame_img
 
+    def quicklook(self):
+        image = KPF0.from_fits(self.rawfile,self.data_type)
+        # Report the mean of counts in overscan region (part of CCD that is covered)
+        oscan_pxs,oscan_clip = self.overscan_arrays()
+        for row in range(0,image.shape[0]):
+            np.nanmean(image[row, oscan_clip])
+        # Check the parallel overscan region
+
+
     def _perform(self):
 
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
-        l0_obj = KPF0.from_fits(self.rawfile,self.data_type)
+        #l0_obj = KPF0.from_fits(self.rawfile,self.data_type)
+        l0_obj = fits.open(self.rawfile)
         frames_data = []
         for ext in channel_exts:
             data = l0_obj[ext].data

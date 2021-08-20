@@ -42,7 +42,7 @@ class BiasSubtractionAlg:
         self.logger=logger
         #self.imagesize=
         
-    def bias_subtraction(self,masterbias):
+    def bias_subtraction(self,masterbias,quicklook):
         """
             Subtracts bias data from raw data.
             In pipeline terms: inputs two L0 files, produces one L0 file. 
@@ -58,14 +58,37 @@ class BiasSubtractionAlg:
         #masterbias = masterbias[1].data
         # masterbias = np.zeros_like(frame)
         ###
-        for no,ffi in enumerate(self.ffi_exts):
-            if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
-                print ("Bias .fits Dimensions Equal, Check Passed")
-            else:
-                raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
+        if quicklook == False: 
+            for no,ffi in enumerate(self.ffi_exts):
+                if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
+                    print ("Bias .fits Dimensions Equal, Check Passed")
+                else:
+                    raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
 
-            self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
             #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+
+        if quicklook == True:
+            for no,ffi in enumerate(self.ffi_exts):
+                if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
+                    print ("Bias .fits Dimensions Equal, Check Passed")
+                else:
+                    raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
+                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+
+                counts = masterbias[no+1].data
+                flatten_counts = np.ravel(counts)
+                low, high = np.percentile(flatten_counts,[0.1,99.9])
+                counts[(counts>high) | (counts<low)] = np.nan #bad pixels
+                flatten_counts = np.ravel(counts)
+                print(np.nanmedian(flatten_counts),np.nanmean(flatten_counts),np.nanmin(flatten_counts),np.nanmax(flatten_counts))
+
+                plt.imshow(counts, cmap = 'cool')
+                plt.savefig('2D_bias_frame.pdf')
+
+                plt.close()
+                plt.hist(flatten_counts, bins = 20)
+                plt.savefig('Bias_histo.pdf')
 
     def get(self):
         """Returns bias-corrected raw image result.
@@ -74,29 +97,6 @@ class BiasSubtractionAlg:
             self.rawimage: The bias-corrected data.
         """
         return self.rawimage
-
-    def quicklook(self,masterbias,imagesize=(10,10)):
-        """Runs quicklook-version of algorithm for quicklook pipeline.
-
-        Args:
-            masterbias (np.ndarray): The FITS master bias data
-        """
-        #plot of images (master bias and raw image)
-
-        plt.figure(figsize=imagesize)
-        plt.title('Master Bias Frame')
-        plt.imshow(masterbias.data,aspect='auto')
-
-        for no,ffi in enumerate(self.ffi_exts):
-            plt.figure(figsize=imagesize)#size/layout up to config ideally
-            plt.title('Raw Frame')
-            plt.imshow(self.rawimage[ffi].data,aspect='auto')
-            
-            plt.figure(figsize=imagesize)
-            plt.title('Bias-Corrected L0 Image')
-            plt.imshow(self.rawimage[ffi].data-masterbias[no+1],aspect='auto')
-        #mean of counts (Std) in reference range
-
 
         #raise flag when counts are significantly diff from master bias
         
