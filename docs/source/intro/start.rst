@@ -6,6 +6,8 @@ the ``KPF-Pipeline`` module.
 
 First, download and install `Docker Desktop <https://www.docker.com/products/docker-desktop>`_ if you don't already have it.
 
+Obtain a copy of the test datasets stored in ownCloud. Download and install the `ownCloud desktop client  <https://owncloud.com/desktop-app/>`_ and direct it to `<http://shrek.caltech.edu:5555`_.
+
 Then clone the repository and navigate into it::
 
     git clone https://github.com/California-Planet-Search/KPF-Pipeline.git
@@ -13,15 +15,11 @@ Then clone the repository and navigate into it::
 
 .. warning:: Refer to :doc:`install_develop` for setting up other branches
 
-Build the package into a docker container::
-    
-    docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+Define the ``KPFPIPE_TEST_DATA`` environment variable and point it to the ``KPF-Pipeline-TestData`` directory inside your copy of the ownCloud directory.
 
-Launch an interactive bash shell in the docker container::
-
-    docker run -it -v $OWNCLOUD_BASE/KPF-Pipeline-TestData:/data kpf-drp:latest bash
+Build the package into a docker container and launch an interactive bash shell::
     
-where ``$OWNCLOUD_BASE`` is the base path of your local ownCloud directory.
+    make docker
 
 Install the package once the container launches::
 

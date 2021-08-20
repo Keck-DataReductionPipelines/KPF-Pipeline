@@ -1,5 +1,5 @@
 Module Wavelength Calibration
-=========================
+=============================
 
 .. toctree::
    :maxdepth: 2

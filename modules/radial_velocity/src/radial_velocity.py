@@ -20,7 +20,7 @@
                       mask lines and velocity steps based on star and other module associated configuration for
                       radial velocity computation.
                     - `action.args['order_name'] (str, optional)`: Order name associated with the level 1 data.
-                      Defaults to 'SCI1'.
+                      Defaults to 'SCI'.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to None. The number means the order relative to the first one if it is greater
                       than or equal to 0, otherwise it means the order relative to the last one.
@@ -98,7 +98,7 @@ DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 class RadialVelocity(KPF1_Primitive):
 
     default_agrs_val = {
-        'order_name': 'SCI1'
+        'order_name': 'SCI'
     }
 
     def __init__(self,
@@ -107,6 +107,7 @@ class RadialVelocity(KPF1_Primitive):
         # Initialize parent class
         KPF1_Primitive.__init__(self, action, context)
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
+
         self.input = action.args[0]
         self.rv_init = action.args[1]
         self.ref_ccf = None
@@ -144,16 +145,15 @@ class RadialVelocity(KPF1_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-        data = self.input.data if hasattr(self.input, 'data') else None
-        self.spectrum_data = self.input.data[self.sci][0, :, :] if data and self.sci in data else None
-        self.wave_cal = self.input.data[self.sci][1, :, :] if data and self.sci in data else None
+        self.spectrum_data = getattr(self.input, self.sci+'FLUX') if hasattr(self.input, self.sci+'FLUX') else None
+        self.wave_cal = getattr(self.input, self.sci+'WAVE') if hasattr(self.input, self.sci+'WAVE') else None
         header = self.input.header if hasattr(self.input, 'header') else None
         self.header = None
         if header:
             if not is_kpf_type:
                 self.header = header['PRIMARY']
-            elif (self.sci + '_FLUX') in header:
-                self.header = header[self.sci + '_FLUX']
+            elif (self.sci + 'FLUX') in header:
+                self.header = header[self.sci + 'FLUX']
 
         # Order trace algorithm setup
         self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init, wave_cal=self.wave_cal,
@@ -214,8 +214,10 @@ class RadialVelocity(KPF1_Primitive):
         output_df = rv_results['ccf_df']
         assert(not output_df.empty and output_df.values.any())
 
-        self.input.create_extension('CCF')
-        self.input.extension['CCF'] = output_df
+        # self.lev1_input.create_extension('CCF')
+        self.input.create_extension('CCF', pd.DataFrame)
+        self.input.CCF = output_df
+        # self.lev1_input.extensions['CCF'] = output_df
         for att in output_df.attrs:
             self.input.header['CCF'][att] = output_df.attrs[att]
         self.input.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')

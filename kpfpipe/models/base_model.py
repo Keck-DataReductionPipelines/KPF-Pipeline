@@ -7,10 +7,13 @@ import sys
 import copy 
 import warnings
 import time
+from collections import OrderedDict
 
 # External dependencies
 import astropy
 from astropy.io import fits
+from astropy.io.fits import verify
+from astropy.io.fits.hdu.image import PrimaryHDU
 from astropy.time import Time
 from astropy.table import Table
 import numpy as np
@@ -21,8 +24,10 @@ import hashlib
 
 # Pipeline dependencies
 from kpfpipe.models.metadata.receipt_columns import *
+from kpfpipe.models.metadata.config_columns import *
+from kpfpipe.models.metadata.KPF_definitions import FITS_TYPE_MAP
 
-class KPFDataModel:
+class KPFDataModel(object):
     '''The base class for all KPF data models.
 
     Warning: 
@@ -30,16 +35,17 @@ class KPFDataModel:
         Based on the data level of your .fits file, used the appropriate
         level specific data model.
 
-    This is the base model for all KPF data models. Level specific data inherit from this 
-    class, so any attribute and method listed here applies to all data models.
+    This is the base model for all KPF data models. Level specific data inherit
+    from this class, so any attribute and method listed here applies to all data
+    models.
 
     Attributes:
         header (dict): a dictionary of headers of each extension (HDU)
 
-            Header stores all header information from the FIT file. Since Each file is
+            Header stores all header information from the FITS file. Since Each file is
             organized into extensions (HDUs), and Astropy parses each extension's 
             header cards into a dictionary, this attribute is structured as a dictionary
-            of dictionaries. The first layer is the name of the header, and the second layer 
+            of Astropy header objects. The first layer is the name of the header, and the second layer 
             is the name of the key.
             
             Note: 
@@ -78,33 +84,36 @@ class KPFDataModel:
                                         Time     ...  Module_Param Status
                 0  2020-06-22T15:42:18.360409     ...        input1   PASS
 
-        extension (dict): a dictionary of auxiliary extensions.
+        extensions (dict): a dictionary of extensions.
 
             This attribute stores any additional information that any primitive may wish to 
-            record to FITS. Creating an auxiliary creates an empty pandas.DataFrame table, and
-            one may modify it directly. Creating an auxiliary will also create a new key-value 
-            in header, so that one can write header keywords to the extension. When writing to
-            FITS, Auxiliary extensions are stored as binary tables.
+            record to FITS. Creating an extension creates an empty extension of the given type and
+            one may modify it directly. Creating an extension will also create a new key-value 
+            pair in header, so that one can write header keywords to the extension. When writing to
+            FITS extensions are stored in the FITS data type as specified in 
+            kpfpipe.models.metadata.KPF_definitions.FITS_TYPE_MAP (image or binary table). Whitespace or 
+            any symbols that may be interpreted by Python as an operator (e.g. -) are not
+            allowed in extension names.
 
             Examples:
                 >>> from kpfpipe.models.level0 import KPF0
                 >>> data = KPF0()
-                # Add an auxiliary extension
+                # Add an extension
                 # A unique name is required
-                >>> data.create_extension('extension 1')
-                # Access the extension by using its name as the dict key
+                >>> data.create_extension('extension1', pd.DataFrame)
+                # Access the extension by using its name as an attribute
                 # Add a column called 'col1' to the Dataframe
-                >>> data.extension['extension 1']['col1'] = [1, 2, 3]
-                >>> data.extension['extension 1']
+                >>> data.extension1['col1'] = [1, 2, 3]
+                >>> data.extension1['extension1']
                 col1
                 0     1
                 1     2
                 2     3
                 # add a key-value pair to the header
-                >>> data.header['extension 1']['key'] = 'value'
+                >>> data.header['extension1']['key'] = 'value'
                 # delete the extension we just made
-                >>> data.del_extension['extension 1']
-
+                >>> data.del_extension['extension1']
+        config (DataFrame): two-column dataframe that stores each line of the input configuration file
     '''
 
     def __init__(self):
@@ -113,23 +122,47 @@ class KPFDataModel:
         '''
         self.filename: str = None
 
-        self.header: dict = {'PRIMARY': {}, 
-                             'RECEIPT': {}}
+        self.header = OrderedDict()
+        self.header['PRIMARY'] = fits.Header()
+        self.header['RECEIPT'] = fits.Header()
+        self.header['CONFIG'] = fits.Header()
 
-        # Construct the receipt table
-        self.receipt: pd.DataFrame = pd.DataFrame(columns=RECEIPT_COL)
+        self.receipt = pd.DataFrame([], columns=RECEIPT_COL)
+        self.RECEIPT = self.receipt
 
-        # list of auxiliary extensions 
-        self.extension: dict = {}
+        self.config = pd.DataFrame([], columns=CONFIG_COL)
+        self.CONFIG = self.config
+
+        self.primary = OrderedDict()
+        self.PRIMARY = self.primary
+
+        self.extensions = OrderedDict(PRIMARY=fits.PrimaryHDU,
+                                      RECEIPT=fits.BinTableHDU,
+                                      CONFIG=fits.BinTableHDU)
+
 
         # level of data model
         self.level = None # set in each derived class
+        self.read_methods = dict()
+
+    def __getitem__(self, key):
+        return getattr(self, key.upper())
+
+    def __setitem__(self, key, value):
+        if key.upper() in self.extensions:
+            setattr(self, key.upper(), value)
+        else:
+            data_type = type(value)
+            self.create_extension(key.upper(), data_type)
+            setattr(self, key.upper(), value)
+
+    def __delitem__(self, key):
+        self.del_extension(key.upper())
 
 # =============================================================================
 # I/O related methods
     @classmethod
-    def from_fits(cls, fn: str,
-                  data_type: str):
+    def from_fits(cls, fn, data_type='KPF'):
         """Create a data instance from a file
 
         This method emplys the ``read`` method for reading the file. Refer to 
@@ -137,7 +170,7 @@ class KPFDataModel:
 
         Args: 
             fn (str): file path (relative to the repository)
-            data_type (str): instrument type of the file
+            data_type (str): (optional) instrument type of the file [default='KPF']
             
         Returns: 
             cls (data model class): the data instance containing the file content
@@ -149,9 +182,7 @@ class KPFDataModel:
         # Return this instance
         return this_data
 
-    def read(self, fn: str,
-             data_type: str,
-             overwrite: bool=False) -> None:
+    def read(self, fn, data_type, overwrite=False):
         """Read the content of a .fits file and populate this 
         data structure. 
 
@@ -168,33 +199,33 @@ class KPFDataModel:
             required before calling this function
         
         """
-
         if not fn.endswith('.fits'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
-        
+
         if not overwrite and self.filename is not None:
             # This instance already contains data, and
             # we don't want to overwrite 
             raise IOError('Cannot overwrite existing data')
-        
+
         self.filename = os.path.basename(fn)
         with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
             for hdu in hdu_list:
-                if isinstance(hdu, fits.BinTableHDU):
+                if isinstance(hdu, fits.PrimaryHDU):
+                    self.header[hdu.name] = hdu.header
+                elif isinstance(hdu, fits.BinTableHDU):
                     t = Table.read(hdu)
-                    if hdu.name == 'RECEIPT':
+                    if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
-                        self.header['RECEIPT'] = hdu.header
-                        self.receipt = t.to_pandas()
-                
-                    else:
-                        if 'AUX' in hdu.header.keys():
-                            if hdu.header['AUX'] == True:
-                                # This is an auxiliary extension
-                                self.header[hdu.name] = hdu.header
-                                self.extension[hdu.name] = t.to_pandas()
+                        df = t.to_pandas()
+                        df = df.reindex(df.columns.union(RECEIPT_COL,
+                                                         sort=False),
+                                                         axis=1, fill_value='')
+                        setattr(self, hdu.name, df)
+                        setattr(self, hdu.name.lower(), getattr(self, hdu.name))
+                    self.header[hdu.name] = hdu.header
+                    setattr(self, hdu.name, t.to_pandas())
             # Leave the rest of HDUs to level specific readers
             if data_type in self.read_methods.keys():
                 self.read_methods[data_type](hdu_list)
@@ -212,10 +243,11 @@ class KPFDataModel:
         with open(fn, 'rb') as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 md5.update(chunk)
-        self.receipt_add_entry('from_fits', self.__module__, f'md5_sum={md5.hexdigest()}', 'PASS')
+        self.receipt_add_entry('from_fits', self.__module__,
+                               f'md5_sum={md5.hexdigest()}', 'PASS')
 
     
-    def to_fits(self, fn:str) -> None:
+    def to_fits(self, fn):
         """
         Collect the content of this instance into a monolithic FITS file
 
@@ -236,45 +268,29 @@ class KPFDataModel:
         else: 
             hdu_list = gen_hdul()
         
-        # handles receipt
-        t = Table.from_pandas(self.receipt)
-        hdu = fits.table_to_hdu(t)
-        for key, value in self.header['RECEIPT'].items():
-            hdu.header.set(key, value)
-        hdu.name = 'RECEIPT'
-        hdu_list.append(hdu)
-
-        # handles any auxiliary extensions
-        for name, table in self.extension.items():
-            t = Table.from_pandas(table)
-            hdu = fits.table_to_hdu(t)
-            for key, value in self.header[name].items():
-                hdu.header[key] = value           # value could be a single value or a 2-D tuple with (value, comment)
-                # hdu.header.set(key, value)
-            hdu.name = name
-            hdu_list.append(hdu)
-
         # check that no card in any HDU is greater than 80
         # this is a hard limit by FITS 
         for hdu in hdu_list:
             if 'OBS FILE' in hdu.header.keys():
                 del hdu.header['OBS FILE']
-
+            elif 'PRIMARY' in hdu.header.keys():
+                del hdu.header['PRIMARY']
+            
         # finish up writing
         hdul = fits.HDUList(hdu_list)
-        hdul.writeto(fn, overwrite=True)
+        hdul.writeto(fn, overwrite=True, output_verify='silentfix')
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, Mod: str, mod_path: str, param: str, status: str) -> None:
+    def receipt_add_entry(self, module, mod_path, param, status, chip='all'):
         '''
         Add an entry to the receipt
 
         Args:
-            Mod (str): Name of the module making this entry
+            module (str): Name of the module making this entry
             param (str): param to be recorded
             status (str): status to be recorded
-
+            chip (str): (optional) which ccd [default='all']
         '''
         
         # time of execution in ISO format
@@ -291,34 +307,60 @@ class KPFDataModel:
             git_branch = ''
             git_tag = ''
         # add the row to the bottom of the table
-        row = [time, git_tag, git_branch, git_commit_hash, \
-               Mod, str(self.level), mod_path, param, status]
-        self.receipt.loc[len(self.receipt)] = row
+        row = {'Time': time,
+               'Code_Release': git_tag,
+               'Commit_Hash': git_commit_hash,
+               'Branch_Name': git_branch,
+               'Chip': chip,
+               'Module_Name': module,
+               'Module_Level': str(self.level),
+               'Module_Path': mod_path,
+               'Module_Param': param,
+               'Status': status}
+        self.receipt = self.receipt.append(row, ignore_index=True)
+        self.RECEIPT = self.receipt
 
-    def receipt_info(self):
+    def receipt_info(self, receipt_name):
         '''
         Print the short version of the receipt
+
+        Args:
+            receipt_name (string): name of the receipt
         '''
-        print(self.receipt[['Time', 'Module_Name', 'Status']])
+        rec = getattr(self, receipt_name)
+        msg = rec['Time', 'Module_Name', 'Status']
+        print(msg)
 
 # =============================================================================
 # Auxiliary related extension
-    def create_extension(self, ext_name: str):
+    def create_extension(self, ext_name, ext_type=pd.DataFrame):
         '''
-        Create an Auxiliary extension to be saved to FITS 
+        Create a new empty extension to be saved to FITS.
+        Will not overwrite an existing extensions
 
         Args:
             ext_name (str): extension name
+            ext_type (object): Python object type for this extension. 
+                Must be present in kpfpipe.models.metadata.FITS_TYPE_MAP.keys().
 
         '''
+        if ext_type not in FITS_TYPE_MAP.values():
+            if ext_type == np.ndarray:
+                ext_type = np.array
+            else:
+                raise TypeError("Unknown extension type {}. Available extension types: {}".format(ext_type, 
+                                                                                                  FITS_TYPE_MAP.values()))
+        reverse_map = OrderedDict(zip(FITS_TYPE_MAP.values(), FITS_TYPE_MAP.keys()))
+
         # check whether the extension already exist
-        if ext_name in self.header.keys():
-            raise NameError('name {} already exist as extension'.format(ext_name))
-        
-        self.extension[ext_name] = pd.DataFrame()
-        self.header[ext_name] = {'AUX': True}
+        if ext_name in self.extensions.keys() and ext_name in self.__dir__():
+            raise NameError('Name {} already exists as extension'.format(ext_name))
+
+        setattr(self, ext_name, None)
+        self.header[ext_name] = fits.Header()
+        self.extensions[ext_name] = reverse_map[ext_type]
     
-    def del_extension(self, ext_name: str):
+    def del_extension(self, ext_name):
         '''
         Delete an existing auxiliary extension
 
@@ -326,11 +368,16 @@ class KPFDataModel:
             ext_name (str): extension name
             
         '''
-        if ext_name not in self.extension.keys():
-            raise KeyError('extension {} could not be found'.format(ext_name))
+        base = KPFDataModel()
+        core_extensions = base.header.keys()
+        if ext_name in core_extensions:
+            raise KeyError('Can not remove any of the core extensions: {}'.format(core_extensions))
+        elif ext_name not in self.extensions.keys():
+            raise KeyError('Extension {} could not be found'.format(ext_name))
         
-        del self.extension[ext_name]
+        delattr(self, ext_name)
         del self.header[ext_name]
+        del self.extensions[ext_name]
 
 if __name__ == '__main__':
     pass
