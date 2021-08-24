@@ -69,7 +69,7 @@ class OrientationReference(KPF0_Primitive):
         keys = list(map(int,keys))
         rows = list(map(int,rows))
         cols = list(map(int,cols))
-        exts = list(map(int,exts))
+        exts = list(map(str,exts))
         tot_frames = len(channels)/max(channels)
 
         if max(channels)==len(channels):
