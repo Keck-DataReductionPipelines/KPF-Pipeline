@@ -3,25 +3,28 @@ from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
-channel_orientation_ref_path = '/Users/paminabby/KPF-Pipeline/neid_ccd_ref.txt'
-all_L0_files_path = '/Users/paminabby/ownCloud2/KPF-Pipeline-TestData/NEIDdata/20200114/L0/neidL0_20200114T115400.fits' 
+channel_orientation_ref_path = '...kpf_ccd_orient_red.txt'
+all_L0_files_path = '...ownCloud/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/science/KPF_rays-1.0E+05_orders- 71-103_cal-lfc_20GHz_sci-solar_Planck_sky-solar_Planck_RV_30000ms_normalized_10018_Red_quad.fits' 
+masterbias_path = '...zeros_master_bias.fits'
+no_bias_L0_files_path = '...'
+final_L0_files_path = '...'
+
 master_bias_create = False
-masterbias_path = '/Users/paminabby/Desktop/biasflat_testers/neid_test_bias.fits'
-lev0_ffi_exts = [17]
+lev0_ffi_exts = ['FFI']
 overscan_reg = [1000,1250]
 overscan_method = 'mean'
 order = 1
 oscan_clip = 5
+quicklook = True
 
 ref_output = OrientationReference(channel_orientation_ref_path)
 
 for raw_file in find_files(all_L0_files_path):
-    #raw_file = kpf0_from_fits(raw_file)
-    L0_with_ffi = OverscanSubtraction(raw_file,overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'KPF')
-    L0_result = to_fits(L0_with_ffi,'/Users/paminabby/Desktop/quicklookresult1.fits')
-    #L0_result = to_fits(L0_with_ffi,raw_file)
+    raw_file = kpf0_from_fits(raw_file,data_type='NEID')
+    L0_with_ffi = OverscanSubtraction(raw_file,overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'NEID')
+    L0_result = to_fits(L0_with_ffi,no_bias_L0_files_path)
 
-all_bias_files = find_files('/Users/paminabby/Desktop/neid_L0*.fits')
+#all_bias_files = find_files('neid_L0*.fits')
 if master_bias_create == True:
     master_bias_data = FrameCombinePrimitive(all_bias_files,lev0_ffi_exts,'NEID')
     master_bias_result = to_fits(master_bias_data,masterbias_path)
@@ -29,7 +32,6 @@ if master_bias_create == False:
     master_bias_data = find_files(masterbias_path)
 
 for raw_file in find_files(no_bias_L0_files_path):
-    #kpf0_from_fits(raw_file)
-    final_raw_frames_file = BiasSubtract(raw_file,master_bias_data,lev0_ffi_exts,'NEID',quicklook=True)
-    result = to_fits()
-    #result = to_fits(final_raw_frames_file,'/Users/paminabby/Desktop/quicklookresult2.fits')
+    raw_file = kpf0_from_fits(raw_file)
+    final_raw_frames_file = BiasSubtract(raw_file,masterbias_path,lev0_ffi_exts,'NEID',quicklook)
+    result = to_fits(final_raw_frames_file,final_L0_files_path)

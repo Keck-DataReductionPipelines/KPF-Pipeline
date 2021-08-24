@@ -2,6 +2,7 @@
 #imports
 import numpy as np
 from astropy.io import fits
+import matplotlib.pyplot as plt
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
@@ -121,10 +122,10 @@ class OverscanSubtraction(KPF0_Primitive):
         """Cuts overscan region off of overscan-subtracted image.
 
         Args:
-            osub_image(np.array):
+            osub_image(np.array): Image with overscan region subtracted.
 
         Returns:
-            image_cut(np.array): 
+            image_cut(np.array): Image with overscan region cut off.
 
         """
         image_cut = osub_image[:,0:overscan_reg[0]]
@@ -139,7 +140,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """Performs overscan subtraction steps, in order: orient frame, subtract overscan (method
         chosen by user) from correctly-oriented frame (overscan on right and bottom), cuts off overscan region.
         """
-
+        #testing = fits.HDUList()
         # clip ends of overscan region 
         oscan_pxl_array,clipped_oscan = self.overscan_arrays()
 
@@ -150,6 +151,7 @@ class OverscanSubtraction(KPF0_Primitive):
             #print(img.shape)
             # orient img
             new_img = self.orientation_adjust(img,key)
+            #testing.append(fits.ImageHDU(new_img))
             # overscan subtraction for chosen method
             if self.mode=='mean':
                 raw_sub_os = self.mean_subtraction(new_img,clipped_oscan)
@@ -162,33 +164,26 @@ class OverscanSubtraction(KPF0_Primitive):
 
             # chop off overscan and prescan - put into overscan subtraction utility
             new_img = self.overscan_cut(raw_sub_os,oscan_pxl_array)
-
+            #testing.append(fits.ImageHDU(new_img))
             # put img back into original orientation 
             og_oriented_img = self.orientation_adjust(new_img,key)
-
+            #testing.append(fits.ImageHDU(og_oriented_img))
             no_overscan_imgs.append(og_oriented_img)
 
         full_frame_img = self.generate_FFI(no_overscan_imgs,channel_rows,channel_cols)
-
+        #testing.append(fits.ImageHDU(full_frame_img))
+        #testing.writeto('',overwrite=True)
         return full_frame_img
 
-    def quicklook(self):
-        image = KPF0.from_fits(self.rawfile,self.data_type)
-        # Report the mean of counts in overscan region (part of CCD that is covered)
-        oscan_pxs,oscan_clip = self.overscan_arrays()
-        for row in range(0,image.shape[0]):
-            np.nanmean(image[row, oscan_clip])
-        # Check the parallel overscan region
-
-
     def _perform(self):
-
+        #print('extension possibilities:',self.rawfile.extensions)
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
         #l0_obj = KPF0.from_fits(self.rawfile,self.data_type)
-        l0_obj = fits.open(self.rawfile)
+        #l0_obj = fits.open(self.rawfile)
+        l0_obj = self.rawfile
         frames_data = []
         for ext in channel_exts:
-            data = l0_obj[ext].data
+            data = l0_obj[ext]
             frames_data.append(data)
         frames_data = np.array(frames_data)
 
@@ -197,13 +192,13 @@ class OverscanSubtraction(KPF0_Primitive):
             single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
             full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)
             #full_frame_images.append(full_frame_img)
-            l0_obj[self.ffi_exts[frame]].data = full_frame_img
+            l0_obj[self.ffi_exts[frame]] = full_frame_img
 
         # l0_obj.receipt_add_entry('overscan subtraction', self.__module__, f'input_files={self.rawfile}', 'PASS')
 
         # if self.logger:
         #     self.logger.info("overscan subtraction: Receipt written")
-
+        print('shape of ffi is:', full_frame_img.shape)
         return Arguments(l0_obj)
 
 

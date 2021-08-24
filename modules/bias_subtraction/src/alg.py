@@ -27,7 +27,7 @@ class BiasSubtractionAlg:
     """
 
 
-    def __init__(self,rawimage,ffi_exts,config=None, logger=None):
+    def __init__(self,rawimage,ffi_exts,quicklook,config=None, logger=None):
         """Inits BiasSubtraction class with raw data, config, logger.
 
         Args:
@@ -38,11 +38,12 @@ class BiasSubtractionAlg:
         """
         self.rawimage=rawimage
         self.ffi_exts=ffi_exts
+        self.quicklook=quicklook
         self.config=config
         self.logger=logger
         #self.imagesize=
         
-    def bias_subtraction(self,masterbias,quicklook):
+    def bias_subtraction(self,masterbias):
         """
             Subtracts bias data from raw data.
             In pipeline terms: inputs two L0 files, produces one L0 file. 
@@ -58,7 +59,7 @@ class BiasSubtractionAlg:
         #masterbias = masterbias[1].data
         # masterbias = np.zeros_like(frame)
         ###
-        if quicklook == False: 
+        if self.quicklook == False: 
             for no,ffi in enumerate(self.ffi_exts):
                 if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
                     print ("Bias .fits Dimensions Equal, Check Passed")
@@ -68,15 +69,16 @@ class BiasSubtractionAlg:
                 self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
             #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
 
-        if quicklook == True:
+        if self.quicklook == True:
             for no,ffi in enumerate(self.ffi_exts):
-                if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
+                #until data model for master files is added:
+                if self.rawimage[ffi].shape==masterbias[no+1].data.shape:
                     print ("Bias .fits Dimensions Equal, Check Passed")
                 else:
                     raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
                 self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
 
-                counts = masterbias[no+1].data
+                counts = masterbias[no+1].data #red and green potentially masters, no+1 means ignoring primary?
                 flatten_counts = np.ravel(counts)
                 low, high = np.percentile(flatten_counts,[0.1,99.9])
                 counts[(counts>high) | (counts<low)] = np.nan #bad pixels
@@ -84,6 +86,7 @@ class BiasSubtractionAlg:
                 print(np.nanmedian(flatten_counts),np.nanmean(flatten_counts),np.nanmin(flatten_counts),np.nanmax(flatten_counts))
 
                 plt.imshow(counts, cmap = 'cool')
+                plt.colorbar()
                 plt.savefig('2D_bias_frame.pdf')
 
                 plt.close()
