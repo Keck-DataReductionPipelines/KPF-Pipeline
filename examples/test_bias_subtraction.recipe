@@ -3,25 +3,11 @@ from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
-channel_orientation_ref_path = '...kpf_ccd_orient_red.txt'
-all_L0_files_path = '...ownCloud/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/science/KPF_rays-1.0E+05_orders- 71-103_cal-lfc_20GHz_sci-solar_Planck_sky-solar_Planck_RV_30000ms_normalized_10018_Red_quad.fits' 
-masterbias_path = '...zeros_master_bias.fits'
-no_bias_L0_files_path = '...'
-final_L0_files_path = '...'
-
-master_bias_create = False
-lev0_ffi_exts = ['FFI']
-overscan_reg = [1000,1250]
-overscan_method = 'mean'
-order = 1
-oscan_clip = 5
-quicklook = True
-
 ref_output = OrientationReference(channel_orientation_ref_path)
 
 for raw_file in find_files(all_L0_files_path):
     raw_file = kpf0_from_fits(raw_file,data_type='NEID')
-    L0_with_ffi = OverscanSubtraction(raw_file,overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'NEID')
+    L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'NEID')
     L0_result = to_fits(L0_with_ffi,no_bias_L0_files_path)
 
 #all_bias_files = find_files('neid_L0*.fits')
