@@ -17,23 +17,27 @@ class OverscanSubtraction(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
         self.rawfile = self.action.args[0]
         #self.channel_imgs = self.action.args[0] #raw channel images
-        self.overscan_reg = self.action.args[1] #overscan region of raw image, start and end pixels of overscan
-        self.mode = self.action.args[2] #defines which method of overscan subtraction
-        self.order = self.action.args[3] #if self.mode = 'polynomial', defines order of polynomial fit
-        self.oscan_clip_no = self.action.args[4] #amount of pixels clipped from each edge of overscan
-        self.ref_output=self.action.args[5] #output of ccd reference file
-        self.ffi_exts=self.action.args[6] #fits extensions where ffis will be stored
-        self.data_type=self.action.args[7] #data type, pertaining to instrument
+        self.prl_overscan_reg = self.action.args[1] #overscan region of raw image, start and end pixels of overscan
+        self.srl_overscan_reg = self.action.args[2]
+        self.mode = self.action.args[3] #defines which method of overscan subtraction
+        self.order = self.action.args[4] #if self.mode = 'polynomial', defines order of polynomial fit
+        self.oscan_clip_no = self.action.args[5] #amount of pixels clipped from each edge of overscan
+        self.ref_output=self.action.args[6] #output of ccd reference file
+        self.ffi_exts=self.action.args[7] #fits extensions where ffis will be stored
+        self.data_type=self.action.args[8] #data type, pertaining to instrument
 
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region
         is 1000 pixels wide, and overscan region (when oriented with overscan on right and parallelscan
         on bottom) is 100 pixels wide, 
         """
-        overscan_pxs = np.arange(self.overscan_reg[0],self.overscan_reg[1],1)
-        N_overscan = len(overscan_pxs)
-        overscan_clipped = overscan_pxs[self.oscan_clip_no:N_overscan-1-self.oscan_clip_no]
-        return overscan_pxs,overscan_clipped
+        srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
+        prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
+        srl_N_overscan = len(srl_overscan_pxs)
+        prl_N_overscan = len(prl_overscan_pxs)
+        srl_overscan_clipped = srl_overscan_pxs[self.oscan_clip_no:srl_N_overscan-1-self.oscan_clip_no]
+        prl_overscan_clipped = prl_overscan_pxs[self.oscan_clip_no:prl_N_overscan-1-self.oscan_clip_no]
+        return srl_overscan_pxs,prl_overscan_pxs,srl_overscan_clipped,prl_overscan_clipped
 
     def mean_subtraction(self,image,overscan_reg): #should work now
         """Gets mean of overscan data, subtracts value from raw science image data.
@@ -118,7 +122,7 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return full_frame_img
 
-    def overscan_cut(self, osub_image,overscan_reg):
+    def overscan_cut(self, osub_image,overscan_reg_srl,overscan_reg_prl):
         """Cuts overscan region off of overscan-subtracted image.
 
         Args:
@@ -128,7 +132,8 @@ class OverscanSubtraction(KPF0_Primitive):
             image_cut(np.array): Image with overscan region cut off.
 
         """
-        image_cut = osub_image[:,0:overscan_reg[0]]
+        image_cut = osub_image[:,0:overscan_reg_srl[0]]
+        image_cut = image_cut [0:overscan_reg_prl[0],:]
 
         return image_cut
 
@@ -142,8 +147,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         #testing = fits.HDUList()
         # clip ends of overscan region 
-        oscan_pxl_array,clipped_oscan = self.overscan_arrays()
-
+        srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays()
         # create empty list for final, overscan subtracted/cut arrays
         no_overscan_imgs = []
         #print (channel_imgs.shape)
@@ -151,22 +155,26 @@ class OverscanSubtraction(KPF0_Primitive):
             #print(img.shape)
             # orient img
             new_img = self.orientation_adjust(img,key)
+            # plt.imshow(new_img)
+            # plt.savefig('oscan_troubleshoot_(%d).pdf' % key)
             #testing.append(fits.ImageHDU(new_img))
             # overscan subtraction for chosen method
             if self.mode=='mean':
-                raw_sub_os = self.mean_subtraction(new_img,clipped_oscan)
+                raw_sub_os = self.mean_subtraction(new_img,srl_clipped_oscan)
 
             elif self.mode=='polynomial': # subtract linear fit of overscan
-                raw_sub_os = self.polyfit_subtraction(new_img,clipped_oscan)
+                raw_sub_os = self.polyfit_subtraction(new_img,srl_clipped_oscan)
 
             else:
                 raise TypeError('Input overscan subtraction mode set to value outside options.')
 
             # chop off overscan and prescan - put into overscan subtraction utility
-            new_img = self.overscan_cut(raw_sub_os,oscan_pxl_array)
+            new_img = self.overscan_cut(raw_sub_os,srl_oscan_pxl_array,prl_oscan_pxl_array)
             #testing.append(fits.ImageHDU(new_img))
             # put img back into original orientation 
             og_oriented_img = self.orientation_adjust(new_img,key)
+            plt.imshow(og_oriented_img)
+            plt.savefig('oscan_troubleshoot_%d.pdf' % key)
             #testing.append(fits.ImageHDU(og_oriented_img))
             no_overscan_imgs.append(og_oriented_img)
 

@@ -103,7 +103,6 @@ class BiasSubtract(KPF0_Primitive):
         """
         #until master file part of data model is fixed
         self.masterbias = fits.open(self.masterbias)
-
         if self.logger:
             self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
         bias_subbed = self.alg.bias_subtraction(self.masterbias)
