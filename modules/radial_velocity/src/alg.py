@@ -9,7 +9,7 @@ import pandas as pd
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
-from modules.CLib.CCF.neidcode import CCF_3d_cpython
+from modules.CLib.CCF import CCF_3d_cpython
 
 LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
@@ -515,10 +515,30 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                             new_line_end.astype('float64'),
                                                             new_wave_cal.astype('float64'),
                                                             new_spec.astype('float64'),
-                                                            new_line_weight.astype('float64'), sn.astype('float'),
+                                                            new_line_weight.astype('float64'), sn.astype('float64'),
                                                             self.velocity_loop[c], v_b)
                 ccf_pixels_c[c, :] = ccf_pixels
                 """
+            """
+            sn_p = np.ones(n_pixel)
+            ccf_python, ccf_pixels_python = self.calc_ccf(v_steps, new_line_start.astype('float64'),
+                                                       new_line_end.astype('float64'),
+                                                       x_pixel_wave.astype('float64'),
+                                                       spectrum.astype('float64'),
+                                                       new_line_weight.astype('float64'),
+                                                       sn_p, zb)
+            ccf_diff_pixel = ccf_pixels_python - ccf_pixels_c
+            max_pixel_diff = np.amax(abs(ccf_diff_pixel))
+            total_pixel_size = np.size(ccf_diff_pixel)
+            total_pixel_diff = np.size(np.where(ccf_diff_pixel != 0.0)[0])
+
+            ccf_diff = ccf_python-ccf
+            max_ccf_diff = np.amax(abs(ccf_diff))
+            total_ccf_size = np.size(ccf_diff)
+            total_ccf_diff = np.size(np.where(ccf_diff != 0.0)[0])
+            self.d_print("max diff of ccf in pixels: ", max_pixel_diff, '(', total_pixel_diff, '/', total_pixel_size, ')', info=True)
+            self.d_print("max diff of ccf in v-steps: ", max_ccf_diff, '(', total_ccf_diff, '/', total_ccf_size, ')', info=True)
+            """
         else:
             sn_p = np.ones(n_pixel)
             ccf, ccf_pixels_python = self.calc_ccf(v_steps, new_line_start.astype('float64'),
@@ -612,6 +632,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                             wave_end = min(x_pixel_wave_end[n], line_end_wave)
                             mask_spectra_doppler_shifted[n] = line_weight * (wave_end - wave_start) / \
                                 (x_pixel_wave_end[n] - x_pixel_wave_start[n])
+                            # self.d_print("n=", n, "p_start_eave:", x_pixel_wave_start[n], "p_end_wave:", x_pixel_wave_end[n], "spec:", spectrum[n], "k:", k, "l_start_w:", line_start_wave, "line_end_w:", line_end_wave, "weight:", line_weight, info=True)
+                            # self.d_print(" fraction:", (wave_end - wave_start)/ (x_pixel_wave_end[n] - x_pixel_wave_start[n]), info=True)
                             if n in idx_collection:
                                 print(str(n), ' already taken')
                                 # import pdb;pdb.set_trace()

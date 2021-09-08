@@ -66,7 +66,6 @@ double ccf(
     for (i = 0; i < n; i++) {
         m_lloc[i] = m_l[i] * gamma;
         m_hloc[i] = m_h[i] * gamma;
-        // printf("i = %d m_lloc = %f m_hloc = %f \n", i, m_lloc[i], m_hloc[i]);
     }
 
     i = 0; /* Marks current location in mask; the mask line iterator. */
@@ -148,6 +147,7 @@ double * ccf_pixels(
     m_lloc = (double *)malloc(n * sizeof(double));
     m_hloc = (double *)malloc(n * sizeof(double));
 
+    //printf("wave 0 & 1: %.13f %.13f \n", wav[0], wav[1]);
     if ((m_lloc == NULL) | (m_hloc == NULL))
     {
         fprintf(
@@ -178,6 +178,8 @@ double * ccf_pixels(
 
         ccf[j-1] = 0.0;
 
+        //printf("j=%d: p_init=%lf  p_end=%lf spec=%lf i=%d m_l=%lf m_h=%lf weight=%lf\n", j, pix_init, pix_end, spec[j], i, m_lloc[i], m_hloc[i], weight[i]);
+
         /* Loop over the mask indices. Figure out how many wavelengths there
          * are within that pixel
          */
@@ -194,6 +196,7 @@ double * ccf_pixels(
 
             /* Case 1: pixel fully within mask. */
             ccf[j-1] = spec[j] * weight[i] * sn[j];
+            //printf(" case 1: ccf: %lf\n", ccf[j-1]);
         } else if (
             ((pix_end < m_hloc[i]) & (pix_init < m_lloc[i])) &
             (pix_end > m_lloc[i])
@@ -202,6 +205,7 @@ double * ccf_pixels(
             /* Case 2: only right half of pixel within mask. */
             fraction = (pix_end - m_lloc[i]) / (pix_end - pix_init);
             ccf[j-1] = spec[j] * weight[i] * fraction * sn[j];
+            //printf(" case 2: ccf: %lf fraction: %lf\n", ccf[j-1], fraction);
         } else if (
             ((pix_end > m_hloc[i]) & (pix_init > m_lloc[i])) &
             (pix_init < m_hloc[i])
@@ -210,11 +214,13 @@ double * ccf_pixels(
             /* Case 3: only left half of pixel within mask. */
             fraction = (m_hloc[i] - pix_init) / (pix_end - pix_init);
             ccf[j-1] = spec[j] * weight[i] * fraction * sn[j];
+            //printf(" case 3: ccf: %lf fraction: %lf\n", ccf[j-1], fraction);
         } else if ((pix_end > m_hloc[i]) & (pix_init < m_lloc[i])) {
 
             /* Case 4: only middle part of pixel within mask. */
             fraction = (m_hloc[i] - m_lloc[i]) / (pix_end - pix_init);
             ccf[j-1] = spec[j] * weight[i] * fraction * sn[j];
+            //printf(" case 4: ccf: %lf fraction: %lf\n", ccf[j-1], fraction);
         }
     }
 
