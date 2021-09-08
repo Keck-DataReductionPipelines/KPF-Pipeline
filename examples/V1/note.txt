@@ -41,4 +41,9 @@ Alpha 1    | Y              | norect,optimal                        | N         
 Alpha 2    | from Alpha 1   | rectified (vertical), optimal         | N                      | Y                      | weighted
 
 
-  
+*** Recipe after the refactoring of data model (Aug 4/2021) 
+>cd <KPF directory>/KPF-Pipeline/
+check if directory examples/V1/recipe_results/RecipeA_0903 exists, create the directory if it doesn't exist.
+>kpf examples/V1/RecipeA/test_neid_0903.recipe examples/V1/default_neid_0903.cfg
+=> order trace result goes to examples/V1/recipe_results and L1 and L2 results go to examples/V1/recipe_results/RecipeA_0903.
+ 

@@ -1,8 +1,8 @@
 import numpy as np
 from ctypes import c_double, c_int, CDLL, c_void_p, pointer
-from modules.CLib.CCF import neidcode
+from modules.CLib import CCF
 
-package_directory = neidcode.__path__[0]
+package_directory = CCF.__path__[0]
 lib_path = '{}/CCF_3d_c.so'.format(package_directory)
 c_ccf_lib = CDLL(lib_path)
 
@@ -33,6 +33,7 @@ ccf_pixels.argtypes = [
     c_int
     ]
 ccf.restype = c_double
+
 
 def calc_ccf(m_l, m_h, wav, spec, weight, sn, v_r, v_b):
     """
