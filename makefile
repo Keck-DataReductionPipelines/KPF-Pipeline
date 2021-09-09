@@ -2,7 +2,7 @@ init:
 	mkdir -p logs
 	mkdir -p outputs
 	pip3 install -r requirements.txt -e .
-
+	pushd "modules/CLib/CCF"; make C; popd;
 update: 
 	pip3 install -r requirements.txt --upgrade
 
