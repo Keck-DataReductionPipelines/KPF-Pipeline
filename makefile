@@ -3,9 +3,7 @@ init:
 	mkdir -p logs
 	mkdir -p outputs
 	pip3 install -r requirements.txt -e .
-	pushd ${CCF_C}; \
-	make C; \
-	popd; \
+	$(MAKE) C  -C ${CCF_C}
 
 update: 
 	pip3 install -r requirements.txt --upgrade

@@ -12,3 +12,4 @@ C: CCF_3d_c.c
 
 clean:
 	rm -f CCF_3d_c *.o *.so
+
