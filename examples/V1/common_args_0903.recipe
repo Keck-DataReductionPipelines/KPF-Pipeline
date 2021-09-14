@@ -17,6 +17,7 @@ orderlette_names = config.ARGUMENT.orderlette_names
 reweighting_method = config.ARGUMENT.reweighting_method
 
 master_file_name = config.ARGUMENT.master_file_name
+ccf_engine = config.ARGUMENT.ccf_engine
 
 # may reset in the recipe
 op_tag = config.ARGUMENT.op_tag

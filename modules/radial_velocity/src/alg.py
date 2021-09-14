@@ -31,6 +31,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         wave_cal (numpy.ndarray): Wavelength calibration for each order of `spectrum_data`.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
+        ccf_engine (string): CCF engine to use, 'c' or 'python'. Defaults to None,
 
     Attributes:
         spectrum_data (numpy.ndarray): From parameter `spectrum_data`.
@@ -70,7 +71,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     The third extra row contains the summation of cross correlation results over all orders.
     """
 
-    def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None):
+    def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None):
 
         if not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
@@ -96,7 +97,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
         self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
         self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF]
-        self.ccf_code = init_data[RadialVelocityAlgInit.CCF_CODE]
+        self.ccf_code = ccf_engine if (ccf_engine and ccf_engine in ['c', 'python']) else \
+            init_data[RadialVelocityAlgInit.CCF_CODE]
 
         self.obs_jd = None
         ny, nx = np.shape(self.spectrum_data)
