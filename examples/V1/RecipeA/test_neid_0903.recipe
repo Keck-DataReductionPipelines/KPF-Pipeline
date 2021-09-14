@@ -10,4 +10,4 @@ lev1_output_suffix = '_' + rect_method + '_' + extract_method + op_tag + lev1_st
 
 invoke_subrecipe("./examples/V1/test_order_trace.recipe")
 invoke_subrecipe("./examples/V1/test_optimal_extraction.recipe")
-invoke_subrecipe("./examples/V1/test_neid_radial_velocity.recipe")
+invoke_subrecipe("./examples/V1/test_neid_radial_velocity_0903.recipe")

@@ -98,9 +98,10 @@ DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
 class RadialVelocity(KPF1_Primitive):
 
-    default_agrs_val = {
+    default_args_val = {
         'order_name': 'SCI',
-        'output_level2': None
+        'output_level2': None,
+        'ccf_engine': 'python'
     }
 
     def __init__(self,
@@ -125,6 +126,9 @@ class RadialVelocity(KPF1_Primitive):
 
         self.sci = action.args['order_name'] if 'order_name' in args_keys and action.args['order_name'] is not None\
             else self.default_args_val['order_name']
+        self.ccf_engine = action.args['ccf_engine'].lower() \
+            if 'ccf_engine' in args_keys and action.args['ccf_engine'] is not None \
+            else self.default_args_val['ccf_engine']
         self.start_order = int(action.args['start_order']) if 'start_order' in args_keys else None
         self.end_order = int(action.args['end_order']) if 'end_order' in args_keys else None
         self.start_x = int(action.args['start_x']) if 'start_x' in args_keys else None
@@ -161,7 +165,7 @@ class RadialVelocity(KPF1_Primitive):
 
         # Order trace algorithm setup
         self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init, wave_cal=self.wave_cal,
-                                     config=self.config, logger=self.logger)
+                                     config=self.config, logger=self.logger, ccf_engine=self.ccf_engine)
 
     def _pre_condition(self) -> bool:
         """
