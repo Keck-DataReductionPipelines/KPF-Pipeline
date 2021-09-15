@@ -84,6 +84,7 @@ import pandas as pd
 from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.models.level1 import KPF1
+from kpfpipe.models.level2 import KPF2
 
 # External dependencies
 from keckdrpframework.models.action import Action
@@ -97,8 +98,10 @@ DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
 class RadialVelocity(KPF1_Primitive):
 
-    default_agrs_val = {
-        'order_name': 'SCI'
+    default_args_val = {
+        'order_name': 'SCI',
+        'output_level2': None,
+        'ccf_engine': 'python'
     }
 
     def __init__(self,
@@ -123,10 +126,15 @@ class RadialVelocity(KPF1_Primitive):
 
         self.sci = action.args['order_name'] if 'order_name' in args_keys and action.args['order_name'] is not None\
             else self.default_args_val['order_name']
+        self.ccf_engine = action.args['ccf_engine'].lower() \
+            if 'ccf_engine' in args_keys and action.args['ccf_engine'] is not None \
+            else self.default_args_val['ccf_engine']
         self.start_order = int(action.args['start_order']) if 'start_order' in args_keys else None
         self.end_order = int(action.args['end_order']) if 'end_order' in args_keys else None
         self.start_x = int(action.args['start_x']) if 'start_x' in args_keys else None
         self.end_x = int(action.args['end_x']) if 'end_x' in args_keys else None
+        self.output_level2 = action.args['output_level2'] if 'output_level2' in args_keys else None
+
         is_kpf_type = action.args['is_kpf_type'] if 'is_kpf_type' in args_keys else True
 
         # input configuration
@@ -157,7 +165,7 @@ class RadialVelocity(KPF1_Primitive):
 
         # Order trace algorithm setup
         self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init, wave_cal=self.wave_cal,
-                                     config=self.config, logger=self.logger)
+                                     config=self.config, logger=self.logger, ccf_engine=self.ccf_engine)
 
     def _pre_condition(self) -> bool:
         """
@@ -194,13 +202,14 @@ class RadialVelocity(KPF1_Primitive):
             else:
                 s_order = 0 if self.start_order is None else self.start_order
                 e_order = 116 if self.end_order is None else self.end_order
-            s_x_pos = 600 if self.start_x is None else self.start_x
-            e_x_pos = nx - 600 if self.end_x is None else self.end_x
+
+            s_x_pos = 600 if self.start_x is None else abs(self.start_x)
+            e_x_pos = nx - 600 if self.end_x is None else nx - abs(self.end_x)
         elif self.alg.get_instrument() == 'HARPS':
             s_order = 0 if self.start_order is None else self.start_order
             e_order = 69 if self.end_order is None else self.end_order
-            s_x_pos = 500 if self.start_x  is None else self.start_x
-            e_x_pos = 3500 if self.end_x is None else self.end_x
+            s_x_pos = 500 if self.start_x  is None else abs(self.start_x)
+            e_x_pos = 3500 if self.end_x is None else nx - abs(self.end_x)
         else:
             s_x_pos = self.start_x
             e_x_pos = self.end_x
@@ -212,15 +221,11 @@ class RadialVelocity(KPF1_Primitive):
         rv_results = self.alg.compute_rv_by_cc(start_order=s_order, end_order=e_order,
                                                start_x=s_x_pos, end_x=e_x_pos, ref_ccf=self.ref_ccf)
         output_df = rv_results['ccf_df']
+
         assert(not output_df.empty and output_df.values.any())
 
-        # self.lev1_input.create_extension('CCF')
-        self.input.create_extension('CCF', pd.DataFrame)
-        self.input.CCF = output_df
-        # self.lev1_input.extensions['CCF'] = output_df
-        for att in output_df.attrs:
-            self.input.header['CCF'][att] = output_df.attrs[att]
-        self.input.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')
+        self.construct_level2_data(output_df, e_order-s_order+1)
+        self.output_level2.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')
 
         if self.logger:
             self.logger.info("RadialVelocity: Receipt written")
@@ -228,7 +233,33 @@ class RadialVelocity(KPF1_Primitive):
         if self.logger:
             self.logger.info("RadialVelocity: Done!")
 
-        return Arguments(self.input)
+        return Arguments(self.output_level2)
 
+    def construct_level2_data(self, output_df, total_order):
+        output_rv = output_df.values
+        if self.output_level2 is None:
+            self.output_level2 = KPF2()
+        else:
+            self.output_level2.del_extension('CCF')
 
+        self.output_level2['CCF'] = output_rv[0:total_order]
 
+        rv_orders = {}
+        row_index = np.arange(total_order+1)
+        row_index[total_order] = total_order+self.alg.ROWS_FOR_ANALYSIS-1
+        velocities = output_rv[total_order+1]
+        rv_guess = self.alg.get_rv_guess()
+
+        for rv_idx, i in np.ndenumerate(row_index):
+            rv_result = 0.0
+            if np.any(output_rv[i, :] != 0.0):
+                _, rv_result, _, _ = self.alg.fit_ccf(output_rv[i, :], rv_guess, velocities)
+            rv_orders[rv_idx] = rv_result
+
+        rv_table = dict()
+        rv_table['rv_orders'] = rv_orders
+        self.output_level2['RV'] = pd.DataFrame(rv_table)
+
+        for att in output_df.attrs:
+            self.output_level2.header['RV'][att] = output_df.attrs[att]
+        return True
