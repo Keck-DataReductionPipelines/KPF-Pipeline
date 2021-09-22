@@ -22,23 +22,19 @@ def test_receipt():
 # =============================================================================
 # AUXILIARY
 
-def test_aux():
+def test_add():
     '''
-    Create and then delete an auxiliary extension 
+    Create and then delete a new extension 
     '''
     data = KPF0()
     data.create_extension('hello')
-    # At this point only one extenion should exist
-    assert(len(data.extension) == 1)
-    assert('hello' in data.extension.keys())
+    assert('hello' in data.extensions.keys())
     assert('hello' in data.header.keys())
+    assert('hello' in data.__dir__())
 
     data.del_extension('hello')
-    # No extension should exist
-    assert(len(data.extension) == 0)
     assert('hello' not in data.header.keys())
-
-    # 
+    assert('hello' not in data.__dir__())
 
 def test_aux_exceptions():
     '''
@@ -66,19 +62,9 @@ def test_aux_exceptions():
 fpath = os.environ['KPFPIPE_TEST_DATA'] + '/NEIDdata/TAUCETI_20191217/L0'
 flist = [f for f in os.listdir(fpath)][0:1]
     
-def test_from_NEID():
+def test_NEID():
     '''
-    Read all available level 0 data and check for data
-    '''
-    for f in flist:
-        data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
-
-        assert(isinstance(data.data, np.ndarray))
-        assert(data.variance.shape == data.data.shape)
-    
-def test_NEID2KPF():
-    '''
-    Check that data 
+    Check that we can read and write NEID data using the KPF data model 
     '''
     # Make a temporary folder
     try:
@@ -92,14 +78,13 @@ def test_NEID2KPF():
         to_path = 'temp_level0/' + f
         data.to_fits(to_path)
         # read the converted data
-        data2 = KPF0.from_fits(to_path, 'KPF')
+        data2 = KPF0.from_fits(to_path, 'NEID')
+        print(data2.info())
         # compare the data value of the two
         assert(np.all(data2.data == data.data))
         assert(np.all(data2.variance == data.variance))
-    # Clean up 
+    # Clean up
     shutil.rmtree('temp_level0')
-
-    # import tempfile
 
 def test_exceptions():
     
@@ -115,8 +100,7 @@ def test_exceptions():
     with pytest.raises(IOError):
         # overwriting without setting overwrite to True
         data.read(os.path.join(fpath, f), 'NEID')
-
-
+        
 if __name__ == '__main__':
     pass
     

@@ -34,7 +34,7 @@
             and the following attributes are defined to initialize the object,
 
                 -  `bc_config (dict)`:  Instance of dict which contains the observation configuration
-                   for Barycentric correction, assigned by `action.args['bc_config'].
+                   for Barycentric correction, assigned by `action.args['bc_config']`.
                 - `start_mjd (float)`: Starting day for Barycentric correction computation, assigned by
                   `action.args['start_mjd']`.
                 - `period (int)`:  Period of days for Barycentric correction computation, assigned by
