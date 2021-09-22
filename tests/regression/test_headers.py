@@ -3,7 +3,7 @@
 import pytest
 # By importing all the headers, we are making sure that 
 # the script runs without any syntax error. 
-import kpfpipe.models.metadata.KPF_headers as KPF_headers
+import kpfpipe.models.metadata.KPF_definitions as KPF_definitions
 import kpfpipe.models.metadata.HARPS_headers as HARPS_headers
 
 # KPF Data product related tests
@@ -13,23 +13,23 @@ class test_kpf_structure():
     strings as keys and "types" (such as str, int, etc.) as values 
     '''
     # Check that all header keys are stored in dictionaries
-    assert(isinstance(KPF_headers.HEADER_KEY, dict))
-    assert(isinstance(KPF_headers.LVL1_KEY, dict))
-    assert(isinstance(KPF_headers.LVL2_KEY, dict))
+    assert(isinstance(KPF_definitions.LEVEL0_HEADER_KEYWORDS, dict))
+    assert(isinstance(KPF_definitions.LEVEL1_HEADER_KEYWORDS, dict))
+    assert(isinstance(KPF_definitions.LEVEL2_HEADER_KEYWORDS, dict))
 
     # check that each key-value pair are expected types
-    for key, value in KPF_headers.HEADER_KEY.items():
+    for key, value in KPF_definitions.LEVEL0_HEADER_KEYWORDS.items():
         # keys must be strings (name of header keywords)
         assert(isinstance(key, str))
         # value must be the expected types of data
         assert(isinstance(value, type))
     
     # do the same for lvl1 and lvl2 data:
-    for key, value in KPF_headers.LVL1_KEY.items():
+    for key, value in KPF_definitions.LEVEL1_HEADER_KEYWORDS.items():
         assert(isinstance(key, str))
         assert(isinstance(value, type))
 
-    for key, value in KPF_headers.LVL2_KEY.items():
+    for key, value in KPF_definitions.LEVEL2_HEADER_KEYWORDS.items():
         assert(isinstance(key, str))
         assert(isinstance(value, type))
 

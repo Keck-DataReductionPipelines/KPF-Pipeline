@@ -89,7 +89,7 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 class RadialVelocityReweighting(KPF1_Primitive):
 
     default_agrs_val = {
-        'order_name': 'SCI1'
+        'order_name': 'SCI'
     }
 
     def __init__(self,
@@ -127,7 +127,7 @@ class RadialVelocityReweighting(KPF1_Primitive):
                             else pd.DataFrame(ccf_hdu.data).values
         elif isinstance(action.args[0], KPF1):
             self.lev1_input = action.args[0]
-            self.ccf_data = action.args[0].extension['CCF'].values
+            self.ccf_data = action.args[0].extensions['CCF'].values
             self.jd = action.args[0].header['CCF']['CCFJDSUM']
 
         self.reweighting_method = action.args[1]
@@ -195,7 +195,8 @@ class RadialVelocityReweighting(KPF1_Primitive):
         else:
             self.lev1_input.del_extension('CCF')
 
-        self.lev1_input.create_extension('CCF')
+        # self.lev1_input.create_extension('CCF')
+        self.lev1_input.create_extension('CCF', pd.DataFrame)
 
         # form DataFrame for extension 'CCF'
         ccf_table = {}
@@ -214,7 +215,8 @@ class RadialVelocityReweighting(KPF1_Primitive):
         ccf_df.attrs['STARTORD'] = str(self.ccf_start_index)
         ccf_df.attrs['ENDORDER'] = str(self.ccf_start_index+self.total_order-1)
 
-        self.lev1_input.extension['CCF'] = ccf_df
+        # self.lev1_input.extensions['CCF'] = ccf_df
+        self.lev1_input.CCF = ccf_df
 
         for att in ccf_df.attrs:
             self.lev1_input.header['CCF'][att] = ccf_df.attrs[att]
