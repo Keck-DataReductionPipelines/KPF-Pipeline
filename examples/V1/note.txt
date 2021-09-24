@@ -47,3 +47,15 @@ check if directory examples/V1/recipe_results/RecipeA_0903 exists, create the di
 >kpf examples/V1/RecipeA/test_neid_0903.recipe examples/V1/default_neid_0903.cfg
 => order trace result goes to examples/V1/recipe_results and L1 and L2 results go to examples/V1/recipe_results/RecipeA_0903.
  
+
+*** Recipe for running time measurement
+ - skip order trace by copying existing level 0 file with order trace from ownCloud to be under recipe_resuts/.
+     > cp <ownCloud directory>/KPF-Pipeline-TestData/order_trac
+ - optimal extraction: vertical rectification + optimal extraction
+     doing vertical rectification on flat file and store the clipping geometric information under recipe_results/clip_geo.
+ - radial velocity: using c version CCF
+ - command to run the recipe:
+   >cd <KPF-Pipeline directory>
+   >cp <ownCloud directory>/KPF-Pipeline-TestData/order_trace_test/stacked_2fiber_flat_L0_202109.fits  examples/V1/recipe_results/stacked_2fiber_flat_L0.fits
+   >kpf examples/V1/Recipe_202109/test_neid_202109.recipe examples/V1/default_neid_0903.cfg
+

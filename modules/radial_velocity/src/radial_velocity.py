@@ -101,7 +101,7 @@ class RadialVelocity(KPF1_Primitive):
     default_args_val = {
         'order_name': 'SCI',
         'output_level2': None,
-        'ccf_engine': 'python'
+        'ccf_engine': 'c'
     }
 
     def __init__(self,

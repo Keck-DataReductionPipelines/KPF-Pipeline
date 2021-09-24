@@ -7,7 +7,6 @@ input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
 input_lev1_prefix = config.ARGUMENT.input_lev1_file_prefix
 
 obs_list = config.ARGUMENT.obs_list
-date = '_0903'
 flat_stem_suffix = config.ARGUMENT.output_flat_suffix + date
 lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix + date
 lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix + date
