@@ -138,12 +138,12 @@ class OrderRectification(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = OptimalExtractionAlg(self.input_flat.data,
-                                        self.input_flat.header['PRIMARY'],
-                                        self.input_spectrum.data if self.input_spectrum is not None else None,
+        self.alg = OptimalExtractionAlg(self.input_flat.DATA,
+                                        self.input_flat.header['DATA'],
+                                        self.input_spectrum.DATA if self.input_spectrum is not None else None,
                                         self.input_spectrum.header['PRIMARY'] if self.input_spectrum is not None else None,
                                         self.input_flat.ORDER_TRACE_RESULT,
-                                        self.input_flat.header['PRIMARY'],
+                                        self.input_flat.header['ORDER_TRACE_RESULT'],
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
@@ -232,7 +232,7 @@ class OrderRectification(KPF0_Primitive):
 
     def update_level0_data(self, data_result, lev0_obj):
         # img_d = np.where(np.isnan(data_result.values), 0.0, data_result.values)
-        lev0_obj.data = data_result.values
+        lev0_obj.DATA = data_result.values
         for att in data_result.attrs:
             lev0_obj.header['DATA'][att] = data_result.attrs[att]
 
