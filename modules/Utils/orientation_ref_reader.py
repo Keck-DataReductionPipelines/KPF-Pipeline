@@ -34,7 +34,6 @@ class OrientationReference(KPF0_Primitive):
 
         """
         channel_ref = open(self.reference_path,'r')
-
         channels = []
         keys = []
         rows = []
@@ -43,7 +42,6 @@ class OrientationReference(KPF0_Primitive):
 
         for line in channel_ref:
             columns = line.split()
-            
             channel = columns[0]
             channels.append(channel)
             
@@ -84,5 +82,4 @@ class OrientationReference(KPF0_Primitive):
                 raise TypeError('Irregular/incorrect channel list')
 
         all_output = channels,keys,rows,cols,exts
-
         return Arguments(all_output)

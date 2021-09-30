@@ -33,8 +33,9 @@ class BiasSubtract(KPF0_Primitive):
     Attributes:
         rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[0]`            
         masterbias (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[1]`
-        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
-
+        ffi_exts(kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[2]`
+        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[3]`
+        quicklook (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by `actions.args[4]`
 
         config_path (str): Path of config file for the computation of bias subtraction.
         config (configparser.ConfigParser): Config context.
@@ -52,9 +53,10 @@ class BiasSubtract(KPF0_Primitive):
             action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `BiasSubtraction` event issued in recipe:
 
                 `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing raw image data
-                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing frame orientation key 
-                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data
+                `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing master bias data
+                `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing FITS FFI extension(s) list
                 `action.args[3]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing the instrument/data type
+                `action.args[4]`(kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing quicklook toggle (T/F)
 
             context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `bias_subtraction` module in master config file associated with recipe.
 
