@@ -44,9 +44,8 @@ class BiasSubtractionAlg:
         #self.imagesize=
         
     def bias_subtraction(self,masterbias):
-        """
-            Subtracts bias data from raw data.
-            In pipeline terms: inputs two L0 files, produces one L0 file. 
+        """Subtracts bias data from raw data.
+        In pipeline terms: inputs two L0 files, produces one L0 file. 
 
         Args:
             masterbias (np.ndarray): The master bias data.
@@ -104,6 +103,4 @@ class BiasSubtractionAlg:
         return self.rawimage
 
         #raise flag when counts are significantly diff from master bias
-        
-
         #identify bad pixels

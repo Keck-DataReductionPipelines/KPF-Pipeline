@@ -1,4 +1,3 @@
-
 #imports
 import numpy as np
 from astropy.io import fits
@@ -16,7 +15,6 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         KPF0_Primitive.__init__(self, action, context)
         self.rawfile = self.action.args[0]
-        #self.channel_imgs = self.action.args[0] #raw channel images
         self.prl_overscan_reg = self.action.args[1] #overscan region of raw image, start and end pixels of overscan
         self.srl_overscan_reg = self.action.args[2]
         self.mode = self.action.args[3] #defines which method of overscan subtraction
@@ -42,49 +40,53 @@ class OverscanSubtraction(KPF0_Primitive):
     def mean_subtraction(self,image,overscan_reg): #should work now
         """Gets mean of overscan data, subtracts value from raw science image data.
 
+        Args:
+            image(np.array): Array of image data
+            overscan_reg(np.array): Array of pixel range of overscan relative to image pixel width
+
         Returns:
-            raw_sub_os(np.ndarray): Raw image with overscan mean subtracted
+            raw_sub_os(np.array): Raw image with overscan mean subtracted
         """
-        #raw_sub_os = np.zeros((image.shape[0],image.shape[1]))
         raw_sub_os = np.zeros_like(image)
         for row in range(0,raw_sub_os.shape[0]):
             raw_sub_os[row] = image[row] - np.mean(image[row,overscan_reg],0,keepdims=True) 
-        #mean of overscan region (columns) of all rows, then transposed
 
         return raw_sub_os
-    
+
 
     def polyfit_subtraction(self,image,overscan_reg): #need to double check that this works w fixes
         """Performs linear fit on overscan data, subtracts fit values from raw science image data.
 
         Args:
-            overscan_reg(np.ndarray): Array of pixel range of overscan relative to image pixel width
+            image(np.array): Array of image data
+            overscan_reg(np.array): Array of pixel range of overscan relative to image pixel width
 
         Returns:
-            raw_sub_os(np.ndarray): Raw image with overscan fit subtracted
+            raw_sub_os(np.array): Raw image with overscan fit subtracted
         """    
-        nlines = image.shape[0] #double check this
-        # raw_sub_os = np.copy(image)
-        raw_sub_os = np.zeros((image.shape[0],image.shape[1]))
-        fit = []
-        fit_params=[]
-        line_array = np.arange(nlines)
-        #if we do method = 1 (for linearfit), or do method = polynomial, then provide order
-        fit_params.append(np.polyfit(line_array, np.mean(image.T[:,overscan_reg],self.order),1))
-        raw_sub_os = image - np.reshape(np.polyval(fit_params,line_array),(-1,1))
-        
-        return raw_sub_os
+        xx = np.arange(image.shape[0]) #double check this
+        raw_sub_os = np.zeros(image.shape)
+        means = []
+        for row in xx:
+            mean = np.mean(image[row,overscan_reg])
+            means.append(mean)
 
+        polyfit = np.polyfit(xx,means,self.order)
+        polyval = np.polyval(polyfit,xx)   
+        reshape = np.reshape(polyval,(-1,1))   
+        for row in xx:
+            raw_sub_os[row] = image[row] - reshape[row]
+        return raw_sub_os
 
     def orientation_adjust(self,image,key): #check transposing
         """ Extracts and flips images to regularlize readout orientation for overscan subtraction.
 
         Args:
-            image(np.ndarray): Raw image with overscan region
+            image(np.array): Raw image with overscan region
             key(int): Orientation of image
 
         Returns:
-            image_fixed(np.ndarray): Correctly-oriented raw image for overscan subtraction
+            image_fixed(np.array): Correctly-oriented raw image for overscan subtraction
                 and overscan region removal
         """
         if key == 1: #flip lr
@@ -103,9 +105,12 @@ class OverscanSubtraction(KPF0_Primitive):
 
         Args:
             images(list): List of arrays corresponding to channel data
+            rows(list): List of rows corresponding to channel image FFI location
+            columns(list): List of columns corresponding to channel image FFI location. 
+                Ex: Quadrant row is 2, col is 2, means that image will go lower right corner in FFI. 
 
         Returns:
-            full_frame_img(np.ndarray): Assembled full frame image
+            full_frame_img(np.array): Assembled full frame image
         """
 
         all_img = list(zip(images,rows,columns))
@@ -127,6 +132,8 @@ class OverscanSubtraction(KPF0_Primitive):
 
         Args:
             osub_image(np.array): Image with overscan region subtracted.
+            overscan_reg_srl(np.array): Serial overscan region
+            overscan_reg_prl(np.array): Parallel overscan region
 
         Returns:
             image_cut(np.array): Image with overscan region cut off.
@@ -137,27 +144,28 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
 
-    #def prescan_cut(self,osub_image,prescan_reg):
-        #image_cut = osub_image[0:prescan_reg[0],:]
-        #return image_cut
-
-    def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts): #iterate through wrapped frames
+    def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
         """Performs overscan subtraction steps, in order: orient frame, subtract overscan (method
         chosen by user) from correctly-oriented frame (overscan on right and bottom), cuts off overscan region.
+
+        Args:
+            channel_imgs(np.ndarray): All extension images that make up a single FFI
+            channels(list): Channel number
+            channel_keys(list): Channel orientation key values (1=overscan on bottom and left, 2=overscan on left and top
+                3=overscan on top and right, 4=overscan on right and bottom)
+            channel_rows(list): List of rows corresponding to channel image FFI location
+            channel_cols(list): List of columns corresponding to channel image FFI location
+            channel_exts(list): FITS extensions of images 
+
+        Returns:
+            full_frame_img():
         """
-        #testing = fits.HDUList()
         # clip ends of overscan region 
         srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays()
         # create empty list for final, overscan subtracted/cut arrays
         no_overscan_imgs = []
-        #print (channel_imgs.shape)
         for img,key in zip(channel_imgs,channel_keys):
-            #print(img.shape)
-            # orient img
             new_img = self.orientation_adjust(img,key)
-            # plt.imshow(new_img)
-            # plt.savefig('oscan_troubleshoot_(%d).pdf' % key)
-            #testing.append(fits.ImageHDU(new_img))
             # overscan subtraction for chosen method
             if self.mode=='mean':
                 raw_sub_os = self.mean_subtraction(new_img,srl_clipped_oscan)
@@ -170,24 +178,22 @@ class OverscanSubtraction(KPF0_Primitive):
 
             # chop off overscan and prescan - put into overscan subtraction utility
             new_img = self.overscan_cut(raw_sub_os,srl_oscan_pxl_array,prl_oscan_pxl_array)
-            #testing.append(fits.ImageHDU(new_img))
             # put img back into original orientation 
             og_oriented_img = self.orientation_adjust(new_img,key)
             plt.imshow(og_oriented_img)
-            plt.savefig('oscan_troubleshoot_%d.pdf' % key)
-            #testing.append(fits.ImageHDU(og_oriented_img))
+
             no_overscan_imgs.append(og_oriented_img)
 
         full_frame_img = self.generate_FFI(no_overscan_imgs,channel_rows,channel_cols)
-        #testing.append(fits.ImageHDU(full_frame_img))
-        #testing.writeto('',overwrite=True)
         return full_frame_img
 
     def _perform(self):
-        #print('extension possibilities:',self.rawfile.extensions)
+        """Performs entire overscan subtraction utility.
+
+        Returns:
+            l0_obj(fits.hdulist): Original FITS.hdulist but with FFI extension(s) filled
+        """
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
-        #l0_obj = KPF0.from_fits(self.rawfile,self.data_type)
-        #l0_obj = fits.open(self.rawfile)
         l0_obj = self.rawfile
         frames_data = []
         for ext in channel_exts:
@@ -198,25 +204,8 @@ class OverscanSubtraction(KPF0_Primitive):
         #full_frame_images=[]
         for frame in range(len(self.ffi_exts)):
             single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
-            full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)
+            full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
             #full_frame_images.append(full_frame_img)
             l0_obj[self.ffi_exts[frame]] = full_frame_img
 
-        # l0_obj.receipt_add_entry('overscan subtraction', self.__module__, f'input_files={self.rawfile}', 'PASS')
-
-        # if self.logger:
-        #     self.logger.info("overscan subtraction: Receipt written")
-        print('shape of ffi is:', full_frame_img.shape)
         return Arguments(l0_obj)
-
-
-
-
-
-
-
-
-
-    
-
-
