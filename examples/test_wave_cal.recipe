@@ -1,14 +1,13 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
-l1_file_names = output_dir + '*' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix + '.fits'
-master_path = test_data_dir + input_lev1_file_prefix + '*.fits'
-master_data = kpf1_from_fits(master_file,data_type='NEID')
+master_path=test_data_dir + master_file_name
 
-for f in find_files(files):
-	_, _file = split(f)
-	_stem, _ext = splitext(_file)
-	lfc_data = kpf1_from_fits(f,data_type='NEID')
-	wave_soln = WaveCalibrate(lfc_data,master_data,f0,frep,data_type='NEID')
+l1_file_names = output_dir + '*' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix + '.fits'
+
+for l1_file in find_files(l1_file_names):
+	# data_type is 'KPF' for optimal extraction produced leve1 fits or 'NEID' for NEID level 1 fits     
+	lfc_data=kpf1_from_fits(l1_file,data_type='NEID')
+	wave_soln=WaveCalibrate(lfc_data,master_path,f0,frep,quicklook)
 	lev1_path, short_lev1 = split(l1_file)
 	lev1_stem, lev1_ext = splitext(short_lev1)
-	result = to_fits(wave_soln,(output_dir + lev1_stem + '_wave' + lev1_ext))
+	result = to_fits(wave_soln, (output_dir + lev1_stem + '_wave' + lev1_ext))

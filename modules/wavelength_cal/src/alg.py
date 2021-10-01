@@ -42,14 +42,15 @@ class LFCWaveCalibration:
             logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
         
         Attributes:
-            f0 (np.int): Offset frequency of comb, in Hertz. Pulled from config file.
-            f_rep (np.int): Repetition frequency of comb, in Hertz. Pulled from config file.
-            max_wave (np.int): Maximum wavelength of wavelength range, in Angstroms. Pulled from config file.
-            min_wave (np.int): Minimum wavelength of wavelength range, in Angstroms. Pulled from config file.
-            fit_order (np.int): Order of fitting polynomial. Pulled from config file.
-            min_order (np.int): Minimum order with coherent light/flux in flux extension. Pulled from config file.
-            max_order (np.int): Maximum order with coherent light/flux in flux extension. Pulled from config file.
-            n_sections (np.int): Number of sections to divide the comb into. Pulled from config file.
+            max_wave (int): Maximum wavelength of wavelength range, in Angstroms. Pulled from config file.
+            min_wave (int): Minimum wavelength of wavelength range, in Angstroms. Pulled from config file.
+            fit_order (int): Order of fitting polynomial. Pulled from config file.
+            min_order (int): Minimum order with coherent light/flux in flux extension. Pulled from config file.
+            max_order (int): Maximum order with coherent light/flux in flux extension. Pulled from config file.
+            n_sections (int): Number of sections to divide the comb into. Pulled from config file.
+            skip_orders ():
+            save_diagnostics ():
+            quicklook_ord_s ():
         """
         configpull=ConfigHandler(config,'PARAM')
         self.max_wave=configpull.get_config_value('max_wave',9300)
@@ -61,18 +62,24 @@ class LFCWaveCalibration:
         #self.clip_peaks_opt=configpull.get_config_value('clip_peaks',False)
         self.skip_orders=configpull.get_config_value('skip_orders',None)
         self.save_diagnostics=configpull.get_config_value('save_diagnostics',False)
+        self.quicklook_ord_steps=configpull.get_config_value('quicklook_ord_steps',5)
         self.config=config
         self.logger=logger
 
-    def remove_orders(self):
+    def remove_orders(self,step):
         """Removes bad orders from order list if between min and max orders to test.
 
+        Args:
+            step (int): Number of orders to skip in order removal. Used to skip orders for QLP.
+
         Returns:
-            order_list: List of orders to run wavelength calibration on.
+            order_list (list): List of orders to run wavelength calibration on.
         """
-        order_list = [*range(self.min_order,self.max_order,1)]
+        order_list = [*range(self.min_order,self.max_order,step)]
         if self.skip_orders:
+            self.skip_orders = self.skip_orders.split(',')
             for i in self.skip_orders:
+                i = int(i)
                 if i in order_list:
                     order_list.remove(i)
                 else:
@@ -88,13 +95,15 @@ class LFCWaveCalibration:
             master_path (str): Path to master file name
 
         Returns:
-            master_data: Master calibration data
+            master_data (np.ndarray): Master calibration data
         """
-        m_file=fits.open(master_path)
-        if len(m_file)>2:
-            print ("Cannot find data extension when there is more than one image HDU")
-        else:
-            master_data=m_file[1].data
+        # m_file=fits.open(master_path)
+        # if len(m_file)>2:
+        #     print ("Cannot find data extension when there is more than one image HDU")
+        # else:
+        #     master_data=m_file[1].data
+        m_file = fits.open(master_path)
+        master_data = m_file['SCIWAVE'].data
             
         return master_data
 
@@ -107,23 +116,20 @@ class LFCWaveCalibration:
         Based on pyreduce.
 
         Args:
-            comb (np.array of float): flux values. Their indices correspond to
+            comb (np.array): flux values. Their indices correspond to
                 their pixel numbers. Generally the entire order.
-            n_sections (int): number of sections to split the comb into
-            plot_path (str): if defined, the path to the output directory for
-                diagnostic plots. If None, plots are not made.
+            plot_path (str): Path for diagnostic plots. If None, plots are not made.
 
         Returns:
-            tuple of:
-                new_peaks (np.array of float): array of true peak locations as 
-                    determined by Gaussian fitting
-                peaks (np.array of float): array of detected peak locations (pre-
-                    Gaussian fitting)
-                peak_heights (np.array of float): array of detected peak heights 
-                    (pre-Gaussian fitting)
-                gauss_coeffs (np.array of float): array of size (4, n_peaks) 
-                    containing best-fit Gaussian parameters [a, mu, sigma**2, const]
-                    for each detected peak
+            new_peaks (np.array): array of true peak locations as 
+                determined by Gaussian fitting
+            peaks (np.array): array of detected peak locations (pre-
+                Gaussian fitting)
+            peak_heights (np.array): array of detected peak heights 
+                (pre-Gaussian fitting)
+            gauss_coeffs (np.array): array of size (4, n_peaks) 
+                containing best-fit Gaussian parameters [a, mu, sigma**2, const]
+                for each detected peak
         """
     
         n_pixels = len(comb)
@@ -195,7 +201,7 @@ class LFCWaveCalibration:
                 x = 0.75 and int_width = 0.25).
 
         Returns:
-            float: the integrated value
+            integrated_gaussian_val (float): the integrated value
         """
 
         integrated_gaussian_val = a * 0.5 * (
@@ -211,11 +217,11 @@ class LFCWaveCalibration:
         using scipy.curve_fit
         
         Args:
-            x (np.array of float): x data to be fit
-            y (np.array of float): y data to be fit
+            x (np.array): x data to be fit
+            y (np.array): y data to be fit
 
         Returns:
-            list: best-fit parameters [a, mu, sigma**2, const]
+            popt (list): best-fit parameters [a, mu, sigma**2, const]
         """
         x = np.ma.compressed(x)
         y = np.ma.compressed(y)
@@ -236,20 +242,19 @@ class LFCWaveCalibration:
             for real, disregarding close peaks.
 
         Args:
-            comb (np.array of float): flux values. Their indices correspond to
+            comb (np.array): flux values. Their indices correspond to
                 their pixel numbers. Generally a subset of the full order.
             
         Returns:
-            tuple of:
-                new_peaks (np.array of float): array of true peak locations as 
-                    determined by Gaussian fitting
-                peaks (np.array of float): array of detected peak locations (pre-
-                    Gaussian fitting)
-                peak_heights (np.array of float): array of detected peak heights 
-                    (pre-Gaussian fitting)
-                gauss_coeffs (np.array of float): array of size (4, n_peaks) 
-                    containing best-fit Gaussian parameters [a, mu, sigma**2, const]
-                    for each detected peak
+            new_peaks (np.array): array of true peak locations as 
+                determined by Gaussian fitting
+            peaks (np.array): array of detected peak locations (pre-
+                Gaussian fitting)
+            peak_heights (np.array): array of detected peak heights 
+                (pre-Gaussian fitting)
+            gauss_coeffs (np.array): array of size (4, n_peaks) 
+                containing best-fit Gaussian parameters [a, mu, sigma**2, const]
+                for each detected peak
         """
 
         c = comb - np.ma.min(comb)
@@ -282,24 +287,26 @@ class LFCWaveCalibration:
         remove them.
 
         Args:
-            new_peaks (np.array of float): array of true peak locations as 
+            comb (np.array): array of comb data
+            new_peaks (np.array): array of true peak locations as 
                 determined by Gaussian fitting
-            peaks (np.array of float): array of detected peak locations (pre-
-                Gaussian fitting)
-            peak_heights (np.array of float): array of detected peak heights 
+            peaks (np.array of float): array of detected peak locations 
                 (pre-Gaussian fitting)
-            gauss_coeffs (np.array of float): array of size (4, n_peaks) 
-                containing best-fit Gaussian parameters [a, mu, sigma**2, const]
-                for each detected peak
+            gauss_coeffs (np.array): array of size (4, n_peaks) containing best-fit 
+                Gaussian parameters [a, mu, sigma**2, const] for each detected peak            
+            peak_heights (np.array): array of detected peak heights (pre-Gaussian fitting)
+            thar_wavecal (np.array): array of ThAr solution data
+            comb_lines_angstrom (np.array): theoretical LFC wavelengths
+                as computed by fundamental physics (in Angstroms)
             print_update (bool): if True, print how many peaks were clipped
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
 
         Returns: 
-            np.array of int: indices of surviving peaks
+            good_peak_idx(np.array): indices of surviving peaks
         """
-        approx_pixel_size = 0.01 #angstroms
-        good_peak_idx =np.where(np.abs(new_peaks - peaks) < 1)[0]
+        approx_pixel_size = 0.01
+        good_peak_idx =np.where(np.abs(new_peaks - peaks) < 1) [0]
         n_pixels = len(thar_wavecal)
 
         s = InterpolatedUnivariateSpline(np.arange(n_pixels),thar_wavecal)
@@ -312,7 +319,9 @@ class LFCWaveCalibration:
             ).argmin()
             if np.abs(comb_lines_angstrom[best_mode_idx] - lamb) < approx_pixel_size:
                 good_peak_idx_modes.append(i)
+        
         good_peak_idx = np.intersect1d(good_peak_idx_modes,good_peak_idx)
+
         if print_update:
             print('{} peaks clipped'.format(len(peaks) - len(good_peak_idx)))
 
@@ -342,33 +351,45 @@ class LFCWaveCalibration:
             )
             plt.close()
 
+            plt.figure()
+            plt.plot(comb, color='k', lw=0.1)   
+            plt.scatter(
+                peaks[good_peak_idx], peak_heights[good_peak_idx], s=1, color='r'
+            )
+            plt.scatter(
+                np.delete(peaks, good_peak_idx), 
+                np.delete(peak_heights, good_peak_idx), s=10, color='k'
+            )
+            plt.savefig('{}/unclipped_peaks.png'.format(plot_path), dpi=250)
+            plt.close()
+
             n_zoom_sections = 10
             zoom_section_pixels = n_pixels // n_zoom_sections
 
-            _,ax_list = plt.subplots(n_zoom_sections,1,figsize=(6,12))
+            _, ax_list = plt.subplots(n_zoom_sections, 1, figsize=(6, 12))
             for i, ax in enumerate(ax_list):
-                ax.plot(comb,color='k',lw=0.1)
+                ax.plot(comb, color='k', lw=0.1)   
                 ax.scatter(
-                    peaks[good_peak_idx], peak_heights[good_peak_idx],
-                    s=1,color='r'
+                    peaks[good_peak_idx], peak_heights[good_peak_idx], 
+                    s=1, color='r'
                 )
                 ax.scatter(
-                    np.delete(peaks,good_peak_idx),
-                    np.delete(peak_heights,good_peak_idx),s=10,color='k'
+                    np.delete(peaks, good_peak_idx), 
+                    np.delete(peak_heights, good_peak_idx), s=10, color='k'
                 )
                 ax.set_xlim(
-                    zoom_section_pixels * i,zoom_section_pixels * (i+1)
+                    zoom_section_pixels * i, zoom_section_pixels * (i + 1)
                 )
                 ax.set_ylim(
-                    0,
+                    0, 
                     np.max(
-                        comb[zoom_section_pixels * i : zoom_section_pixels * (i+1)]
+                        comb[zoom_section_pixels * i : zoom_section_pixels * (i + 1)]
                     )
                 )
-            plt.tight_layout()
-            plt.savefig('{}/unclipped_peaks_zoom.png'.format(plot_path),dpi=250)
-            plt.close()
 
+            plt.tight_layout()
+            plt.savefig('{}/unclipped_peaks_zoom.png'.format(plot_path), dpi=250)
+            plt.close()
         return good_peak_idx
 
     def mode_match(self,comb, new_peaks, good_peak_idx, thar_wavecal, 
@@ -379,26 +400,27 @@ class LFCWaveCalibration:
 
         Args:
             comb (np.array of float): flux values for an order. Their indices 
-            correspond to their pixel numbers. 
-            new_peaks (np.array of float): array of true detected peak locations as 
+                correspond to their pixel numbers. 
+            new_peaks (np.array): array of true detected peak locations as 
                 determined by Gaussian fitting.
-            good_peak_idx (np.array of int): indices (of ``new_peaks``) of detected 
+            good_peak_idx (np.array): indices (of ``new_peaks``) of detected 
                 and unclipped peaks
-            thar_wavecal (np.array of float): ThAr-based wavelength solution. Each
+            thar_wavecal (np.array): ThAr-based wavelength solution. Each
                 entry in the array is the wavelength (in Angstroms) corresponding
                 to a pixel (indicated by its index)
-            comb_lines_angstrom (np.array of float): theoretical LFC wavelengths
+            comb_lines_angstrom (np.array): theoretical LFC wavelengths
                 as computed by fundamental physics (in Angstroms)
             print_update (bool): if True, print total number of LFC modes in
                 the order that were not detected (n_clipped + n_never_detected)
+            plot_path (str): if defined, the path to the output directory for
+                diagnostic plots. If None, plots are not made.
             
         Returns:
-            tuple of:
-                np.array of float: the precise wavelengths of detected comb peaks. Each
-                    entry in the array is the wavelength (in Angstroms) corresponding
-                    to a pixel (indicated by its index)
-                np.array of int: the mode numbers of the LFC modes to be used for 
-                    wavelength calibration
+            wls (np.array): the precise wavelengths of detected comb peaks. Each
+                entry in the array is the wavelength (in Angstroms) corresponding
+                to a pixel (indicated by its index)
+            mode_nums (np.array): the mode numbers of the LFC modes to be used for 
+                wavelength calibration
         """
 
         n_pixels = len(comb)
@@ -525,24 +547,22 @@ class LFCWaveCalibration:
         polynomial wavelength solution.
 
         Args:
-            wls (np.array of float): the precise wavelengths of detected comb peaks,
+            wls (np.array): the precise wavelengths of detected comb peaks,
                 from fundamental physics.
-            gauss_coeffs (np.array of float): array of size (4, n_peaks) 
+            gauss_coeffs (np.array): array of size (4, n_peaks) 
                 containing best-fit Gaussian parameters [a, mu, sigma**2, const]
                 for each detected peak
             good_peak_idx (np.array of int): indices of unclipped peaks
             n_pixels (int): number of pixels in the order
-            new_peaks (np.array of float): array of true detected peak locations as 
+            new_peaks (np.array): array of true detected peak locations as 
                 determined by Gaussian fitting.
-            print_update (bool): if True, print the RV precision.
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
 
         Returns:
-            tuple of:
-                np.array of float: calculated wavelength solution for the order (i.e. 
+                our_wavelength_solution_for_order (np.array): calculated wavelength solution for the order (i.e. 
                     wavelength value for each pixel in the order)
-                func: a Python function that, given an array of pixel locations, 
+                leg_out (func): a Python function that, given an array of pixel locations, 
                     returns the Legendre polynomial wavelength solutions
         """
 
@@ -587,11 +607,12 @@ class LFCWaveCalibration:
                 from fundamental physics.
             leg_out (func): a Python function that, given an array of pixel 
                 locations, returns the Legendre polynomial wavelength solutions
+            print_update (bool): If true, prints standard error per order.
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
 
         Returns:
-            np.float: RV precision in cm/s
+            precision_cm_s (float): RV precision in cm/s
         """
         our_wls_peak_pos = leg_out(new_peaks[good_peak_idx]) 
 
@@ -613,7 +634,15 @@ class LFCWaveCalibration:
         return precision_cm_s
 
     def mask_array_neid(self, calflux,n_orders):
-    
+        """Creates mask to remove bad pixel regions specific to order. For NEID testing.
+
+        Args:
+            calflux (np.array): [description]
+            n_orders (np.array): [description]
+
+        Returns:
+            calflux [type]: [description]
+        """
         mask = np.zeros((2,n_orders),dtype=int)
         
         mask_order_lims = {
@@ -695,10 +724,12 @@ class LFCWaveCalibration:
         Iteratively performs LFC wavelength calibration for all orders.
 
         Args:
-            comb_all (np.array of floar): (n_orders x n_pixels) array of LFC fluxes
-            thar_wavecal_all (np.array of float): (n_orders x n_pixels) array of    
-                ThAr-derived wavelength soluton values for each pixel on the 
-                detector
+            comb_all (np.array): (n_orders x n_pixels) array of LFC fluxes
+            thar_wavecal_all (np.array): (n_orders x n_pixels) array of    
+                ThAr-derived wavelength solution values for each pixel on the detector
+            comb_lines_angstrom (np.array): theoretical LFC wavelengths
+                as computed by fundamental physics (in Angstroms)
+            order_list (list): Order list
             plt_path (str): if set, all diagnostic plots will be saved in this
                 directory. If None, no plots will be made.
             print_update (bool): whether subfunctions should print updates.
@@ -706,8 +737,11 @@ class LFCWaveCalibration:
         Returns:
             dict: the LFC mode numbers used for wavelength cal. Keys are ints
                 representing order numbers, values are 2-tuples of:
-                    lists of mode numbers
-                    the corresponding pixels on which the LFC mode maxima fall
+                    - lists of mode numbers
+                    - the corresponding pixels on which the LFC mode maxima fall
+
+            poly_soln_final_array (np.array): Polynomial solution for each tested order
+            thars (np.array): ThAr solutions for each tested order
         """    
         # 2D extracted spectra
         if plt_path is not None:
@@ -722,10 +756,17 @@ class LFCWaveCalibration:
 
         order_precisions = []
         num_detected_peaks = []
-
+        poly_solns = []
+        thars = []
         modenums_and_pixels = {}
+
+        #print("orderlist",order_list)
+        total_order_no = np.shape(comb_all)
+        #total_order_list = np.arange(total_order_no[0])
+        poly_soln_final_array = np.zeros(np.shape(comb_all))
+        thars = np.zeros(np.shape(comb_all))
+
         for order_num in order_list:
-            
             if print_update:
                 print('\nRunning order # {}'.format(order_num))
 
@@ -746,6 +787,7 @@ class LFCWaveCalibration:
 
             comb = comb_all[order_num,:]
             thar_wavecal = thar_wavecal_all[order_num,:]
+            #thars.append(thar_wavecal)
             n_pixels = len(comb)
 
             # calculate, clip, and mode-match peaks
@@ -761,13 +803,13 @@ class LFCWaveCalibration:
                 comb, new_peaks, good_peak_idx, thar_wavecal, comb_lines_angstrom, 
                 print_update=print_update, plot_path=order_plt_path
             )
-
             # calculate the wavelength solution for the order
             polynomial_wls, leg_out = self.fit_polynomial(
                 wls, gauss_coeffs, good_peak_idx, n_pixels, new_peaks, 
                 plot_path=order_plt_path
             )
-
+            poly_soln_final_array[order_num,:] = polynomial_wls
+            #poly_solns.append(polynomial_wls)
             if plt_path is not None:
                 plt.figure(figsize=(12,5))
                 plt.plot(
@@ -785,6 +827,7 @@ class LFCWaveCalibration:
                 plt.close()
 
             # compute RV precision for order
+            print(poly_soln_final_array[order_num])
             precision = self.calculate_rv_precision(
                 new_peaks, good_peak_idx, wls, leg_out, plot_path=order_plt_path, 
                 print_update=print_update
@@ -803,13 +846,17 @@ class LFCWaveCalibration:
         )
         print('Overall precision: {:2.2f} cm/s'.format(overall_std_error))
 
-        return polynomial_wls
+        return poly_soln_final_array,thars
 
     def comb_gen(self, f0, f_rep):
         """Generates comb lines for mapping flux.
 
+        Args:
+            f0 (float): Initial comb frequency
+            f_rep (float): Comb repitition frequency
+
         Returns:
-            comb_lines_ang(np.ndarray): Array of comb lines, in Angstroms.
+            comb_lines_ang (np.array): Array of comb lines, in Angstroms.
         """
         mode_start=np.int((((scipy.constants.c*1e10)/self.min_wave)-f0)/f_rep)
         mode_end=np.int((((scipy.constants.c*1e10)/self.max_wave)-f0)/f_rep)
@@ -821,20 +868,111 @@ class LFCWaveCalibration:
 
         return comb_lines_ang
 
-    def open_and_run(self, calflux, master_data, f0, f_rep):
+    def open_and_run(self, calflux, master_data, f0, f_rep, quicklook):
+        """Runs all LFC Wavecal alg steps in order.
+
+        Args:
+            calflux (np.array): [description]
+            master_data (np.array): [description]
+            f0 (float): Initial comb frequency
+            f_rep (float): Comb repition frequency
+            quicklook (bool): Whether or not to run quicklook pipeline
+
+        Returns:
+            poly_soln (np.array): [description]
+        """
+        if quicklook == False:
+            if type(self.save_diagnostics) == str:
+                SAVEPLOTS = ('{}/%s' % self.save_diagnostics).format(os.getcwd())
+                if not os.path.isdir(SAVEPLOTS):
+                    os.makedirs(SAVEPLOTS)
+            if self.save_diagnostics == False:
+                SAVEPLOTS = None
+
+            cl_ang = self.comb_gen(f0, f_rep)
+            order_list = self.remove_orders(step=1)
+            n_orders = len(order_list)
+            new_calflux = self.mask_array_neid(calflux,n_orders)
+            # perform wavelength calibration
+            poly_soln,thars = self.fit_many_orders(new_calflux, master_data, cl_ang, order_list, print_update=True, plt_path=SAVEPLOTS)
+
+            return poly_soln
     
-        if type(self.save_diagnostics) == str:
-            SAVEPLOTS = ('{}/%s' % self.save_diagnostics).format(os.getcwd())
-            if not os.path.isdir(SAVEPLOTS):
-                os.makedirs(SAVEPLOTS)
-        if self.save_diagnostics == False:
-            SAVEPLOTS = None
+        if quicklook == True:
+            if type(self.save_diagnostics) == str:
+                SAVEPLOTS = ('{}/%s' % self.save_diagnostics).format(os.getcwd())
+                if not os.path.isdir(SAVEPLOTS):
+                    os.makedirs(SAVEPLOTS)
+            if self.save_diagnostics == False:
+                SAVEPLOTS = None
 
-        cl_ang = self.comb_gen(f0, f_rep)
-        order_list = self.remove_orders()
-        n_orders = len(order_list)
-        new_calflux = self.mask_array_neid(calflux,n_orders)
-        # perform wavelength calibration
-        poly_soln = self.fit_many_orders(new_calflux, master_data, cl_ang, order_list, print_update=True, plt_path=SAVEPLOTS)
+            cl_ang = self.comb_gen(f0, f_rep)
+            order_list = self.remove_orders(step=self.quicklook_ord_steps)
+            n_orders = len(order_list)
+            new_calflux = self.mask_array_neid(calflux,n_orders)
+            # perform wavelength calibration
+            poly_soln,thars = self.fit_many_orders(new_calflux, master_data, cl_ang, order_list, print_update=True, plt_path=SAVEPLOTS)
 
-        return poly_soln
+            ##### #draft of quicklook drift plot
+            # def plot_drift(thars,poly_soln,order_list):
+            #     dev = np.array(thars) - np.array(poly_soln)
+            #     mean = np.mean(dev,1)
+            #     if np.max(mean) > .01:
+            #         plt.axhspan(.01,np.max(mean), facecolor='grey', alpha=0.5,label='Warning: Large deviation region')
+            #     if np.max(mean) < .01:
+            #         plt.axhspan(.01,.012,facecolor='grey',alpha=.5,label='Warning: Large deviation region')
+
+            #     if np.min(mean) < -.01:
+            #         plt.axhspan(-.01,np.min(mean),facecolor='grey',alpha=.5,label='Warning: Large deviation region')
+            #     if np.min(mean) > -.01:
+            #         plt.axhspan(-.01,-.012,facecolor='grey',alpha=.5,label='Warning: Large deviation region')
+
+            #     #print(order_list,mean,np.shape(order_list),np.shape(mean))
+            #     plt.scatter(order_list,mean,marker='.',color='orange')
+            #     plt.xlabel('Order')
+            #     plt.ylabel('Drift (?km/s)')
+            #     h, l = plt.gca().get_legend_handles_labels()
+            #     newh=[h[0]]
+            #     newl=[l[0]]
+            #     plt.legend(newh,newl)
+            #     plt.savefig('master_soln_deviation.pdf')
+            #     plt.close()
+            
+            # print(np.shape(master_data),np.shape(poly_soln),np.shape(thars))
+            # plot_drift(master_data,poly_soln)
+            #####
+
+            def plot_orders(wav,flux):
+                from matplotlib import gridspec
+                n = 10 # number of sub panels
+                m = 6 #number of panel per panel
+                gs = gridspec.GridSpec(n, 1, height_ratios=np.ones(n))
+
+                plt.rcParams.update({'font.size': 8})
+                #fig = plt.figure(figsize=(6, 12))
+                fig, ax = plt.subplots(n,1, sharey=False,figsize=(24,18))
+
+                plt.subplots_adjust(left=0.1, right=0.9, top=0.85, bottom=0.1)
+                fig.subplots_adjust(hspace=0.3)
+
+                for i in range(55,115,1):#np.shape(wav)[0]
+                    low, high = np.nanpercentile(flux[i,:],[0.5,99.5])
+                    flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
+                    j = int((i-55)/m)
+                    ax[j].plot(wav[i,:],flux[i,:], linewidth =  0.1)
+
+                #for j in range(n):
+                    #low, high = np.nanpercentile(flux[j*m:(j+1)*m,:],[.5,99.5])
+                    #print(j,high*1.5)
+                    #ax[j].set_ylim(-high*0.1, high*1.5)
+
+                low, high = np.nanpercentile(flux,[0.5,99.5])
+                #plt.ylim(-high*0.1, high*1.2)
+                ax[int(n/2)].set_ylabel('Counts',fontsize = 20)
+                plt.xlabel('Wavelength (Ang)',fontsize = 20)
+                plt.savefig('quicklook_LFC_orderplot.pdf') #name should have pre/suffix with og file number
+                plt.close()
+
+            plot_orders(master_data,calflux)
+            #####
+            return poly_soln

@@ -68,6 +68,7 @@ class WaveCalibrate(KPF1_Primitive):
         self.master_wavelength=self.action.args[1]
         self.f0_key = self.action.args[2]
         self.frep_key = self.action.args[3]
+        self.quicklook = self.action.args[4]
         self.data_type = self.get_args_value('data_type', action.args, args_keys)
 
         #Input configuration
@@ -146,13 +147,16 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Extracting flux")
                 flux = self.l1_obj.data[prefix][0,:,:]#0 referring to 'flux'
+                #print('flux shape:', np.shape(flux))
                 flux = np.nan_to_num(flux)
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Running algorithm")  
-                wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr)
+                wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr,self.quicklook)
+                #print('soln shape:', np.shape(wl_soln))
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Saving solution output")  
                 self.l1_obj.data[prefix][1,:,:]=wl_soln
+        print(np.shape(self.l1_obj.data[prefix][1,:,:]),self.l1_obj.data[prefix][1,:,:])
         if self.l1_obj is not None:
             self.l1_obj.receipt_add_entry('Wavelength Calibration', self.__module__,
                                           f'config_path={self.config_path}', 'PASS')
@@ -171,4 +175,3 @@ class WaveCalibrate(KPF1_Primitive):
         else:
             v = self.default_args_val[key]
         return v
-
