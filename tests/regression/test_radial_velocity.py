@@ -77,6 +77,33 @@ def init_radial_velocity():
     return rv_init, config_neid
 
 
+def init_radial_velocity_c():
+    config_neid = configparser.ConfigParser()
+    config_neid['PARAM'] = {
+        'starname': 'Tau Ceti',
+        'star_rv': -20,
+        'obslon': -111.600562,
+        'obslat': 31.958092,
+        'obsalt': 2091.0,
+        'star_config_file': 'NEIDdata/TAUCETI_20191217/neid_stars.config',
+        'ra': 'star/ra',
+        'dec': 'star/dec',
+        'pmra': 'star/pmra',
+        'pmdec': 'star/pmdec',
+        'parallax': 'star/plx',
+        'mask': 'star/default_mask',
+        'step': 0.25,
+        'step_range': '[-82, 82]',
+        'mask_width': 0.5,
+        'air_to_vacuum': True,
+        'header_date_obs': 'DATE-OBS',
+        'ccf_engine': 'c'
+    }
+
+    rv_init = RadialVelocityAlgInit(config_neid, bc_time=Time("2019-04-18").jd)
+
+    return rv_init, config_neid
+
 def collect_data_for_rv():
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
     assert os.path.isdir(test_data_dir), "test data directory doesn't exist"
@@ -147,8 +174,44 @@ def start_neid_radial_velocity():
     return rv_handler
 
 
+def start_neid_radial_velocity_c():
+    rv_init, config_neid = init_radial_velocity_c()
+    neid_lev1_sample, op_result_fits = collect_data_for_rv()
+
+    order_diff = 7
+    wave_hdu = 7
+
+    neid_sample_hdulist = fits.open(neid_lev1_sample)
+    wave_calib = neid_sample_hdulist[wave_hdu].data[order_diff:, :]
+    op_result_data, op_result_header = fits.getdata(op_result_fits, header=True)
+    neid_sample_header = neid_sample_hdulist[0].header
+
+    rv_handler = RadialVelocityAlg(op_result_data, neid_sample_header,
+                                   rv_init.start(), wave_calib, config_neid)
+
+    return rv_handler
+
+
 def test_neid_compute_rv_by_cc():
     rv_handler = start_neid_radial_velocity()
+    _, nx, ny = rv_handler.get_spectrum()
+    s_x = 600
+    e_x = nx - s_x
+
+    rv_result = rv_handler.compute_rv_by_cc(start_order=s_order, end_order=e_order, start_x=s_x, end_x=e_x)
+    assert 'ccf_ary' in rv_result, "no radial velocity computation result"
+    assert isinstance(rv_result['ccf_ary'], np.ndarray), "wrong radial velocity result type"
+
+    target_file = result_data + str(s_order) + '_' + str(e_order) + '.fits'
+    if os.path.isfile(target_file):
+        target_data = get_result_from_rv_fits(target_file)
+        if target_data is not None:
+            is_equal, msg = np_equal(target_data, rv_result.get('ccf_ary'), "compute radial velocity on neid: ")
+            assert is_equal, msg
+
+
+def test_neid_compute_rv_by_cc_c():
+    rv_handler = start_neid_radial_velocity_c()
     _, nx, ny = rv_handler.get_spectrum()
     s_x = 600
     e_x = nx - s_x
@@ -177,6 +240,7 @@ def test_neid_make_reweighting_ratio_table():
         df_from_ref = pd.read_csv(table_ref)
         is_equal, msg = np_equal(ratio_df.values, df_from_ref.values, "not equal to the ratio table")
         assert is_equal, msg
+
 
 
 def test_neid_reweight_ccf():
