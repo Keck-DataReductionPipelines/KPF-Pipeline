@@ -34,19 +34,19 @@ class FrameCombinePrimitive(KPF0_Primitive):
                 obj=fits.open(name)
                 #issue here with 'NotImplementedError: memoryview: unsupported format >f' when using KPF0.from_fits
                 arrays_list.append(obj[ext].data)
-                #self.logger.info(f'file: {name}, obj.data_type is {type(obj.data)}')
+                #self.logger.info(f'file: {name}, obj.data_type is {type(obj.data)}') #debug w/levels
         master_frames = []
         for frame in range(len(self.lev0_ffi_exts)):
             split = np.array_split(arrays_list,no_ffis)
             single_frame_data =split[frame]
             data=np.dstack(single_frame_data)
-            master_frame = stats.sigma_clip(data,sigma=5,masked=True)
+            master_frame = stats.sigma_clip(data,sigma=5,masked=True) #do median/min-max rejected median instead, sigma better when no files > 20
         #assuming all data will be 2D arrays
         #master_frame.data=np.mean(data,2)
             mast_mean_axis = len(np.array(master_frame).shape)-1
             master_mean = np.mean(master_frame,axis=mast_mean_axis)
             master_frames.append(master_mean)
-            #master_frame.receipt_add_entry('frame_combine', self.__module__, f'input_files={self.L0_names}', 'PASS')
+            #master_frame.receipt_add_entry('frame_combine', self.__module__, f'input_files={self.L0_names}', 'PASS') #avoid duplication
             if self.logger:
                 self.logger.info("frame_combine: Receipt written")
         # for ext in self.lev0_ffi_exts:
