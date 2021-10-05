@@ -14,19 +14,24 @@ class OrientationReference(KPF0_Primitive):
         """Reads channel/image orientation .txt file and returns
         orientation key for each channel. File must be formatted in ASCII format.
         It should resemble the following:
+
         CHANNEL CHANNEL_KEYS CHANNEL_FFI_ROW CHANNEL_FFI_COLUMN CHANNEL_EXT
         1 4 1 1 1 1 2
         2 1 1 2 1 2 3
         3 3 2 1 2 1 4
         4 2 2 2 2 2 5
+
         where there are 5 columns, named CHANNEL, CHANNEL_KEYS, CHANNEL_FFI_ROW, CHANNEL_FFI_COLUMN, and CHANNEL_EXT, with 
         channel number, channel orientation key, intended row of image in FFI, intended column of image in FFI, and channel ext 
         underneath, respectively.
+
         Channel orientation key is as follows:
+
         1=overscan on bottom and left
         2=overscan on left and top
         3=overscan on top and right
         4=overscan on right and bottom
+
         """
         channel_ref = open(self.reference_path,'r')
         channels = []
