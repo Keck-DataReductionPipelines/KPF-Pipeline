@@ -4,14 +4,16 @@ from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
 #kpfsim
-flat_files_path = '/Users/paminabby/Desktop/kpfsim_flats/*.fits'
-master_flat_path = './examples/V1/FlatRecipe/FlatRecipeRes/test_zeros_masterbias.fits'
-lev0_ffi_exts = ['GREEN_CCD','RED_CCD']
-flat_lev0_ffi_exts = ['GREEN_FLAT','RED_FLAT']
+flat_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_flats/flat_*.fits'
 L0_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/L0_data_format_w_headers_20211001.fits'
 channel_orientation_ref_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_ccd_orient.txt'
-new_raw_file = './examples/V1/FlatRecipe/FlatRecipeRes/end_flat_kpfsim_test.fits'
+
+master_flat_path = './examples/V1/FlatRecipe/FlatRecipeRes/test_masterflat.fits'
 no_flat_L0_files_path = './examples/V1/FlatRecipe/FlatRecipeRes/mid_flat_kpfsim_test.fits'
+new_raw_file = './examples/V1/FlatRecipe/FlatRecipeRes/end_flat_kpfsim_test.fits'
+
+lev0_ffi_exts = ['GREEN_CCD','RED_CCD']
+flat_lev0_ffi_exts = ['GREEN_FLAT','RED_FLAT']
 master_flat_create = True
 pl_overscan_reg = [2000,2200]
 srl_overscan_reg = [2000,2200]
