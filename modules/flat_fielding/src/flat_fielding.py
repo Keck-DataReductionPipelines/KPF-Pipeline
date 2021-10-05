@@ -1,6 +1,7 @@
 
 import configparser
 import numpy as np
+from astropy.io import fits
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -96,6 +97,7 @@ class FlatFielding(KPF0_Primitive):
         Returns:
             Arguments object(np.ndarray): Level 0, flat-corrected, raw observation data
         """
+        self.masterflat = fits.open(self.masterflat)
 
         #Option 1:
         if self.logger:
