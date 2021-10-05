@@ -5,6 +5,7 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 import scipy
 import os
+import ast
 from scipy import signal
 from scipy.signal import find_peaks as peak
 from scipy.optimize import curve_fit as cv
@@ -21,8 +22,8 @@ load_dotenv()
 #define functions
 def f0_and_frep(filepath:str):
     file_ = fits.open(filepath)
-    f0 = file_[0].header['LFCF0']
-    frep = file_[0].header['LFCFR']
+    f0 = float(file_[0].header['LFCF0'])
+    frep = float(file_[0].header['LFCFR'])
     return f0,frep
 
 def comb_thar_size(comb:np.ndarray, thar:np.ndarray):
@@ -66,10 +67,10 @@ def test_run_alg():
     f0,frep = f0_and_frep(filepath)
     #make order list
     orders = algg.remove_orders()
-    min_order = config_vals['PARAM']['min_order']
-    max_order = config_vals['PARAM']['max_order']
+    min_order = int(config_vals['PARAM']['min_order'])
+    max_order = int(config_vals['PARAM']['max_order'])
     orderlist = np.arange(min_order,max_order)
-    skip_orders = config_vals['PARAM']['skip_orders']
+    skip_orders = ast.literal_eval(config_vals['PARAM']['skip_orders'])
     n_olist = len(orderlist)
     for i in skip_orders:
         if i in orderlist:
@@ -77,7 +78,8 @@ def test_run_alg():
     assert n_olist==len(orders),"Orders improperly removed"
 
     cl_ang = algg.comb_gen(f0,frep)
-    poly_soln = algg.fit_many_orders(combs,thars,cl_ang,orders)
+    import pdb; pdb.set_trace()
+    poly_soln = algg.fit_many_orders(combs,thars,cl_ang,np.array(orders))
     
 def test_rv_acc():
     config_vals = configparser.ConfigParser()
