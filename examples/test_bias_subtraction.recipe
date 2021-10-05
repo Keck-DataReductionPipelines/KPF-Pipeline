@@ -3,11 +3,11 @@ from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
-channel_orientation_ref_path = '/Users/paminabby/ownCloud2/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_ccd_orient.txt'
-all_L0_files_path = '/Users/paminabby/ownCloud2/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/L0_data_format_w_headers_20211001.fits' 
-masterbias_path = '/Users/paminabby/Desktop/KPF_sim_endtoend_mbias.fits'
-no_bias_L0_files_path = '/Users/paminabby/Desktop/bias_test/no_bias_tester_sim.fits'
-final_L0_files_path = '/Users/paminabby/Desktop/bias_test/final_bias_tester_sim.fits'
+channel_orientation_ref_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_ccd_orient.txt'
+all_L0_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/L0_data_format_w_headers_20211001.fits'
+no_bias_L0_files_path = './examples/V1/BiasRecipe/BiasRecipeRes/nobias_tester_sim.fits'
+final_L0_files_path = './examples/V1/BiasRecipe/BiasRecipeRes/finalbias_tester_sim.fits'
+masterbias_path = './examples/V1/BiasRecipe/test_zeros_masterbias.fits'
 
 master_bias_create = False
 lev0_ffi_exts = ['GREEN_CCD','RED_CCD']
@@ -25,7 +25,7 @@ for raw_file in find_files(all_L0_files_path):
     L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'NEID')
     L0_result = to_fits(L0_with_ffi,no_bias_L0_files_path)
 
-#all_bias_files = find_files('/Users/paminabby/Desktop/NeidBiasTests/*.fits')
+#all_bias_files = find_files()
 if master_bias_create == True:
     master_bias_data = FrameCombinePrimitive(all_bias_files,lev0_ffi_exts,'NEID')
     master_bias_result = to_fits(master_bias_data,masterbias_path)
