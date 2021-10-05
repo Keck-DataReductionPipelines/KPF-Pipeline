@@ -1,0 +1,46 @@
+from modules.optimal_extraction.src.order_rectification import OrderRectification
+from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
+
+rect_suffix = ''
+lev0_flat_pattern =  output_dir + '*' + flat_stem_suffix + '.fits'
+
+lev1_extraction_set = []
+for lev0_flat_file in find_files(lev0_flat_pattern):
+	_, short_lev0_flat = split(lev0_flat_file)
+	lev0_flat_stem, lev0_flat_ext = splitext(short_lev0_flat)
+
+	clip_file = recipe_output_dir + 'clip_geo/' + rect_method + '/' + lev0_flat_stem + '_' + rect_method
+	output_lev0_flat_rect = output_dir + lev0_flat_stem + '_' + rect_method + '.fits'
+	lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type='KPF')
+
+
+	for code in obs_list:
+		input_lev0_file = test_data_dir + input_lev0_prefix + code + '.fits'
+		_, short_lev0_file = split(input_lev0_file)
+		lev0_stem, lev0_ext = splitext(short_lev0_file)
+		output_lev1_file = recipe_output_dir + lev0_flat_stem + rect_suffix + '_' + lev0_stem + '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix + '.fits'
+		lev1_extraction_set = lev1_extraction_set + [output_lev1_file]
+		
+		if not find_files(output_lev1_file):
+			lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+
+			# get wavelength header and data from existing level 1 data. temporary setting, no need later
+			input_lev1_file = test_data_dir + input_lev1_prefix + code + '.fits'
+			wavecal_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
+			
+			# build SCIFLUX and CALFLUX by one module instance or build SCIFLUX only
+			if op_tag != '_all':
+				order_to_process = order_name
+			else:
+				order_to_process = orderlette_names
+
+			set_wave = True			
+
+			op_data = OptimalExtraction(lev0_data, lev0_flat_data,  None, order_name=order_to_process, 
+					rectification_method=rect_method, 
+					extraction_method = extract_method,
+					clip_file=clip_file, 
+					wavecal_fits=wavecal_data, to_set_wavelength_cal=set_wave)
+
+			result = to_fits(op_data, output_lev1_file)
+
