@@ -97,10 +97,11 @@ class FlatFielding(KPF0_Primitive):
         Returns:
             Arguments object(np.ndarray): Level 0, flat-corrected, raw observation data
         """
-        self.masterflat = fits.open(self.masterflat)
+        print('pumpkin', self.masterflat)
+        #self.masterflat = fits.open(self.masterflat)
 
         #Option 1:
         if self.logger:
             self.logger.info("Flat-fielding: dividing raw image by master flat")
-        flat_result=self.alg(self.masterflat)
+        flat_result=self.alg.flat_fielding(self.masterflat)
         return Arguments(self.alg.get())

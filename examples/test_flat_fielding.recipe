@@ -4,7 +4,7 @@ from modules.Utils.frame_combine import FrameCombinePrimitive
 #kpfsim
 #flat_files_path = KPFPIPE_TEST_DATA
 lev0_ffi_exts = ['GREEN_CCD','RED_CCD']
-master_flat_path = '/Users/paminabby/Desktop/end-to-end/test_ones_masterflat.fits'
+master_flat_path = '/Users/paminabby/Desktop/end_to_end/test_zeros_masterbias.fits'
 L0_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/L0_data_format_w_headers_20211001.fits'
 new_raw_file = './examples/V1/FlatRecipe/FlatRecipeRes/end_flat_kpfsim_test.fits'
 master_flat_create = False
