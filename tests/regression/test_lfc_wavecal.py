@@ -78,8 +78,7 @@ def test_run_alg():
     assert n_olist==len(orders),"Orders improperly removed"
 
     cl_ang = algg.comb_gen(f0,frep)
-    import pdb; pdb.set_trace()
-    poly_soln = algg.fit_many_orders(combs,thars,cl_ang,np.array(orders))
+    poly_soln = algg.fit_many_orders(combs,thars,cl_ang,orders)
     
 def test_rv_acc():
     config_vals = configparser.ConfigParser()
