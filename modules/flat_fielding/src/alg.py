@@ -1,3 +1,4 @@
+from astropy.io import fits
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 
