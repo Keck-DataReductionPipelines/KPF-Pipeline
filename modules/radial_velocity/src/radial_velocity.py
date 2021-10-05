@@ -34,6 +34,7 @@
                       The number has the same meaning as that of `action.args['start_x']`.
                     - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference for
                       reweighting ccf orders. Defaults to None.
+                    - `action.args['reweighting_method'] (str, optional)`: reweighting method. Defaults to None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of radial velocity in the master
@@ -48,6 +49,7 @@
                 - `end_order (int)`: Index of the last order to be processed.
                 - `start_x (int)`: Start x position associated with `action.args['start_x']`.
                 - `end_x (int)`: End x position associated with `action.args['end_x']`.
+                - `reweighting_method (str)`: reweighting method associated with `action.args['reweighting_method']`.
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
@@ -134,6 +136,7 @@ class RadialVelocity(KPF1_Primitive):
         self.start_x = int(action.args['start_x']) if 'start_x' in args_keys else None
         self.end_x = int(action.args['end_x']) if 'end_x' in args_keys else None
         self.output_level2 = action.args['output_level2'] if 'output_level2' in args_keys else None
+        self.reweighting_method = action.args['reweighting_method'] if 'reweighting_method' in args_keys else None
 
         is_kpf_type = action.args['is_kpf_type'] if 'is_kpf_type' in args_keys else True
 
@@ -165,7 +168,8 @@ class RadialVelocity(KPF1_Primitive):
 
         # Order trace algorithm setup
         self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init, wave_cal=self.wave_cal,
-                                     config=self.config, logger=self.logger, ccf_engine=self.ccf_engine)
+                                     config=self.config, logger=self.logger, ccf_engine=self.ccf_engine,
+                                     reweighting_method=self.reweighting_method)
 
     def _pre_condition(self) -> bool:
         """
@@ -244,7 +248,7 @@ class RadialVelocity(KPF1_Primitive):
 
         self.output_level2['CCF'] = output_rv[0:total_order]
 
-        rv_orders = {}
+        rv_orders = []
         row_index = np.arange(total_order+1)
         row_index[total_order] = total_order+self.alg.ROWS_FOR_ANALYSIS-1
         velocities = output_rv[total_order+1]
@@ -254,10 +258,10 @@ class RadialVelocity(KPF1_Primitive):
             rv_result = 0.0
             if np.any(output_rv[i, :] != 0.0):
                 _, rv_result, _, _ = self.alg.fit_ccf(output_rv[i, :], rv_guess, velocities)
-            rv_orders[rv_idx] = rv_result
+            rv_orders.append(rv_result)
 
         rv_table = dict()
-        rv_table['rv_orders'] = rv_orders
+        rv_table['rv_orders'] = np.array(rv_orders)
         self.output_level2['RV'] = pd.DataFrame(rv_table)
 
         for att in output_df.attrs:
