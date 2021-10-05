@@ -1,7 +1,8 @@
+from astropy.io import fits
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 
-class FlatFielding:
+class FlatFieldingAlg:
     """
     Flat division calculation.
 
@@ -20,16 +21,18 @@ class FlatFielding:
         Exception: If raw image and flat frame don't have the same dimensions
     """
 
-    def __init__(self, rawimage, config=None, logger=None):
+    def __init__(self, rawimage, ffi_exts, config=None, logger=None):
         """
         Inits FlatFielding class with raw data, config, logger.
 
         Args:
-            rawimage (np.ndarray): The FITS raw data
+            rawimage (np.ndarray): The FITS raw data.
+            ffi_exts (np.ndarray): The extensions in L0 FITS files where FFIs (full frame images) are stored. 
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
             logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
         """
         self.rawimage=rawimage
+        self.ffi_exts=ffi_exts
         self.config=config
         self.logger=logger
 
@@ -44,19 +47,21 @@ class FlatFielding:
         Raises:
             Exception: If raw image and flat frame don't have the same dimensions.
         """
-
-        if self.rawimage.data.shape==masterflat.data.shape:
-            print ("Flat .fits Dimensions Equal, Check Passed")
-        else:
-            raise Exception("Flat .fits Dimensions NOT Equal! Check Failed")
+        for no,ffi in enumerate(self.ffi_exts):
+            print('shapes:',self.rawimage[ffi].data.shape,masterflat[no+1].data.shape)
+            if self.rawimage[ffi].data.shape==masterflat[no+1].data.shape:
+                print ("Flat .fits Dimensions Equal, Check Passed")
+            else:
+                raise Exception ("Flat .fits Dimensions NOT Equal! Check Failed")
     
-        self.rawimage.data=self.rawimage.data/self.masterflat.data
-
+            self.rawimage[ffi].data=self.rawimage[ffi].data/masterflat[no+1].data
+            #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+            
     def get(self):
         """Returns flat-corrected raw image result.
 
         Returns:
-            self.rawimage: The flat-corrected data
+            self.rawimage: The flat-corrected data.
         """
         return self.rawimage
     
