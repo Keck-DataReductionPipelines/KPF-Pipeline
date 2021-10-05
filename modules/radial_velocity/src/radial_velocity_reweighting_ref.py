@@ -90,7 +90,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         self.reweighting_method = action.args[1]
         self.total_order = action.args[2]
 
-        self.ccf_hdu_name = action.args['ccf_hdu_name'] if 'ccf_hdu_name' in args_keys else 'ccf'
+        self.ccf_hdu_name = action.args['ccf_hdu_name'] if 'ccf_hdu_name' in args_keys else 'CCF'
         self.ccf_start_index = action.args['ccf_start_index'] if 'ccf_start_index' in args_keys else 0
         self.is_ratio_data = action.args['is_ratio_data'] if 'is_ratio_data' in args_keys else False
         self.ccf_ratio_file = action.args['ccf_ratio_file'] if 'ccf_ratio_file' in args_keys else ''
@@ -124,7 +124,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         """
         Check for some necessary pre conditions
         """
-        # input argument must be KPF0
+        # input argument must be KPF2
         success = isinstance(self.files, list) and len(self.files) > 0 and \
                   (self.reweighting_method in ['ccf_max', 'ccf_mean', 'ccf_steps'])
 
@@ -192,6 +192,8 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
                                                                     self.reweighting_method, max_ratio = 1.0,
                                                                     output_csv=self.ccf_ratio_file)
             ccf_ref = ccf_df.values
+
+        assert ccf_ref is not None, 'no reference table is made'
 
         if self.logger:
             self.logger.info("RadialVelocityReweightingRef: done")

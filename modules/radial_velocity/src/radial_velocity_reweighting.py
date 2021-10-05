@@ -117,8 +117,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
         self.ccf_data = None
         if self.ccf_hdu_name and self.ccf_hdu_name in vars(lev2_obj).keys():
             self.ccf_data = lev2_obj[self.ccf_hdu_name]
-        # self.jd = lev2_obj.header[self.ccf_hdu_name]['CCFJDSUM'] \
-        #    if self.ccf_data and 'CCFJDSUM' in lev2_obj.header[self.ccf_hdu_name] else None
 
         self.reweighting_method = action.args[1]
         self.ccf_ref = action.args[2].values if isinstance(action.args[2], pd.DataFrame) else action.args[2]
@@ -203,7 +201,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
             rv_result = 0.0
             if np.any(rw_ccf[i, :] != 0.0):
                 _, rv_result, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[i, :], rv_guess, velocities)
-            # rv_orders[rv_idx[0]] = rv_result
             rv_orders.append(rv_result)
 
         rv_table = dict()

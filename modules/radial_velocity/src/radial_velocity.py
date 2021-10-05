@@ -258,7 +258,6 @@ class RadialVelocity(KPF1_Primitive):
             rv_result = 0.0
             if np.any(output_rv[i, :] != 0.0):
                 _, rv_result, _, _ = self.alg.fit_ccf(output_rv[i, :], rv_guess, velocities)
-            # rv_orders[rv_idx[0]] = rv_result
             rv_orders.append(rv_result)
 
         rv_table = dict()
