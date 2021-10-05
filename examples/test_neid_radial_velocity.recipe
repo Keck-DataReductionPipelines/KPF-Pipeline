@@ -2,7 +2,7 @@ from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 
 rv_init = RadialVelocityInit()
-input_lev1_pattern = output_dir + '*' + '_' + rect_method + '_' + extract_method  + op_tag + lev1_stem_suffix + '_wave'+ '.fits'
+input_lev1_pattern = output_dir + '*' + '_L0' + flat_rect + '_*' + obs_rect + '_' +  rect_method + '_' + extract_method  + op_tag + lev1_stem_suffix + '.fits'
 for input_L1_file in find_files(input_lev1_pattern):
 	_, short_lev1 = split(input_L1_file)
 	lev1_stem, lev1_ext = splitext(short_lev1)
@@ -15,5 +15,6 @@ for input_L1_file in find_files(input_lev1_pattern):
 		else:
 			start_order=25
 			end_order = 100
-		rv_data = RadialVelocity(lev1_data, rv_init, order_name=order_name, start_order=start_order, end_order=end_order)
+		limits = 600
+		rv_data = RadialVelocity(lev1_data, rv_init, order_name=order_name, start_order=start_order, end_order=end_order, start_x=limits, end_x=limits)
 		result = to_fits(rv_data, output_lev2_file)
