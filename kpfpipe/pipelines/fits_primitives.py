@@ -6,7 +6,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from keckdrpframework.primitives.base_primitive import BasePrimitive
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
-# from kpfpipe.models.level2 import KPF2
+from kpfpipe.models.level2 import KPF2
 
 #from kpfpipe.models.kpf_arguments import KpfArguments
 
@@ -64,9 +64,10 @@ class FromFitsBasePrimitive(BasePrimitive):
             data_type = self.action.args['data_type']
         except KeyError:
             data_type = 'KPF'
-        print(f"_perform_common: data_type is {data_type}")
-        data_model.read(filename, data_type)
+        print(f"_perform_common: {filename} data_type is {data_type}")
+        data_model = data_model.from_fits(filename, data_type)
         return Arguments(data_model, name=name+'_from_fits_result')
+
 
 class kpf0_from_fits(FromFitsBasePrimitive):
     """
@@ -77,7 +78,8 @@ class kpf0_from_fits(FromFitsBasePrimitive):
         FromFitsBasePrimitive.__init__(self, action, context)
 
     def _perform(self):
-        return self._perform_common(KPF0(), 'kpf0')
+        return self._perform_common(KPF0, 'kpf0')
+
 
 class kpf1_from_fits(FromFitsBasePrimitive):
     """
@@ -88,16 +90,17 @@ class kpf1_from_fits(FromFitsBasePrimitive):
         FromFitsBasePrimitive.__init__(self, action, context)
 
     def _perform(self):
-        return self._perform_common(KPF1(), 'kpf1')
+        return self._perform_common(KPF1, 'kpf1')
 
-# class kpf2_from_fits(FromFitsBasePrimitive):
-#     """
-#     kpf0_from_fits: create a KPF2 data model object and instantiate
-#                     its contents from the given FITS file
-#     """
-#     def __init__(self, action, context):
-#         FromFitsBasePrimitive.__init__(self, action, context)
 
-#     def _perform(self):
-#         return self._perform_common(KPF2(), 'kpf2')
+class kpf2_from_fits(FromFitsBasePrimitive):
+    """
+    kpf02from_fits: create a KPF2 data model object and instantiate
+        its contents from the given FITS file
+    """
+    def __init__(self, action, context):
+        FromFitsBasePrimitive.__init__(self, action, context)
+
+    def _perform(self):
+        return self._perform_common(KPF2, 'kpf2')
 

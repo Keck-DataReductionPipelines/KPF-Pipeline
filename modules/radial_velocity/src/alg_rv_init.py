@@ -4,11 +4,13 @@ from astropy.coordinates import Angle
 import os
 import os.path
 import json
+import pandas as pd
 from dotenv import load_dotenv
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_rv_mask_line import RadialVelocityMaskLine
 from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
 from modules.Utils.config_parser import ConfigHandler
+
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -79,6 +81,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_WID = 'mask_width'     # km/s
     AIR_TO_VACUUM = 'air_to_vacuum'    # True or False
     REWEIGHTING_CCF = 'reweighting_ccf_method'         # ratio, ccf, or None
+    CCF_CODE = 'ccf_engine'       # ccf code language
 
     # defined in configuration file or star config for NEID
     RA = 'ra'                   # hours, like "01:44:04.0915236842"
@@ -94,6 +97,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     VELOCITY_STEPS = 'velocity_steps'
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
+
+    # defined for order limits mask
+    ORDER_LIMITS_MASK = 'order_limits_mask'
 
     def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None):
         RadialVelocityBase.__init__(self, config, logger)
@@ -119,6 +125,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.bc_corr_path = bc_corr_path
         self.bc_corr_output = bc_corr_output
         self.bc_period = bc_period
+        self.ccf_engine = None
+        self.order_limits_mask = None
 
     @staticmethod
     def ret_status(msg='ok'):
@@ -234,6 +242,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.get_velocity_steps()  # based on velocity_loop
         self.get_redshift_range()  # get redshift from barycentric velocity correction
         self.get_mask_line()       # based on mask_path, velocity loop and mask_width/vacuum_to_air
+        self.get_ccf_version()     # get ccf engine in either 'python' or 'c'
+        self.get_order_limits_mask() # set the order limits
         return self.ret_status()
 
     def get_rv_config_value(self, prop, star_config=None, default=None):
@@ -294,6 +304,21 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             config = self.config_param
 
         return config.get_config_value(prop, default)
+
+    def get_ccf_version(self, default_code='python'):
+        """ Get the ccf code language
+
+        Args:
+            default_code (str): Default ccf code language, 'python' or 'c'
+
+        Returns:
+            str: ccf code language
+
+        """
+
+        if self.ccf_engine is None:
+            self.ccf_engine = self.get_value_from_config(self.CCF_CODE, default=default_code)
+        return self.ccf_engine
 
     def get_reweighting_ccf_method(self, default_method='ccf_max'):
         """ Get the ccf reweighting method.
@@ -406,6 +431,34 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         return self.mask_line
 
+    def get_order_limits_mask(self):
+        """ Get order limits mask file.
+
+        Returns:
+            numpy.ndarray: array containing order and the left and right limits of the order
+
+        """
+        if self.order_limits_mask is None:
+            order_limits_file = self.get_value_from_config(self.ORDER_LIMITS_MASK, default=None)
+
+            if order_limits_file is not None and os.path.isfile(self.test_data_dir+order_limits_file):
+                order_limits_file = self.test_data_dir+order_limits_file
+                df = pd.read_csv(order_limits_file, header=None, sep="\s+|\t+|\s+\t+|\t+\s+", engine='python')
+                max_row = np.amax(df.values[:, 0])
+                self.order_limits_mask = np.ones((max_row+1, 2), dtype=int) * -1
+                no_limits = np.shape(df.values)[1] - 1
+                for r in range(np.shape(df.values)[0]):
+                    limits = np.array([0, 0], dtype=int)
+                    if no_limits >= 2:
+                        limits = np.array([df.values[r, 1], df.values[r, 2]], dtype=int)
+                    elif no_limits == 1:
+                        limits = np.array([df.values[r, 1], df.values[r, 1]], dtype=int)
+                    self.order_limits_mask[df.values[r, 0]] = limits
+            else:
+                self.order_limits_mask = np.array([])
+
+        return self.order_limits_mask
+
     def collect_init_data(self):
         """ Collect init data for radial velocity analysis.
 
@@ -421,7 +474,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         # star_rv in rv_config, mask_width, step, step_range
         collection = [self.RV_CONFIG, self.MASK_LINE, self.VELOCITY_STEPS,
                       self.VELOCITY_LOOP, self.REWEIGHTING_CCF,
-                      self.ZB_RANGE]
+                      self.ZB_RANGE, self.CCF_CODE, self.ORDER_LIMITS_MASK]
 
         attrs = self.__dict__.keys()
         for c in collection:

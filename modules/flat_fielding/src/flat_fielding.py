@@ -1,6 +1,7 @@
 
 import configparser
 import numpy as np
+from astropy.io import fits
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -13,7 +14,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.flat_fielding.src.alg import FlatFielding
+from modules.flat_fielding.src.alg import FlatFieldingAlg
 #from modules.utils.frame_combine import frame_combine
 
 # Global read-only variables
@@ -58,11 +59,11 @@ class FlatFielding(KPF0_Primitive):
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
         
-        #Input argument
-        #self.input=action.args[0]
-        self.rawdata=self.action.args[0]
+              #Input arguments
+        self.raw_file=self.action.args[0]
         self.masterflat=self.action.args[1]
-        self.data_type=self.action.args[2]
+        self.ffi_exts=self.action.args[2]
+        self.data_type=self.action.args[3]
         
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -81,7 +82,7 @@ class FlatFielding(KPF0_Primitive):
         #Flat Fielding algorithm setup
 
         #Option 1
-        self.alg=FlatFielding(self.rawdata,config=self.config,logger=self.logger)
+        self.alg=FlatFieldingAlg(self.raw_file,self.ffi_exts,config=self.config,logger=self.logger)
 
         #Preconditions
         
@@ -96,9 +97,9 @@ class FlatFielding(KPF0_Primitive):
         Returns:
             Arguments object(np.ndarray): Level 0, flat-corrected, raw observation data
         """
-
+        #self.masterflat = fits.open(self.masterflat)
         #Option 1:
         if self.logger:
             self.logger.info("Flat-fielding: dividing raw image by master flat")
-        flat_result=self.alg(self.masterflat)
+        flat_result=self.alg.flat_fielding(self.masterflat)
         return Arguments(self.alg.get())
