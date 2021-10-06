@@ -66,7 +66,7 @@ class LFCWaveCalibration:
         self.config=config
         self.logger=logger
 
-    def remove_orders(self,step):
+    def remove_orders(self,step=1):
         """Removes bad orders from order list if between min and max orders to test.
 
         Args:
