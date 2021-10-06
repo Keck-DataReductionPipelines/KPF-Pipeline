@@ -5,11 +5,14 @@ from scipy import signal, constants
 from astropy.io import fits
 import matplotlib.pyplot as plt
 from numpy.polynomial.legendre import Legendre
+from modules.Utils.config_parser import ConfigHandler
+from kpfpipe.models.level0 import KPF0
+from keckdrpframework.models.arguments import Arguments
 
 from modules.wavelength_cal.src.alg import LFCWaveCalibration
 
-class ThArCalibration:
-    """
+class ThArCalibrationAlg:
+    """[summary]
     """
 
     def __init__(self, config=None, logger=None):
@@ -76,14 +79,15 @@ class ThArCalibration:
                 if amp < 0:
                     missed_lines += 1
         
-        if plot_toggle = True:
+        if plot_toggle == True:
             zoom_section_pixels = (num_pixels // self.n_zoom_sections)
             _, ax_list = plt.subplots(self.n_zoom_sections,1,figsize=(self.subplot_size))
             ax_list[0].set_title('({} missed lines)'.format(missed_lines))
             for i, ax in enumerate(ax_list):
                 ax.plot(
                     np.arange(num_pixels[i*zoom_section_pixels:(i+1)*zoom_section_pixels]
-                    flux[i*zoom_section_pixels:(i+1)*zoom_section_pixels],color='k',alpha=.1))
+                    flux[i*zoom_section_pixels:(i+1)*zoom_section_pixels],color='k',alpha=.1)
+                    )
 
                 ax.scatter(
                     coefs[1,:][
@@ -136,7 +140,7 @@ class ThArCalibration:
         residuals = ((our_wls - other_wls) * constants.c) / other_wls
         precision = np.std(residuals)/np.sqrt(num_lines_fit)
 
-        if plot_toggle = True:
+        if plot_toggle == True:
             plt.figure()
             plt.plot(residuals)
             plt.save_fig('{}/rv_precision.png'.format(savefig), dpi=250)
@@ -148,14 +152,14 @@ class ThArCalibration:
         """[summary]
 
         Args:
-            flux ([type]): [description]
+            flux (np.array): [description]
             redman_w ([type]): [description]
             redman_i ([type]): [description]
             linelist_sub ([type]): [description]
             other_wls ([type]): [description]
             plot_toggle ([type]): [description]
         """
-        if plot_toggle = True:
+        if plot_toggle == True:
             _, summary_ax = plt.subplots()
             summary_ax.set_xlabel('pixel')
             summary_ax.set_ylabel('Our WLS - Their WLS [m/s]')
@@ -166,7 +170,7 @@ class ThArCalibration:
         for order_num in np.arange(first_order,last_order+1):
             print('\nRunning Order {}!'.format(order_num))
 
-            if plot_toggle = True:
+            if plot_toggle == True:
                 order_plt_path = '{}/order{}'.format(self.saveplots,order_num)
                 if not os.path.exists(order_plt_path):
                     os.mkdir(order_plt_path)
@@ -175,7 +179,7 @@ class ThArCalibration:
             max_order_wl = np.max(linelist_sub[order_num]['known_wavelengths_vac'])
             in_order_mask = ((redman_w > min_order_wl) & (redman_w < max_order_wl))
 
-            if plot_toggle = True:
+            if plot_toggle == True:
                 _, ax = plt.subplots(figsize=(12,6))
                 plt.plot(
                     redman_w[in_order_mask], 
@@ -233,13 +237,13 @@ class ThArCalibration:
 
             print('Order {} Precision: {:.2f} m/s.'.format(order_num, precision))
 
-            if plot_toggle = True:
+            if plot_toggle == True:
                 summary_ax.plot(
                     np.arange(self.end_pixels_to_clip, num_pixels - self.end_pixels_to clip),
                     residuals[self.end_pixels_to_clip:num_pixels - self.end_pixels_to_clip]
                 )
         
-        if plot_toggle = True:
+        if plot_toggle == True:
             plt.savefig('{}/wls_comp.png'.format(self.saveplots), dpi=250)
             plt.close()
 
