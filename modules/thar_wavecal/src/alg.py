@@ -12,7 +12,15 @@ from keckdrpframework.models.arguments import Arguments
 from modules.wavelength_cal.src.alg import LFCWaveCalibration
 
 class ThArCalibrationAlg:
-    """[summary]
+    """Performs Thorium Argon (ThAr) wavelength calibration. 
+    
+    Args:
+        config (configparser.ConfigParser, optional): Config context. Defaults to None.
+        logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
+
+    Attributes:
+        config_param(ConfigHandler): Instance representing pull from config file.
+        
     """
 
     def __init__(self, config=None, logger=None):
@@ -26,6 +34,8 @@ class ThArCalibrationAlg:
         self.end_pixels_to_clip = configpull.get_config_value('clip_end_pxls', 1500)
         self.subplot_size = configpull.get_config_value('subplot_size', (6,20))
         self.saveplots = configpull.get_config_value('saveplots', 'ThAr_plots')
+        self.flux_ext = configpull.get_config_value('flux_ext','CALFLUX')
+        self.wave_ext = configpull.get_config_value('wave_ext','SCIWAVE')
 
     def find_and_fit_peaks(self,flux,linelist,line_pixels_expected,plot_toggle,savefig):
         """[summary]
@@ -247,7 +257,33 @@ class ThArCalibrationAlg:
             plt.savefig('{}/wls_comp.png'.format(self.saveplots), dpi=250)
             plt.close()
 
-        
+    def perform_thar_cal(self,l1_file,linelist_path,linelist_subset_path):
+        #open file (fits) in recipe or prim
+        """[summary]
+
+        Args:
+            l1_file (HDUList): Level 1 data file containing flux/wavelength solns
+            linelist_path ([type]): [description]
+            linelist_subset_path ([type]): [description]
+        """
+        linelist = np.load(linelist_path)
+        redman_w = np.array(linelist['redman_w'], dtype=float)
+        redman_i = np.array(linelist['redman_i'], dtype = float)
+
+        linelist_sub = np.load(linelist_subset_path, allow_pickle = True).tolist()
+
+        assert l1_file[0].header['CAL-OBJ'].startswith('ThAr')
+        #decide whether flux/wav exts go in recipe config or module config
+        calflux = l1_file[self.flux_ext]
+        calflux = np.nan_to_num(calflux)
+        calflux[calflux < 0] = np.min(calflux[calflux > 0])
+
+        wls = l1_file[self.wave_ext]
+
+        run_on_all_orders(calflux,redman_w,redman_i,linelist_sub,wls)
+
+
+
 
 
 
