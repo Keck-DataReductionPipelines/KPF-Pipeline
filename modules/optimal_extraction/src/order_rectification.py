@@ -19,7 +19,7 @@
                     - `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing flat data and order
                       trace result.
                     - `action.args['order_name'] (str|list, optional)`: Name or list of names of the order to be
-                      processed. Defaults to 'SCI1'.
+                      processed. Defaults to 'SCI'.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
                     - `action.args['max_result_order'] (int, optional)`: Total orders to be processed, Defaults to -1.
@@ -91,7 +91,7 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 class OrderRectification(KPF0_Primitive):
     default_agrs_val = {
-                    'order_name': 'SCI1',
+                    'order_name': 'SCI',
                     'max_result_order': -1,
                     'start_order': 0,
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical',
@@ -138,11 +138,11 @@ class OrderRectification(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = OptimalExtractionAlg(self.input_flat.data,
+        self.alg = OptimalExtractionAlg(self.input_flat.DATA,
                                         self.input_flat.header['DATA'],
-                                        self.input_spectrum.data if self.input_spectrum is not None else None,
-                                        self.input_spectrum.header['DATA'] if self.input_spectrum is not None else None,
-                                        self.input_flat.extension['ORDER_TRACE_RESULT'],
+                                        self.input_spectrum.DATA if self.input_spectrum is not None else None,
+                                        self.input_spectrum.header['PRIMARY'] if self.input_spectrum is not None else None,
+                                        self.input_flat.ORDER_TRACE_RESULT,
                                         self.input_flat.header['ORDER_TRACE_RESULT'],
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
@@ -159,7 +159,7 @@ class OrderRectification(KPF0_Primitive):
             success = False
         else:
             success = (self.input_spectrum is None or isinstance(self.input_spectrum, KPF0)) and \
-                      isinstance(self.input_flat, KPF0) and 'ORDER_TRACE_RESULT' in self.input_flat.extension
+                      isinstance(self.input_flat, KPF0) and 'ORDER_TRACE_RESULT' in self.input_flat.extensions
 
         return success
 
@@ -232,7 +232,7 @@ class OrderRectification(KPF0_Primitive):
 
     def update_level0_data(self, data_result, lev0_obj):
         # img_d = np.where(np.isnan(data_result.values), 0.0, data_result.values)
-        lev0_obj.data = data_result.values
+        lev0_obj.DATA = data_result.values
         for att in data_result.attrs:
             lev0_obj.header['DATA'][att] = data_result.attrs[att]
 

@@ -193,9 +193,11 @@ class OrderTrace(KPF0_Primitive):
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
 
         assert(isinstance(df, pd.DataFrame))
-        
-        self.input.create_extension('ORDER_TRACE_RESULT')
-        self.input.extension['ORDER_TRACE_RESULT'] = df
+
+        # self.input.create_extension('ORDER_TRACE_RESULT')
+        # self.input.extensions['ORDER_TRACE_RESULT'] = df
+        self.input.create_extension('ORDER_TRACE_RESULT', pd.DataFrame)
+        self.input.ORDER_TRACE_RESULT = df
 
         for att in df.attrs:
             self.input.header['ORDER_TRACE_RESULT'][att] = df.attrs[att]

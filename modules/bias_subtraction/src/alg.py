@@ -1,17 +1,21 @@
 #packages
-#Subtracting 2D array, function to subtract master bias frame from raw data image
+import numpy as np
+import matplotlib.pyplot as plt
+from astropy.io import fits
+###
 
+from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 
-class BiasSubtraction:
+class BiasSubtractionAlg:
     """
     Bias subtraction calculation.
 
     This module defines 'BiasSubtraction' and methods to perform bias subtraction by subtracting a master bias frame from the raw data frame.  
 
     Args:
-        rawimage (np.ndarray): The FITS raw data
+        rawimage (np.ndarray): The FITS raw data with image extensions
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
     
@@ -23,40 +27,80 @@ class BiasSubtraction:
     """
 
 
-    def __init__(self,rawimage,config=None, logger=None):
+    def __init__(self,rawimage,ffi_exts,quicklook,config=None, logger=None):
         """Inits BiasSubtraction class with raw data, config, logger.
 
         Args:
-            rawimage (np.ndarray): The FITS raw data
+            rawimage (np.ndarray): The FITS raw data.
+            ffi_exts (np.ndarray): The extensions in L0 FITS files where FFIs (full frame images) are stored.
             config (configparser.ConfigParser, optional): Config context. Defaults to None.
-            logger (logging.Lobber, optional): Instance of logging.Logger. Defaults to None.
+            logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
         """
         self.rawimage=rawimage
+        self.ffi_exts=ffi_exts
+        self.quicklook=quicklook
         self.config=config
         self.logger=logger
-
-#make bias subtraction just a function, takes 
+        #self.imagesize=
+        
     def bias_subtraction(self,masterbias):
-        """
-            Subtracts bias data from raw data.
-            In pipeline terms: inputs two L0 files, produces one L0 file. 
+        """Subtracts bias data from raw data.
+        In pipeline terms: inputs two L0 files, produces one L0 file. 
 
         Args:
-            masterbias (np.ndarray): The FITS master bias data.
+            masterbias (np.ndarray): The master bias data.
 
         Raises:
             Exception: If raw image and bias frame don't have the same dimensions.
         """
-        if self.rawimage.data.shape==masterbias.data.shape:
-            print ("Bias .fits Dimensions Equal, Check Passed")
-        else:
-            raise Exception("Bias .fits Dimensions NOT Equal! Check Failed")
-        self.rawimage.data=self.rawimage.data-masterbias.data
-    
+        ###for testing purposes###
+        #masterbias = fits.open(masterbias)
+        #masterbias = masterbias[1].data
+        # masterbias = np.zeros_like(frame)
+        ###
+        if self.quicklook == False: 
+            for no,ffi in enumerate(self.ffi_exts):
+                print('shapes:',self.rawimage[ffi].data.shape,masterbias[no+1].data.shape)
+                if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
+                    print ("Bias .fits Dimensions Equal, Check Passed")
+                else:
+                    raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
+
+                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+            #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+
+        if self.quicklook == True:
+            for no,ffi in enumerate(self.ffi_exts):
+                print('shapes:',self.rawimage[ffi].data.shape,masterbias[no+1].data.shape)
+                #until data model for master files is added:
+                if self.rawimage[ffi].shape==masterbias[no+1].data.shape:
+                    print ("Bias .fits Dimensions Equal, Check Passed")
+                else:
+                    raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
+                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+
+                counts = masterbias[no+1].data #red and green potentially masters, no+1 means ignoring primary?
+                flatten_counts = np.ravel(counts)
+                low, high = np.percentile(flatten_counts,[0.1,99.9])
+                counts[(counts>high) | (counts<low)] = np.nan #bad pixels
+                flatten_counts = np.ravel(counts)
+                print(np.nanmedian(flatten_counts),np.nanmean(flatten_counts),np.nanmin(flatten_counts),np.nanmax(flatten_counts))
+
+                plt.imshow(counts, cmap = 'cool')
+                plt.colorbar()
+                plt.savefig('2D_bias_frame.pdf')
+
+                plt.close()
+                plt.hist(flatten_counts, bins = 20)
+                plt.savefig('Bias_histo.pdf')
+
     def get(self):
         """Returns bias-corrected raw image result.
 
         Returns:
-            self.rawimage: The bias-corrected data
+            self.rawimage: The bias-corrected data.
         """
         return self.rawimage
+
+        #raise flag when counts are significantly diff from master bias
+        #identify bad pixels

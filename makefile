@@ -1,7 +1,9 @@
+CCF_C=modules/CLib/CCF
 init: 
 	mkdir -p logs
 	mkdir -p outputs
 	pip3 install -r requirements.txt -e .
+	$(MAKE) C  -C ${CCF_C}
 
 update: 
 	pip3 install -r requirements.txt --upgrade
@@ -17,9 +19,13 @@ clean: clear
 	find . -name '*.pyc' -exec rm -f {} +
 	find . -name '*.pyo' -exec rm -f {} +
 
+notebook:
+	pip3 install jupyter
+	jupyter notebook --port 8888 --allow-root --ip=0.0.0.0 ""&
+
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
-	docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
+	docker run -p 8888:8888 -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
 
 regression_tests:
 	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
