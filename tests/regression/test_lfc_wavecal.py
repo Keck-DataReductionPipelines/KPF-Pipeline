@@ -43,9 +43,9 @@ def start_alg():
     test_file = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
     assert os.path.isfile(test_file), "Test file doesn't exist"
     test_thar = fits.getdata(test_file,ext=6)
-    assert test_thar, 'ThAr data not extracted'
+    assert test_thar.shape[0] > 0, 'ThAr data not extracted'
     test_comb = fits.getdata(test_file,ext=4)
-    assert test_comb, 'Comb data not extracted'
+    assert test_comb.shape[0] > 0, 'Comb data not extracted'
     lfc_start = LFCWaveCalibration(config=config_vals)
     return test_comb,test_thar,lfc_start
 
