@@ -1,13 +1,42 @@
-from modules.utils.frame_combine import FrameCombinePrimitive
-from modules.flat_fielding.src.flat_fielding import FlatFielding 
+from modules.flat_fielding.src.flat_fielding import FlatFielding
+from modules.Utils.frame_combine import FrameCombinePrimitive
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
 
-flat_files=find_files('input location')
-master_flat_data=FrameCombinePrimitive(flat_files, data_type)
-master_bias=find_files('input location')
-master_result_data=master_flat_data-master_bias
-master_result=to_fits(master_result_data, 'output location')
+#kpfsim
+flat_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_flats/flat_*.fits'
+L0_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/L0_data_format_w_headers_20211001.fits'
+channel_orientation_ref_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_ccd_orient.txt'
 
-raw_file_name=find_files('input location')
-raw_file=kpf0_from_fits(raw_file_name, data_type)
-raw_div_flat=FlatFielding(raw_file, master_result_data, data_type)
-raw_div_flat=to_fits(raw_min_flat, 'output location')
+master_flat_path = './examples/V1/FlatRecipe/FlatRecipeRes/test_masterflat.fits'
+no_flat_L0_files_path = './examples/V1/FlatRecipe/FlatRecipeRes/mid_flat_kpfsim_test.fits'
+new_raw_file = './examples/V1/FlatRecipe/FlatRecipeRes/end_flat_kpfsim_test.fits'
+
+lev0_ffi_exts = ['GREEN_CCD','RED_CCD']
+flat_lev0_ffi_exts = ['GREEN_FLAT','RED_FLAT']
+master_flat_create = True
+pl_overscan_reg = [2000,2200]
+srl_overscan_reg = [2000,2200]
+overscan_method = 'mean'
+order = 1
+oscan_clip = 5
+
+ref_output = OrientationReference(channel_orientation_ref_path)
+
+for raw_file in find_files(L0_files_path):
+    raw_file = kpf0_from_fits(raw_file,data_type='KPF')
+    L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'NEID')
+    L0_result = to_fits(L0_with_ffi,no_flat_L0_files_path)
+
+if master_flat_create == True:
+    all_flat_files = find_files(flat_files_path)
+    master_flat_data = FrameCombinePrimitive(all_flat_files,flat_lev0_ffi_exts,'KPF')
+    #master_flat_result = to_fits(master_flat_data,master_flat_path)
+if master_flat_create == False:
+    master_flat_data = find_files(master_flat_path)
+
+for raw_file in find_files(no_flat_L0_files_path):
+    raw_file = kpf0_from_fits(raw_file)
+    final_raw_frames_file = FlatFielding(raw_file,master_flat_data,lev0_ffi_exts,'KPF')
+    result = to_fits(final_raw_frames_file, new_raw_file)
+
