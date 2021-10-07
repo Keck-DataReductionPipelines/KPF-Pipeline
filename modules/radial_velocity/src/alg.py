@@ -32,6 +32,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
         ccf_engine (string): CCF engine to use, 'c' or 'python'. Defaults to None,
+        reweighting_method (string): reweighting method, ccf_max or ccf_mean, of ccf_steps. Defaults to None.
 
     Attributes:
         spectrum_data (numpy.ndarray): From parameter `spectrum_data`.
@@ -71,7 +72,8 @@ class RadialVelocityAlg(RadialVelocityBase):
     The third extra row contains the summation of cross correlation results over all orders.
     """
 
-    def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None):
+    def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None,
+                 reweighting_method=None):
 
         if not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
@@ -96,7 +98,9 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
         self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
-        self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF]
+        self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF] \
+            if reweighting_method is None or not self.is_good_reweighting_method(reweighting_method) \
+            else reweighting_method
         self.ccf_code = ccf_engine if (ccf_engine and ccf_engine in ['c', 'python']) else \
             init_data[RadialVelocityAlgInit.CCF_CODE]
 
@@ -831,9 +835,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             raise Exception(msg)
 
         if ref_ccf is not None:
-            ccf = self.reweight_ccf(ccf, self.spectrum_order, ref_ccf, self.reweighting_ccf_method,
+            ccf, _ = self.reweight_ccf(ccf, self.spectrum_order, ref_ccf, self.reweighting_ccf_method,
                                     s_order=start_order)
-
         analyzed_ccf = self.analyze_ccf(ccf)
         df = self.output_ccf_to_dataframe(analyzed_ccf)
         return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd}
@@ -951,7 +954,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             oval_at_index = oval[max_index]                     # value from oder of max_index
             if oval_at_index == 0.0:      # order of max_index has value 0.0, skip reweighting, returns all zeros
                 return new_crt_rv
-            oval = oval/oval_at_index     # ratio of orders before reweighting, order of max_index is 1.0
+            oval = oval/oval_at_index     # ratio of orders before reweighting, value at order of max_index is 1.0
+
             for order in range(total_order):
                 if oval[order] != 0.0:
                     new_crt_rv[order, :] = crt_rv[order, :] * tval[order]/oval[order]
@@ -963,10 +967,11 @@ class RadialVelocityAlg(RadialVelocityBase):
                     if np.size(np.where(crt_rv[order, :] != 0.0)[0]) > 0:
                         new_crt_rv[order, :] = crt_rv[order, :] * \
                                            np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
+
         if do_analysis:
             row_for_analysis = np.arange(1, total_order, dtype=int)
             new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :] = \
                 np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
             if velocities is not None and np.size(velocities) == nx:
                 new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 2, :] = velocities
-        return new_crt_rv
+        return new_crt_rv, total_order
