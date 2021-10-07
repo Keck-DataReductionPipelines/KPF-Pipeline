@@ -37,7 +37,7 @@ def start_alg():
         'min_order':60,
         'max_order':90,
         'n_sections': 20,
-        'skip_orders': 84,85,86
+        'skip_orders': [84,85,86]
     }
     test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
     test_file = test_dir+'NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
@@ -59,7 +59,7 @@ def test_run_alg():
         'min_order':60,
         'max_order':90,
         'n_sections': 20,
-        'skip_orders': 84,85,86
+        'skip_orders': [84,85,86]
     }
     combs,thars,algg = start_alg()
     test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
