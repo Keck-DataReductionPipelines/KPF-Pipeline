@@ -5,10 +5,11 @@ from astropy import constants as const
 import warnings
 import datetime
 import pandas as pd
-import math
+
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
+from modules.CLib.CCF import CCF_3d_cpython
 
 LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
@@ -30,6 +31,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         wave_cal (numpy.ndarray): Wavelength calibration for each order of `spectrum_data`.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
+        ccf_engine (string): CCF engine to use, 'c' or 'python'. Defaults to None,
+        reweighting_method (string): reweighting method, ccf_max or ccf_mean, of ccf_steps. Defaults to None.
 
     Attributes:
         spectrum_data (numpy.ndarray): From parameter `spectrum_data`.
@@ -69,7 +72,8 @@ class RadialVelocityAlg(RadialVelocityBase):
     The third extra row contains the summation of cross correlation results over all orders.
     """
 
-    def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None):
+    def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None,
+                 reweighting_method=None):
 
         if not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
@@ -94,7 +98,11 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
         self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
-        self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF]
+        self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF] \
+            if reweighting_method is None or not self.is_good_reweighting_method(reweighting_method) \
+            else reweighting_method
+        self.ccf_code = ccf_engine if (ccf_engine and ccf_engine in ['c', 'python']) else \
+            init_data[RadialVelocityAlgInit.CCF_CODE]
 
         self.obs_jd = None
         ny, nx = np.shape(self.spectrum_data)
@@ -342,36 +350,99 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         s_x = self.start_x_pos
         e_x = self.end_x_pos+1
+        s_order = self.start_order
+        e_order = self.end_order + 1
 
         spectrum, nx, ny = self.get_spectrum()
         spectrum_x = np.arange(nx)[s_x:e_x]
-
-        s_order = self.start_order
-        e_order = self.end_order+1
+        spec_order = np.arange(ny)[s_order:e_order]
 
         new_spectrum = spectrum[s_order:e_order, s_x:e_x]
         result_ccf = np.zeros([self.spectrum_order + self.ROWS_FOR_ANALYSIS, self.velocity_steps])
-        wavecal_all_orders = self.wavelength_calibration(spectrum_x)
+        wavecal_all_orders = self.wavelength_calibration(spectrum_x)     # from s_order to e_order, s_x to e_x
 
-        for ord_idx in range(self.spectrum_order):
-            # self.d_print(ord_idx, ' ', end="")
-            self.d_print('order ', ord_idx, info=True)
-            wavecal = wavecal_all_orders[ord_idx, :]
+        # for ord_idx in range(self.spectrum_order):
+        for idx, ord_idx in np.ndenumerate(spec_order):
+            self.d_print("order", ord_idx, ' ', end="", info=True)
+            wavecal = wavecal_all_orders[idx]
+            order_limits = self.get_order_limits(ord_idx)
+            # self.d_print("order_limits: ", order_limits, info=True)
+            left_x = order_limits[0]
+            right_x = np.size(spectrum_x)-order_limits[1]
+
             if np.any(wavecal != 0.0):
                 if wavecal[-1] < wavecal[0]:
-                    ordered_spec = np.flip(new_spectrum[ord_idx, :])
-                    ordered_wavecal = np.flip(wavecal)
+                    ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[idx])[left_x:right_x])
+                    ordered_wavecal = np.flip(wavecal)[left_x:right_x]
                 else:
-                    ordered_spec = new_spectrum[ord_idx, :]
-                    ordered_wavecal = wavecal
-                result_ccf[ord_idx, :] = \
+                    ordered_spec = self.fix_nan_spectrum(new_spectrum[idx][left_x:right_x])
+                    ordered_wavecal = wavecal[left_x:right_x]
+                result_ccf[idx, :] = \
                     self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
             else:
                 self.d_print("all wavelength zero")
 
-        self.d_print("\n")
+        self.d_print("\n", info=True)
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
+
+    @staticmethod
+    def fix_nan_spectrum(spec_vals):
+        """ Fix NaN in spectrum.
+
+        Args:
+            spec_vals (numpy.ndarray): Spectrum data
+
+        Returns:
+            numpy.ndarray: Spectrum with fixed NaN values
+
+        """
+
+        # convert NaN to zero
+        def nan_to_zero(s_vals):
+            new_spec = np.where(np.isnan(s_vals), 0.0, s_vals)
+            return new_spec
+
+        # linear NaN
+        def linear_nan(s_vals):
+            nan_locs = np.where(np.isnan(s_vals))[0]
+            if np.size(nan_locs) == 0:
+                return s_vals
+
+            new_spec = np.where(np.isnan(s_vals), 0.0, s_vals)
+            last_idx = np.shape(spec_vals)[0] - 1
+            last_nan_idx = np.shape(nan_locs)[0] - 1
+            e_nan_loc = -1
+            s_nan_loc = -1
+
+            for idx in range(last_nan_idx+1):
+                nan_loc = nan_locs[idx]
+                if idx != 0 and (nan_loc - e_nan_loc) == 1:
+                    e_nan_loc = nan_loc
+                else:
+                    s_nan_loc = nan_loc   # s_nan_loc, e_lan_loc starts to be assigned when idx == 0
+                    e_nan_loc = nan_loc
+
+                # not the last loc and the next one is right next to the current loc.
+                if idx != last_nan_idx and (nan_locs[idx+1] - nan_loc) == 1:
+                    continue
+
+                s_idx = s_nan_loc - 1   # surrounding non-nan location
+                e_idx = e_nan_loc + 1
+                if s_idx >= 0 and e_idx <= last_idx:
+                    delta = (spec_vals[e_idx] - spec_vals[s_idx]) / (e_idx - s_idx)
+                    for n_idx in range(s_nan_loc, e_nan_loc+1):
+                        new_spec[n_idx] = new_spec[n_idx-1] + delta
+                elif e_idx <= last_idx:
+                    for n_idx in range(s_nan_loc, e_nan_loc+1):
+                        new_spec[n_idx] = new_spec[e_idx]
+                elif s_idx >= 0:
+                    for n_idx in range(s_nan_loc, e_nan_loc+1):
+                        new_spec[n_idx] = new_spec[s_idx]
+
+            return new_spec
+
+        return linear_nan(spec_vals)
 
     def cross_correlate_by_mask_shift(self, wave_cal, spectrum, zb):
         """Cross correlation by the shifted mask line and the spectrum data of one order for each velocity step.
@@ -400,11 +471,10 @@ class RadialVelocityAlg(RadialVelocityBase):
         n_line_index = len(line_index)
         v_steps = self.velocity_steps
         ccf = np.zeros(v_steps)
-        if n_line_index == 0:
+        if n_line_index == 0 or wave_cal.size <= 2:
             return ccf
 
         n_pixel = np.shape(wave_cal)[0]
-        pix1, pix2 = 10, n_pixel - 11
 
         new_line_start = line['start'][line_index]
         new_line_end = line['end'][line_index]
@@ -422,7 +492,98 @@ class RadialVelocityAlg(RadialVelocityBase):
         x_pixel_wave_start[0] = wave_cal[0] - (wave_cal[1] - wave_cal[0]) / 2.0
         x_pixel_wave_end[-1] = wave_cal[-1] + (wave_cal[-1] - wave_cal[-2]) / 2.0
 
-        shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)  # Shifting mask in redshift space
+        x_pixel_wave = np.zeros(n_pixel + 1)
+        x_pixel_wave[1:n_pixel] = x_pixel_wave_start[1:n_pixel]
+        x_pixel_wave[n_pixel] = x_pixel_wave_end[-1]
+        x_pixel_wave[0] = x_pixel_wave_start[0]
+
+        # shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)  # Shifting mask in redshift space
+        if self.ccf_code == 'c':
+            # ccf_pixels_c = np.zeros([v_steps, n_pixel])
+            v_b = zb * LIGHT_SPEED
+            for c in range(v_steps):
+                # add one pixel before and after the original array in order to uniform the calculation between c code
+                # and python code
+                new_wave_cal = np.pad(wave_cal, (1, 1), 'constant')
+                new_wave_cal[0] = 2 * wave_cal[0] - wave_cal[1]     # w[0] - (w[1]-w[0])
+                new_wave_cal[-1] = 2 * wave_cal[-1] - wave_cal[-2]  # w[n-1] + (w[n-1] - w[n-2])
+
+                new_spec = np.pad(spectrum, (1, 1), 'constant')
+                new_spec[1:n_pixel+1] = spectrum
+
+                sn = np.ones(n_pixel+2)
+                ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
+                                                 new_wave_cal.astype('float64'), new_spec.astype('float64'),
+                                                 new_line_weight.astype('float64'), sn.astype('float64'),
+                                                 self.velocity_loop[c], v_b)
+                """
+                ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
+                                                            new_line_end.astype('float64'),
+                                                            new_wave_cal.astype('float64'),
+                                                            new_spec.astype('float64'),
+                                                            new_line_weight.astype('float64'), sn.astype('float64'),
+                                                            self.velocity_loop[c], v_b)
+                ccf_pixels_c[c, :] = ccf_pixels
+                """
+            """
+            sn_p = np.ones(n_pixel)
+            ccf_python, ccf_pixels_python = self.calc_ccf(v_steps, new_line_start.astype('float64'),
+                                                       new_line_end.astype('float64'),
+                                                       x_pixel_wave.astype('float64'),
+                                                       spectrum.astype('float64'),
+                                                       new_line_weight.astype('float64'),
+                                                       sn_p, zb)
+            ccf_diff_pixel = ccf_pixels_python - ccf_pixels_c
+            max_pixel_diff = np.amax(abs(ccf_diff_pixel))
+            total_pixel_size = np.size(ccf_diff_pixel)
+            total_pixel_diff = np.size(np.where(ccf_diff_pixel != 0.0)[0])
+
+            ccf_diff = ccf_python-ccf
+            max_ccf_diff = np.amax(abs(ccf_diff))
+            total_ccf_size = np.size(ccf_diff)
+            total_ccf_diff = np.size(np.where(ccf_diff != 0.0)[0])
+            self.d_print("max diff of ccf in pixels: ", max_pixel_diff, '(', total_pixel_diff, '/', total_pixel_size, ')', info=True)
+            self.d_print("max diff of ccf in v-steps: ", max_ccf_diff, '(', total_ccf_diff, '/', total_ccf_size, ')', info=True)
+            """
+        else:
+            sn_p = np.ones(n_pixel)
+            ccf, ccf_pixels_python = self.calc_ccf(v_steps, new_line_start.astype('float64'),
+                                                   new_line_end.astype('float64'),
+                                                   x_pixel_wave.astype('float64'),
+                                                   spectrum.astype('float64'),
+                                                   new_line_weight.astype('float64'),
+                                                   sn_p, zb)
+        return ccf
+
+    def calc_ccf(self, v_steps, new_line_start, new_line_end, x_pixel_wave, spectrum, new_line_weight, sn, zb):
+        """ Cross correlation by the shifted mask line and the spectrum data of one order for each velocity step.
+
+        Args:
+            v_steps (int): Total velocity steps.
+            new_line_start (numpy.ndarray): Start of the mask line.
+            new_line_end (numpy.ndarray): End of the mask line.
+            x_pixel_wave (numpy.ndarray): Wavelength calibration of the pixels.
+            spectrum (numpy.ndarray): 1D Spectrum data.
+            new_line_weight (numpy.ndarray): Mask weight
+            sn (numpy.ndarray): Additional SNR scaling factor (comply with the implementation of CCF of C version)
+            zb (float): Redshift at the observation time.
+
+        Returns:
+            numpy.ndarray: ccf at velocity steps.
+            numpy.ndarray: Intermediate CCF numbers at pixels.
+        """
+
+        ccf = np.zeros(v_steps)
+        shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)
+
+        n_pixel = np.shape(x_pixel_wave)[0] - 1                # total size in  x_pixel_wave_start
+        n_line_index = np.shape(new_line_start)[0]
+
+        # pix1, pix2 = 10, n_pixel - 11
+        pix1, pix2 = 0, n_pixel-1
+        x_pixel_wave_end = x_pixel_wave[1: n_pixel+1]            # total size: n_pixel
+        x_pixel_wave_start = x_pixel_wave[0: n_pixel]
+        ccf_pixels = np.zeros([v_steps, n_pixel])
 
         for c in range(v_steps):
             line_doppler_shifted_start = new_line_start * shift_lines_by[c]
@@ -467,9 +628,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                     continue
                 else:
                     for n in range(closest_x_pixel, closest_x_pixel_next):
-                        if n >= pix2:
+                        if n > pix2:
                             break
-                        if n <= pix1:
+                        if n < pix1:
                             continue
                         # if there is overlap
                         if x_pixel_wave_start[n] <= line_end_wave and x_pixel_wave_end[n] >= line_start_wave:
@@ -477,15 +638,16 @@ class RadialVelocityAlg(RadialVelocityBase):
                             wave_end = min(x_pixel_wave_end[n], line_end_wave)
                             mask_spectra_doppler_shifted[n] = line_weight * (wave_end - wave_start) / \
                                 (x_pixel_wave_end[n] - x_pixel_wave_start[n])
+                            # self.d_print("n=", n, "p_start_eave:", x_pixel_wave_start[n], "p_end_wave:", x_pixel_wave_end[n], "spec:", spectrum[n], "k:", k, "l_start_w:", line_start_wave, "line_end_w:", line_end_wave, "weight:", line_weight, info=True)
+                            # self.d_print(" fraction:", (wave_end - wave_start)/ (x_pixel_wave_end[n] - x_pixel_wave_start[n]), info=True)
                             if n in idx_collection:
                                 print(str(n), ' already taken')
                                 # import pdb;pdb.set_trace()
                             else:
                                 idx_collection.append(n)
-
-            ccf[c] = np.nansum(spectrum * mask_spectra_doppler_shifted)
-
-        return ccf
+            ccf_pixels[c, :] = spectrum * mask_spectra_doppler_shifted * sn
+            ccf[c] = np.nansum(ccf_pixels[c, :])
+        return ccf, ccf_pixels
 
     def analyze_ccf(self, ccf, row_for_analysis=None):
         """Analyze cross correlation results.
@@ -494,7 +656,6 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         Args:
             ccf (numpy.ndarray): A container storing cross correlation values of all orders at each velocity step.
-            total_order (int): Total order to analyze.
             row_for_analysis (numpy.ndarray): Rows for analysis. Defaults to None, meaning skipping the first row.
 
         Returns:
@@ -511,6 +672,26 @@ class RadialVelocityAlg(RadialVelocityBase):
 
     def get_rv_guess(self):
         return self.get_rv_estimation(self.header, self.init_data)
+
+    def get_order_limits(self, order_idx):
+        """ Get the left and right limits of the specified order
+
+        Args:
+            order_idx (int): order index
+
+        Returns:
+            numpy.ndarray: an array containing the left and right limits
+
+        """
+
+        order_limits = self.init_data[RadialVelocityAlgInit.ORDER_LIMITS_MASK]
+
+        if order_limits.size > order_idx:
+            limits = order_limits[order_idx]
+        else:
+            limits = np.array([0, 0])
+
+        return limits
 
     @staticmethod
     def get_rv_estimation(hdu_header, init_data):
@@ -591,7 +772,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             results.attrs['CCFJDSUM'] = self.get_obs_time()
             results.attrs['CCF-RVC'] = (f_decimal(rv_result), 'BaryC RV (km/s)')
-            results.attrs['CCFSTART'] = str(self.rv_config[RadialVelocityAlgInit.STAR_RV])
+            # results.attrs['CCF-RVC'] = f_decimal(rv_result)+' BaryC RV (km/s)'
+            results.attrs['CCFSTART'] = str(self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP][0])
             results.attrs['CCFSTEP'] = str(self.rv_config[RadialVelocityAlgInit.STEP])
             results.attrs['STARTORD'] = str(self.start_order)
             results.attrs['ENDORDER'] = str(self.end_order)
@@ -653,9 +835,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             raise Exception(msg)
 
         if ref_ccf is not None:
-            ccf = self.reweight_ccf(ccf, self.spectrum_order, ref_ccf, self.reweighting_ccf_method,
+            ccf, _ = self.reweight_ccf(ccf, self.spectrum_order, ref_ccf, self.reweighting_ccf_method,
                                     s_order=start_order)
-
         analyzed_ccf = self.analyze_ccf(ccf)
         df = self.output_ccf_to_dataframe(analyzed_ccf)
         return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd}
@@ -691,6 +872,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         row_val = order_val[np.arange(0, e_idx-s_idx+1, dtype=int), :]
         row_val = np.where((row_val < 0.0), 0.0, row_val)
 
+        # t_val = np.zeros(np.shape(row_val)[0])  # check if this setting is needed
         if reweighting_method == 'ccf_max':
             t_val = np.nanpercentile(row_val, 95, axis=1)
         elif reweighting_method == 'ccf_mean':
@@ -756,7 +938,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             if np.shape(reweighting_table_or_ccf)[1] >= 2:
                 s_order = 0 if s_order is None else s_order
                 e_order = s_order + total_order - 1
-                c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_order)&
+                c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_order) &
                                  (reweighting_table_or_ccf[:, 0] <= e_order))[0]
                 tval = reweighting_table_or_ccf[c_idx, -1]
                 crt_rv = crt_rv[c_idx, :]
@@ -772,7 +954,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             oval_at_index = oval[max_index]                     # value from oder of max_index
             if oval_at_index == 0.0:      # order of max_index has value 0.0, skip reweighting, returns all zeros
                 return new_crt_rv
-            oval = oval/oval_at_index     # ratio of orders before reweighting, order of max_index is 1.0
+            oval = oval/oval_at_index     # ratio of orders before reweighting, value at order of max_index is 1.0
+
             for order in range(total_order):
                 if oval[order] != 0.0:
                     new_crt_rv[order, :] = crt_rv[order, :] * tval[order]/oval[order]
@@ -784,12 +967,11 @@ class RadialVelocityAlg(RadialVelocityBase):
                     if np.size(np.where(crt_rv[order, :] != 0.0)[0]) > 0:
                         new_crt_rv[order, :] = crt_rv[order, :] * \
                                            np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
+
         if do_analysis:
             row_for_analysis = np.arange(1, total_order, dtype=int)
-            new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS -1, :] = \
-                            np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
+            new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :] = \
+                np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
             if velocities is not None and np.size(velocities) == nx:
                 new_crt_rv[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 2, :] = velocities
-        return new_crt_rv
-
-
+        return new_crt_rv, total_order

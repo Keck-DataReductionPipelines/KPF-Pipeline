@@ -11,7 +11,7 @@ python-dotenv
 pytest
 pytest-cov
 coveralls
-barycorrpy>=0.4.0
+barycorrpy==0.4.1
 
 # Documentation
 sphinx

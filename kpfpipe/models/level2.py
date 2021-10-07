@@ -1,17 +1,63 @@
 '''
 KPF Level 2 Data Model
 '''
-        
-#class Orderlet2(object):
-#    """
-#    Contanier for data that's associated with level two data products
-#    per orderlet
-#    """
-#    def __init__(self):
-#        self.ccf # cross-correlation function (1D array)
-#        self.dv # displacement in velocity space (1D array)
-#        self.mask # binary mask (1D array)
-#        self.rv # per orderlet rv (float)
-#        self.bc # per orderlet bary-centric correction (float)
-#        self.fiberid # [1,2,3,4,5]
-#        self.ordernum # [71-137]; 103-137 = green, 71-102 = red
+# Standard dependencies
+from collections import OrderedDict
+import os
+import copy
+
+# External dependencies
+import astropy
+from astropy.io import fits
+from astropy.time import Time
+from astropy.table import Table
+import numpy as np
+import pandas as pd
+
+from kpfpipe.models.base_model import KPFDataModel
+from kpfpipe.models.metadata import KPF_definitions
+from kpfpipe.models.level0 import KPF0
+from kpfpipe.models.level1 import KPF1
+
+class KPF2(KPF0):
+    '''
+    The level 2 KPF data. Initialize with empty fields.
+    Attributes inherited from KPF0
+
+    '''
+
+    def __init__(self):
+        '''
+        Constructor
+        '''
+        super().__init__()
+
+        self.level = 2
+
+        self.extensions = copy.copy(KPF_definitions.LEVEL2_EXTENSIONS)
+        self.header_definitions = KPF_definitions.LEVEL2_HEADER_KEYWORDS.items()
+        python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
+
+        for key, value in self.extensions.items():
+            if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
+                atr = python_types[value]([])
+                self.header[key] = fits.Header()
+            else:
+                continue
+            self.create_extension(key, python_types[value])
+            setattr(self, key, atr)
+
+        header_keys = self.header.keys()
+        del_keys = []
+        for key in header_keys:
+            if key not in self.extensions.keys():
+                del_keys.append(key)
+        for key in del_keys:
+            del self.header[key]
+
+        for key, value in self.header_definitions:
+            # assume 2D image
+            if key == 'NAXIS':
+                self.header['PRIMARY'][key] = 2
+            else:
+                self.header['PRIMARY'][key] = value()

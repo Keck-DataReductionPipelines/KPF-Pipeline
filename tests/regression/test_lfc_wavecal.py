@@ -46,6 +46,7 @@ def start_alg():
     assert test_thar.shape[0] > 0, 'ThAr data not extracted'
     test_comb = fits.getdata(test_file,ext=4)
     assert test_comb.shape[0] > 0, 'Comb data not extracted'
+ 
     lfc_start = LFCWaveCalibration(config=config_vals)
     return test_comb,test_thar,lfc_start
 
