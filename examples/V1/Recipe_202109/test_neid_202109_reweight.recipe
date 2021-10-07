@@ -1,0 +1,20 @@
+date = ''
+# date = '_202109'
+invoke_subrecipe("./examples/V1/common_args_0903.recipe")
+
+# RecipeA: order trace, extraction (norect + sum), rv (no weighting)
+lev1_wavelength_cal = False
+lev2_weight_rv = True
+rect_method = 'vertical'
+extract_method = 'optimal'
+recipe_output_dir = output_dir + 'Recipe_202109/'
+lev1_output_suffix = '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix
+ccf_engine = 'c'
+
+invoke_subrecipe("./examples/V1/test_order_trace.recipe")
+#invoke_subrecipe("./examples/V1/test_optimal_extraction_202109.recipe")
+invoke_subrecipe("./examples/V1/test_optimal_extraction_rect_202109.recipe")
+if lev2_weight_rv:
+	invoke_subrecipe("./examples/V1/test_neid_radial_velocity_202109_reweight.recipe")
+else:
+	invoke_subrecipe("./examples/V1/test_neid_radial_velocity_202109.recipe")
