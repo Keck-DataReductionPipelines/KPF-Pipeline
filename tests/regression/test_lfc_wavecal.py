@@ -89,7 +89,7 @@ def test_rv_acc():
         'min_order':60,
         'max_order':90,
         'n_sections': 20,
-        'skip_orders': 84,85,86
+        'skip_orders': [84,85,86]
     }
     combs,thars,algg = start_alg()
     test_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
