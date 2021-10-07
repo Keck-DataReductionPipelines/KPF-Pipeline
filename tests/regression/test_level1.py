@@ -40,11 +40,16 @@ def test_NEID2KPF():
         # read the converted data
         data2 = KPF1.from_fits(to_path, 'KPF')
         # compare the data value of the two
-        for key, value in data2.data.items():
+        for key in data2.extensions.keys():
+            if key not in data.extensions.keys() or key == 'RECEIPT':
+                continue
+            value = getattr(data2, key)
             if value is None:
-                assert(data2.data[key] is None)
+                assert(getattr(data, key) is None)
+            elif isinstance(value, pd.DataFrame):
+                assert(np.all(value.values == getattr(data, key).values))
             else:
-                assert(np.all(value == data.data[key]))
+                assert(np.all(value == getattr(data, key)))
 
     # Clean up 
     shutil.rmtree('temp')
@@ -70,67 +75,5 @@ def test_io_exception():
         #trying to overwrite existing data
         data.read(path, 'NEID')
 
-
-# =============================================================================
-# Segments
-
-def test_add_segments():
-    '''
-    Check that segments are added properly
-    '''
-    data = KPF1()
-    data = KPF1.from_fits(os.path.join(fpath, flist[0]), 'NEID')
-    # check that default segments are working
-    for fiber, value in data.segments.items():
-        if len(value) != 0:
-            assert(len(value) == data.data[fiber].shape[1])
-
-    data.add_segment('SCI1', (0, 1), (0, 5), label='test')
-    data.add_segment('SCI1', (0, 1), (0 ,5))
-    assert('Custom segment 1' in list(data.segments['SCI1']['Label']))
-    assert('test' in list(data.segments['SCI1']['Label']))
-
-def test_remove_segment():
-    '''
-    Check that segments are removed properly
-    '''
-    data = KPF1()
-    data = KPF1.from_fits(os.path.join(fpath, flist[0]), 'NEID')
-    data.clear_segment()
-    for key, value in data.segments.items():
-        assert(len(value) == 0)
-    data.add_segment('SCI1', (0, 1), (0, 5), label='test')
-    data.add_segment('SCI1', (0, 1), (0 ,5))
-    data.remove_segment('SCI1', 'test')
-    data.remove_segment('SCI1', 'Custom segment 1')
-    assert(len(data.segments['SCI1']) == 0)
-
-def test_segments_exceptions():
-    '''
-    Check that proper exceptions are raised with an invalid input
-    '''
-    data = KPF1()
-    with pytest.raises(ValueError):
-        # adding segment to an empty data
-        data.add_segment('SCI1', (0, 1), (0, 2), label='test')
-    
-    data = KPF1.from_fits(os.path.join(fpath, flist[0]), 'NEID')
-    data.add_segment('SCI1', (0, 1), (0, 2), label='test')
-    with pytest.raises(ValueError):
-        # end index is less than beginning index
-        data.add_segment('SCI1', (0, 3), (0, 2))
-    
-    with pytest.raises(ValueError):
-        # segment not on same order
-        data.add_segment('SCI1', (0, 1), (1, 2))
-    
-    with pytest.raises(NameError):
-        # duplicate label 
-        data.add_segment('SCI1', (0, 1), (0, 2), label='test')
-    
-    with pytest.raises(ValueError):
-        # Non-existent label
-        data.remove_segment('SCI1', 'what')
-        
 if __name__ == "__main__":
-    test()
+    test_NEID2KPF()
