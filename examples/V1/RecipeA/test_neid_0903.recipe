@@ -1,3 +1,4 @@
+date = '_0903'
 invoke_subrecipe("./examples/V1/common_args_0903.recipe")
 
 # RecipeA: order trace, extraction (norect + sum), rv (no weighting)
