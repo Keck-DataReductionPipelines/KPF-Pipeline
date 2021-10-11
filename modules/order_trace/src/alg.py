@@ -507,7 +507,9 @@ class OrderTraceAlg:
 
             # first y or no cluster found at previous y
             if (cy == 0) or len(clusters_endy_dict[cy-1]) == 0:
+                nx_prev_cluster_id = [list() for _ in range(nx)]
                 c_idx = 0
+
                 for seg in segments_at_cy:
                     clusters_endy_dict[cy].append({cy: {'segments': [seg]},
                                                   'y1': cy, 'y2': cy, 'x1': x[seg[0]], 'x2': x[seg[1]]})
@@ -554,7 +556,7 @@ class OrderTraceAlg:
                     b_conn = -1
 
                     # find connected unit which has any of the clusters connected with current segment
-                    if self.common_member(cluster_to_update, connected_clusters):
+                    if self.common_member(cluster_to_update, connected_clusters): # has some connection with prev.
                         for conn_idx in range(len(connected_set)):
                             one_conn = connected_set[conn_idx]
                             if self.common_member(connected_clusters, one_conn['cluster_idx']):
@@ -565,7 +567,7 @@ class OrderTraceAlg:
                     if b_conn == -1:
                         new_conn = {'segment_idx': [s_idx], 'cluster_idx': connected_clusters}
                         connected_set.append(new_conn)
-                    else:
+                    else:     # accumulate the segment and cluster id for each cluster
                         if s_idx not in connected_set[b_conn]['segment_idx']:
                             connected_set[b_conn]['segment_idx'].append(s_idx)
                         for c in connected_clusters:

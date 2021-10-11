@@ -46,4 +46,10 @@
 - default_simple.cfg is the configuration file for tests/regression/test_recipe.py
 
 
+** the recipe and config for KPF simulated flat and science data
+-- kfp examples/test_kpf.recipe examples/default_kfp.cfg
+   using the flat and science at ownCloud/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/flat and 
+   ownCloud/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/science. 
+
+
 
