@@ -1,5 +1,6 @@
 import numpy as np
 from astropy.io import fits
+import matplotlib.pyplot as plt
 from astropy import stats
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -9,65 +10,69 @@ Averaging several frames together reduces the impact of readout
 noise and gives a more accurate estimate of the bias level. 
 The master bias frame produced from this averaging - Dealing with CCD Data
 
-Frame combine Steps:
-    - Takes 2D arrays (currently takes them written out)
-    - Stacks arrays on 3rd axis (now 3d matrix)
-    - Takes element-wise mean of each array
-    - Returns 2d array of element-wise averages
 """
 class FrameCombinePrimitive(KPF0_Primitive):
     def __init__(self, action, context):
         KPF0_Primitive.__init__(self, action, context)
-        self.L0_names=self.action.args[0]
-        self.lev0_ffi_exts=self.action.args[1]
-        self.data_type=self.action.args[2]
+        self.frame_type=self.action.args[0]
+        self.L0_names=self.action.args[1]
+        self.ffi_ext=self.action.args[2]
+        self.data_type=self.action.args[3]
 
     def _perform(self):
-        no_ffis = len(self.lev0_ffi_exts)
-        self.logger.info(f'Number of masters to create: {no_ffis}')
-        #loop here through L0 objects
-        arrays_list=[]
-        #overwrites first iterated file with the combination of it+the rest
-        self.logger.info(f'L0_names: {self.L0_names}')
-        for ext in self.lev0_ffi_exts:
-            for name in self.L0_names:
-                obj=fits.open(name)
-                #issue here with 'NotImplementedError: memoryview: unsupported format >f' when using KPF0.from_fits
-                arrays_list.append(obj[ext].data)
-                #self.logger.info(f'file: {name}, obj.data_type is {type(obj.data)}') #debug w/levels
-        master_frames = []
-        for frame in range(len(self.lev0_ffi_exts)):
-            split = np.array_split(arrays_list,no_ffis)
-            single_frame_data =split[frame]
-            data=np.dstack(single_frame_data)
-            master_frame = stats.sigma_clip(data,sigma=5,masked=True) #do median/min-max rejected median instead, sigma better when no files > 20
-        #assuming all data will be 2D arrays
-        #master_frame.data=np.mean(data,2)
-            mast_mean_axis = len(np.array(master_frame).shape)-1
-            master_mean = np.mean(master_frame,axis=mast_mean_axis)
-            master_frames.append(master_mean)
-            #master_frame.receipt_add_entry('frame_combine', self.__module__, f'input_files={self.L0_names}', 'PASS') #avoid duplication
-            if self.logger:
-                self.logger.info("frame_combine: Receipt written")
-        # for ext in self.lev0_ffi_exts:
-        master_frames = np.array(master_frames)
-        #master_frames.reshape(master_frames.shape[0])
-            #master_frames = np.array(master_frames).reshape(obj[ext].shape[0],obj[ext].shape[1])
+        print("frame type is",self.frame_type)
+        if self.frame_type == 'bias':
+            print('bias triggered')
+            tester = KPF0.from_fits(self.L0_names[0])
+            ext_list = []
+            for i in tester.extensions.keys():
+                if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
+                    ext_list.append(i)
+            frames_data=[]
+            for path in self.L0_names:
+                obj = KPF0.from_fits(path) #check this
+                frames_data.append(obj[self.ffi_ext])
+            frames_data = np.array(frames_data)
+            medians = np.median(frames_data,axis=0)
+            final_frame = medians
+            ### kpf master file creation ###
+            master_holder = obj
+            for ext in ext_list:#figure out where to open master_holder_path
+                master_holder.del_extension(ext)
+            master_holder[self.ffi_ext] = final_frame
+            #master_holder[self.ffi_ext].name = self.ffi_ext.split('_')[0] + '_MASTER_BIAS'
 
-        master_file_HDU = fits.HDUList()
-        master_file_HDU.append(fits.PrimaryHDU())
-        for ffi_no in range(no_ffis):
-            master_file_HDU.append(fits.ImageHDU(name='MASTER_'+str(ffi_no)))
-        
-        for ext in range(no_ffis): 
-            single = np.array_split(master_frames,len(self.lev0_ffi_exts))[ext]
-            single = np.squeeze(single)
-            master_file_HDU[ext+1].data = single
-        ## per number of ffi extentions, made hdu list with that many extensions
-        ## populate those extensions with master frames split per iter of loop
-        print(master_file_HDU.info())
-        print (f'master_frame_type:{type(master_frame)}')
-        ####################write workaround fits.writeto? 
-        master_file_HDU.writeto('./examples/V1/FlatRecipe/FlatRecipeRes/test_masterflat.fits',overwrite=True)
-        #######
-        return Arguments(master_file_HDU)
+        if self.frame_type == 'flat':
+            print('flat triggered')
+            tester = KPF0.from_fits(self.L0_names[0])
+            ext_list = []
+            for i in tester.extensions.keys():
+                if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
+                    ext_list.append(i)
+            frames_data=[]
+            for path in self.L0_names:
+                obj = KPF0.from_fits(path) #check this
+                frames_data.append(obj[self.ffi_ext])
+            frames_data = np.array(frames_data)
+            medians = np.median(frames_data,axis=0)
+            mmax,mmin = medians.max(),medians.min()
+            norm_meds = (medians - mmin)/(mmax - mmin)
+            final_frame = norm_meds
+            ### kpf master file creation ###
+            master_holder = obj
+            for ext in ext_list:#figure out where to open master_holder_path
+                master_holder.del_extension(ext)
+            print('ffi extension is',self.ffi_ext)
+            master_holder[self.ffi_ext] = final_frame
+
+            # plt.figure()
+            # plt.imshow(final_frame)
+            # plt.colorbar()
+            # plt.savefig('final_frame_{}.pdf'.format(self.ffi_ext))
+            # plt.close()
+            # plt.figure()
+            # plt.imshow(master_holder[self.ffi_ext])
+            # plt.colorbar()
+            # plt.savefig('master_holder_{}.pdf'.format(self.ffi_ext))
+            # plt.close()
+        return Arguments(master_holder)
