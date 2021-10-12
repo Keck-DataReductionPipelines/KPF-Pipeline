@@ -27,8 +27,17 @@ class OverscanSubtraction(KPF0_Primitive):
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region
         is 1000 pixels wide, and overscan region (when oriented with overscan on right and parallelscan
-        on bottom) is 100 pixels wide, 
+        on bottom) is 100 pixels wide, it will make an array of values 900-1000.
+
+        Returns:
+            srl_overscan_pxs(np.ndarray): Array of serial overscan region pixels
+            prl_overscan_pxs(np.ndarray): Array of parallel overscan region pixels
+            srl_overscan_clipped(np.ndarray): Array of clipped serial overscan region pixels
+            prl_overscan_clipped(np.ndarray): Array of clipped parallel overscan region pixels
         """
+        # if self.rawfile.header['NOSCN_S'] and self.rawfile.header['NOSCN_P']:
+
+        # else:       
         srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
         prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
         srl_N_overscan = len(srl_overscan_pxs)
@@ -41,11 +50,11 @@ class OverscanSubtraction(KPF0_Primitive):
         """Gets mean of overscan data, subtracts value from raw science image data.
 
         Args:
-            image(np.array): Array of image data
-            overscan_reg(np.array): Array of pixel range of overscan relative to image pixel width
+            image(np.ndarray): Array of image data
+            overscan_reg(np.ndarray): Array of pixel range of overscan relative to image pixel width
 
         Returns:
-            raw_sub_os(np.array): Raw image with overscan mean subtracted
+            raw_sub_os(np.ndarray): Raw image with overscan mean subtracted
         """
         raw_sub_os = np.zeros_like(image)
         for row in range(0,raw_sub_os.shape[0]):
@@ -58,11 +67,11 @@ class OverscanSubtraction(KPF0_Primitive):
         """Performs linear fit on overscan data, subtracts fit values from raw science image data.
 
         Args:
-            image(np.array): Array of image data
-            overscan_reg(np.array): Array of pixel range of overscan relative to image pixel width
+            image(np.ndarray): Array of image data
+            overscan_reg(np.ndarray): Array of pixel range of overscan relative to image pixel width
 
         Returns:
-            raw_sub_os(np.array): Raw image with overscan fit subtracted
+            raw_sub_os(np.ndarray): Raw image with overscan fit subtracted
         """    
         xx = np.arange(image.shape[0]) #double check this
         raw_sub_os = np.zeros(image.shape)
@@ -82,11 +91,11 @@ class OverscanSubtraction(KPF0_Primitive):
         """ Extracts and flips images to regularlize readout orientation for overscan subtraction.
 
         Args:
-            image(np.array): Raw image with overscan region
+            image(np.ndarray): Raw image with overscan region
             key(int): Orientation of image
 
         Returns:
-            image_fixed(np.array): Correctly-oriented raw image for overscan subtraction
+            image_fixed(np.ndarray): Correctly-oriented raw image for overscan subtraction
                 and overscan region removal
         """
         if key == 1: #flip lr
@@ -110,7 +119,7 @@ class OverscanSubtraction(KPF0_Primitive):
                 Ex: Quadrant row is 2, col is 2, means that image will go lower right corner in FFI. 
 
         Returns:
-            full_frame_img(np.array): Assembled full frame image
+            full_frame_img(np.ndarray): Assembled full frame image
         """
 
         all_img = list(zip(images,rows,columns))
@@ -127,16 +136,16 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return full_frame_img
 
-    def overscan_cut(self, osub_image,overscan_reg_srl,overscan_reg_prl):
+    def overscan_cut(self,osub_image,overscan_reg_srl,overscan_reg_prl):
         """Cuts overscan region off of overscan-subtracted image.
 
         Args:
-            osub_image(np.array): Image with overscan region subtracted.
-            overscan_reg_srl(np.array): Serial overscan region
-            overscan_reg_prl(np.array): Parallel overscan region
+            osub_image(np.ndarray): Image with overscan region subtracted.
+            overscan_reg_srl(np.ndarray): Serial overscan region
+            overscan_reg_prl(np.ndarray): Parallel overscan region
 
         Returns:
-            image_cut(np.array): Image with overscan region cut off.
+            image_cut(np.ndarray): Image with overscan region cut off.
 
         """
         image_cut = osub_image[:,0:overscan_reg_srl[0]]
@@ -158,7 +167,7 @@ class OverscanSubtraction(KPF0_Primitive):
             channel_exts(list): FITS extensions of images 
 
         Returns:
-            full_frame_img():
+            full_frame_img(np.ndarray): Stiched-together full frame image, with overscan subtracted and removed
         """
         # clip ends of overscan region 
         srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays()
