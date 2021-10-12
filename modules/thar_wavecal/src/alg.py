@@ -34,17 +34,15 @@ class ThArCalibrationAlg:
         self.end_pixels_to_clip = configpull.get_config_value('clip_end_pxls', 1500)
         self.subplot_size = configpull.get_config_value('subplot_size', (6,20))
         self.saveplots = configpull.get_config_value('saveplots', 'ThAr_plots')
-        self.flux_ext = configpull.get_config_value('flux_ext','CALFLUX')
-        self.wave_ext = configpull.get_config_value('wave_ext','SCIWAVE')
 
     def find_and_fit_peaks(self,flux,linelist,line_pixels_expected,plot_toggle,savefig):
-        """[summary]
+        """Identifies and fits peaks to gaussian.
 
         Args:
-            flux ([type]): [description]
-            linelist ([type]): [description]
-            line_pixels_expected ([type]): [description]
-            savefig ([type]): [description]
+            flux (np.ndarray): Flux data
+            linelist (list): Wavelength line list
+            line_pixels_expected (list): Line positions
+            savefig (str): Directory for plots
         """
         peaks,_ = signal.find_peaks(flux)
         print('{} peaks detected ({} lines in input list).'.format(len(peaks),len(linelist)))
@@ -123,12 +121,12 @@ class ThArCalibrationAlg:
         return coefs
 
     def fit_polynomial(self,peak_pixels,vacuum_wavelens,n_pixels):
-        """[summary]
+        """Fits polynomial to peaks.
 
         Args:
-            peak_pixels ([type]): [description]
-            vacuum_wavelens ([type]): [description]
-            n_pixels ([type]): [description]
+            peak_pixels (np.ndarray): Peak pixel locations
+            vacuum_wavelens (np.ndarray): Vaccuum wavelength values
+            n_pixels (int): Number of pixels
         """
         leg_out = Legendre.fit(
             peak_pixels[peak_pixels > 0], vacuum_wavelens[peak_pixels >0], fit_order
@@ -139,13 +137,13 @@ class ThArCalibrationAlg:
 
 
     def calculate_precision(self,our_wls,other_wls,num_lines_fit,plot_toggle,savefig):
-        """[summary]
+        """Calculates precision of generated wavelengths versus wavelengths key
 
         Args:
-            our_wls ([type]): [description]
-            other_wls ([type]): [description]
-            num_lines_fit ([type]): [description]
-            savefig ([type]): [description]
+            our_wls (np.ndarray): Wavelengths resulting from ThAr wavelength calibration
+            other_wls (np.ndarray): External wavelengths data
+            num_lines_fit (int): Number of fit lines
+            savefig (str): Directory for plot
         """
         residuals = ((our_wls - other_wls) * constants.c) / other_wls
         precision = np.std(residuals)/np.sqrt(num_lines_fit)
@@ -159,15 +157,15 @@ class ThArCalibrationAlg:
         return precision, residuals
 
     def run_on_all_orders(self,flux,redman_w,redman_i,linelist_sub,other_wls,plot_toggle):
-        """[summary]
+        """Runs ThAr wavelength calibration steps on list of orders.
 
         Args:
-            flux (np.array): [description]
-            redman_w ([type]): [description]
-            redman_i ([type]): [description]
-            linelist_sub ([type]): [description]
-            other_wls ([type]): [description]
-            plot_toggle ([type]): [description]
+            flux (np.ndarray): Flux data
+            redman_w (list): Redman linelist wavelengths
+            redman_i (list): Redman linelist identifications (?)
+            linelist_sub (list): Linelist subset 
+            other_wls (np.ndarray): External wavelengths key data
+            plot_toggle (bool): Whether or not to create plots
         """
         if plot_toggle == True:
             _, summary_ax = plt.subplots()
@@ -176,6 +174,8 @@ class ThArCalibrationAlg:
             summary_ax.set_ylim(-500, 500)
 
         num_pixels = len(flux[0])
+
+        wls_soln = []
 
         for order_num in np.arange(first_order,last_order+1):
             print('\nRunning Order {}!'.format(order_num))
@@ -240,6 +240,7 @@ class ThArCalibrationAlg:
                 linelist_sub[order_num]['known_wavelengths_vac'],
                 len(flux[order_num])
             )
+            wls_soln.append(wls)
 
             num_lines_fit = len(gauss_fit_coefs[1,:][gauss_fit_coefs[1,:] > 0])
             precision,residuals = self.calculate_precision(wls,other_wls[order_num],
@@ -257,30 +258,8 @@ class ThArCalibrationAlg:
             plt.savefig('{}/wls_comp.png'.format(self.saveplots), dpi=250)
             plt.close()
 
-    def perform_thar_cal(self,l1_file,linelist_path,linelist_subset_path):
-        #open file (fits) in recipe or prim
-        """[summary]
-
-        Args:
-            l1_file (HDUList): Level 1 data file containing flux/wavelength solns
-            linelist_path ([type]): [description]
-            linelist_subset_path ([type]): [description]
-        """
-        linelist = np.load(linelist_path)
-        redman_w = np.array(linelist['redman_w'], dtype=float)
-        redman_i = np.array(linelist['redman_i'], dtype = float)
-
-        linelist_sub = np.load(linelist_subset_path, allow_pickle = True).tolist()
-
-        assert l1_file[0].header['CAL-OBJ'].startswith('ThAr')
-        #decide whether flux/wav exts go in recipe config or module config
-        calflux = l1_file[self.flux_ext]
-        calflux = np.nan_to_num(calflux)
-        calflux[calflux < 0] = np.min(calflux[calflux > 0])
-
-        wls = l1_file[self.wave_ext]
-
-        run_on_all_orders(calflux,redman_w,redman_i,linelist_sub,wls)
+        return wls_soln
+        
 
 
 

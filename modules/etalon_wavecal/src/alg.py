@@ -52,21 +52,3 @@ class EtalonWaveCalAlg:
             new_peaks,peaks,peak_heights,gauss_coeffs = LFCWaveCalibration.find_peaks_in_order(
                 flux[order],self.height_sigma, plot_path=plot_dir)
 
-    def etalon_alg(self,hdul):
-        #make sure fits file is opened elsewhere
-        """Set-up and running Etalon algorithm.
-
-        Args:
-            hdul (HDUList): HDUList of FITS file
-        """
-
-        assert hdul[0].header['CAL-OBJ'].startswith('Etalon')
-
-        calflux = hdul[self.flux_ext]
-        calflux = np.nan_to_num(calflux)
-
-        #neid masking
-        calflux[:,425:450] = 0
-
-        run_on_all_orders(calflux)
-
