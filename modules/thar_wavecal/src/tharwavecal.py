@@ -7,7 +7,7 @@ from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.models.level1 import KPF1
 
-# External dependencies
+# # External dependencies
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
@@ -18,24 +18,24 @@ from modules.thar_wavecal.src.alg import ThArCalibrationAlg
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/thar_wavecal/configs/default.cfg'
 
-class ThArCalibrate():
-    """This module defines class `EtalonWaveCal,` which inherits from KPF1_Primitive and provides methods
-    to perform the event `Etalon wavelength calibration` in the recipe.
+class ThArWavelengthCalibration(KPF1_Primitive):
+    """This module defines class `ThArWaveCal,` which inherits from KPF1_Primitive and provides methods
+    to perform the event `ThAr wavelength calibration` in the recipe.
 
     Args:
         KPF1_Primitive: Parent class
-        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `EtalonWaveCal` event issued in recipe.
-        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `etalon_wavecal` module in master config file associated with recipe.
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `ThArWaveCal` event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `thar_wavecal` module in master config file associated with recipe.
 
     Attributes:
         l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[0]`
         linelist_path (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[1]`
         linelist_sub_path (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
         data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[3]`
-        config_path (str): Path of config file for Etalon wavelength calibration.
+        config_path (str): Path of config file for ThAr wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
-        alg (modules.wavelength_cal.src.alg.EtalonWaveCalAlg): Instance of `EtalonWaveCal,` which has operation codes for Etalon Wavelength Calibration.
+        alg (modules.wavelength_cal.src.alg.ThArWaveCalAlg): Instance of `ThArWaveCal,` which has operation codes for ThAr Wavelength Calibration.
     """
     def __init__(self, 
                 action:Action,
@@ -80,28 +80,28 @@ class ThArCalibrate():
     def _perform(self): -> None:
         """Performs ThAr wavelength calibration algorithm
         """
-        if self.logger:
-            self.logger.info("ThAr Wavelength Calibration: Loading linelist and linelist subset paths")
-        linelist = np.load(self.linelist_path)
-        linelist_sub = np.load(self.linelist_sub_path, allow_pickle=True).tolist()
+        # if self.logger:
+        #     self.logger.info("ThAr Wavelength Calibration: Loading linelist and linelist subset paths")
+        # linelist = np.load(self.linelist_path)
+        # linelist_sub = np.load(self.linelist_sub_path, allow_pickle=True).tolist()
 
-        if self.logger:
-            self.logger.info("ThAr Wavelength Calibration: Loading Redman line lists")
-        redman_w = np.array(linelist['redman_w'], dtype=float)
-        redman_i = np.array(linelist['redman_i'], dtype=float)
+        # if self.logger:
+        #     self.logger.info("ThAr Wavelength Calibration: Loading Redman line lists")
+        # redman_w = np.array(linelist['redman_w'], dtype=float)
+        # redman_i = np.array(linelist['redman_i'], dtype=float)
 
-        if self.logger:
-            self.logger.info("ThAr Wavelength Calibration: Loading flux and wavelengths")
-        assert self.l1_obj.header['CAL-OBJ'].startswith('ThAr') #check this through line 75
-        flux = self.l1_obj.data['CAL'][0,:,:]
-        flux = np.nan_to_num(flux)
-        flux[flux < 0] = np.min(flux[flux > 0])
-        wls = self.l1_obj.data['SCI'][1,:,:]
+        # if self.logger:
+        #     self.logger.info("ThAr Wavelength Calibration: Loading flux and wavelengths")
+        # assert self.l1_obj.header['CAL-OBJ'].startswith('ThAr') #check this through line 75
+        # flux = self.l1_obj.data['CAL'][0,:,:]
+        # flux = np.nan_to_num(flux)
+        # flux[flux < 0] = np.min(flux[flux > 0])
+        # wls = self.l1_obj.data['SCI'][1,:,:]
 
-        if self.logger:
-            self.logger.info("ThAr Wavelength Calibration: Running calibration algorithm") 
-        thar_wavesoln = self.alg.run_on_all_orders(flux,redman_w,redman_i,wls,self.plot_toggle)
+        # if self.logger:
+        #     self.logger.info("ThAr Wavelength Calibration: Running calibration algorithm") 
+        # thar_wavesoln = self.alg.run_on_all_orders(flux,redman_w,redman_i,wls,self.plot_toggle)
 
-        self.l1_obj.data['SCI'][1,:,:] = thar_wavesoln
+        # self.l1_obj.data['SCI'][1,:,:] = thar_wavesoln
 
         return Arguments(self.l1_obj)
