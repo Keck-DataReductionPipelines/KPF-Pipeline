@@ -24,7 +24,7 @@ ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, total_or
 for f in all_lev2_files:
     lev2_obj = kpf2_from_fits(f, data_type='KPF')
     reweighted_lev2 = RadialVelocityReweighting(lev2_obj, reweighting_method, ratio_ref, total_order, rv_init,
-                        ccf_hdu_name='CCFS')
+                        ccf_ext='CCFS')
 """
 
 radial_velocity_neid_reweighting_config = "examples/default_recipe_neid_hd127334.cfg"
