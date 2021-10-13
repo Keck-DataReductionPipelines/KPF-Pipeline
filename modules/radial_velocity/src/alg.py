@@ -772,12 +772,12 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             results.attrs['CCFJDSUM'] = self.get_obs_time()
             results.attrs['CCF-RVC'] = (f_decimal(rv_result), 'BaryC RV (km/s)')
-            # results.attrs['CCF-RVC'] = f_decimal(rv_result)+' BaryC RV (km/s)'
-            results.attrs['CCFSTART'] = str(self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP][0])
-            results.attrs['CCFSTEP'] = str(self.rv_config[RadialVelocityAlgInit.STEP])
-            results.attrs['STARTORD'] = str(self.start_order)
-            results.attrs['ENDORDER'] = str(self.end_order)
-
+            results.attrs['CCFSTART'] = self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP][0]
+            results.attrs['CCFSTEP'] = self.rv_config[RadialVelocityAlgInit.STEP]
+            results.attrs['TOTALSTP'] = self.velocity_steps
+            results.attrs['STARTORD'] = self.start_order
+            results.attrs['ENDORDER'] = self.end_order
+            results.attrs['TOTALORD'] = self.end_order - self.start_order+1
         return results
 
     def compute_rv_by_cc(self, start_x=None, end_x=None, start_order=None, end_order=None,

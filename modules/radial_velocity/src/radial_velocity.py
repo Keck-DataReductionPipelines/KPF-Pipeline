@@ -19,8 +19,9 @@
                     - `action.args[1] (dict)`: Result from the init work made by `RadialVelocityInit` which makes
                       mask lines and velocity steps based on star and other module associated configuration for
                       radial velocity computation.
-                    - `action.args['order_name'] (str, optional)`: Order name associated with the level 1 data.
-                      Defaults to 'SCI'.
+                    - `action.args[2] (kpfpipe.models.level2.KPF2)`: Instance of `KPF2` containing radial velocity
+                      results. If not existing, it is None.
+                    - `action.args[3] (str)`: Extension name associated with the level 1 science data.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to None. The number means the order relative to the first one if it is greater
                       than or equal to 0, otherwise it means the order relative to the last one.
@@ -32,6 +33,8 @@
                       pixel.
                     - `action.args['end_x'](int, optional)`: Index of end x position, Default to None.
                       The number has the same meaning as that of `action.args['start_x']`.
+                    - `action.args['ccf_ext'] (str): Extension name containing the ccf results.
+                    - `action.args['rv_ext'] (str): Extension name containing rv results.
                     - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference for
                       reweighting ccf orders. Defaults to None.
                     - `action.args['reweighting_method'] (str, optional)`: reweighting method. Defaults to None.
@@ -44,7 +47,8 @@
 
                 - `input (kpfpipe.models.level1.KPF1)`: Instance of `KPF1`, assigned by `action.args[0]`.
                 - `rv_init (dict)`: Result from radial velocity init.
-                - `sci (str)`: Name of the order to be processed.
+                - `output_level2 (kpfpipe.models.level2.KPF2)`: Instance of `KPF2`, assigned by `action.args[2]`.
+                - `sci_names (list)`: Name of the order to be processed, assigned by `action.args[2]`.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `end_order (int)`: Index of the last order to be processed.
                 - `start_x (int)`: Start x position associated with `action.args['start_x']`.
@@ -101,9 +105,11 @@ DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 class RadialVelocity(KPF1_Primitive):
 
     default_args_val = {
-        'order_name': 'SCI',
+        'order_names': ['SCIFLUX'],
         'output_level2': None,
-        'ccf_engine': 'c'
+        'ccf_engine': 'c',
+        'ccf_ext': 'CCF',
+        'rv_ext': 'RV'
     }
 
     def __init__(self,
@@ -115,6 +121,8 @@ class RadialVelocity(KPF1_Primitive):
 
         self.input = action.args[0]
         self.rv_init = action.args[1]
+        self.output_level2 = action.args[2]
+        self.sci_names = action.args[3] if isinstance(action.args[3], list) else [action.args[3]]
         self.ref_ccf = None
 
         if 'input_ref' in args_keys:
@@ -126,8 +134,6 @@ class RadialVelocity(KPF1_Primitive):
                 ratio_df = pd.read_csv(action.args['input_ref'])
                 self.ref_ccf = ratio_df.values
 
-        self.sci = action.args['order_name'] if 'order_name' in args_keys and action.args['order_name'] is not None\
-            else self.default_args_val['order_name']
         self.ccf_engine = action.args['ccf_engine'].lower() \
             if 'ccf_engine' in args_keys and action.args['ccf_engine'] is not None \
             else self.default_args_val['ccf_engine']
@@ -135,10 +141,10 @@ class RadialVelocity(KPF1_Primitive):
         self.end_order = int(action.args['end_order']) if 'end_order' in args_keys else None
         self.start_x = int(action.args['start_x']) if 'start_x' in args_keys else None
         self.end_x = int(action.args['end_x']) if 'end_x' in args_keys else None
-        self.output_level2 = action.args['output_level2'] if 'output_level2' in args_keys else None
         self.reweighting_method = action.args['reweighting_method'] if 'reweighting_method' in args_keys else None
-
-        is_kpf_type = action.args['is_kpf_type'] if 'is_kpf_type' in args_keys else True
+        self.ccf_ext = action.args['ccf_ext'] if 'ccf_ext' in args_keys else self.default_args_val['ccf_ext']
+        self.rv_ext = action.args['rv_ext'] if 'rv_ext' in args_keys else self.default_args_val['rv_ext']
+        self.active_order = self.sci_names[0]
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -156,18 +162,23 @@ class RadialVelocity(KPF1_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-        self.spectrum_data = getattr(self.input, self.sci+'FLUX') if hasattr(self.input, self.sci+'FLUX') else None
-        self.wave_cal = getattr(self.input, self.sci+'WAVE') if hasattr(self.input, self.sci+'WAVE') else None
-        header = self.input.header if hasattr(self.input, 'header') else None
-        self.header = None
-        if header:
-            if not is_kpf_type:
-                self.header = header['PRIMARY']
-            elif (self.sci + 'FLUX') in header:
-                self.header = header[self.sci + 'FLUX']
+        self.spectrum_data_set = list()
+        self.wave_cal_set = list()
+        self.header_set = list()
+        for sci in self.sci_names:
+            self.spectrum_data_set.append(getattr(self.input, sci) if hasattr(self.input, sci) else None)
 
+            wave = sci.replace('FLUX', 'WAVE') if 'FLUX' in sci else None
+            self.wave_cal_set.append(getattr(self.input, wave) if (wave is not None and hasattr(self.input, wave)) else None)
+            self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
+                               else None)
+
+        self.spectrum_data = self.spectrum_data_set[0]
+        self.header = self.header_set[0]
+        wave_cal = self.wave_cal_set[0]
         # Order trace algorithm setup
-        self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init, wave_cal=self.wave_cal,
+        self.alg = RadialVelocityAlg(self.spectrum_data, self.header, self.rv_init,
+                                     wave_cal = wave_cal,
                                      config=self.config, logger=self.logger, ccf_engine=self.ccf_engine,
                                      reweighting_method=self.reweighting_method)
 
@@ -198,6 +209,10 @@ class RadialVelocity(KPF1_Primitive):
         """
 
         _, nx, ny = self.alg.get_spectrum()
+        # all_segments = self.alg.get_order_segment()
+        # for segment in all_segments
+        # get s_order, e_order, s_x_pos and e_x_pos from each segment
+        # update spectrum_data, wave_cal, and header
 
         if self.alg.get_instrument() == 'NEID':
             if self.rv_init['data']['rv_config']['starname'] != 'HD 127334':
@@ -241,29 +256,59 @@ class RadialVelocity(KPF1_Primitive):
 
     def construct_level2_data(self, output_df, total_order):
         output_rv = output_df.values
+
         if self.output_level2 is None:
             self.output_level2 = KPF2()
+            total_set = 1
+            row_idx = 0
+            self.output_level2[self.ccf_ext] = output_rv[0:total_order]
         else:
-            self.output_level2.del_extension('CCF')
+            old_ccf = getattr(self.output_level2, self.ccf_ext) if hasattr(self.output_level2, self.ccf_ext) else None
 
-        self.output_level2['CCF'] = output_rv[0:total_order]
+            if old_ccf is None or np.shape(old_ccf)[0] == 0:
+                _, v_steps = np.shape(output_rv)
+                old_ccf = np.empty((0, v_steps))
 
-        rv_orders = []
-        row_index = np.arange(total_order+1)
-        row_index[total_order] = total_order+self.alg.ROWS_FOR_ANALYSIS-1
+            ccf = np.vstack((old_ccf, output_rv[0:total_order]))
+            self.output_level2[self.ccf_ext] = ccf
+
+            total_set = self.output_level2.header[self.ccf_ext]['TOTALSET'] + 1 \
+                if 'TOTALSET' in self.output_level2.header[self.ccf_ext] else 1
+            row_idx = np.shape(old_ccf)[0]
+
+        self.output_level2.header[self.ccf_ext]['TOTALSET'] = total_set
+        self.output_level2.header[self.ccf_ext]['CCF_'+str(total_set)+'_AT'] = row_idx
+        self.output_level2.header[self.ccf_ext]['CCF_'+str(total_set)+'_NM'] = self.active_order
+        for att in output_df.attrs:
+            if att != 'CCF-RVC' and total_set == 1:
+                self.output_level2.header[self.ccf_ext][att] = output_df.attrs[att]
+
+        rv_orders = [0.0] * total_order
         velocities = output_rv[total_order+1]
         rv_guess = self.alg.get_rv_guess()
 
-        for rv_idx, i in np.ndenumerate(row_index):
-            rv_result = 0.0
+        for i in range(total_order):
             if np.any(output_rv[i, :] != 0.0):
-                _, rv_result, _, _ = self.alg.fit_ccf(output_rv[i, :], rv_guess, velocities)
-            rv_orders.append(rv_result)
+                _, rv_orders[i], _, _ = self.alg.fit_ccf(output_rv[i, :], rv_guess, velocities)
 
-        rv_table = dict()
-        rv_table['rv_orders'] = np.array(rv_orders)
-        self.output_level2['RV'] = pd.DataFrame(rv_table)
+        rv_table = {}
+        crt_rv = []
+        if hasattr(self.output_level2, self.rv_ext) and isinstance(self.output_level2[self.rv_ext], pd.DataFrame):
+            crt_rv = self.output_level2[self.rv_ext]['RV'].tolist() if 'RV' in self.output_level2[self.rv_ext] else []
+
+        rv_table[self.rv_ext] = crt_rv + rv_orders
+        self.output_level2[self.rv_ext] = pd.DataFrame(rv_table)
+
+        total_set = self.output_level2.header[self.rv_ext]['TOTALSET'] + 1 \
+            if 'TOTALSET' in self.output_level2.header[self.rv_ext] else 1
+        self.output_level2.header[self.rv_ext]['RV_'+str(total_set)] = total_order
+        self.output_level2.header[self.rv_ext]['RV_'+str(total_set)+'_NM'] = self.ccf_ext
+        self.output_level2.header[self.rv_ext]['RV_'+str(total_set)+'_AT'] = len(crt_rv)
+        self.output_level2.header[self.rv_ext]['TOTALSET'] = total_set
 
         for att in output_df.attrs:
-            self.output_level2.header['RV'][att] = output_df.attrs[att]
+            if att == 'CCF-RVC':
+                new_att = 'RV_'+str(total_set)
+                self.output_level2.header[self.rv_ext][ new_att] = output_df.attrs[att]
+
         return True
