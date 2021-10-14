@@ -1,0 +1,9 @@
+from modules.etalon_wavecal.src.etalon_wcal import EtalonWaveCal
+
+l1_file_names = '...neidL1_20210119T030252.fits'
+
+for l1_file in find_files(l1_file_names):
+    cal_data=kpf1_from_fits(l1_file)
+    wave_soln=EtalonWaveCal(cal_data)
+    wavefits = to_fits(wave_soln,result_path)
+

@@ -1,4 +1,7 @@
 # Pipeline dependencies
+import configparser
+import numpy as np
+
 from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.models.level1 import KPF1
@@ -7,6 +10,9 @@ from kpfpipe.models.level1 import KPF1
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
+
+# Local dependencies
+from modules.etalon_wavecal.src.alg import EtalonWaveCalAlg
 
 DEFAULT_CFG_PATH = 'modules/etalon_wavecal/configs/default.cfg'
 
@@ -45,7 +51,7 @@ class EtalonWaveCal(KPF1_Primitive):
         KPF1_Primitive.__init__(self,action,context)
 
         self.l1_obj=self.action.args[0]
-        self.data_type=self.action.args[1]
+        #self.data_type=self.action.args[1]
 
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -68,8 +74,8 @@ class EtalonWaveCal(KPF1_Primitive):
     def _perform(self) -> None:
         if self.logger:
             self.logger.info("Etalon Wavelength Calibration: Loading flux and wavelengths")
-        assert self.l1_obj.header['CAL-OBJ'].startswith('ThAr') #check this through line 75
-        flux = self.l1_obj.data['CAL'][0,:,:]
+        assert self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon') #check this through line 75
+        flux = self.l1_obj['CALFLUX']
         flux = np.nan_to_num(flux)
         #neid masking
         flux[:,425:450] = 0

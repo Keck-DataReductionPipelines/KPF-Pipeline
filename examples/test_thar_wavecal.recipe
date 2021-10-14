@@ -1,14 +1,11 @@
-from modules.thar_wavecal.src.tharwavecal import ThArWavelengthCalibration
+from modules.thar_wavecal.src.thar_wcal import TharWaveCal
 
-line_list = '/Users/paminabby/Desktop/redman_linelist.npz'
-line_list_sub = '/Users/paminabby/Desktop/neidMaster_ThArLines20210218_v001.npy'
-plot_toggle = True
-l1_file_names = '/Users/paminabby/Desktop/neidL1_20210119T030252.fits'
-res_path = '/Users/paminabby/Desktop/thar_res.fits'
+l1_file_names = '...neidL1_20210119T030252.fits'
+line_list = '...redman_linelist.npz'
+line_list_sub = '...neidMaster_ThArLines20210218_v001.npy'
 
 for l1_file in find_files(l1_file_names):
     cal_data=kpf1_from_fits(l1_file)
-    wave_soln=ThArWavelengthCalibration(cal_data,line_list,line_list_sub,plot_toggle)
-    wavefits = to_fits(wave_soln,res_path)
-
+    wave_soln=TharWaveCal(cal_data,line_list,line_list_sub)
+    wavefits = to_fits(wave_soln,result_path)
 
