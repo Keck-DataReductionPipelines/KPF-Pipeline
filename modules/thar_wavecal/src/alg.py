@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from numpy.polynomial.legendre import Legendre
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
-from keckdrpframework.models.arguments import Arguments
 
 from modules.wavelength_cal.src.alg import LFCWaveCalibration
 

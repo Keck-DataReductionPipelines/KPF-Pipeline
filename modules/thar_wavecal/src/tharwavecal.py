@@ -80,28 +80,28 @@ class ThArWavelengthCalibration(KPF1_Primitive):
     def _perform(self): -> None:
         """Performs ThAr wavelength calibration algorithm
         """
-        # if self.logger:
-        #     self.logger.info("ThAr Wavelength Calibration: Loading linelist and linelist subset paths")
-        # linelist = np.load(self.linelist_path)
-        # linelist_sub = np.load(self.linelist_sub_path, allow_pickle=True).tolist()
+        if self.logger:
+            self.logger.info("ThAr Wavelength Calibration: Loading linelist and linelist subset paths")
+        linelist = np.load(self.linelist_path)
+        linelist_sub = np.load(self.linelist_sub_path, allow_pickle=True).tolist()
 
-        # if self.logger:
-        #     self.logger.info("ThAr Wavelength Calibration: Loading Redman line lists")
-        # redman_w = np.array(linelist['redman_w'], dtype=float)
-        # redman_i = np.array(linelist['redman_i'], dtype=float)
+        if self.logger:
+            self.logger.info("ThAr Wavelength Calibration: Loading Redman line lists")
+        redman_w = np.array(linelist['redman_w'], dtype=float)
+        redman_i = np.array(linelist['redman_i'], dtype=float)
 
-        # if self.logger:
-        #     self.logger.info("ThAr Wavelength Calibration: Loading flux and wavelengths")
-        # assert self.l1_obj.header['CAL-OBJ'].startswith('ThAr') #check this through line 75
-        # flux = self.l1_obj.data['CAL'][0,:,:]
-        # flux = np.nan_to_num(flux)
-        # flux[flux < 0] = np.min(flux[flux > 0])
-        # wls = self.l1_obj.data['SCI'][1,:,:]
+        if self.logger:
+            self.logger.info("ThAr Wavelength Calibration: Loading flux and wavelengths")
+        assert self.l1_obj.header['CAL-OBJ'].startswith('ThAr') #check this through line 75
+        flux = self.l1_obj.data['CAL'][0,:,:]
+        flux = np.nan_to_num(flux)
+        flux[flux < 0] = np.min(flux[flux > 0])
+        wls = self.l1_obj.data['SCI'][1,:,:]
 
-        # if self.logger:
-        #     self.logger.info("ThAr Wavelength Calibration: Running calibration algorithm") 
-        # thar_wavesoln = self.alg.run_on_all_orders(flux,redman_w,redman_i,wls,self.plot_toggle)
+        if self.logger:
+            self.logger.info("ThAr Wavelength Calibration: Running calibration algorithm") 
+        thar_wavesoln = self.alg.run_on_all_orders(flux,redman_w,redman_i,wls,self.plot_toggle)
 
-        # self.l1_obj.data['SCI'][1,:,:] = thar_wavesoln
+        self.l1_obj.data['SCI'][1,:,:] = thar_wavesoln
 
         return Arguments(self.l1_obj)
