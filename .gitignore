@@ -1,4 +1,6 @@
-# Byte-compiled / optimized / DLL files
+examples/V1/BiasRecipe/BiasRecipeRes/
+examples/V1/recipe_results/
+*.npy
 *~
 *.DS_Store
 .idea/
