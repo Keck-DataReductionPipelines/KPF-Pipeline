@@ -4,18 +4,18 @@ import matplotlib.pyplot as plt
 import scipy
 import os
 from scipy import signal
-from scipy.signal import find_peaks as peak
-from scipy.optimize import curve_fit as cv
+# from scipy.signal import find_peaks as peak
+# from scipy.optimize import curve_fit as cv
 from scipy.special import erf
 from scipy.interpolate import InterpolatedUnivariateSpline
 #from lmfit.models import GaussianModel #fit type can be changed
 #uses _find_peaks, gaussfit3, gaussval2 from PyReduce
 #import get_config_value once it is util primitve
 from modules.Utils.config_parser import ConfigHandler
-from kpfpipe.models.level0 import KPF0
-from keckdrpframework.models.arguments import Arguments
+# from kpfpipe.models.level0 import KPF0
+# from keckdrpframework.models.arguments import Arguments
 from scipy.optimize.minpack import curve_fit
-from numpy.polynomial.polynomial import Polynomial
+# from numpy.polynomial.polynomial import Polynomial
 from numpy.polynomial.legendre import Legendre
 
 class LFCWaveCalibration:
@@ -52,6 +52,7 @@ class LFCWaveCalibration:
             save_diagnostics ():
             quicklook_ord_s ():
         """
+
         configpull=ConfigHandler(config,'PARAM')
         self.max_wave=configpull.get_config_value('max_wave',9300)
         self.min_wave=configpull.get_config_value('min_wave',3800)
@@ -61,7 +62,7 @@ class LFCWaveCalibration:
         self.n_sections=configpull.get_config_value('n_sections',20)
         #self.clip_peaks_opt=configpull.get_config_value('clip_peaks',False)
         self.skip_orders=configpull.get_config_value('skip_orders',None)
-        self.save_diagnostics=configpull.get_config_value('save_diagnostics',False)
+        self.save_diagnostics=configpull.get_config_value('save_diagnostics', 'False')
         self.quicklook_ord_steps=configpull.get_config_value('quicklook_ord_steps',5)
         self.config=config
         self.logger=logger
@@ -75,7 +76,7 @@ class LFCWaveCalibration:
         Returns:
             order_list (list): List of orders to run wavelength calibration on.
         """
-        order_list = [*range(self.min_order,self.max_order,step)]
+        order_list = [*range(self.min_order, self.max_order + 1,step)]
         if self.skip_orders:
             #self.skip_orders = self.skip_orders.split(',')
             for i in self.skip_orders:
@@ -102,6 +103,7 @@ class LFCWaveCalibration:
         #     print ("Cannot find data extension when there is more than one image HDU")
         # else:
         #     master_data=m_file[1].data
+
         m_file = fits.open(master_path)
         master_data = m_file['SCIWAVE'].data
             
@@ -881,18 +883,20 @@ class LFCWaveCalibration:
         Returns:
             poly_soln (np.array): [description]
         """
+
         if quicklook == False:
             if type(self.save_diagnostics) == str:
                 SAVEPLOTS = ('{}/%s' % self.save_diagnostics).format(os.getcwd())
                 if not os.path.isdir(SAVEPLOTS):
                     os.makedirs(SAVEPLOTS)
-            if self.save_diagnostics == False:
+            if self.save_diagnostics == 'False':
                 SAVEPLOTS = None
 
             cl_ang = self.comb_gen(f0, f_rep)
             order_list = self.remove_orders(step=1)
             n_orders = len(order_list)
             new_calflux = self.mask_array_neid(calflux,n_orders)
+
             # perform wavelength calibration
             poly_soln,thars = self.fit_many_orders(new_calflux, master_data, cl_ang, order_list, print_update=True, plt_path=SAVEPLOTS)
 
