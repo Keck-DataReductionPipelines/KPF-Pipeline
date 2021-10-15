@@ -86,7 +86,6 @@ class WaveCalibrate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-
         #Wavelength calibration algorithm setup
         self.alg=LFCWaveCalibration(self.config,self.logger)
 
@@ -105,13 +104,16 @@ class WaveCalibrate(KPF1_Primitive):
         # 1. extracting master data
         if self.logger:
             self.logger.info("Wavelength Calibration: Extracting master data")  
+
         master_data=self.alg.get_master_data(self.master_wavelength)
-        # master_data = self.master_wavelength.data['SCI1'][1,:,:]
+
+        # check that we actually have an LFC image
+        if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
+            raise ValueError('Not an LFC file!')
+
         # 2. get comb frequency values
         if self.logger:
             self.logger.info("Wavelength Calibration: Getting comb frequency values ")
-
-        print ('f0 key and frep keys:', type(self.f0_key), type(self.frep_key))
 
         if self.f0_key:
             if type(self.f0_key) == str:
@@ -140,23 +142,25 @@ class WaveCalibrate(KPF1_Primitive):
         # 2. starting loop
         if self.logger:
             self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
-
-        for prefix in ['CAL']: #change to recipe config: 'orderlette_names' 
-            if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
+        
+        for prefix in ['CALFLUX']: #change to recipe config: 'orderlette_names' 
+            if self.l1_obj[prefix] is not None:
                 self.logger.info("Wavelength Calibration: Running {prefix}")
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Extracting flux")
-                flux = self.l1_obj.data[prefix][0,:,:]#0 referring to 'flux'
-                #print('flux shape:', np.shape(flux))
+                
+                flux = self.l1_obj[prefix]
+
                 flux = np.nan_to_num(flux)
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Running algorithm")  
+
                 wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr,self.quicklook)
-                #print('soln shape:', np.shape(wl_soln))
+
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Saving solution output")  
-                self.l1_obj.data[prefix][1,:,:]=wl_soln
-        print(np.shape(self.l1_obj.data[prefix][1,:,:]),self.l1_obj.data[prefix][1,:,:])
+                self.l1_obj['CALWAVE']=wl_soln
+
         if self.l1_obj is not None:
             self.l1_obj.receipt_add_entry('Wavelength Calibration', self.__module__,
                                           f'config_path={self.config_path}', 'PASS')
