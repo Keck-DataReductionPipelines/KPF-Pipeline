@@ -1685,7 +1685,9 @@ class OptimalExtractionAlg:
 
         """
         all_names = self.get_orderlette_names()
+        traces_per_order = self.get_total_orderlettes_from_image()
         order_name_idx = all_names.index(order_name) if order_name in all_names else 0
+        order_name_idx = order_name_idx%traces_per_order
 
         return order_name_idx
 
