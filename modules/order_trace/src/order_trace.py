@@ -22,6 +22,10 @@
                     - `action.args['data_col_range'] (list, optional)`: Column coverage of the level 0 data to be
                       processed. If the number is less than 0, it stands for the position relative to the last column
                       of the image.
+                    - `action.args['data_extension'] (string, optional)`: name of the extension with the image. `data`
+                      is the default.
+                    - `action.args['result_extension'] (string, optional)`: name of the extension containing the order
+                      trace result. Defaults to 'ORDER_TRACE_RESULT'.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace  in the master
@@ -95,7 +99,13 @@ class OrderTrace(KPF0_Primitive):
 
         # input argument
         self.input = action.args[0]
-        row, col = np.shape(self.input.data)
+
+        if 'data_extension' in args_keys and action.args['data_extension'] is not None:
+            self.flat_data = self.input[action.args['data_extension']]
+        else:
+            self.flat_data = self.input.data
+
+        row, col = np.shape(self.flat_data)
         self.row_range = [0, row-1]
         self.col_range = [0, col-1]
         self.cols_to_reset = None
@@ -113,7 +123,11 @@ class OrderTrace(KPF0_Primitive):
         if 'rows_to_reset' in args_keys and action.args['rows_to_reset'] is not None:
             self.rows_to_reset = action.args['rows_to_reset']
 
-        self.flat_data = self.input.data
+        if 'result_extension' in args_keys and action.args['result_extension'] is not None:
+            self.result_extension = action.args['result_extension']
+        else:
+            self.result_extension = 'ORDER_TRACE_RESULT'
+
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -139,7 +153,7 @@ class OrderTrace(KPF0_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.input, KPF0) and \
-            isinstance(self.input.data, np.ndarray)
+            isinstance(self.flat_data, np.ndarray)
 
         return success
 
@@ -196,11 +210,12 @@ class OrderTrace(KPF0_Primitive):
 
         # self.input.create_extension('ORDER_TRACE_RESULT')
         # self.input.extensions['ORDER_TRACE_RESULT'] = df
-        self.input.create_extension('ORDER_TRACE_RESULT', pd.DataFrame)
-        self.input.ORDER_TRACE_RESULT = df
+        # self.input.create_extension(self.result_extension, pd.DataFrame)
+        self.input[self.result_extension]= df
 
         for att in df.attrs:
-            self.input.header['ORDER_TRACE_RESULT'][att] = df.attrs[att]
+            # self.input.header['ORDER_TRACE_RESULT'][att] = df.attrs[att]
+            self.input.header[self.result_extension][att] = df.attrs[att]
 
         self.input.receipt_add_entry('OrderTrace', self.__module__, f'config_path={self.config_path}', 'PASS')
         if self.logger:

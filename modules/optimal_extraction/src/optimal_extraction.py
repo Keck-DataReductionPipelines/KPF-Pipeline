@@ -112,7 +112,9 @@ class OptimalExtraction(KPF0_Primitive):
                     'extraction_method': 'optimal',
                     'wavecal_fits': None,
                     'to_set_wavelength_cal': False,
-                    'clip_file': None
+                    'clip_file': None,
+                    'data_extension': 'DATA',
+                    'trace_extension': 'ORDER_TRACE_RESULT'
                 }
 
     NORMAL = 0
@@ -142,6 +144,8 @@ class OptimalExtraction(KPF0_Primitive):
         self.wavecal_fits = self.get_args_value('wavecal_fits', action.args, args_keys) # providing wavelength calib.
         self.to_set_wavelength_cal = self.get_args_value('to_set_wavelength_cal', action.args, args_keys) # set wave cal
         self.clip_file = self.get_args_value('clip_file', action.args, args_keys)
+        data_ext = self.get_args_value('data_extension', action.args, args_keys)
+        self.order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -158,12 +162,14 @@ class OptimalExtraction(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = OptimalExtractionAlg(self.input_flat.DATA,
-                                        self.input_flat.header['DATA'],
-                                        self.input_spectrum.DATA,
-                                        self.input_spectrum.header['DATA'] if self.input_spectrum is not None else None,
-                                        self.input_flat.ORDER_TRACE_RESULT,
-                                        self.input_flat.header['ORDER_TRACE_RESULT'],
+        spec_header = self.input_spectrum.header[data_ext] \
+            if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
+        self.alg = OptimalExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
+                                        self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,
+                                        self.input_spectrum[data_ext] if hasattr(self.input_spectrum, data_ext) else None,
+                                        spec_header,
+                                        self.input_flat[self.order_trace_ext],
+                                        self.input_flat.header[self.order_trace_ext],
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
@@ -175,7 +181,7 @@ class OptimalExtraction(KPF0_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0) and \
-            'ORDER_TRACE_RESULT' in self.input_flat.extensions
+           self.order_trace_ext in self.input_flat.extensions
 
         return success
 
@@ -215,6 +221,7 @@ class OptimalExtraction(KPF0_Primitive):
 
         all_order_names = self.order_name if type(self.order_name) is list else [self.order_name]
         for order_name in all_order_names:
+
             o_set = self.alg.get_order_set(order_name)
             if o_set.size > 0 :
                 s_order = self.start_order if self.start_order is not None else 0
@@ -255,14 +262,13 @@ class OptimalExtraction(KPF0_Primitive):
             total_order, width = np.shape(op_result.values)
         else:
             total_order = 0
-
         def get_data_extensions_on(order_name, ins):
             if ins == 'NEID':
                 ext_name = [order_name + ext for ext in ['FLUX', 'VAR', 'WAVE']]
             elif ins == 'KPF':
                 if 'FLUX' in order_name:
                     ext_name = [order_name, order_name.replace('FLUX', 'VAR'),
-                                order_name.replace['FLUX', 'WAVE']]
+                                order_name.replace('FLUX', 'WAVE')]
                 else:
                     ext_name = [order_name]
             else:  # temporary setting, need more instrument information
@@ -275,9 +281,10 @@ class OptimalExtraction(KPF0_Primitive):
             ext_names = get_data_extensions_on(order_name, ins)
             data_ext_name = ext_names[0]
 
-            data = op_result.values
-            kpf1_obj.create_extension(data_ext_name, np.array)
-            setattr(kpf1_obj, data_ext_name, data)
+            # data = op_result.values
+            kpf1_obj[data_ext_name] = op_result.values
+            #kpf1_obj.create_extension(data_ext_name, np.array)
+            #setattr(kpf1_obj, data_ext_name, data)
 
             for att in op_result.attrs:
                 kpf1_obj.header[data_ext_name][att] = op_result.attrs[att]
@@ -286,8 +293,9 @@ class OptimalExtraction(KPF0_Primitive):
                 for ext_idx in range(1, 3):
                     if not hasattr(kpf1_obj, ext_names[ext_idx]):         # no ext name yet, for case like neid
                         zero_data = np.zeros((total_order, width))
-                        kpf1_obj.create_extension(ext_names[ext_idx], np.array)
-                        setattr(kpf1_obj, ext_names[ext_idx], zero_data)
+                        kpf1_obj[ext_names[ext_idx]] = zero_data
+                        # kpf1_obj.create_extension(ext_names[ext_idx], np.array)
+                        # setattr(kpf1_obj, ext_names[ext_idx], zero_data)
                     elif np.size(getattr(kpf1_obj, ext_names[ext_idx])) == 0:
                         zero_data = np.zeros((total_order, width))        # for case like kpf, need more check
                         setattr(kpf1_obj, ext_names[ext_idx], zero_data)
@@ -304,7 +312,6 @@ class OptimalExtraction(KPF0_Primitive):
     def add_wavecal_to_level1_data(self, level1_obj: KPF1, order_name: str, level1_sample: KPF1, level0_sample: KPF0):
         if level1_sample is None and level0_sample is None:
             return False
-
         ins = self.alg.get_instrument()
         def get_extension_on(order_name, ins, ext_type):
             if ins == 'NEID':
@@ -338,7 +345,7 @@ class OptimalExtraction(KPF0_Primitive):
         if wave_header is None:
             return False
 
-        level1_obj.header[wave_ext_name] = wave_header
+        level1_obj.header[wave_ext_name] = wave_header   # assign the item or set?
 
         if not self.to_set_wavelength_cal:  # no data setting
             return True
@@ -346,7 +353,7 @@ class OptimalExtraction(KPF0_Primitive):
         if level1_sample is not None:   # assume wavelength calibration data is from level1 sample
             wave_data = getattr(level1_sample, wave_ext_name) if hasattr(level1_sample, wave_ext_name) else None
         else:    # assume wavelength calibration data is in level0 sample
-            wave_data = getattr(level0_sample, wave_ext_name) if hasattr(level0_sample, wave_ext_name) else None
+            wave_data = getattr(level0_sample, 'DATA') if hasattr(level0_sample, 'DATA') else None
 
         if wave_data is None:               # data setting error
             return False
@@ -385,6 +392,10 @@ class OptimalExtraction(KPF0_Primitive):
             else:
                 method = OptimalExtractionAlg.OPTIMAL
         else:
+            if key == 'data_extension' or key == 'trace_extension':
+                if v is None:
+                    v = self.default_args_val[key]
+
             return v
 
         return method

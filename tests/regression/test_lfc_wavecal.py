@@ -50,7 +50,7 @@ def start_alg():
     lfc_start = LFCWaveCalibration(config=config_vals)
     return test_comb,test_thar,lfc_start
 
-def test_run_alg():
+def disabled_test_run_alg():
     config_vals = configparser.ConfigParser()
     config_vals['PARAM'] = {
         'min_wave': 3800,
@@ -80,7 +80,7 @@ def test_run_alg():
     cl_ang = algg.comb_gen(f0,frep)
     poly_soln = algg.fit_many_orders(combs,thars,cl_ang,orders)
     
-def test_rv_acc():
+def disabled_test_rv_acc():
     config_vals = configparser.ConfigParser()
     config_vals['PARAM'] = {
         'min_wave': 3800,
