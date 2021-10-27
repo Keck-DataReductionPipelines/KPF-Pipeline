@@ -14,29 +14,29 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.wavelength_cal.src.alg import LFCWaveCalibration
+from modules.wavelength_calibration.src.alg import WaveCalibrationAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default_recipe_neid.cfg'
+DEFAULT_CFG_PATH = 'modules/wavelength_calibration/configs/default.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
     """
     This module defines class `WaveCalibrate,` which inherits from KPF1_Primitive and provides methods
-    to perform the event `LFC wavelength calibration` in the recipe.
+    to perform the event `wavelength calibration` in the recipe.
 
     Args:
         KPF1_Primitive: Parent class
-        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCalibration` event issued in recipe.
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveCalibrationAlg` event issued in recipe.
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
 
     Attributes:
         l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[0]`
         master_wavelength (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[1]`
         data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
-        config_path (str): Path of config file for LFC wavelength calibration.
+        config_path (str): Path of config file for wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
-        alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
+        alg (modules.wavelength_cal.src.alg.WaveCalibrationAlg): Instance of `WaveCalibrationAlg,` which has operation codes for Wavelength Calibration.
     """
 
     default_args_val = {
@@ -50,7 +50,7 @@ class WaveCalibrate(KPF1_Primitive):
         WaveCalibrate constructor.
 
         Args:
-            action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
+            action (Action): Contains positional arguments and keyword arguments passed by the `WaveCal` event issued in recipe:
               
                 `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 file
                 `action.args[1] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing master file
@@ -88,7 +88,7 @@ class WaveCalibrate(KPF1_Primitive):
 
 
         #Wavelength calibration algorithm setup
-        self.alg=LFCWaveCalibration(self.config,self.logger)
+        self.alg=WaveCalibrationAlg(self.config,self.logger)
 
         #Preconditions
        
