@@ -19,7 +19,7 @@ order_name = config.ARGUMENT.order_name
 data_ext = config.ARGUMENT.order_trace_data_extension
 output_ext = config.ARGUMENT.order_trace_output_extension
 
-orderlette_names = config.ARGUMENT.orderlette_names
+orderlet_names = config.ARGUMENT.orderlet_names
 op_tag = config.ARGUMENT.op_tag
 wave_from_lev1 = config.ARGUMENT.wave_from_lev1
 wave_fits = config.ARGUMENT.wave_fits
@@ -36,4 +36,4 @@ obs_rect = '_byclip'
 
 invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
 invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
-#invoke_subrecipe("./examples/test_kpf_radial_velocity.recipe")
+invoke_subrecipe("./examples/test_kpf_radial_velocity_reweight_2.recipe")
