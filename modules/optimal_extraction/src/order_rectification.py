@@ -118,7 +118,7 @@ class OrderRectification(KPF0_Primitive):
         # action.args[1] is for level 0 flat with order trace result extension
         self.input_spectrum = action.args[0]  # kpf0 instance
         self.input_flat = action.args[1]      # kpf0 instance with flat data
-        self.order_name = self.get_args_value('order_name', action.args, args_keys)
+        self.orderlet_names = self.get_args_value('orderlet_names', action.args, args_keys)
         self.max_result_order = self.get_args_value("max_result_order", action.args, args_keys)
         self.start_order = self.get_args_value("start_order", action.args, args_keys)  # for the result of order trace
         self.rectification_method = self.get_args_value("rectification_method", action.args, args_keys)
@@ -205,7 +205,7 @@ class OrderRectification(KPF0_Primitive):
         if self.logger:
             self.logger.info("OrderRectification: rectifying order...")
 
-        all_order_names = self.order_name if type(self.order_name) is list else [self.order_name]
+        all_order_names = self.orderlet_names if type(self.orderlet_names) is list else [self.orderlet_names]
         all_orders = []
         for order_name in all_order_names:
             o_set = self.alg.get_order_set(order_name)
