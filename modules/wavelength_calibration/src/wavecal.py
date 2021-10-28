@@ -69,6 +69,9 @@ class WaveCalibrate(KPF1_Primitive):
         self.f0_key = self.action.args[2]
         self.frep_key = self.action.args[3]
         self.quicklook = self.action.args[4]
+        self.linelist_path = self.action.args[5]
+        self.linelist_sub_path = self.action.args[6]
+        self.extensions = self.action.args[7]
         self.data_type = self.get_args_value('data_type', action.args, args_keys)
 
         #Input configuration
@@ -102,6 +105,26 @@ class WaveCalibrate(KPF1_Primitive):
         Returns:
             Level 1 data, containing wavelength-per-pixel result.
         """
+        # 0. setting up extract and save extension names
+        #color opts: GREEN, RED
+        #prefix opts: SCI, SKY, CAL
+        #suffix opts: FLUX1, FLUX2, FLUX3, FLUX (corresponding WAVEs)
+        output_ext_list = []
+        for ext in self.extensions:
+            split_ext = ext.split('_')
+            color = split_ext[0]
+            prefix = split_ext[1]
+            suffix = split_ext[2]
+
+            for i in ('1','2','3'):
+                if suffix.endswith(i):
+                    no = '_' + i
+                else:
+                    no = None
+
+            output_ext = color + prefix + 'WAVE' + no
+            output_ext_list.append(output_ext)
+
         # 1. extracting master data
         if self.logger:
             self.logger.info("Wavelength Calibration: Extracting master data")  
@@ -141,22 +164,64 @@ class WaveCalibrate(KPF1_Primitive):
         if self.logger:
             self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
 
-        for prefix in ['CAL']: #change to recipe config: 'orderlette_names' 
-            if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
-                self.logger.info("Wavelength Calibration: Running {prefix}")
-                if self.logger:
-                    self.logger.info("Wavelength Calibration: Extracting flux")
-                flux = self.l1_obj.data[prefix][0,:,:]#0 referring to 'flux'
-                #print('flux shape:', np.shape(flux))
-                flux = np.nan_to_num(flux)
-                if self.logger:
-                    self.logger.info("Wavelength Calibration: Running algorithm")  
-                wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr,self.quicklook)
-                #print('soln shape:', np.shape(wl_soln))
-                if self.logger:
-                    self.logger.info("Wavelength Calibration: Saving solution output")  
-                self.l1_obj.data[prefix][1,:,:]=wl_soln
-        print(np.shape(self.l1_obj.data[prefix][1,:,:]),self.l1_obj.data[prefix][1,:,:])
+        for input_ext,output_ext in (self.extensions,output_ext_list): #change to recipe config: 'orderlette_names' 
+            if cal_type == 'LFC':
+                if self.l1_obj[input_ext] is not None:
+                    self.logger.info("Wavelength Calibration: Running {input_ext}")
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Extracting flux")
+                    flux = self.l1_obj[input_ext]#0 referring to 'flux'
+                    #print('flux shape:', np.shape(flux))
+                    flux = np.nan_to_num(flux)
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Running algorithm")  
+                    wl_soln=self.alg.open_and_run_LFC(flux,master_data,comb_f0,comb_fr,self.quicklook)
+                    #print('soln shape:', np.shape(wl_soln))
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Saving solution output")  
+                    self.l1_obj[output_ext]=wl_soln
+            if cal_type == 'Etalon':
+                if self.l1_obj[input_ext] is not None:
+                    self.logger.info("Wavelength Calibration: Running {input_ext}")
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Extracting flux")
+                    flux = self.l1_obj[input_ext]#0 referring to 'flux'
+                    #print('flux shape:', np.shape(flux))
+                    flux = np.nan_to_num(flux)
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Running algorithm")  
+                    wl_soln=self.alg.open_and_run_etalon(flux,self.quicklook)
+                    #print('soln shape:', np.shape(wl_soln))
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Saving solution output")  
+                    self.l1_obj[output_ext]=wl_soln
+            if cal_type == 'ThAr':
+                if self.l1_obj[input_ext] is not None:
+                    self.logger.info("Wavelength Calibration: Running {input_ext}")
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Extracting linelists")
+                    linelist = np.load(self.linelist_path)
+                    redman_w = np.array(linelist['redman_w']),dtype=float)
+                    redman_i = np.array(linelist(['redman_i']),dtype=float)
+
+                    linelist_sub = np.load(self.linelist_subset_path,allow_pickle = True)
+                    assert self.l1_obj[0].header['CAL-OBJ'].startswith('ThAr')
+
+                    flux = self.l1_obj[input_ext]#0 referring to 'flux'
+                    #print('flux shape:', np.shape(flux))
+                    flux = np.nan_to_num(flux)
+                    flux[flux < 0] = np.min(flux[flux > 0])
+                    other_wls = self.l1_obj[]
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Running algorithm")  
+                    wl_soln=self.alg.open_and_run_thar(flux,redman_w,redman_i,linelist_sub,other_wls,plot_toggle,self.quicklook)
+                    #print('soln shape:', np.shape(wl_soln))
+                    if self.logger:
+                        self.logger.info("Wavelength Calibration: Saving solution output")  
+                    self.l1_obj[output_ext]=wl_soln
+            else: 
+                raise ValueError('Wavelength calibration type not found')
+        
         if self.l1_obj is not None:
             self.l1_obj.receipt_add_entry('Wavelength Calibration', self.__module__,
                                           f'config_path={self.config_path}', 'PASS')
