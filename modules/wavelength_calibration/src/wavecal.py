@@ -120,7 +120,7 @@ class WaveCalibrate(KPF1_Primitive):
                 if suffix.endswith(i):
                     no = '_' + i
                 else:
-                    no = None
+                    no = ''
 
             output_ext = color + prefix + 'WAVE' + no
             output_ext_list.append(output_ext)
