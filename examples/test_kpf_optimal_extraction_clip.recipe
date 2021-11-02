@@ -22,7 +22,7 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 			out_order = output_ext + '_' + ccd
 			clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd 
 
-			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, order_name=orderlet_names[idx], 
+			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, orderlet_names=orderlet_names[idx], 
 						rectification_method=rect_method, clip_file=clip_file,
 						data_extension=ccd, trace_extension=out_order)
 		result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
@@ -45,7 +45,7 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 				order_trace_ext = output_ext + '_' + ccd
 				clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd
 				
-				op_data = OptimalExtraction(lev0_data, lev0_flat_rect, op_data, order_name = order_name,
+				op_data = OptimalExtraction(lev0_data, lev0_flat_rect, op_data, orderlet_names=order_name,
 						rectification_method=rect_method, extraction_method=extract_method, 
 						clip_file=clip_file, data_extension=ccd, trace_extension=order_trace_ext,
 						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)

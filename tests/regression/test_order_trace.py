@@ -47,7 +47,11 @@ def start_paras_order_trace():
         'locate_cluster_noise': 0.0,
         'cluster_mask': 1,
         'order_width_th': 8,
-        'width_default': 7
+        'width_default': 7,
+        'trace_v_gap': 8,
+        'fit_error_threshold': 2.5,
+        'sigma_for_width_estimation': 3.0,
+        'max_order_distance':  -1
     }
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
@@ -56,7 +60,7 @@ def start_paras_order_trace():
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
 
     flat_data = fits.getdata(paras_flat)
-    order_t = OrderTraceAlg(flat_data[1000:2200, :], config_paras)
+    order_t = OrderTraceAlg(flat_data[1000:2200, :], config=config_paras)
     # order_t = OrderTraceAlg(flat_data, config_paras)
     # order_t.add_file_logger("")
     return order_t
@@ -71,7 +75,11 @@ def test_init_exceptions():
         'locate_cluster_noise': 0.0,
         'cluster_mask': 1,
         'order_width_th': 8,
-        'width_default': 7
+        'width_default': 7,
+        'trace_v_gap': 8,
+        'fit_error_threshold': 2.5,
+        'sigma_for_width_estimation': 3.0,
+        'max_order_distance': -1
     }
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
     paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'

@@ -18,7 +18,7 @@
                       optimal extraction.
                     - `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing flat data and order
                       trace result.
-                    - `action.args[2] (kpfpipe.models.level0.KPF1)`:  Instance of `KPF1` containing optimal
+                    - `action.args[2] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing optimal
                       extraction results. If not existing, it is None.
                     - `action.args['order_name'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
@@ -108,8 +108,8 @@ DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 
 class OptimalExtraction(KPF0_Primitive):
-    default_agrs_val = {
-                    'orderlet_names': 'SCI',
+    default_args_val = {
+                    'order_name': 'SCI',
                     'max_result_order': -1,
                     'start_order': 0,
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical'
@@ -118,7 +118,10 @@ class OptimalExtraction(KPF0_Primitive):
                     'to_set_wavelength_cal': False,
                     'clip_file': None,
                     'data_extension': 'DATA',
-                    'trace_extension': 'ORDER_TRACE_RESULT'
+                    'poly_degree': 3,
+                    'origin': [0, 0],
+                    'trace_extension': None,
+                    'trace_file': None
                 }
 
     NORMAL = 0
@@ -148,8 +151,10 @@ class OptimalExtraction(KPF0_Primitive):
         self.wavecal_fits = self.get_args_value('wavecal_fits', action.args, args_keys) # providing wavelength calib.
         self.to_set_wavelength_cal = self.get_args_value('to_set_wavelength_cal', action.args, args_keys) # set wave cal
         self.clip_file = self.get_args_value('clip_file', action.args, args_keys)
+
         data_ext = self.get_args_value('data_extension', action.args, args_keys)
-        self.order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
+        order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
+        order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -165,6 +170,16 @@ class OptimalExtraction(KPF0_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
+        self.order_trace_data = None
+        if order_trace_file:
+            self.order_trace_data = pd.read_csv(order_trace_file, header=0, index_col=0)
+            poly_degree = self.get_args_value('poly_degree', action.args, args_keys)
+            origin = self.get_args_value('origin', action.args, args_keys)
+            order_trace_header = {'STARTCOL': origin[0], 'STARTROW': origin[1], 'POLY_DEG': poly_degree}
+        elif order_trace_ext:
+            self.order_trace_data = self.input_flat[order_trace_ext]
+            order_trace_header = self.input_flat.header[order_trace_ext]
+
         # Order trace algorithm setup
         spec_header = self.input_spectrum.header[data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
@@ -172,8 +187,8 @@ class OptimalExtraction(KPF0_Primitive):
                                         self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_spectrum[data_ext] if hasattr(self.input_spectrum, data_ext) else None,
                                         spec_header,
-                                        self.input_flat[self.order_trace_ext],
-                                        self.input_flat.header[self.order_trace_ext],
+                                        self.order_trace_data,
+                                        order_trace_header,
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
@@ -185,7 +200,7 @@ class OptimalExtraction(KPF0_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0) and \
-           self.order_trace_ext in self.input_flat.extensions
+                  (self.order_trace_data is not None)
 
         return success
 
@@ -307,7 +322,6 @@ class OptimalExtraction(KPF0_Primitive):
     def add_wavecal_to_level1_data(self, level1_obj: KPF1, order_name: str, level1_sample: KPF1, level0_sample: KPF0):
         if level1_sample is None and level0_sample is None:
             return False
-
         ins = self.alg.get_instrument()
 
         def get_extension_on(order_name, ext_type):
@@ -363,7 +377,7 @@ class OptimalExtraction(KPF0_Primitive):
         if key in args_keys:
             v = args[key]
         else:
-            v = self.default_agrs_val[key]
+            v = self.default_args_val[key]
 
         if key == 'rectification_method':
             if v is not None and isinstance(v, str):

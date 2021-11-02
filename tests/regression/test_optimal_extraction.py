@@ -59,7 +59,9 @@ def start_paras_optimal_extraction(rectification_method=OptimalExtractionAlg.NoR
     config_paras['PARAM'] = {
         'instrument': 'PARAS',
         'correct_method': 'sub',
-        'width_default': 6
+        'total_image_orderlettes': 1,
+        'orderlette_names': ['SCI'],
+        'start_order': 0
     }
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'

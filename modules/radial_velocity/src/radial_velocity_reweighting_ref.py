@@ -89,13 +89,13 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
 
         self.reweighting_method = action.args[1]
-        self.total_order = action.args[2]
+        self.total_segment = action.args[2]
 
         self.ccf_hdu_name = action.args['ccf_hdu_name'] if 'ccf_hdu_name' in args_keys else 'CCF'
         self.ccf_start_index = action.args['ccf_start_index'] if 'ccf_start_index' in args_keys else 0
         self.is_ratio_data = action.args['is_ratio_data'] if 'is_ratio_data' in args_keys else False
         self.ccf_ratio_file = action.args['ccf_ratio_file'] if 'ccf_ratio_file' in args_keys else ''
-        self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 1
+        # self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 1
 
         file_list = action.args[0] if isinstance(action.args[0], list) else [action.args[0]]
         self.files = []
@@ -176,25 +176,26 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
             for ccf_file in self.files:
                 ccf_ref = get_template_observation(ccf_file, self.ccf_hdu_name, "observation with ccf error")
                 header = ccf_file.header[self.ccf_hdu_name]
-                at_idx_key = 'CCF_' + str(self.rv_ext_idx) + '_AT'
-                at_idx = header[at_idx_key] if at_idx_key in header else 0
-                ccf_ref = ccf_ref[at_idx:at_idx + header['TOTALORD']] if at_idx_key in header else ccf_ref
-                m_ccf_ref.append(ccf_ref)
+                total_orderlet = np.shape(ccf_ref)[0] if header['NAXIS'] == 3 else 1
 
-                t_order = min(np.shape(ccf_ref)[0], self.total_order)
-                # pick the max among all orders for each file
-                if self.reweighting_method == 'ccf_max':
-                    m_file.append(np.max([np.nanpercentile(ccf_ref[od, :], 95) for od in range(t_order)]))
-                elif self.reweighting_method == 'ccf_mean':
-                    m_file.append(np.max([np.nanmean(ccf_ref[od, :]) for od in range(t_order)]))
+                for o in range(total_orderlet):
+                    if total_orderlet > 1:
+                        m_ccf_ref.append(ccf_ref[o, :, :])
+                    else:
+                        m_ccf_ref.append(ccf_ref)
+                    t_segment = min(np.shape(ccf_ref)[0], self.total_segment)
+                    # pick the max among all segments for each file
+                    if self.reweighting_method == 'ccf_max':
+                        m_file.append(np.max([np.nanpercentile(ccf_ref[od, :], 95) for od in range(t_segment)]))
+                    elif self.reweighting_method == 'ccf_mean':
+                        m_file.append(np.max([np.nanmean(ccf_ref[od, :]) for od in range(t_segment)]))
 
-            # find the maximum among all files and get the ccf data of the file with the maximum ccf
+            # find the maximum among all sci orderlets and get the ccf data of the file with the maximum ccf
             tmp_idx = np.where(m_file == np.nanmax(m_file))[0]
             ccf_ref = m_ccf_ref[tmp_idx[0]]
-            t_order = min(np.shape(ccf_ref)[0], self.total_order)
-
+            t_segment = min(np.shape(ccf_ref)[0], self.total_segment)
             ccf_df = RadialVelocityAlg.make_reweighting_ratio_table(ccf_ref, self.ccf_start_index,
-                                                                    self.ccf_start_index + t_order - 1,
+                                                                    self.ccf_start_index + t_segment - 1,
                                                                     self.reweighting_method, max_ratio = 1.0,
                                                                     output_csv=self.ccf_ratio_file)
             ccf_ref = ccf_df.values
