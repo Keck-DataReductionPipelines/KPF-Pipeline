@@ -5,6 +5,8 @@
 # TODO: make output fits extension a cfg param
 # TODO: we should only put choices in config 
 # TODO: make a database rather than saving individual intermediate files
+# TODO: fourier decomposition of calibration error
+# TODO: plot of median flux per order?
 
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
