@@ -11,5 +11,5 @@ for bias_file_path in find_files(all_bias_files_path):
 
 for ext in lev0_ffi_exts:
     all_bias_files = find_files(all_bias_files_path)
-    master_bias_data = FrameCombinePrimitive('flat',all_bias_files,ext,'KPF')
+    master_bias_data = FrameCombinePrimitive('bias',all_bias_files,ext,'KPF')
     master_bias_result = to_fits(master_bias_data,masterbias_path)
