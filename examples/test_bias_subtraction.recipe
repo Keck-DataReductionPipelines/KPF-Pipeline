@@ -3,37 +3,16 @@ from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
-#kpfsim
-channel_orientation_ref_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/kpfsim_ccd_orient.txt'
-all_L0_files_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/L0_data_format_w_headers_20211001.fits'
-no_bias_L0_files_path = './examples/V1/BiasRecipe/BiasRecipeRes/nobias_tester_sim.fits'
-final_L0_files_path = './examples/V1/BiasRecipe/BiasRecipeRes/finalbias_tester_sim.fits'
-masterbias_path = KPFPIPE_TEST_DATA+'/KPF-Pipeline-TestData/KPF_Simulated_Data/test_zeros_masterbias.fits'
-
-master_bias_create = False
-lev0_ffi_exts = ['GREEN_CCD','RED_CCD']
-pl_overscan_reg = [2000,2200]
-srl_overscan_reg = [2000,2200]
-overscan_method = 'mean'
-order = 1
-oscan_clip = 5
-quicklook = False
-
 ref_output = OrientationReference(channel_orientation_ref_path)
 
-for raw_file in find_files(all_L0_files_path):
-    raw_file = kpf0_from_fits(raw_file,data_type='KPF')
-    L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'NEID')
-    L0_result = to_fits(L0_with_ffi,no_bias_L0_files_path)
+for raw_file_path in find_files(L0_files_path):
+    raw_file = kpf0_from_fits(raw_file_path,data_type='KPF')
+    L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'KPF')
+    L0_result = to_fits(L0_with_ffi,raw_file_path)
 
-#all_bias_files = find_files()
-if master_bias_create == True:
-    master_bias_data = FrameCombinePrimitive(all_bias_files,lev0_ffi_exts,'NEID')
-    master_bias_result = to_fits(master_bias_data,masterbias_path)
-if master_bias_create == False:
-    master_bias_data = find_files(masterbias_path)
+master_bias_data = find_files(masterbias_path)
 
-for raw_file in find_files(no_bias_L0_files_path):
-    raw_file = kpf0_from_fits(raw_file)
-    final_raw_frames_file = BiasSubtract(raw_file,masterbias_path,lev0_ffi_exts,'NEID',quicklook)
-    result = to_fits(final_raw_frames_file,final_L0_files_path)
+for raw_file_path in find_files(L0_files_path):
+    raw_file = kpf0_from_fits(raw_file_path)
+    final_raw_frames_file = BiasSubtract(raw_file,master_bias_data,lev0_ffi_exts,'KPF',quicklook)
+    result = to_fits(final_raw_frames_file,raw_file_path)
