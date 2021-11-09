@@ -55,9 +55,15 @@ class KPF2(KPF0):
         for key in del_keys:
             del self.header[key]
 
-        for key, value in self.header_definitions:
-            # assume 2D image
-            if key == 'NAXIS':
-                self.header['PRIMARY'][key] = 2
-            else:
-                self.header['PRIMARY'][key] = value()
+        # add header keywords
+        self.header_definitions = pd.read_csv(KPF_definitions.LEVEL2_HEADER_FILE)
+        for i, row in self.header_definitions.iterrows():
+            ext_name = row['Ext']
+            key = row['Keyword']
+            val = row['Value']
+            desc = row['Description']
+            if val is np.nan:
+                val = None
+            if desc is np.nan:
+                desc = None
+            self.header[ext_name][key] = (val, desc)
