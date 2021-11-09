@@ -34,7 +34,7 @@ class KPF1(KPF0):
         self.level = 1
 
         self.extensions = copy.copy(KPF_definitions.LEVEL1_EXTENSIONS)
-        self.header_definitions = KPF_definitions.LEVEL1_HEADER_KEYWORDS.items()
+        self.header_definitions = pd.read_csv(KPF_definitions.LEVEL1_HEADER_FILE)
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
 
         for key, value in self.extensions.items():
@@ -55,7 +55,6 @@ class KPF1(KPF0):
             del self.header[key]
 
         # add header keywords
-        self.header_definitions = pd.read_csv(KPF_definitions.LEVEL1_HEADER_FILE)
         for i, row in self.header_definitions.iterrows():
             ext_name = row['Ext']
             key = row['Keyword']
