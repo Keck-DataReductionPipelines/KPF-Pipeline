@@ -1,7 +1,7 @@
 from modules.optimal_extraction.src.order_rectification import OrderRectification
 from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
 
-output_dir = output_dir + 'tmp_flat_rect_obs_clip/'
+#output_dir = output_dir + 'tmp_flat_rect_obs_clip/'
 lev0_flat_pattern = output_dir + '*' + flat_stem_suffix + '.fits'
 
 for lev0_flat_file in find_files(lev0_flat_pattern):
@@ -14,7 +14,8 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 	output_lev0_flat_rect = output_dir + lev0_flat_stem + flat_rect + '.fits'
 	if not find_files(output_lev0_flat_rect):
 		lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type='KPF')
-		lev0_flat_rect = OrderRectification(None, lev0_flat_data, order_name=orderlette_names, 
+		lev0_flat_rect = OrderRectification(None, lev0_flat_data, orderlet_names=orderlet_names,
+						data_extension=data_ext, 
 						rectification_method=rect_method, clip_file=clip_file)
 		result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
 	else:
@@ -31,9 +32,9 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 			lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 			input_lev1_file = test_data_dir + input_lev1_prefix + code + '.fits'
 			wavecal_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
-			op_data = OptimalExtraction(lev0_data, lev0_flat_rect, None, order_name=orderlette_names,
+			op_data = OptimalExtraction(lev0_data, lev0_flat_rect, None, orderlet_names=orderlet_names,
 						rectification_method=rect_method, extraction_method=extract_method, 
-						clip_file=clip_file,
+						clip_file=clip_file, data_extension=data_ext, trace_extension=output_ext,
 						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
 			result = to_fits(op_data, output_lev1_rect_file)
 	

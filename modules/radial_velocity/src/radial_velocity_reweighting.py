@@ -14,15 +14,19 @@
                 - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
                   keyword arguments passed by the `RadialVelocityReweighting` event issued in the recipe:
 
-                    - `action.args[0] (str|KPF1)`: one file or one KPF1 with ccf for reweighting.
+                    - `action.args[0] (str|KPF2)`: one file or one KPF2 with ccf for reweighting.
                     - `action.args[1] (str)`: Reweighting method.
                     - `action.args[2] (pandas.DataFrame|np.ndarray)`: The ratio table or reference ccf for reweighting.
                     - `action.args[3] (int)`: total order for the ccf data.
                     - `action.args[4] (dict)`: Result from the init work made by `RadialVelocityInit` which makes
                       mask lines and velocity steps based on star and other module associated configuration for
                       radial velocity computation.
-                    - `action.args['ccf_hdu_index'] (int)`: The HDU index in fits file for the HDU with ccf data.
-                      Defaults to None.
+                    - `action.args['ccf_ext'] (str)`: The HDU name  in fits file for the HDU with ccf data.
+                      Defaults to 'CCF'.
+                    - `action.args['rv_ext'] (str)`: The HDU name in fits file for the HDU with rv data.
+                      Defaults to 'RV'.
+                    - `action.args['rv_ext_idx'] (int)`: The set index in the extension containing rv data.
+                      Defaults to 1.
                     - 'action.args['ccf_start_index'] (int)`: The order index that the first row of ccf_data is
                       associated with.
 
@@ -43,6 +47,7 @@
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
+                - `ccf_ext`: name of hdu containing ccf data
 
         * Method `__perform`:
 
@@ -72,8 +77,9 @@ import datetime
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
-from kpfpipe.primitives.level1 import KPF1_Primitive
-from kpfpipe.models.level1 import KPF1
+from kpfpipe.primitives.level2 import KPF2_Primitive
+from kpfpipe.models.level2 import KPF2
+
 
 # External dependencies
 from keckdrpframework.models.action import Action
@@ -81,12 +87,11 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 from modules.radial_velocity.src.alg import RadialVelocityAlg
-from modules.radial_velocity.src.alg import RadialVelocityAlgInit
 
 DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 
-class RadialVelocityReweighting(KPF1_Primitive):
+class RadialVelocityReweighting(KPF2_Primitive):
 
     default_agrs_val = {
         'order_name': 'SCI'
@@ -96,39 +101,28 @@ class RadialVelocityReweighting(KPF1_Primitive):
                  action: Action,
                  context: ProcessingContext) -> None:
         # Initialize parent class
-        KPF1_Primitive.__init__(self, action, context)
+        KPF2_Primitive.__init__(self, action, context)
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
 
-        self.ccf_hdu_index = action.args['ccf_hdu_index'] if 'ccf_hdu_index' in args_keys else None
+        self.ccf_ext = action.args['ccf_ext'] if 'ccf_ext' in args_keys else 'CCF'
         self.ccf_start_index = action.args['ccf_start_index'] if 'ccf_start_index' in args_keys else 0
+        self.rv_ext = action.args['rv_ext'] if 'rv_ext' in args_keys else 'RV'
+        self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 1
         self.ccf_data = None
         self.lev1_input = None
         self.lev1_file = None
-        self.jd = None
+        lev2_obj = None
 
         if isinstance(action.args[0], str):
-            self.lev1_file = action.args[0]
-
             if os.path.exists(action.args[0]):
-                hdulist = fits.open(action.args[0])
-                ccf_hdu = None
-                if hdulist is not None:
-                    if self.ccf_hdu_index is not None:
-                        ccf_hdu = hdulist[self.ccf_hdu_index]
-                    else:
-                        for hdu in hdulist:
-                            if 'EXTNAME' in hdu.header and hdu.header['EXTNAME'].lower().startswith('ccf'):
-                                ccf_hdu = hdu
-                                break
+                lev2_obj = KPF2.from_fits(action.args[0])
+        elif isinstance(action.args[0], KPF2):
+            lev2_obj = action.args[0]
 
-                if ccf_hdu is not None:
-                    self.jd = ccf_hdu.header['CCFJDSUM'] if 'CCFJDSUM' in ccf_hdu.header else 0.0
-                    self.ccf_data = ccf_hdu.data if not isinstance(ccf_hdu.data, fits.fitsrec.FITS_rec) \
-                            else pd.DataFrame(ccf_hdu.data).values
-        elif isinstance(action.args[0], KPF1):
-            self.lev1_input = action.args[0]
-            self.ccf_data = action.args[0].extensions['CCF'].values
-            self.jd = action.args[0].header['CCF']['CCFJDSUM']
+        self.lev2_obj = lev2_obj
+        self.ccf_data = None
+        if self.ccf_ext and hasattr(lev2_obj, self.ccf_ext):
+            self.ccf_data = lev2_obj[self.ccf_ext]
 
         self.reweighting_method = action.args[1]
         self.ccf_ref = action.args[2].values if isinstance(action.args[2], pd.DataFrame) else action.args[2]
@@ -154,7 +148,7 @@ class RadialVelocityReweighting(KPF1_Primitive):
         Check for some necessary pre conditions
         """
         # input argument must be KPF0
-        success = self.ccf_data is not None and isinstance(self.ccf_data, np.ndarray) \
+        success = self.lev2_obj is not None and self.ccf_data is not None and isinstance(self.ccf_data, np.ndarray) \
                   and isinstance(self.ccf_ref, np.ndarray)
 
         return success
@@ -175,60 +169,80 @@ class RadialVelocityReweighting(KPF1_Primitive):
             (this part will be updated after level 2 data model is made.)
         """
 
-        ny, nx = np.shape(self.ccf_data)
+        header = self.lev2_obj.header[self.ccf_ext]
+        at_idx_key = 'CCF_' + str(self.rv_ext_idx) + '_AT'
+        if at_idx_key in header:
+            at_idx = header[at_idx_key]
+            ny = header['TOTALORD']
+        else:
+            at_idx = 0
+            ny, nx = np.shape(self.ccf_data)
+
         if ny < self.total_order:
             self.total_order = ny
 
-        result_ccf_data = self.ccf_data[0:self.total_order, :].copy()
+        result_ccf_data = self.ccf_data[at_idx:at_idx+self.total_order, :].copy()
 
         # assume the first row of ccf data (self.ccf_data) and the ccf from the observation template (or the ratio,
         # i.e. self.ccf_ref) are related to the same order index.
 
         velocities = self.rv_init['data']['velocity_loop']
-        rw_ccf = RadialVelocityAlg.reweight_ccf(result_ccf_data, self.total_order, self.ccf_ref,
-                                                self.reweighting_method, s_order=self.ccf_start_index,
-                                                do_analysis=True, velocities=velocities)
+        rw_ccf, new_total_order = \
+            RadialVelocityAlg.reweight_ccf(result_ccf_data, self.total_order, self.ccf_ref,
+                                            self.reweighting_method, s_order=self.ccf_start_index,
+                                            do_analysis=True, velocities=velocities)
 
-        rv_est = self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STAR_RV]
-        if self.lev1_input is None:       # TBD: data type containing ccf, change to an instance of level 2 data later
-            self.lev1_input = KPF1()
-        else:
-            self.lev1_input.del_extension('CCF')
-
-        # self.lev1_input.create_extension('CCF')
-        self.lev1_input.create_extension('CCF', pd.DataFrame)
-
-        # form DataFrame for extension 'CCF'
-        ccf_table = {}
-        for i in range(len(velocities)):
-            ccf_table['vel-' + str(i)] = rw_ccf[:, i]
-        ccf_df = pd.DataFrame(ccf_table)
-
-        ccf_fit, ccf_mean, g_x, g_y = RadialVelocityAlg.fit_ccf(
-            rw_ccf[self.total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :],
-            rv_est, velocities)
-
-        ccf_df.attrs['CCFJDSUM'] = self.jd
-        ccf_df.attrs['CCF-RVC'] = ("{:.10f}".format(ccf_mean), ' Baryc RV (km/s)')
-        ccf_df.attrs['CCFSTART'] = str(rv_est)
-        ccf_df.attrs['CCFSTEP']  = str(self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STEP])
-        ccf_df.attrs['STARTORD'] = str(self.ccf_start_index)
-        ccf_df.attrs['ENDORDER'] = str(self.ccf_start_index+self.total_order-1)
-
-        # self.lev1_input.extensions['CCF'] = ccf_df
-        self.lev1_input.CCF = ccf_df
-
-        for att in ccf_df.attrs:
-            self.lev1_input.header['CCF'][att] = ccf_df.attrs[att]
-
-        self.lev1_input.receipt_add_entry('RadialVelocityReweighting',
+        self.update_level2_data(rw_ccf, new_total_order)
+        self.lev2_obj.receipt_add_entry('RadialVelocityReweighting on '+ self.ccf_ext,
                                     self.__module__, f'config_path={self.config_path}', 'PASS')
         if self.logger:
             self.logger.info("RadialVelocityReweighting: Receipt written")
         if self.logger:
             self.logger.info("RadialVelocityReweighting: Done!")
 
-        return Arguments(self.lev1_input)
+        return Arguments(self.lev2_obj)
 
+    def update_level2_data(self, rw_ccf, total_order):
+        at_idx_key = 'CCF_' + str(self.rv_ext_idx) + '_AT'
+        if at_idx_key in self.lev2_obj.header[self.ccf_ext]:
+            at_idx = self.lev2_obj.header[self.ccf_ext][at_idx_key]
+            self.lev2_obj[self.ccf_ext][at_idx:at_idx+total_order, :] = rw_ccf[0:total_order]
+            self.lev2_obj.header[self.ccf_ext]['STARTORD'] = str(self.ccf_start_index)
+            self.lev2_obj.header[self.ccf_ext]['ENDORDER'] = str(self.ccf_start_index + total_order - 1)
+            self.lev2_obj.header[self.ccf_ext]['TOTALORD'] = str(total_order)
+        else:
+            self.lev2_obj[self.ccf_ext] = rw_ccf[0:total_order]
 
+        if not self.rv_ext or not self.rv_ext_idx:
+            return True
+
+        rv_orders = [0.0] * total_order
+        velocities = rw_ccf[total_order + 1]
+        rv_guess = RadialVelocityAlg.get_rv_estimation(self.lev2_obj.header[self.ccf_ext], self.rv_init['data'])
+
+        for i in range(total_order):
+            if np.any(rw_ccf[i, :] != 0.0):
+                _, rv_orders[i], _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[i, :], rv_guess, velocities)
+
+        rv_table = {}
+        _, new_rv, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :],
+                                                    rv_guess, velocities)
+        new_rv_set = ("{:.10f}".format(new_rv), ' Baryc RV (km/s)')
+
+        at_idx_key = 'RV_' + str(self.rv_ext_idx) + '_AT'
+        if hasattr(self.lev2_obj, self.rv_ext) and (at_idx_key in self.lev2_obj.header[self.rv_ext]):
+            if isinstance(self.lev2_obj[self.rv_ext], pd.DataFrame):
+                crt_rv = self.lev2_obj[self.rv_ext]['RV'].tolist() if 'RV' in self.lev2_obj[self.rv_ext] else []
+
+            start_idx = self.lev2_obj.header[self.rv_ext][at_idx_key]
+            crt_rv[start_idx:start_idx+total_order] = rv_orders[0:total_order]
+
+            rv_table['RV'] = crt_rv
+            self.lev2_obj.header[self.rv_ext]['RV_'+str(self.rv_ext_idx)] = new_rv_set
+        else:
+            rv_table['RV'] = rv_orders
+            self.lev2_obj.header[self.rv_ext]['CCF-RVC'] = new_rv_set
+        self.lev2_obj[self.rv_ext] = pd.DataFrame(rv_table)
+
+        return True
 

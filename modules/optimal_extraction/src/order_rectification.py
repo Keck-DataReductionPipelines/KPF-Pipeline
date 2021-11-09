@@ -95,7 +95,9 @@ class OrderRectification(KPF0_Primitive):
                     'max_result_order': -1,
                     'start_order': 0,
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical',
-                    'clip_file': None
+                    'clip_file': None,
+                    'data_extension': 'DATA',
+                    'trace_extension': 'ORDER_TRACE_RESULT'
                 }
 
     NORMAL = 0
@@ -116,12 +118,14 @@ class OrderRectification(KPF0_Primitive):
         # action.args[1] is for level 0 flat with order trace result extension
         self.input_spectrum = action.args[0]  # kpf0 instance
         self.input_flat = action.args[1]      # kpf0 instance with flat data
-        self.order_name = self.get_args_value('order_name', action.args, args_keys)
+        self.orderlet_names = self.get_args_value('orderlet_names', action.args, args_keys)
         self.max_result_order = self.get_args_value("max_result_order", action.args, args_keys)
         self.start_order = self.get_args_value("start_order", action.args, args_keys)  # for the result of order trace
         self.rectification_method = self.get_args_value("rectification_method", action.args, args_keys)
         self.extraction_method = OptimalExtractionAlg.NOEXTRACT
         self.clip_file = self.get_args_value("clip_file", action.args, args_keys)
+        self.data_ext =  self.get_args_value('data_extension', action.args, args_keys)
+        self.order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -138,12 +142,17 @@ class OrderRectification(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = OptimalExtractionAlg(self.input_flat.DATA,
-                                        self.input_flat.header['DATA'],
-                                        self.input_spectrum.DATA if self.input_spectrum is not None else None,
-                                        self.input_spectrum.header['PRIMARY'] if self.input_spectrum is not None else None,
-                                        self.input_flat.ORDER_TRACE_RESULT,
-                                        self.input_flat.header['ORDER_TRACE_RESULT'],
+        spec_data = self.input_spectrum[self.data_ext] \
+            if self.input_spectrum is not None and hasattr(self.input_spectrum, self.data_ext) else None
+        spec_header = self.input_spectrum.header[self.data_ext] \
+            if (self.input_spectrum is not None and hasattr(self.input_spectrum, self.data_ext)) else None
+
+        self.alg = OptimalExtractionAlg(self.input_flat[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
+                                        self.input_flat.header[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
+                                        spec_data,
+                                        spec_header,
+                                        self.input_flat[self.order_trace_ext],
+                                        self.input_flat.header[self.order_trace_ext],
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
@@ -159,7 +168,7 @@ class OrderRectification(KPF0_Primitive):
             success = False
         else:
             success = (self.input_spectrum is None or isinstance(self.input_spectrum, KPF0)) and \
-                      isinstance(self.input_flat, KPF0) and 'ORDER_TRACE_RESULT' in self.input_flat.extensions
+                      isinstance(self.input_flat, KPF0) and  self.order_trace_ext in self.input_flat.extensions
 
         return success
 
@@ -183,19 +192,20 @@ class OrderRectification(KPF0_Primitive):
         # extraction_method: 'optimal' (default), 'sum', or 'rectonly'
 
         # either the input spectrum or flat is already rectified
+
         if self.input_spectrum is not None:
-            if OptimalExtractionAlg.RECTIFYKEY in self.input_spectrum.header['DATA']:
+            if OptimalExtractionAlg.RECTIFYKEY in self.input_spectrum.header[self.data_ext]:
                 self.logger.info("OrderRectification: the order of the spectrum is rectified already")
                 return Arguments(self.input_spectrum)
         else:
-            if OptimalExtractionAlg.RECTIFYKEY in self.input_flat.header['DATA']:
+            if OptimalExtractionAlg.RECTIFYKEY in self.input_flat.header[self.data_ext]:
                 self.logger.info("OrderRectification: the order of the flat is rectified already")
                 return Arguments(self.input_flat)
 
         if self.logger:
             self.logger.info("OrderRectification: rectifying order...")
 
-        all_order_names = self.order_name if type(self.order_name) is list else [self.order_name]
+        all_order_names = self.orderlet_names if type(self.orderlet_names) is list else [self.orderlet_names]
         all_orders = []
         for order_name in all_order_names:
             o_set = self.alg.get_order_set(order_name)
@@ -232,9 +242,9 @@ class OrderRectification(KPF0_Primitive):
 
     def update_level0_data(self, data_result, lev0_obj):
         # img_d = np.where(np.isnan(data_result.values), 0.0, data_result.values)
-        lev0_obj.DATA = data_result.values
+        lev0_obj[self.data_ext] = data_result.values
         for att in data_result.attrs:
-            lev0_obj.header['DATA'][att] = data_result.attrs[att]
+            lev0_obj.header[self.data_ext][att] = data_result.attrs[att]
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):
         if key in args_keys:
@@ -254,4 +264,7 @@ class OrderRectification(KPF0_Primitive):
                 method = OptimalExtractionAlg.NoRECT
             return method
         else:
+            if key == 'data_extension' or key == 'trace_extension':
+                if v is None:
+                    v = self.default_args_val[key]
             return v
