@@ -1,7 +1,7 @@
 Ext,HDU,Keyword,Description,Units,Data Type,Value,Range,Source,Keep,comment
 PRIMARY,0,ORIGIN,File Originator,N/A,string,astropy.fits',N/A,neid,y,
 PRIMARY,0,INSTRUME,Instrument Name,N/A,string,KPF,fixed,neid,y,
-PRIMARY,0,DATALVL,Data Product Base Level,N/A,Uint,"0,1,2","0,1,2",neid,y,
+PRIMARY,0,DATALVL,Data Product Base Level,N/A,Uint,0,"0,1,2",neid,y,
 PRIMARY,0,DATATMP,Data Temporary Intermediate Product,N/A,Bool,T/F,T/F,neid,y,
 PRIMARY,0,OBSERVER,Observer Name,N/A,string,Classical Observer Name or Queue,N/A,neid,y,
 PRIMARY,0,TIMESYS,Time Scale,N/A,string,UTC,fixed,neid,y,
