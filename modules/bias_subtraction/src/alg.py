@@ -60,24 +60,24 @@ class BiasSubtractionAlg:
         ###
         if self.quicklook == False: 
             for no,ffi in enumerate(self.ffi_exts):
-                print('shapes:',self.rawimage[ffi].data.shape,masterbias[no+1].data.shape)
-                if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
+                print('shapes:',self.rawimage[ffi].data.shape,masterbias[ffi].data.shape)
+                if self.rawimage[ffi].data.shape==masterbias[ffi].data.shape:
                     print ("Bias .fits Dimensions Equal, Check Passed")
                 else:
                     raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
 
-                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
             #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
 
         if self.quicklook == True:
             for no,ffi in enumerate(self.ffi_exts):
                 print('shapes:',self.rawimage[ffi].data.shape,masterbias[no+1].data.shape)
                 #until data model for master files is added:
-                if self.rawimage[ffi].shape==masterbias[no+1].data.shape:
+                if self.rawimage[ffi].shape==masterbias[ffi].data.shape:
                     print ("Bias .fits Dimensions Equal, Check Passed")
                 else:
                     raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
-                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
+                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
 
                 counts = masterbias[no+1].data #red and green potentially masters, no+1 means ignoring primary?
                 flatten_counts = np.ravel(counts)

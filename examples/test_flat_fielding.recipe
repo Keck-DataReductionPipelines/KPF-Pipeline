@@ -1,9 +1,7 @@
 from modules.flat_fielding.src.flat_fielding import FlatFielding
 
-master_flat_data = find_files(masterflat_path)
-
 for raw_file_path in find_files(L0_files_path):
     raw_file = kpf0_from_fits(raw_file_path)
-    final_raw_frames_file = FlatFielding(raw_file,master_flat_data,lev0_ffi_exts,'KPF')
+    final_raw_frames_file = FlatFielding(raw_file,masterflat_path,lev0_ffi_exts,'KPF')
     result = to_fits(final_raw_frames_file, raw_file_path)
 
