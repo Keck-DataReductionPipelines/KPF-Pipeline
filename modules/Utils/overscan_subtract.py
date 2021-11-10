@@ -204,12 +204,12 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
         l0_obj = self.rawfile
+        print(l0_obj.info())
         frames_data = []
         for ext in channel_exts:
             data = l0_obj[ext]
             frames_data.append(data)
         frames_data = np.array(frames_data)
-
         #full_frame_images=[]
         for frame in range(len(self.ffi_exts)):
             single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]

@@ -69,7 +69,7 @@ class BiasSubtract(KPF0_Primitive):
         self.masterbias=self.action.args[1]
         self.ffi_exts=self.action.args[2]
         self.data_type=self.action.args[3]
-        self.quicklook=self.action.args[4] #True or False
+        self.quicklook=self.action.args[4]
 
         # input configuration
         self.config = configparser.ConfigParser()

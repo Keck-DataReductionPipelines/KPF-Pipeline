@@ -6,14 +6,21 @@ srl_overscan_reg = config.ARGUMENT.srl_overscan_reg
 overscan_method = config.ARGUMENT.overscan_method
 order = config.ARGUMENT.order
 oscan_clip = config.ARGUMENT.oscan_clip
-ref_output = config.ARGUMENT.ref_output
 lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
 masterbias_path = config.ARGUMENT.masterbias_path
 all_flat_files_path = config.ARGUMENT.all_flat_files_path
 masterflat_path = config.ARGUMENT.masterflat_path
-L0_files_path = config.ARGUMENT.L0_files_path
+make_master_bias = config.ARGUMENT.make_master_bias
+make_master_flat = config.ARGUMENT.make_master_flat
+L0_files_path = config.ARGUMENT.lev0_files_path
+quicklook = config.ARGUMENT.quicklook
+data_type = config.ARGUMENT.data_type
 
-invoke_subrecipe("./examples/test_master_bias.recipe")
-invoke_subrecipe("./examples/test_master_flat.recipe")
+if make_master_bias == True:
+    invoke_subrecipe("./examples/test_master_bias.recipe")
+
+if make_master_flat == True:
+    invoke_subrecipe("./examples/test_master_flat.recipe")
+
 invoke_subrecipe("./examples/test_bias_subtraction.recipe")
 invoke_subrecipe("./examples/test_flat_fielding.recipe")

@@ -99,7 +99,8 @@ class FlatFielding(KPF0_Primitive):
         """
         #self.masterflat = fits.open(self.masterflat)
         #Option 1:
+        masterflat = fits.open(self.masterflat)
         if self.logger:
             self.logger.info("Flat-fielding: dividing raw image by master flat")
-        flat_result=self.alg.flat_fielding(self.masterflat)
+        flat_result=self.alg.flat_fielding(masterflat)
         return Arguments(self.alg.get())
