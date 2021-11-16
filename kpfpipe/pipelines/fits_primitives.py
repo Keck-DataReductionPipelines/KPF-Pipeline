@@ -61,9 +61,11 @@ class FromFitsBasePrimitive(BasePrimitive):
         """
         filename = self.action.args[0]
         try:
-            data_type = self.action.args['data_type']
-        except KeyError:
+            data_type = self.action.args[1]
+        except IndexError:
             data_type = 'KPF'
+        assert data_type in data_model.read_methods.keys(), \
+            "Data type must be one of {}".format(data_model.read_methods.keys().__repr__())
         print(f"_perform_common: {filename} data_type is {data_type}")
         data_model = data_model.from_fits(filename, data_type)
         return Arguments(data_model, name=name+'_from_fits_result')
