@@ -61,8 +61,9 @@ class BiasSubtractionAlg:
         ###
         if self.quicklook == False: 
             if self.data_type == 'KPF':
-                for no,ffi in enumerate(self.ffi_exts):
-                    print('shapes:',self.rawimage[ffi].data.shape,masterbias[ffi].data.shape)
+                for ffi in self.ffi_exts:
+                    print(self.rawimage.info)
+                    print(masterbias.info())
                     if self.rawimage[ffi].data.shape==masterbias[ffi].data.shape:
                         print ("Bias .fits Dimensions Equal, Check Passed")
                     else:
@@ -72,12 +73,13 @@ class BiasSubtractionAlg:
                 #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
                 
             if self.data_type == 'NEID':
-                print('shapes:',self.rawimage.DATA.shape,masterbias.DATA.shape)
-                if self.rawimage.DATA.shape==masterbias.DATA.shape:
+                print(self.rawimage.info())
+                print('shapes:',self.rawimage['DATA'].shape,masterbias['DATA'].shape)
+                if self.rawimage['DATA'].shape==masterbias['DATA'].shape:
                     print ("Bias .fits Dimensions Equal, Check Passed")
                 else:
                     raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
-                self.rawimage.DATA=self.rawimage.DATA-masterbias.DATA
+                self.rawimage['DATA']=self.rawimage['DATA']-masterbias['DATA']
 
 
         if self.quicklook == True:

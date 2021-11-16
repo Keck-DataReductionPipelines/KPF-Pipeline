@@ -11,6 +11,6 @@ for raw_file_path in find_files(L0_files_path):
     L0_result = to_fits(L0_with_ffi,raw_file_path)
 
 for raw_file_path in find_files(L0_files_path):
-    raw_file = kpf0_from_fits(raw_file_path)
+    raw_file = kpf0_from_fits(raw_file_path,data_type)
     final_raw_frames_file = BiasSubtract(raw_file,masterbias_path,lev0_ffi_exts,data_type,quicklook)
     result = to_fits(final_raw_frames_file,raw_file_path)

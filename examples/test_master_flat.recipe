@@ -3,21 +3,21 @@ from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.bias_subtraction.src.bias_subtraction import BiasSubtract
 
-ref_output = OrientationReference(channel_orientation_ref_path)
+ref_output = OrientationReference(channel_orientation_ref_path,data_type)
 
 all_flat_files = find_files(all_flat_files_path)
 
 for flat_file_path in all_flat_files:
-    flat_file = kpf0_from_fits(flat_file_path,data_type='KPF')
-    flat_with_ffi = OverscanSubtraction(flat_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'KPF')
+    flat_file = kpf0_from_fits(flat_file_path,data_type)
+    flat_with_ffi = OverscanSubtraction(flat_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,data_type)
     flat_oscan_result = to_fits(flat_with_ffi,flat_file_path)
 
 for flat_file_path in all_flat_files:
     flat_file = kpf0_from_fits(flat_file_path)
-    final_flat_frames_file = BiasSubtract(flat_file,masterbias_path,lev0_ffi_exts,'KPF',quicklook)
+    final_flat_frames_file = BiasSubtract(flat_file,masterbias_path,lev0_ffi_exts,data_type,quicklook)
     result = to_fits(final_flat_frames_file,flat_file_path)
 
 for ext in lev0_ffi_exts:
-    master_flat_data = FrameCombinePrimitive('flat',all_flat_files,ext,'KPF')
+    master_flat_data = FrameCombinePrimitive('flat',all_flat_files,ext,data_type)
     master_flat_result = to_fits(master_flat_data,masterflat_path)
 
