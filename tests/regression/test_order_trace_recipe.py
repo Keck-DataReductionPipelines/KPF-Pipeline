@@ -18,7 +18,7 @@ _, short_flat_file = split(input_flat_file)
 flat_stem, flat_ext = splitext(short_flat_file)
 output_lev0_file = output_dir + flat_stem + '_recipetest'+flat_stem_suffix + flat_ext
 flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
-ot_data = OrderTrace(flat_data, data_row_range=row_range, result_path='ORDER_TRACE_RESULT')
+ot_data = OrderTrace(flat_data, data_row_range=row_range, result_path='ORDER_TRACE_RESULT', is_output_file=False)
 """
 
 paras_config = "examples/default_recipe_test_paras.cfg"
@@ -41,7 +41,7 @@ flat_stem, flat_ext = splitext(short_flat_file)
 output_lev0_file = output_dir + flat_stem + '_recipetest'+flat_stem_suffix + flat_ext
 
 flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
-ot_data = OrderTrace(flat_data, data_row_range=row_range, result_path='ORDER_TRACE_RESULT')
+ot_data = OrderTrace(flat_data, data_row_range=row_range, result_path='ORDER_TRACE_RESULT', is_output_file=False)
 """
 
 neid_config = "examples/default_recipe_test_neid.cfg"
