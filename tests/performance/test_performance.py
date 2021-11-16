@@ -29,6 +29,7 @@ else:
                                            'max_time', 'meas_time'])
     exe_limits.to_csv(execution_limits_file, header=True, index=False)
 
+
 def get_execution_limits(func):
     """Get execution time limits for a given function.
 
@@ -64,6 +65,7 @@ def set_execution_limits(func, execution_time, low_frac=0.8, high_frac=1.2):
     with open(execution_limits_file, 'a') as f:
         print("{:s},{:s},{:.2f},{:.2f},{:.2f}".format(hostname, func.__name__, short_limit,
                                                       long_limit, execution_time), file=f)
+
 
 def execution_time_limit(time_limit=None):
     """
