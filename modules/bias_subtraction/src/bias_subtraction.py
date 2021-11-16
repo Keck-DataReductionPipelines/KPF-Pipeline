@@ -16,7 +16,6 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.bias_subtraction.src.alg import BiasSubtractionAlg
-from modules.Utils.overscan_subtract import OverscanSubtraction
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
@@ -88,7 +87,7 @@ class BiasSubtract(KPF0_Primitive):
 
         #Bias subtraction algorithm setup
 
-        self.alg=BiasSubtractionAlg(self.raw_file,self.ffi_exts,self.quicklook,config=self.config,logger=self.logger)
+        self.alg=BiasSubtractionAlg(self.raw_file,self.ffi_exts,self.quicklook,self.data_type,config=self.config,logger=self.logger)
 
         #Preconditions
         
