@@ -156,7 +156,6 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
                 r_ccf = f[hdu_idx_name]
 
             assert r_ccf is not None, msg
-
             return r_ccf
 
         if self.reweighting_method == 'ccf_steps':
@@ -179,7 +178,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
                 total_orderlet = np.shape(ccf_ref)[0] if header['NAXIS'] == 3 else 1
 
                 for o in range(total_orderlet):
-                    if total_orderlet > 1:
+                    if header['NAXIS'] == 3:
                         m_ccf_ref.append(ccf_ref[o, :, :])
                     else:
                         m_ccf_ref.append(ccf_ref)
