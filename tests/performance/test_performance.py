@@ -11,29 +11,7 @@ from kpfpipe.tools.recipe_test_unit import run_recipe
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 
 neid_config = "examples/default_neid.cfg"
-
-neid_recipe = """test_data_dir = KPFPIPE_TEST_DATA + '/NEIDdata' 
-data_type = config.ARGUMENT.data_type
-output_dir = config.ARGUMENT.output_dir
-
-input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
-input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
-input_lev1_prefix = config.ARGUMENT.input_lev1_file_prefix
-
-obs_list = config.ARGUMENT.obs_list
-flat_stem_suffix = config.ARGUMENT.output_flat_suffix
-lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
-lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
-
-max_result_order = config.ARGUMENT.max_result_order
-start_result_order = config.ARGUMENT.start_result_order
-rect_method = config.ARGUMENT.rectification_method
-order_name = config.ARGUMENT.order_name
-
-invoke_subrecipe("./examples/test_order_trace.recipe")
-invoke_subrecipe("./examples/test_optimal_extraction.recipe")
-invoke_subrecipe("./examples/test_neid_radial_velocity.recipe")
-"""
+neid_recipe = open("examples/test_neid.recipe", 'r').read()
 
 # Load .env file for test path 
 load_dotenv()
