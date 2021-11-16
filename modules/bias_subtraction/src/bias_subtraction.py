@@ -103,10 +103,10 @@ class BiasSubtract(KPF0_Primitive):
             Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
         """
         #until master file part of data model is fixed
-        self.masterbias = fits.open(self.masterbias)
+        masterbias = fits.open(self.masterbias)
         if self.logger:
             self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
-        bias_subbed = self.alg.bias_subtraction(self.masterbias)
+        bias_subbed = self.alg.bias_subtraction(masterbias)
         return Arguments(self.alg.get())
         
         # for frame_no in range(len(self.ffi_exts)):

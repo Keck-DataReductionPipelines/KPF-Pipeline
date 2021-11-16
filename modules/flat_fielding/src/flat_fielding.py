@@ -82,7 +82,7 @@ class FlatFielding(KPF0_Primitive):
         #Flat Fielding algorithm setup
 
         #Option 1
-        self.alg=FlatFieldingAlg(self.raw_file,self.ffi_exts,config=self.config,logger=self.logger)
+        self.alg=FlatFieldingAlg(self.raw_file,self.ffi_exts,self.data_type,config=self.config,logger=self.logger)
 
         #Preconditions
         
