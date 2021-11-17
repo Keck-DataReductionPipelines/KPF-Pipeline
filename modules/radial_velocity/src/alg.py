@@ -448,11 +448,16 @@ class RadialVelocityAlg(RadialVelocityBase):
         wavecal_all_orders = self.wavelength_calibration(spectrum_x)     # from s_order to e_order, s_x to e_x
 
         seg_ary = np.arange(total_seg)[s_seg_idx:e_seg_idx+1]
+
         for idx, seg_idx in np.ndenumerate(seg_ary):
             seg_limits = self.get_segment_limits(seg_idx=seg_idx)
             ord_idx = int(seg_limits[self.SEGMENT_ORD])
-            self.d_print("order", ord_idx, ' ', end="", info=True)
-            wavecal = wavecal_all_orders[ord_idx] if self.instrument != 'kpf' else wavecal_all_orders[ord_idx]*10.0
+            self.d_print("segment", ord_idx, ' ',
+                         [int(seg_limits[self.SEGMENT_X1]), int(seg_limits[self.SEGMENT_X2]),
+                          seg_limits[self.SEGMENT_W1], seg_limits[self.SEGMENT_W2], int(seg_limits[self.SEGMENT_ORD])],
+                         ' ', end="", info=True)
+            wavecal = wavecal_all_orders[ord_idx] if self.instrument.lower() != 'kpf' \
+                else wavecal_all_orders[ord_idx]*10.0
             left_x = int(seg_limits[self.SEGMENT_X1])
             right_x = int(seg_limits[self.SEGMENT_X2])
 
@@ -545,7 +550,6 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         """
         line = self.mask_line
-
         # made some fix on line_index. the original calculation may miss some pixels at the edges while
         # finding the overlap between the wavelength range of the pixels and the maximum wavelength range of
         # the mask line

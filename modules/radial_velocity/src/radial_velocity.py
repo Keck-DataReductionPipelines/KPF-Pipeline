@@ -150,7 +150,7 @@ class RadialVelocity(KPF1_Primitive):
         self.area_def = action.args['area_def'] if 'area_def' in args_keys else None
         self.segment_limits = self.load_csv(action.args['segment_def']) if 'segment_def' in args_keys else None
         self.order_limits = self.load_csv(action.args['order_def']) if 'order_def' in args_keys else None
-        self.start_seg = action.args['start_seg'] if 'start_seg' in args_keys else None
+        self.start_seg = action.args['start_seg'] if 'start_seg' in args_keys else 0
         self.end_seg = action.args['end_seg'] if 'end_seg' in args_keys else None
         self.reweighting_method = action.args['reweighting_method'] if 'reweighting_method' in args_keys else None
         self.ccf_ext = action.args['ccf_ext'] if 'ccf_ext' in args_keys else self.default_args_val['ccf_ext']

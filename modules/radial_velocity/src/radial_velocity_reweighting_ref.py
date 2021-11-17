@@ -99,13 +99,28 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
 
         file_list = action.args[0] if isinstance(action.args[0], list) else [action.args[0]]
         self.files = []
-        
+
+        f_size = -1
         for one_file in file_list:
             if isinstance(one_file, str):
-                self.files.append(KPF2.from_fits(one_file))
+                f_lev2 = KPF2.from_fits(one_file)
             elif isinstance(one_file, KPF2):
-                self.files.append(one_file)
+                f_lev2 = one_file
+            else:
+                f_lev2 = None
+            if f_lev2 is not None:
+                self.files.append(f_lev2)
+                # find the total_segment if not set yet
+                if self.total_segment is None and self.ccf_hdu_name in f_lev2.header \
+                        and 'NAXIS' in f_lev2.header[self.ccf_hdu_name]:
+                    nx = f_lev2.header[self.ccf_hdu_name]['NAXIS']    # 2 or 3
+                    if f_size >= 0:
+                        f_size = min(f_size, np.shape(f_lev2[self.ccf_hdu_name])[nx-2])
+                    else:
+                        f_size = np.shape(f_lev2[self.ccf_hdu_name])[nx-2]
 
+        if self.total_segment is None and f_size != -1:
+            self.total_segment = f_size
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -128,7 +143,8 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         """
         # input argument must be KPF2
         success = isinstance(self.files, list) and len(self.files) > 0 and \
-                  (self.reweighting_method in ['ccf_max', 'ccf_mean', 'ccf_steps'])
+                  (self.reweighting_method in ['ccf_max', 'ccf_mean', 'ccf_steps']) and \
+                  (self.is_ratio_data or self.total_segment is not None)
 
         return success
 
@@ -174,6 +190,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
 
             for ccf_file in self.files:
                 ccf_ref = get_template_observation(ccf_file, self.ccf_hdu_name, "observation with ccf error")
+
                 header = ccf_file.header[self.ccf_hdu_name]
                 total_orderlet = np.shape(ccf_ref)[0] if header['NAXIS'] == 3 else 1
 
@@ -182,12 +199,14 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
                         m_ccf_ref.append(ccf_ref[o, :, :])
                     else:
                         m_ccf_ref.append(ccf_ref)
-                    t_segment = min(np.shape(ccf_ref)[0], self.total_segment)
+
+                    one_ccf = m_ccf_ref[-1]
+                    t_segment = min(np.shape(one_ccf)[0], self.total_segment)
                     # pick the max among all segments for each file
                     if self.reweighting_method == 'ccf_max':
-                        m_file.append(np.max([np.nanpercentile(ccf_ref[od, :], 95) for od in range(t_segment)]))
+                        m_file.append(np.max([np.nanpercentile(one_ccf[od, :], 95) for od in range(t_segment)]))
                     elif self.reweighting_method == 'ccf_mean':
-                        m_file.append(np.max([np.nanmean(ccf_ref[od, :]) for od in range(t_segment)]))
+                        m_file.append(np.max([np.nanmean(one_ccf[od, :]) for od in range(t_segment)]))
 
             # find the maximum among all sci orderlets and get the ccf data of the file with the maximum ccf
             tmp_idx = np.where(m_file == np.nanmax(m_file))[0]
