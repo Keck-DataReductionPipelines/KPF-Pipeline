@@ -168,8 +168,9 @@ def start_neid_radial_velocity():
     op_result_data, op_result_header = fits.getdata(op_result_fits, header=True)
     neid_sample_header = neid_sample_hdulist[0].header
 
+    area_def = [0, -1, 600, -600]
     rv_handler = RadialVelocityAlg(op_result_data, neid_sample_header,
-                                   rv_init.start(), wave_calib, config_neid)
+                                   rv_init.start(), wave_calib, config=config_neid, area_limits=area_def)
 
     return rv_handler
 
@@ -186,19 +187,20 @@ def start_neid_radial_velocity_c():
     op_result_data, op_result_header = fits.getdata(op_result_fits, header=True)
     neid_sample_header = neid_sample_hdulist[0].header
 
+    area_def = [0, -1, 600, -600]
     rv_handler = RadialVelocityAlg(op_result_data, neid_sample_header,
-                                   rv_init.start(), wave_calib, config_neid)
+                                   rv_init.start(), wave_calib, config=config_neid, area_limits=area_def)
 
     return rv_handler
 
 
 def test_neid_compute_rv_by_cc():
     rv_handler = start_neid_radial_velocity()
-    _, nx, ny = rv_handler.get_spectrum()
-    s_x = 600
-    e_x = nx - s_x
+    # _, nx, ny = rv_handler.get_spectrum()
+    # s_x = 600
+    # e_x = nx - s_x
 
-    rv_result = rv_handler.compute_rv_by_cc(start_order=s_order, end_order=e_order, start_x=s_x, end_x=e_x)
+    rv_result = rv_handler.compute_rv_by_cc(start_seg=s_order, end_seg=e_order)
     assert 'ccf_ary' in rv_result, "no radial velocity computation result"
     assert isinstance(rv_result['ccf_ary'], np.ndarray), "wrong radial velocity result type"
 
@@ -212,11 +214,11 @@ def test_neid_compute_rv_by_cc():
 
 def test_neid_compute_rv_by_cc_c():
     rv_handler = start_neid_radial_velocity_c()
-    _, nx, ny = rv_handler.get_spectrum()
-    s_x = 600
-    e_x = nx - s_x
+    # _, nx, ny = rv_handler.get_spectrum()
+    # s_x = 600
+    # e_x = nx - s_x
 
-    rv_result = rv_handler.compute_rv_by_cc(start_order=s_order, end_order=e_order, start_x=s_x, end_x=e_x)
+    rv_result = rv_handler.compute_rv_by_cc(start_seg=s_order, end_seg=e_order)
     assert 'ccf_ary' in rv_result, "no radial velocity computation result"
     assert isinstance(rv_result['ccf_ary'], np.ndarray), "wrong radial velocity result type"
 

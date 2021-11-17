@@ -17,7 +17,7 @@
                     - `action.args[0] (str|KPF2)`: one file or one KPF2 with ccf for reweighting.
                     - `action.args[1] (str)`: Reweighting method.
                     - `action.args[2] (pandas.DataFrame|np.ndarray)`: The ratio table or reference ccf for reweighting.
-                    - `action.args[3] (int)`: total order for the ccf data.
+                    - `action.args[3] (int)`: total segment for the ccf data.
                     - `action.args[4] (dict)`: Result from the init work made by `RadialVelocityInit` which makes
                       mask lines and velocity steps based on star and other module associated configuration for
                       radial velocity computation.
@@ -26,8 +26,8 @@
                     - `action.args['rv_ext'] (str)`: The HDU name in fits file for the HDU with rv data.
                       Defaults to 'RV'.
                     - `action.args['rv_ext_idx'] (int)`: The set index in the extension containing rv data.
-                      Defaults to 1.
-                    - 'action.args['ccf_start_index'] (int)`: The order index that the first row of ccf_data is
+                      Defaults to 0.
+                    - 'action.args['ccf_start_index'] (int)`: The segment index that the first row of ccf_data is
                       associated with.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
@@ -37,8 +37,6 @@
             and the following attributes are defined to initialize the object,
 
                 - `ccf_data (np.ndarray)`: ccf data.
-                - `lev1_file (str)`: file containing ccf data.
-                - `lev1_data (KPF1)`: data containing ccf data.
                 - `reweighting_method (str)`: Reweighting method.
                 - `total_order (int)`: Total order for reweighting.
                 - `rv_init (dict)`: Result from radial velocity init.
@@ -71,9 +69,7 @@
 import configparser
 import numpy as np
 import pandas as pd
-from astropy.io import fits
 import os.path
-import datetime
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -96,6 +92,17 @@ class RadialVelocityReweighting(KPF2_Primitive):
     default_agrs_val = {
         'order_name': 'SCI'
     }
+    RV_COL_ORDERLET = 'orderlet'
+    RV_COL_START_W = 's_wavelength'
+    RV_COL_END_W = 'e_wavelength'
+    RV_COL_SEG_NO = 'segment no.'
+    RV_COL_RV = 'RV'
+    RV_COL_RV_ERR = 'RV error'
+    RV_COL_CCFJD = 'CCFJD'
+    RV_COL_SOURCE = 'source'
+    rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_RV, RV_COL_RV_ERR,
+                    RV_COL_CCFJD, RV_COL_SOURCE]
+    rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
 
     def __init__(self,
                  action: Action,
@@ -107,10 +114,8 @@ class RadialVelocityReweighting(KPF2_Primitive):
         self.ccf_ext = action.args['ccf_ext'] if 'ccf_ext' in args_keys else 'CCF'
         self.ccf_start_index = action.args['ccf_start_index'] if 'ccf_start_index' in args_keys else 0
         self.rv_ext = action.args['rv_ext'] if 'rv_ext' in args_keys else 'RV'
-        self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 1
+        self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 0
         self.ccf_data = None
-        self.lev1_input = None
-        self.lev1_file = None
         lev2_obj = None
 
         if isinstance(action.args[0], str):
@@ -126,9 +131,8 @@ class RadialVelocityReweighting(KPF2_Primitive):
 
         self.reweighting_method = action.args[1]
         self.ccf_ref = action.args[2].values if isinstance(action.args[2], pd.DataFrame) else action.args[2]
-        self.total_order = action.args[3]
+        self.total_segment = action.args[3] if action.args[3] is not None else np.shape(self.ccf_ref)[0]
         self.rv_init = action.args[4]
-
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -149,7 +153,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         """
         # input argument must be KPF0
         success = self.lev2_obj is not None and self.ccf_data is not None and isinstance(self.ccf_data, np.ndarray) \
-                  and isinstance(self.ccf_ref, np.ndarray)
+                  and isinstance(self.ccf_ref, np.ndarray) and self.total_segment is not None
 
         return success
 
@@ -170,29 +174,59 @@ class RadialVelocityReweighting(KPF2_Primitive):
         """
 
         header = self.lev2_obj.header[self.ccf_ext]
-        at_idx_key = 'CCF_' + str(self.rv_ext_idx) + '_AT'
-        if at_idx_key in header:
-            at_idx = header[at_idx_key]
-            ny = header['TOTALORD']
-        else:
-            at_idx = 0
-            ny, nx = np.shape(self.ccf_data)
+        ccf_dim = header['NAXIS']
 
-        if ny < self.total_order:
-            self.total_order = ny
+        assert (ccf_dim == 2 or ccf_dim == 3)
 
-        result_ccf_data = self.ccf_data[at_idx:at_idx+self.total_order, :].copy()
+        total_orderlet = 1
 
-        # assume the first row of ccf data (self.ccf_data) and the ccf from the observation template (or the ratio,
-        # i.e. self.ccf_ref) are related to the same order index.
+        if ccf_dim == 2:
+            ccf_data = self.ccf_data
+            self.ccf_data = np.zeros((1, np.shape(ccf_data)[0], np.shape(ccf_data)[1]))  # convert 2D to 3D
+            self.ccf_data[0, :, :] = ccf_data
+        elif ccf_dim == 3:
+            total_orderlet = np.shape(self.ccf_data)[0]
 
         velocities = self.rv_init['data']['velocity_loop']
-        rw_ccf, new_total_order = \
-            RadialVelocityAlg.reweight_ccf(result_ccf_data, self.total_order, self.ccf_ref,
-                                            self.reweighting_method, s_order=self.ccf_start_index,
-                                            do_analysis=True, velocities=velocities)
+        is_rv_ext = hasattr(self.lev2_obj, self.rv_ext) and not self.lev2_obj[self.rv_ext].empty
+        rv_ext_header = self.lev2_obj.header[self.rv_ext] if is_rv_ext else self.lev2_obj.header[self.ccf_ext]
 
-        self.update_level2_data(rw_ccf, new_total_order)
+        final_sum_ccf = np.zeros(np.shape(velocities)[0])
+
+        for o in range(total_orderlet):
+            if self.logger:
+                self.logger.info("RadialVelocityReweighting: reweighting on ccd " + str(self.rv_ext_idx+1) +
+                                 " orderlet " + str(o+1) + "...")
+            result_ccf_data = self.ccf_data[o, :, :]
+            rw_ccf, new_total_seg = RadialVelocityAlg.reweight_ccf(result_ccf_data, self.total_segment, self.ccf_ref,
+                                                                   self.reweighting_method, s_seg=self.ccf_start_index,
+                                                                   do_analysis=True, velocities=velocities)
+            self.ccf_data[o, 0:new_total_seg, :] = rw_ccf[0:new_total_seg, :]     # update ccf value for each orderlet
+
+            # if existing ccf table with summary row
+            if np.shape(self.ccf_data)[1] >= new_total_seg + RadialVelocityAlg.ROWS_FOR_ANALYSIS and not is_rv_ext:
+                self.ccf_data[o, -1, :] = rw_ccf[-1]
+            final_sum_ccf += rw_ccf[-1]
+            _, ccd_rv, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[-1], RadialVelocityAlg.get_rv_estimation(rv_ext_header,
+                                                                                    self.rv_init['data']), velocities)
+
+            # update rv on each orderlet in rv extension
+            if is_rv_ext:
+                self.lev2_obj.header[self.rv_ext]['ccd'+str(self.rv_ext_idx+1)+'rv'+str(o+1)] = ccd_rv
+
+        self.lev2_obj[self.ccf_ext] = self.ccf_data                 # update ccf extension
+
+        # update final rv on all orderlets
+        _, ccd, _, _ = RadialVelocityAlg.fit_ccf(final_sum_ccf,
+                                    RadialVelocityAlg.get_rv_estimation(rv_ext_header, self.rv_init['data']),
+                                    velocities)
+        rv_ext_header['ccd'+ str(self.rv_ext_idx+1) + 'rv'] = ccd        # header: ccdnrv
+
+        if is_rv_ext:
+            if self.logger:
+                self.logger.info("RadialVelocityReweighting: start updating rv for each segment")
+            self.update_rv_table(total_orderlet, velocities)
+
         self.lev2_obj.receipt_add_entry('RadialVelocityReweighting on '+ self.ccf_ext,
                                     self.__module__, f'config_path={self.config_path}', 'PASS')
         if self.logger:
@@ -202,47 +236,54 @@ class RadialVelocityReweighting(KPF2_Primitive):
 
         return Arguments(self.lev2_obj)
 
-    def update_level2_data(self, rw_ccf, total_order):
-        at_idx_key = 'CCF_' + str(self.rv_ext_idx) + '_AT'
-        if at_idx_key in self.lev2_obj.header[self.ccf_ext]:
-            at_idx = self.lev2_obj.header[self.ccf_ext][at_idx_key]
-            self.lev2_obj[self.ccf_ext][at_idx:at_idx+total_order, :] = rw_ccf[0:total_order]
-            self.lev2_obj.header[self.ccf_ext]['STARTORD'] = str(self.ccf_start_index)
-            self.lev2_obj.header[self.ccf_ext]['ENDORDER'] = str(self.ccf_start_index + total_order - 1)
-            self.lev2_obj.header[self.ccf_ext]['TOTALORD'] = str(total_order)
-        else:
-            self.lev2_obj[self.ccf_ext] = rw_ccf[0:total_order]
+    def update_rv_table(self, total_orderlet, velocities):
+        rv_ext_values = self.lev2_obj[self.rv_ext].values
+        rv_ext_header = self.lev2_obj.header[self.rv_ext]
+        rv_name_list = [name.lower() for name in self.rv_col_names]
+        rv_start_idx = self.rv_ext_idx * self.total_segment
 
-        if not self.rv_ext or not self.rv_ext_idx:
-            return True
+        rv_orderlet_colnames = [self.RV_COL_ORDERLET + str(o + 1) for o in range(total_orderlet)]
 
-        rv_orders = [0.0] * total_order
-        velocities = rw_ccf[total_order + 1]
-        rv_guess = RadialVelocityAlg.get_rv_estimation(self.lev2_obj.header[self.ccf_ext], self.rv_init['data'])
+        def col_idx_rv_table(colname, orderlet_idx=0):
+            colname = colname.lower()
 
-        for i in range(total_order):
-            if np.any(rw_ccf[i, :] != 0.0):
-                _, rv_orders[i], _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[i, :], rv_guess, velocities)
+            if 'orderlet' in colname:
+                return orderlet_idx
+            elif 'source' in colname:
+                return rv_name_list.index('source') + total_orderlet - 1 + orderlet_idx
+            else:
+                return rv_name_list.index(colname) + total_orderlet - 1
 
-        rv_table = {}
-        _, new_rv, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[total_order + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :],
-                                                    rv_guess, velocities)
-        new_rv_set = ("{:.10f}".format(new_rv), ' Baryc RV (km/s)')
+        seg_size = self.total_segment
 
-        at_idx_key = 'RV_' + str(self.rv_ext_idx) + '_AT'
-        if hasattr(self.lev2_obj, self.rv_ext) and (at_idx_key in self.lev2_obj.header[self.rv_ext]):
-            if isinstance(self.lev2_obj[self.rv_ext], pd.DataFrame):
-                crt_rv = self.lev2_obj[self.rv_ext]['RV'].tolist() if 'RV' in self.lev2_obj[self.rv_ext] else []
+        for s in range(seg_size):
+            sum_segment = np.zeros(np.shape(velocities)[0])
+            for o in range(total_orderlet):
+                ccf_orderlet = self.lev2_obj[self.ccf_ext][o, s, :]
+                sum_segment += ccf_orderlet
+                _, orderlet_rv, _, _ = RadialVelocityAlg.fit_ccf(ccf_orderlet,
+                                                                RadialVelocityAlg.get_rv_estimation(rv_ext_header,
+                                                                self.rv_init['data']), velocities)
+                c_idx = col_idx_rv_table(rv_orderlet_colnames[o], o)
+                rv_ext_values[s+rv_start_idx, c_idx] = orderlet_rv
 
-            start_idx = self.lev2_obj.header[self.rv_ext][at_idx_key]
-            crt_rv[start_idx:start_idx+total_order] = rv_orders[0:total_order]
+            # update orderletn column at segment s
+            _, seg_rv, _, _ = RadialVelocityAlg.fit_ccf(sum_segment,
+                                            RadialVelocityAlg.get_rv_estimation(rv_ext_header, self.rv_init['data']),
+                                            velocities)
+            rv_ext_values[s+rv_start_idx, col_idx_rv_table(self.RV_COL_RV)] = seg_rv     # update rv column\
 
-            rv_table['RV'] = crt_rv
-            self.lev2_obj.header[self.rv_ext]['RV_'+str(self.rv_ext_idx)] = new_rv_set
-        else:
-            rv_table['RV'] = rv_orders
-            self.lev2_obj.header[self.rv_ext]['CCF-RVC'] = new_rv_set
-        self.lev2_obj[self.rv_ext] = pd.DataFrame(rv_table)
+        new_rv_table = {}
+        for c_name in self.rv_col_names:
+            if c_name in self.rv_col_on_orderlet:
+                for o in range(total_orderlet):
+                    c_name_orderlet = c_name+str(o+1)
+                    idx = col_idx_rv_table(c_name, o)
+                    new_rv_table[c_name_orderlet] = rv_ext_values[:, idx].tolist()
+            else:
+                idx = col_idx_rv_table(c_name)
+                new_rv_table[c_name] = rv_ext_values[:, idx].tolist()
 
+        self.lev2_obj[self.rv_ext] = pd.DataFrame(new_rv_table)      # update rv table
         return True
 

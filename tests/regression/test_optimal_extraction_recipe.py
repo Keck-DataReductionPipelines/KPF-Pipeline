@@ -63,7 +63,7 @@ lev0_flat_stem, lev0_flat_ext = splitext(short_lev0_flat)
 lev0_flat_rect = OrderRectification(None, lev0_flat_data, orderlet_names=order_name,
                                     rectification_method=rect_method, max_result_order=max_result_order,
                                     data_extension='DATA',
-                                    start_order=start_result_order)
+                                    start_order=start_result_order, trace_extension='ORDER_TRACE_RESULT')
 for code in obs_list:
     input_lev0_file = test_data_dir + input_lev0_prefix + code + '.fits'
     _, short_lev0_file = split(input_lev0_file)
@@ -73,7 +73,7 @@ for code in obs_list:
     lev0_data_rect = OrderRectification(lev0_data, lev0_flat_rect, None, orderlet_names=order_name,
                             rectification_method=rect_method, max_result_order=max_result_order,
                             start_order=start_result_order, 
-                            data_extension='DATA')       
+                            data_extension='DATA', trace_extension='ORDER_TRACE_RESULT')
 """
 optimal_extraction_neid_config = "examples/default_recipe_test_neid.cfg"
 

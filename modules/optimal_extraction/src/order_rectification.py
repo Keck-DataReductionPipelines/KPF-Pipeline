@@ -90,15 +90,18 @@ from modules.optimal_extraction.src.alg import OptimalExtractionAlg
 DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
 class OrderRectification(KPF0_Primitive):
-    default_agrs_val = {
+    default_args_val = {
                     'order_name': 'SCI',
                     'max_result_order': -1,
                     'start_order': 0,
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical',
                     'clip_file': None,
                     'data_extension': 'DATA',
-                    'trace_extension': 'ORDER_TRACE_RESULT'
-                }
+                    'trace_extension': None,
+                    'trace_file': None,
+                    'poly_degree': 3,
+                    'origin': [0, 0]
+            }
 
     NORMAL = 0
     VERTICAL = 1
@@ -124,8 +127,10 @@ class OrderRectification(KPF0_Primitive):
         self.rectification_method = self.get_args_value("rectification_method", action.args, args_keys)
         self.extraction_method = OptimalExtractionAlg.NOEXTRACT
         self.clip_file = self.get_args_value("clip_file", action.args, args_keys)
+
         self.data_ext =  self.get_args_value('data_extension', action.args, args_keys)
-        self.order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
+        order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
+        order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -147,12 +152,22 @@ class OrderRectification(KPF0_Primitive):
         spec_header = self.input_spectrum.header[self.data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, self.data_ext)) else None
 
+        self.order_trace_data = None
+        if order_trace_file:
+            self.order_trace_data = pd.read_csv(order_trace_file, header=0, index_col=0)
+            poly_degree = self.get_args_value('poly_degree', action.args, args_keys)
+            origin = self.get_args_value('origin', action.args, args_keys)
+            order_trace_header = {'STARTCOL': origin[0], 'STARTROW': origin[1], 'POLY_DEG': poly_degree}
+        elif order_trace_ext and hasattr(self.input_flat, order_trace_ext):
+            self.order_trace_data = self.input_flat[order_trace_ext]
+            order_trace_header = self.input_flat.header[order_trace_ext]
+
         self.alg = OptimalExtractionAlg(self.input_flat[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
                                         self.input_flat.header[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
                                         spec_data,
                                         spec_header,
-                                        self.input_flat[self.order_trace_ext],
-                                        self.input_flat.header[self.order_trace_ext],
+                                        self.order_trace_data,
+                                        order_trace_header,
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
@@ -168,7 +183,7 @@ class OrderRectification(KPF0_Primitive):
             success = False
         else:
             success = (self.input_spectrum is None or isinstance(self.input_spectrum, KPF0)) and \
-                      isinstance(self.input_flat, KPF0) and  self.order_trace_ext in self.input_flat.extensions
+                      isinstance(self.input_flat, KPF0) and self.order_trace_data is not None
 
         return success
 
@@ -250,7 +265,7 @@ class OrderRectification(KPF0_Primitive):
         if key in args_keys:
             v = args[key]
         else:
-            v = self.default_agrs_val[key]
+            v = self.default_args_val[key]
 
         if key == 'rectification_method':
             if v is not None and isinstance(v, str):
