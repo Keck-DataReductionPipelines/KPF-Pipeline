@@ -1,4 +1,4 @@
 Ext,HDU,Keyword,Description,Units,Data Type,Value,Range,Source,Keep,comment
-PRIMARY,0,ORIGIN,File Originator,N/A,string,astropy.fits',N/A,neid,y,
+PRIMARY,0,ORIGIN,File Originator,N/A,string,astropy.fits,N/A,neid,y,
 PRIMARY,0,INSTRUME,Instrument Name,N/A,string,KPF,fixed,neid,y,
 PRIMARY,0,DATALVL,Data Product Base Level,N/A,Uint,1,"0,1,2",neid,y,
