@@ -131,7 +131,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
 
         self.reweighting_method = action.args[1]
         self.ccf_ref = action.args[2].values if isinstance(action.args[2], pd.DataFrame) else action.args[2]
-        self.total_segment = action.args[3]
+        self.total_segment = action.args[3] if action.args[3] is not None else np.shape(self.ccf_ref)[0]
         self.rv_init = action.args[4]
         # input configuration
         self.config = configparser.ConfigParser()
@@ -153,7 +153,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         """
         # input argument must be KPF0
         success = self.lev2_obj is not None and self.ccf_data is not None and isinstance(self.ccf_data, np.ndarray) \
-                  and isinstance(self.ccf_ref, np.ndarray)
+                  and isinstance(self.ccf_ref, np.ndarray) and self.total_segment is not None
 
         return success
 

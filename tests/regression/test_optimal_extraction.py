@@ -65,8 +65,10 @@ def start_paras_optimal_extraction(rectification_method=OptimalExtractionAlg.NoR
     }
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
-    paras_data = test_data_dir + 'polygon_clipping_test/paras_data/14feb2015/a0018.fits'
+    # paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    paras_flat = test_data_dir + 'order_trace_test/paras_data/paras.flatA.fits'
+    # paras_data = test_data_dir + 'polygon_clipping_test/paras_data/14feb2015/a0018.fits'
+    paras_data = test_data_dir + 'order_trace_test/paras_data/14feb2015/a0018.fits'
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
     assert os.path.isfile(paras_data), "paras data doesn't exist"
 
@@ -95,7 +97,8 @@ def start_paras_flat_rectification(rectification_method=OptimalExtractionAlg.NoR
     }
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    # paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    paras_flat = test_data_dir + 'order_trace_test/paras_data/paras.flatA.fits'
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
 
     order_trace_csv = test_data_dir + \
@@ -121,8 +124,10 @@ def start_paras_spectrum_rectification(rectification_method=OptimalExtractionAlg
     }
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
-    paras_data = test_data_dir + 'polygon_clipping_test/paras_data/14feb2015/a0018.fits'
+    # paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    paras_flat = test_data_dir + 'order_trace_test/paras_data/paras.flatA.fits'
+    # paras_data = test_data_dir + 'polygon_clipping_test/paras_data/14feb2015/a0018.fits'
+    paras_data = test_data_dir + 'order_trace_test/paras_data/14feb2015/a0018.fits'
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
     assert os.path.isfile(paras_data), "paras data doesn't exist"
 
@@ -150,10 +155,12 @@ def test_init_exceptions():
         'width_default': 6
     }
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    # paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    paras_flat = test_data_dir + 'order_trace_test/paras_data/paras.flatA.fits'
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
 
-    paras_data = test_data_dir + 'polygon_clipping_test/paras_data/14feb2015/a0018.fits'
+    # paras_data = test_data_dir + 'polygon_clipping_test/paras_data/14feb2015/a0018.fits'
+    paras_data = test_data_dir + 'order_trace_test/paras_data/14feb2015/a0018.fits'
     assert os.path.isfile(paras_data), "praas data doesn't exist"
 
     order_trace_csv = test_data_dir + \

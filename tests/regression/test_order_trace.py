@@ -56,7 +56,8 @@ def start_paras_order_trace():
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
     # paras_flat = '/Users/cwang/documents/KPF/KPF-Pipeline-TestData/polygon_clipping_test/paras_data/paras.flatA.fits'
-    paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    # paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    paras_flat = test_data_dir + 'order_trace_test/paras_data/paras.flatA.fits'
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
 
     flat_data = fits.getdata(paras_flat)
@@ -82,7 +83,8 @@ def test_init_exceptions():
         'max_order_distance': -1
     }
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
-    paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    # paras_flat = test_data_dir + 'polygon_clipping_test/paras_data/paras.flatA.fits'
+    paras_flat = test_data_dir + 'order_trace_test/paras_data/paras.flatA.fits'
     assert os.path.isfile(paras_flat), "paras flat doesn't exist"
     flat_data = fits.getdata(paras_flat)
 
