@@ -3,7 +3,6 @@ import json
 from scipy import linalg
 import math
 from astropy.modeling import models, fitting
-import csv
 import time
 import pandas as pd
 from configparser import ConfigParser
@@ -41,6 +40,7 @@ class OrderTraceAlg:
 
     Args:
         data (numpy.ndarray): 2D spectral data.
+        poly_degree (int): Order of polynomial for order trace fitting.
         config (configparser.ConfigParser): config context.
         logger (logging.Logger): Instance of logging.Logger.
 
@@ -66,7 +66,7 @@ class OrderTraceAlg:
     UPPER = 1
     LOWER = 0
 
-    def __init__(self, data, config=None, logger=None):
+    def __init__(self, data, poly_degree=None, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
         if not isinstance(config, ConfigParser):
@@ -90,6 +90,7 @@ class OrderTraceAlg:
         self.debug_output = None
         self.is_time_profile = False
         self.is_debug = True if self.logger else False
+        self.poly_degree = poly_degree
 
     def enable_debug_print(self, to_print=True):
         """Enable or disable debug printing.
@@ -161,7 +162,7 @@ class OrderTraceAlg:
             int: Order of polynomial.
 
         """
-        return self.get_config_value('fitting_poly_degree', 3)
+        return self.poly_degree or self.get_config_value('fitting_poly_degree', 3)
 
     def get_instrument(self):
         """Get imaging instrument.
@@ -189,6 +190,24 @@ class OrderTraceAlg:
             float: number of sigma
         """
         return self.get_config_value("sigma_for_width_estimation", 3.0)
+
+    def get_width_default(self):
+        """Get the trace width default
+
+        Returns:
+                float: number of width default
+        """
+
+        return self.get_config_value('width_default', 6)
+
+    def get_trace_vertical_gap(self):
+        """ Get the estimated vertical gap between the traces
+
+        Returns:
+            float: Vertical gap between traces
+        """
+
+        return self.get_config_value('trace_v_gap', 7)
 
     def d_print(self, *args, end='\n', info=False):
         """Print out running status to logger or debug information to a file.
@@ -319,7 +338,7 @@ class OrderTraceAlg:
     def locate_clusters(self, img_rows_to_reset=None, img_cols_to_reset=None):
         """ Find cluster pixels from 2D data array.
 
-        Perform smoothing method tpconvert the pixels to be 1 and 0 and find cluster pixels.
+        Perform smoothing method to convert the pixels to be 1 and 0 and find cluster pixels.
         Cluster pixels mean a set of pixels with value 1 and each pixel connects to at least one neighbor pixel
         in vertical, horizontal or in diagonal direction.
 
@@ -353,6 +372,7 @@ class OrderTraceAlg:
         noise = self.get_config_value('locate_cluster_noise', 0.0)
         mask = self.get_config_value('cluster_mask', 1)
 
+        # if rows_to_reset (or cols_to_reset) to define in config file ???
         rows_str = self.get_config_value('rows_to_reset', '') if img_rows_to_reset is None \
             else json.dumps(img_rows_to_reset)
         cols_str = self.get_config_value('cols_to_reset', '') if img_cols_to_reset is None \
@@ -877,7 +897,7 @@ class OrderTraceAlg:
 
         """
 
-        curve_th = self.get_config_value('order_width_th', 7)
+        curve_th = self.get_trace_vertical_gap()
         crt_cluster_idx = np.where(index_t == num_set[0])[0]
         crt_cluster_x = x[crt_cluster_idx]
         crt_cluster_y = y[crt_cluster_idx]
@@ -1705,7 +1725,7 @@ class OrderTraceAlg:
 
         """
 
-        width_th = self.get_config_value('order_width_th', 7)
+        width_th = self.get_trace_vertical_gap()
         # merge_coeffs contains the coeffs and range in case the two cluster get merged
         min_x = int(merged_coeffs[power+1])
         max_x = int(merged_coeffs[power+2])
@@ -1716,7 +1736,7 @@ class OrderTraceAlg:
         cluster_x = x[cluster_idx]
         cluster_y = y[cluster_idx]
 
-        # x1 of cluster_nos_for_polys[0] is smaller than that of cluster_nos_for_polys[1]
+        # x1 of cluster_nos_for_polys[0] is smaller than x0 of cluster_nos_for_polys[1]
         two_curve_x1 = polys[cluster_nos_for_polys[0], power+2]
         two_curve_x2 = polys[cluster_nos_for_polys[1], power+1]
 
@@ -1951,7 +1971,7 @@ class OrderTraceAlg:
         coeffs, errors = self.curve_fitting_on_all_clusters(index_t, new_x, new_y)
         cluster_points = self.get_cluster_points(coeffs)
 
-        width_default = self.get_config_value('width_default', 6)
+        width_default = self.get_width_default()
         new_index = index_t.copy()
         cluster_coeffs = coeffs.copy()
         max_cluster_no = np.amax(new_index)
@@ -1998,8 +2018,8 @@ class OrderTraceAlg:
         """
 
         power = self.get_poly_degree()
-        width_default = self.get_config_value('width_default', 6)
-        width_th = self.get_config_value('order_width_th', 7)
+        width_default = self.get_width_default()
+        width_th = self.get_trace_vertical_gap()
         spec_data, nx, ny = self.get_spectral_data()
         max_cluster_no = np.shape(poly_coeffs)[0]-1
         center_x = nx//2
@@ -2037,7 +2057,7 @@ class OrderTraceAlg:
             cluster_y_next = cluster_points[idx_v_post[idx+1], xs] if idx < max_cluster_no else ny-1
             cluster_y_prev = cluster_points[idx_v_post[idx-1], xs] if idx > 1 else 0
 
-            if max_gap != 0:
+            if max_gap > 0:
                 cluster_y_next = min(cluster_y + max_gap, cluster_y_next)
                 cluster_y_prev = max(cluster_y - max_gap, cluster_y_prev)
 
@@ -2252,7 +2272,7 @@ class OrderTraceAlg:
                 y_middle_list[c-1] = np.polyval(cluster_coeffs[c, 0:power+1], h_center)
 
         widths_all = list()   # [ <np.array of bottom_width>, <np.array of top widths> ]
-        width_default = self.get_config_value('width_default', 6)
+        width_default = self.get_width_default()
 
         widths_all.append(np.array([c_widths['bottom_edge'] for c_widths in cluster_widths]))
         widths_all.append(np.array([c_widths['top_edge'] for c_widths in cluster_widths]))
