@@ -10,8 +10,8 @@ pytest
 python-dotenv
 pytest
 pytest-cov
-coveralls
-barycorrpy==0.4.1
+coveralls==2.2.0
+barycorrpy
 
 # Documentation
 sphinx

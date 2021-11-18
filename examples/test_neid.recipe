@@ -15,21 +15,14 @@ max_result_order = config.ARGUMENT.max_result_order
 start_result_order = config.ARGUMENT.start_result_order
 rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
-order_name = config.ARGUMENT.order_name
+orderlet_names = config.ARGUMENT.orderlet_names
 
 master_file_name = config.ARGUMENT.master_file_name
-orderlette_names = config.ARGUMENT.orderlette_names
 op_tag = config.ARGUMENT.op_tag
 wave_from_lev1 = config.ARGUMENT.wave_from_lev1
 
-#flat_rect = '', obs_rect='' for test_optimal_extraction.recipe (no clip file applied)
-#flat_rect = '_'+rect_method, obs_rect='_clip' for test_optimal_extraction_rect_clip.recipe (create rectification and op by clip file)
-#flat_rect = '_'+rect_method, obs_rect='_byclip' for test_optimal_extraction_clip.recipe (create op by clip file)
-
 #flat_rect = ''
 flat_rect = '_'+rect_method
-#obs_rect = ''
-#obs_rect = '_clip'
 obs_rect = '_byclip'
 
 invoke_subrecipe("./examples/test_order_trace.recipe")

@@ -7,6 +7,7 @@ import re
 from modules.Utils.config_parser import ConfigHandler
 #from memory_profiler import profile
 import os
+import json
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -208,6 +209,8 @@ class OptimalExtractionAlg:
         self.clip_file_prefix = clip_file
         self.output_clip_area = False
         self.output_area_info = list()
+        self.poly_clip_dict = dict()
+        self.poly_clip_update = False
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -507,7 +510,7 @@ class OptimalExtractionAlg:
         # get order information from poly clip file
 
         if self.rectification_method != self.NoRECT and poly_file and os.path.exists(poly_file):
-            y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file)
+            y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file, c_order)
         else:
             # get order information from rectified lev0 fits
             order_key = 'ORD_' + str(c_order)
@@ -738,7 +741,7 @@ class OptimalExtractionAlg:
                     for o_y in pixel_list:
                         # if read from clip file
                         if read_poly_file:
-                            input_pixels = clip_areas[o_y][o_x]
+                            input_pixels = clip_areas[str(o_y)][str(o_x)]
                             flux_v.fill(0.0)
                             total_area = 0
                             for i_p in input_pixels:
@@ -760,8 +763,8 @@ class OptimalExtractionAlg:
                                                                             len(raw_data_group))
                             if self.output_clip_area:
                                 if o_y not in clip_areas:
-                                    clip_areas[o_y] = dict()
-                                clip_areas[o_y][o_x] = area
+                                    clip_areas[int(o_y)] = dict()
+                                clip_areas[int(o_y)][int(o_x)] = area
 
                         for n in range(len(raw_group)):
                             out_data[raw_group[n]['idx']][o_y, 0] = flux[n]
@@ -772,7 +775,8 @@ class OptimalExtractionAlg:
             extracted_data[:, o_x:o_x + 1] = extracted_result['extraction']
 
         if self.output_clip_area:
-            self.write_clip_file(poly_file, y_output_mid, [lower_width, upper_width], clip_areas)
+            self.poly_clip_update = True
+            self.write_clip_file(None, int(y_output_mid), [int(lower_width), int(upper_width)], clip_areas, order_idx)
 
         result_data = {'y_center': y_output_mid,
                        'widths': [lower_width, upper_width],
@@ -1333,7 +1337,7 @@ class OptimalExtractionAlg:
                 area = self.polygon_area(new_corners)
                 total_area += area
                 if area > 0.0 and self.output_clip_area:
-                    clipped_areas.append((x, y, area))
+                    clipped_areas.append((int(x), int(y), float(area)))
                 for n in range(total_data_group):
                     if input_data[n][y, x] != 0.0:
                         flux[n] += area * input_data[n][y, x]
@@ -1719,8 +1723,7 @@ class OptimalExtractionAlg:
 
         return o_set
 
-    @staticmethod
-    def write_clip_file(poly_file, y_center, edges, clip_areas):
+    def write_clip_file(self, poly_file, y_center=None, edges=None, clip_areas=None, order=None):
         """Write polygon clipping information to file.
 
         Args:
@@ -1740,23 +1743,31 @@ class OptimalExtractionAlg:
                     # where output pixel [x_loc_i, y_loc_i] overlaps with
                     # input pixel [x_i, y_i] and the overlapping area is area_n.
                 }
-
+            order (int): Order to be written.
         Returns:
             The polygon clipping information is written to .npy file.
         """
 
         order_clip = dict()
-        order_clip['y_center'] = y_center
-        order_clip['edges'] = edges
-        order_clip['clip_areas'] = clip_areas
-        order_clip_array = np.array(list(order_clip.items()))
+        if y_center is not None:
+            order_clip['y_center'] = y_center
+        if edges is not None:
+            order_clip['edges'] = edges
+        if clip_areas is not None:
+            order_clip['clip_areas'] = clip_areas
+        # order_clip_array = np.array(list(order_clip.items()))
+        if order is not None:
+            self.poly_clip_dict[int(order)] = order_clip
 
         # f = open(poly_file, "wb")
-        np.save(poly_file, order_clip_array)
+        if poly_file is not None:
+            with open(poly_file, "w") as outfile:
+                json.dump(self.poly_clip_dict, outfile)
+
+        # np.save(poly_file, order_clip_array)
         # f.close()
 
-    @staticmethod
-    def read_clip_file(poly_file):
+    def read_clip_file(self, poly_file, c_order):
         """Read order polygon data from clip file.
 
         Args:
@@ -1771,6 +1782,17 @@ class OptimalExtractionAlg:
                 * **clip_areas** (*dict*): polygon clip information for the order.
 
         """
+        if self.poly_clip_dict is None or len(self.poly_clip_dict)==0:
+            with open(poly_file) as clip_input:
+                f = json.load(clip_input)
+                self.poly_clip_dict = f
+
+        order_poly = self.poly_clip_dict[str(c_order)]
+        y_center = order_poly['y_center']
+        lower_width, upper_width = order_poly['edges']
+        clip_areas = order_poly['clip_areas']
+
+        """    
         # infile = open(poly_file, 'rb')
         order_flux = np.load(poly_file,  allow_pickle=True)
         # infile.close()
@@ -1786,7 +1808,7 @@ class OptimalExtractionAlg:
         k = 'clip_areas'
         idx = np.where(order_flux[:, 0] == k)[0][0]
         clip_areas = order_flux[idx, 1]
-
+        """
         return y_center, lower_width, upper_width, clip_areas
 
     def reset_clip_file(self):
@@ -1804,8 +1826,9 @@ class OptimalExtractionAlg:
             str: full path of the clip file.
 
         """
-        crt_order_clip_file = self.clip_file_prefix + '_order_' + str(order_idx) + '.npy' \
-            if (self.clip_file_prefix and order_idx is not None) else None
+        # crt_order_clip_file = self.clip_file_prefix + '_order_' + str(order_idx) + '.npy' \
+        #    if (self.clip_file_prefix and order_idx is not None) else None
+        crt_order_clip_file = self.clip_file_prefix + '_poly.json' if self.clip_file_prefix else None
 
         return crt_order_clip_file
 
@@ -1919,6 +1942,7 @@ class OptimalExtractionAlg:
         order_result = dict()
         self.output_area_info = list()
 
+        # for idx_out in range(2):
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             self.reset_clip_file()
@@ -1934,10 +1958,13 @@ class OptimalExtractionAlg:
             order_result[c_order] = order_flux
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
+        if self.poly_clip_update:
+            self.write_clip_file(self.get_clip_file(0))
         out_data_height, out_data_width = self.update_output_size(order_set, order_result, result_height)
         out_data = np.zeros((out_data_height, out_data_width))
         order_rectification_result = list()
 
+        # produce output data
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             to_pos = idx_out+start_row_at if self.extraction_method != self.NOEXTRACT else \
