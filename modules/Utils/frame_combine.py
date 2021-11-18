@@ -20,9 +20,10 @@ class FrameCombinePrimitive(KPF0_Primitive):
         self.data_type=self.action.args[3]
 
     def _perform(self):
-        print("frame type is",self.frame_type)
+        if self.logger:
+            self.logger.info
+            print("Frame Combine: frame type is",self.frame_type)
         if self.frame_type == 'bias':
-            print('bias triggered')
             tester = KPF0.from_fits(self.L0_names[0])
             ext_list = []
             for i in tester.extensions.keys():
@@ -43,7 +44,6 @@ class FrameCombinePrimitive(KPF0_Primitive):
             #master_holder[self.ffi_ext].name = self.ffi_ext.split('_')[0] + '_MASTER_BIAS'
 
         if self.frame_type == 'flat':
-            print('flat triggered')
             tester = KPF0.from_fits(self.L0_names[0])
             ext_list = []
             for i in tester.extensions.keys():
@@ -62,7 +62,6 @@ class FrameCombinePrimitive(KPF0_Primitive):
             master_holder = obj
             for ext in ext_list:#figure out where to open master_holder_path
                 master_holder.del_extension(ext)
-            print('ffi extension is',self.ffi_ext)
             master_holder[self.ffi_ext] = final_frame
 
             # plt.figure()
