@@ -9,7 +9,6 @@ for bias_file_path in find_files(all_bias_files_path):
     bias_with_ffi = OverscanSubtraction(bias_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,'KPF')
     bias_oscan_result = to_fits(bias_with_ffi,bias_file_path)
 
-for ext in lev0_ffi_exts:
-    all_bias_files = find_files(all_bias_files_path)
-    master_bias_data = FrameCombinePrimitive('bias',all_bias_files,ext,data_type)
-    master_bias_result = to_fits(master_bias_data,masterbias_path)
+all_bias_files = find_files(all_bias_files_path)
+master_bias_data = FrameCombinePrimitive('bias',all_bias_files,lev0_ffi_exts,data_type)
+master_bias_result = to_fits(master_bias_data,masterbias_path)
