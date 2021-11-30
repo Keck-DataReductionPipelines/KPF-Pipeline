@@ -50,14 +50,14 @@ class FlatFieldingAlg:
         """
         if self.data_type == 'KPF':
             for ffi in self.ffi_exts:
-                assert self.rawimage[ffi].data.shape==masterflat[ffi].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
-                self.rawimage[ffi].data=self.rawimage[ffi].data/masterflat[ffi].data
+                assert self.rawimage[ffi].data.shape==masterflat[ffi+'_NORMALIZED'].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
+                self.rawimage[ffi].data=self.rawimage[ffi].data/masterflat[ffi+'_NORMALIZED'].data
                 #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
         if self.data_type == 'NEID':
             print(self.rawimage.info())
             print(masterflat.info())
             assert self.rawimage[ffi].data.shape==masterflat[ffi].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
-            self.rawimage['DATA']=self.rawimage['DATA']-masterflat['DATA']
+            self.rawimage['DATA']=self.rawimage['DATA']/masterflat['DATA']
 
             
     def get(self):
