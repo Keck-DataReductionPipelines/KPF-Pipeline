@@ -24,7 +24,6 @@ class to_fits(BasePrimitive):
     def _perform(self):
         """
         _perform
-
         inputs
             args[0]: data model (python subclassed from KPFDataModel)
             args[1]: FITS filename (path) as string.  Should be
@@ -61,12 +60,9 @@ class FromFitsBasePrimitive(BasePrimitive):
         """
         filename = self.action.args[0]
         try:
-            data_type = self.action.args[1]
-        except IndexError:
+            data_type = self.action.args['data_type']
+        except KeyError:
             data_type = 'KPF'
-        allowed_types = data_model().read_methods.keys()
-        assert data_type in allowed_types, \
-            "Data type must be one of {}".format(allowed_types.__repr__())
         print(f"_perform_common: {filename} data_type is {data_type}")
         data_model = data_model.from_fits(filename, data_type)
         return Arguments(data_model, name=name+'_from_fits_result')
@@ -106,4 +102,3 @@ class kpf2_from_fits(FromFitsBasePrimitive):
 
     def _perform(self):
         return self._perform_common(KPF2, 'kpf2')
-
