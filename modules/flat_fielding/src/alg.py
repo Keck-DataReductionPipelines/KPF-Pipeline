@@ -21,7 +21,7 @@ class FlatFieldingAlg:
         Exception: If raw image and flat frame don't have the same dimensions
     """
 
-    def __init__(self, rawimage, ffi_exts, config=None, logger=None):
+    def __init__(self, rawimage, ffi_exts, data_type, config=None, logger=None):
         """
         Inits FlatFielding class with raw data, config, logger.
 
@@ -33,6 +33,7 @@ class FlatFieldingAlg:
         """
         self.rawimage=rawimage
         self.ffi_exts=ffi_exts
+        self.data_type=data_type
         self.config=config
         self.logger=logger
 
@@ -47,15 +48,17 @@ class FlatFieldingAlg:
         Raises:
             Exception: If raw image and flat frame don't have the same dimensions.
         """
-        for no,ffi in enumerate(self.ffi_exts):
-            print('shapes:',self.rawimage[ffi].data.shape,masterflat[no+1].data.shape)
-            if self.rawimage[ffi].data.shape==masterflat[no+1].data.shape:
-                print ("Flat .fits Dimensions Equal, Check Passed")
-            else:
-                raise Exception ("Flat .fits Dimensions NOT Equal! Check Failed")
-    
-            self.rawimage[ffi].data=self.rawimage[ffi].data/masterflat[no+1].data
-            #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+        if self.data_type == 'KPF':
+            for ffi in self.ffi_exts:
+                assert self.rawimage[ffi].data.shape==masterflat[ffi+'_NORMALIZED'].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
+                self.rawimage[ffi].data=self.rawimage[ffi].data/masterflat[ffi+'_NORMALIZED'].data
+                #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+        if self.data_type == 'NEID':
+            print(self.rawimage.info())
+            print(masterflat.info())
+            assert self.rawimage[ffi].data.shape==masterflat[ffi].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
+            self.rawimage['DATA']=self.rawimage['DATA']/masterflat['DATA']
+
             
     def get(self):
         """Returns flat-corrected raw image result.

@@ -67,7 +67,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         Exception: If test data directory is not found.
 
     """
-
+    
     # defined in configuration file
     STARNAME = 'starname'
     SPEC = 'instrument'
