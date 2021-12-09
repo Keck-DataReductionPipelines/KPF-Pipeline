@@ -1,8 +1,7 @@
-#test_data_dir = KPFPIPE_TEST_DATA + '/KPF_Simulated_Data/' 
-#test_data_dir = config.ARGUMENT.output_dir
-test_data_dir = './test_results/kpf_results/data/'
+test_data_dir = KPFPIPE_TEST_DATA
+
 data_type = config.ARGUMENT.data_type
-output_dir = config.ARGUMENT.output_dir
+output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
 
 input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
 input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
@@ -24,9 +23,27 @@ op_tag = config.ARGUMENT.op_tag
 wave_from_lev1 = config.ARGUMENT.wave_from_lev1
 wave_fits = config.ARGUMENT.wave_fits
 
+channel_orientation_ref_path = KPFPIPE_TEST_DATA+config.ARGUMENT.channel_orientation_ref_path
+all_bias_files_path = KPFPIPE_TEST_DATA+config.ARGUMENT.all_bias_files_path
+pl_overscan_reg = config.ARGUMENT.pl_overscan_reg
+srl_overscan_reg = config.ARGUMENT.srl_overscan_reg
+overscan_method = config.ARGUMENT.overscan_method
+order = config.ARGUMENT.overscan_order
+oscan_clip = config.ARGUMENT.overscan_clip
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+masterbias_path = KPFPIPE_TEST_DATA+config.ARGUMENT.masterbias_path
+all_flat_files_path = KPFPIPE_TEST_DATA+config.ARGUMENT.all_flat_files_path
+masterflat_path = KPFPIPE_TEST_DATA+config.ARGUMENT.masterflat_path
+make_master_bias = config.ARGUMENT.make_master_bias
+make_master_flat = config.ARGUMENT.make_master_flat
+L0_files_path = KPFPIPE_TEST_DATA+config.ARGUMENT.lev0_files_path
+quicklook = config.ARGUMENT.quicklook
+data_type = config.ARGUMENT.data_type
+
 flat_rect = '_'+rect_method
 obs_rect = '_byclip'
 
+invoke_subrecipe("./examples/test_kpf_bias_flat_corrections.recipe")
 invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
 invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
-#invoke_subrecipe("./examples/test_kpf_radial_velocity_reweight_2.recipe")
+invoke_subrecipe("./examples/test_kpf_radial_velocity_reweight_2.recipe")
