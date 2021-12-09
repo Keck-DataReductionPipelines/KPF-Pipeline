@@ -1,8 +1,6 @@
 CCF_C=modules/CLib/CCF
 init: 
-	mkdir -p logs
-	mkdir -p outputs
-	pip3 install -r requirements.txt -e .
+	pip3 install -e .
 	$(MAKE) C  -C ${CCF_C}
 
 update: 
