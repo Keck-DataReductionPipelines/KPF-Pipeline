@@ -1,40 +1,15 @@
-# fits_primitives.py
 
-from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
-from keckdrpframework.models.processing_context import ProcessingContext
 from keckdrpframework.primitives.base_primitive import BasePrimitive
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.models.level2 import KPF2
 
-#from kpfpipe.models.kpf_arguments import KpfArguments
 
 """
 Provides pipeline primitive wrappers around data model to_fits and
 from_fits methods.
 """
-class to_fits(BasePrimitive):
-    """
-    to_fits: pipeline primitive to write data_model to FITS file
-    """
-    def __init__(self, action, context):
-        BasePrimitive.__init__(self, action, context)
-
-    def _perform(self):
-        """
-        _perform
-        inputs
-            args[0]: data model (python subclassed from KPFDataModel)
-            args[1]: FITS filename (path) as string.  Should be
-                    extracted from config in recipe.
-        outputs
-            result:  Always True
-        """
-        data_model = self.action.args[0]
-        file_name = self.action.args[1]
-        data_model.to_fits(file_name)
-        return Arguments(True, name='to_fits_result')
 
 class FromFitsBasePrimitive(BasePrimitive):
     """
@@ -46,17 +21,16 @@ class FromFitsBasePrimitive(BasePrimitive):
     
     def _perform_common(self, data_model, name):
         """
-        _perform_common
+        Driver method for the Keck framework to execute
         
-        arguments
+        Args:
             data_model: instance of a subclass of KPFDataModel
-            name: name of data model class as str
-        inputs
+            name (str): name of data model class as string
             args[0]: Name of FITS file (path). Should be extracted
                      from config in recipe.
             data_type: 'KPF' or 'NEID. Defaults to 'KPF'
-        outputs
-            python object of type data_model
+        Returns:
+            data model object
         """
         filename = self.action.args[0]
         try:
