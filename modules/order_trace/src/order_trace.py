@@ -191,7 +191,6 @@ class OrderTrace(KPF0_Primitive):
         if self.logger:
             self.logger.info("OrderTrace: locating cluster...")
         cluster_xy = self.alg.locate_clusters(self.rows_to_reset, self.cols_to_reset)
-
         # 2) assign cluster id and do basic cleaning
         if self.logger:
             self.logger.info("OrderTrace: assigning cluster id and cleaning...")
@@ -217,7 +216,6 @@ class OrderTrace(KPF0_Primitive):
             self.logger.info("OrderTrace: writing cluster into dataframe...")
 
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
-
         assert(isinstance(df, pd.DataFrame))
 
         # self.input.create_extension('ORDER_TRACE_RESULT')

@@ -24,7 +24,6 @@ class to_fits(BasePrimitive):
     def _perform(self):
         """
         _perform
-
         inputs
             args[0]: data model (python subclassed from KPFDataModel)
             args[1]: FITS filename (path) as string.  Should be
@@ -103,4 +102,3 @@ class kpf2_from_fits(FromFitsBasePrimitive):
 
     def _perform(self):
         return self._perform_common(KPF2, 'kpf2')
-
