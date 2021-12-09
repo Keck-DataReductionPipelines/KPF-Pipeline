@@ -1,25 +1,27 @@
+# fits_primitives.py
 
+from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
+from keckdrpframework.models.processing_context import ProcessingContext
 from keckdrpframework.primitives.base_primitive import BasePrimitive
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.models.level2 import KPF2
 
+#from kpfpipe.models.kpf_arguments import KpfArguments
 
 """
 Provides pipeline primitive wrappers around data model to_fits and
 from_fits methods.
 """
-
-class FromFitsBasePrimitive(BasePrimitive):
+class to_fits(BasePrimitive):
     """
-    FromFitsPrimitive: create a data model object and instiantiate
-    its contents from a FITS file. 
+    to_fits: pipeline primitive to write data_model to FITS file
     """
     def __init__(self, action, context):
         BasePrimitive.__init__(self, action, context)
-    
-    def _perform_common(self, data_model, name):
+
+    def _perform(self):
         """
         Driver method for the Keck framework to execute
         
@@ -31,6 +33,33 @@ class FromFitsBasePrimitive(BasePrimitive):
             data_type: 'KPF' or 'NEID. Defaults to 'KPF'
         Returns:
             data model object
+        """
+        data_model = self.action.args[0]
+        file_name = self.action.args[1]
+        data_model.to_fits(file_name)
+        return Arguments(True, name='to_fits_result')
+
+class FromFitsBasePrimitive(BasePrimitive):
+    """
+    FromFitsPrimitive: create a data model object and instiantiate
+    its contents from a FITS file. 
+    """
+    def __init__(self, action, context):
+        BasePrimitive.__init__(self, action, context)
+    
+    def _perform_common(self, data_model, name):
+        """
+        _perform_common
+        
+        arguments
+            data_model: instance of a subclass of KPFDataModel
+            name: name of data model class as str
+        inputs
+            args[0]: Name of FITS file (path). Should be extracted
+                     from config in recipe.
+            data_type: 'KPF' or 'NEID. Defaults to 'KPF'
+        outputs
+            python object of type data_model
         """
         filename = self.action.args[0]
         try:
@@ -76,3 +105,4 @@ class kpf2_from_fits(FromFitsBasePrimitive):
 
     def _perform(self):
         return self._perform_common(KPF2, 'kpf2')
+
