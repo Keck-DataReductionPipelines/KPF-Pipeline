@@ -24,15 +24,15 @@
                     - `action.args[3] (str)`: Extension name associated with the level 1 science data.
                     - `action.args['area_def'] (list, optional)`: pixel area, [start_y, end_y, start_x, end_x],
                       to be processed. Defaults to None.
-                    - `action.args['segment_def'] (str): csv file defining segment wavelength information.
-                    - `action.args['order_def'] (str): csv file defining order limits information.
-                    - `action.args['ccf_ext'] (str): Extension name containing the ccf results.
-                    - `action.args['rv_ext'] (str): Extension name containing rv results.
+                    - `action.args['segment_def'] (str)`: csv file defining segment wavelength information.
+                    - `action.args['order_def'] (str)`: csv file defining order limits information.
+                    - `action.args['ccf_ext'] (str)`: Extension name containing the ccf results.
+                    - `action.args['rv_ext'] (str)`: Extension name containing rv results.
                     - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference for
                       reweighting ccf orders. Defaults to None.
                     - `action.args['reweighting_method'] (str, optional)`: reweighting method. Defaults to None.
-                    - `action.args['start_seg'] (int): Index of first segment to be processed. Defaults to None.
-                    - `action.args['end_seg'] (int): Index of last segment to be processed. Defaults to None.
+                    - `action.args['start_seg'] (int)`: Index of first segment to be processed. Defaults to None.
+                    - `action.args['end_seg'] (int)`: Index of last segment to be processed. Defaults to None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of radial velocity in the master

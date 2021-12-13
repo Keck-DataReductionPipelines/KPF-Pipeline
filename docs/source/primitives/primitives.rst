@@ -12,4 +12,5 @@ This list contains stable and functional primitives within the KPF-Pipeline
     bias_subtraction/bias_subtraction.rst
     flat_fielding/flat_fielding.rst
     barycentric_correction/barycentric_correction.rst
+    ca_hk/ca_hk_extraction.rst
   
