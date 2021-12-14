@@ -1,30 +1,30 @@
 from modules.optimal_extraction.src.order_rectification import OrderRectification
 from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
 
-wavecal_data = kpf0_from_fits(test_data_dir+wave_fits, data_type='NEID')
-lev0_flat_pattern = output_dir + "*_L0.fits"
+lev0_flat_pattern = test_data_dir + input_flat_pattern
 lev0_science_pattern = test_data_dir + input_lev0_prefix
+origin = [data_col_range[0], data_row_range[0]]
+ccd_idx=[0, 1]
 
 for lev0_flat_file in find_files(lev0_flat_pattern):
 	_, short_lev0_flat = split(lev0_flat_file)
 	lev0_flat_stem, lev0_flat_ext = splitext(short_lev0_flat)
 
-	# make flat rectification
+	lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type=data_type)
 
-	output_lev0_flat_rect = output_dir + lev0_flat_stem + flat_rect + '.fits'
+	# make flat rectification
+	output_lev0_flat_rect = output_dir + lev0_flat_stem + flat_stem_suffix + flat_rect + '.fits'
 	if not find_files(output_lev0_flat_rect):
-		lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type=data_type)
 		lev0_flat_rect = lev0_flat_data
 		op_data = None
-		ccd_idx = [0, 1]
 		for idx in ccd_idx:
-			ccd = data_ext[idx]
-			out_order = output_ext + '_' + ccd
+			ccd = ccd_list[idx]
 			clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd 
-
-			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, order_name=orderlet_names[idx], 
+			trace_file = output_dir + lev0_flat_stem + '_' + ccd_list[idx] + flat_stem_suffix + '.csv'
+			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, orderlet_names=orderlet_names[idx], 
+						trace_file=trace_file, data_extension=ccd,
 						rectification_method=rect_method, clip_file=clip_file,
-						data_extension=ccd, trace_extension=out_order)
+						origin=origin, poly_degree=poly_degree)
 		result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
 	else:
 		lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type='KPF')
@@ -38,17 +38,20 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 		if not find_files(output_lev1_rect_file):
 			lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 			op_data = None
-			ccd_idx = [0, 1]
 			for idx in ccd_idx:
-				ccd = data_ext[idx]
+				ccd = ccd_list[idx]
 				order_name = orderlet_names[idx]
-				order_trace_ext = output_ext + '_' + ccd
+				trace_file = output_dir + lev0_flat_stem + '_' + ccd_list[idx] + flat_stem_suffix + '.csv'
 				clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd
-				
-				op_data = OptimalExtraction(lev0_data, lev0_flat_rect, op_data, order_name = order_name,
+	
+				wavecal_data = None
+				if wave_fits[idx]:
+					wavecal_data = kpf0_from_fits(test_data_dir+wave_fits[idx], data_type='NEID')
+							
+				op_data = OptimalExtraction(lev0_data, lev0_flat_rect, op_data, orderlet_names=order_name,
 						rectification_method=rect_method, extraction_method=extract_method, 
-						clip_file=clip_file, data_extension=ccd, trace_extension=order_trace_ext,
-						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
+						clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
+						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1[idx])
 			result = to_fits(op_data, output_lev1_rect_file)
 	
 

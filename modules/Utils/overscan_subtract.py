@@ -58,8 +58,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         raw_sub_os = np.zeros_like(image)
         for row in range(0,raw_sub_os.shape[0]):
-            raw_sub_os[row] = image[row] - np.mean(image[row,overscan_reg],0,keepdims=True) 
-
+            raw_sub_os[row,:] = image[row,:] - np.mean(image[row,overscan_reg],keepdims=True) 
         return raw_sub_os
 
 
@@ -184,7 +183,6 @@ class OverscanSubtraction(KPF0_Primitive):
 
             else:
                 raise TypeError('Input overscan subtraction mode set to value outside options.')
-
             # chop off overscan and prescan - put into overscan subtraction utility
             new_img = self.overscan_cut(raw_sub_os,srl_oscan_pxl_array,prl_oscan_pxl_array)
             # put img back into original orientation 
@@ -202,19 +200,21 @@ class OverscanSubtraction(KPF0_Primitive):
         Returns:
             l0_obj(fits.hdulist): Original FITS.hdulist but with FFI extension(s) filled
         """
-        channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
-        l0_obj = self.rawfile
-        frames_data = []
-        for ext in channel_exts:
-            data = l0_obj[ext]
-            frames_data.append(data)
-        frames_data = np.array(frames_data)
-
-        #full_frame_images=[]
-        for frame in range(len(self.ffi_exts)):
-            single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
-            full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
-            #full_frame_images.append(full_frame_img)
-            l0_obj[self.ffi_exts[frame]] = full_frame_img
-
+        if self.data_type == 'KPF':
+            channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
+            l0_obj = self.rawfile
+            frames_data = []
+            for ext in channel_exts:
+                data = l0_obj[ext]
+                frames_data.append(data)
+            frames_data = np.array(frames_data)
+            #full_frame_images=[]
+            for frame in range(len(self.ffi_exts)):
+                single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
+                full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
+                #full_frame_images.append(full_frame_img)
+                l0_obj[self.ffi_exts[frame]] = full_frame_img
+        if self.data_type == 'NEID':
+            l0_obj = self.rawfile
+            #no overscan or image to assemble at the moment
         return Arguments(l0_obj)
