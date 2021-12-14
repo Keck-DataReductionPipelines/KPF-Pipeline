@@ -1,0 +1,12 @@
+from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
+
+L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
+
+thar_data = kpf1_from_fits(L1_file, data_type='NEID')
+peak_wavelength_data = config.ARGUMENT.linelist_path
+
+wave_soln = WaveCalibrate(thar_data, peak_wavelength_data, config.ARGUMENT.quicklook, data_type='NEID')
+
+obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
+output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
+result = to_fits(wave_soln, output_filename)

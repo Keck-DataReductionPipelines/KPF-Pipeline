@@ -1,12 +1,9 @@
 # Standard dependencies
 import configparser
 import numpy as np
-import pandas as pd
 
 # Pipeline dependencies
-from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level1 import KPF1_Primitive
-from kpfpipe.models.level1 import KPF1
 
 # External dependencies
 from keckdrpframework.models.action import Action
@@ -17,7 +14,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.wavelength_cal.src.alg import LFCWaveCalibration
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default_recipe_neid.cfg'
+DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/LFC_NEID.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
     """
@@ -58,20 +55,44 @@ class WaveCalibrate(KPF1_Primitive):
 
             context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """
-        #Initialize parent class
-        KPF1_Primitive.__init__(self,action,context)
 
-        #Input arguments
+        KPF1_Primitive.__init__(self, action, context)
+
+        def get_args_value(key: str, args: Arguments, args_keys: list):
+            v = None
+            if key in args_keys:
+                v = args[key]
+            elif key in self.default_args_val.keys():
+                v = self.default_args_val[key]
+            return v
+
+        # input arguments
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
 
-        self.l1_obj=self.action.args[0]
-        self.master_wavelength=self.action.args[1]
-        self.f0_key = self.action.args[2]
-        self.frep_key = self.action.args[3]
-        self.quicklook = self.action.args[4]
-        self.data_type = self.get_args_value('data_type', action.args, args_keys)
+        self.l1_obj = self.action.args[0]
+        self.quicklook = self.action.args[1]
 
-        #Input configuration
+        # look for and set optional keywords needed for LFC
+        self.f0_key = get_args_value('f0', action.args, args_keys)
+        self.frep_key = get_args_value('fr', action.args, args_keys)
+
+        # look for and set other optional keywords
+        self.master_wavelength = get_args_value('master_wavelength', action.args, args_keys)
+        self.peak_wavelength_data = get_args_value('peak_wavelength_data', action.args, args_keys)
+        self.data_type = get_args_value('data_type', action.args, args_keys)
+
+        # possible keyword configurations:
+        # LFC: self.master_wavelength always set (lamp solution)
+        #  1) self.peak_wavelength_data set (expected mode nums & pixels)
+        #  2) self.peak_wavelength_data NOT set (need to refind peaks)
+        # ThAr/other lamp:
+        #  1) self.master_wavelength NOT set,
+        #     self.peak_wavelength_data set (expected line wavelengths & pixels)
+        # Etalon: self.master_wavelength always set (lamp solution OR LFC solution)
+        #  1) self.peak_wavelength_data set (expected peak numbers ("modes") & pixels)
+        #  2) self.peak_wavelength_data NOT set (need to refind peaks)
+
+        # input configuration
         self.config=configparser.ConfigParser()
         try:
             self.config_path=context.config_path['wavelength_cal']
@@ -79,71 +100,80 @@ class WaveCalibrate(KPF1_Primitive):
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
 
-        #Start logger
+        # start logger
         self.logger=None
-        #self.logger=start_logger(self.__class__.__name__,config_path)
+
         if not self.logger:
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-        #Wavelength calibration algorithm setup
-        self.alg=LFCWaveCalibration(self.config,self.logger)
+        # wavelength calibration algorithm setup
+        self.alg = LFCWaveCalibration(self.config, self.logger)
 
-        #Preconditions
+        # preconditions
        
-        #Postconditions
+        # postconditions
         
-    #Perform - primitive's action
     def _perform(self) -> None:
-        """Primitive action - 
-        Performs wavelength calibration by calling method 'run_wave_cal' from alg.py, and saves result in FITS extensions.
+        """ Primitive action.
+
+        Performs wavelength calibration by calling method 'run_wave_cal' 
+        from alg.py, and saves result in .fits extensions.
 
         Returns:
             Level 1 data, containing wavelength-per-pixel result.
         """
-        # 1. extracting master data
+
+        # extract master data
         if self.logger:
-            self.logger.info("Wavelength Calibration: Extracting master data")  
+            self.logger.info("Wavelength Calibration: Extracting master data.")  
 
-        master_data=self.alg.get_master_data(self.master_wavelength)
+        master_data = self.alg.get_master_data(self.master_wavelength)
 
-        # check that we actually have an LFC image
-        if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
-            raise ValueError('Not an LFC file!')
-
-        # 2. get comb frequency values
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Getting comb frequency values ")
-
-        if self.f0_key:
-            if type(self.f0_key) == str:
-                comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
-                print("comb_f0:",comb_f0)
-            if type(self.f0_key) == float:
-                comb_f0 = self.f0_key
-                print("comb_f0:",comb_f0)
-            # else:
-            #     raise ValueError('F_0 incorrectly formatted')
+        # check that we have an image containing the matching calibration type
+        if self.alg.config_type == 'LFC':
+            if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
+                raise ValueError('Not an LFC file!')
+        elif self.alg.config_type == 'ThAr':
+            if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('ThAr'):
+                raise ValueError('Not a ThAr file!')
+        elif self.alg.config_type == 'Etalon':
+            if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
+                raise ValueError('Not an Etalon file!')
         else:
-            raise ValueError('F_0 value not found')
+            raise ValueError(
+                'config_type {} not recognized. Available options are LFC, ThAr, and Etalon.'.format(
+                    self.alg.config_type
+                )
+            )
 
-        if self.frep_key:
-            if type(self.frep_key) == str:
-                comb_fr = float(self.l1_obj.header['PRIMARY'][self.frep_key])
-                print("comb_fr:",comb_fr)
-            if type(self.frep_key) == float:
-                comb_fr = self.frep_key
-                print("comb_fr:",comb_fr)
-            # else:
-            #     raise ValueError('F_Rep incorrectly formatted')
-        else:
-            raise ValueError('F_Rep value not found')
+        # get comb frequency values if LFC
+        if self.alg.config_type == 'LFC':
+            
+            if self.logger:
+                self.logger.info("Wavelength Calibration: Getting comb frequency values.")
 
-        # 2. starting loop
+            if self.f0_key is not None:
+                if type(self.f0_key) == str:
+                    comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
+                if type(self.f0_key) == float:
+                    comb_f0 = self.f0_key
+            else:
+                raise ValueError('f_0 value not found.')
+
+            if self.frep_key is not None:
+                if type(self.frep_key) == str:
+                    comb_fr = float(self.l1_obj.header['PRIMARY'][self.frep_key])
+                if type(self.frep_key) == float:
+                    comb_fr = self.frep_key
+            else:
+                raise ValueError('f_rep value not found')
+
         if self.logger:
             self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
         
         for prefix in ['CALFLUX']: #change to recipe config: 'orderlette_names' 
+
             if self.l1_obj[prefix] is not None:
                 self.logger.info("Wavelength Calibration: Running {prefix}")
                 if self.logger:
@@ -155,15 +185,20 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Running algorithm")  
 
-                wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr,self.quicklook)
+                wl_soln = self.alg.open_and_run(
+                    flux, self.alg.config_type, master_data=master_data, f0=comb_f0, 
+                    f_rep=comb_fr, quicklook=self.quicklook
+                )
 
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Saving solution output")  
-                self.l1_obj['CALWAVE']=wl_soln
+                self.l1_obj['CALWAVE'] = wl_soln
 
         if self.l1_obj is not None:
-            self.l1_obj.receipt_add_entry('Wavelength Calibration', self.__module__,
-                                          f'config_path={self.config_path}', 'PASS')
+            self.l1_obj.receipt_add_entry(
+                'Wavelength Calibration', self.__module__, 
+                f'config_path={self.config_path}', 'PASS'
+            )
         if self.logger:
             self.logger.info("Wavelength Calibration: Receipt written")
 
@@ -172,10 +207,3 @@ class WaveCalibrate(KPF1_Primitive):
 
         return Arguments(self.l1_obj)
 
-    def get_args_value(self, key: str, args: Arguments, args_keys: list):
-        v = None
-        if key in args_keys and args[key] is not None:
-            v = args[key]
-        else:
-            v = self.default_args_val[key]
-        return v
