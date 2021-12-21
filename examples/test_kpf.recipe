@@ -1,7 +1,8 @@
 test_data_dir = KPFPIPE_TEST_DATA
 
 data_type = config.ARGUMENT.data_type
-output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
+#output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
+output_dir = config.ARGUMENT.output_dir
 
 input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
 input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
