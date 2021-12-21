@@ -89,8 +89,8 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RED_TELLURIC': fits.BinTableHDU,
                      'RED_SKY': fits.BinTableHDU,
 
-                     'CA_HK_FLUX1': fits.ImageHDU,
-                     'CA_HK_FLUX2': fits.ImageHDU,
+                     'CA_HK_SCI': fits.ImageHDU,
+                     'CA_HK_SKY': fits.ImageHDU,
                      'CA_HK_WAVE': fits.ImageHDU,
                     }
 # KPF level 2 extensions should be defined here
