@@ -1,59 +1,78 @@
-# Standard dependencies
+# standard dependencies
 import configparser
 import numpy as np
 
-# Pipeline dependencies
+# pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
 
-# External dependencies
+# external dependencies
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
-# Local dependencies
-from modules.wavelength_cal.src.alg import LFCWaveCalibration
+# local dependencies
+from modules.wavelength_cal.src.alg import WaveCalibration
 
-# Global read-only variables
+# global read-only variables
 DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/LFC_NEID.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
     """
-    This module defines class `WaveCalibrate,` which inherits from KPF1_Primitive and provides methods
-    to perform the event `LFC wavelength calibration` in the recipe.
+    This module defines class `WaveCalibrate`, which inherits from KPF1_Primitive 
+    and provides methods to perform the event `WaveCalibration` in 
+    the recipe.
 
     Args:
         KPF1_Primitive: Parent class
-        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCalibration` event issued in recipe.
-        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+        action (keckdrpframework.models.action.Action): contains positional 
+            arguments and keyword arguments passed by the `WaveCalibration` 
+            event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): 
+            contains path of config file defined for `wavelength_cal` module in 
+            master config file associated with recipe.
 
     Attributes:
-        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[0]`
-        master_wavelength (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[1]`
-        data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
-        config_path (str): Path of config file for LFC wavelength calibration.
+        l1_obj (kpfpipe.models.level1.KPF1): instance of `KPF1`, assigned by 
+            `actions.args[0]`
+        quicklook (bool): whether to run quicklook pipeline, assigned by 
+            `actions.args[1]`
+        f0_key (str or float): if float, the initial frequency of the LFC
+            in Hz. If string, the fits header keyword used to look up this value.
+            Default None.
+        frep_key (str or float): if float, the repetition frequency of the LFC
+            in Hz. If string, the fits header keyword used to look up this value.
+            Default None.
+        master_wavelength (np.array): (N_orders x N_pixels) wavelength solution
+            that will be used to derive the wavelength solution of the 
+            input frame. Ex: for an LFC frame, this might be a ThAr-derived
+            solution.
+        data_type (str): 'KPF', 'NEID', etc
+        config_path (str): Path of config file for wavelength calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
-        alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
+        alg (modules.wavelength_cal.src.alg.WaveCalibration): instance of 
+            `WaveCalibration`, which has operation codes for wavelength 
+            calibration.
     """
 
     default_args_val = {
-            'data_type': 'KPF'
-        }
+        'data_type': 'KPF'
+    }
 
-    def __init__(self, 
-                action:Action,
-                context:ProcessingContext) -> None:
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
         """
         WaveCalibrate constructor.
 
         Args:
-            action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
+            action (Action): Contains positional arguments and keyword arguments 
+                passed by the `WaveCalibration` event issued in recipe:
               
-                `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 file
-                `action.args[1] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing master file
-                `action.args[2] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data type
+                `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` 
+                    containing level 1 file
+                `action.args[1] (str)`: data type
 
-            context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+            context (ProcessingContext): Contains path of config file defined for 
+                `wavelength_cal` module in master config file associated with recipe.
         """
 
         KPF1_Primitive.__init__(self, action, context)
@@ -67,30 +86,19 @@ class WaveCalibrate(KPF1_Primitive):
             return v
 
         # input arguments
-        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        args_keys = [item for item in self.action.args.iter_kw() if item != "name"]
 
         self.l1_obj = self.action.args[0]
         self.quicklook = self.action.args[1]
+        self.linelist_path = self.action.args[2]
 
         # look for and set optional keywords needed for LFC
-        self.f0_key = get_args_value('f0', action.args, args_keys)
-        self.frep_key = get_args_value('fr', action.args, args_keys)
+        self.f0_key = get_args_value('f0', self.action.args, args_keys)
+        self.frep_key = get_args_value('fr', self.action.args, args_keys)
 
         # look for and set other optional keywords
-        self.master_wavelength = get_args_value('master_wavelength', action.args, args_keys)
-        self.peak_wavelength_data = get_args_value('peak_wavelength_data', action.args, args_keys)
-        self.data_type = get_args_value('data_type', action.args, args_keys)
-
-        # possible keyword configurations:
-        # LFC: self.master_wavelength always set (lamp solution)
-        #  1) self.peak_wavelength_data set (expected mode nums & pixels)
-        #  2) self.peak_wavelength_data NOT set (need to refind peaks)
-        # ThAr/other lamp:
-        #  1) self.master_wavelength NOT set,
-        #     self.peak_wavelength_data set (expected line wavelengths & pixels)
-        # Etalon: self.master_wavelength always set (lamp solution OR LFC solution)
-        #  1) self.peak_wavelength_data set (expected peak numbers ("modes") & pixels)
-        #  2) self.peak_wavelength_data NOT set (need to refind peaks)
+        self.master_wavelength = get_args_value('master_wavelength', self.action.args, args_keys)
+        self.data_type = get_args_value('data_type', self.action.args, args_keys)
 
         # input configuration
         self.config=configparser.ConfigParser()
@@ -108,7 +116,7 @@ class WaveCalibrate(KPF1_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # wavelength calibration algorithm setup
-        self.alg = LFCWaveCalibration(self.config, self.logger)
+        self.alg = WaveCalibration(self.config, self.logger)
 
         # preconditions
        
@@ -117,38 +125,40 @@ class WaveCalibrate(KPF1_Primitive):
     def _perform(self) -> None:
         """ Primitive action.
 
-        Performs wavelength calibration by calling method 'run_wave_cal' 
+        Performs wavelength calibration by calling method `run_wavelength_cal()` 
         from alg.py, and saves result in .fits extensions.
 
         Returns:
-            Level 1 data, containing wavelength-per-pixel result.
+            keckdrpframework.models.arguments.Arguments: a single
+                kpfpipe.models.level1.KPF1 object containing 
+                wavelength-per-pixel result in the CALWAVE fits header
         """
 
         # extract master data
         if self.logger:
-            self.logger.info("Wavelength Calibration: Extracting master data.")  
+            self.logger.info("Wavelength Calibration: Extracting master wavelength solution.")  
 
-        master_data = self.alg.get_master_data(self.master_wavelength)
+        rough_wls = self.alg.get_master_data(self.master_wavelength)
 
         # check that we have an image containing the matching calibration type
-        if self.alg.config_type == 'LFC':
+        if self.alg.cal_type == 'LFC':
             if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
                 raise ValueError('Not an LFC file!')
-        elif self.alg.config_type == 'ThAr':
+        elif self.alg.cal_type == 'ThAr':
             if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('ThAr'):
                 raise ValueError('Not a ThAr file!')
-        elif self.alg.config_type == 'Etalon':
+        elif self.alg.cal_type == 'Etalon':
             if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                 raise ValueError('Not an Etalon file!')
         else:
             raise ValueError(
-                'config_type {} not recognized. Available options are LFC, ThAr, and Etalon.'.format(
-                    self.alg.config_type
+                'cal_type {} not recognized. Available options are LFC, ThAr, and Etalon.'.format(
+                    self.alg.cal_type
                 )
             )
 
         # get comb frequency values if LFC
-        if self.alg.config_type == 'LFC':
+        if self.alg.cal_type == 'LFC':
             
             if self.logger:
                 self.logger.info("Wavelength Calibration: Getting comb frequency values.")
@@ -169,25 +179,40 @@ class WaveCalibrate(KPF1_Primitive):
             else:
                 raise ValueError('f_rep value not found')
 
+            lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
+        else:
+            lfc_allowed_wls = None
+
         if self.logger:
             self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
-        
-        for prefix in ['CALFLUX']: #change to recipe config: 'orderlette_names' 
+
+        for prefix in ['CALFLUX']: # TODO: change to recipe config: 'orderlette_names' 
 
             if self.l1_obj[prefix] is not None:
                 self.logger.info("Wavelength Calibration: Running {prefix}")
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Extracting flux")
                 
-                flux = self.l1_obj[prefix]
+                calflux = self.l1_obj[prefix]
 
-                flux = np.nan_to_num(flux)
+                calflux = np.nan_to_num(calflux)
                 if self.logger:
                     self.logger.info("Wavelength Calibration: Running algorithm")  
+                
 
-                wl_soln = self.alg.open_and_run(
-                    flux, self.alg.config_type, master_data=master_data, f0=comb_f0, 
-                    f_rep=comb_fr, quicklook=self.quicklook
+                if self.linelist_path is not None:
+                    peak_wavelengths_ang = np.load(
+                        self.linelist_path, allow_pickle=True
+                    ).tolist()
+                else:
+                    peak_wavelengths_ang = None
+
+                # perform wavelength calibration
+                wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+                    calflux, self.alg.cal_type, rough_wls = rough_wls, 
+                    peak_wavelengths_ang = peak_wavelengths_ang, 
+                    lfc_allowed_wls = lfc_allowed_wls, 
+                    quicklook = self.quicklook
                 )
 
                 if self.logger:
@@ -205,5 +230,5 @@ class WaveCalibrate(KPF1_Primitive):
         if self.logger:
             self.logger.info("Wavelength Calibration: Done!")
 
-        return Arguments(self.l1_obj)
+        return Arguments(self.l1_obj, wls_and_pixels)
 

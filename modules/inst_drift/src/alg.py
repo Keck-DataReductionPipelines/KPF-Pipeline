@@ -1,5 +1,10 @@
 import numpy as np
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
 from astropy.io import fits
+from astropy import units as u, constants as cst
 
 # two algorithms: 1) using existing polynomial solutions, interpolate for given obs time:
 #   compute a mean RV based on the pixel-level differences
@@ -18,25 +23,98 @@ class InstDrift(object):
         """
         pass
 
-    def plot_drift(self, calibration_fitsfile_array):
+    def plot_drift(self, wlpixelfile1, wlpixelfile2, savename):
         """
         overall RV of cal data vs time for array of input files
         """
-        pass
+        # for each file in array, calculate drift using func below between ith file and 0th file
+        # then plot drift vs time
+        
+        drift = self.calcdrift_polysolution(wlpixelfile1, wlpixelfile2)
+
+        obsname1 = wlpixelfile1.split('_')[1]
+        obsname2 = wlpixelfile2.split('_')[1]
+
+        fig, ax = plt.subplots()
+        ax.axhline(0, color='grey', ls='--')
+
+        plt.plot(
+            drift[:,0], drift[:,1], 'ko', ls='-'
+        )
+        plt.title('Inst. drift: {} to {}'.format(obsname1, obsname2))
+        plt.xlabel('order')
+        plt.ylabel('drift [cm s$^{-1}$]')
+        plt.savefig(savename, dpi=250)
 
     def calcdrift_ccf(self, obstime, calfile1, calfile2):
         pass
 
-    def calcdrift_polysolution(self, obstime, calfile1, calfile2):
+    def calcdrift_polysolution(self, wlpixelfile1, wlpixelfile2):
 
-        calfile1 = fits.open(calfile1)
-        wls1 = calfile1['SCIWAVE'].data
-        time1 = calfile1[0].OBSJD # TODO: is this correct time to use for interpolation?
+        peak_wavelengths_ang1 = np.load(
+            wlpixelfile1, allow_pickle=True
+        ).tolist()
 
-        calfile2 = fits.open(calfile2)
-        wls2 = calfile2['SCIWAVE'].data
-        time2 = calfile2[0].OBSJD
+        peak_wavelengths_ang2 = np.load(
+            wlpixelfile2, allow_pickle=True
+        ).tolist()
 
-        wl_diff = np.mean(wls2 - wls1)
+        orders = peak_wavelengths_ang1.keys()
 
-        # TODO: interpolate based on time diffs, return
+        drift_all_orders = np.empty((len(orders),2))
+
+        # make a dataframe and join on wavelength
+        for i, order_num in enumerate(orders):
+
+            order_wls1 = pd.DataFrame(
+                data = np.transpose([
+                    peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
+                    peak_wavelengths_ang1[order_num]['line_positions']
+                ]),
+                columns=['wl', 'pixel1']
+            )
+
+            order_wls2 = pd.DataFrame(
+                data = np.transpose([
+                    peak_wavelengths_ang2[order_num]['known_wavelengths_vac'],
+                    peak_wavelengths_ang2[order_num]['line_positions']
+                ]),
+                columns=['wl', 'pixel2']
+            )
+
+            order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
+
+            delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
+            delta_pixel = order_wls.pixel2.values[1:] - order_wls.pixel1.values[:-1]
+
+            drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
+
+            drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda # TODO: is this the correct way to compute drift?
+
+            drifts_cms = (drift_wl / order_wls.index.values[1:] * cst.c).to(u.cm/u.s).value
+
+            drift_all_orders[i,0] = order_num
+            drift_all_orders[i,1] = np.mean(drifts_cms)
+
+        return drift_all_orders
+
+if __name__ == '__main__':
+    myI = InstDrift()
+    file1 = '/code/KPF-Pipeline/outputs/neidL1_20191217T023129_wls_pixels.npy'
+    file2 = '/code/KPF-Pipeline/outputs/neidL1_20191217T023815_wls_pixels.npy'
+    drift = myI.plot_drift(file1, file2, '/code/KPF-Pipeline/outputs/drift.png')
+
+
+
+
+            # calfile1 = fits.open(calfile1)
+            # wls1 = calfile1['SCIWAVE'].data
+            # time1 = calfile1[0].OBSJD # TODO: is this correct time to use for interpolation?
+
+            # calfile2 = fits.open(calfile2)
+            # wls2 = calfile2['SCIWAVE'].data
+            # time2 = calfile2[0].OBSJD
+
+            # wl_diff = np.mean(wls2 - wls1)
+
+            # TODO: compute overall RV shift, then use this as wls. The drift code will do all future etalons, this will only do first & last one
