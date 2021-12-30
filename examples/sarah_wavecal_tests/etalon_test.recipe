@@ -1,0 +1,29 @@
+from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
+from modules.Utils.save_wl_pixel_info import save_wl_pixel_info
+
+for filenum in config.ARGUMENT.obs_list:
+
+    L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + filenum + '.fits'
+    master_file = config.ARGUMENT.master_wls_file + '.fits'
+
+    etalon_data = kpf1_from_fits(L1_file, data_type='NEID')
+    quicklook = False
+    savefile = config.ARGUMENT.output_dir + config.ARGUMENT.obs_prefix + filenum + '_wls_pixels.npy'
+
+    if filenum == config.ARGUMENT.obs_list[0]:
+
+        # same as savefile for first file in list
+        master_wlpixel_file = config.ARGUMENT.output_dir + config.ARGUMENT.obs_prefix + filenum + '_wls_pixels.npy'
+
+        # use wls from L1 NEID file as master solution
+        _, wls_and_pixels = WaveCalibrate(etalon_data, quicklook, None, master_wavelength=master_file, data_type='NEID')
+
+    else:
+
+        # use saved pixels & wavelengths from first run
+        _, wls_and_pixels = WaveCalibrate(
+            etalon_data, quicklook, master_wlpixel_file, master_wavelength=master_file, data_type='NEID',
+        )
+
+    # save derived wavelength/pixel information for peaks
+    save_wl_pixel_info(savefile, wls_and_pixels)
