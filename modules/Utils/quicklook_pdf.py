@@ -29,7 +29,7 @@ class quicklook_pdf(KPF0_Primitive):
         """Combines quicklook outputs into single pdf file.
 
         Args:
-            png_list (list, optional): List of .png files output by quicklook parts of modules to combine onto pdf. Defaults to None.
+            png_list (list): List of .png files output by quicklook parts of modules to combine onto pdf.
             pdf_list (list, optional): List of .pdf files output by quicklook parts of modules to combine onto pdf (if possible). Defaults to None.
         """
         pdf = FPDF(orientation = 'L',unit='mm', format='A3')
