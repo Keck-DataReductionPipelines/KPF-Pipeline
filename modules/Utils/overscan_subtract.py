@@ -20,9 +20,9 @@ class OverscanSubtraction(KPF0_Primitive):
         self.mode = self.action.args[3] #defines which method of overscan subtraction
         self.order = self.action.args[4] #if self.mode = 'polynomial', defines order of polynomial fit
         self.oscan_clip_no = self.action.args[5] #amount of pixels clipped from each edge of overscan
-        self.ref_output=self.action.args[6] #output of ccd reference file
-        self.ffi_exts=self.action.args[7] #fits extensions where ffis will be stored
-        self.data_type=self.action.args[8] #data type, pertaining to instrument
+        self.ref_output = self.action.args[6] #output of ccd reference file
+        self.ffi_exts = self.action.args[7] #fits extensions where ffis will be stored
+        self.data_type = self.action.args[8] #data type, pertaining to instrument
 
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region
@@ -37,7 +37,8 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         # if self.rawfile.header['NOSCN_S'] and self.rawfile.header['NOSCN_P']:
 
-        # else:       
+        # else:
+      
         srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
         prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
         srl_N_overscan = len(srl_overscan_pxs)
@@ -152,6 +153,25 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
 
+    def neid_overscan_arrays(self,channel_exts):
+        """[summary]
+
+        Args:
+            channel_exts ([type]): [description]
+        """
+        no_oscan = self.rawfile.header[channel_exts[0]]['DATASEC']
+        no_oscan = no_oscan.replace('[','')
+        no_oscan = no_oscan.replace(']','')
+        a,b = no_oscan.split(',')
+        col_start,col_end = a.split(':')
+        row_start,row_end = b.split(':')
+        col_start,col_end,row_start,row_end = int(col_start),int(col_end),int(row_start),int(row_end)
+        
+    def neid_run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
+        self.neid_overscan_arrays(channel_exts)
+        for img,key in zip(channel_imgs,channel_keys):
+            new_img = self.orientation_adjust(img,key)
+        
     def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
         """Performs overscan subtraction steps, in order: orient frame, subtract overscan (method
         chosen by user) from correctly-oriented frame (overscan on right and bottom), cuts off overscan region.
@@ -200,8 +220,9 @@ class OverscanSubtraction(KPF0_Primitive):
         Returns:
             l0_obj(fits.hdulist): Original FITS.hdulist but with FFI extension(s) filled
         """
+        channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
+
         if self.data_type == 'KPF':
-            channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
             l0_obj = self.rawfile
             frames_data = []
             for ext in channel_exts:
@@ -214,7 +235,10 @@ class OverscanSubtraction(KPF0_Primitive):
                 full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
                 #full_frame_images.append(full_frame_img)
                 l0_obj[self.ffi_exts[frame]] = full_frame_img
-        if self.data_type == 'NEID':
-            l0_obj = self.rawfile
-            #no overscan or image to assemble at the moment
+        
+        # if self.data_type == 'NEID':
+        #     l0_obj = self.rawfile
+        #     # self.neid_overscan_arrays(channel_exts)
+        #     self.orientation_adjust()
+        #     #no overscan or image to assemble at the moment
         return Arguments(l0_obj)
