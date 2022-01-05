@@ -103,18 +103,3 @@ if __name__ == '__main__':
     file1 = '/code/KPF-Pipeline/outputs/neidL1_20191217T023129_wls_pixels.npy'
     file2 = '/code/KPF-Pipeline/outputs/neidL1_20191217T023815_wls_pixels.npy'
     drift = myI.plot_drift(file1, file2, '/code/KPF-Pipeline/outputs/drift.png')
-
-
-
-
-            # calfile1 = fits.open(calfile1)
-            # wls1 = calfile1['SCIWAVE'].data
-            # time1 = calfile1[0].OBSJD # TODO: is this correct time to use for interpolation?
-
-            # calfile2 = fits.open(calfile2)
-            # wls2 = calfile2['SCIWAVE'].data
-            # time2 = calfile2[0].OBSJD
-
-            # wl_diff = np.mean(wls2 - wls1)
-
-            # TODO: compute overall RV shift, then use this as wls. The drift code will do all future etalons, this will only do first & last one

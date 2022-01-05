@@ -27,8 +27,8 @@ class save_wl_pixel_info(KPF1_Primitive):
         self.data = self.action.args[1]
 
     def _perform(self) -> None:
-        '''
+        """
         TODO: document
-        '''
-
+        """
+        
         np.save(self.filename, self.data, allow_pickle=True)

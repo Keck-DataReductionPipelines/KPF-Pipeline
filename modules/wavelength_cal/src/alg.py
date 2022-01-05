@@ -29,6 +29,7 @@ class WaveCalibration(object):
                 Defaults to None.
         
         Attributes:
+            cal_type (str): One of "Etalon", "LFC", or "ThAr". Pulled from config file.
             max_wave (int): Maximum wavelength of wavelength range, in Angstroms. 
                 Pulled from config file.
             min_wave (int): Minimum wavelength of wavelength range, in Angstroms. 
@@ -40,10 +41,15 @@ class WaveCalibration(object):
                 extension. Pulled from config file.
             n_sections (int): Number of sections to divide the order_flux into. Pulled 
                 from config file.
-            skip_orders ():
-            save_diagnostics ():
-            quicklook_ord_s ():
-            TODO: complete these
+            skip_orders (list of int): orders not to compute a wavelength solution for.
+                Pulled from config file.
+            save_diagnostics (str): path to save diagnostic plots to, or "False" if
+                not saving plots. Pulled from config file.
+            quicklook_ord_s (int): number of orders to skip in order removal (for QLP).
+                Pulled from config file.
+            gaussian_fit_width (int): number of pixels to use for fitting Gaussians
+                to peaks. Pulled from config file.
+            flux_ext (str): fits extension where flux data is stored. Pulled from config file.
         """
 
         configpull = ConfigHandler(config, 'PARAM')
@@ -60,9 +66,6 @@ class WaveCalibration(object):
         self.quicklook_ord_steps = configpull.get_config_value('quicklook_ord_steps', 5)
         self.gaussian_fit_width = configpull.get_config_value('gaussian_fit_width', 10)
         self.flux_ext = configpull.get_config_value('flux_ext','CALFLUX')
-        self.wave_ext = configpull.get_config_value('wave_ext','SCIWAVE')
-        self.saveplots = configpull.get_config_value('saveplots', 'ThAr_plots')
-        # self.linelist_path = configpull.get_config_value('linelist_path', None)
         self.config = config
         self.logger = logger
 
@@ -406,7 +409,9 @@ class WaveCalibration(object):
         Given a linelist derived from physics and a preexisting mapping of pixels to 
         vacuum wavelengths, returns precise pixels for wavelengths.
 
-        Works for ThAr and LFC. TODO: document
+        Args:
+
+        Retuns:
 
         # search_within: pixel +/- range within which to search for lines
         # gaussian_fit_width: pixel +/- range to use for Gaussian fitting
