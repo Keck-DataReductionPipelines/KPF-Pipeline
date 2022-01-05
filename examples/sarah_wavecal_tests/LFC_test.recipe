@@ -1,13 +1,3 @@
-# TODO: LFC0, LFCR should be defined in wlc config
-# TODO: add kwarg for diagnostic plot loc; think about which plots to save long-term/more granular on/off kwargs
-# TODO: make sure wave solution is saved to actual file
-# TODO: autocorr of comb lines to probe PSF at this point
-# TODO: make output fits extension a cfg param
-# TODO: we should only put choices in config 
-# TODO: make a database rather than saving individual intermediate files
-# TODO: fourier decomposition of calibration error
-# TODO: plot of median flux per order?
-
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
 L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
