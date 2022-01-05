@@ -402,7 +402,7 @@ class WaveCalibration(object):
         return good_peak_idx
 
     def line_match(
-        self, flux, linelist, line_pixels_expected, plot_toggle, savefig, search_within=1,
+        self, flux, linelist, line_pixels_expected, plot_toggle, savefig,
         gaussian_fit_width = 10
     ):
         """
@@ -410,11 +410,19 @@ class WaveCalibration(object):
         vacuum wavelengths, returns precise pixels for wavelengths.
 
         Args:
+            flux (np.array): flux of order
+            linelist (np.array of float): wavelengths of lines to be fit (Angstroms)
+            line_pixels_expected (np.array of float): expected pixels for each wavelength
+                (Angstroms); must be same length as `linelist`
+            plot_toggle (bool): if True, make and save plots.
+            savefig (str): path to directory where plots will be saved
+            gaussian_fit_width (int): pixel +/- range to use for Gaussian fitting
 
         Retuns:
-
-        # search_within: pixel +/- range within which to search for lines
-        # gaussian_fit_width: pixel +/- range to use for Gaussian fitting
+            tuple of:
+                - np.array: same input linelist
+                - np.array: array of size (4, n_peaks) containing best-fit 
+                  Gaussian parameters [a, mu, sigma**2, const] for each detected peak  
 
 
         """
@@ -730,16 +738,16 @@ class WaveCalibration(object):
 
         return precision_cm_s
 
-    def mask_array_neid(self, calflux,n_orders):
+    def mask_array_neid(self, calflux, n_orders):
         """ Creates ad-hoc mask to remove bad pixel regions specific to order. 
-        For NEID testing. TODO: document
+        For NEID testing. 
 
         Args:
-            calflux (np.array): [description]
-            n_orders (np.array): [description]
+            calflux (np.array): (N_orders x N_pixels) flux array to be masked
+            n_orders (np.array): number of orders to be masked
 
         Returns:
-            calflux [type]: [description]
+            np.array: masked flux array
         """
         mask = np.zeros((2,n_orders),dtype=int)
         
@@ -825,26 +833,31 @@ class WaveCalibration(object):
         Iteratively performs wavelength calibration for all orders.
 
         Args:
-        TODO: update
             cal_flux (np.array): (n_orders x n_pixels) array of calibrator fluxes
                 for which to derive a wavelength solution
-            rough_wls (np.array): (n_orders x n_pixels) array of    
-                ThAr-derived wavelength solution values for each pixel on the detector
-            order_flux_lines_angstrom (np.array): theoretical LFC wavelengths
-                as computed by fundamental physics (in Angstroms)
-            order_list (list): Order list
+            order_list (list of int): list order to compute wls for
+            cal_type (str): one of 'LFC', 'Etalon', or 'ThAr'
+            rough_wls (np.array): (N_orders x N_pixels) array of wavelength 
+                values describing a "rough" wavelength solution. Always None for
+                lamps. For LFC, this is generally a lamp-derived solution.
+                For Etalon, this is generally an LFC-derived solution. Default None.
+            comb_lines_angstrom (np.array): array of all allowed wavelengths for the 
+                LFC, computed using the order_flux equation. Should be None unless we
+                are calibrating an LFC frame. Default None.
+            expected_peak_locs (dict): dictionary of order number-dict
+                pairs. See description in run_wavelength_cal().
             plt_path (str): if set, all diagnostic plots will be saved in this
                 directory. If None, no plots will be made.
             print_update (bool): whether subfunctions should print updates.
 
         Returns:
-            dict: the LFC mode numbers used for wavelength cal. Keys are ints
-                representing order numbers, values are 2-tuples of:
-                    - lists of mode numbers
-                    - the corresponding pixels on which the LFC mode maxima fall
-
-            np.array: Polynomial solution for each tested order
-            np.array: ThAr solutions for each tested order
+            tuple of:
+                np.array of float: (N_orders x N_pixels) Polynomial solution
+                np.array: ThAr solutions for each tested order
+                dict: the LFC mode numbers used for wavelength cal. Keys are ints
+                    representing order numbers, values are 2-tuples of:
+                        - lists of mode numbers
+                        - the corresponding pixels on which the LFC mode maxima fall
         """    
 
         # 2D extracted spectra
