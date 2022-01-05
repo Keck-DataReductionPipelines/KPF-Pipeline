@@ -3,7 +3,7 @@ drift modules. The items are organized by near-term and long-term. Notes are at
 the bottom. Near-term TODOs are in rough order of importance.
 
 Near-term:
-1. Generalize variable names in wavelength_cal/alg.py and wavelength_cal/wavelength_cal.py (Abby?)
+1. Generalize variable names (and docstrings) in wavelength_cal/alg.py and wavelength_cal/wavelength_cal.py
 2. Integrate instrument drift module into the rest of the pipeline and write a test recipe (Abby?)
 3. Document save_wl_pixel_info.py (Abby?)
 4. Check that Gaussian fits have wide enough kernel widths for ThAr data (plot)
