@@ -82,7 +82,7 @@ class WaveCalibrate(KPF1_Primitive):
             if key in args_keys:
                 v = args[key]
             elif key in self.default_args_val.keys():
-                v = self.default_args_val[key]
+             v = self.default_args_val[key]
             return v
 
         # input arguments
