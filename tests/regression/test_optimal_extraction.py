@@ -2,13 +2,13 @@ import pytest
 from dotenv import load_dotenv
 from astropy.io import fits
 import numpy as np
-from modules.optimal_extraction.src.alg import OptimalExtractionAlg
+from modules.spectral_extraction.src.alg import SpectralExtractionAlg
 import configparser
 import os
 load_dotenv()
 
 result_data = os.getenv('KPFPIPE_TEST_DATA') + '/optimal_extraction_test/for_pytest/paras_'
-# result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/optimal_extraction/results/PARAS_3sigma/paras_'
+# result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/spectral_extraction/results/PARAS_3sigma/paras_'
 rectification_method = ['optimal_norm_fraction', 'optimal_vertical_fraction', 'optimal_not_rectified']
 
 collect_flux_fits = 'flux'
@@ -53,8 +53,8 @@ def np_equal(ary1: np.ndarray, ary2: np.ndarray, msg_prefix=""):
     return True, ""
 
 
-def start_paras_optimal_extraction(rectification_method=OptimalExtractionAlg.NoRECT,
-                                   extraction_method=OptimalExtractionAlg.OPTIMAL):
+def start_paras_optimal_extraction(rectification_method=SpectralExtractionAlg.NoRECT,
+                                   extraction_method=SpectralExtractionAlg.OPTIMAL):
     config_paras = configparser.ConfigParser()
     config_paras['PARAM'] = {
         'instrument': 'PARAS',
@@ -80,7 +80,7 @@ def start_paras_optimal_extraction(rectification_method=OptimalExtractionAlg.NoR
     flat_flux = fits.open(paras_flat)
     spectrum_flux, spectrum_header = fits.getdata(paras_data, header=True)
 
-    opt_ext_t = OptimalExtractionAlg(flat_flux[0].data, flat_flux[0].header, spectrum_flux, spectrum_header,
+    opt_ext_t = SpectralExtractionAlg(flat_flux[0].data, flat_flux[0].header, spectrum_flux, spectrum_header,
                                      order_trace_result, order_trace_header,
                                      rectification_method=rectification_method,
                                      extraction_method=extraction_method)
@@ -88,7 +88,7 @@ def start_paras_optimal_extraction(rectification_method=OptimalExtractionAlg.NoR
     return opt_ext_t
 
 
-def start_paras_flat_rectification(rectification_method=OptimalExtractionAlg.NoRECT):
+def start_paras_flat_rectification(rectification_method=SpectralExtractionAlg.NoRECT):
     config_paras = configparser.ConfigParser()
     config_paras['PARAM'] = {
         'instrument': 'PARAS',
@@ -108,14 +108,14 @@ def start_paras_flat_rectification(rectification_method=OptimalExtractionAlg.NoR
 
     flat_flux = fits.open(paras_flat)
 
-    opt_ext_t = OptimalExtractionAlg(flat_flux[0].data, flat_flux[0].header, None, None,
+    opt_ext_t = SpectralExtractionAlg(flat_flux[0].data, flat_flux[0].header, None, None,
                                      order_trace_result, order_trace_header,
                                      rectification_method=rectification_method,
-                                     extraction_method=OptimalExtractionAlg.NOEXTRACT)
+                                     extraction_method=SpectralExtractionAlg.NOEXTRACT)
     return opt_ext_t
 
 
-def start_paras_spectrum_rectification(rectification_method=OptimalExtractionAlg.NoRECT):
+def start_paras_spectrum_rectification(rectification_method=SpectralExtractionAlg.NoRECT):
     config_paras = configparser.ConfigParser()
     config_paras['PARAM'] = {
         'instrument': 'PARAS',
@@ -139,10 +139,10 @@ def start_paras_spectrum_rectification(rectification_method=OptimalExtractionAlg
     flat_flux = fits.open(paras_flat)
     spectrum_flux, spectrum_header = fits.getdata(paras_data, header=True)
 
-    opt_ext_t = OptimalExtractionAlg(flat_flux[0].data, flat_flux[0].header, spectrum_flux, spectrum_header,
+    opt_ext_t = SpectralExtractionAlg(flat_flux[0].data, flat_flux[0].header, spectrum_flux, spectrum_header,
                                      order_trace_result, order_trace_header,
                                      rectification_method=rectification_method,
-                                     extraction_method=OptimalExtractionAlg.NOEXTRACT)
+                                     extraction_method=SpectralExtractionAlg.NOEXTRACT)
 
     return opt_ext_t
 
@@ -177,16 +177,16 @@ def test_init_exceptions():
     spectrum_header = spectrum_flux[0].header
 
     with pytest.raises(TypeError):
-        OptimalExtractionAlg(flat_flux, spectrum_data, spectrum_header, order_trace_result, order_trace_header)
+        SpectralExtractionAlg(flat_flux, spectrum_data, spectrum_header, order_trace_result, order_trace_header)
 
     with pytest.raises(TypeError):
-        OptimalExtractionAlg(flat_data, spectrum_flux, spectrum_header, order_trace_result, order_trace_header)
+        SpectralExtractionAlg(flat_data, spectrum_flux, spectrum_header, order_trace_result, order_trace_header)
 
     with pytest.raises(TypeError):
-        OptimalExtractionAlg(flat_data, spectrum_data, spectrum_header, list(order_trace_result), order_trace_header)
+        SpectralExtractionAlg(flat_data, spectrum_data, spectrum_header, list(order_trace_result), order_trace_header)
 
     with pytest.raises(TypeError):
-        OptimalExtractionAlg(None, spectrum_data, None, order_trace_result, order_trace_header, )
+        SpectralExtractionAlg(None, spectrum_data, None, order_trace_result, order_trace_header, )
 
 
 def test_get_flux_from_order_exceptions():
@@ -205,7 +205,7 @@ def test_get_flux_from_order_exceptions():
 
 
 def test_optimal_extraction_exceptions():
-    method = OptimalExtractionAlg.VERTICAL
+    method = SpectralExtractionAlg.VERTICAL
     opt_ext = start_paras_optimal_extraction(method)
 
     m_file = '_'+rectification_method[method]+'.fits'
@@ -272,17 +272,17 @@ def get_flux_from_order_by_method(method):
 
 
 def test_get_flux_from_order_norect():
-    method = OptimalExtractionAlg.NoRECT
+    method = SpectralExtractionAlg.NoRECT
     get_flux_from_order_by_method(method)
 
 
 def test_get_flux_from_order_vertical():
-    method = OptimalExtractionAlg.VERTICAL
+    method = SpectralExtractionAlg.VERTICAL
     get_flux_from_order_by_method(method)
 
 
 def test_get_flux_from_order_normal():
-    method = OptimalExtractionAlg.NORMAL
+    method = SpectralExtractionAlg.NORMAL
     get_flux_from_order_by_method(method)
 
 
@@ -308,15 +308,15 @@ def optimal_extraction_by_method(method):
 
 
 def test_optimal_extraction_norect():
-    method = OptimalExtractionAlg.NoRECT
+    method = SpectralExtractionAlg.NoRECT
     optimal_extraction_by_method(method)
 
 
 def test_optimal_extraction_vertical():
-    method = OptimalExtractionAlg.VERTICAL
+    method = SpectralExtractionAlg.VERTICAL
     optimal_extraction_by_method(method)
 
 
 def test_optimal_extraction_normal():
-    method = OptimalExtractionAlg.NORMAL
+    method = SpectralExtractionAlg.NORMAL
     optimal_extraction_by_method(method)
