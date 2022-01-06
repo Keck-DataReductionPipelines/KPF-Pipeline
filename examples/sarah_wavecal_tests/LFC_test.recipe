@@ -4,11 +4,13 @@ L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUME
 master_file = config.ARGUMENT.master_wls_file + '.fits'
 
 lfc_data = kpf1_from_fits(L1_file, data_type='NEID')
+f0 = config.ARGUMENT.f0_key
+fr = config.ARGUMENT.frepy_key
 
 quicklook = False
 
 # use wls from L1 NEID file as master solution
-wave_soln, _ = WaveCalibrate(lfc_data, quicklook, master_wavelength=master_file, f0='LFCF0', fr='LFCFR', data_type='NEID')
+wave_soln, _ = WaveCalibrate(lfc_data, quicklook, master_wavelength=master_file, f0, fr, data_type='NEID')
 
 obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
 output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
