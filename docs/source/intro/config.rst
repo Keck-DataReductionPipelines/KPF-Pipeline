@@ -73,7 +73,7 @@ The section ``MODULE_CONFIGS`` contains key/value pairs for the path of the conf
 
 	[MODULE_CONFIGS]
 	order_trace = modules/order_trace/configs/default_recipe_neid.cfg
-	optimal_extraction = modules/optimal_extraction/configs/default_recipe_neid.cfg
+	spectral_extraction = modules/spectral_extraction/configs/default_recipe_neid.cfg
 	radial_velocity = modules/radial_velocity/configs/default_recipe_neid.cfg
 
 
