@@ -5,10 +5,12 @@ import scipy
 import os
 from scipy import signal
 from scipy.special import erf
+import pandas as pd
 from scipy.interpolate import InterpolatedUnivariateSpline
 from modules.Utils.config_parser import ConfigHandler
 from scipy.optimize.minpack import curve_fit
 from numpy.polynomial.legendre import Legendre
+from astropy import units as u, constants as cst
 
 class WaveCalibration(object):
     """
@@ -68,6 +70,89 @@ class WaveCalibration(object):
         self.flux_ext = configpull.get_config_value('flux_ext','CALFLUX')
         self.config = config
         self.logger = logger
+
+    def plot_poly_coefs(self,coef_num,order_num):
+        """*** to implement in the future: polynomail coeffs vs time for specific order (inputs: poly num, order num)
+
+        Args:
+            coef_num ([type]): [description]
+            order_num ([type]): [description]
+        """
+        pass
+    
+    def plot_drift(self,wlpixelfile1,wlpixelfile2,savename):
+        """Overall RV of cal data vs time for array of input files.
+
+        Args:
+            wlpixelfile1 ([type]): [description]
+            wlpixelfile2 ([type]): [description]
+            savename ([type]): [description]
+        """
+        drift = self.calcdrift_polysolution(wlpixelfile1,wlpixelfile2)
+        obsname1 = wlpixelfile1.split('_')[1]
+        obsname2 = wlpixelfile2.split('_')[1]
+        
+        fig,ax = plt.subplots()
+        ax.axhline(0,color='grey',ls='--')
+        
+        plt.plot(
+            drift[:,0],drift[:,1],'ko',ls='-'
+        )
+        plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
+        plt.xlabel('order')
+        plt.ylabel('drift [cm s$^{-1}$]')
+        plt.savefig(savename, dpi=250)
+        
+    def calcdrift_ccf(self,obstime,calfile1,calfile2):
+        pass
+    
+    def calcdrift_polysolution(self,wlpixelfile1,wlpixelfile2):
+        peak_wavelengths_ang1 = np.load(
+            wlpixelfile1, allow_pickle=True
+        ).tolist()
+
+        peak_wavelengths_ang2 = np.load(
+            wlpixelfile2, allow_pickle=True
+        ).tolist()
+
+        orders = peak_wavelengths_ang1.keys()
+
+        drift_all_orders = np.empty((len(orders),2))
+
+        # make a dataframe and join on wavelength
+        for i, order_num in enumerate(orders):
+
+            order_wls1 = pd.DataFrame(
+                data = np.transpose([
+                    peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
+                    peak_wavelengths_ang1[order_num]['line_positions']
+                ]),
+                columns=['wl', 'pixel1']
+            )
+
+            order_wls2 = pd.DataFrame(
+                data = np.transpose([
+                    peak_wavelengths_ang2[order_num]['known_wavelengths_vac'],
+                    peak_wavelengths_ang2[order_num]['line_positions']
+                ]),
+                columns=['wl', 'pixel2']
+            )
+
+            order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
+
+            delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
+            delta_pixel = order_wls.pixel2.values[1:] - order_wls.pixel1.values[:-1]
+
+            drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
+
+            drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda # TODO: is this the correct way to compute drift?
+
+            drifts_cms = (drift_wl / order_wls.index.values[1:] * cst.c).to(u.cm/u.s).value
+
+            drift_all_orders[i,0] = order_num
+            drift_all_orders[i,1] = np.mean(drifts_cms)
+
+        return drift_all_orders
 
     def remove_orders(self,step=1):
         """Removes bad orders from order list if between min and max orders to test.

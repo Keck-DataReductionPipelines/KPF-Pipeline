@@ -55,9 +55,9 @@ class WaveCalibrate(KPF1_Primitive):
             calibration.
     """
 
-    default_args_val = {
-        'data_type': 'KPF'
-    }
+    # default_args_val = {
+    #     'data_type': 'KPF'
+    # }
 
     def __init__(self, action:Action, context:ProcessingContext) -> None:
         """
@@ -91,6 +91,8 @@ class WaveCalibrate(KPF1_Primitive):
         self.l1_obj = self.action.args[0]
         self.quicklook = self.action.args[1]
         self.linelist_path = self.action.args[2]
+        self.cal_orderlette_name = self.action.args[]
+        self.data_type = self.action.args[]
 
         # look for and set optional keywords needed for LFC
         self.f0_key = get_args_value('f0', self.action.args, args_keys)
@@ -98,7 +100,6 @@ class WaveCalibrate(KPF1_Primitive):
 
         # look for and set other optional keywords
         self.master_wavelength = get_args_value('master_wavelength', self.action.args, args_keys)
-        self.data_type = get_args_value('data_type', self.action.args, args_keys)
 
         # input configuration
         self.config=configparser.ConfigParser()
@@ -186,7 +187,7 @@ class WaveCalibrate(KPF1_Primitive):
         if self.logger:
             self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
 
-        for prefix in ['CALFLUX']: # TODO: change to recipe config: 'orderlette_names' 
+        for prefix in self.cal_orderlette_names: 
 
             if self.l1_obj[prefix] is not None:
                 self.logger.info("Wavelength Calibration: Running {prefix}")
