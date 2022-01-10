@@ -4,5 +4,5 @@ if make_master_bias == True:
 if make_master_flat == True:
     invoke_subrecipe("./examples/test_master_flat.recipe")
 
-invoke_subrecipe("./examples/test_bias_subtraction.recipe")
-invoke_subrecipe("./examples/test_flat_fielding.recipe")
+#invoke_subrecipe("./examples/test_bias_subtraction.recipe")
+#invoke_subrecipe("./examples/test_flat_fielding.recipe")

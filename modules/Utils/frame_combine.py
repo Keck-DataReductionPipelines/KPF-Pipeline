@@ -67,6 +67,8 @@ class FrameCombinePrimitive(KPF0_Primitive):
                 norm_flat = pd.DataFrame(norm_flat)
                 master_holder.create_extension((ffi+'_NORMALIZED'),ext_type=np.array)
                 master_holder[ffi+'_NORMALIZED'] = norm_flat
+                print(np.shape(master_holder[ffi+'_NORMALIZED']))
+
             print (master_holder.info())
             # for ffi in self.ffi_ext:
             #     frames_data=[]
