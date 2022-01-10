@@ -1,10 +1,11 @@
-from modules.optimal_extraction.src.order_rectification import OrderRectification
-from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
+from modules.spectral_extraction.src.order_rectification import OrderRectification
+from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
 
 lev0_flat_pattern = test_data_dir + input_flat_pattern
 lev0_science_pattern = test_data_dir + input_lev0_prefix
 origin = [data_col_range[0], data_row_range[0]]
 ccd_idx=[0, 1]
+start_order=[4, 1]
 
 for lev0_flat_file in find_files(lev0_flat_pattern):
 	_, short_lev0_flat = split(lev0_flat_file)
@@ -21,7 +22,8 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 			ccd = ccd_list[idx]
 			clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd 
 			trace_file = output_dir + lev0_flat_stem + '_' + ccd_list[idx] + flat_stem_suffix + '.csv'
-			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, orderlet_names=orderlet_names[idx], 
+			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, orderlet_names=orderlet_names[idx],
+						start_order=start_order[idx], 
 						trace_file=trace_file, data_extension=ccd,
 						rectification_method=rect_method, clip_file=clip_file,
 						origin=origin, poly_degree=poly_degree)
@@ -48,7 +50,8 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 				if wave_fits[idx]:
 					wavecal_data = kpf0_from_fits(test_data_dir+wave_fits[idx], data_type='NEID')
 							
-				op_data = OptimalExtraction(lev0_data, lev0_flat_rect, op_data, orderlet_names=order_name,
+				op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data, orderlet_names=order_name,
+						start_order=start_order[idx],
 						rectification_method=rect_method, extraction_method=extract_method, 
 						clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
 						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1[idx])

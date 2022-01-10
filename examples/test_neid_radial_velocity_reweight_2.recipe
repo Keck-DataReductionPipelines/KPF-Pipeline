@@ -13,11 +13,11 @@ data_ext_rv = config.ARGUMENT.orderlet_names_rv
 rv_init = RadialVelocityInit()
 
 # mimic the testing as for KPF's ccf & rv extension
-ccf_ext_names = ['GREEN_CCF', 'RED_CCF']
-#ccf_ext_names = ['CCF']
+#ccf_ext_names = ['GREEN_CCF', 'RED_CCF']
+ccf_ext_names = ['CCF']
 rv_ext = 'RV'
-rv_idx = [0, 1]
-#rv_idx = [0]
+#rv_idx = [0, 1]
+rv_idx = [0]
 
 input_lev1_pattern = output_dir + '*' + obs_rect + '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix + '.fits'
 segments_limits = KPFPIPE_TEST_DATA + '/radial_velocity_test/data/neid_segments.csv'
