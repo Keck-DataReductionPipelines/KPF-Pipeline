@@ -1,5 +1,5 @@
 Wavelength Calibration Algorithm
-============================
+================================
 
 .. module:: modules
     :noindex:
