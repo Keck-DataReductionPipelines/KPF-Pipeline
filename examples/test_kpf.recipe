@@ -1,4 +1,4 @@
-test_data_dir = KPFPIPE_TEST_DATA
+test_data_dir = config.ARGUMENT.test_data_dir
 
 data_type = config.ARGUMENT.data_type
 output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
@@ -44,6 +44,6 @@ flat_rect = '_'+rect_method
 obs_rect = '_byclip'
 
 invoke_subrecipe("./examples/test_kpf_bias_flat_corrections.recipe")
-invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
-invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
-invoke_subrecipe("./examples/test_kpf_radial_velocity_reweight_2.recipe")
+#invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
+#invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
+#invoke_subrecipe("./examples/test_kpf_radial_velocity_reweight_2.recipe")
