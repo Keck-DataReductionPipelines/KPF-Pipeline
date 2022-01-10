@@ -187,7 +187,7 @@ class WaveCalibrate(KPF1_Primitive):
         if self.logger:
             self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
 
-        for prefix in self.cal_orderlette_names: 
+        for prefix in cal_orderlette_names: 
 
             if self.l1_obj[prefix] is not None:
                 self.logger.info("Wavelength Calibration: Running {prefix}")
