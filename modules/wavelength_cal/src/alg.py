@@ -175,27 +175,6 @@ class WaveCalibration(object):
         
         return order_list
 
-    def get_master_data(self, master_path):
-        """Temporary function to pull master data from master calibration file - will be removed once L1 is updated
-        and permanent master file is created.
-
-        Args:
-            master_path (str): Path to master file name
-
-        Returns:
-            np.array: Master calibration data
-        """
-        # m_file=fits.open(master_path)
-        # if len(m_file)>2:
-        #     print ("Cannot find data extension when there is more than one image HDU")
-        # else:
-        #     master_data=m_file[1].data
-
-        m_file = fits.open(master_path)
-        master_data = m_file['SCIWAVE'].data
-            
-        return master_data
-
     def find_peaks_in_order(self, order_flux, plot_path=None):
         """
         Runs find_peaks on successive subsections of the order_flux lines and concatenates
