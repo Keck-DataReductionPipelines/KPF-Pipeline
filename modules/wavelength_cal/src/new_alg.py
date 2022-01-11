@@ -21,7 +21,7 @@ class WaveCalibration:
     in wavelength_cal.py. Algorithm itself iterates over orders.
     """
     
-    def __init__(self, cal_type, save_wl_pixel_toggle, quicklook, config=None, logger=None):
+    def __init__(self, save_wl_pixel_toggle, quicklook, config=None, logger=None):
         """Initializes WaveCalibration class.
 
         Args:
@@ -31,15 +31,15 @@ class WaveCalibration:
                 Defaults to None.        
                 
         Attributes:        
-            cal_type (str): Choice of "Etalon", "LFC", or "ThAr". 
             quicklook (bool): Whether or not to run quicklook pipeline. Defaults to False.
 
                 
         """
-        self.cal_type = cal_type  
         self.save_wl_pixel_toggle = save_wl_pixel_toggle
         self.quicklook = quicklook
         configpull = ConfigHandler(config,'PARAM')
+        self.figsave_name=configpull.get_config_value('figsave_name','instrument_drift')
+
  
 ## wavecal fxns ## -run_wavelength_cal, -remove_orders, -fit_many_orders,
 #-find_peaks_in_order, -find_peaks, -integrate_gaussian, -fit_gaussian, -clip_peaks,
@@ -47,7 +47,7 @@ class WaveCalibration:
        
     
     def run_wavelength_cal(
-        self, calflux, rough_wls=None, 
+        self, calflux, cal_type,rough_wls=None, 
         peak_wavelengths_ang=None, lfc_allowed_wls=None):
         """ Runs all wavelength calibration algorithm steps in order.
 
@@ -227,13 +227,13 @@ class WaveCalibration:
                 # )
                 good_peak_idx = np.arange(len(peaks))
 
-                if self.cal_type == 'LFC':
+                if cal_type == 'LFC':
                     wls, lfc_modes = self.mode_match(
                         order_flux, new_peaks, good_peak_idx, rough_wls_order, comb_lines_angstrom, 
                         print_update=print_update, plot_path=order_plt_path
                     )
                     # TODO: - save pixel-wavelength pairs of LFC peaks
-                elif self.cal_type == 'Etalon':
+                elif cal_type == 'Etalon':
 
                     wls = np.interp(new_peaks, np.arange(n_pixels), rough_wls_order)
                     
@@ -264,7 +264,7 @@ class WaveCalibration:
                 new_peaks = gauss_coeffs[1,:]
             
             # only calculate a new wavelength solution if we aren't using an Etalon frame
-            if self.cal_type != 'Etalon':
+            if cal_type != 'Etalon':
 
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
@@ -1047,16 +1047,14 @@ class WaveCalibration:
         
         return calflux
 
-              
     ## instrument drift fxns ## plot_drift, calcdrift_polysolution
     
-    def plot_drift(self,wlpixelfile1,wlpixelfile2,savename):
+    def plot_drift(self,wlpixelfile1,wlpixelfile2):
         """Overall RV of cal data vs time for array of input files.
 
         Args:
             wlpixelfile1 ([type]): [description]
             wlpixelfile2 ([type]): [description]
-            savename ([type]): [description]
         """
         drift = self.calcdrift_polysolution(wlpixelfile1,wlpixelfile2)
         obsname1 = wlpixelfile1.split('_')[1]
@@ -1071,7 +1069,7 @@ class WaveCalibration:
         plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
         plt.xlabel('order')
         plt.ylabel('drift [cm s$^{-1}$]')
-        plt.savefig(savename, dpi=250)
+        plt.savefig(self.figsave_name, dpi=250)
 
     def calcdrift_polysolution(self,wlpixelfile1,wlpixelfile2):
         peak_wavelengths_ang1 = np.load(
@@ -1163,13 +1161,12 @@ class WaveCalibration:
 
         return order_flux_lines_ang
 
-    def save_wl_pixel_info(self,filename,data): -> *****
+    def save_wl_pixel_info(self,filename,data): #TODO
         """
         Saves wavelength pixel reference file.
         
         Args:
         
         """
-        
         np.save(filename,data,allow_pickle=True)
     
