@@ -85,7 +85,7 @@ class InstDrift(object):
             order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
 
             delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
-            delta_pixel = order_wls.pixel2.values[1:] - order_wls.pixel1.values[:-1]
+            delta_pixel = order_wls.pixel1.values[1:] - order_wls.pixel1.values[:-1]
 
             drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
 
