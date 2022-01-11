@@ -89,9 +89,11 @@ class InstDrift(object):
 
             drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
 
-            drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda # TODO: is this the correct way to compute drift?
+            drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda
 
-            drifts_cms = (drift_wl / order_wls.index.values[1:] * cst.c).to(u.cm/u.s).value
+            alpha = (drift_wl / order_wls.index.values[1:])
+
+            drifts_cms = (alpha**2 + 2 * alpha) / (alpha**2 + 2 * alpha + 2) * cst.c.to(u.cm/u.s).value
 
             drift_all_orders[i,0] = order_num
             drift_all_orders[i,1] = np.mean(drifts_cms)
