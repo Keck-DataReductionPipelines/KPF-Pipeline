@@ -2,37 +2,6 @@ This is central list of goals and TODOs for the wavelength calibration and inst
 drift modules. The items are organized by near-term and long-term. Notes are at
 the bottom. Near-term TODOs are in rough order of importance.
 
-Near-term:
-1. Generalize variable names (and docstrings) in wavelength_cal/alg.py and wavelength_cal/wavelength_cal.py
-2. Integrate instrument drift module into the rest of the pipeline and write a test recipe (Abby?)
-3. Document save_wl_pixel_info.py (Abby?)
-4. Check that Gaussian fits have wide enough kernel widths for ThAr data (plot)
-5. Add diagnostic plot: all newly-computed wls vs master wls differences (for each order) on top of one another
-6. Incorporate some minimum number of lines to do the fit, otherwise interpolate.
-7. Check equation for drift calculation 
-8. Check if quotes are needed for path names in config files (Abby?)
-9. Make sure all module-related parameters (i.e. skip_orders, clip_peaks_opt) are taken into account (Abby?)
-10. In wavelength_cal.py, change "for prefix in ['CALFLUX']" to "for prefix in orderlette_names" (Abby?)
-11. LFC0, LFCR should be defined in wlc config (Abby?)
-12. Make output fits extension a cfg param (Abby?)
-13. Make choice of Legendre polynomials a config parameter (Abby?)
-14. Correct weighting of peaks in calculation of polynomail fit-- should be squared SNR, not sqrt (Abby?)
-15. Reintroduce & update peak clipping:
- - think through peak clipping in etalon case
- - peak just needs to be within fitting window to not be clipped
- - don't clip peaks by default
- - add option to clip at polynomial fitting astep
- - use delta_lambda/lambda instead of +/- 1 angstrom for clipping
-16. Put in another check for 15 modes in a row not detected. If near edge, then can skip this many, otherwise skip fewer
-17. Return several versions of RV precision: absolute, relative, etc.
-18. Make sure correct things are being saved in ThAr, etalon, and LFC cases: (Abby?)
- - for the first etalon frame, the LFC solution should be saved as the official wls for the file,
-   and the wavelength-pixel values of the peaks should be saved separately
- - for subsequent etalon frames, the drift-corrected solution should be saved as the official wls for the file
- - for a LFC frame, the computed solution should be saved as the official wls for the file, and the wavelength-pixel
-   values of the modes should be saved separately
-19. Check that line_match and subsequent polynomial fitting is working correctly
-
 Long-term:
 1. Make a database rather than saving individual intermediate files
 2. Try a 2d polynomial (second dimension across orders))
@@ -47,6 +16,7 @@ Long-term:
  - Use blaze information to more reliably find peaks
 7. Compute autocorrelation of comb lines as a function of detector location to probe PSF
 8. Make sure residuals are being calculated correctly (see Zhao+ eq 5)
+9. Incorporate flux uncertainties in Gaussian fitting
 
 NOTES:
 1. KPF/NEID pixels span ~850 m/s, so the ThAr wls precision in one order should be below that.
