@@ -211,6 +211,8 @@ class WaveCalibration:
             rough_wls_order = rough_wls[order_num,:]
             n_pixels = len(order_flux)
 
+            cal_type = 'ThAr'
+
             # find, clip, and compute precise wavelengths for peaks.
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
@@ -633,11 +635,14 @@ class WaveCalibration:
             _, ax_list = plt.subplots(n_zoom_sections,1,figsize=(6, 20))
             ax_list[0].set_title('({} missed lines)'.format(missed_lines))
             for i, ax in enumerate(ax_list):
+
+                # plot the flux
                 ax.plot(
                     np.arange(num_pixels)[i*zoom_section_pixels:(i+1)*zoom_section_pixels],
                     flux[i*zoom_section_pixels:(i+1)*zoom_section_pixels],color='k',alpha=.1
                 )
 
+                # plot the fitted peak maxima as points
                 ax.scatter(
                     coefs[1,:][
                         (coefs[1,:] > i * zoom_section_pixels) & 
@@ -653,6 +658,20 @@ class WaveCalibration:
                     ],
                     color='red'
                 )
+
+                # overplot the Gaussian fits
+                for j in np.arange(num_input_lines):
+
+                    # if peak in range:
+                    if (coefs[1,j] > i * zoom_section_pixels) & (coefs[1,j] < (i+1) * zoom_section_pixels):
+
+                        xs = np.floor(coefs[1,j]) - gaussian_fit_width + np.linspace(0, 2 * gaussian_fit_width, 2 * gaussian_fit_width)
+                        gaussian_fit = self.integrate_gaussian(
+                            xs, coefs[0,j], coefs[1,j], coefs[2,j], coefs[3,j]
+                        )
+
+                        ax.plot(xs, gaussian_fit, alpha=0.5, color='grey')
+
                 ax.set_yscale('log')
 
             plt.tight_layout()
