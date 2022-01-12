@@ -1,6 +1,5 @@
 This is central list of goals and TODOs for the wavelength calibration and inst 
-drift modules. The items are organized by near-term and long-term. Notes are at
-the bottom. Near-term TODOs are in rough order of importance.
+drift modules. Notes are at the bottom. 
 
 Long-term:
 1. Make a database rather than saving individual intermediate files
