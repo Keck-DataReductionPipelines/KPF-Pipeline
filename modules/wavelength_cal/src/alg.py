@@ -147,6 +147,21 @@ class WaveCalibration:
                 expected_peak_locs=peak_wavelengths_ang, 
                 print_update=True, plt_path=SAVEPLOTS
             )
+
+            # make a plot of all of the precise new wls minus the rough input  wls
+            if SAVEPLOTS is not None and rough_wls is not None:
+                plt.figure()
+                for i in np.arange(len(poly_soln)):
+                    wls_i = poly_soln[i, :]
+                    rough_wls_i = rough_wls[i,:]
+                    plt.plot(wls_i - rough_wls_i, color='grey', alpha=0.5)
+
+                plt.xlabel('pixel')
+                plt.ylabel('Derived WLS - Approx WLS [$\\rm \AA$]')
+                plt.saveplot('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
+
+
+
         if self.quicklook == True:
             #TODO
             order_list = self.remove_orders(step = self.quicklook_steps)
