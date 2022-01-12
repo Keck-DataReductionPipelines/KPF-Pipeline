@@ -256,16 +256,19 @@ class WaveCalibration:
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
 
-                fitted_peak_pixels, detected_peak_pixels, gauss_coeffs = self.find_peaks_in_order(
+                fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
                     order_flux, plot_path=order_plt_path
                 )
 
-                # TODO: actually incorporate peak clipping
-                # good_peak_idx = self.clip_peaks(
-                #     order_flux, new_peaks, peaks, gauss_coeffs, peak_heights, rough_wls_order,
-                #     comb_lines_angstrom, plot_path=order_plt_path, print_update=print_update
-                # )
-                good_peak_idx = np.arange(len(detected_peak_pixels))
+                if self.clip_peaks_toggle:
+                    good_peak_idx = self.clip_peaks(
+                        order_flux, fitted_peak_pixels, detected_peak_pixels,
+                        gauss_coeffs, detected_peak_heights, rough_wls_order,
+                        comb_lines_angstrom=comb_lines_angstrom, 
+                        plot_path=order_plt_path, print_update=print_update
+                    )
+                else:
+                    good_peak_idx = np.arange(len(detected_peak_pixels))
 
                 if cal_type == 'LFC':
                     wls, _ = self.mode_match(
@@ -275,11 +278,13 @@ class WaveCalibration:
                     # TODO: - save pixel-wavelength pairs of LFC peaks
                 elif self.cal_type == 'Etalon':
 
-                    wls = np.interp(fitted_peak_pixels, np.arange(n_pixels), rough_wls_order)
+                    assert comb_lines_angstrom is None, '`comb_lines_angstrom` should not be set for Etalon frames.'
+
+                    wls = np.interp(fitted_peak_pixels[good_peak_idx], np.arange(n_pixels), rough_wls_order)
                     
                     # save pixel-wavelength mapping for detected etalon peaks and return
                     # TODO: save LFC-derived wls as "official" wavelength solution for this image
-                    # have: - precise pixel locations of etalon peaks (new_peaks)
+                    # have: - precise pixel locations of (potentially clipped) etalon peaks (fitted_peak_pixels[good_peak_idx])
                     #       - precise LFC-derived pixel-wavelength sol
 
                 fitted_peak_pixels = fitted_peak_pixels[good_peak_idx]
@@ -295,7 +300,6 @@ class WaveCalibration:
                 line_wavelengths = expected_peak_locs[order_num]['known_wavelengths_vac']
                 line_pixels_expected = expected_peak_locs[order_num]['line_positions']
 
-                # TODO: check that this is outputting the right thing for the polynomial fit
                 wls, gauss_coeffs = self.line_match(
                     order_flux, line_wavelengths, line_pixels_expected, 
                     plot_toggle, order_plt_path
@@ -303,7 +307,9 @@ class WaveCalibration:
 
                 fitted_peak_pixels = gauss_coeffs[1,:]
             
-            # only calculate a new wavelength solution if we aren't using an Etalon frame
+            # Only calculate a new wavelength solution if we aren't using an Etalon frame.
+            # Computing a drift value and using it to update the wavelength solution
+            # is handled by the inst drift module.
             if self.cal_type != 'Etalon':
 
                 # calculate the wavelength solution for the order
@@ -392,6 +398,7 @@ class WaveCalibration:
                     determined by Gaussian fitting
                 np.array: array of detected peak locations (pre-
                     Gaussian fitting)
+                np.array: array of detected peak heights (pre-Gaussian fitting)
                 np.array: array of size (4, n_peaks) 
                     containing best-fit Gaussian parameters [a, mu, sigma**2, const]
                     for each detected peak
@@ -444,7 +451,7 @@ class WaveCalibration:
             plt.savefig('{}/detected_peaks_zoom.png'.format(plot_path),dpi=250)
             plt.close()
 
-        return fitted_peak_pixels, detected_peak_pixels, gauss_coeffs
+        return fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs
         
     def find_peaks(self, order_flux):
         """
@@ -495,12 +502,14 @@ class WaveCalibration:
         
     def clip_peaks(
         self, order_flux, fitted_peak_pixels, detected_peak_pixels, gauss_coeffs, 
-        detected_peak_heights, rough_wls_order, order_flux_lines_angstrom,
+        detected_peak_heights, rough_wls_order, comb_lines_angstrom=None,
         print_update=False, plot_path=None
     ):
         """
-        If fitted peak locations are move than 1 Angstrom from detected locations,
-        remove them.
+        Clips peaks that have detected and Gaussian-fitted central pixels values 
+        more than 1 pixel apart. If clipping peaks for an LFC frame with known
+        comb wavelengths, then also clips detected peaks which are more than one
+        pixel (delta lambda/lambda) away from an LFC mode wavelength.
 
         Args:
             order_flux (np.array): array of order_flux data
@@ -512,8 +521,10 @@ class WaveCalibration:
                 Gaussian parameters [a, mu, sigma**2, const] for each detected peak            
             detected_peak_heights (np.array): array of detected peak heights (pre-Gaussian fitting)
             rough_wls_order (np.array): array of ThAr solution data
-            order_flux_lines_angstrom (np.array): theoretical LFC wavelengths
-                as computed by fundamental physics (in Angstroms)
+            comb_lines_angstrom (np.array): theoretical LFC wavelengths
+                as computed by fundamental physics (in Angstroms). If peak
+                clipping is being performed on an etalon frame, this should
+                be set to None. Default None.
             print_update (bool): if True, print how many peaks were clipped
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
@@ -521,25 +532,38 @@ class WaveCalibration:
         Returns: 
             np.array: indices of surviving peaks
 
-
-        TODO: think through this code in etalon case
         """
-        approx_pixel_size = 0.01
-        good_peak_idx =np.where(np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) [0]
-        n_pixels = len(rough_wls_order)
 
-        s = InterpolatedUnivariateSpline(np.arange(n_pixels), rough_wls_order)
-        approx_peaks_lambda = s(fitted_peak_pixels)
-        good_peak_idx_peaks = []
+        # clip peaks that have Gaussian-fitted centers more than 1 pixel from
+        # their detected centers
+        good_peak_idx = np.where(np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) [0]
 
-        for i, lamb in enumerate(approx_peaks_lambda):
-            best_mode_idx = (
-                np.abs(order_flux_lines_angstrom - lamb)
-            ).argmin()
-            if np.abs(order_flux_lines_angstrom[best_mode_idx] - lamb) < approx_pixel_size:
-                good_peak_idx_peaks.append(i)
-        
-        good_peak_idx = np.intersect1d(good_peak_idx_peaks, good_peak_idx)
+        # if we know the wavelengths of the peaks (i.e. if dealine with LFC),
+        # then we can clip peaks with derived wavelengths far from the location
+        # of a comb line
+        if comb_lines_angstrom is not None:
+
+            # compute an approx wavelength solution that we'll use to find
+            # the nearest LFC mode
+            n_pixels = len(rough_wls_order)
+            s = InterpolatedUnivariateSpline(np.arange(n_pixels), rough_wls_order)
+            approx_peaks_lambda = s(fitted_peak_pixels)
+
+            # iterate through all modes and save only those that are near 
+            # LFC modes
+            peaks_nearby_lfcmodes = []
+            for i, lamb in enumerate(approx_peaks_lambda):
+
+                # delta lambda / lambda
+                approx_pixel_size = (approx_peaks_lambda[i] - s(fitted_peak_pixels[i] - 1)) / approx_peaks_lambda[i]
+
+                best_mode_idx = (
+                    np.abs(comb_lines_angstrom - lamb)
+                ).argmin()
+                if np.abs(comb_lines_angstrom[best_mode_idx] - lamb) < approx_pixel_size:
+                    peaks_nearby_lfcmodes.append(i)
+            
+            good_peak_idx = np.intersect1d(peaks_nearby_lfcmodes, good_peak_idx)
 
         if print_update:
             print('{} peaks clipped'.format(len(detected_peak_pixels) - len(good_peak_idx)))
@@ -609,6 +633,7 @@ class WaveCalibration:
             plt.tight_layout()
             plt.savefig('{}/unclipped_peaks_zoom.png'.format(plot_path), dpi=250)
             plt.close()
+
         return good_peak_idx
     
     def line_match(
@@ -930,12 +955,12 @@ class WaveCalibration:
           
     def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, plot_path=None):
         """
-        Given precise wavelengths of detected LFC order_flux lines, fits a Legendre 
+        Given precise wavelengths of detected LFC order_flux lines, fits a 
         polynomial wavelength solution.
 
         Args:
-            wls (np.array): the precise wavelengths of detected order_flux peaks,
-                from fundamental physics.
+            wls (np.array): the known, precise wavelengths of the detected peaks,
+                either from fundamental physics or a previous wavelength solution.
             n_pixels (int): number of pixels in the order
             fitted_peak_pixels (np.array): array of true detected peak locations as 
                 determined by Gaussian fitting.
