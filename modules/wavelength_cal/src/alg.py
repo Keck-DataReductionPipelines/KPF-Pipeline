@@ -1135,7 +1135,7 @@ class WaveCalibration:
     
     ## quicklook ## order_flux_gen
     def comb_gen(self, f0, f_rep):
-        """ Computes wavelengths of LFC modes using the order_flux equation
+        """ Computes wavelengths of LFC modes using the comb equation
 
         Args:
             f0 (float): initial order_flux frequency [Hz]
@@ -1158,9 +1158,9 @@ class WaveCalibration:
         mode_numbers = np.arange(mode_start, mode_end, -1)
 
         frequencies = f0 + (mode_numbers * f_rep)
-        order_flux_lines_ang = scipy.constants.c * 1e10 / frequencies
+        comb_lines_ang = scipy.constants.c * 1e10 / frequencies
 
-        return order_flux_lines_ang
+        return comb_lines_ang
 
     def save_wl_pixel_info(self,filename,data): #TODO
         """
