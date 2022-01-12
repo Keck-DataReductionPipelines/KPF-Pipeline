@@ -1138,11 +1138,11 @@ class WaveCalibration:
         """ Computes wavelengths of LFC modes using the comb equation
 
         Args:
-            f0 (float): initial order_flux frequency [Hz]
-            f_rep (float): order_flux repitition frequency [Hz]
+            f0 (float): initial comb frequency [Hz]
+            f_rep (float): comb repitition frequency [Hz]
 
         Returns:
-            np.array: array of order_flux lines [Angstroms]
+            np.array: array of comb lines [Angstroms]
         """
         mode_start = int(
             (
