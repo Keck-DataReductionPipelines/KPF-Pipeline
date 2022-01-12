@@ -57,19 +57,23 @@ class BiasSubtractionAlg:
                     print(self.rawimage.info)
                     print(masterbias.info())
                     assert self.rawimage[ffi].data.shape==masterbias[ffi].data.shape, "Bias .fits Dimensions NOT Equal! Check failed"
-                    self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
+                    #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
+                    minus_bias = self.rawimage[ffi].data-masterbias[ffi].data
+                    self.rawimage[ffi] = minus_bias
                 
             if self.data_type == 'NEID':
                 print(self.rawimage.info())
                 print('shapes:',self.rawimage['DATA'].shape,masterbias['DATA'].shape)
                 assert self.rawimage['DATA'].shape==masterbias['DATA'].shape, "Bias .fits Dimensions NOT Equal! Check failed"
-                self.rawimage['DATA']=self.rawimage['DATA']-masterbias['DATA']
+                minus_bias=self.rawimage['DATA']-masterbias['DATA']
+                self.rawimage['DATA'] = minus_bias
 
         if self.quicklook == True:
             for no,ffi in enumerate(self.ffi_exts):
                 print('shapes:',self.rawimage[ffi].data.shape,masterbias[ffi].data.shape)
                 assert self.rawimage[ffi].data.shape==masterbias[ffi].data.shape, "Bias .fits Dimensions NOT Equal! Check failed"
-                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
+                minus_bias = self.rawimage[ffi].data-masterbias[ffi].data
+                self.rawimage[ffi] = minus_bias                 
 
                 counts = masterbias[ffi].data 
                 flatten_counts = np.ravel(counts)
