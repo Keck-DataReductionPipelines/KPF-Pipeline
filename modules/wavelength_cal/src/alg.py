@@ -335,14 +335,13 @@ class WaveCalibration:
                     plt.tight_layout()
                     plt.close()
 
-                # compute RV precision for order
-                print(poly_soln_final_array[order_num])
-                precision = self.calculate_rv_precision(
+                # compute various RV precision values for order
+                poly_precision, abs_precision = self.calculate_rv_precision(
                     fitted_peak_pixels, good_peak_idx, wls, leg_out, plot_path=order_plt_path, 
                     print_update=print_update
                 )
 
-                order_precisions.append(precision)
+                order_precisions.append(abs_precision)
                 num_detected_peaks.append(len(good_peak_idx))
 
                 squared_resids = (np.array(order_precisions) * num_detected_peaks)**2
@@ -351,7 +350,7 @@ class WaveCalibration:
                     np.sqrt(sum_of_squared_resids) / 
                     np.sum(num_detected_peaks)
                 )
-                print('Overall precision: {:2.2f} cm/s'.format(overall_std_error))
+                print('Overall absolute precision: {:2.2f} cm/s'.format(overall_std_error))
 
             wavelengths_and_pixels[order_num] = {'known_wavelengths_vac':wls, 'line_positions':fitted_peak_pixels}
 
@@ -538,7 +537,7 @@ class WaveCalibration:
         # their detected centers
         good_peak_idx = np.where(np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) [0]
 
-        # if we know the wavelengths of the peaks (i.e. if dealine with LFC),
+        # if we know the wavelengths of the peaks (i.e. if dealing with LFC),
         # then we can clip peaks with derived wavelengths far from the location
         # of a comb line
         if comb_lines_angstrom is not None:
@@ -1008,15 +1007,18 @@ class WaveCalibration:
         print_update=True, plot_path=None
     ):
         """
-        Calculates the difference between the LFC modes of detected peaks from
-        fundamental physics and the polynomial WLS for a given order.
+        Calculates 1) RV precision from the difference between the known wavelengths of pixels
+        containing peak flux values and the fitted wavelengths of the same
+        pixels, generated using a polynomial wavelength solution, and 2)
+        absolute RV precision from the difference between contiguous peaks in
+        RV space.
 
         Args:
             fitted_peak_pixels (np.array of float): array of true detected peak locations as 
                 determined by Gaussian fitting.
             good_peak_idx (np.array of int): indices of unclipped peaks
-            wls (np.array of float): the precise wavelengths of detected order_flux peaks,
-                from fundamental physics.
+            wls (np.array of float): precise wavelengths of `fitted_peak_pixels`,
+                from fundamental physics or another wavelength solution.
             leg_out (func): a Python function that, given an array of pixel 
                 locations, returns the Legendre polynomial wavelength solutions
             print_update (bool): If true, prints standard error per order.
@@ -1024,16 +1026,22 @@ class WaveCalibration:
                 diagnostic plots. If None, plots are not made.
 
         Returns:
-            float: RV precision in cm/s
+            tuple of:
+                float: polynomial RV precision in cm/s
+                float: absolute RV precision in cm/s
         """
         our_wls_peak_pos = leg_out(fitted_peak_pixels[good_peak_idx]) 
 
+        # polynomial precision of order
         residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
+        poly_precision_cm_s = 100 * np.std(residual)/np.sqrt(len(good_peak_idx))
 
-        precision_cm_s = 100 * np.std(residual)/np.sqrt(len(good_peak_idx))
+        # absolute RV precision of order, i.e. std(delta wavelength of peaks/lambda) / sqrt(num peaks))
+        abs_residual = (wls[1:] - wls[:-1]) * scipy.constants.c / wls[1:]
+        abs_precision_cm_s = 100 * np.std(abs_residual)/np.sqrt(len(good_peak_idx))
 
         if print_update:
-            print('Standard error (this order): {:.2f} cm/s'.format(precision_cm_s))
+            print('Polynomial standard error (this order): {:.2f} cm/s'.format(poly_precision_cm_s))
 
         if plot_path is not None:
             plt.figure()
@@ -1043,7 +1051,7 @@ class WaveCalibration:
             plt.savefig('{}/rv_precision.png'.format(plot_path), dpi=250)
             plt.close()
 
-        return precision_cm_s
+        return poly_precision_cm_s, abs_precision_cm_s
 
     def mask_array_neid(self, calflux, n_orders):
         """ Creates ad-hoc mask to remove bad pixel regions specific to order. 
