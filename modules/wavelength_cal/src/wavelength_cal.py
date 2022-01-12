@@ -25,11 +25,18 @@ class WaveCalibrate(KPF1_Primitive):
         self.l1_obj = self.action.args[0]
         self.cal_type = self.action.args[1]
         self.cal_orderlette_names = self.action.args[2]
-        self.linelist_path = self.action.args[3]
         self.save_wl_pixel_toggle = self.action.args[4]
-        self.quicklook = self.action.args[5]
-        self.data_type =self.action.args[6]
-
+        self.fit_type = self.action.args[5]
+        self.quicklook = self.action.args[6]
+        self.data_type =self.action.args[7]
+        ## self.output_ext = self.action.args[]
+        
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.rough_wls = action.args['rough_wls'] if 'rough_wls' in args_keys else None
+        self.linelist_path = action.args['linelist_path'] if 'linelist_path' in args_keys else None
+        self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
+        self.frep_key = action.args['frep_key'] if 'frep_key' in args_keys else None
+    
         #Input configuration
         self.config=configparser.ConfigParser()
         try:
@@ -44,7 +51,7 @@ class WaveCalibrate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        self.alg = WaveCalibration(self.save_wl_pixel_toggle,self.quicklook,self.self.config, self.logger)
+        self.alg = WaveCalibration(self.cal_type,self.fit_type,self.quicklook,self.config,self.logger)
 
     def _perform(self) -> None: 
         
@@ -53,15 +60,8 @@ class WaveCalibrate(KPF1_Primitive):
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
             
-                rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
-            
-                if self.linelist_path is not None:
-                    peak_wavelengths_ang = np.load(
-                        self.linelist_path, allow_pickle=True
-                    ).tolist()
-                else:
-                    peak_wavelengths_ang = None
-            
+                # rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
+                        
                 #### lfc ####
                 if self.cal_type == 'LFC':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
@@ -88,32 +88,57 @@ class WaveCalibrate(KPF1_Primitive):
                     
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
                     
+                    rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
+                    
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,self.cal_type,rough_wls,peak_wavelengths_ang,lfc_allowed_wls)
-                
+                        calflux,peak_wavelengths_ang=peak_wavelengths_ang,rough_wls=rough_wls,lfc_allowed_wls=lfc_allowed_wls)
+                    
+                    if self.save_wl_pixel_toggle == True:
+                        self.alg.save_wl_pixel_info(self.date,wls_and_pixels) #TODO
+                        
+                #TODO: should peak wavelengths ang be in all of them?
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('ThAr'):
                         raise ValueError('Not a ThAr file!')
                     
+                    if self.linelist_path is not None:
+                        peak_wavelengths_ang = np.load(
+                            self.linelist_path, allow_pickle=True
+                        ).tolist()
+                    else:
+                        peak_wavelengths_ang = None
+                    
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,self.cal_type,rough_wls,peak_wavelengths_ang)
+                        calflux,peak_wavelengths_ang=peak_wavelengths_ang)
+                    
+                    if self.save_wl_pixel_toggle == True:
+                        self.alg.save_wl_pixel_info(self.date,wls_and_pixels) #TODO
+
                     
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
+                    
+                    rough_wls = self.master_wavelength['SCIWAVE'] ### TODO: from fits in recipe, check this
 
                     wl_soln,wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,self.cal_type,rough_wls,peak_wavelengths_ang)
-                
-                
-                elif self.cal_type == 'Drift':
-                    self.alg.plot_drift(wl_file1,wl_file2)
-                    
+                        calflux,rough_wls,peak_wavelengths_ang)
+
+                    if self.save_wl_pixel_toggle == True:
+                        self.alg.save_wl_pixel_info(self.date+'_'+self.cal_type,wls_and_pixels) #TODO
+                        '{0} '.format()
                 else:
                     raise ValueError(
                         'cal_type {} not recognized. Available options are LFC, ThAr, & Etalon'.format(
                             self.cal_type))
+                
+            ## need to save data into correct extension
+            
+            
+            ## TODO: how to put in drift
+            
+            
                 
         
