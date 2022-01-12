@@ -21,7 +21,7 @@ class WaveCalibration:
     in wavelength_cal.py. Algorithm itself iterates over orders.
     """
     
-    def __init__(self, save_wl_pixel_toggle, quicklook, config=None, logger=None):
+    def __init__(self, cal_type, quicklook, config=None, logger=None):
         """Initializes WaveCalibration class.
 
         Args:
@@ -33,13 +33,22 @@ class WaveCalibration:
         Attributes:        
             quicklook (bool): Whether or not to run quicklook pipeline. Defaults to False.
 
-                
         """
-        self.save_wl_pixel_toggle = save_wl_pixel_toggle
+        self.cal_type = cal_type
         self.quicklook = quicklook
         configpull = ConfigHandler(config,'PARAM')
-        self.figsave_name=configpull.get_config_value('figsave_name','instrument_drift')
-
+        self.figsave_name = configpull.get_config_value('drift_figsave_name','instrument_drift')
+        self.skip_orders = configpull.get_config_value('skip_orders',None)
+        self.quicklook_steps = configpull.get_config_value('quicklook_steps',10)
+        self.min_wave = configpull.get_config_value('min_wave_lfc',3800)
+        self.max_wave = configpull.get_config_value('max_wave_lfc',9300)
+        self.fit_order = configpull.get_config_value('fit_order',9)
+        self.fit_type = configpull.get_config_value('fit_type', 'Legendre')
+        self.max_order = configpull.get_config_value('max_order',100)
+        self.n_sections = configpull.get_config_value('n_sections',1)
+        self.skip_orders = configpull.get_config_value('skip_orders',None)
+        self.save_diagnostics_dir = configpull.get_config_value('save_diagnostics','outputs/')
+        self.linelist_path = configpull.get_config_value('linelist_path_etalon',None)
  
 ## wavecal fxns ## -run_wavelength_cal, -remove_orders, -fit_many_orders,
 #-find_peaks_in_order, -find_peaks, -integrate_gaussian, -fit_gaussian, -clip_peaks,
@@ -47,7 +56,7 @@ class WaveCalibration:
        
     
     def run_wavelength_cal(
-        self, calflux, cal_type,rough_wls=None, 
+        self, calflux,rough_wls=None, 
         peak_wavelengths_ang=None, lfc_allowed_wls=None):
         """ Runs all wavelength calibration algorithm steps in order.
 
@@ -111,18 +120,20 @@ class WaveCalibration:
 
         Returns:
             np.array: (N_orders x N_pixels) array of the computed wavelength
-                for each pixel. 
+                for each pixel.
+            TODO: second return     
         """
 
         # create directories for diagnostic plots
-        if type(self.save_diagnostics) == str:
-            SAVEPLOTS = ('{}/%s' % self.save_diagnostics).format(os.getcwd())
+        if type(self.save_diagnostics_dir) == str:
+            self.save_diagnostics_dir = self.save_diagnostics_dir+'{}_diagnostics'.format(self.cal_type)
+            SAVEPLOTS = ('{}/%s' % self.save_diagnostics_dir).format(os.getcwd())
             if not os.path.isdir(SAVEPLOTS):
                 os.makedirs(SAVEPLOTS)
-        if self.save_diagnostics == 'False':
+        if self.save_diagnostics_dir == 'False':
             SAVEPLOTS = None
 
-        if not self.quicklook:
+        if self.quicklook == False:
             order_list = self.remove_orders(step=1)
             n_orders = len(order_list)
 
@@ -135,8 +146,21 @@ class WaveCalibration:
                 expected_peak_locs=peak_wavelengths_ang, 
                 print_update=True, plt_path=SAVEPLOTS
             )
+        if self.quicklook == True:
+            #TODO
+            order_list = self.remove_orders(step = self.quicklook_steps)
+            n_orders = len(order_list)
+            
+            masked_calflux = self.mask_array_neid(calflux,n_orders)
+            
+            poly_soln, _, wls_and_pixels = self.fit_many_orders(
+                masked_calflux, order_list, rough_wls=rough_wls, 
+                comb_lines_angstrom=lfc_allowed_wls, 
+                expected_peak_locs=peak_wavelengths_ang, 
+                print_update=True, plt_path=SAVEPLOTS ###CHECK THIS TODO
+            )
 
-            return poly_soln, wls_and_pixels    
+        return poly_soln, wls_and_pixels    
         
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
@@ -227,13 +251,13 @@ class WaveCalibration:
                 # )
                 good_peak_idx = np.arange(len(peaks))
 
-                if cal_type == 'LFC':
+                if self.cal_type == 'LFC':
                     wls, lfc_modes = self.mode_match(
                         order_flux, new_peaks, good_peak_idx, rough_wls_order, comb_lines_angstrom, 
                         print_update=print_update, plot_path=order_plt_path
                     )
                     # TODO: - save pixel-wavelength pairs of LFC peaks
-                elif cal_type == 'Etalon':
+                elif self.cal_type == 'Etalon':
 
                     wls = np.interp(new_peaks, np.arange(n_pixels), rough_wls_order)
                     
@@ -264,7 +288,7 @@ class WaveCalibration:
                 new_peaks = gauss_coeffs[1,:]
             
             # only calculate a new wavelength solution if we aren't using an Etalon frame
-            if cal_type != 'Etalon':
+            if self.cal_type != 'Etalon':
 
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
@@ -893,28 +917,30 @@ class WaveCalibration:
 
         # fitted_heights = gauss_coeffs[0,:]
         # weights = np.sqrt(fitted_heights)
+        if self.fit_type == 'Legendre': 
+            leg_out = Legendre.fit(new_peaks, wls, self.fit_order)
 
-        leg_out = Legendre.fit(new_peaks, wls, self.fit_order)
+            our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
-        our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+            if plot_path is not None:
 
-        if plot_path is not None:
+                s = InterpolatedUnivariateSpline(new_peaks, wls)
+                interpolated_ground_truth = s(np.arange(n_pixels))
 
-            s = InterpolatedUnivariateSpline(new_peaks, wls)
-            interpolated_ground_truth = s(np.arange(n_pixels))
+                # plot ground truth wls vs our wls
+                plt.figure()
+                plt.plot(
+                    np.arange(n_pixels), 
+                    interpolated_ground_truth - our_wavelength_solution_for_order, 
+                    color='k'
+                )
 
-            # plot ground truth wls vs our wls
-            plt.figure()
-            plt.plot(
-                np.arange(n_pixels), 
-                interpolated_ground_truth - our_wavelength_solution_for_order, 
-                color='k'
-            )
-
-            plt.xlabel('pixel')
-            plt.ylabel('wavelength diff (A)')
-            plt.savefig('{}/interp_vs_our_wls.png'.format(plot_path))
-            plt.close()
+                plt.xlabel('pixel')
+                plt.ylabel('wavelength diff (A)')
+                plt.savefig('{}/interp_vs_our_wls.png'.format(plot_path))
+                plt.close()
+        else:
+            raise ValueError('Only set up to perform Legendre fits currently! Please set fit_type to "Legendre"')
 
         return our_wavelength_solution_for_order, leg_out
 
@@ -1143,16 +1169,9 @@ class WaveCalibration:
         Returns:
             np.array: array of order_flux lines [Angstroms]
         """
-        mode_start = int(
-            (
-                ((scipy.constants.c * 1e10) / self.min_wave) - f0
-            ) / f_rep
-        )
-        mode_end = int(
-            (
-                ((scipy.constants.c * 1e10) / self.max_wave) - f0
-            ) / f_rep
-        )
+        mode_start = int((((scipy.constants.c * 1e10) / self.min_wave) - f0) / f_rep)
+        
+        mode_end = int((((scipy.constants.c * 1e10) / self.max_wave) - f0) / f_rep)
 
         mode_numbers = np.arange(mode_start, mode_end, -1)
 
@@ -1161,12 +1180,15 @@ class WaveCalibration:
 
         return order_flux_lines_ang
 
-    def save_wl_pixel_info(self,filename,data): #TODO
+    def save_wl_pixel_info(self,date,data): #TODO: self.date/time, folder in which to save output file 
         """
         Saves wavelength pixel reference file.
         
-        Args:
+        Args: 
+            data (np.array): Wavelength per pixel reference information output by 
+                function 'run_wavelength_cal'.
         
         """
-        np.save(filename,data,allow_pickle=True)
+        #file name addition '+ self.date'
+        np.save(self.wl_pixel_file_prefix,data,allow_pickle=True)
     
