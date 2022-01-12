@@ -1,4 +1,4 @@
-test_data_dir = config.ARGUMENT.test_data_dir
+test_data_dir = KPFPIPE_TEST_DATA
 
 data_type = config.ARGUMENT.data_type
 output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
