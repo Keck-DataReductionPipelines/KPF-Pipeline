@@ -1,6 +1,5 @@
 This is central list of goals and TODOs for the wavelength calibration and inst 
-drift modules. The items are organized by near-term and long-term. Notes are at
-the bottom. Near-term TODOs are in rough order of importance.
+drift modules. Notes are at the bottom. 
 
 Long-term:
 1. Make a database rather than saving individual intermediate files
@@ -17,6 +16,7 @@ Long-term:
 7. Compute autocorrelation of comb lines as a function of detector location to probe PSF
 8. Make sure residuals are being calculated correctly (see Zhao+ eq 5)
 9. Incorporate flux uncertainties in Gaussian fitting
+10. Clip peaks at polynomial step, see if this improves precision
 
 NOTES:
 1. KPF/NEID pixels span ~850 m/s, so the ThAr wls precision in one order should be below that.
