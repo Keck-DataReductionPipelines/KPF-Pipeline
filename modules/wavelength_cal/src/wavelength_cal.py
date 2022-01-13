@@ -23,6 +23,8 @@ class WaveCalibrate(KPF1_Primitive):
         KPF1_Primitive.__init__(self, action, context)
         
         self.l1_obj = self.action.args[0]
+        #self.filename = self.action.args[] - should we remove l1_obj and just do to_fits in here? 
+        #getting filename so as to steal its date suffix 
         self.cal_type = self.action.args[1]
         self.cal_orderlette_names = self.action.args[2]
         self.save_wl_pixel_toggle = self.action.args[4]
@@ -36,6 +38,8 @@ class WaveCalibrate(KPF1_Primitive):
         self.linelist_path = action.args['linelist_path'] if 'linelist_path' in args_keys else None
         self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
         self.frep_key = action.args['frep_key'] if 'frep_key' in args_keys else None
+        self.prev_wl_pixel_ref = action.args['prev_wl_pixel_ref'] if 'prev_wl_pixel_ref' in args_keys else None
+        ## ^ how will we automate cycling through the most recent files?
     
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -56,6 +60,8 @@ class WaveCalibrate(KPF1_Primitive):
     def _perform(self) -> None: 
         
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
+            file_name_split = self.filename.split('_')
+            datetime_suffix = file_name_split[-1].split('.')[0]
             for prefix in self.cal_orderlette_names:
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
@@ -94,7 +100,8 @@ class WaveCalibrate(KPF1_Primitive):
                         calflux,peak_wavelengths_ang=peak_wavelengths_ang,rough_wls=rough_wls,lfc_allowed_wls=lfc_allowed_wls)
                     
                     if self.save_wl_pixel_toggle == True:
-                        self.alg.save_wl_pixel_info(self.date,wls_and_pixels) #TODO
+                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
                         
                 #TODO: should peak wavelengths ang be in all of them?
                 #### thar ####    
@@ -113,8 +120,8 @@ class WaveCalibrate(KPF1_Primitive):
                         calflux,peak_wavelengths_ang=peak_wavelengths_ang)
                     
                     if self.save_wl_pixel_toggle == True:
-                        self.alg.save_wl_pixel_info(self.date,wls_and_pixels) #TODO
-
+                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
                     
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
@@ -127,8 +134,8 @@ class WaveCalibrate(KPF1_Primitive):
                         calflux,rough_wls,peak_wavelengths_ang)
 
                     if self.save_wl_pixel_toggle == True:
-                        self.alg.save_wl_pixel_info(self.date+'_'+self.cal_type,wls_and_pixels) #TODO
-                        '{0} '.format()
+                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
                 else:
                     raise ValueError(
                         'cal_type {} not recognized. Available options are LFC, ThAr, & Etalon'.format(
@@ -136,9 +143,9 @@ class WaveCalibrate(KPF1_Primitive):
                 
             ## need to save data into correct extension
             
+                if self.prev_wl_pixel_ref is not None:
+                    self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
             
-            ## TODO: how to put in drift
-            
-            
+            ## where to save final polynomial solution
                 
         

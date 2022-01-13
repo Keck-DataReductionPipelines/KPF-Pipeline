@@ -1180,15 +1180,20 @@ class WaveCalibration:
 
         return order_flux_lines_ang
 
-    def save_wl_pixel_info(self,date,data): #TODO: self.date/time, folder in which to save output file 
+    def save_wl_pixel_info(self,file_suffix,wave_pxl_data):
         """
         Saves wavelength pixel reference file.
         
         Args: 
-            data (np.array): Wavelength per pixel reference information output by 
+            file_suffix (str): String including date and time from original science file
+            wave_pxl_data (np.array): Wavelength per pixel reference information output by 
                 function 'run_wavelength_cal'.
-        
+                
+        Returns:
+            str: Full wavelength pixel reference filename
         """
-        #file name addition '+ self.date'
-        np.save(self.wl_pixel_file_prefix,data,allow_pickle=True)
-    
+        full_filename = self.wl_pixel_file_prefix + file_suffix
+        np.save(full_filename,wave_pxl_data,allow_pickle=True)
+        
+        return full_filename
+        ## self.wl_pixel_file_prefix in module config will need to include full path as well for now
