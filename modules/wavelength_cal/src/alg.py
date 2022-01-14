@@ -20,11 +20,11 @@ class WaveCalibration:
     in wavelength_cal.py. Algorithm itself iterates over orders.
     """
     
-    def __init__(self, cal_type, quicklook, config=None, logger=None):
+    def __init__(self, cal_type, clip_peaks_toggle, quicklook, config=None, logger=None):
         """Initializes WaveCalibration class.
 
         Args:
-            save_wl_pixel_toggle: TODO
+            clip_peaks_toggle: TODO            
             quicklook: TODO
             config (configparser.ConfigParser, optional): Config context. 
                 Defaults to None.
@@ -36,6 +36,7 @@ class WaveCalibration:
 
         """
         self.cal_type = cal_type
+        self.clip_peaks_toggle = clip_peaks_toggle
         self.quicklook = quicklook
         configpull = ConfigHandler(config,'PARAM')
         self.figsave_name = configpull.get_config_value('drift_figsave_name','instrument_drift')
@@ -45,6 +46,7 @@ class WaveCalibration:
         self.max_wave = configpull.get_config_value('max_wave_lfc',9300)
         self.fit_order = configpull.get_config_value('fit_order',9)
         self.fit_type = configpull.get_config_value('fit_type', 'Legendre')
+        self.min_order = configpull.get_config_value('min_order',50)
         self.max_order = configpull.get_config_value('max_order',100)
         self.n_sections = configpull.get_config_value('n_sections',1)
         self.skip_orders = configpull.get_config_value('skip_orders',None)
@@ -158,7 +160,7 @@ class WaveCalibration:
 
                 plt.xlabel('pixel')
                 plt.ylabel('Derived WLS - Approx WLS [$\\rm \AA$]')
-                plt.saveplot('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
+                plt.savefig('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
 
 
 
@@ -502,7 +504,7 @@ class WaveCalibration:
     def clip_peaks(
         self, order_flux, fitted_peak_pixels, detected_peak_pixels, gauss_coeffs, 
         detected_peak_heights, rough_wls_order, comb_lines_angstrom=None,
-        print_update=False, plot_path=None
+        print_update=True, plot_path=None #print_update should be false TESTING TODO
     ):
         """
         Clips peaks that have detected and Gaussian-fitted central pixels values 
@@ -532,6 +534,7 @@ class WaveCalibration:
             np.array: indices of surviving peaks
 
         """
+        n_pixels = len(order_flux)
 
         # clip peaks that have Gaussian-fitted centers more than 1 pixel from
         # their detected centers

@@ -24,6 +24,13 @@ op_tag = config.ARGUMENT.op_tag
 wave_from_lev1 = config.ARGUMENT.wave_from_lev1
 wave_fits = config.ARGUMENT.wave_fits
 
+l1_test_files = config.ARGUMENT.l1_test_files
+cal_type = config.ARGUMENT.wave_calibration_type
+save_wl_pixel_toggle = config.ARGUMENT.save_wl_pixel_toggle
+wavecal_output_ext = config.ARGUMENT.wave_calibration_output_fits_ext
+cal_orderlette_names = config.ARGUMENT.cal_orderlette_names
+quicklook = False
+
 #flat_rect = '', obs_rect='' for test_optimal_extraction.recipe (no clip file applied)
 #flat_rect = '_'+rect_method, obs_rect='_clip' for test_optimal_extraction_rect_clip.recipe (create rectification and op by clip file)
 #flat_rect = '_'+rect_method, obs_rect='_byclip' for test_optimal_extraction_clip.recipe (create op by clip file)
@@ -34,6 +41,7 @@ flat_rect = '_'+rect_method
 #obs_rect = '_clip'
 obs_rect = '_byclip'
 
-invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
-invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
+#invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
+#invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
 #invoke_subrecipe("./examples/test_kpf_radial_velocity.recipe")
+invoke_subrecipe('./examples/test_kpf_wavelength_calibration.recipe')

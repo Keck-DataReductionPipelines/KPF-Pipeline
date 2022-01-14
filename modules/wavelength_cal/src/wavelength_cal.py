@@ -23,20 +23,20 @@ class WaveCalibrate(KPF1_Primitive):
         KPF1_Primitive.__init__(self, action, context)
         
         self.l1_obj = self.action.args[0]
-        #self.filename = self.action.args[] - should we remove l1_obj and just do to_fits in here? 
-        #getting filename so as to steal its date suffix 
         self.cal_type = self.action.args[1]
         self.cal_orderlette_names = self.action.args[2]
-        self.save_wl_pixel_toggle = self.action.args[4]
-        self.fit_type = self.action.args[5]
-        self.quicklook = self.action.args[6]
-        self.data_type =self.action.args[7]
-        ## self.output_ext = self.action.args[]
+        self.save_wl_pixel_toggle = self.action.args[3]
+        self.quicklook = self.action.args[4]
+        self.data_type =self.action.args[5]
+        self.output_ext = self.action.args[6]
         
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.filename = action.args['filename'] if 'filename' in args_keys else None
+        #getting filename so as to steal its date suffix 
         self.rough_wls = action.args['rough_wls'] if 'rough_wls' in args_keys else None
         self.linelist_path = action.args['linelist_path'] if 'linelist_path' in args_keys else None
         self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
+        self.clip_peaks_toggle = action.args['clip_peaks_toggle'] if 'clip_peaks_toggle' in args_keys else None
         self.frep_key = action.args['frep_key'] if 'frep_key' in args_keys else None
         self.prev_wl_pixel_ref = action.args['prev_wl_pixel_ref'] if 'prev_wl_pixel_ref' in args_keys else None
         ## ^ how will we automate cycling through the most recent files?
@@ -55,7 +55,7 @@ class WaveCalibrate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        self.alg = WaveCalibration(self.cal_type,self.fit_type,self.quicklook,self.config,self.logger)
+        self.alg = WaveCalibration(self.cal_type,self.clip_peaks_toggle,self.quicklook,self.config,self.logger)
 
     def _perform(self) -> None: 
         
@@ -66,7 +66,8 @@ class WaveCalibrate(KPF1_Primitive):
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
             
-                # rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
+                #PUT BACK: rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
+                rough_wls = self.l1_obj['SCIWAVE']   
                         
                 #### lfc ####
                 if self.cal_type == 'LFC':
@@ -92,9 +93,16 @@ class WaveCalibrate(KPF1_Primitive):
                     else:
                         raise ValueError('f_rep value not found')
                     
+                    if self.linelist_path is not None:
+                        peak_wavelengths_ang = np.load(
+                            self.linelist_path, allow_pickle=True
+                        ).tolist()
+                    else:
+                        peak_wavelengths_ang = None
+                    
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
                     
-                    rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
+                    #rough_wls = self.master_wavelength['SCIWAVE'] #TODO ### check this
                     
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux,peak_wavelengths_ang=peak_wavelengths_ang,rough_wls=rough_wls,lfc_allowed_wls=lfc_allowed_wls)
@@ -128,7 +136,14 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
                     
-                    rough_wls = self.master_wavelength['SCIWAVE'] ### TODO: from fits in recipe, check this
+                    #rough_wls = self.master_wavelength['SCIWAVE'] ### TODO: from fits in recipe, check this
+
+                    if self.linelist_path is not None:
+                        peak_wavelengths_ang = np.load(
+                            self.linelist_path, allow_pickle=True
+                        ).tolist()
+                    else:
+                        peak_wavelengths_ang = None
 
                     wl_soln,wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux,rough_wls,peak_wavelengths_ang)
@@ -147,5 +162,6 @@ class WaveCalibrate(KPF1_Primitive):
                     self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
             
             ## where to save final polynomial solution
+            
                 
         
