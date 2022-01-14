@@ -1,9 +1,11 @@
 # standard dependencies
 import configparser
 import numpy as np
+import glob
 
 # pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
+from kpfpipe.pipelines.fits_primitives import kpf1_from_fits
 from kpfpipe.logger import start_logger
 
 # external dependencies
@@ -23,17 +25,16 @@ class WaveCalibrate(KPF1_Primitive):
         KPF1_Primitive.__init__(self, action, context)
         
         self.l1_obj = self.action.args[0]
-        #self.filename = self.action.args[] - should we remove l1_obj and just do to_fits in here? 
-        #getting filename so as to steal its date suffix 
         self.cal_type = self.action.args[1]
         self.cal_orderlette_names = self.action.args[2]
-        self.save_wl_pixel_toggle = self.action.args[4]
-        self.fit_type = self.action.args[5]
-        self.quicklook = self.action.args[6]
-        self.data_type =self.action.args[7]
+        self.save_wl_pixel_toggle = self.action.args[3]
+        self.quicklook = self.action.args[4]
+        self.data_type =self.action.args[5]
+
         ## self.output_ext = self.action.args[]
         
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        # self.fit_type = self.action.args['fit_type'] if 'fit_type' in args_keys else None
         self.rough_wls = action.args['rough_wls'] if 'rough_wls' in args_keys else None
         self.linelist_path = action.args['linelist_path'] if 'linelist_path' in args_keys else None
         self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
@@ -55,24 +56,34 @@ class WaveCalibrate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        self.alg = WaveCalibration(self.cal_type,self.fit_type,self.quicklook,self.config,self.logger)
+        self.alg = WaveCalibration(self.cal_type,self.quicklook,self.data_type,self.config,self.logger)
 
     def _perform(self) -> None: 
         
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
-            file_name_split = self.filename.split('_')
-            datetime_suffix = file_name_split[-1].split('.')[0]
+            # file_name_split = self.filename.split('_')
+            # datetime_suffix = file_name_split[-1].split('.')[0]
             for prefix in self.cal_orderlette_names:
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
+
+                if self.data_type == 'NEID':
+                    calflux = self.alg.mask_array_neid(calflux, n_orders)
             
                 # rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
                         
                 #### lfc ####
-                if self.cal_type == 'LFC':
+                if self.cal_type == 'Simulated':
+                    lfc_allowed_wls, rough_wls = self._generate_kpf_simulated_data_inputs()
+                    wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+                        calflux, rough_wls=calflux, 
+                        lfc_allowed_wls=lfc_allowed_wls
+                    )
+
+                elif self.cal_type == 'LFC':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
                         raise ValueError('Not an LFC file!')
-                    
+
                     if self.logger:
                         self.logger.info("Wavelength Calibration: Getting comb frequency values.")
 
@@ -147,5 +158,49 @@ class WaveCalibrate(KPF1_Primitive):
                     self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
             
             ## where to save final polynomial solution
+
+    def _generate_kpf_simulated_data_inputs(self):
+
+        # generate fake set of lfc allowed wavelengths
+        wavelength_files = glob.glob('/data/KPF_Simulated_Data/LFC 20GHz Wavelength Files/*')
+        all_wavelengths = np.array([])
+        for f in wavelength_files:
+
+            file_contents = np.loadtxt(f)
+            all_wavelengths = np.concatenate((all_wavelengths, file_contents[:,0]))
+
+        # generate fake master wavelength sol
+
+        min_order = 71
+        max_order = 138
+
+        for order in np.arange(min_order, max_order + 1):
+            order_files = [x for x in wavelength_files if int(x.split(' ')[5]) == order]
+
+        # convert desired wavelengths into frequencies
+        # min_order_frequency = c / max_order_wavelength_um
+        # max_order_frequency = c / min_order_wavelength_um
+        
+        # # determine the number of lines within the desired waveband
+        # num_points = (max_order_frequency - min_order_frequency) / (LFC_frequency_GHz * 1E9)
+        
+        # # fill the frequency array
+        # num_points_int = int(num_points)+1
+        
+        # frequency_array = np.zeros(int(num_points)+1)
+        
+        # for lfc_index in range(0, num_points_int, 1):
+        #     frequency_array[lfc_index] = min_order_frequency + (lfc_index * (LFC_frequency_GHz * 1E9))
+            
+        # # convert the frequency array to wavelengths
+        # wavelength_um = c / frequency_array
+        
+        # # reverse the array so wavelengths increase with index
+        # wavelength_um = wavelength_um[::-1]
+
+
+
+        return all_wavelengths, None
+
                 
         

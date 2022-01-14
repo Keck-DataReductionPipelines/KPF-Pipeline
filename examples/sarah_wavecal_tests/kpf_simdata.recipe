@@ -1,0 +1,18 @@
+from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
+
+L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + config.ARGUMENT.lev1_suffix + '.fits'
+lfc_L1_obj = kpf1_from_fits(L1_file, data_type='KPF')
+cal_type = config.ARGUMENT.cal_type
+cal_orderlette_names = config.ARGUMENT.cal_orderlette_names
+save_wl_pixel_toggle = config.ARGUMENT.save_wl_pixel_toggle
+quicklook = config.ARGUMENT.quicklook
+data_type = config.ARGUMENT.data_type
+
+wave_soln, _ = WaveCalibrate(
+    lfc_L1_obj, cal_type, cal_orderlette_names, save_wl_pixel_toggle, 
+    quicklook, data_type
+)
+
+# obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
+# output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
+# result = to_fits(wave_soln, output_filename)

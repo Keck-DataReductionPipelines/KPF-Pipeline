@@ -20,7 +20,7 @@ class WaveCalibration:
     in wavelength_cal.py. Algorithm itself iterates over orders.
     """
     
-    def __init__(self, cal_type, quicklook, config=None, logger=None):
+    def __init__(self, cal_type, quicklook, data_type, config=None, logger=None):
         """Initializes WaveCalibration class.
 
         Args:
@@ -37,6 +37,7 @@ class WaveCalibration:
         """
         self.cal_type = cal_type
         self.quicklook = quicklook
+        self.data_type = data_type
         configpull = ConfigHandler(config,'PARAM')
         self.figsave_name = configpull.get_config_value('drift_figsave_name','instrument_drift')
         self.skip_orders = configpull.get_config_value('skip_orders',None)
@@ -45,11 +46,13 @@ class WaveCalibration:
         self.max_wave = configpull.get_config_value('max_wave_lfc',9300)
         self.fit_order = configpull.get_config_value('fit_order',9)
         self.fit_type = configpull.get_config_value('fit_type', 'Legendre')
-        self.max_order = configpull.get_config_value('max_order',100)
+        self.min_order = configpull.get_config_value('min_order',None)
+        self.max_order = configpull.get_config_value('max_order',None)
         self.n_sections = configpull.get_config_value('n_sections',1)
         self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.save_diagnostics_dir = configpull.get_config_value('save_diagnostics','outputs/')
         self.linelist_path = configpull.get_config_value('linelist_path_etalon',None)
+        self.clip_peaks_toggle = configpull.get_config_value('clip_peaks','False')
  
 ## wavecal fxns ## -run_wavelength_cal, -remove_orders, -fit_many_orders,
 #-find_peaks_in_order, -find_peaks, -integrate_gaussian, -fit_gaussian, -clip_peaks,
@@ -125,6 +128,11 @@ class WaveCalibration:
             TODO: second return     
         """
 
+        if self.min_order is None:
+            self.min_order = 10
+        if self.max_order is None:
+            self.max_order = len(calflux)
+
         # create directories for diagnostic plots
         if type(self.save_diagnostics_dir) == str:
             self.save_diagnostics_dir = self.save_diagnostics_dir+'{}_diagnostics'.format(self.cal_type)
@@ -138,11 +146,12 @@ class WaveCalibration:
             order_list = self.remove_orders(step=1)
             n_orders = len(order_list)
 
-            masked_calflux = self.mask_array_neid(calflux, n_orders)
+            if self.data_type == 'NEID':
+                calflux = self.mask_array_neid(calflux,n_orders)
 
             # perform wavelength calibration
             poly_soln, wls_and_pixels = self.fit_many_orders(
-                masked_calflux, order_list, rough_wls=rough_wls, 
+                calflux, order_list, rough_wls=rough_wls, 
                 comb_lines_angstrom=lfc_allowed_wls, 
                 expected_peak_locs=peak_wavelengths_ang, 
                 print_update=True, plt_path=SAVEPLOTS
@@ -159,7 +168,6 @@ class WaveCalibration:
                 plt.xlabel('pixel')
                 plt.ylabel('Derived WLS - Approx WLS [$\\rm \AA$]')
                 plt.saveplot('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
-
 
 
         if self.quicklook == True:
@@ -250,8 +258,6 @@ class WaveCalibration:
             rough_wls_order = rough_wls[order_num,:]
             n_pixels = len(order_flux)
 
-            cal_type = 'ThAr'
-
             # find, clip, and compute precise wavelengths for peaks.
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
@@ -260,7 +266,7 @@ class WaveCalibration:
                     order_flux, plot_path=order_plt_path
                 )
 
-                if self.clip_peaks_toggle:
+                if self.clip_peaks_toggle == 'True':
                     good_peak_idx = self.clip_peaks(
                         order_flux, fitted_peak_pixels, detected_peak_pixels,
                         gauss_coeffs, detected_peak_heights, rough_wls_order,
@@ -270,7 +276,7 @@ class WaveCalibration:
                 else:
                     good_peak_idx = np.arange(len(detected_peak_pixels))
 
-                if cal_type == 'LFC':
+                if self.cal_type == 'LFC' or self.cal_type == 'Simulated':
                     wls, _ = self.mode_match(
                         order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, comb_lines_angstrom, 
                         print_update=print_update, plot_path=order_plt_path
