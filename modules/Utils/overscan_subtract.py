@@ -23,7 +23,79 @@ class OverscanSubtraction(KPF0_Primitive):
         self.ref_output=self.action.args[6] #output of ccd reference file
         self.ffi_exts=self.action.args[7] #fits extensions where ffis will be stored
         self.data_type=self.action.args[8] #data type, pertaining to instrument
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.quicklook = action.args['quicklook'] if 'quicklook' in args_keys else False
+        self.filename = action.args['filename'] if 'filename' in args_keys else None
+        
+    def quicklook_raw_plots(self,l0_obj):
+        """Runs quicklook: saves diagnostic plots of assembled images.
 
+        Args:
+            l0_obj(fits.hdulist): Original FITS.hdulist but with FFI extension(s) filled
+        """
+        if self.filename is not None:
+            date,fits = (self.filename.split('_')[-1]).split('.')
+        for i in self.ffi_exts:
+            if i.startswith('GREEN'):
+                green_ext = i
+            if i.startswith('RED'):
+                red_ext = i
+        counts_green = np.array(l0_obj[green_ext].data,'d')
+        counts_red = np.array(l0_obj[red_ext].data,'d')
+        flatten_counts_green = np.ravel(counts_green)
+        low, high = np.percentile(flatten_counts_green,[0.1,99.9])
+        counts_green[(counts_green>high) | (counts_green<low)] = np.nan #bad pixels
+        flatten_counts_green = np.ravel(counts_green)
+
+        flatten_counts_red = np.ravel(counts_red)
+        low, high = np.percentile(flatten_counts_red,[0.1,99.9])
+        counts_red[(counts_red>high) | (counts_red<low)] = np.nan #bad pixels
+        flatten_counts_red = np.ravel(counts_red)
+        plt.figure(figsize=(5,4))
+        
+        #plt.subplots_adjust(left=0.15, bottom=0.1, right=0.95, top=0.9)
+        plt.imshow(np.log10(counts_green),vmin = 0)
+        plt.xlabel('x (pixel number)')
+        plt.ylabel('y (pixel number)')
+        plt.title('Green Science Frame')
+        plt.colorbar(label = 'log(Counts)')
+        plt.savefig('outputs/2D_science_frame_green_'+ date +'.png')
+
+        plt.figure(figsize=(5,4))
+        #plt.subplots_adjust(left=0.15, bottom=0.1, right=0.95, top=0.9)
+        plt.imshow(np.log10(counts_red),vmin = 0)
+        plt.xlabel('x (pixel number)')
+        plt.ylabel('y (pixel number)')
+        plt.title('Red Science Frame')
+        plt.colorbar(label = 'log(Counts)')
+        plt.savefig('outputs/2D_science_frame_red_' + date + '.png')
+        
+        plt.close()
+        plt.figure(figsize=(5,4))
+        plt.hist(np.log10(flatten_counts_green), bins = 20,alpha =0.5, label = 'Green Chip',density = True, range = [0,6], histtype='step', color = 'red', linewidth = 1)#
+        plt.hist(np.log10(flatten_counts_red), bins = 20,alpha =0.5, label = 'Red Chip',density = True, range = [0,6], histtype='step', color = 'green', linewidth = 1)#
+        #plt.hist(flatten_counts*np.random.normal(1,0.1,len(flatten_counts)), bins = 20,alpha =0.5, label = 'Master Science',density = True)
+        #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
+        plt.xlabel('log(Counts)')
+        plt.title('Science Frame Histogram')
+        plt.legend()
+        plt.savefig('outputs/Science_histo_' + date + '.png')
+
+        plt.close('all')
+        fig = plt.gcf()
+        fig.set_size_inches(8, 3)
+        plt.subplots_adjust(left=0.1, bottom=0.15, right=0.95, top=0.9)
+        #figure(figsize=(8, 6), dpi=80)
+        plt.plot(counts_green[:,int(np.shape(counts_green)[1]/2)],alpha = 0.5,linewidth =  0.5, label = 'Green Chip', color = 'Green')
+        plt.plot(counts_red[:,int(np.shape(counts_red)[1]/2)],alpha = 0.5, linewidth =  0.5, label = 'Red Chip',color = 'Red')
+        plt.yscale('log')
+        plt.ylabel('log(Counts)')
+        plt.xlabel('Row Number')
+        plt.title('Column Cut (Middle of CCD)')
+        plt.ylim(1,1.2*np.nanmax(counts_green[:,int(np.shape(counts_green)[1]/2)]))
+        plt.legend()
+        plt.savefig('outputs/Column_cut' + date + '.png')
+        
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region
         is 1000 pixels wide, and overscan region (when oriented with overscan on right and parallelscan
@@ -54,7 +126,7 @@ class OverscanSubtraction(KPF0_Primitive):
             overscan_reg(np.ndarray): Array of pixel range of overscan relative to image pixel width
 
         Returns:
-            raw_sub_os(np.ndarray): Raw image with overscan mean subtracted
+            np.ndarray: Raw image with overscan mean subtracted
         """
         raw_sub_os = np.zeros_like(image)
         for row in range(0,raw_sub_os.shape[0]):
@@ -71,7 +143,7 @@ class OverscanSubtraction(KPF0_Primitive):
             overscan_reg(np.ndarray): Array of pixel range of overscan relative to image pixel width
 
         Returns:
-            raw_sub_os(np.ndarray): Raw image with overscan fit subtracted
+            np.ndarray: Raw image with overscan fit subtracted
         """    
         xx = np.arange(image.shape[0]) #double check this
         raw_sub_os = np.zeros(image.shape)
@@ -95,7 +167,7 @@ class OverscanSubtraction(KPF0_Primitive):
             key(int): Orientation of image
 
         Returns:
-            image_fixed(np.ndarray): Correctly-oriented raw image for overscan subtraction
+            np.ndarray: Correctly-oriented raw image for overscan subtraction
                 and overscan region removal
         """
         if key == 1: #flip lr
@@ -119,7 +191,7 @@ class OverscanSubtraction(KPF0_Primitive):
                 Ex: Quadrant row is 2, col is 2, means that image will go lower right corner in FFI. 
 
         Returns:
-            full_frame_img(np.ndarray): Assembled full frame image
+            np.ndarray: Assembled full frame image
         """
 
         all_img = list(zip(images,rows,columns))
@@ -145,7 +217,7 @@ class OverscanSubtraction(KPF0_Primitive):
             overscan_reg_prl(np.ndarray): Parallel overscan region
 
         Returns:
-            image_cut(np.ndarray): Image with overscan region cut off.
+            np.ndarray: Image with overscan region cut off.
 
         """
         image_cut = osub_image[:,0:overscan_reg_srl[0]]
@@ -167,7 +239,7 @@ class OverscanSubtraction(KPF0_Primitive):
             channel_exts(list): FITS extensions of images 
 
         Returns:
-            full_frame_img(np.ndarray): Stiched-together full frame image, with overscan subtracted and removed
+            np.ndarray: Stiched-together full frame image, with overscan subtracted and removed
         """
         # clip ends of overscan region 
         srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays()
@@ -200,7 +272,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """Performs entire overscan subtraction utility.
 
         Returns:
-            l0_obj(fits.hdulist): Original FITS.hdulist but with FFI extension(s) filled
+            fits.hdulist: Original FITS.hdulist but with FFI extension(s) filled
         """
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
         l0_obj = self.rawfile
@@ -216,5 +288,8 @@ class OverscanSubtraction(KPF0_Primitive):
             full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
             #full_frame_images.append(full_frame_img)
             l0_obj[self.ffi_exts[frame]] = full_frame_img
+            
+        if self.quicklook == True:
+            qlp = self.quicklook_raw_plots(l0_obj)
 
         return Arguments(l0_obj)
