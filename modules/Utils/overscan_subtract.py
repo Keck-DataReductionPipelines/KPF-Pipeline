@@ -274,22 +274,24 @@ class OverscanSubtraction(KPF0_Primitive):
         Returns:
             fits.hdulist: Original FITS.hdulist but with FFI extension(s) filled
         """
-        channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
-        l0_obj = self.rawfile
-        frames_data = []
-        for ext in channel_exts:
-            data = l0_obj[ext]
-            frames_data.append(data)
-        frames_data = np.array(frames_data)
 
-        #full_frame_images=[]
-        for frame in range(len(self.ffi_exts)):
-            single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
-            full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
-            #full_frame_images.append(full_frame_img)
-            l0_obj[self.ffi_exts[frame]] = full_frame_img
-            
-        if self.quicklook == True:
-            qlp = self.quicklook_raw_plots(l0_obj)
+        if self.data_type == 'KPF':
+            channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
+            l0_obj = self.rawfile
+            frames_data = []
+            for ext in channel_exts:
+                data = l0_obj[ext]
+                frames_data.append(data)
+            frames_data = np.array(frames_data)
+            #full_frame_images=[]
+            for frame in range(len(self.ffi_exts)):
+                single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
+                full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
+                #full_frame_images.append(full_frame_img)
+                l0_obj[self.ffi_exts[frame]] = full_frame_img
+            if self.quicklook == True:
+                qlp = self.quicklook_raw_plots(l0_obj)
+        if self.data_type == 'NEID':
+            l0_obj = self.rawfile
 
         return Arguments(l0_obj)
