@@ -9,6 +9,7 @@ class OrientationReference(KPF0_Primitive):
     def __init__(self, action, context):
         KPF0_Primitive.__init__(self, action, context)
         self.reference_path = self.action.args[0]
+        self.data_type = self.action.args[1]
 
     def _perform(self):
         """Reads channel/image orientation .txt file and returns
@@ -33,53 +34,58 @@ class OrientationReference(KPF0_Primitive):
         4=overscan on right and bottom
 
         """
-        channel_ref = open(self.reference_path,'r')
-        channels = []
-        keys = []
-        rows = []
-        cols = []
-        exts = []
+        if self.data_type == 'KPF':
+            channel_ref = open(self.reference_path,'r')
+            channels = []
+            keys = []
+            rows = []
+            cols = []
+            exts = []
 
-        for line in channel_ref:
-            columns = line.split()
-            channel = columns[0]
-            channels.append(channel)
+            for line in channel_ref:
+                columns = line.split()
+                channel = columns[0]
+                channels.append(channel)
+                
+                key = columns[1]
+                keys.append(key)
+                
+                row = columns[2]
+                rows.append(row)
+                
+                col = columns[3]
+                cols.append(col)
+                
+                ext = columns[4]
+                exts.append(ext)
+
+            del channels[0]
+            del keys[0]
+            del rows[0]
+            del cols[0]
+            del exts[0]
+
+            channels = list(map(int,channels))
+            keys = list(map(int,keys))
+            rows = list(map(int,rows))
+            cols = list(map(int,cols))
+            exts = list(map(str,exts))
+            tot_frames = len(channels)/max(channels)
+
+            if max(channels)==len(channels):
+                print (f'CCD reference file appears to show {max(channels)} amplifiers per CCD, of which there is {int(tot_frames)}')
+
+            elif max(channels)!=len(channels):
+                if channels.count(max(channels)) == tot_frames:
+                    print (f'CCD reference file appears to show {max(channels)} amplifiers per CCD, of which there are {int(tot_frames)}')
             
-            key = columns[1]
-            keys.append(key)
+            elif max(channels)!=len(channels):
+                if channels.count(max(channels))!=tot_frames:
+                    raise TypeError('Irregular/incorrect channel list')
+
+            all_output = channels,keys,rows,cols,exts
             
-            row = columns[2]
-            rows.append(row)
+        if self.data_type == 'NEID':
+            all_output = None
             
-            col = columns[3]
-            cols.append(col)
-            
-            ext = columns[4]
-            exts.append(ext)
-
-        del channels[0]
-        del keys[0]
-        del rows[0]
-        del cols[0]
-        del exts[0]
-
-        channels = list(map(int,channels))
-        keys = list(map(int,keys))
-        rows = list(map(int,rows))
-        cols = list(map(int,cols))
-        exts = list(map(str,exts))
-        tot_frames = len(channels)/max(channels)
-
-        if max(channels)==len(channels):
-            print (f'CCD reference file appears to show {max(channels)} amplifiers per CCD, of which there is {int(tot_frames)}')
-
-        elif max(channels)!=len(channels):
-            if channels.count(max(channels)) == tot_frames:
-                print (f'CCD reference file appears to show {max(channels)} amplifiers per CCD, of which there are {int(tot_frames)}')
-         
-        elif max(channels)!=len(channels):
-            if channels.count(max(channels))!=tot_frames:
-                raise TypeError('Irregular/incorrect channel list')
-
-        all_output = channels,keys,rows,cols,exts
         return Arguments(all_output)

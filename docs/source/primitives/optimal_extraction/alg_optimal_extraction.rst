@@ -1,8 +1,8 @@
-Optimal Extraction Algorithm
-============================
+Spectral Extraction Algorithm
+=============================
 
 .. module:: modules
     :noindex:
 
-.. automodule:: modules.optimal_extraction.src.alg
+.. automodule:: modules.spectral_extraction.src.alg
     :members:

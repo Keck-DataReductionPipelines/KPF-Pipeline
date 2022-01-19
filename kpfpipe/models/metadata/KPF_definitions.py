@@ -88,6 +88,10 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RED_CAL_WAVE': fits.ImageHDU,
                      'RED_TELLURIC': fits.BinTableHDU,
                      'RED_SKY': fits.BinTableHDU,
+
+                     'CA_HK_SCI': fits.ImageHDU,
+                     'CA_HK_SKY': fits.ImageHDU,
+                     'CA_HK_WAVE': fits.ImageHDU,
                     }
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys

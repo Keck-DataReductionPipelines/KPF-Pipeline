@@ -1,5 +1,5 @@
-Module Optimal Extraction
-=========================
+Module Spectral Extraction
+==========================
 
 .. toctree::
    :maxdepth: 2

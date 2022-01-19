@@ -8,10 +8,10 @@
   Purpose: perform simple module test on KPFModExample from modules.Trivial.KPFM_Trivial
   note: this is the simple recipe and config example used in documentation, "Running a simple module".
 
-** The recipe and config pairs to perform order trace, optimal extraction, radial velocity  are listed as below:
+** The recipe and config pairs to perform order trace, spectral extraction, radial velocity  are listed as below:
 
 - kpf examples/test_neid.recipe  examples/default_neid.cfg 
-  purpose: perform order_trace, optimal extraction and radial velocity for NEID on target Tau Ceti
+  purpose: perform order_trace, spectral extraction and radial velocity for NEID on target Tau Ceti
   master recipe: test_neid.recipe
   subrecipes: test_order_trace.recipe, 
 	      test_optimal_extraction.recipe, test_optimal_extraction_clip.recipe (faster spectral extraction by using clip file), 
@@ -28,7 +28,7 @@
                       'ln -s ../clip_np' to link to the folder containing clipping results.
 
 - kpf examples/data_range_test/test_neid_part.recipe examples/data_range_test/defaiult_neid_part.cfg
-  purpose: preform order trace, optimal extraction and radial velocity by specifying the data range and the order range.
+  purpose: preform order trace, spectral extraction and radial velocity by specifying the data range and the order range.
   master recipe: test_neid_part.recipe
   subrecipe: test_order_trace_part.recipe, test_optimal_extraction_part.recipe, test_neid_radial_velocity_part.recipe
   note: create folder test_results/neid_data_range under KPF-Pipeline to contain the results

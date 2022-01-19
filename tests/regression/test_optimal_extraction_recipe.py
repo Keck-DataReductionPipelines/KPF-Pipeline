@@ -2,7 +2,7 @@
 from kpfpipe.tools.recipe_test_unit import recipe_test
 
 optimal_extraction_neid_recipe = """# test recipe for optimal extraction on NEID data
-from modules.optimal_extraction.src.optimal_extraction import OptimalExtraction
+from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
 
 test_data_dir = KPFPIPE_TEST_DATA
 flat_data_dir = test_data_dir + config.ARGUMENT.flat_data_dir
@@ -34,14 +34,14 @@ for code in obs_list:
     lev0_stem, lev0_ext = splitext(short_lev0_file)
     lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
     output_lev1_file = output_dir + lev0_flat_stem + '_' + lev0_stem + '_' + str(rect_method) + '_recipe' + lev1_stem_suffix + '.fits'
-    op_data = OptimalExtraction(lev0_data, lev0_flat_data, None, orderlet_names=order_name, 
+    op_data = SpectralExtraction(lev0_data, lev0_flat_data, None, orderlet_names=order_name, 
                                                 rectification_method=rect_method, max_result_order=max_result_order,
                                                 start_order=start_result_order, wavecal_fits=input_lev1_file,
                                                 data_extension='DATA', trace_extension='ORDER_TRACE_RESULT')
 """
 
 rectification_neid_recipe = """# test recipe for rectification on NEID data
-from modules.optimal_extraction.src.order_rectification import OrderRectification
+from modules.spectral_extraction.src.order_rectification import OrderRectification
 
 test_data_dir = KPFPIPE_TEST_DATA
 flat_data_dir = test_data_dir + config.ARGUMENT.flat_data_dir

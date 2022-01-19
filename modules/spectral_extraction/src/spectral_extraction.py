@@ -1,24 +1,24 @@
 # Standard dependencies
 """
-    This module defines class OptimalExtraction which inherits from `KPF0_Primitive` and provides methods to perform
-    the event on optimal extraction in the recipe.
+    This module defines class SpectralExtraction which inherits from `KPF0_Primitive` and provides methods to perform
+    the event on spectral extraction in the recipe.
 
     Attributes:
-        OptimalExtraction
+        SpectralExtraction
 
     Description:
         * Method `__init__`:
 
-            OptimalExtraction constructor, the following arguments are passed to `__init__`,
+            SpectralExtraction constructor, the following arguments are passed to `__init__`,
 
                 - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
-                  keyword arguments passed by the `OptimalExtraction` event issued in the recipe:
+                  keyword arguments passed by the `SpectralExtraction` event issued in the recipe:
 
                     - `action.args[0] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing spectrum data for
-                      optimal extraction.
+                      spectral extraction.
                     - `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` containing flat data and order
                       trace result.
-                    - `action.args[2] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing optimal
+                    - `action.args[2] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing spectral
                       extraction results. If not existing, it is None.
                     - `action.args['order_name'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
@@ -43,7 +43,7 @@
                       values from ``action.args['wavecal_fits']``. Defaults to False.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
-                  contains the path of the config file defined for the module of optimal extraction in the master
+                  contains the path of the config file defined for the module of spectral extraction in the master
                   config file associated with the recipe.
 
             and the following attributes are defined to initialize the object,
@@ -54,30 +54,30 @@
                 - `order_name (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `max_result_order (int)`: Total orders to be processed.
-                - `rectification_method (int)`: Rectification method code as defined in `OptimalExtractionAlg`.
-                - `extraction_method (str)`: Extraction method code as defined in `OptimalExtractionAlg`.
+                - `rectification_method (int)`: Rectification method code as defined in `SpectralExtractionAlg`.
+                - `extraction_method (str)`: Extraction method code as defined in `SpectralExtractionAlg`.
                 - `wavecal_fits (str)`: Path of the fits file or `KPF1` instance with wavelength calibration data.
                 - `to_set_wavelength_cal`: Flag indicates if setting wavelength calibration data to wavelength
                   calibration extension from ``wavecal_fits``.
-                - `config_path (str)`: Path of config file for optimal extraction.
+                - `config_path (str)`: Path of config file for spectral extraction.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
-                - `alg (modules.order_trace.src.alg.OptimalExtractionAlg)`: Instance of `OptimalExtractionAlg` which
-                  has operation codes for the computation of optimal extraction.
+                - `alg (modules.order_trace.src.alg.SpectralExtractionAlg)`: Instance of `SpectralExtractionAlg` which
+                  has operation codes for the computation of spectral extraction.
 
 
         * Method `__perform`:
 
-            OptimalExtraction returns the result in `Arguments` object which contains a level 1 data object (`KPF1`)
-            with the optimal extraction results and the wavelength data tentatively transported from
+            SpectralExtraction returns the result in `Arguments` object which contains a level 1 data object (`KPF1`)
+            with the spectral extraction results and the wavelength data tentatively transported from
             `action.args['wavecal_fits']` if there is.
 
     Usage:
-        For the recipe, the optimal extraction event is issued like::
+        For the recipe, the spectral extraction event is issued like::
 
             :
             lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-            op_data = OptimalExtraction(lev0_data, lev0_flat_data,
+            op_data = SpectralExtraction(lev0_data, lev0_flat_data,
                                         None, order_name=order_name,
                                         rectification_method=rect_method,
                                         wavecal_fits=input_lev1_file)
@@ -101,13 +101,13 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.optimal_extraction.src.alg import OptimalExtractionAlg
+from modules.spectral_extraction.src.alg import SpectralExtractionAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
 
 
-class OptimalExtraction(KPF0_Primitive):
+class SpectralExtraction(KPF0_Primitive):
     default_args_val = {
                     'order_name': 'SCI',
                     'max_result_order': -1,
@@ -159,7 +159,7 @@ class OptimalExtraction(KPF0_Primitive):
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            self.config_path = context.config_path['optimal_extraction']
+            self.config_path = context.config_path['spectral_extraction']
         except:
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
@@ -183,7 +183,7 @@ class OptimalExtraction(KPF0_Primitive):
         # Order trace algorithm setup
         spec_header = self.input_spectrum.header[data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
-        self.alg = OptimalExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
+        self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_spectrum[data_ext] if hasattr(self.input_spectrum, data_ext) else None,
                                         spec_header,
@@ -213,18 +213,18 @@ class OptimalExtraction(KPF0_Primitive):
     def _perform(self):
         """
         Primitive action -
-        perform optimal extraction by calling method `extract_spectrum` from OptimalExtractionAlg and create an instance
+        perform spectral extraction by calling method `extract_spectrum` from SpectralExtractionAlg and create an instance
         of level 1 data (KPF1) to contain the analysis result.
 
         Returns:
-            Level 1 data containing optimal extraction result.
+            Level 1 data containing spectral extraction result.
 
         """
-        # rectification_method: OptimalExtractAlg.NoRECT(fastest) OptimalExtractAlg.VERTICAL, OptimalExtractAlg.NORMAL
+        # rectification_method: SpectralExtractAlg.NoRECT(fastest) SpectralExtractAlg.VERTICAL, SpectralExtractAlg.NORMAL
         # extraction_method: 'optimal' (default), 'sum'
 
         if self.logger:
-            self.logger.info("OptimalExtraction: rectifying and extracting order...")
+            self.logger.info("SpectralExtraction: rectifying and extracting order...")
 
         ins = self.alg.get_instrument().upper()
 
@@ -239,36 +239,48 @@ class OptimalExtraction(KPF0_Primitive):
                 kpf0_sample = self.wavecal_fits
 
         all_order_names = self.orderlet_names if type(self.orderlet_names) is list else [self.orderlet_names]
+
+        all_o_sets = []
+        s_order = self.start_order if self.start_order is not None else 0
+
         for order_name in all_order_names:
-
             o_set = self.alg.get_order_set(order_name)
-            if o_set.size > 0 :
-                s_order = self.start_order if self.start_order is not None else 0
-                e_order = min((s_order + self.max_result_order), len(o_set)) \
-                    if (self.max_result_order is not None and self.max_result_order > 0) else len(o_set)
+            if o_set.size > 0:
+                o_set = self.get_order_set(o_set, s_order)
+            all_o_sets.append(o_set)
 
-                o_set = o_set[s_order:e_order]
+        order_to_process = min([len(a_set) for a_set in all_o_sets])
 
+        for idx, order_name in enumerate(all_order_names):
+            o_set = all_o_sets[idx][0:order_to_process]
             opt_ext_result = self.alg.extract_spectrum(order_set=o_set)
 
-            assert('optimal_extraction_result' in opt_ext_result and
-                   isinstance(opt_ext_result['optimal_extraction_result'], pd.DataFrame))
+            assert('spectral_extraction_result' in opt_ext_result and
+                   isinstance(opt_ext_result['spectral_extraction_result'], pd.DataFrame))
 
-            data_df = opt_ext_result['optimal_extraction_result']
+            data_df = opt_ext_result['spectral_extraction_result']
             self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
                                                             order_name, self.output_level1)
             self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
 
         if self.output_level1 is not None:
-            self.output_level1.receipt_add_entry('OptimalExtraction', self.__module__,
+            self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,
                                                  f'orderlettes={" ".join(all_order_names)}', 'PASS')
         if self.logger:
-            self.logger.info("OptimalExtraction: Receipt written")
+            self.logger.info("SpectralExtraction: Receipt written")
 
         if self.logger:
-            self.logger.info("OptimalExtraction: Done for orders " + " ".join(all_order_names) + "!")
+            self.logger.info("SpectralExtraction: Done for orders " + " ".join(all_order_names) + "!")
 
         return Arguments(self.output_level1)
+
+    def get_order_set(self, o_set, s_order):
+        e_order = min(self.max_result_order, len(o_set)) \
+            if (self.max_result_order is not None and self.max_result_order > 0) else o_set.size
+
+        o_set_ary = o_set[0:e_order] + s_order
+
+        return o_set_ary[np.where(o_set_ary < self.alg.get_spectrum_order())]
 
     def construct_level1_data(self, op_result, ins, level1_sample: KPF1, order_name: str, output_level1:KPF1):
         update_primary_header = False if level1_sample is None or ins != 'NEID' else True
@@ -382,21 +394,21 @@ class OptimalExtraction(KPF0_Primitive):
         if key == 'rectification_method':
             if v is not None and isinstance(v, str):
                 if v.lower() == 'normal':
-                    method = OptimalExtractionAlg.NORMAL
+                    method = SpectralExtractionAlg.NORMAL
                 elif v.lower() == 'vertical':
-                    method = OptimalExtractionAlg.VERTICAL
+                    method = SpectralExtractionAlg.VERTICAL
                 else:
-                    method = OptimalExtractionAlg.NoRECT
+                    method = SpectralExtractionAlg.NoRECT
             else:
-                method = OptimalExtractionAlg.NoRECT
+                method = SpectralExtractionAlg.NoRECT
         elif key == 'extraction_method':
             if v is not None and isinstance(v, str):
                 if 'sum' in v.lower():
-                    method = OptimalExtractionAlg.SUM
+                    method = SpectralExtractionAlg.SUM
                 else:
-                    method = OptimalExtractionAlg.OPTIMAL
+                    method = SpectralExtractionAlg.OPTIMAL
             else:
-                method = OptimalExtractionAlg.OPTIMAL
+                method = SpectralExtractionAlg.OPTIMAL
         else:
             if key == 'data_extension' or key == 'trace_extension':
                 if v is None:
