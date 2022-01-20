@@ -2,6 +2,9 @@ from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.Utils.quicklook_pdf import quicklook_pdf
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
-ql_directory = './outputs/'
+= OverscanSubtraction(quicklook=quicklook)
+
+= FrameCombinePrimitive()
+
 png_list = find_files(ql_directory+ '*.png')
 quicklook_pdf(png_list,ql_directory)
