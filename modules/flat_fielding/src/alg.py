@@ -47,15 +47,19 @@ class FlatFieldingAlg:
         Raises:
             Exception: If raw image and flat frame don't have the same dimensions.
         """
-        for no,ffi in enumerate(self.ffi_exts):
-            print('shapes:',self.rawimage[ffi].data.shape,masterflat[no+1].data.shape)
-            if self.rawimage[ffi].data.shape==masterflat[no+1].data.shape:
-                print ("Flat .fits Dimensions Equal, Check Passed")
-            else:
-                raise Exception ("Flat .fits Dimensions NOT Equal! Check Failed")
-    
-            self.rawimage[ffi].data=self.rawimage[ffi].data/masterflat[no+1].data
-            #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+        if self.data_type == 'KPF':
+            for ffi in self.ffi_exts:
+                assert self.rawimage[ffi].data.shape == masterflat[ffi+'_NORMALIZED'].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
+                flat_div = self.rawimage[ffi].data/masterflat[ffi+'_NORMALIZED'].data
+                self.rawimage[ffi] = flat_div
+                #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
+        if self.data_type == 'NEID':
+            print(self.rawimage.info())
+            print(masterflat.info())
+            assert self.rawimage[ffi].data.shape == masterflat[ffi].data.shape, "Flat .fits Dimensions NOT Equal! Check Failed"
+            flat_div = self.rawimage['DATA']/masterflat['DATA']
+            self.rawimage['DATA'] = flat_div
+
             
     def get(self):
         """Returns flat-corrected raw image result.

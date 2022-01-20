@@ -59,41 +59,22 @@ class BiasSubtractionAlg:
         # masterbias = np.zeros_like(frame)
         ###
         if self.quicklook == False: 
-            for no,ffi in enumerate(self.ffi_exts):
-                print('shapes:',self.rawimage[ffi].data.shape,masterbias[no+1].data.shape)
-                if self.rawimage[ffi].data.shape==masterbias[no+1].data.shape:
-                    print ("Bias .fits Dimensions Equal, Check Passed")
-                else:
-                    raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
-
-                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
-            #ext no+1 for mflat because there is a primary ext coded into the masterflat currently
-
-        if self.quicklook == True:
-            for no,ffi in enumerate(self.ffi_exts):
-                print('shapes:',self.rawimage[ffi].data.shape,masterbias[no+1].data.shape)
-                #until data model for master files is added:
-                if self.rawimage[ffi].shape==masterbias[no+1].data.shape:
-                    print ("Bias .fits Dimensions Equal, Check Passed")
-                else:
-                    raise Exception ("Bias .fits Dimensions NOT Equal! Check failed")
-                self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[no+1].data
-
-                counts = masterbias[no+1].data #red and green potentially masters, no+1 means ignoring primary?
-                flatten_counts = np.ravel(counts)
-                low, high = np.percentile(flatten_counts,[0.1,99.9])
-                counts[(counts>high) | (counts<low)] = np.nan #bad pixels
-                flatten_counts = np.ravel(counts)
-                print(np.nanmedian(flatten_counts),np.nanmean(flatten_counts),np.nanmin(flatten_counts),np.nanmax(flatten_counts))
-
-                plt.imshow(counts, cmap = 'cool')
-                plt.colorbar()
-                plt.savefig('2D_bias_frame.pdf')
-
-                plt.close()
-                plt.hist(flatten_counts, bins = 20)
-                plt.savefig('Bias_histo.pdf')
-
+            if self.data_type == 'KPF':
+                for ffi in self.ffi_exts:
+                    print(self.rawimage.info)
+                    print(masterbias.info())
+                    assert self.rawimage[ffi].data.shape==masterbias[ffi].data.shape, "Bias .fits Dimensions NOT Equal! Check failed"
+                    #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
+                    minus_bias = self.rawimage[ffi].data-masterbias[ffi].data
+                    self.rawimage[ffi] = minus_bias
+                
+            if self.data_type == 'NEID':
+                print(self.rawimage.info())
+                print('shapes:',self.rawimage['DATA'].shape,masterbias['DATA'].shape)
+                assert self.rawimage['DATA'].shape==masterbias['DATA'].shape, "Bias .fits Dimensions NOT Equal! Check failed"
+                minus_bias=self.rawimage['DATA']-masterbias['DATA']
+                self.rawimage['DATA'] = minus_bias
+                 
     def get(self):
         """Returns bias-corrected raw image result.
 

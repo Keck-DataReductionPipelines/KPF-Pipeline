@@ -109,7 +109,8 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         # if self.rawfile.header['NOSCN_S'] and self.rawfile.header['NOSCN_P']:
 
-        # else:       
+        # else:
+      
         srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
         prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
         srl_N_overscan = len(srl_overscan_pxs)
@@ -225,6 +226,25 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
 
+    def neid_overscan_arrays(self,channel_exts):
+        """[summary]
+
+        Args:
+            channel_exts ([type]): [description]
+        """
+        no_oscan = self.rawfile.header[channel_exts[0]]['DATASEC']
+        no_oscan = no_oscan.replace('[','')
+        no_oscan = no_oscan.replace(']','')
+        a,b = no_oscan.split(',')
+        col_start,col_end = a.split(':')
+        row_start,row_end = b.split(':')
+        col_start,col_end,row_start,row_end = int(col_start),int(col_end),int(row_start),int(row_end)
+        
+    def neid_run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
+        self.neid_overscan_arrays(channel_exts)
+        for img,key in zip(channel_imgs,channel_keys):
+            new_img = self.orientation_adjust(img,key)
+        
     def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
         """Performs overscan subtraction steps, in order: orient frame, subtract overscan (method
         chosen by user) from correctly-oriented frame (overscan on right and bottom), cuts off overscan region.
@@ -274,9 +294,9 @@ class OverscanSubtraction(KPF0_Primitive):
         Returns:
             fits.hdulist: Original FITS.hdulist but with FFI extension(s) filled
         """
+        channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
 
         if self.data_type == 'KPF':
-            channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
             l0_obj = self.rawfile
             frames_data = []
             for ext in channel_exts:
