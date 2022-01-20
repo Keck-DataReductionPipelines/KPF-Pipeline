@@ -1,5 +1,5 @@
 from modules.Utils.frame_combine import FrameCombinePrimitive
-from modules.Utils.quicklook_pdf import quicklook_pdf
+from modules.Utils.quicklook_pdf import QuicklookPDF
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.orientation_ref_reader import OrientationReference
 
@@ -48,4 +48,4 @@ for raw in find_files(lev0_files_path):
 FrameCombinePrimitive('bias',find_files(all_bias_files_path),ffi_exts,data_type,high_level_master=high_lev_bias,quicklook=quicklook,ql_directory=ql_directory)
 FrameCombinePrimitive('flat',find_files(all_flat_files_path),ffi_exts,data_type,high_level_master=high_lev_flat,quicklook=quicklook,ql_directory=ql_directory)
 
-quicklook_pdf(ql_directory)
+QuicklookPDF(ql_directory)

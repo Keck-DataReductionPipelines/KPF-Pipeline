@@ -6,7 +6,7 @@ import glob
 import numpy as np
 from fpdf import FPDF
 
-class quicklook_pdf(KPF0_Primitive):
+class QuicklookPDF(KPF0_Primitive):
     
     def __init__(self,action,context):
         """Initializes quicklook_pdf utility."""
