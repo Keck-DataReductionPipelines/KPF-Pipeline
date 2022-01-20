@@ -26,6 +26,7 @@ class OverscanSubtraction(KPF0_Primitive):
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         self.quicklook = action.args['quicklook'] if 'quicklook' in args_keys else False
         self.filename = action.args['filename'] if 'filename' in args_keys else None
+        self.ql_directory = action.args['ql_directory'] if 'ql_directory' in args_keys else None
         
     def quicklook_raw_plots(self,l0_obj):
         """Runs quicklook: saves diagnostic plots of assembled images.
@@ -59,7 +60,7 @@ class OverscanSubtraction(KPF0_Primitive):
         plt.ylabel('y (pixel number)')
         plt.title('Green Science Frame')
         plt.colorbar(label = 'log(Counts)')
-        plt.savefig('outputs/2D_science_frame_green_'+ date +'.png')
+        plt.savefig('{a}/2D_science_frame_green_{b}.png'.format(a=self.ql_directory,b=date))
 
         plt.figure(figsize=(5,4))
         #plt.subplots_adjust(left=0.15, bottom=0.1, right=0.95, top=0.9)
@@ -68,8 +69,8 @@ class OverscanSubtraction(KPF0_Primitive):
         plt.ylabel('y (pixel number)')
         plt.title('Red Science Frame')
         plt.colorbar(label = 'log(Counts)')
-        plt.savefig('outputs/2D_science_frame_red_' + date + '.png')
-        
+        plt.savefig('{a}/2D_science_frame_red_{b}.png'.format(a=self.ql_directory,b=date))
+        ### need to change this so name will have bias/flat/science/cal
         plt.close()
         plt.figure(figsize=(5,4))
         plt.hist(np.log10(flatten_counts_green), bins = 20,alpha =0.5, label = 'Green Chip',density = True, range = [0,6], histtype='step', color = 'red', linewidth = 1)#
@@ -79,7 +80,7 @@ class OverscanSubtraction(KPF0_Primitive):
         plt.xlabel('log(Counts)')
         plt.title('Science Frame Histogram')
         plt.legend()
-        plt.savefig('outputs/Science_histo_' + date + '.png')
+        plt.savefig('{a}/Science_histo_{b}.png'.format(a=self.ql_directory,b=date))
 
         plt.close('all')
         fig = plt.gcf()
@@ -94,7 +95,7 @@ class OverscanSubtraction(KPF0_Primitive):
         plt.title('Column Cut (Middle of CCD)')
         plt.ylim(1,1.2*np.nanmax(counts_green[:,int(np.shape(counts_green)[1]/2)]))
         plt.legend()
-        plt.savefig('outputs/Column_cut' + date + '.png')
+        plt.savefig('{a}/Column_cut{b}.png'.format(a=self.ql_directory,b=date))
         
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region

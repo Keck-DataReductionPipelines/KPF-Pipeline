@@ -3,13 +3,49 @@ from modules.Utils.quicklook_pdf import quicklook_pdf
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.orientation_ref_reader import OrientationReference
 
+test_data_dir = config.ARGUMENT.test_data_dir
+reference_path = config.ARGUMENT.channel_orientation_ref_path
+all_bias_files_path = config.ARGUMENT.all_bias_files_path
+all_flat_files_path = config.ARGUMENT.all_flat_files_path
+high_level_bias = config.ARGUMENT.high_level_bias
+high_level_flat = config.ARGUMENT.high_level_flat
+prl_overscan_reg = config.ARGUMENT.pl_overscan_reg
+srl_overscan_reg = config.ARGUMENT.srl_overscan_reg
+mode = config.ARGUMENT.overscan_method
+order = config.ARGUMENT.overscan_order
+oscan_clip_no = config.ARGUMENT.overscan_clip
+ffi_exts = config.ARGUMENT.lev0_ffi_exts
+masterbias_path = config.ARGUMENT.masterbias_path
+masterflat_path = config.ARGUMENT.masterflat_path
+make_master_bias = config.ARGUMENT.make_master_bias
+make_master_flat = config.ARGUMENT.make_master_flat
+lev0_files_path = config.ARGUMENT.lev0_files_path
+quicklook = config.ARGUMENT.quicklook
+ql_directory = config.ARGUMENT.ql_directory
+step = config.ARGUMENT.step
+step_range = config.ARGUMENT.step_range
+data_type = config.ARGUMENT.data_type
+rectification_method = config.ARGUMENT.rectification_method
+extraction_method = config.ARGUMENT.extraction_method
+
 ref_output = OrientationReference(reference_path)
 
-for file in find_files(filename):
-    raw_file = kpf0_from_fits(filename)
-    l0_obj = OverscanSubtraction(raw_file,prl_overscan_reg,srl_overscan_reg,mode,order,oscan_clip_no,ref_output,ffi_exts,data_type,quicklook=quicklook,filename=filename)
-    FrameCombinePrimitive(bias,bias_files,ffi_exts,data_type,quicklook=quicklook)
-    FrameCombinePrimitive(flat,flat_files,ffi_exts,data_type,quicklook=quicklook)
+high_lev_bias = kpf0_from_fits(high_level_bias)
+high_lev_flat = kpf0_from_fits(high_level_flat)
 
-png_list = find_files(ql_directory+ '*.png')
-quicklook_pdf(png_list,ql_directory)
+for b in find_files(all_bias_files_path): 
+    bias = kpf0_from_fits(b)
+    assembled_bias = OverscanSubtraction(bias,prl_overscan_reg,srl_overscan_reg,mode,order,oscan_clip_no,ref_output,ffi_exts,data_type,quicklook=quicklook,filename=all_bias_files_path,ql_directory=ql_directory)
+
+for f in find_files(all_flat_files_path):    
+    flat = kpf0_from_fits(f)
+    assembled_flat = OverscanSubtraction(flat,prl_overscan_reg,srl_overscan_reg,mode,order,oscan_clip_no,ref_output,ffi_exts,data_type,quicklook=quicklook,filename=all_flat_files_path,ql_directory=ql_directory)
+
+for raw in find_files(lev0_files_path):
+    raw_file = kpf0_from_fits(raw)
+    l0_obj = OverscanSubtraction(raw_file,prl_overscan_reg,srl_overscan_reg,mode,order,oscan_clip_no,ref_output,ffi_exts,data_type,quicklook=quicklook,filename=lev0_files_path,ql_directory=ql_directory)
+
+FrameCombinePrimitive('bias',find_files(all_bias_files_path),ffi_exts,data_type,high_level_master=high_lev_bias,quicklook=quicklook,ql_directory=ql_directory)
+FrameCombinePrimitive('flat',find_files(all_flat_files_path),ffi_exts,data_type,high_level_master=high_lev_flat,quicklook=quicklook,ql_directory=ql_directory)
+
+quicklook_pdf(ql_directory)

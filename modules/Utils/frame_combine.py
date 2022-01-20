@@ -22,6 +22,7 @@ class FrameCombinePrimitive(KPF0_Primitive):
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         self.high_level_master = action.args['high_level_master'] if 'high_level_master' in args_keys else None
         self.quicklook = action.args['quicklook'] if 'quicklook' in args_keys else False
+        self.ql_directory = action.args['ql_directory'] if 'ql_directory' in args_keys else None
 
     def _perform(self):
         print("frame type is",self.frame_type)
@@ -45,14 +46,14 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     master_holder[ffi] = final_frame
                 for ext in ext_list:#figure out where to open master_holder_path
                     master_holder.del_extension(ext)
-                    
+                    return Arguments(master_holder)
             if self.quicklook == True:
                 for ffi in self.ffi_ext: 
                     color,ccd = ffi.split('_')
                     tester = KPF0.from_fits(self.L0_names[0])
                     no,fits = (self.L0_names[0].split('_')[-1]).split('.')
-                    masterbias = KPF0.from_fits(self.high_level_master) #where to kpf open fits?
-                    counts_master = np.array(masterbias[ffi],'d')
+                    #masterbias = KPF0.from_fits(self.high_level_master) #where to kpf open fits?
+                    counts_master = np.array(self.high_level_master[ffi],'d')
                     counts = np.array(tester[ffi],'d')
                     
                     flatten_counts = np.ravel(counts)
@@ -71,7 +72,7 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     plt.ylabel('y (pixel number)')
                     plt.title('{} Bias'.format(color))
                     plt.colorbar(label = 'Counts')
-                    plt.savefig('outputs/2D_bias_frame_{a}_{b}.png'.format(a=color.lower(),b=no))
+                    plt.savefig('{a}/2D_bias_frame_{b}_{c}.png'.format(a=self.ql_directory,b=color.lower(),c=no))
                     
                     plt.close()
                     plt.figure(figsize=(5,4))
@@ -81,7 +82,7 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     plt.xlabel('Counts')
                     plt.title('{} Bias Histogram'.format(color))
                     plt.legend()
-                    plt.savefig('outputs/Bias_histo_{a}_{b}.png'.format(a=color.lower(),b=no))
+                    plt.savefig('{a}/Bias_histo_{b}_{c}.png'.format(a=self.ql_directory,b=color.lower(),c=no))
         #####     
                 
         if self.frame_type == 'flat':
@@ -109,14 +110,14 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     master_holder.create_extension((ffi+'_NORMALIZED'),ext_type=np.array)
                     master_holder[ffi+'_NORMALIZED'] = norm_flat
                     # print(np.shape(master_holder[ffi+'_NORMALIZED']))
-                    
+                    return Arguments(master_holder)
             if self.quicklook == True:
                 for ffi in self.ffi_ext: 
                     color,ccd = ffi.split('_')
                     tester = KPF0.from_fits(self.L0_names[0])
                     no,fits = (self.L0_names[0].split('_')[-1]).split('.')
-                    masterflat = KPF0.from_fits(self.high_level_master) #where to kpf open fits?
-                    counts_master = np.array(masterflat[ffi],'d')
+                    #masterflat = KPF0.from_fits(self.high_level_master) #where to kpf open fits?
+                    counts_master = np.array(self.high_level_master[ffi],'d')
                     counts = np.array(tester[ffi],'d')
                     flatten_counts = np.ravel(counts)
                     flatten_counts_master = np.ravel(counts_master)
@@ -130,7 +131,7 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     plt.ylabel('y (pixel number)')
                     plt.title('{} Flat'.format(color))
                     #plt.show()
-                    plt.savefig('outputs/2D_Flat_frame_{a}_{b}.png'.format(a=color.lower(),b=no))
+                    plt.savefig('{a}/2D_Flat_frame_{b}_{c}.png'.format(a=self.ql_directory,b=color.lower(),c=no))
 
                     plt.close()
                     plt.figure(figsize=(5,4))
@@ -141,7 +142,7 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     plt.xlabel('log(Counts)')
                     plt.title('{} Flat Histogram'.format(color))
                     plt.legend()
-                    plt.savefig('outputs/Flat_histo_{a}_{b}.png'.format(a=color.lower(),b=no))
+                    plt.savefig('{a}/Flat_histo_{b}_{c}.png'.format(a=self.ql_directory,b=color.lower(),c=no))
                     
             # for ffi in self.ffi_ext:
             #     frames_data=[]
@@ -168,4 +169,3 @@ class FrameCombinePrimitive(KPF0_Primitive):
             # plt.colorbar()
             # plt.savefig('master_holder_{}.pdf'.format(self.ffi_ext))
             # plt.close()
-        return Arguments(master_holder)
