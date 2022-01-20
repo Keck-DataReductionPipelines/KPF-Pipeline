@@ -3,7 +3,7 @@ from modules.Utils.quicklook_pdf import quicklook_pdf
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.orientation_ref_reader import OrientationReference
 
-test_data_dir = KPFPIPE_TEST_DATA
+test_data_dir = KPFPIPE_TEST_DATA + '/'
 reference_path = test_data_dir + config.ARGUMENT.channel_orientation_ref_path
 all_bias_files_path = test_data_dir + config.ARGUMENT.all_bias_files_path
 all_flat_files_path = test_data_dir + config.ARGUMENT.all_flat_files_path
