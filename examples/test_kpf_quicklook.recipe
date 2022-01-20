@@ -1,10 +1,15 @@
 from modules.Utils.frame_combine import FrameCombinePrimitive
 from modules.Utils.quicklook_pdf import quicklook_pdf
 from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.Utils.orientation_ref_reader import OrientationReference
 
-= OverscanSubtraction(quicklook=quicklook)
+ref_output = OrientationReference(reference_path)
 
-= FrameCombinePrimitive()
+for file in find_files(filename):
+    raw_file = kpf0_from_fits(filename)
+    l0_obj = OverscanSubtraction(raw_file,prl_overscan_reg,srl_overscan_reg,mode,order,oscan_clip_no,ref_output,ffi_exts,data_type,quicklook=quicklook,filename=filename)
+    FrameCombinePrimitive(bias,bias_files,ffi_exts,data_type,quicklook=quicklook)
+    FrameCombinePrimitive(flat,flat_files,ffi_exts,data_type,quicklook=quicklook)
 
 png_list = find_files(ql_directory+ '*.png')
 quicklook_pdf(png_list,ql_directory)
