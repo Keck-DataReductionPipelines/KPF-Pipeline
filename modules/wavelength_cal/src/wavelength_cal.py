@@ -76,7 +76,7 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.cal_type == 'Simulated':
                     lfc_allowed_wls, rough_wls = self._generate_kpf_simulated_data_inputs()
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux, rough_wls=calflux, 
+                        calflux, rough_wls=rough_wls, 
                         lfc_allowed_wls=lfc_allowed_wls
                     )
 
@@ -161,46 +161,46 @@ class WaveCalibrate(KPF1_Primitive):
 
     def _generate_kpf_simulated_data_inputs(self):
 
+        num_pixels = len(self.l1_obj['GREEN_CAL_FLUX'][0])
+
         # generate fake set of lfc allowed wavelengths
-        wavelength_files = glob.glob('/data/KPF_Simulated_Data/LFC 20GHz Wavelength Files/*')
+        wavelength_files = glob.glob("/data/LFC 20GHz Wavelength Files/*")
         all_wavelengths = np.array([])
         for f in wavelength_files:
 
             file_contents = np.loadtxt(f)
-            all_wavelengths = np.concatenate((all_wavelengths, file_contents[:,0]))
+            all_wavelengths = np.concatenate((all_wavelengths, file_contents[:,0])) # [um]
+        
+        all_wavelengths *= 1e4 # [angstroms]
 
         # generate fake master wavelength sol
+        min_order_green = 103
+        max_order = 138 # TODO: what do the orders in the extracted spectrum correspond to?
+        num_green_orders = max_order - min_order_green + 1
 
-        min_order = 71
-        max_order = 138
+        rough_wls = np.empty((num_green_orders, num_pixels))
 
-        for order in np.arange(min_order, max_order + 1):
+        for i, order in enumerate(np.arange(min_order_green, max_order + 1)):
+
+            order_wavelengths = np.array([])
             order_files = [x for x in wavelength_files if int(x.split(' ')[5]) == order]
 
-        # convert desired wavelengths into frequencies
-        # min_order_frequency = c / max_order_wavelength_um
-        # max_order_frequency = c / min_order_wavelength_um
-        
-        # # determine the number of lines within the desired waveband
-        # num_points = (max_order_frequency - min_order_frequency) / (LFC_frequency_GHz * 1E9)
-        
-        # # fill the frequency array
-        # num_points_int = int(num_points)+1
-        
-        # frequency_array = np.zeros(int(num_points)+1)
-        
-        # for lfc_index in range(0, num_points_int, 1):
-        #     frequency_array[lfc_index] = min_order_frequency + (lfc_index * (LFC_frequency_GHz * 1E9))
-            
-        # # convert the frequency array to wavelengths
-        # wavelength_um = c / frequency_array
-        
-        # # reverse the array so wavelengths increase with index
-        # wavelength_um = wavelength_um[::-1]
+            for f in order_files:
+                file_contents = np.loadtxt(f)
+                order_wavelengths = np.concatenate((order_wavelengths, file_contents[:,0]))
+
+            # idea: convert to frequencies, space frequencies evenly across detector ?? how?
+
+            num_modes = len(order_wavelengths)
 
 
+            est_pixels_btwn_peaks = num_pixels / num_modes
+            rough_wls_order = np.linspace(10, num_modes * est_pixels_btwn_peaks, num=num_modes)
+            rough_wls[i,:] = np.interp(np.arange(num_pixels), rough_wls_order, order_wavelengths)
+        
+        rough_wls *= 1e4 # [um]
 
-        return all_wavelengths, None
+        return all_wavelengths, rough_wls
 
                 
         

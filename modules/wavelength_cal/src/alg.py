@@ -129,7 +129,7 @@ class WaveCalibration:
         """
 
         if self.min_order is None:
-            self.min_order = 10
+            self.min_order = 0
         if self.max_order is None:
             self.max_order = len(calflux)
 
@@ -484,7 +484,7 @@ class WaveCalibration:
         c = order_flux - np.ma.min(order_flux)
 
         # TODO: make this more indep of order_flux flux
-        height = 3 * np.ma.median(c) # 0.5 * np.ma.median(c) works for whole chip
+        height = 0.5 * np.ma.median(c) # 0.5 * np.ma.median(c) works for whole chip, 3 works for indiv sections
         detected_peaks, properties = signal.find_peaks(c, height=height)
 
         distance = np.median(np.diff(detected_peaks)) // 2
@@ -823,7 +823,7 @@ class WaveCalibration:
             # if current peak location is greater than (n + 0.5) * sigma of 
             # previous peak diffs, then skip over n modes
             if i > 0:
-                for j in np.arange(15):
+                for j in np.arange(3):
                     if (
                         fitted_peak_pixels[good_peak_idx][i] - 
                         fitted_peak_pixels[good_peak_idx][i - 1] > 
@@ -833,9 +833,9 @@ class WaveCalibration:
                 if (
                     fitted_peak_pixels[good_peak_idx][i] - 
                     fitted_peak_pixels[good_peak_idx][i - 1] > 
-                    15.5 * running_peak_diff
+                    3.5 * running_peak_diff
                 ):
-                    assert False, 'More than 15 peaks in a row not detected!'
+                    assert False, 'More than 3 peaks in a row not detected!'
 
             # set mode_nums
             mode_nums[i] = peak_mode_num
