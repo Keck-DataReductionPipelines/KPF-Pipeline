@@ -190,6 +190,9 @@ class WaveCalibrate(KPF1_Primitive):
                 order_wavelengths = np.concatenate((order_wavelengths, file_contents[:,0]))
 
             # idea: convert to frequencies, space frequencies evenly across detector ?? how?
+            # idea: check stellar spectra, look at H-alpha, check if in right place
+            # idea: use Arpita's calibration as rough_wls (plot & look at)
+
 
             num_modes = len(order_wavelengths)
 
