@@ -23,14 +23,11 @@ class WaveCalibrate(KPF1_Primitive):
         KPF1_Primitive.__init__(self, action, context)
         
         self.l1_obj = self.action.args[0]
-        #self.filename = self.action.args[] - should we remove l1_obj and just do to_fits in here? 
-        #getting filename so as to steal its date suffix 
         self.cal_type = self.action.args[1]
         self.cal_orderlette_names = self.action.args[2]
-        self.save_wl_pixel_toggle = self.action.args[4]
-        self.fit_type = self.action.args[5]
-        self.quicklook = self.action.args[6]
-        self.data_type =self.action.args[7]
+        self.save_wl_pixel_toggle = self.action.args[3]
+        self.quicklook = self.action.args[4]
+        self.data_type =self.action.args[5]
         ## self.output_ext = self.action.args[]
         
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
@@ -55,19 +52,17 @@ class WaveCalibrate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        self.alg = WaveCalibration(self.cal_type,self.fit_type,self.quicklook,self.config,self.logger)
+        self.alg = WaveCalibration(self.cal_type,self.quicklook,self.config,self.logger)
 
     def _perform(self) -> None: 
         
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
-            file_name_split = self.filename.split('_')
+            file_name_split = self.l1_obj.filename.split('_')
             datetime_suffix = file_name_split[-1].split('.')[0]
             for prefix in self.cal_orderlette_names:
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
-            
-                # rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
-                        
+                                    
                 #### lfc ####
                 if self.cal_type == 'LFC':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
@@ -93,11 +88,11 @@ class WaveCalibrate(KPF1_Primitive):
                         raise ValueError('f_rep value not found')
                     
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
-                    
-                    rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
-                    
+                                        
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,peak_wavelengths_ang=peak_wavelengths_ang,rough_wls=rough_wls,lfc_allowed_wls=lfc_allowed_wls)
+                        calflux, peak_wavelengths_ang=self.prev_wl_pixel_ref,
+                        rough_wls=self.rough_wls, lfc_allowed_wls=lfc_allowed_wls
+                    )
                     
                     if self.save_wl_pixel_toggle == True:
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
@@ -128,10 +123,8 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
                     
-                    rough_wls = self.master_wavelength['SCIWAVE'] ### TODO: from fits in recipe, check this
-
                     wl_soln,wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,rough_wls,peak_wavelengths_ang)
+                        calflux,self.rough_wls,peak_wavelengths_ang)
 
                     if self.save_wl_pixel_toggle == True:
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
