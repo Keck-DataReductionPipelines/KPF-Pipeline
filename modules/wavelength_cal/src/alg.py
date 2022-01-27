@@ -48,7 +48,6 @@ class WaveCalibration:
         self.min_order = configpull.get_config_value('min_order',0)
         self.max_order = configpull.get_config_value('max_order',100)
         self.n_sections = configpull.get_config_value('n_sections',1)
-        self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.save_diagnostics_dir = configpull.get_config_value('save_diagnostics','outputs/')
         self.linelist_path = configpull.get_config_value('linelist_path_etalon',None)
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
@@ -367,15 +366,15 @@ class WaveCalibration:
             list: List of orders to run wavelength calibration on.
         """
         order_list = [*range(self.min_order, self.max_order + 1,step)]
+    
         if self.skip_orders:
-            #self.skip_orders = self.skip_orders.split(',')
+            self.skip_orders = np.array(self.skip_orders.split(',')).astype('int')
             for i in self.skip_orders:
-                #i = int(i)
                 if i in order_list:
                     order_list.remove(i)
                 else:
                     continue
-        
+                
         return order_list
 
     def find_peaks_in_order(self, order_flux, plot_path=None):
@@ -555,6 +554,7 @@ class WaveCalibration:
 
                 # delta lambda between adjacent pixels, as measured by rough wls
                 approx_pixel_size = (approx_peaks_lambda[i] - s(fitted_peak_pixels[i] - 1))
+                print(approx_pixel_size)
 
                 best_mode_idx = (
                     np.abs(comb_lines_angstrom - lamb)
