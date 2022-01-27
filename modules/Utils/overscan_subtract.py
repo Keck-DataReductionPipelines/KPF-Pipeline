@@ -153,12 +153,22 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
 
-    def neid_setup_run(self,channel_exts):
-        """[summary]
+    def neid_setup_run(self,l0_obj,channel_exts):
+        """Runs individual frame overscan subtraction and removal. In progress.
 
         Args:
-            channel_ext ([type]): [description]
+            l0_obj (fits.HDUList): Raw file object.
+            channel_exts (list): List of extensions with amplifiers. 
+            
+        Returns:
+            array: Whole assembled image (full frame image)
         """
+        detsize = self.rawfile.header['PRIMARY']['DETSIZE']
+        detsize = detsize.replace('[','')
+        detsize = detsize.replace(']','')
+        a_detsize,b_detsize = detsize.split(',')
+        a_detsize,b_detsize = int(a_detsize),int(b_detsize)
+        whole_image = np.zeros((b_detsize,a_detsize))
         for ext in channel_exts:
             bias1 = self.rawfile.header[ext]['BIASSEC1']
             bias2 = self.rawfile.header[ext]['BIASSEC2']
@@ -198,10 +208,11 @@ class OverscanSubtraction(KPF0_Primitive):
             ba_data,bb_data = b_data.split(':')
             aa_data,ab_data,ba_data,bb_data = int(aa_data),int(ab_data),int(ba_data),int(bb_data)            
         
+            self.rawfile.data[ext] = self.rawfile.data[ext][ba_data:bb_data,aa_data:ab_data]
             # perform poly/mean sub
             #if self.mode=='mean':
-
-
+            whole_image[ba_det:bb_det,aa_det:ab_det] = self.rawfile.data[ext]
+        return whole_image
             #elif self.mode=='polynomial': # subtract linear fit of overscan
 
         
@@ -268,10 +279,10 @@ class OverscanSubtraction(KPF0_Primitive):
                 full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
                 #full_frame_images.append(full_frame_img)
                 l0_obj[self.ffi_exts[frame]] = full_frame_img
+                
+        if self.data_type == 'NEID':
+            l0_obj = self.rawfile
+            whole_image = self.neid_setup_run(l0_obj,channel_exts)
+            l0_obj[self.ffi_exts] = whole_image
         
-        # if self.data_type == 'NEID':
-        #     l0_obj = self.rawfile
-        #     # self.neid_overscan_arrays(channel_exts)
-        #     self.orientation_adjust()
-        #     #no overscan or image to assemble at the moment
         return Arguments(l0_obj)
