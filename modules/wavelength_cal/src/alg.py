@@ -151,15 +151,22 @@ class WaveCalibration:
 
             # make a plot of all of the precise new wls minus the rough input  wls
             if SAVEPLOTS is not None and rough_wls is not None:
-                plt.figure()
-                for i in np.arange(len(poly_soln)):
+                fig, ax = plt.subplots(2,1, figsize=(12,5))
+                for i in order_list:
                     wls_i = poly_soln[i, :]
                     rough_wls_i = rough_wls[i,:]
-                    plt.plot(wls_i - rough_wls_i, color='grey', alpha=0.5)
+                    ax[0].plot(wls_i - rough_wls_i, color='grey', alpha=0.5)
 
-                plt.xlabel('pixel')
-                plt.ylabel('Derived WLS - Approx WLS [$\\rm \AA$]')
-                plt.saveplot('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
+                    pixel_sizes = rough_wls_i[1:] - rough_wls_i[:-1]
+                    ax[1].plot((wls_i[:-1] - rough_wls_i[:-1]) / pixel_sizes, color='grey', alpha=0.5)
+
+                ax[0].set_title('Derived WLS - Approx WLS')
+                ax[0].set_xlabel('pixel')
+                ax[0].set_ylabel('[$\\rm \AA$]')
+                ax[1].set_xlabel('pixel')
+                ax[1].set_ylabel('[pixel]')
+                plt.tight_layout()
+                plt.savefig('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
 
 
 
@@ -319,14 +326,26 @@ class WaveCalibration:
                 poly_soln_final_array[order_num,:] = polynomial_wls
 
                 if plt_path is not None:
-                    plt.figure(figsize=(12,5))
-                    plt.plot(
+                    fig, ax = plt.subplots(2, 1, figsize=(12,5))
+
+                    ax[0].set_title('Precise WLS - Rough WLS')
+                    ax[0].plot(
                         np.arange(n_pixels), 
                         leg_out(np.arange(n_pixels)) - rough_wls_order, 
                         color='k'
                     )
-                    plt.xlabel('pixel')
-                    plt.ylabel('Precise WLS - Rough WLS [$\\rm \AA$]')
+                    ax[0].set_ylabel('[$\\rm \AA$]')
+
+                    pixel_sizes = rough_wls_order[1:] - rough_wls_order[:-1]
+                    ax[1].plot(
+                        np.arange(n_pixels - 1), 
+                        (leg_out(np.arange(n_pixels - 1)) - rough_wls_order[:-1]) / pixel_sizes, 
+                        color='k'
+                    )
+
+                    ax[1].set_ylabel('[pixels]')
+                    ax[1].set_xlabel('pixel')
+                    plt.tight_layout()
                     plt.savefig(
                         '{}/precise_vs_rough.png'.format(order_plt_path),
                         dpi=250
@@ -365,7 +384,7 @@ class WaveCalibration:
         Returns:
             list: List of orders to run wavelength calibration on.
         """
-        order_list = [*range(self.min_order, self.max_order + 1,step)]
+        order_list = [*range(self.min_order, self.max_order + 1, step)]
     
         if self.skip_orders:
             self.skip_orders = np.array(self.skip_orders.split(',')).astype('int')
@@ -554,7 +573,6 @@ class WaveCalibration:
 
                 # delta lambda between adjacent pixels, as measured by rough wls
                 approx_pixel_size = (approx_peaks_lambda[i] - s(fitted_peak_pixels[i] - 1))
-                print(approx_pixel_size)
 
                 best_mode_idx = (
                     np.abs(comb_lines_angstrom - lamb)
@@ -817,7 +835,7 @@ class WaveCalibration:
             # if current peak location is greater than (n + 0.5) * sigma of 
             # previous peak diffs, then skip over n modes
             if i > 0:
-                for j in np.arange(5):
+                for j in np.arange(7):
                     if (
                         fitted_peak_pixels[good_peak_idx][i] - 
                         fitted_peak_pixels[good_peak_idx][i - 1] > 
@@ -827,9 +845,9 @@ class WaveCalibration:
                 if (
                     fitted_peak_pixels[good_peak_idx][i] - 
                     fitted_peak_pixels[good_peak_idx][i - 1] > 
-                    5.5 * running_peak_diff
+                    7.5 * running_peak_diff
                 ):
-                    assert False, 'More than 5 peaks in a row not detected!'
+                    assert False, 'More than 7 peaks in a row not detected!'
 
             # set mode_nums
             mode_nums[i] = peak_mode_num
