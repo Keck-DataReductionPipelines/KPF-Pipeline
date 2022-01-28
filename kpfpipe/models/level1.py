@@ -34,7 +34,7 @@ class KPF1(KPF0):
         self.level = 1
 
         self.extensions = copy.copy(KPF_definitions.LEVEL1_EXTENSIONS)
-        self.header_definitions = KPF_definitions.LEVEL1_HEADER_KEYWORDS.items()
+        self.header_definitions = pd.read_csv(KPF_definitions.LEVEL1_HEADER_FILE)
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
 
         for key, value in self.extensions.items():
@@ -54,12 +54,17 @@ class KPF1(KPF0):
         for key in del_keys:
             del self.header[key]
 
-        for key, value in self.header_definitions:
-            # assume 2D image
-            if key == 'NAXIS':
-                self.header['PRIMARY'][key] = 2
-            else:
-                self.header['PRIMARY'][key] = value()
+        # add header keywords
+        for i, row in self.header_definitions.iterrows():
+            ext_name = row['Ext']
+            key = row['Keyword']
+            val = row['Value']
+            desc = row['Description']
+            if val is np.nan:
+                val = None
+            if desc is np.nan:
+                desc = None
+            self.header[ext_name][key] = (val, desc)
 
         self.read_methods: dict = {
             'KPF':  self._read_from_KPF,

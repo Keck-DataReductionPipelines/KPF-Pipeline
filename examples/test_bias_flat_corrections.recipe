@@ -1,0 +1,26 @@
+
+channel_orientation_ref_path = config.ARGUMENT.channel_orientation_ref_path
+all_bias_files_path = config.ARGUMENT.all_bias_files_path
+pl_overscan_reg = config.ARGUMENT.pl_overscan_reg
+srl_overscan_reg = config.ARGUMENT.srl_overscan_reg
+overscan_method = config.ARGUMENT.overscan_method
+order = config.ARGUMENT.order
+oscan_clip = config.ARGUMENT.oscan_clip
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+masterbias_path = config.ARGUMENT.masterbias_path
+all_flat_files_path = config.ARGUMENT.all_flat_files_path
+masterflat_path = config.ARGUMENT.masterflat_path
+make_master_bias = config.ARGUMENT.make_master_bias
+make_master_flat = config.ARGUMENT.make_master_flat
+L0_files_path = config.ARGUMENT.lev0_files_path
+quicklook = config.ARGUMENT.quicklook
+data_type = config.ARGUMENT.data_type
+
+if make_master_bias == True:
+    invoke_subrecipe("./examples/test_master_bias.recipe")
+
+if make_master_flat == True:
+    invoke_subrecipe("./examples/test_master_flat.recipe")
+
+#invoke_subrecipe("./examples/test_bias_subtraction.recipe")
+#invoke_subrecipe("./examples/test_flat_fielding.recipe")

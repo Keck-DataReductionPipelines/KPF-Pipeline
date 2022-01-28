@@ -7,6 +7,7 @@ import re
 from modules.Utils.config_parser import ConfigHandler
 #from memory_profiler import profile
 import os
+import json
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -14,9 +15,9 @@ import os
 # from kpfpipe.models.level0 import KPF0
 
 
-class OptimalExtractionAlg:
+class SpectralExtractionAlg:
     """
-    This module defines class 'OptimalExtractionAlg' and methods to perform the optimal or summation
+    This module defines class 'SpectralExtractionAlg' and methods to perform the optimal or summation
     extraction which reduces 2D spectrum to 1D spectrum for each order, or perform the rectification on either 2D
     flat or spectrum.
     The process includes 2 steps. In the first step, the curved order from the 2D spectral data and/or flat data
@@ -61,18 +62,18 @@ class OptimalExtractionAlg:
         rectification_method (int, optional): There are three methods used to collect pixels from orders of spectrum
                 data and flat dta for spectral extraction. Defaults to NoRECT.
 
-                - OptimalExtractionAlg.NoRECT: Pixels at the north-up direction along the order are collected.
+                - SpectralExtractionAlg.NoRECT: Pixels at the north-up direction along the order are collected.
                   No rectification. (the fastest computation).
-                - OptimalExtractionAlg.VERTICAL: Pixels at the north-up direction along the order are collected
+                - SpectralExtractionAlg.VERTICAL: Pixels at the north-up direction along the order are collected
                   to be rectified.
-                - OptimalExtractionAlg.NORMAL: Pixels at the normal direction of the order are collected to
+                - SpectralExtractionAlg.NORMAL: Pixels at the normal direction of the order are collected to
                   be rectified.
         extraction_method (int, optional): There are 2 extraction methods performing extraction on collected
                 flux along the order or no extraction is made. Defaults to OPTIMAL.
 
-                - OptimalExtractionAlg.OPTIMAL (i.e. 'optimal'): for optimal extraction.
-                - OptimalExtractionAlg.SUM (i.e. 'sum'): for summation extraction.
-                - OptimalExtractionAlg.NOEXTRACT (i.e. 'rectonly'): no reduction on rectified
+                - SpectralExtractionAlg.OPTIMAL (i.e. 'optimal'): for optimal extraction.
+                - SpectralExtractionAlg.SUM (i.e. 'sum'): for summation extraction.
+                - SpectralExtractionAlg.NOEXTRACT (i.e. 'rectonly'): no reduction on rectified
                   (including VERTICAL, NORMAL or NoRECT rectification method) order trace.
         clip_file (str, optional): Prefix of clip file path. Defaults to None. Clip file is used to store the
             polygon clip data for the rectification method which is not NoRECT.
@@ -85,7 +86,7 @@ class OptimalExtractionAlg:
     Attributes:
         logger (logging.Logger): Instance of logging.Logger.
         flat_flux (numpy.ndarray): Numpy array storing 2d flat data.
-        spectrum_flux (numpy.ndarray): Numpy array storing 2d spectrum data for optimal extraction. None is allowed.
+        spectrum_flux (numpy.ndarray): Numpy array storing 2d spectrum data for spectral extraction. None is allowed.
         spectrum_header (fits.header.Header): Header of the fits for spectrum data. None is allowed.
         poly_order (int): Polynomial order for the approximation made on the order trace.
         origin (list): The origin of the image from the original raw image.
@@ -149,24 +150,24 @@ class OptimalExtractionAlg:
                  clip_file=None):
 
         if not isinstance(flat_data, np.ndarray):
-            raise TypeError('flat data type error, cannot construct object from OptionalExtractionAlg')
+            raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
         if spectrum_data is not None and not isinstance(spectrum_data, np.ndarray):
-            raise TypeError('flux data type error, cannot construct object from OptionalExtractionAlg')
+            raise TypeError('flux data type error, cannot construct object from SpectralExtractionAlg')
         if spectrum_data is None and extraction_method in [self.SUM, self.OPTIMAL]:
-            raise TypeError("no flux data for spectral extraction, cannot construct object from OptimalExtractAlg")
+            raise TypeError("no flux data for spectral extraction, cannot construct object from SpectralExtractAlg")
         if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
-            raise TypeError('flux data type error, cannot construct object from OptionalExtractionAlg')
+            raise TypeError('flux data type error, cannot construct object from SpectralExtractionAlg')
         if spectrum_header is not None and not isinstance(spectrum_header, fits.header.Header):
-            raise TypeError('flux header type error, cannot construct object from OptionalExtractionAlg')
+            raise TypeError('flux header type error, cannot construct object from SpectralExtractionAlg')
         if not isinstance(flat_header, fits.header.Header):
-            raise TypeError('flat header type error, cannot construct object from OptionalExtractionAlg')
+            raise TypeError('flat header type error, cannot construct object from SpectralExtractionAlg')
         if not isinstance(order_trace_header, dict) and not isinstance(order_trace_header, fits.header.Header):
             raise TypeError('type: ' + str(type(order_trace_header)) +
-                            ' flux header type error, cannot construct object from OptionalExtractionAlg')
-        if rectification_method < OptimalExtractionAlg.NORMAL or rectification_method > OptimalExtractionAlg.NoRECT:
-            raise TypeError('illegal rectification method code, cannot construct object from OptionalExtractionAlg')
-        if extraction_method < OptimalExtractionAlg.OPTIMAL or rectification_method > OptimalExtractionAlg.NOEXTRACT:
-            raise TypeError('illegal extraction method code, cannot construct object from OptionalExtractionAlg')
+                            ' flux header type error, cannot construct object from SpectralExtractionAlg')
+        if rectification_method < SpectralExtractionAlg.NORMAL or rectification_method > SpectralExtractionAlg.NoRECT:
+            raise TypeError('illegal rectification method code, cannot construct object from SpectralExtractionAlg')
+        if extraction_method < SpectralExtractionAlg.OPTIMAL or rectification_method > SpectralExtractionAlg.NOEXTRACT:
+            raise TypeError('illegal extraction method code, cannot construct object from SpectralExtractionAlg')
 
         self.logger = logger
         self.flat_flux = flat_data
@@ -208,6 +209,8 @@ class OptimalExtractionAlg:
         self.clip_file_prefix = clip_file
         self.output_clip_area = False
         self.output_area_info = list()
+        self.poly_clip_dict = dict()
+        self.poly_clip_update = False
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -340,7 +343,7 @@ class OptimalExtractionAlg:
 
         Returns:
             This function handles the print-out to the logger defined in the config file or other file as specified in
-            :func:`~alg.OptimalExtractionAlg.add_file_logger()`.
+            :func:`~alg.SpectralExtractionAlg.add_file_logger()`.
 
         """
         if self.is_debug:
@@ -451,9 +454,9 @@ class OptimalExtractionAlg:
             dict: Spectral extraction or rectification result of one column.
         """
 
-        if self.extraction_method == OptimalExtractionAlg.OPTIMAL:
+        if self.extraction_method == SpectralExtractionAlg.OPTIMAL:
             return self.optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height], height, 1)
-        elif self.extraction_method == OptimalExtractionAlg.SUM:
+        elif self.extraction_method == SpectralExtractionAlg.SUM:
             return self.summation_extraction(out_data[self.SDATA][0:height])
 
         # data_group should contain only the data set to be rectified.
@@ -507,7 +510,7 @@ class OptimalExtractionAlg:
         # get order information from poly clip file
 
         if self.rectification_method != self.NoRECT and poly_file and os.path.exists(poly_file):
-            y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file)
+            y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file, c_order)
         else:
             # get order information from rectified lev0 fits
             order_key = 'ORD_' + str(c_order)
@@ -738,7 +741,7 @@ class OptimalExtractionAlg:
                     for o_y in pixel_list:
                         # if read from clip file
                         if read_poly_file:
-                            input_pixels = clip_areas[o_y][o_x]
+                            input_pixels = clip_areas[str(o_y)][str(o_x)]
                             flux_v.fill(0.0)
                             total_area = 0
                             for i_p in input_pixels:
@@ -760,8 +763,8 @@ class OptimalExtractionAlg:
                                                                             len(raw_data_group))
                             if self.output_clip_area:
                                 if o_y not in clip_areas:
-                                    clip_areas[o_y] = dict()
-                                clip_areas[o_y][o_x] = area
+                                    clip_areas[int(o_y)] = dict()
+                                clip_areas[int(o_y)][int(o_x)] = area
 
                         for n in range(len(raw_group)):
                             out_data[raw_group[n]['idx']][o_y, 0] = flux[n]
@@ -772,7 +775,8 @@ class OptimalExtractionAlg:
             extracted_data[:, o_x:o_x + 1] = extracted_result['extraction']
 
         if self.output_clip_area:
-            self.write_clip_file(poly_file, y_output_mid, [lower_width, upper_width], clip_areas)
+            self.poly_clip_update = True
+            self.write_clip_file(None, int(y_output_mid), [int(lower_width), int(upper_width)], clip_areas, order_idx)
 
         result_data = {'y_center': y_output_mid,
                        'widths': [lower_width, upper_width],
@@ -980,9 +984,9 @@ class OptimalExtractionAlg:
 
         Args:
             v1_borders: Left side of vertical borders of the rectified cells collected by
-                        :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+                        :func:`~alg.SpectralExtractionAlg.collect_v_borders()`
             v2_borders: Right side of vertical borders of the rectified cells collected by
-                        :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
+                        :func:`~alg.SpectralExtractionAlg.collect_v_borders()`
 
         Returns:
             list: Collection of all horizontal borders along either normal or vertical direction
@@ -1152,7 +1156,7 @@ class OptimalExtractionAlg:
             dict: Information related to the order data, like::
 
                 {
-                    'extraction': numpy.ndarray   # optimal extraction result.
+                    'extraction': numpy.ndarray   # summation extraction result.
                 }
 
         """
@@ -1333,7 +1337,7 @@ class OptimalExtractionAlg:
                 area = self.polygon_area(new_corners)
                 total_area += area
                 if area > 0.0 and self.output_clip_area:
-                    clipped_areas.append((x, y, area))
+                    clipped_areas.append((int(x), int(y), float(area)))
                 for n in range(total_data_group):
                     if input_data[n][y, x] != 0.0:
                         flux[n] += area * input_data[n][y, x]
@@ -1382,8 +1386,8 @@ class OptimalExtractionAlg:
         """
         new_corners = []
         for b in borders:
-            v1 = b[OptimalExtractionAlg.V1]
-            v2 = b[OptimalExtractionAlg.V2]
+            v1 = b[SpectralExtractionAlg.V1]
+            v2 = b[SpectralExtractionAlg.V2]
             if v1 not in new_corners:
                 new_corners.append(v1)
             if v2 not in new_corners:
@@ -1418,8 +1422,8 @@ class OptimalExtractionAlg:
 
         Args:
             poly_borders (list): List of borders of the polygon.
-                Each border is a dict instance as described in :func:`~alg.OptimalExtractionAlg.collect_v_borders()`
-                or :func:`~alg.OptimalExtractionAlg.collect_h_borders()`.
+                Each border is a dict instance as described in :func:`~alg.SpectralExtractionAlg.collect_v_borders()`
+                or :func:`~alg.SpectralExtractionAlg.collect_h_borders()`.
             x1 (int): x of end point 1 of the vector.
             y1 (int): y of end point 1 of the vector.
             x2 (int): x of end point 2 of the vector.
@@ -1539,10 +1543,10 @@ class OptimalExtractionAlg:
         return [num_x/den, num_y/den]
 
     def write_data_to_dataframe(self, result_data):
-        """ Write optimal extraction result to an instance of Pandas DataFrame.
+        """ Write spectral extraction result to an instance of Pandas DataFrame.
 
         Args:
-            result_data (numpy.ndarray): Optimal extraction result.  Each row of the array corresponds to the reduced
+            result_data (numpy.ndarray): Spectral extraction result.  Each row of the array corresponds to the reduced
                 1D data of one order.
 
         Returns:
@@ -1700,7 +1704,7 @@ class OptimalExtractionAlg:
         return self.get_config_value('start_order', 0)
 
     def get_order_set(self, order_name=''):
-        """ Get the list of the trace index eligible for optimal extraction process.
+        """ Get the list of the trace index eligible for spectral extraction process.
 
         Args:
             order_name (str): Fiber name.
@@ -1719,8 +1723,7 @@ class OptimalExtractionAlg:
 
         return o_set
 
-    @staticmethod
-    def write_clip_file(poly_file, y_center, edges, clip_areas):
+    def write_clip_file(self, poly_file, y_center=None, edges=None, clip_areas=None, order=None):
         """Write polygon clipping information to file.
 
         Args:
@@ -1740,23 +1743,31 @@ class OptimalExtractionAlg:
                     # where output pixel [x_loc_i, y_loc_i] overlaps with
                     # input pixel [x_i, y_i] and the overlapping area is area_n.
                 }
-
+            order (int): Order to be written.
         Returns:
             The polygon clipping information is written to .npy file.
         """
 
         order_clip = dict()
-        order_clip['y_center'] = y_center
-        order_clip['edges'] = edges
-        order_clip['clip_areas'] = clip_areas
-        order_clip_array = np.array(list(order_clip.items()))
+        if y_center is not None:
+            order_clip['y_center'] = y_center
+        if edges is not None:
+            order_clip['edges'] = edges
+        if clip_areas is not None:
+            order_clip['clip_areas'] = clip_areas
+        # order_clip_array = np.array(list(order_clip.items()))
+        if order is not None:
+            self.poly_clip_dict[int(order)] = order_clip
 
         # f = open(poly_file, "wb")
-        np.save(poly_file, order_clip_array)
+        if poly_file is not None:
+            with open(poly_file, "w") as outfile:
+                json.dump(self.poly_clip_dict, outfile)
+
+        # np.save(poly_file, order_clip_array)
         # f.close()
 
-    @staticmethod
-    def read_clip_file(poly_file):
+    def read_clip_file(self, poly_file, c_order):
         """Read order polygon data from clip file.
 
         Args:
@@ -1771,6 +1782,17 @@ class OptimalExtractionAlg:
                 * **clip_areas** (*dict*): polygon clip information for the order.
 
         """
+        if self.poly_clip_dict is None or len(self.poly_clip_dict)==0:
+            with open(poly_file) as clip_input:
+                f = json.load(clip_input)
+                self.poly_clip_dict = f
+
+        order_poly = self.poly_clip_dict[str(c_order)]
+        y_center = order_poly['y_center']
+        lower_width, upper_width = order_poly['edges']
+        clip_areas = order_poly['clip_areas']
+
+        """    
         # infile = open(poly_file, 'rb')
         order_flux = np.load(poly_file,  allow_pickle=True)
         # infile.close()
@@ -1786,7 +1808,7 @@ class OptimalExtractionAlg:
         k = 'clip_areas'
         idx = np.where(order_flux[:, 0] == k)[0][0]
         clip_areas = order_flux[idx, 1]
-
+        """
         return y_center, lower_width, upper_width, clip_areas
 
     def reset_clip_file(self):
@@ -1804,8 +1826,9 @@ class OptimalExtractionAlg:
             str: full path of the clip file.
 
         """
-        crt_order_clip_file = self.clip_file_prefix + '_order_' + str(order_idx) + '.npy' \
-            if (self.clip_file_prefix and order_idx is not None) else None
+        # crt_order_clip_file = self.clip_file_prefix + '_order_' + str(order_idx) + '.npy' \
+        #    if (self.clip_file_prefix and order_idx is not None) else None
+        crt_order_clip_file = self.clip_file_prefix + '_poly.json' if self.clip_file_prefix else None
 
         return crt_order_clip_file
 
@@ -1843,7 +1866,7 @@ class OptimalExtractionAlg:
                          show_time=False,
                          print_debug=None,
                          bleeding_file=None):
-        """ Optimal extraction from 2D flux to 1D. Rectification step is optional.
+        """ Spectral extraction from 2D flux to 1D. Rectification step is optional.
 
         Args:
             order_set (numpy.ndarray, optional): Set of orders to extract. Defaults to None for all orders.
@@ -1855,11 +1878,11 @@ class OptimalExtractionAlg:
             bleeding_file (str, optioanl): Bleeding cure file, such as that for PARAS data. Defaults to None.
 
         Returns:
-            dict: Optimal extraction result from 2D spectrum data, like::
+            dict: Spectral extraction result from 2D spectrum data, like::
 
                     {
-                        'optimal_extraction_result':  Padas.DataFrame
-                            # table storing optimal extraction or rectification result.
+                        'spectral_extraction_result':  Padas.DataFrame
+                            # table storing spectral extraction or rectification result.
                             # each row of the table containing the spectral extraction
                             # or rectification only.
                             # result for all orders set in order_set.
@@ -1887,15 +1910,15 @@ class OptimalExtractionAlg:
         rectification_on = ''
 
         # rectification on spectrum & flat if extraction method is set & data is raw flat
-        if self.extraction_method == OptimalExtractionAlg.NOEXTRACT:
+        if self.extraction_method == SpectralExtractionAlg.NOEXTRACT:
             rectification_on = 'spectrum' if self.spectrum_flux is not None else 'flat'
 
         if self.spectrum_flux is not None:
             # spectrum rectified yet
-            if not self.is_raw_spectrum and self.extraction_method == OptimalExtractionAlg.NOEXTRACT:  # spec rectified
+            if not self.is_raw_spectrum and self.extraction_method == SpectralExtractionAlg.NOEXTRACT:  # spec rectified
                 data_df = self.write_data_to_dataframe(self.spectrum_flux)
                 noop = True
-        elif self.extraction_method == OptimalExtractionAlg.NOEXTRACT:    # do rectification on flat
+        elif self.extraction_method == SpectralExtractionAlg.NOEXTRACT:    # do rectification on flat
             if not self.is_raw_flat:
                 noop = True
                 data_df = self.write_data_to_dataframe(self.flat_flux)
@@ -1903,7 +1926,7 @@ class OptimalExtractionAlg:
             noop = True
 
         if noop:
-            return {'optimal_extraction_result': data_df, 'rectification_on': rectification_on}
+            return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on}
 
         data_group = list()     # containing the data set needed for spectral extraction or rectification only
         if rectification_on != 'flat':
@@ -1919,6 +1942,7 @@ class OptimalExtractionAlg:
         order_result = dict()
         self.output_area_info = list()
 
+        # for idx_out in range(2):
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             self.reset_clip_file()
@@ -1934,10 +1958,13 @@ class OptimalExtractionAlg:
             order_result[c_order] = order_flux
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
+        if self.poly_clip_update:
+            self.write_clip_file(self.get_clip_file(0))
         out_data_height, out_data_width = self.update_output_size(order_set, order_result, result_height)
         out_data = np.zeros((out_data_height, out_data_width))
         order_rectification_result = list()
 
+        # produce output data
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             to_pos = idx_out+start_row_at if self.extraction_method != self.NOEXTRACT else \
@@ -1954,4 +1981,4 @@ class OptimalExtractionAlg:
             data_df = self.write_rectified_data_to_dataframe(out_data, order_rectification_result)
         else:
             data_df = self.write_data_to_dataframe(out_data)
-        return {'optimal_extraction_result': data_df, 'rectification_on': rectification_on}
+        return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on}
