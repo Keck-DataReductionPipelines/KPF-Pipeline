@@ -1,17 +1,24 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
 L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
-master_file = config.ARGUMENT.master_wls_file + '.fits'
+rough_wls_file = config.ARGUMENT.master_wls_file + '.fits'
+rough_wls = kpf1_from_fits(rough_wls_file, data_type='NEID')['SCIWAVE']
 
-lfc_data = kpf1_from_fits(L1_file, data_type='NEID')
+lfc_l1_obj = kpf1_from_fits(L1_file, data_type='NEID')
 f0 = config.ARGUMENT.f0_key
-fr = config.ARGUMENT.frepy_key
+fr = config.ARGUMENT.frep_key
+orderlette_names = config.ARGUMENT.cal_orderlette_name
 
 quicklook = False
 
 # use wls from L1 NEID file as master solution
-wave_soln, _ = WaveCalibrate(lfc_data, quicklook, master_wavelength=master_file, f0, fr, data_type='NEID')
+wave_soln, _ = WaveCalibrate(
+    lfc_l1_obj, 'LFC', orderlette_names, True, quicklook, 'NEID', 
+    rough_wls = rough_wls, f0_key=f0, frep_key=fr
+)
 
-obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
-output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
-result = to_fits(wave_soln, output_filename)
+# TODO: plot against NEID solution
+
+# obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
+# output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
+# result = to_fits(wave_soln, output_filename)
