@@ -60,7 +60,7 @@ class WaveCalibrate(KPF1_Primitive):
     def _perform(self) -> None: 
         
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
-            file_name_split = self.filename.split('_')
+            file_name_split = self.l1_obj.filename.split('_')
             datetime_suffix = file_name_split[-1].split('.')[0]
             for prefix in self.cal_orderlette_names:
                 calflux = self.l1_obj[prefix]
@@ -101,11 +101,11 @@ class WaveCalibrate(KPF1_Primitive):
                         peak_wavelengths_ang = None
                     
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
-                    
-                    #rough_wls = self.master_wavelength['SCIWAVE'] #TODO ### check this
-                    
+                                        
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,peak_wavelengths_ang=peak_wavelengths_ang,rough_wls=rough_wls,lfc_allowed_wls=lfc_allowed_wls)
+                        calflux, peak_wavelengths_ang=self.prev_wl_pixel_ref,
+                        rough_wls=self.rough_wls, lfc_allowed_wls=lfc_allowed_wls
+                    )
                     
                     if self.save_wl_pixel_toggle == True:
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
@@ -146,7 +146,7 @@ class WaveCalibrate(KPF1_Primitive):
                         peak_wavelengths_ang = None
 
                     wl_soln,wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,rough_wls,peak_wavelengths_ang)
+                        calflux,self.rough_wls,peak_wavelengths_ang)
 
                     if self.save_wl_pixel_toggle == True:
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
