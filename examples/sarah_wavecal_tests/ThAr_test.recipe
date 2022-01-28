@@ -1,5 +1,7 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
+output_ext = config.ARGUMENT.output_ext
+
 L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
 
 thar_data = kpf1_from_fits(L1_file, data_type='NEID')

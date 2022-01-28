@@ -7,6 +7,7 @@ rough_wls = kpf1_from_fits(rough_wls_file, data_type='NEID')['SCIWAVE']
 lfc_l1_obj = kpf1_from_fits(L1_file, data_type='NEID')
 f0 = config.ARGUMENT.f0_key
 fr = config.ARGUMENT.frep_key
+output_ext = config.ARGUMENT.output_ext
 orderlette_names = config.ARGUMENT.cal_orderlette_name
 
 quicklook = False
