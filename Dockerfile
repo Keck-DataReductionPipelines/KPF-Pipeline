@@ -23,12 +23,12 @@ RUN mkdir /code && \
     apt install build-essential -y --no-install-recommends && \
     apt-get install --yes git vim emacs && \
     /usr/local/bin/python -m pip install --upgrade pip && \
-    cd /code
-    # # Clone the KeckDRPFramework repository 
-    # git clone https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git && \
-    # # Current branch only run on develop branch of KeckDRPFramewke
-    # cd KeckDRPFramework && \
-    # git checkout develop
+    cd /code/KPF-Pipeline && \
+    mkdir -p logs && \
+	mkdir -p outputs
 
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
+
+ADD requirements.txt /code/KPF-Pipeline/
+RUN pip3 install -r requirements.txt

@@ -24,8 +24,13 @@
                       of the image.
                     - `action.args['data_extension'] (string, optional)`: name of the extension with the image. `data`
                       is the default.
-                    - `action.args['result_extension'] (string, optional)`: name of the extension containing the order
-                      trace result. Defaults to 'ORDER_TRACE_RESULT'.
+                    - `action.args['result_path'] (string, optional)`: name of the file path or data model extension
+                      containing the order trace result. Defaults to None.
+                    - `action.args['fitting_poly_degree'] (int, optional)`: Order of polynomial used to fit the trace.
+                      Defaults to None. The value overrides the number defined in the configuration file for the module
+                      if it is defined.
+                    - `action.args['is_output_file'] (boolean, optional)`: if the result is output to a file or data
+                      model extension. Defaults to None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace  in the master
@@ -44,8 +49,10 @@
                 - `config_path (str)`: Path of config file for the computation of order trace.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
+                - `result_path (str)`: File or extension containing the output.
                 - `alg (modules.order_trace.src.alg.OrderTraceAlg)`: Instance of `OrderTraceAlg` which has operation
                   codes for the computation of order trace.
+                - `poly_degree (int)`: Order of polynimial for order trace fitting.
 
 
         * Method `__perform`:
@@ -69,7 +76,6 @@ import configparser
 import pandas as pd
 
 # Pipeline dependencies
-from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from kpfpipe.models.level0 import KPF0
 
@@ -82,6 +88,9 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.order_trace.src.alg import OrderTraceAlg
 import ast
 import numpy as np
+import os
+import datetime
+import pandas as pd
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/order_trace/configs/default.cfg'
@@ -110,6 +119,8 @@ class OrderTrace(KPF0_Primitive):
         self.col_range = [0, col-1]
         self.cols_to_reset = None
         self.rows_to_reset = None
+        self.result_path = None
+        self.poly_degree = None
 
         if 'data_row_range' in args_keys and action.args['data_row_range'] is not None:
             self.row_range = self.find_range(action.args['data_row_range'], row)
@@ -123,10 +134,13 @@ class OrderTrace(KPF0_Primitive):
         if 'rows_to_reset' in args_keys and action.args['rows_to_reset'] is not None:
             self.rows_to_reset = action.args['rows_to_reset']
 
-        if 'result_extension' in args_keys and action.args['result_extension'] is not None:
-            self.result_extension = action.args['result_extension']
-        else:
-            self.result_extension = 'ORDER_TRACE_RESULT'
+        if 'result_path' in args_keys and action.args['result_path'] is not None:
+            self.result_path = action.args['result_path']
+
+        self.is_output_file = 'is_output_file' not in args_keys or action.args['is_output_file']
+
+        if 'fitting_poly_degree' in args_keys and action.args['fitting_poly_degree'] is not None:
+            self.poly_degree = action.args['fitting_poly_degree']
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -145,7 +159,7 @@ class OrderTrace(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = OrderTraceAlg(self.flat_data, config=self.config, logger=self.logger)
+        self.alg = OrderTraceAlg(self.flat_data, poly_degree=self.poly_degree, config=self.config, logger=self.logger)
 
     def _pre_condition(self) -> bool:
         """
@@ -169,17 +183,14 @@ class OrderTrace(KPF0_Primitive):
         perform radial velocity computation by calling methods from OrderTraceAlg.
 
         Returns:
-            Level 0 data from the input plus an extension containing the order trace result.
+            DataFrame instance containing the order trace result.
         """
-
         self.alg.set_data_range([self.col_range[0], self.col_range[1],
                                 self.row_range[0], self.row_range[1]])
-
         # 1) Locate cluster
         if self.logger:
             self.logger.info("OrderTrace: locating cluster...")
         cluster_xy = self.alg.locate_clusters(self.rows_to_reset, self.cols_to_reset)
-
         # 2) assign cluster id and do basic cleaning
         if self.logger:
             self.logger.info("OrderTrace: assigning cluster id and cleaning...")
@@ -205,17 +216,20 @@ class OrderTrace(KPF0_Primitive):
             self.logger.info("OrderTrace: writing cluster into dataframe...")
 
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
-
         assert(isinstance(df, pd.DataFrame))
 
         # self.input.create_extension('ORDER_TRACE_RESULT')
         # self.input.extensions['ORDER_TRACE_RESULT'] = df
         # self.input.create_extension(self.result_extension, pd.DataFrame)
-        self.input[self.result_extension]= df
 
-        for att in df.attrs:
-            # self.input.header['ORDER_TRACE_RESULT'][att] = df.attrs[att]
-            self.input.header[self.result_extension][att] = df.attrs[att]
+        if self.result_path:
+            if self.is_output_file:
+                df.to_csv(self.result_path)
+            else:
+                self.input[self.result_path]= df
+
+                for att in df.attrs:
+                    self.input.header[self.result_path][att] = df.attrs[att]
 
         self.input.receipt_add_entry('OrderTrace', self.__module__, f'config_path={self.config_path}', 'PASS')
         if self.logger:
@@ -224,14 +238,14 @@ class OrderTrace(KPF0_Primitive):
         if self.logger:
             self.logger.info("OrderTrace: Done!")
 
-        return Arguments(self.input)
+        return Arguments(df)
 
     @staticmethod
     def find_range(range_des, limit):
         tmp_range = ast.literal_eval(range_des) if isinstance(range_des, str) else range_des
 
         if isinstance(tmp_range, list) and len(tmp_range) == 2:
-            tmp_range = [int(t) for t in tmp_range]
+            tmp_range = [int(t) if t >= 0 else int(limit + t) for t in tmp_range]
             return tmp_range
         tmp_range = [0, limit-1]
         return tmp_range

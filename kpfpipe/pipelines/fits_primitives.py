@@ -23,14 +23,16 @@ class to_fits(BasePrimitive):
 
     def _perform(self):
         """
-        _perform
-
-        inputs
-            args[0]: data model (python subclassed from KPFDataModel)
-            args[1]: FITS filename (path) as string.  Should be
-                    extracted from config in recipe.
-        outputs
-            result:  Always True
+        Driver method for the Keck framework to execute
+        
+        Args:
+            data_model: instance of a subclass of KPFDataModel
+            name (str): name of data model class as string
+            args[0]: Name of FITS file (path). Should be extracted
+                     from config in recipe.
+            data_type: 'KPF' or 'NEID. Defaults to 'KPF'
+        Returns:
+            data model object
         """
         data_model = self.action.args[0]
         file_name = self.action.args[1]
