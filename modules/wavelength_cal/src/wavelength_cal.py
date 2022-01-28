@@ -111,6 +111,8 @@ class WaveCalibrate(KPF1_Primitive):
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
                         wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
                         
+                    self.l1_obj[self.output_ext] = wl_soln
+                
                 #TODO: should peak wavelengths ang be in all of them?
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
@@ -122,7 +124,7 @@ class WaveCalibrate(KPF1_Primitive):
                             self.linelist_path, allow_pickle=True
                         ).tolist()
                     else:
-                        peak_wavelengths_ang = None
+                        raise ValueError('ThAr run requires linelist_path')
                     
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux,peak_wavelengths_ang=peak_wavelengths_ang)
@@ -130,7 +132,9 @@ class WaveCalibrate(KPF1_Primitive):
                     if self.save_wl_pixel_toggle == True:
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
                         wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
-                    
+
+                    self.l1_obj[self.output_ext] = wl_soln
+
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
@@ -151,16 +155,18 @@ class WaveCalibrate(KPF1_Primitive):
                     if self.save_wl_pixel_toggle == True:
                         file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
                         wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
+                
+                    self.l1_obj[self.output_ext] = wl_soln
+
                 else:
                     raise ValueError(
                         'cal_type {} not recognized. Available options are LFC, ThAr, & Etalon'.format(
                             self.cal_type))
-                
-            ## need to save data into correct extension
-            
+                            
                 if self.prev_wl_pixel_ref is not None:
                     self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
-            
+
+                
             ## where to save final polynomial solution
             
                 
