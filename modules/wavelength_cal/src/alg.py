@@ -557,32 +557,41 @@ class WaveCalibration:
         # their detected centers
         good_peak_idx = np.where(np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) [0]
 
-        # if we know the wavelengths of the peaks (i.e. if dealing with LFC),
-        # then we can clip peaks with derived wavelengths far from the location
-        # of a comb line
-        if comb_lines_angstrom is not None:
+        # # if we know the wavelengths of the peaks (i.e. if dealing with LFC),
+        # # then we can clip peaks with derived wavelengths far from the location
+        # # of a comb line
+        # if comb_lines_angstrom is not None:
 
-            # compute an approx wavelength solution that we'll use to find
-            # the nearest LFC mode
-            n_pixels = len(rough_wls_order)
-            s = InterpolatedUnivariateSpline(np.arange(n_pixels), rough_wls_order)
-            approx_peaks_lambda = s(fitted_peak_pixels)
+        #     # compute an approx wavelength solution that we'll use to find
+        #     # the nearest LFC mode
+        #     n_pixels = len(rough_wls_order)
+        #     s = InterpolatedUnivariateSpline(np.arange(n_pixels), rough_wls_order)
+        #     approx_peaks_lambda = s(fitted_peak_pixels)
 
-            # iterate through all modes and save only those that are less than ~1 pixel from an 
-            # LFC mode
-            peaks_nearby_lfcmodes = []
-            for i, lamb in enumerate(approx_peaks_lambda):
+            # # iterate through all modes and save only those that are less than ~1 pixel from an 
+            # # LFC mode
+            # peaks_nearby_lfcmodes = []
+            # for i, lamb in enumerate(approx_peaks_lambda):
 
-                # delta lambda between adjacent pixels, as measured by rough wls
-                approx_pixel_size = (approx_peaks_lambda[i] - s(fitted_peak_pixels[i] - 1))
+            #     # delta lambda between adjacent pixels, as measured by rough wls
+            #     approx_pixel_size = (approx_peaks_lambda[i] - s(fitted_peak_pixels[i] - 1))
 
-                best_mode_idx = (
-                    np.abs(comb_lines_angstrom - lamb)
-                ).argmin()
-                if np.abs(comb_lines_angstrom[best_mode_idx] - lamb) < approx_pixel_size:
-                    peaks_nearby_lfcmodes.append(i)
+            #     best_mode_idx = (
+            #         np.abs(comb_lines_angstrom - lamb)
+            #     ).argmin()
+            #     if np.abs(comb_lines_angstrom[best_mode_idx] - lamb) < approx_pixel_size:
+            #         peaks_nearby_lfcmodes.append(i)
             
-            good_peak_idx = np.intersect1d(peaks_nearby_lfcmodes, good_peak_idx)
+            # good_peak_idx = np.intersect1d(peaks_nearby_lfcmodes, good_peak_idx)
+
+        # clip peaks that are immediately next to zero pixels (indicating 
+        # they're next to a masked section, eg, and therefore unreliable
+        notnearmask_peaks = []
+        for i, lamb in enumerate(detected_peak_pixels):
+            if order_flux[int(lamb) + 1] != 0 and order_flux[int(lamb) - 1] != 0:
+                notnearmask_peaks.append(i)
+        
+        good_peak_idx = np.intersect1d(notnearmask_peaks, good_peak_idx)
 
         if print_update:
             print('{} peaks clipped'.format(len(detected_peak_pixels) - len(good_peak_idx)))
@@ -837,7 +846,7 @@ class WaveCalibration:
             # if current peak location is greater than (n + 0.5) * sigma of 
             # previous peak diffs, then skip over n modes
             if i > 0:
-                for j in np.arange(7):
+                for j in np.arange(8):
                     if (
                         fitted_peak_pixels[good_peak_idx][i] - 
                         fitted_peak_pixels[good_peak_idx][i - 1] > 
@@ -847,9 +856,9 @@ class WaveCalibration:
                 if (
                     fitted_peak_pixels[good_peak_idx][i] - 
                     fitted_peak_pixels[good_peak_idx][i - 1] > 
-                    7.5 * running_peak_diff
+                    8.5 * running_peak_diff
                 ):
-                    assert False, 'More than 7 peaks in a row not detected!'
+                    assert False, 'More than 8 peaks in a row not detected!'
 
             # set mode_nums
             mode_nums[i] = peak_mode_num
