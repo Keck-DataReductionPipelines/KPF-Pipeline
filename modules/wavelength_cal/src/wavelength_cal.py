@@ -108,8 +108,8 @@ class WaveCalibrate(KPF1_Primitive):
                     )
                     
                     if self.save_wl_pixel_toggle == True:
-                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
+                        file_name = self.cal_type + '_' + datetime_suffix + '.npy'
+                        self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
                         
                     self.l1_obj[self.output_ext] = wl_soln
                 
@@ -166,7 +166,7 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.prev_wl_pixel_ref is not None:
                     self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
 
-                
+        return Arguments(self.l1_obj)
             ## where to save final polynomial solution
             
                 
