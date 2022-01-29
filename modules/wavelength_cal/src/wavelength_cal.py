@@ -79,6 +79,7 @@ class WaveCalibrate(KPF1_Primitive):
                             comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
                         if type(self.f0_key) == float:
                             comb_f0 = self.f0_key
+
                     else:
                         raise ValueError('f_0 value not found.')
                     
