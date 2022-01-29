@@ -65,9 +65,6 @@ class WaveCalibrate(KPF1_Primitive):
             for prefix in self.cal_orderlette_names:
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
-            
-                #PUT BACK: rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
-                rough_wls = self.l1_obj['SCIWAVE']   
                         
                 #### lfc ####
                 if self.cal_type == 'LFC':
@@ -140,8 +137,6 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
                     
-                    #rough_wls = self.master_wavelength['SCIWAVE'] ### TODO: from fits in recipe, check this
-
                     if self.linelist_path is not None:
                         peak_wavelengths_ang = np.load(
                             self.linelist_path, allow_pickle=True

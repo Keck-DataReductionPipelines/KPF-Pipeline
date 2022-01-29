@@ -6,11 +6,11 @@ filename = 'neidL1_20220127T135910'
 
 # read in our solution
 our_file = fits.open('/code/KPF-Pipeline/outputs/{}_L1_wave.fits'.format(filename))
-our_wls = our_file['SCIWAVE'].data
+our_wls = our_file['CALWAVE'].data
 
 # read in NEID team solution
 neid_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID-cals/{}.fits'.format(filename))
-neid_wls = neid_file['SCIWAVE'].data
+neid_wls = neid_file['CALWAVE'].data
 
 # make a difference plot
 fig, ax = plt.subplots(2, 1, figsize=(15,5))
