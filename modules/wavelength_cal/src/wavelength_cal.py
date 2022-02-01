@@ -65,9 +65,6 @@ class WaveCalibrate(KPF1_Primitive):
             for prefix in self.cal_orderlette_names:
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
-            
-                #PUT BACK: rough_wls = self.master_wavelength['SCIWAVE'] ### from fits in recipe, check this
-                rough_wls = self.l1_obj['SCIWAVE']   
                         
                 #### lfc ####
                 if self.cal_type == 'LFC':
@@ -82,6 +79,7 @@ class WaveCalibrate(KPF1_Primitive):
                             comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
                         if type(self.f0_key) == float:
                             comb_f0 = self.f0_key
+
                     else:
                         raise ValueError('f_0 value not found.')
                     
@@ -108,8 +106,8 @@ class WaveCalibrate(KPF1_Primitive):
                     )
                     
                     if self.save_wl_pixel_toggle == True:
-                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
+                        file_name = self.cal_type + '_' + datetime_suffix + '.npy'
+                        self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
                         
                     self.l1_obj[self.output_ext] = wl_soln
                 
@@ -140,8 +138,6 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
                     
-                    #rough_wls = self.master_wavelength['SCIWAVE'] ### TODO: from fits in recipe, check this
-
                     if self.linelist_path is not None:
                         peak_wavelengths_ang = np.load(
                             self.linelist_path, allow_pickle=True
@@ -166,7 +162,7 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.prev_wl_pixel_ref is not None:
                     self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
 
-                
+        return Arguments(self.l1_obj)
             ## where to save final polynomial solution
             
                 
