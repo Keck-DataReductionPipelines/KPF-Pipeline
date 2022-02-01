@@ -2,14 +2,27 @@ from modules.order_trace.src.order_trace import OrderTrace
  
 order_trace_flat_pattern = test_data_dir + input_flat_pattern
 data_ext = config.ARGUMENT.order_trace_data_extension
-output_ext = config.ARGUMENT.order_trace_output_extension
+
+data_row_range = config.ARGUMENT.data_row_range
+data_col_range = config.ARGUMENT.data_col_range
+cols_to_reset = config.ARGUMENT.cols_to_reset
+rows_to_reset = config.ARGUMENT.rows_to_reset
+
+if data_row_range is None:
+	data_row_range = [0, -1]
+if data_col_range is None:
+	data_col_range = [0, -1]
+
+poly_degree = config.ARGUMENT.fitting_poly_degree
 
 for input_flat_file in find_files(order_trace_flat_pattern):
 	_, short_flat_file = split(input_flat_file)
 	flat_stem, flat_ext = splitext(short_flat_file)
-	output_lev0_file = output_dir + flat_stem + flat_stem_suffix + flat_ext
-	if not find_files(output_lev0_file):
+	# output_lev0_file = output_dir + flat_stem + flat_stem_suffix + flat_ext
+	output_order_trace_csv = output_dir + flat_stem + flat_stem_suffix + '.csv'
+	if not find_files(output_order_trace_csv):
 		flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
-		ot_data = OrderTrace(flat_data, data_extension=data_ext, output_extension=output_ext)
-		result = to_fits(ot_data, output_lev0_file)
-
+		ot_data = OrderTrace(flat_data, data_extension=data_ext, result_path=output_order_trace_csv, is_output_file=True,
+				data_col_range=data_col_range, data_row_range=data_row_range,
+				cols_to_reset=cols_to_reset, rows_to_reset=rows_to_reset, 
+				fitting_poly_degree=poly_degree)

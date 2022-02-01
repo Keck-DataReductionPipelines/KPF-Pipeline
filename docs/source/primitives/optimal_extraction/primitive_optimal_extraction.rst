@@ -1,8 +1,8 @@
-Optimal Extraction Primitive
+Spectral Extraction Primitive
 =============================
 
 .. module:: modules
     :noindex:
 
-.. automodule:: modules.optimal_extraction.src.optimal_extraction
+.. automodule:: modules.spectral_extraction.src.spectral_extraction
     :members:
