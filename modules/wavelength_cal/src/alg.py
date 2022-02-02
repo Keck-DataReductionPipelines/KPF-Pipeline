@@ -47,8 +47,8 @@ class WaveCalibration:
         self.figsave_name = configpull.get_config_value('drift_figsave_name','instrument_drift')
         self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.quicklook_steps = configpull.get_config_value('quicklook_steps',10)
-        self.min_wave = configpull.get_config_value('min_wave_lfc',3800)
-        self.max_wave = configpull.get_config_value('max_wave_lfc',9300)
+        self.min_wave = configpull.get_config_value('min_wave',3800)
+        self.max_wave = configpull.get_config_value('max_wave',9300)
         self.fit_order = configpull.get_config_value('fit_order',9)
         self.fit_type = configpull.get_config_value('fit_type', 'Legendre')
         self.min_order = configpull.get_config_value('min_order',0)
@@ -309,7 +309,20 @@ class WaveCalibration:
 
                 line_wavelengths = expected_peak_locs[order_num]['known_wavelengths_vac']
                 line_pixels_expected = expected_peak_locs[order_num]['line_positions']
+                sorted_indices = np.argsort(line_pixels_expected)
+                line_wavelengths = line_wavelengths[sorted_indices]
+                line_pixels_expected = line_pixels_expected[sorted_indices]
 
+                line_wavelengths = np.array([
+                    line_wavelengths[i] for i in 
+                    np.arange(1, len(line_pixels_expected)) if 
+                    line_pixels_expected[i] != line_pixels_expected[i-1]
+                ])
+                line_pixels_expected = np.array([
+                    line_pixels_expected[i] for i in 
+                    np.arange(1, len(line_pixels_expected)) if 
+                    line_pixels_expected[i] != line_pixels_expected[i-1]
+                ])
                 wls, gauss_coeffs = self.line_match(
                     order_flux, line_wavelengths, line_pixels_expected, 
                     plot_toggle, order_plt_path
@@ -766,8 +779,6 @@ class WaveCalibration:
                         )
 
                         ax.plot(xs, gaussian_fit, alpha=0.5, color='red')
-
-                # ax.set_yscale('log')
 
             plt.tight_layout()
             plt.savefig('{}/spectrum_and_gaussian_fits.png'.format(savefig), dpi=250)
