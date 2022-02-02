@@ -32,14 +32,16 @@ class WaveCalibrate(KPF1_Primitive):
         
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         self.filename = action.args['filename'] if 'filename' in args_keys else None
+        self.save_diagnostics = action.args['save_diagnostics'] if 'save_diagnostics' in args_keys else None
         #getting filename so as to steal its date suffix 
         self.rough_wls = action.args['rough_wls'] if 'rough_wls' in args_keys else None
         self.linelist_path = action.args['linelist_path'] if 'linelist_path' in args_keys else None
+        self.output_dir = action.args['output_dir'] if 'output_dir' in args_keys else None
+        ## ^ TODO: how will we automate cycling through the most recent files?
+
         self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
         self.clip_peaks_toggle = action.args['clip_peaks_toggle'] if 'clip_peaks_toggle' in args_keys else None
         self.frep_key = action.args['frep_key'] if 'frep_key' in args_keys else None
-        self.prev_wl_pixel_ref = action.args['prev_wl_pixel_ref'] if 'prev_wl_pixel_ref' in args_keys else None
-        ## ^ how will we automate cycling through the most recent files?
     
         #Input configuration
         self.config=configparser.ConfigParser()
@@ -55,7 +57,7 @@ class WaveCalibrate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        self.alg = WaveCalibration(self.cal_type,self.clip_peaks_toggle,self.quicklook,self.config,self.logger)
+        self.alg = WaveCalibration(self.cal_type,self.clip_peaks_toggle,self.quicklook,self.save_diagnostics, self.config,self.logger)
 
     def _perform(self) -> None: 
         
@@ -69,7 +71,7 @@ class WaveCalibrate(KPF1_Primitive):
                 #### lfc ####
                 if self.cal_type == 'LFC':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
-                        raise ValueError('Not an LFC file!')
+                        raise ValueError('Not an LFC file! CAL-OBJ is {}.'.format(self.l1_obj.header['PRIMARY']['CAL-OBJ']))
                     
                     if self.logger:
                         self.logger.info("Wavelength Calibration: Getting comb frequency values.")
@@ -101,17 +103,16 @@ class WaveCalibrate(KPF1_Primitive):
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
                                         
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux, peak_wavelengths_ang=self.prev_wl_pixel_ref,
+                        calflux, peak_wavelengths_ang=peak_wavelengths_ang,
                         rough_wls=self.rough_wls, lfc_allowed_wls=lfc_allowed_wls
                     )
                     
                     if self.save_wl_pixel_toggle == True:
-                        file_name = self.cal_type + '_' + datetime_suffix + '.npy'
+                        file_name = self.output_dir + self.cal_type + '_' + datetime_suffix + '.npy'
                         self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
                         
                     self.l1_obj[self.output_ext] = wl_soln
                 
-                #TODO: should peak wavelengths ang be in all of them?
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('ThAr'):
@@ -125,11 +126,13 @@ class WaveCalibrate(KPF1_Primitive):
                         raise ValueError('ThAr run requires linelist_path')
                     
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,peak_wavelengths_ang=peak_wavelengths_ang)
+                        calflux,peak_wavelengths_ang=peak_wavelengths_ang, 
+                        rough_wls=self.rough_wls
+                    )
                     
                     if self.save_wl_pixel_toggle == True:
-                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
+                        file_name = self.output_dir + self.cal_type + '_' + datetime_suffix + '.npy'
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
 
                     self.l1_obj[self.output_ext] = wl_soln
 
@@ -146,21 +149,23 @@ class WaveCalibrate(KPF1_Primitive):
                         peak_wavelengths_ang = None
 
                     wl_soln,wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux,self.rough_wls,peak_wavelengths_ang)
+                        calflux,self.rough_wls,peak_wavelengths_ang=peak_wavelengths_ang)
 
                     if self.save_wl_pixel_toggle == True:
-                        file_suffix = self.cal_type + '_' + datetime_suffix + '.npy'
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_suffix,wls_and_pixels)
+                        file_name = self.output_dir + self.cal_type + '_' + datetime_suffix + '.npy'
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
                 
                     self.l1_obj[self.output_ext] = wl_soln
+
+                    if self.linelist_path is not None:
+                        self.alg.plot_drift(self.linelist_path, wl_pixel_filename)
 
                 else:
                     raise ValueError(
                         'cal_type {} not recognized. Available options are LFC, ThAr, & Etalon'.format(
                             self.cal_type))
                             
-                if self.prev_wl_pixel_ref is not None:
-                    self.alg.plot_drift(self.prev_wl_pixel_ref, wl_pixel_filename)
+
 
         return Arguments(self.l1_obj)
             ## where to save final polynomial solution

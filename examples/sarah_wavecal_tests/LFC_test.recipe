@@ -10,11 +10,13 @@ fr = config.ARGUMENT.frep_key
 output_ext = config.ARGUMENT.output_ext
 orderlette_names = config.ARGUMENT.cal_orderlette_name
 quicklook = config.ARGUMENT.quicklook
+save_diagnostics = config.ARGUMENT.save_diagnostics
+output_dir = config.ARGUMENT.output_dir
 
-# use wls from L1 NEID file as master solution
 wave_soln = WaveCalibrate(
     lfc_l1_obj, 'LFC', orderlette_names, True, quicklook, 'NEID', output_ext,
-    rough_wls = rough_wls, f0_key=f0, frep_key=fr
+    rough_wls = rough_wls, f0_key=f0, frep_key=fr, save_diagnostics = save_diagnostics, 
+    output_dir=output_dir
 )
 
 obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
