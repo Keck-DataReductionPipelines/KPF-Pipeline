@@ -1,0 +1,5 @@
+from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
+
+for l1_file_path in find_files(l1_test_files):
+    l1_file = kpf1_from_fits(l1_file_path,'NEID')
+    l1_file_wavecal = WaveCalibrate(l1_file,cal_type,cal_orderlette_names,save_wl_pixel_toggle,quicklook,data_type,wavecal_output_ext,filename=l1_file_path,clip_peaks_toggle=True)
