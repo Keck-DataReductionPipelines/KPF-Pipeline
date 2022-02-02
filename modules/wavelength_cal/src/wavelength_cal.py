@@ -1,5 +1,6 @@
 # standard dependencies
 import configparser
+import imp
 import numpy as np
 
 # pipeline dependencies
@@ -155,6 +156,11 @@ class WaveCalibrate(KPF1_Primitive):
                         file_name = self.output_dir + self.cal_type + '_' + datetime_suffix + '.npy'
                         wl_pixel_filename = self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
                 
+                    # if we've just got one etalon frame, the wl solution
+                    # that should be assigned to the file is the master (usually LFC) solution
+                    if peak_wavelengths_ang is None:
+                        wl_soln = self.rough_wls
+
                     self.l1_obj[self.output_ext] = wl_soln
 
                     if self.linelist_path is not None:
