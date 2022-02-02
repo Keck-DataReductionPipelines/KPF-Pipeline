@@ -153,24 +153,68 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
 
-    def neid_overscan_arrays(self,channel_exts):
-        """[summary]
+    def neid_setup_run(self,l0_obj,channel_exts):
+        """Runs individual frame overscan subtraction and removal. In progress.
 
         Args:
-            channel_exts ([type]): [description]
+            l0_obj (fits.HDUList): Raw file object.
+            channel_exts (list): List of extensions with amplifiers. 
+            
+        Returns:
+            array: Whole assembled image (full frame image)
         """
-        no_oscan = self.rawfile.header[channel_exts[0]]['DATASEC']
-        no_oscan = no_oscan.replace('[','')
-        no_oscan = no_oscan.replace(']','')
-        a,b = no_oscan.split(',')
-        col_start,col_end = a.split(':')
-        row_start,row_end = b.split(':')
-        col_start,col_end,row_start,row_end = int(col_start),int(col_end),int(row_start),int(row_end)
+        detsize = self.rawfile.header['PRIMARY']['DETSIZE']
+        detsize = detsize.replace('[','')
+        detsize = detsize.replace(']','')
+        a_detsize,b_detsize = detsize.split(',')
+        a_detsize,b_detsize = int(a_detsize),int(b_detsize)
+        whole_image = np.zeros((b_detsize,a_detsize))
+        for ext in channel_exts:
+            bias1 = self.rawfile.header[ext]['BIASSEC1']
+            bias2 = self.rawfile.header[ext]['BIASSEC2']
+            bias3 = self.rawfile.header[ext]['BIASSEC3']
+            datasec = self.rawfile.header[ext]['DATASEC']
+            detsec = self.rawfile.header[ext]['DETSEC']
         
-    def neid_run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
-        self.neid_overscan_arrays(channel_exts)
-        for img,key in zip(channel_imgs,channel_keys):
-            new_img = self.orientation_adjust(img,key)
+            col_start_list = []
+            col_end_list = []
+            row_start_list = []
+            row_end_list = []
+            for section in (bias1,bias2,bias3):
+                bias = section.replace('[','')
+                bias = bias.replace(']','')
+                a,b = bias.split(',')
+                col_start,col_end = a.split(':')
+                row_start,row_end = b.split(':')
+                col_start,col_end,row_start,row_end = int(col_start),int(col_end),int(row_start),int(row_end)
+                col_start_list.append(col_start)
+                col_end_list.append(col_end)
+                row_start_list.append(row_start)
+                row_end_list.append(row_end)      
+                
+            #detsec
+            detsec = detsec.replace('[','')
+            detsec = detsec.replace(']','')
+            a_det,b_det = detsec.split(',')
+            aa_det,ab_det = a_det.split(':')
+            ba_det,bb_det = b_det.split(':')
+            aa_det,ab_det,ba_det,bb_det = int(aa_det),int(ab_det),int(ba_det),int(bb_det)    
+            
+            #datasec
+            datasec = datasec.replace('[','')
+            datasec = datasec.replace(']','')
+            a_data,b_data = datasec.split(',')
+            aa_data,ab_data = a_data.split(':')
+            ba_data,bb_data = b_data.split(':')
+            aa_data,ab_data,ba_data,bb_data = int(aa_data),int(ab_data),int(ba_data),int(bb_data)            
+        
+            self.rawfile.data[ext] = self.rawfile.data[ext][ba_data:bb_data,aa_data:ab_data]
+            # perform poly/mean sub
+            #if self.mode=='mean':
+            whole_image[ba_det:bb_det,aa_det:ab_det] = self.rawfile.data[ext]
+        return whole_image
+            #elif self.mode=='polynomial': # subtract linear fit of overscan
+
         
     def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
         """Performs overscan subtraction steps, in order: orient frame, subtract overscan (method
@@ -235,10 +279,10 @@ class OverscanSubtraction(KPF0_Primitive):
                 full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
                 #full_frame_images.append(full_frame_img)
                 l0_obj[self.ffi_exts[frame]] = full_frame_img
+                
+        if self.data_type == 'NEID':
+            l0_obj = self.rawfile
+            whole_image = self.neid_setup_run(l0_obj,channel_exts)
+            l0_obj[self.ffi_exts] = whole_image
         
-        # if self.data_type == 'NEID':
-        #     l0_obj = self.rawfile
-        #     # self.neid_overscan_arrays(channel_exts)
-        #     self.orientation_adjust()
-        #     #no overscan or image to assemble at the moment
         return Arguments(l0_obj)
