@@ -2,16 +2,25 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 import numpy as np
 
-prev_wls_sol = 'no' # 'yes'/'no'; if 'yes', plot results for LFC run w/o previous knowledge of wls/pixels
+#######################################
+# LFC, running for first time
+# filename = 'neidL1_20220127T135910'
+# savedir = 'LFC_noprev'
+# ylims_pix = [-.15, .15]
 
-assert prev_wls_sol in ['yes', 'no'], 'prev_wls_sol toggle must be either "yes" or "no"'
+# LFC, not for first time
+# filename = 'neidL1_20220130T135641'
+# savedir = 'LFC_yesprev'
+# ylims_pix = [-.15, .15]
 
-if prev_wls_sol == 'yes':
-    filename = 'neidL1_20220130T135641'
-else:
-    filename = 'neidL1_20220127T135910'
+# ThAr
+filename = 'neidL1_20220126T235959'
+savedir = 'ThAr'
+ylims_pix = [-1.5, 1.5]
+#######################################
 
-output_path = '/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID-cals/output_wavecal/LFC_{}prev'.format(prev_wls_sol)
+
+output_path = '/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID-cals/output_wavecal/{}'.format(savedir)
 
 # read in our solution
 our_file = fits.open('{}/{}_L1_wave.fits'.format(output_path, filename))
@@ -33,5 +42,5 @@ for i in np.arange(len(our_wls)):
 ax[1].set_xlabel('pixel')
 ax[0].set_ylabel('Our WLS - NEID WLS [$\\rm \AA$]')
 ax[1].set_ylabel('Our WLS - NEID WLS [pix]')
-ax[1].set_ylim(-.15, .15)
-plt.savefig('{}/LFC_vs_NEID.png'.format(output_path), dpi=250)
+ax[1].set_ylim(*ylims_pix)
+plt.savefig('{}/us_vs_NEID.png'.format(output_path), dpi=250)

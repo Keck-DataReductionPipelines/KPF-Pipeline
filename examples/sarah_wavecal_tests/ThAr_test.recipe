@@ -1,12 +1,22 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
-output_ext = config.ARGUMENT.output_ext
-
 L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
+rough_wls_file = config.ARGUMENT.master_wls_file + '.fits'
+rough_wls = kpf1_from_fits(rough_wls_file, data_type='NEID')['CALWAVE']
 
-thar_data = kpf1_from_fits(L1_file, data_type='NEID')
+lfc_l1_obj = kpf1_from_fits(L1_file, data_type='NEID')
+output_ext = config.ARGUMENT.output_ext
+orderlette_names = config.ARGUMENT.cal_orderlette_name
+quicklook = config.ARGUMENT.quicklook
+linelist_path = config.ARGUMENT.linelist_path
+save_diagnostics = config.ARGUMENT.save_diagnostics
+output_dir = config.ARGUMENT.output_dir
 
-wave_soln, _ = WaveCalibrate(thar_data, config.ARGUMENT.quicklook, data_type='NEID')
+wave_soln = WaveCalibrate(
+    lfc_l1_obj, 'ThAr', orderlette_names, True, quicklook, 'NEID', output_ext,
+    rough_wls = rough_wls, linelist_path=linelist_path, 
+    save_diagnostics=save_diagnostics, output_dir = output_dir
+)
 
 obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
 output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
