@@ -1,3 +1,4 @@
+outputs/*
 examples/V1/BiasRecipe/BiasRecipeRes/
 examples/V1/recipe_results/
 *.npy
