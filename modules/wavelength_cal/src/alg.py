@@ -20,12 +20,13 @@ class WaveCalibration:
     in wavelength_cal.py. Algorithm itself iterates over orders.
     """
     
-    def __init__(self, cal_type, clip_peaks_toggle, quicklook, config=None, logger=None):
+    def __init__(self, cal_type, clip_peaks_toggle, quicklook, save_diagnostics=None, config=None, logger=None):
         """Initializes WaveCalibration class.
 
         Args:
             clip_peaks_toggle: TODO            
             quicklook: TODO
+            save_diagnostics: TODO
             config (configparser.ConfigParser, optional): Config context. 
                 Defaults to None.
             logger (logging.Logger, optional): Instance of logging.Logger. 
@@ -38,18 +39,21 @@ class WaveCalibration:
         self.cal_type = cal_type
         self.clip_peaks_toggle = clip_peaks_toggle
         self.quicklook = quicklook
+        if save_diagnostics is None:
+            self.save_diagnostics_dir = 'outputs/'
+        else:
+            self.save_diagnostics_dir = save_diagnostics
         configpull = ConfigHandler(config,'PARAM')
         self.figsave_name = configpull.get_config_value('drift_figsave_name','instrument_drift')
         self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.quicklook_steps = configpull.get_config_value('quicklook_steps',10)
-        self.min_wave = configpull.get_config_value('min_wave_lfc',3800)
-        self.max_wave = configpull.get_config_value('max_wave_lfc',9300)
+        self.min_wave = configpull.get_config_value('min_wave',3800)
+        self.max_wave = configpull.get_config_value('max_wave',9300)
         self.fit_order = configpull.get_config_value('fit_order',9)
         self.fit_type = configpull.get_config_value('fit_type', 'Legendre')
         self.min_order = configpull.get_config_value('min_order',0)
         self.max_order = configpull.get_config_value('max_order',100)
         self.n_sections = configpull.get_config_value('n_sections',1)
-        self.save_diagnostics_dir = configpull.get_config_value('save_diagnostics','outputs/')
         self.linelist_path = configpull.get_config_value('linelist_path_etalon',None)
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
  
@@ -129,12 +133,12 @@ class WaveCalibration:
 
         # create directories for diagnostic plots
         if type(self.save_diagnostics_dir) == str:
-            self.save_diagnostics_dir = self.save_diagnostics_dir+'{}_diagnostics'.format(self.cal_type)
-            SAVEPLOTS = ('{}/%s' % self.save_diagnostics_dir).format(os.getcwd())
-            if not os.path.isdir(SAVEPLOTS):
-                os.makedirs(SAVEPLOTS)
+            if not os.path.isdir(self.save_diagnostics_dir):
+                os.makedirs(self.save_diagnostics_dir)
+            if not os.path.isdir(self.save_diagnostics_dir + '/order_diagnostics'):
+                os.makedirs(self.save_diagnostics_dir + '/order_diagnostics')
         if self.save_diagnostics_dir == 'False':
-            SAVEPLOTS = None
+            self.save_diagnostics_dir = None
 
         if self.quicklook == False:
             order_list = self.remove_orders(step=1)
@@ -147,11 +151,11 @@ class WaveCalibration:
                 masked_calflux, order_list, rough_wls=rough_wls, 
                 comb_lines_angstrom=lfc_allowed_wls, 
                 expected_peak_locs=peak_wavelengths_ang, 
-                print_update=True, plt_path=SAVEPLOTS
+                print_update=True, plt_path=self.save_diagnostics_dir
             )
 
             # make a plot of all of the precise new wls minus the rough input  wls
-            if SAVEPLOTS is not None and rough_wls is not None:
+            if self.save_diagnostics_dir is not None and rough_wls is not None:
                 fig, ax = plt.subplots(2,1, figsize=(12,5))
                 for i in order_list:
                     wls_i = poly_soln[i, :]
@@ -167,8 +171,7 @@ class WaveCalibration:
                 ax[1].set_xlabel('pixel')
                 ax[1].set_ylabel('[pixel]')
                 plt.tight_layout()
-                plt.savefig('{}/all_wls.png'.format(SAVEPLOTS), dpi=250)
-
+                plt.savefig('{}/all_wls.png'.format(self.save_diagnostics_dir), dpi=250)
 
 
         if self.quicklook == True:
@@ -182,7 +185,7 @@ class WaveCalibration:
                 masked_calflux, order_list, rough_wls=rough_wls, 
                 comb_lines_angstrom=lfc_allowed_wls, 
                 expected_peak_locs=peak_wavelengths_ang, 
-                print_update=True, plt_path=SAVEPLOTS ###CHECK THIS TODO
+                print_update=True, plt_path=self.save_diagnostics_dir ###CHECK THIS TODO
             )
 
         return poly_soln, wls_and_pixels    
@@ -241,7 +244,7 @@ class WaveCalibration:
                 print('\nRunning order # {}'.format(order_num))
 
             if plt_path is not None:
-                order_plt_path = '{}/order{}'.format(plt_path, order_num)
+                order_plt_path = '{}/order_diagnostics/order{}'.format(plt_path, order_num)
                 if not os.path.isdir(order_plt_path):
                     os.makedirs(order_plt_path)
 
@@ -306,7 +309,20 @@ class WaveCalibration:
 
                 line_wavelengths = expected_peak_locs[order_num]['known_wavelengths_vac']
                 line_pixels_expected = expected_peak_locs[order_num]['line_positions']
+                sorted_indices = np.argsort(line_pixels_expected)
+                line_wavelengths = line_wavelengths[sorted_indices]
+                line_pixels_expected = line_pixels_expected[sorted_indices]
 
+                line_wavelengths = np.array([
+                    line_wavelengths[i] for i in 
+                    np.arange(1, len(line_pixels_expected)) if 
+                    line_pixels_expected[i] != line_pixels_expected[i-1]
+                ])
+                line_pixels_expected = np.array([
+                    line_pixels_expected[i] for i in 
+                    np.arange(1, len(line_pixels_expected)) if 
+                    line_pixels_expected[i] != line_pixels_expected[i-1]
+                ])
                 wls, gauss_coeffs = self.line_match(
                     order_flux, line_wavelengths, line_pixels_expected, 
                     plot_toggle, order_plt_path
@@ -361,7 +377,7 @@ class WaveCalibration:
                 )
 
                 order_precisions.append(abs_precision)
-                num_detected_peaks.append(len(good_peak_idx))
+                num_detected_peaks.append(len(fitted_peak_pixels))
 
                 squared_resids = (np.array(order_precisions) * num_detected_peaks)**2
                 sum_of_squared_resids = np.sum(squared_resids)
@@ -731,25 +747,25 @@ class WaveCalibration:
                 # plot the flux
                 ax.plot(
                     np.arange(num_pixels)[i*zoom_section_pixels:(i+1)*zoom_section_pixels],
-                    flux[i*zoom_section_pixels:(i+1)*zoom_section_pixels],color='k',alpha=.1
+                    flux[i*zoom_section_pixels:(i+1)*zoom_section_pixels],color='k'
                 )
 
-                # plot the fitted peak maxima as points
-                ax.scatter(
-                    coefs[1,:][
-                        (coefs[1,:] > i * zoom_section_pixels) & 
-                        (coefs[1,:] < (i+1) * zoom_section_pixels)
-                    ], 
-                    coefs[0,:][
-                        (coefs[1,:] > i * zoom_section_pixels) & 
-                        (coefs[1,:] < (i+1) * zoom_section_pixels)
-                    ] + 
-                    coefs[3,:][
-                        (coefs[1,:] > i * zoom_section_pixels) & 
-                        (coefs[1,:] < (i+1) * zoom_section_pixels)
-                    ],
-                    color='red'
-                )
+                # #  plot the fitted peak maxima as points
+                # ax.scatter(
+                #     coefs[1,:][
+                #         (coefs[1,:] > i * zoom_section_pixels) & 
+                #         (coefs[1,:] < (i+1) * zoom_section_pixels)
+                #     ], 
+                #     coefs[0,:][
+                #         (coefs[1,:] > i * zoom_section_pixels) & 
+                #         (coefs[1,:] < (i+1) * zoom_section_pixels)
+                #     ] + 
+                #     coefs[3,:][
+                #         (coefs[1,:] > i * zoom_section_pixels) & 
+                #         (coefs[1,:] < (i+1) * zoom_section_pixels)
+                #     ],
+                #     color='red'
+                # )
 
                 # overplot the Gaussian fits
                 for j in np.arange(num_input_lines):
@@ -762,12 +778,10 @@ class WaveCalibration:
                             xs, coefs[0,j], coefs[1,j], coefs[2,j], coefs[3,j]
                         )
 
-                        ax.plot(xs, gaussian_fit, alpha=0.5, color='grey')
-
-                ax.set_yscale('log')
+                        ax.plot(xs, gaussian_fit, alpha=0.5, color='red')
 
             plt.tight_layout()
-            plt.savefig('{}/spectrum_and_peaks.png'.format(savefig), dpi=250)
+            plt.savefig('{}/spectrum_and_gaussian_fits.png'.format(savefig), dpi=250)
             plt.close()
 
         return linelist, coefs
@@ -1275,7 +1289,7 @@ class WaveCalibration:
 
         return comb_lines_ang
 
-    def save_wl_pixel_info(self,file_name,wave_pxl_data, file_path='/code/KPF-Pipeline/outputs/'):
+    def save_wl_pixel_info(self,file_name,wave_pxl_data):
         """
         Saves wavelength pixel reference file.
         
@@ -1283,11 +1297,10 @@ class WaveCalibration:
             file_name (str): Filename including date and time from original science file
             wave_pxl_data (np.array): Wavelength per pixel reference information output by 
                 function 'run_wavelength_cal'.
-            file_path (str): directory to save this file in
                 
         Returns:
             str: Full wavelength pixel reference filename
         """
 
-        np.save(file_path + file_name,wave_pxl_data,allow_pickle=True)
+        np.save(file_name,wave_pxl_data,allow_pickle=True)
         
