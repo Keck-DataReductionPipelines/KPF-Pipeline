@@ -1,0 +1,16 @@
+from modules.line_activity.src.line_activity import Line_Activity
+data_dir = config.ARGUMENT.data_dir
+data_file= config.ARGUMENT.input_file
+
+#startloc = 'ownCloud/KPF-Pipeline-TestData/NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits'
+#resultloc = '/Users/paminabby/Desktop/cn_test/test1.fits'
+file = data_dir+data_file
+
+#for file in find_files(startloc):
+
+data = kpf1_from_fits(file,data_type='NEID')
+EW = Line_Activity(data)
+#EW = Line_Activity()
+#result = to_fits(norm,resultloc)
+
+

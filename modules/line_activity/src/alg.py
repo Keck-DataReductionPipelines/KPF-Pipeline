@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import InterpolatedUnivariateSpline
 import matplotlib as mpl
+
+from kpfpipe.primitives.level1 import KPF1_Primitive
 mpl.use('Agg')
 from astropy.io import fits
 from matplotlib import gridspec
@@ -49,7 +51,7 @@ class LineActivityAlg:
 #        self.mask_array_provided=configpull.get_config_value('mask_array_provided',False)
 #        self.method=configpull.get_config_value('method','Spline')
 #        self.continuum_guess_provided=configpull.get_config_value('continuum_guess_provided',False)
-        self.plot_results=configpull.get_config_value('plot_results',True)
+#        self.plot_results=configpull.get_config_value('plot_results',True)
 #        self.n_iter=configpull.get_config_value('n_iter',5)
 #        self.n_order=configpull.get_config_value('n_order',8)
 #        self.ffrac=configpull.get_config_value('ffrac',0.98)
@@ -62,7 +64,7 @@ class LineActivityAlg:
         self.config=config
         self.logger=logger
 
-    def CalcHalpha(self,x,y,window):
+    def CalcHalpha(self,x,y):#,window):
         """ Perform equivalent width calculation
         Args:
             x (np.array): X-data (wavelength).
@@ -73,9 +75,21 @@ class LineActivityAlg:
             EW (float)  : Equivalent width
         """
         Halpha_EW = np.sum(x)
-        return ss
+        print('We are inside alg.py')
+        return Halpha_EW
 
-
-
+#   def run_calc_halpha
+#       """
+#       Prepare and run entire line activity algorithm
+#       
+#       Args:
+#           wav_i (np.array): Wavelength data
+#           data_i (np.array): Flux data
+#       Reruns:
+#           Value of EW for H-alpha
+#       """
+#
+#       ew = np.sum
+#       return ew
 
 
