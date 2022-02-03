@@ -1,0 +1,67 @@
+from modules.order_trace.src.order_trace import OrderTrace
+from modules.order_trace.src.order_trace_result_combine import OrderTraceCombine
+
+output_trace = output_dir + config.ARGUMENT.output_trace
+
+cols_to_reset = config.ARGUMENT.cols_to_reset
+ffbb_rows_to_reset = config.ARGUMENT.ffbb_rows_to_reset
+ldls_rows_to_reset = config.ARGUMENT.ldls_rows_to_reset
+
+cal_flat_list = config.ARGUMENT.cal_flat_list
+cal_object = config.ARGUMENT.cal_object
+cal_fibers = config.ARGUMENT.cal_fibers 
+
+kpf0_data = []		# list of kpf0 for each input flat file 
+ot_data_results = []    # list of order trace result for each flat file
+idx = 0
+for input_flat_code in cal_flat_list:
+	# input for order trace
+	input_flat_file = test_data_dir + input_flat_pattern + input_flat_code + '.fits'
+	_, short_flat_file = split(input_flat_file)
+	flat_stem, flat_ext = splitext(short_flat_file)
+	# output trace result
+	output_order_trace_csv = output_trace + flat_stem + flat_stem_suffix + '.csv'
+
+	if cal_object[idx] == 'ffbb':
+		rows_to_reset = ffbb_rows_to_reset
+	else:
+		rows_to_reset = ldls_rows_to_reset
+	flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
+	kpf0_data = kpf0_data + [flat_data]
+	if not find_files(output_order_trace_csv):
+		ot_data = OrderTrace(flat_data, data_extension=data_ext, result_path=output_order_trace_csv, is_output_file=True,
+				data_col_range=data_col_range, data_row_range=data_row_range,
+				cols_to_reset=cols_to_reset, rows_to_reset=rows_to_reset, 
+				fitting_poly_degree=poly_degree)
+	else:
+		ot_data = output_order_trace_csv
+	ot_data_results = ot_data_results + [ot_data]
+	idx = idx + 1
+
+
+l1 = 0
+l2 = 1
+output_path_1 = output_trace + cal_object[l1] + '_' + cal_flat_list[l1] + '_' + cal_object[l2] + '_' + cal_flat_list[l2]+ '.csv'
+if not find_files(output_path_1):
+	ldls_combined = OrderTraceCombine(2, [kpf0_data[l1], kpf0_data[l2]], [ot_data_results[l1], ot_data_results[l2]], 
+					data_extension=data_ext, for_cal=[cal_object[l1], cal_object[l2]], 
+					for_fiber=[cal_fibers[l1], cal_fibers[l2]], trace_range=[[2, -1], [2, -1]], 
+					common_fiber='cal', output_path=output_path_1)
+
+f1=2
+f2=3
+output_path_2 = output_trace + cal_object[f1] + '_' + cal_flat_list[f1] + '_' + cal_object[f2] + '_' + cal_flat_list[f2]+ '.csv'
+if not find_files(output_path_2):
+        ffbb_combined = OrderTraceCombine(2, [kpf0_data[f1], kpf0_data[f2]], [ot_data_results[f1], ot_data_results[f2]],
+                                        data_extension=data_ext, for_cal=[cal_object[f1], cal_object[f2]],
+                                        for_fiber=[cal_fibers[f1], cal_fibers[f2]], trace_range=[[5, -1], [0, -1]],
+                                        common_fiber='cal', output_path=output_path_2)
+
+output_order_trace_path = output_trace + cal_object[l1]+'_'+cal_flat_list[l1]+'_'+cal_flat_list[l2]+'_'+cal_object[f1]+'_'+cal_flat_list[f1]+'_'+cal_flat_list[f2]+'.csv'
+if not find_files(output_order_trace_path):
+	ldls_ffbb_combined = OrderTraceCombine(2, [[kpf0_data[0], kpf0_data[1]],[kpf0_data[2], kpf0_data[3]]], 
+						   [output_path_1, output_path_2], data_extension=data_ext, 
+						   for_cal=[cal_object[0], cal_object[2]], 
+						   for_fiber = [['sky', 'sci', 'cal'], ['sky', 'sci', 'cal']], 
+						   trace_range=[[0, 158], [186, 236]], mixed_trace_range=[[159, 206], [138, 185]], 
+						   output_path=output_order_trace_path)

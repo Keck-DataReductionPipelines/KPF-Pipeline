@@ -183,6 +183,8 @@ class BarycentricCorrectionAlg:
             if zb_bc_file is not None and os.path.isfile(zb_bc_file):
                 df = pd.read_csv(zb_bc_file, header=None)
                 zb_bc_corr = np.reshape(df.values, (np.size(df.values), ))
+            elif zb_bc_file is not None and save_to_path is None:
+                save_to_path = zb_bc_file
 
         # compute redshift from barycentric correction and save the result to the file if there is
         if np.size(zb_bc_corr) == 0 and obs_config is not None:

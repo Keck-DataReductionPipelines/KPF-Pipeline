@@ -10,7 +10,7 @@
 
 ** The recipe and config pairs to perform order trace, spectral extraction, radial velocity  are listed as below:
 
-- kpf examples/test_neid.recipe  examples/default_neid.cfg 
+- kpf examples/neid_recipe/test_neid.recipe  examples/neid_recipe/default_neid.cfg 
   purpose: perform order_trace, spectral extraction and radial velocity for NEID on target Tau Ceti
   master recipe: test_neid.recipe
   subrecipes: test_order_trace.recipe, 
@@ -51,4 +51,18 @@
    ownCloud/KPF-Pipeline-TestData/KPF-Pipeline-TestData/KPF_Simulated_Data/science. 
 
 
+recipes for DRP V2 end to end test
+
+** folder kpf_recipe contains recipe * config for kpf simulated data
+-- kpf examples/kpf_recipe/test_kpf.recipe examples/kpf_recipe/default_kpf.cfg
+note: create folder test_resuts/kpf/output_trace, output_extraction, output_rv, output_barycorr, output_cahk to contain the recipe output
+
+** folder hd73344_recipe contains recipe * config for NEID HD73344
+-- kpf examples/hd73344_recipe/test_neid_hd73344.recipe examples/hd73344_recipe/default_neid_hd73344.cfg
+note: create folder test_resuts/neid_hd73344/output_trace, output_extraction, output_rv, output_barycorr, output_wavecal to contain the recipe output
+
+
+** folder hd127334_recipe contains recipe * config for NEID HD127334
+-- kpf examples/hd127334_recipe/test_neid_hd127334.recipe examples/hd127334_recipe/default_neid_hd127334.cfg
+note: create folder test_resuts/neid_hd127334/output_trace,  output_extraction, output_rv, output_barycorr to contain the recipe output
 
