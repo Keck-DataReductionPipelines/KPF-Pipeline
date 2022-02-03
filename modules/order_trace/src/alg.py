@@ -269,11 +269,17 @@ class OrderTraceAlg:
 
         return self.flat_data, nx, ny
 
-    @staticmethod
+    def correct_nan_data(self):
+        self.flat_data = np.nan_to_num(self.flat_data)
+        return self.flat_data
+
+
+    @ staticmethod
     def opt_filter(y_data: np.ndarray, par: int, weight: np.ndarray = None):
         """A smoothing filter."""
 
         n = y_data.size
+
         # Check for some input preliminaries
         try: 
             assert(y_data.ndim == 1)
@@ -364,8 +370,10 @@ class OrderTraceAlg:
             else:
                 return [max(a_seg[0], b_seg[0]), min(a_seg[1], b_seg[1])]
 
+        self.correct_nan_data()
         # flat data array and dimension
         image_data, n_col, n_row = self.get_spectral_data()
+
 
         # Parameters
         filter_par = self.get_config_value('filter_par', 20)
@@ -381,7 +389,7 @@ class OrderTraceAlg:
         o_row, o_col = self.original_size
         s_row, s_col = self.data_range[0], self.data_range[2]
 
-        # adjust rows and cols to reset based on the data rage
+        # adjust rows and cols to reset based on the data range
         rows_to_reset = None
         if rows_str:
             rows_list = json.loads(rows_str)

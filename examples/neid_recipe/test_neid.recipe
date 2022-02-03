@@ -25,7 +25,7 @@ wave_from_lev1 = config.ARGUMENT.wave_from_lev1
 flat_rect = '_'+rect_method
 obs_rect = '_byclip'
 
-invoke_subrecipe("./examples/test_order_trace.recipe")
-invoke_subrecipe("./examples/test_optimal_extraction_clip.recipe")
+#invoke_subrecipe("./examples/test_order_trace.recipe")
+#invoke_subrecipe("./examples/test_optimal_extraction_clip.recipe")
 #invoke_subrecipe("./examples/test_wave_cal.recipe")
 invoke_subrecipe("./examples/test_neid_radial_velocity_reweight_2.recipe")

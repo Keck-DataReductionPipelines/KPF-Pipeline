@@ -182,6 +182,8 @@ class RadialVelocity(KPF1_Primitive):
             wave = sci.replace('FLUX', 'WAVE') if 'FLUX' in sci else None
             self.wave_cal_set.append(getattr(self.input, wave) if (wave is not None and hasattr(self.input, wave))
                                      else None)
+            if 'SSBJD100' in self.input.header['PRIMARY']:
+                self.input.header[sci]['SSBJD100'] = self.input.header['PRIMARY']['SSBJD100']
             self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
                                    else None)
 

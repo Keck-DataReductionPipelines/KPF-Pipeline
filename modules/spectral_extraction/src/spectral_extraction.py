@@ -181,12 +181,12 @@ class SpectralExtraction(KPF0_Primitive):
             order_trace_header = self.input_flat.header[order_trace_ext]
 
         # Order trace algorithm setup
-        spec_header = self.input_spectrum.header[data_ext] \
+        self.spec_header = self.input_spectrum.header[data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
         self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_spectrum[data_ext] if hasattr(self.input_spectrum, data_ext) else None,
-                                        spec_header,
+                                        self.spec_header,
                                         self.order_trace_data,
                                         order_trace_header,
                                         config=self.config, logger=self.logger,
@@ -322,12 +322,17 @@ class SpectralExtraction(KPF0_Primitive):
                         zero_data = np.zeros((total_order, width))
                         kpf1_obj[ext_names[ext_idx]] = zero_data
 
-            # for neid data:
+            # for neid data with level 1 sample:
             if update_primary_header and level1_sample is not None and hasattr(kpf1_obj, data_ext_name):
                 sample_primary_header = level1_sample.header['PRIMARY']
-                if sample_primary_header is not None:
-                    for h_key in ['SSBZ100', 'SSBJD100']:
-                        kpf1_obj.header[data_ext_name][h_key] = sample_primary_header[h_key]
+            else:
+                sample_primary_header = self.spec_header
+
+            if sample_primary_header is not None:
+                    # for h_key in sample_primary_header:
+                for h_key in ['SSBZ100', 'SSBJD100', 'CAL-OBJ']:
+                    if h_key in sample_primary_header:
+                        kpf1_obj.header['PRIMARY'][h_key] = sample_primary_header[h_key]
 
         return kpf1_obj
 

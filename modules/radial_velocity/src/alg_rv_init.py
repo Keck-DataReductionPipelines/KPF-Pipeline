@@ -81,7 +81,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_WID = 'mask_width'     # km/s
     AIR_TO_VACUUM = 'air_to_vacuum'    # True or False
     REWEIGHTING_CCF = 'reweighting_ccf_method'         # ratio, ccf, or None
-    CCF_CODE = 'ccf_engine'       # ccf code language
+    CCF_CODE = 'ccf_engine'     # ccf code language
+    START_VEL = 'start_v'       # start velocity
 
     # defined in configuration file or star config for NEID
     RA = 'ra'                   # hours, like "01:44:04.0915236842"
@@ -224,11 +225,15 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if not ret['status']:
             return self.ret_status(ret['msg'])
 
-        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID) # in rv_config
+        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
+                                                                                                    # in rv_config
         for rv_k in rv_keys:
             val = self.get_rv_config_value(rv_k)
             if val is None:
-                return self.ret_status(rv_k + ' not defined in config')
+                if rv_k == self.START_VEL:  # optional
+                    self.rv_config[self.START_VEL] = val
+                else:
+                    return self.ret_status(rv_k + ' not defined in config')
             else:
                 self.rv_config[rv_k] = float(val)
 
@@ -354,8 +359,12 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         if self.velocity_loop is None:
             v_range = self.get_step_range()
-            self.velocity_loop = np.arange(v_range[0], v_range[1]) * self.rv_config[self.STEP] + \
-                self.rv_config[self.STAR_RV]
+            if self.rv_config[self.START_VEL] is not None:
+                self.velocity_loop = np.arange(0, v_range[1]-v_range[0]) * self.rv_config[self.STEP] + \
+                                     self.rv_config[self.START_VEL]
+            else:
+                self.velocity_loop = np.arange(v_range[0], v_range[1]) * self.rv_config[self.STEP] + \
+                                     self.rv_config[self.STAR_RV]
         return self.velocity_loop
 
     def get_velocity_steps(self):

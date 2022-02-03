@@ -3,17 +3,23 @@ from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
 
+output_rv = output_dir + config.ARGUMENT.output_rv
+# output_extraction = output_dir + config.ARGUMENT.output_extraction
+output_extraction = test_data_dir + config.ARGUMENT.output_extraction
+
 reweighting_method = config.ARGUMENT.reweighting_method
 data_ext_rv = config.ARGUMENT.orderlet_names_rv
 ccf_ext_names = config.ARGUMENT.ccf_ext
 rv_ext = config.ARGUMENT.rv_ext
-rv_init = RadialVelocityInit(start_time="2020-04-18")
+
+bc_path = output_dir + '/output_barycorr/'
+rv_init = RadialVelocityInit(start_time="2020-04-18", bc_corr_path=bc_path)
 
 rv_ext = 'RV'
 rv_idx = [0]
 area_def = [0, -1, 0, -1]
 
-input_lev1_pattern = output_dir + '*' + obs_rect + '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix + '.fits'
+input_lev1_pattern = output_extraction + '*' + '_'  + rect_method + '_' + extract_method + lev1_stem_suffix + '.fits'
 
 lev2_list = []
 all_lev2_files = []
@@ -24,7 +30,8 @@ start_seg = 0
 for input_L1_file in find_files(input_lev1_pattern):
 	_, short_lev1 = split(input_L1_file)
 	lev1_stem, lev1_ext = splitext(short_lev1)
-	output_lev2_file = output_dir + lev1_stem + lev2_stem_suffix + lev1_ext
+
+	output_lev2_file = output_rv + lev1_stem + lev2_stem_suffix + lev1_ext
 	all_lev2_files = all_lev2_files + [output_lev2_file]
 	lev1_data = kpf1_from_fits(input_L1_file, data_type='KPF')	
 
@@ -44,7 +51,7 @@ for input_L1_file in find_files(input_lev1_pattern):
 
 
 for idx in rv_idx:
-        ccf_ratio_file = output_dir + 'ccf_ratio_table_'+ rect_method + '_' + extract_method + '_' + reweighting_method+ '_' + ccf_ext_names[idx] + '.csv'
+        ccf_ratio_file = output_rv + 'ccf_ratio_table_'+ rect_method + '_' + extract_method + '_' + reweighting_method+ '_' + ccf_ext_names[idx] + '.csv'
 
         if not find_files(ccf_ratio_file):
                 ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, total_segment, ccf_hdu_name=ccf_ext_names[idx],
@@ -57,7 +64,7 @@ i = 0
 for f in all_lev2_files:
         _, short_lev2 = split(f)
         lev2_stem, lev2_ext = splitext(short_lev2)
-        reweighted_output = output_dir + lev2_stem + '_reweighted2_' + reweighting_method +lev2_ext
+        reweighted_output = output_rv + lev2_stem + '_reweighted_' + reweighting_method +lev2_ext
 
         lev2_rv = lev2_list[i]
 
@@ -66,3 +73,4 @@ for f in all_lev2_files:
                                                 ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
         result = to_fits(lev2_rv, reweighted_output)
         i = i + 1
+
