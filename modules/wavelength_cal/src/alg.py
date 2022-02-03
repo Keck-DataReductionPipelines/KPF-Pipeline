@@ -20,7 +20,10 @@ class WaveCalibration:
     in wavelength_cal.py. Algorithm itself iterates over orders.
     """
     
-    def __init__(self, cal_type, clip_peaks_toggle, quicklook, save_diagnostics=None, config=None, logger=None):
+    def __init__(
+        self, cal_type, clip_peaks_toggle, quicklook, save_diagnostics=None, 
+        config=None, logger=None
+    ):
         """Initializes WaveCalibration class.
 
         Args:
@@ -33,18 +36,18 @@ class WaveCalibration:
                 Defaults to None.        
                 
         Attributes:        
-            quicklook (bool): Whether or not to run quicklook pipeline. Defaults to False.
+            quicklook (bool): Whether or not to run quicklook pipeline. 
+                Defaults to False.
 
         """
         self.cal_type = cal_type
         self.clip_peaks_toggle = clip_peaks_toggle
         self.quicklook = quicklook
-        if save_diagnostics is None:
-            self.save_diagnostics_dir = 'outputs/'
-        else:
-            self.save_diagnostics_dir = save_diagnostics
+        self.save_diagnostics_dir = save_diagnostics
         configpull = ConfigHandler(config,'PARAM')
-        self.figsave_name = configpull.get_config_value('drift_figsave_name','instrument_drift')
+        self.figsave_name = configpull.get_config_value(
+            'drift_figsave_name','instrument_drift'
+        )
         self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.quicklook_steps = configpull.get_config_value('quicklook_steps',10)
         self.min_wave = configpull.get_config_value('min_wave',3800)
@@ -54,14 +57,11 @@ class WaveCalibration:
         self.min_order = configpull.get_config_value('min_order',0)
         self.max_order = configpull.get_config_value('max_order',100)
         self.n_sections = configpull.get_config_value('n_sections',1)
-        self.linelist_path = configpull.get_config_value('linelist_path_etalon',None)
+        self.linelist_path = configpull.get_config_value(
+            'linelist_path_etalon',None
+        )
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
  
-## wavecal fxns ## -run_wavelength_cal, -remove_orders, -fit_many_orders,
-#-find_peaks_in_order, -find_peaks, -integrate_gaussian, -fit_gaussian, -clip_peaks,
-#-line_match, -mode_match,-fit_polynomial,-calculate_rv_precision, -mask_array_neid
-       
-    
     def run_wavelength_cal(
         self, calflux, rough_wls=None, 
         peak_wavelengths_ang=None, lfc_allowed_wls=None):
@@ -137,8 +137,6 @@ class WaveCalibration:
                 os.makedirs(self.save_diagnostics_dir)
             if not os.path.isdir(self.save_diagnostics_dir + '/order_diagnostics'):
                 os.makedirs(self.save_diagnostics_dir + '/order_diagnostics')
-        if self.save_diagnostics_dir == 'False':
-            self.save_diagnostics_dir = None
 
         if self.quicklook == False:
             order_list = self.remove_orders(step=1)
@@ -156,22 +154,32 @@ class WaveCalibration:
 
             # make a plot of all of the precise new wls minus the rough input  wls
             if self.save_diagnostics_dir is not None and rough_wls is not None:
-                fig, ax = plt.subplots(2,1, figsize=(12,5))
-                for i in order_list:
-                    wls_i = poly_soln[i, :]
-                    rough_wls_i = rough_wls[i,:]
-                    ax[0].plot(wls_i - rough_wls_i, color='grey', alpha=0.5)
 
-                    pixel_sizes = rough_wls_i[1:] - rough_wls_i[:-1]
-                    ax[1].plot((wls_i[:-1] - rough_wls_i[:-1]) / pixel_sizes, color='grey', alpha=0.5)
+                # don't do this for etalon exposures, where we're either not 
+                # deriving a new wls or using drift to do so
+                if self.cal_type != 'Etalon':
+                    fig, ax = plt.subplots(2,1, figsize=(12,5))
+                    for i in order_list:
+                        wls_i = poly_soln[i, :]
+                        rough_wls_i = rough_wls[i,:]
+                        ax[0].plot(wls_i - rough_wls_i, color='grey', alpha=0.5)
 
-                ax[0].set_title('Derived WLS - Approx WLS')
-                ax[0].set_xlabel('pixel')
-                ax[0].set_ylabel('[$\\rm \AA$]')
-                ax[1].set_xlabel('pixel')
-                ax[1].set_ylabel('[pixel]')
-                plt.tight_layout()
-                plt.savefig('{}/all_wls.png'.format(self.save_diagnostics_dir), dpi=250)
+                        pixel_sizes = rough_wls_i[1:] - rough_wls_i[:-1]
+                        ax[1].plot(
+                            (wls_i[:-1] - rough_wls_i[:-1]) / pixel_sizes, 
+                            color='grey', alpha=0.5
+                        )
+
+                    ax[0].set_title('Derived WLS - Approx WLS')
+                    ax[0].set_xlabel('pixel')
+                    ax[0].set_ylabel('[$\\rm \AA$]')
+                    ax[1].set_xlabel('pixel')
+                    ax[1].set_ylabel('[pixel]')
+                    plt.tight_layout()
+                    plt.savefig(
+                        '{}/all_wls.png'.format(self.save_diagnostics_dir), 
+                        dpi=250
+                    )
 
 
         if self.quicklook == True:
@@ -217,10 +225,11 @@ class WaveCalibration:
             tuple of:
                 np.array of float: (N_orders x N_pixels) derived wavelength 
                     solution for each pixel
-                dict: the peaks and wavelengths used for wavelength cal. Keys are ints
-                    representing order numbers, values are 2-tuples of:
+                dict: the peaks and wavelengths used for wavelength cal. Keys 
+                    are ints representing order numbers, values are 2-tuples of:
                         - lists of wavelengths corresponding to peaks
-                        - the corresponding (fractional) pixels on which the peaks fall
+                        - the corresponding (fractional) pixels on which the 
+                          peaks fall
         """    
 
         # 2D extracted spectra
@@ -244,7 +253,9 @@ class WaveCalibration:
                 print('\nRunning order # {}'.format(order_num))
 
             if plt_path is not None:
-                order_plt_path = '{}/order_diagnostics/order{}'.format(plt_path, order_num)
+                order_plt_path = '{}/order_diagnostics/order{}'.format(
+                    plt_path, order_num
+                )
                 if not os.path.isdir(order_plt_path):
                     os.makedirs(order_plt_path)
 
@@ -253,7 +264,9 @@ class WaveCalibration:
                 plt.title('Order # {}'.format(order_num))
                 plt.xlabel('pixel')
                 plt.ylabel('flux')
-                plt.savefig('{}/order_spectrum.png'.format(order_plt_path), dpi=250)
+                plt.savefig(
+                    '{}/order_spectrum.png'.format(order_plt_path), dpi=250
+                )
                 plt.close()
             else:
                 order_plt_path = None
@@ -266,7 +279,8 @@ class WaveCalibration:
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
 
-                fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
+                fitted_peak_pixels, detected_peak_pixels, \
+                    detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
                     order_flux, plot_path=order_plt_path
                 )
 
@@ -282,24 +296,24 @@ class WaveCalibration:
 
                 if self.cal_type == 'LFC':
                     wls, _ = self.mode_match(
-                        order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, comb_lines_angstrom, 
+                        order_flux, fitted_peak_pixels, good_peak_idx, 
+                        rough_wls_order, comb_lines_angstrom, 
                         print_update=print_update, plot_path=order_plt_path
                     )
-                    # TODO: - save pixel-wavelength pairs of LFC peaks
                 elif self.cal_type == 'Etalon':
 
-                    assert comb_lines_angstrom is None, '`comb_lines_angstrom` should not be set for Etalon frames.'
+                    assert comb_lines_angstrom is None, '`comb_lines_angstrom` \
+                        should not be set for Etalon frames.'
 
-                    wls = np.interp(fitted_peak_pixels[good_peak_idx], np.arange(n_pixels), rough_wls_order)
-                    
-                    # save pixel-wavelength mapping for detected etalon peaks and return
-                    # TODO: save LFC-derived wls as "official" wavelength solution for this image
-                    # have: - precise pixel locations of (potentially clipped) etalon peaks (fitted_peak_pixels[good_peak_idx])
-                    #       - precise LFC-derived pixel-wavelength sol
+                    wls = np.interp(
+                        fitted_peak_pixels[good_peak_idx], np.arange(n_pixels), 
+                        rough_wls_order
+                    )
 
                 fitted_peak_pixels = fitted_peak_pixels[good_peak_idx]
 
-            # use expected peak locations to compute updated precise wavelengths for each pixel
+            # use expected peak locations to compute updated precise wavelengths
+            # for each pixel
             else:
 
                 if order_plt_path is not None:
@@ -330,9 +344,8 @@ class WaveCalibration:
 
                 fitted_peak_pixels = gauss_coeffs[1,:]
             
-            # Only calculate a new wavelength solution if we aren't using an Etalon frame.
-            # Computing a drift value and using it to update the wavelength solution
-            # is handled by the inst drift module.
+            # if we don't have an etalon frame, we won't use drift to 
+            # calculate the wls
             if self.cal_type != 'Etalon':
 
                 # calculate the wavelength solution for the order
@@ -356,7 +369,8 @@ class WaveCalibration:
                     pixel_sizes = rough_wls_order[1:] - rough_wls_order[:-1]
                     ax[1].plot(
                         np.arange(n_pixels - 1), 
-                        (leg_out(np.arange(n_pixels - 1)) - rough_wls_order[:-1]) / pixel_sizes, 
+                        (leg_out(np.arange(n_pixels - 1)) - rough_wls_order[:-1]) / 
+                            pixel_sizes, 
                         color='k'
                     )
 
@@ -385,9 +399,19 @@ class WaveCalibration:
                     np.sqrt(sum_of_squared_resids) / 
                     np.sum(num_detected_peaks)
                 )
-                print('Overall absolute precision: {:2.2f} cm/s'.format(overall_std_error))
+                print('Overall absolute precision: {:2.2f} cm/s'.format(
+                        overall_std_error
+                    )
+                )
+            
+            # compute drift, and use this to update the wavelength solution
+            else:
+                pass
 
-            wavelengths_and_pixels[order_num] = {'known_wavelengths_vac':wls, 'line_positions':fitted_peak_pixels}
+            wavelengths_and_pixels[order_num] = {
+                'known_wavelengths_vac':wls, 
+                'line_positions':fitted_peak_pixels
+            }
 
         return poly_soln_final_array, wavelengths_and_pixels
 
@@ -395,8 +419,9 @@ class WaveCalibration:
         """Removes bad orders from order list if between min and max orders to test.
 
         Args:
-            step (int): Interval at which to test orders. Used to skip orders for QLP.
-                Defaults to 1, which means every order will be tested on and none will be removed.
+            step (int): Interval at which to test orders. Used to skip orders 
+                for QLP. Defaults to 1, which means every order will be tested 
+                on and none will be removed.
 
         Returns:
             list: List of orders to run wavelength calibration on.
@@ -449,20 +474,36 @@ class WaveCalibration:
             if i == self.n_sections - 1:
                 indices = np.arange(i * n_pixels // self.n_sections, n_pixels)
             else:
-                indices = np.arange(i * n_pixels // self.n_sections, (i+1) * n_pixels // self.n_sections)
+                indices = np.arange(
+                    i * n_pixels // self.n_sections, 
+                    (i+1) * n_pixels // self.n_sections
+                )
 
-            fitted_peaks_section, detected_peaks_section, peak_heights_section, gauss_coeffs_section = self.find_peaks(order_flux[indices])
+            fitted_peaks_section, detected_peaks_section, peak_heights_section, \
+                gauss_coeffs_section = self.find_peaks(order_flux[indices])
 
-            detected_peak_heights = np.append(detected_peak_heights, peak_heights_section)
+            detected_peak_heights = np.append(
+                detected_peak_heights, peak_heights_section
+            )
             gauss_coeffs = np.append(gauss_coeffs, gauss_coeffs_section, axis=1)
 
             if i == 0:
-                fitted_peak_pixels = np.append(fitted_peak_pixels, fitted_peaks_section)
-                detected_peak_pixels = np.append(detected_peak_pixels, detected_peaks_section)
+                fitted_peak_pixels = np.append(
+                    fitted_peak_pixels, fitted_peaks_section
+                )
+                detected_peak_pixels = np.append(
+                    detected_peak_pixels, detected_peaks_section
+                )
 
             else:
-                fitted_peak_pixels = np.append(fitted_peak_pixels, fitted_peaks_section + i * n_pixels // self.n_sections)
-                detected_peak_pixels = np.append(detected_peak_pixels, detected_peaks_section + i * n_pixels // self.n_sections)
+                fitted_peak_pixels = np.append(
+                    fitted_peak_pixels, 
+                    fitted_peaks_section + i * n_pixels // self.n_sections
+                )
+                detected_peak_pixels = np.append(
+                    detected_peak_pixels, 
+                    detected_peaks_section + i * n_pixels // self.n_sections
+                )
         
         if plot_path is not None:
             plt.figure()
@@ -479,7 +520,12 @@ class WaveCalibration:
                 ax.plot(order_flux,color='k', lw=0.1)
                 ax.scatter(detected_peak_pixels,detected_peak_heights,s=1,color='r')
                 ax.set_xlim(zoom_section_pixels * i, zoom_section_pixels * (i+1))
-                ax.set_ylim(0,np.max(order_flux[zoom_section_pixels * i : zoom_section_pixels * (i+1)]))
+                ax.set_ylim(
+                    0,
+                    np.max(
+                        order_flux[zoom_section_pixels * i : zoom_section_pixels * (i+1)]
+                    )
+                )
 
             plt.tight_layout()
             plt.savefig('{}/detected_peaks_zoom.png'.format(plot_path),dpi=250)
@@ -771,9 +817,17 @@ class WaveCalibration:
                 for j in np.arange(num_input_lines):
 
                     # if peak in range:
-                    if (coefs[1,j] > i * zoom_section_pixels) & (coefs[1,j] < (i+1) * zoom_section_pixels):
+                    if (
+                        (coefs[1,j] > i * zoom_section_pixels) & 
+                        (coefs[1,j] < (i+1) * zoom_section_pixels)
+                    ):
 
-                        xs = np.floor(coefs[1,j]) - gaussian_fit_width + np.linspace(0, 2 * gaussian_fit_width, 2 * gaussian_fit_width)
+                        xs = np.floor(coefs[1,j]) - gaussian_fit_width + \
+                            np.linspace(
+                                0, 
+                                2 * gaussian_fit_width, 
+                                2 * gaussian_fit_width
+                            )
                         gaussian_fit = self.integrate_gaussian(
                             xs, coefs[0,j], coefs[1,j], coefs[2,j], coefs[3,j]
                         )
@@ -1183,80 +1237,12 @@ class WaveCalibration:
         return calflux
 
     ## instrument drift fxns ## plot_drift, calcdrift_polysolution
-    
-    def plot_drift(self,wlpixelfile1,wlpixelfile2):
-        """Overall RV of cal data vs time for array of input files.
 
-        Args:
-            wlpixelfile1 ([type]): [description]
-            wlpixelfile2 ([type]): [description]
-        """
-        drift = self.calcdrift_polysolution(wlpixelfile1,wlpixelfile2)
-        obsname1 = wlpixelfile1.split('_')[1]
-        obsname2 = wlpixelfile2.split('_')[1]
-        
-        fig,ax = plt.subplots()
-        ax.axhline(0,color='grey',ls='--')
-        
-        plt.plot(
-            drift[:,0],drift[:,1],'ko',ls='-'
-        )
-        plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
-        plt.xlabel('order')
-        plt.ylabel('drift [cm s$^{-1}$]')
-        plt.savefig(self.figsave_name, dpi=250)
-
-    def calcdrift_polysolution(self,wlpixelfile1,wlpixelfile2):
-        peak_wavelengths_ang1 = np.load(
-            wlpixelfile1, allow_pickle=True
-        ).tolist()
-
-        peak_wavelengths_ang2 = np.load(
-            wlpixelfile2, allow_pickle=True
-        ).tolist()
-
-        orders = peak_wavelengths_ang1.keys()
-
-        drift_all_orders = np.empty((len(orders),2))
-
-        # make a dataframe and join on wavelength
-        for i, order_num in enumerate(orders):
-
-            order_wls1 = pd.DataFrame(
-                data = np.transpose([
-                    peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
-                    peak_wavelengths_ang1[order_num]['line_positions']
-                ]),
-                columns=['wl', 'pixel1']
-            )
-
-            order_wls2 = pd.DataFrame(
-                data = np.transpose([
-                    peak_wavelengths_ang2[order_num]['known_wavelengths_vac'],
-                    peak_wavelengths_ang2[order_num]['line_positions']
-                ]),
-                columns=['wl', 'pixel2']
-            )
-
-            order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
-
-            delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
-            delta_pixel = order_wls.pixel2.values[1:] - order_wls.pixel1.values[:-1]
-
-            drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
-
-            drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda # TODO: is this the correct way to compute drift?
-
-            drifts_cms = (drift_wl / order_wls.index.values[1:] * cst.c).to(u.cm/u.s).value
-
-            drift_all_orders[i,0] = order_num
-            drift_all_orders[i,1] = np.mean(drifts_cms)
-
-        return drift_all_orders
     
     ## plotting/unused? ## plot_poly_coefs, calcdrift_ccf, 
     def plot_poly_coefs(self,coef_num,order_num):
-        """*** to implement in the future: polynomail coeffs vs time for specific order (inputs: poly num, order num)
+        """*** to implement in the future: polynomail coeffs vs time for 
+            specific order (inputs: poly num, order num)
 
         Args:
             coef_num ([type]): [description]
@@ -1304,3 +1290,78 @@ class WaveCalibration:
 
         np.save(file_name,wave_pxl_data,allow_pickle=True)
         
+def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
+
+    peak_wavelengths_ang1 = np.load(
+        wlpixelfile1, allow_pickle=True
+    ).tolist()
+
+    peak_wavelengths_ang2 = np.load(
+        wlpixelfile2, allow_pickle=True
+    ).tolist()
+
+    orders1 = list(peak_wavelengths_ang1.keys())
+    orders2 = list(peak_wavelengths_ang2.keys())
+
+    orders = np.intersect1d(orders1, orders2)
+
+    drift_all_orders = np.empty((len(orders),2))
+
+    # make a dataframe and join on wavelength
+    for i, order_num in enumerate(orders):
+
+        order_wls1 = pd.DataFrame(
+            data = np.transpose([
+                peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
+                peak_wavelengths_ang1[order_num]['line_positions']
+            ]),
+            columns=['wl', 'pixel1']
+        )
+
+        order_wls2 = pd.DataFrame(
+            data = np.transpose([
+                peak_wavelengths_ang2[order_num]['known_wavelengths_vac'],
+                peak_wavelengths_ang2[order_num]['line_positions']
+            ]),
+            columns=['wl', 'pixel2']
+        )
+
+        order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
+
+        delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
+        delta_pixel = order_wls.pixel1.values[1:] - order_wls.pixel1.values[:-1]
+
+        drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
+
+        drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda
+
+        alpha = (drift_wl / order_wls.index.values[1:])
+
+        drifts_cms = (alpha**2 + 2 * alpha) / (alpha**2 + 2 * alpha + 2) * cst.c.to(u.cm/u.s).value
+
+        drift_all_orders[i,0] = order_num
+        drift_all_orders[i,1] = np.mean(drifts_cms)
+
+    return drift_all_orders
+
+def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
+    """Overall RV of cal data vs time for array of input files.
+
+    Args:
+        wlpixelfile1 ([type]): [description]
+        wlpixelfile2 ([type]): [description]
+    """
+    drift = calcdrift_polysolution(wlpixelfile1,wlpixelfile2)
+    obsname1 = wlpixelfile1.split('_')[1]
+    obsname2 = wlpixelfile2.split('_')[1]
+    
+    fig,ax = plt.subplots()
+    ax.axhline(0,color='grey',ls='--')
+    
+    plt.plot(
+        drift[:,0],drift[:,1],'ko',ls='-'
+    )
+    plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
+    plt.xlabel('order')
+    plt.ylabel('drift [cm s$^{-1}$]')
+    plt.savefig(figsave_name, dpi=250)
