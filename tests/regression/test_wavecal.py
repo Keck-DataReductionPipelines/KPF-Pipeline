@@ -52,10 +52,14 @@ def thar_run():
     wl_soln, wls_and_pixels = th_init.run_wavelength_cal(calflux,peak_wavelengths_ang=peak_wavelengths_ang, 
         rough_wls=rough_wls)
     
-# def etalon_run():
-#     cal_type = 'Etalon'
-#     quicklook = False
-#     #peak_wavelengths_ang = 
-#     et_init = WaveCalibration(cal_type,quicklook)
-#     wl_soln, wls_and_pixels = et_init.run_wavelength_cal()
-    
+def etalon_run():
+    cal_type = 'Etalon'
+    quicklook = False
+    l1_obj = fits.open('/data/NEIDdata/TAUCETI_20191217/L1/neidL1_20191217T023129.fits')
+    calflux = l1_obj[cal_orderlette_name].data
+    master_wls_file = fits.open('/data/NEIDdata/TAUCETI/L2/neidL2_20210714T063111.fits')
+    rough_wls = master_wls_file['CALWAVE'].data
+    linelist_path = '/data/KPF-Pipeline-TestData/NEIDdata/neidMaster_ThArLines20210218_v001.npy'
+    peak_wavelengths_ang = np.load(linelist_path, allow_pickle=True).tolist()
+    et_init = WaveCalibration(cal_type,quicklook)
+    wl_soln, wls_and_pixels = et_init.run_wavelength_cal(calflux,rough_wls,peak_wavelengths_ang=peak_wavelengths_ang)
