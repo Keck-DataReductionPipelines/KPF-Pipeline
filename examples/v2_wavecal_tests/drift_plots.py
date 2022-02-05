@@ -11,7 +11,7 @@ First, plot our wavelength solutions compared to the NEID team's
 """
 
 path_prefix = '/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/output_wavecal/'
-file_dirs = np.sort(glob.glob('{}*/'.format(path_prefix)))[0:13]
+file_dirs = np.sort(glob.glob('{}*/'.format(path_prefix)))
 obs_nums = [f.split('/')[-2] for f in file_dirs]
 
 wlpixelfile1 = '{}/Etalon_20210221T{}.npy'.format(file_dirs[0], obs_nums[0])
@@ -45,6 +45,7 @@ for j, obnum in enumerate(obs_nums):
     ax[1].set_ylabel('Our WLS - NEID WLS [pix]')
 
     plt.savefig('{}/us_vs_NEID.png'.format(file_dirs[j]), dpi=250)
+    plt.close()
 
 """
 Next, make a gif showing the order-by-order drift over the three exposures
