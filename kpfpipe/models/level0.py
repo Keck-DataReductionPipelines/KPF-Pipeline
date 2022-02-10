@@ -98,6 +98,10 @@ class KPF0(KPFDataModel):
                 continue
             
             self.header[hdu.name] = hdu.header
+            
+        self.l0filename = self.filename
+        self.l1filename = self.filename.replace('.fits', '_L1.fits')
+        self.l2filename = self.filename.replace('.fits', '_L2.fits')
 
     def _read_from_NEID(self, hdul):
         '''
