@@ -350,7 +350,7 @@ class WaveCalibration:
 
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
-                    wls, n_pixels, fitted_peak_pixels, 
+                    wls, n_pixels, fitted_peak_pixels, detected_peak_heights,
                     plot_path=order_plt_path
                 )
                 poly_soln_final_array[order_num,:] = polynomial_wls
@@ -1049,7 +1049,7 @@ class WaveCalibration:
 
         return popt  
           
-    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, plot_path=None):
+    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, detected_peak_heights, plot_path=None):
         """
         Given precise wavelengths of detected LFC order_flux lines, fits a 
         polynomial wavelength solution.
@@ -1060,6 +1060,9 @@ class WaveCalibration:
             n_pixels (int): number of pixels in the order
             fitted_peak_pixels (np.array): array of true detected peak locations as 
                 determined by Gaussian fitting.
+            detected_peak_heights (np.array): detected heights of peaks. We use
+                this to weight the peaks in the polynomial fit, assuming Poisson
+                errors.
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
 
@@ -1071,10 +1074,9 @@ class WaveCalibration:
                     returns the Legendre polynomial wavelength solutions
         """
 
-        # fitted_heights = gauss_coeffs[0,:]
-        # weights = np.sqrt(fitted_heights)
+        weights = 1 / np.sqrt(detected_peak_heights)
         if self.fit_type == 'Legendre': 
-            leg_out = Legendre.fit(fitted_peak_pixels, wls, self.fit_order)
+            leg_out = Legendre.fit(fitted_peak_pixels, wls, self.fit_order, w=weights)
             our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
             if plot_path is not None:
@@ -1229,7 +1231,8 @@ class WaveCalibration:
             k = mask[1,i]
             calflux[i + self.min_order, j:k] = 0
 
-        # orders 75 & 86 have some additional weird stuff going on
+        # orders 71, 75 & 86 have some additional weird stuff going on
+        calflux[71, 1550:1560] = 0
         calflux[75, 1930:1940] = 0
         calflux[75, 6360:6366] = 0
         calflux[86, 1930:1940] = 0

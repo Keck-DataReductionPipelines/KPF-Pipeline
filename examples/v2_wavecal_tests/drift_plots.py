@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
+from astropy import units as u, constants as cst
 from matplotlib.animation import FuncAnimation
 import glob
 
@@ -14,11 +15,18 @@ path_prefix = '/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/output_wa
 file_dirs = np.sort(glob.glob('{}*/'.format(path_prefix)))
 obs_nums = [f.split('/')[-2] for f in file_dirs]
 
-wlpixelfile1 = '{}/Etalon_20210221T{}.npy'.format(file_dirs[0], obs_nums[0])
+# if only running on a subset of files (else comment out next two lines)
+# obs_nums = ['020928','022017','041712','042749','062335','063343','080910']
+# file_dirs = [f for f in file_dirs if f.split('/')[-2] in obs_nums]
+######################################
+
+wlpixelfile1 = '{}Etalon_20210221T{}.npy'.format(file_dirs[0], obs_nums[0])
 
 obstimes = np.zeros(len(file_dirs))
 first_file = fits.open('{}neidL1_20210221T{}_L1_wave.fits'.format(path_prefix, obs_nums[0]))
 obstimes[0] = first_file['PRIMARY'].header['OBSJD']
+
+avg_drift_neid = np.zeros(len(file_dirs) - 1) 
 
 for j, obnum in enumerate(obs_nums):
 
@@ -30,6 +38,13 @@ for j, obnum in enumerate(obs_nums):
     # read in NEID team solution
     neid_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/L1/neidL1_20210221T{}.fits'.format(obs_nums[j]))
     neid_wls = neid_file['CALWAVE'].data
+
+    if j == 0:
+        neid_master_wls = neid_file['CALWAVE'].data
+    else:
+        # back out the drift that was applied to the NEID wls
+        neid_delta_wl = cst.c.to(u.cm / u.s).value * (neid_master_wls - neid_wls) / neid_master_wls # [cm/s]
+        avg_drift_neid[j - 1] = np.nanmedian(neid_delta_wl)
 
     # make a difference plot
     fig, ax = plt.subplots(2, 1, figsize=(15,7))
@@ -80,9 +95,9 @@ animation.save('{}drift.gif'.format(path_prefix))
 # """
 
 plt.figure()
-plt.plot((obstimes[1:] - obstimes[0]) * 24, avg_drift, 'ro', ls='--', color='k')
+plt.plot((obstimes[1:] - obstimes[0]) * 24, avg_drift, 'ro', ls='--', label='KPF DRP (std(KPF - NEID) = {:.1f} cm/s)'.format(np.std(avg_drift - avg_drift_neid)))
+plt.plot((obstimes[1:] - obstimes[0]) * 24, avg_drift_neid, 'k*', ls=':', color='k', label='NEID Team')
+plt.legend()
 plt.xlabel('$\Delta$ time [hr]')
 plt.ylabel('order-averaged drift [cm/s]')
 plt.savefig('{}drift.png'.format(path_prefix), dpi=250)
-
-
