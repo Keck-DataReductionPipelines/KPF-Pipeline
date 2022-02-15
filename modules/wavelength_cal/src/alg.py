@@ -386,7 +386,7 @@ class WaveCalibration:
 
                 # compute various RV precision values for order
                 poly_precision, abs_precision = self.calculate_rv_precision(
-                    fitted_peak_pixels, wls, leg_out, plot_path=order_plt_path, 
+                    fitted_peak_pixels, wls, leg_out, rough_wls_order, plot_path=order_plt_path, 
                     print_update=print_update
                 )
 
@@ -1102,15 +1102,16 @@ class WaveCalibration:
         return our_wavelength_solution_for_order, leg_out
 
     def calculate_rv_precision(
-        self, fitted_peak_pixels, wls, leg_out, 
+        self, fitted_peak_pixels, wls, leg_out, rough_wls,
         print_update=True, plot_path=None
     ):
         """
-        Calculates 1) RV precision from the difference between the known wavelengths of pixels
-        containing peak flux values and the fitted wavelengths of the same
-        pixels, generated using a polynomial wavelength solution, and 2)
-        absolute RV precision from the difference between contiguous peaks in
-        RV space.
+        Calculates 1) RV precision from the difference between the known (from 
+        physics) wavelengths of pixels containing peak flux values and the 
+        fitted wavelengths of the same pixels, generated using a polynomial 
+        wavelength solution ("absolute RV precision") and 2) RV precision from
+        the difference between the "master" wavelength solution and our 
+        fitted wavelength solution ("relative RV precision")
 
         Args:
             fitted_peak_pixels (np.array of float): array of true detected peak locations as 
@@ -1119,37 +1120,46 @@ class WaveCalibration:
                 from fundamental physics or another wavelength solution.
             leg_out (func): a Python function that, given an array of pixel 
                 locations, returns the Legendre polynomial wavelength solutions
+            rough_wls (np.array of float): rough wavelength values for each
+                pixel in the order [Angstroms]
             print_update (bool): If true, prints standard error per order.
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
 
         Returns:
             tuple of:
-                float: polynomial RV precision in cm/s
                 float: absolute RV precision in cm/s
+                float: relative RV precision in cm/s
         """
         our_wls_peak_pos = leg_out(fitted_peak_pixels) 
 
-        # polynomial precision of order
-        residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
-        poly_precision_cm_s = 100 * np.std(residual)/np.sqrt(len(fitted_peak_pixels))
-
-        # absolute RV precision of order, i.e. std(delta wavelength of peaks/lambda) / sqrt(num peaks))
-        abs_residual = (wls[1:] - wls[:-1]) * scipy.constants.c / wls[1:]
+        # absolute/polynomial precision of order = difference between fundemental wavelengths
+        # and our wavelength solution wavelengths for (fractional) peak pixels
+        abs_residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
         abs_precision_cm_s = 100 * np.std(abs_residual)/np.sqrt(len(fitted_peak_pixels))
 
+        # relative RV precision of order = difference between rough wls wavelengths
+        # and our wavelength solution wavelengths for all pixels
+        n_pixels = len(rough_wls)
+        rel_residual = (leg_out(np.arange(n_pixels)) -  rough_wls) * scipy.constants.c /rough_wls
+        rel_precision_cm_s = 100 * np.std(rel_residual)/np.sqrt(n_pixels)
+
         if print_update:
-            print('Polynomial standard error (this order): {:.2f} cm/s'.format(poly_precision_cm_s))
+            print('Absolute standard error (this order): {:.2f} cm/s'.format(abs_precision_cm_s))
+            print('Relative standard error (this order): {:.2f} cm/s'.format(rel_precision_cm_s))
 
         if plot_path is not None:
-            plt.figure()
-            plt.plot(residual)
-            plt.xlabel('pixel')
-            plt.ylabel('error [m/s]')
+            fig, ax = plt.subplots(2,1)
+            ax[0].plot(abs_residual)
+            ax[0].xlabel('pixel')
+            ax[0].ylabel('absolute error [m/s]')
+            ax[1].plot(rel_residual)
+            ax[1].xlabel('pixel')
+            ax[1].ylabel('relative error [m/s]')
             plt.savefig('{}/rv_precision.png'.format(plot_path), dpi=250)
             plt.close()
 
-        return poly_precision_cm_s, abs_precision_cm_s
+        return rel_precision_cm_s, abs_precision_cm_s
 
     def mask_array_neid(self, calflux, n_orders):
         """ Creates ad-hoc mask to remove bad pixel regions specific to order. 

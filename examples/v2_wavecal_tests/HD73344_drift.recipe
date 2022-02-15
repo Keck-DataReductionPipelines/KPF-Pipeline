@@ -1,8 +1,9 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
-first_etalon_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
-first_etalon_l1 = kpf1_from_fits(first_etalon_file, data_type='NEID')
-rough_wls = first_etalon_l1['CALWAVE'] # use NEID team wls for first exposure as rough wls
+main_etalon_filenum = 1
+main_etalon_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[main_etalon_filenum] + '.fits'
+main_etalon_l1 = kpf1_from_fits(main_etalon_file, data_type='NEID')
+rough_wls = main_etalon_l1['CALWAVE'] # use NEID team wls for first exposure as rough wls
 output_ext = config.ARGUMENT.output_ext
 orderlette_names = config.ARGUMENT.cal_orderlette_name
 quicklook = config.ARGUMENT.quicklook
@@ -11,7 +12,7 @@ output_dir = config.ARGUMENT.output_dir + config.ARGUMENT.obs_list[0] + '/'
 
 # first file: just compute peak positions & save
 wave_soln = WaveCalibrate(
-    first_etalon_l1, 'Etalon', orderlette_names, True, quicklook, 'NEID', output_ext,
+    main_etalon_l1, 'Etalon', orderlette_names, True, quicklook, 'NEID', output_ext,
     rough_wls = rough_wls, save_diagnostics = save_diagnostics, 
     output_dir=output_dir
 )
