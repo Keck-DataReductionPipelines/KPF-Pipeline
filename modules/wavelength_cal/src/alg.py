@@ -347,7 +347,7 @@ class WaveCalibration:
 
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
-                    wls, n_pixels, fitted_peak_pixels, detected_peak_heights,
+                    wls, n_pixels, fitted_peak_pixels, detected_peak_heights[good_peak_idx],
                     plot_path=order_plt_path
                 )
                 poly_soln_final_array[order_num,:] = polynomial_wls
@@ -382,7 +382,7 @@ class WaveCalibration:
                     plt.close()
 
                 # compute various RV precision values for order
-                poly_precision, abs_precision = self.calculate_rv_precision(
+                rel_precision, abs_precision = self.calculate_rv_precision(
                     fitted_peak_pixels, wls, leg_out, rough_wls_order, plot_path=order_plt_path, 
                     print_update=print_update
                 )
@@ -390,17 +390,7 @@ class WaveCalibration:
                 order_precisions.append(abs_precision)
                 num_detected_peaks.append(len(fitted_peak_pixels))
 
-                squared_resids = (np.array(order_precisions) * num_detected_peaks)**2
-                sum_of_squared_resids = np.sum(squared_resids)
-                overall_std_error = (
-                    np.sqrt(sum_of_squared_resids) / 
-                    np.sum(num_detected_peaks)
-                )
-                print('Overall absolute precision: {:2.2f} cm/s'.format(
-                        overall_std_error
-                    )
-                )
-            
+        
             # compute drift, and use this to update the wavelength solution
             else:
                 pass
@@ -409,6 +399,21 @@ class WaveCalibration:
                 'known_wavelengths_vac':wls, 
                 'line_positions':fitted_peak_pixels
             }
+
+        # for lamps and LFC, we can compute absolute precision across all orders
+        if self.cal_type != 'Etalon':
+
+            squared_resids = (np.array(order_precisions) * num_detected_peaks)**2
+            sum_of_squared_resids = np.sum(squared_resids)
+            overall_std_error = (
+                np.sqrt(sum_of_squared_resids) / 
+                np.sum(num_detected_peaks)
+            )
+
+            print('\n\n\nOverall absolute precision (all orders): {:2.2f} cm/s\n\n\n'.format(
+                    overall_std_error
+                )
+            )
 
         return poly_soln_final_array, wavelengths_and_pixels
 
@@ -1148,11 +1153,11 @@ class WaveCalibration:
         if plot_path is not None:
             fig, ax = plt.subplots(2,1)
             ax[0].plot(abs_residual)
-            ax[0].xlabel('pixel')
-            ax[0].ylabel('absolute error [m/s]')
+            ax[0].set_xlabel('pixel')
+            ax[0].set_ylabel('absolute error [m/s]')
             ax[1].plot(rel_residual)
-            ax[1].xlabel('pixel')
-            ax[1].ylabel('relative error [m/s]')
+            ax[1].set_xlabel('pixel')
+            ax[1].set_ylabel('relative error [m/s]')
             plt.savefig('{}/rv_precision.png'.format(plot_path), dpi=250)
             plt.close()
 
@@ -1300,78 +1305,78 @@ class WaveCalibration:
 
         np.save(file_name,wave_pxl_data,allow_pickle=True)
         
-    def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
+def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
 
-        peak_wavelengths_ang1 = np.load(
-            wlpixelfile1, allow_pickle=True
-        ).tolist()
+    peak_wavelengths_ang1 = np.load(
+        wlpixelfile1, allow_pickle=True
+    ).tolist()
 
-        peak_wavelengths_ang2 = np.load(
-            wlpixelfile2, allow_pickle=True
-        ).tolist()
+    peak_wavelengths_ang2 = np.load(
+        wlpixelfile2, allow_pickle=True
+    ).tolist()
 
-        orders1 = list(peak_wavelengths_ang1.keys())
-        orders2 = list(peak_wavelengths_ang2.keys())
+    orders1 = list(peak_wavelengths_ang1.keys())
+    orders2 = list(peak_wavelengths_ang2.keys())
 
-        orders = np.intersect1d(orders1, orders2)
+    orders = np.intersect1d(orders1, orders2)
 
-        drift_all_orders = np.empty((len(orders),2))
+    drift_all_orders = np.empty((len(orders),2))
 
-        # make a dataframe and join on wavelength
-        for i, order_num in enumerate(orders):
+    # make a dataframe and join on wavelength
+    for i, order_num in enumerate(orders):
 
-            order_wls1 = pd.DataFrame(
-                data = np.transpose([
-                    peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
-                    peak_wavelengths_ang1[order_num]['line_positions']
-                ]),
-                columns=['wl', 'pixel1']
-            )
-
-            order_wls2 = pd.DataFrame(
-                data = np.transpose([
-                    peak_wavelengths_ang2[order_num]['known_wavelengths_vac'],
-                    peak_wavelengths_ang2[order_num]['line_positions']
-                ]),
-                columns=['wl', 'pixel2']
-            )
-
-            order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
-
-            delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
-            delta_pixel = order_wls.pixel1.values[1:] - order_wls.pixel1.values[:-1]
-
-            drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
-
-            drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda
-
-            alpha = (drift_wl / order_wls.index.values[1:])
-
-            drifts_cms = (alpha**2 + 2 * alpha) / (alpha**2 + 2 * alpha + 2) * cst.c.to(u.cm/u.s).value
-
-            drift_all_orders[i,0] = order_num
-            drift_all_orders[i,1] = np.mean(drifts_cms)
-
-        return drift_all_orders
-
-    def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
-        """Overall RV of cal data vs time for array of input files.
-
-        Args:
-            wlpixelfile1 (str): Path to first wavelength solution file
-            wlpixelfile2 (str): Path to second wavelength solution file
-        """
-        drift = calcdrift_polysolution(wlpixelfile1,wlpixelfile2)
-        obsname1 = wlpixelfile1.split('_')[1]
-        obsname2 = wlpixelfile2.split('_')[1]
-
-        fig,ax = plt.subplots()
-        ax.axhline(0,color='grey',ls='--')
-
-        plt.plot(
-            drift[:,0],drift[:,1],'ko',ls='-'
+        order_wls1 = pd.DataFrame(
+            data = np.transpose([
+                peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
+                peak_wavelengths_ang1[order_num]['line_positions']
+            ]),
+            columns=['wl', 'pixel1']
         )
-        plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
-        plt.xlabel('order')
-        plt.ylabel('drift [cm s$^{-1}$]')
-        plt.savefig(figsave_name, dpi=250)
+
+        order_wls2 = pd.DataFrame(
+            data = np.transpose([
+                peak_wavelengths_ang2[order_num]['known_wavelengths_vac'],
+                peak_wavelengths_ang2[order_num]['line_positions']
+            ]),
+            columns=['wl', 'pixel2']
+        )
+
+        order_wls = order_wls1.set_index('wl').join(order_wls2.set_index('wl'))
+
+        delta_lambda = order_wls.index.values[1:] - order_wls.index.values[:-1]
+        delta_pixel = order_wls.pixel1.values[1:] - order_wls.pixel1.values[:-1]
+
+        drift_pixels = order_wls['pixel2'] - order_wls['pixel1']
+
+        drift_wl = drift_pixels.values[1:] / delta_pixel * delta_lambda
+
+        alpha = (drift_wl / order_wls.index.values[1:])
+
+        drifts_cms = (alpha**2 + 2 * alpha) / (alpha**2 + 2 * alpha + 2) * cst.c.to(u.cm/u.s).value
+
+        drift_all_orders[i,0] = order_num
+        drift_all_orders[i,1] = np.mean(drifts_cms)
+
+    return drift_all_orders
+
+def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
+    """Overall RV of cal data vs time for array of input files.
+
+    Args:
+        wlpixelfile1 (str): Path to first wavelength solution file
+        wlpixelfile2 (str): Path to second wavelength solution file
+    """
+    drift = calcdrift_polysolution(wlpixelfile1,wlpixelfile2)
+    obsname1 = wlpixelfile1.split('_')[1]
+    obsname2 = wlpixelfile2.split('_')[1]
+
+    fig,ax = plt.subplots()
+    ax.axhline(0,color='grey',ls='--')
+
+    plt.plot(
+        drift[:,0],drift[:,1],'ko',ls='-'
+    )
+    plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
+    plt.xlabel('order')
+    plt.ylabel('drift [cm s$^{-1}$]')
+    plt.savefig(figsave_name, dpi=250)

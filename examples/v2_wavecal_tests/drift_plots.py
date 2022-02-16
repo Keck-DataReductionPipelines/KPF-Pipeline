@@ -13,10 +13,15 @@ First, plot our wavelength solutions compared to the NEID team's
 
 path_prefix = '/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/output_wavecal/'
 file_dirs = np.sort(glob.glob('{}*/'.format(path_prefix)))
-obs_nums = [f.split('/')[-2] for f in file_dirs]
+obs_nums = np.array([f.split('/')[-2] for f in file_dirs])
+
+# choose a subset of the available results (>= 113642 selects just calibration frames for this night)
+file_dirs = file_dirs[(obs_nums.astype(int) >= 113642)]
+obs_nums = obs_nums[(obs_nums.astype(int) >= 113642)]
+##########################################
 
 # index of etalon file used as "main" file (on which peak finding is run)
-main_etalon_num = 1
+main_etalon_num = np.where(obs_nums == '113642')[0][0]
 
 wlpixelfile1 = '{}Etalon_20210221T{}.npy'.format(file_dirs[main_etalon_num], obs_nums[main_etalon_num])
 
@@ -26,7 +31,7 @@ obstimes[main_etalon_num] = main_file['PRIMARY'].header['OBSJD']
 
 avg_drift_neid = np.zeros(len(file_dirs)) 
 
-neid_master_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/L1/neidL1_20210221T{}.fits'.format(obs_nums[main_etalon_num]))
+neid_master_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID-cals/20220221/neidL1_20210221T{}.fits'.format(obs_nums[main_etalon_num]))
 neid_master_wls = neid_master_file['CALWAVE'].data
 
 for j, obnum in enumerate(obs_nums):
@@ -37,7 +42,10 @@ for j, obnum in enumerate(obs_nums):
     obstimes[j] = our_file['PRIMARY'].header['OBSJD']
 
     # read in NEID team solution
-    neid_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/L1/neidL1_20210221T{}.fits'.format(obs_nums[j]))
+    try:
+        neid_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID_HD73344/L1/neidL1_20210221T{}.fits'.format(obs_nums[j]))
+    except FileNotFoundError:
+        neid_file = fits.open('/data/KPF-Pipeline-TestData/DRP_V2_Testing/NEID-cals/20220221/neidL1_20210221T{}.fits'.format(obs_nums[j]))
     neid_wls = neid_file['CALWAVE'].data
 
     # back out the drift that was applied to the NEID wls
@@ -92,10 +100,18 @@ animation.save('{}drift.gif'.format(path_prefix))
 # Finally, plot the average drift in cm/s over the course of all exposures
 # """
 
-plt.figure()
-plt.plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift, 'ro', ls='--', label='KPF DRP (std(KPF - NEID) = {:.1f} cm/s)'.format(np.std(avg_drift - avg_drift_neid)))
-plt.plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift_neid, 'k*', ls=':', color='k', label='NEID Team')
-plt.legend()
-plt.xlabel('$\Delta$ time [hr]')
-plt.ylabel('order-averaged drift [cm/s]')
+fig, ax = plt.subplots(2, 1)
+plt.subplots_adjust(hspace=0)
+
+resid = np.abs(avg_drift - avg_drift_neid)
+# resid_clipped = resid[resid < 200]
+
+ax[0].plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift, 'ro', ls='--', label='KPF DRP (std(KPF - NEID) = {:.1f} cm/s)'.format(np.std(resid)))
+ax[0].plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift_neid, 'k*', ls=':', color='k', label='NEID Team')
+ax[0].legend()
+ax[1].plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift - avg_drift_neid, 'ro', ls='--')
+ax[1].axhline(0, ls='--', color='k')
+ax[1].set_xlabel('$\Delta$ time [hr]')
+ax[0].set_ylabel('order-averaged drift [cm/s]')
+ax[1].set_ylabel('residual [cm/s]')
 plt.savefig('{}drift.png'.format(path_prefix), dpi=250)
