@@ -345,9 +345,14 @@ class WaveCalibration:
             # calculate the wls
             if self.cal_type != 'Etalon':
 
+                if expected_peak_locs is None:
+                    peak_heights = detected_peak_heights[good_peak_idx]
+                else:
+                   peak_heights = fitted_peak_pixels
+
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
-                    wls, n_pixels, fitted_peak_pixels, detected_peak_heights[good_peak_idx],
+                    wls, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
                     plot_path=order_plt_path
                 )
                 poly_soln_final_array[order_num,:] = polynomial_wls
@@ -1051,7 +1056,7 @@ class WaveCalibration:
 
         return popt  
           
-    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, detected_peak_heights, plot_path=None):
+    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, peak_heights=None, plot_path=None):
         """
         Given precise wavelengths of detected LFC order_flux lines, fits a 
         polynomial wavelength solution.
@@ -1062,9 +1067,9 @@ class WaveCalibration:
             n_pixels (int): number of pixels in the order
             fitted_peak_pixels (np.array): array of true detected peak locations as 
                 determined by Gaussian fitting.
-            detected_peak_heights (np.array): detected heights of peaks. We use
-                this to weight the peaks in the polynomial fit, assuming Poisson
-                errors.
+            peak_heights (np.array): heights of peaks (either detected heights or 
+                fitted heights). We use this to weight the peaks in the polynomial 
+                fit, assuming Poisson errors. 
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
 
@@ -1076,7 +1081,7 @@ class WaveCalibration:
                     returns the Legendre polynomial wavelength solutions
         """
 
-        weights = 1 / np.sqrt(detected_peak_heights)
+        weights = 1 / np.sqrt(peak_heights)
         if self.fit_type == 'Legendre': 
             leg_out = Legendre.fit(fitted_peak_pixels, wls, self.fit_order, w=weights)
             our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))

@@ -9,14 +9,14 @@ import numpy as np
 # ylims_pix = [-.15, .15]
 
 # LFC, not for first time
-# filename = 'neidL1_20220130T135641'
-# savedir = 'LFC_yesprev'
-# ylims_pix = [-.15, .15]
+filename = 'neidL1_20220130T135641'
+savedir = 'LFC_yesprev'
+ylims_pix = [-.15, .15]
 
 # ThAr
-filename = 'neidL1_20220126T235959'
-savedir = 'ThAr'
-ylims_pix = [-1.5, 1.5]
+# filename = 'neidL1_20220126T235959'
+# savedir = 'ThAr'
+# ylims_pix = [-1.5, 1.5]
 
 #######################################
 
