@@ -42,7 +42,7 @@ class WaveCalibrate(KPF1_Primitive):
         alg (modules.wavelength_cal.src.alg.WaveCalibrate): Instance of `WaveCalibrate,` which has operation codes for wavelength calibration.
     """
     def __init__(self, action:Action, context:ProcessingContext) -> None:
-         """
+        """
         WaveCalibrate constructor.
         Args:
             action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveCalibrate` event issued in recipe:
@@ -54,7 +54,7 @@ class WaveCalibrate(KPF1_Primitive):
                 `action.args[5]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data/instrument type
                 `action.args[6]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing name of FITS extension to output result to
             context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
-       """ 
+        """ 
         KPF1_Primitive.__init__(self, action, context)
         
         self.l1_obj = self.action.args[0]
