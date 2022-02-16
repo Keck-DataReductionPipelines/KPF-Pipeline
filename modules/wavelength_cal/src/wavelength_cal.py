@@ -19,8 +19,42 @@ from modules.wavelength_cal.src.alg import WaveCalibration, calcdrift_polysoluti
 DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
+    """
+    This module defines class `WaveCalibrate,` which inherits from `KPF1_Primitive` and provides methods 
+    to perform the event `wavelength calibration` in the recipe.
     
+    Args:
+        KPF1_Primitive: Parent class
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveCalibrate` event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+    
+    Attributes:
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[0]`
+        cal_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[1]`
+        cal_orderlette_names (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
+        save_wl_pixel_toggle (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[3]`
+        quicklook (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[4]`
+        data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[5]`
+        output_ext (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[6]`
+        config_path (str): Path of config file for the computation of wavelength_calibration.
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger
+        alg (modules.wavelength_cal.src.alg.WaveCalibrate): Instance of `WaveCalibrate,` which has operation codes for wavelength calibration.
+    """
     def __init__(self, action:Action, context:ProcessingContext) -> None:
+         """
+        WaveCalibrate constructor.
+        Args:
+            action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveCalibrate` event issued in recipe:
+                `action.args[0]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 data
+                `action.args[1]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing calibration type
+                `action.args[2]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing names of calibration extensions
+                `action.args[3]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing bool regarding saving of wavelength-pixel solution
+                `action.args[4]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing bool regarding running of quicklook algorithms
+                `action.args[5]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data/instrument type
+                `action.args[6]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing name of FITS extension to output result to
+            context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+       """ 
         KPF1_Primitive.__init__(self, action, context)
         
         self.l1_obj = self.action.args[0]
@@ -71,7 +105,14 @@ class WaveCalibrate(KPF1_Primitive):
         )
 
     def _perform(self) -> None: 
+        """
+        Primitive action - perform wavelength calibration by calling method `wavelength_cal` from WaveCalibrate.
+        Depending on the type of calibration, will save/compute some combination of wavelength solution, 
+        wavelength-pixel map, instrument drift.
         
+        Returns:
+            Level 1 Data Object
+        """
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
             file_name_split = self.l1_obj.filename.split('_')
             datetime_suffix = file_name_split[-1].split('.')[0]
