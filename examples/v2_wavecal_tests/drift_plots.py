@@ -18,11 +18,6 @@ obs_nums = [f.split('/')[-2] for f in file_dirs]
 # index of etalon file used as "main" file (on which peak finding is run)
 main_etalon_num = 1
 
-# if only running on a subset of files (else comment out next two lines)
-# obs_nums = ['020928','022017','041712','042749','062335','063343','080910']
-# file_dirs = [f for f in file_dirs if f.split('/')[-2] in obs_nums]
-######################################
-
 wlpixelfile1 = '{}Etalon_20210221T{}.npy'.format(file_dirs[main_etalon_num], obs_nums[main_etalon_num])
 
 obstimes = np.zeros(len(file_dirs))
@@ -77,7 +72,7 @@ plt.ylim(-1000, 1000)
 plt.xlabel('order')
 plt.ylabel('drift [cm/s]')
 date_text = plt.text(78, 900, '')
-avg_drift = np.zeros(len(file_dirs) - 1)
+avg_drift = np.zeros(len(file_dirs))
 
 def AnimationFunction(i):
 
@@ -98,8 +93,8 @@ animation.save('{}drift.gif'.format(path_prefix))
 # """
 
 plt.figure()
-plt.plot((obstimes - obstimes[main_file]) * 24, avg_drift, 'ro', ls='--', label='KPF DRP (std(KPF - NEID) = {:.1f} cm/s)'.format(np.std(avg_drift - avg_drift_neid)))
-plt.plot((obstimes - obstimes[main_file]) * 24, avg_drift_neid, 'k*', ls=':', color='k', label='NEID Team')
+plt.plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift, 'ro', ls='--', label='KPF DRP (std(KPF - NEID) = {:.1f} cm/s)'.format(np.std(avg_drift - avg_drift_neid)))
+plt.plot((obstimes - obstimes[main_etalon_num]) * 24, avg_drift_neid, 'k*', ls=':', color='k', label='NEID Team')
 plt.legend()
 plt.xlabel('$\Delta$ time [hr]')
 plt.ylabel('order-averaged drift [cm/s]')

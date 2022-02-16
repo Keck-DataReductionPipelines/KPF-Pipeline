@@ -1,45 +1,28 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
-main_etalon_filenum = 1
-main_etalon_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[main_etalon_filenum] + '.fits'
+main_etalon_file = config.ARGUMENT.master_wls_file
 main_etalon_l1 = kpf1_from_fits(main_etalon_file, data_type='NEID')
 rough_wls = main_etalon_l1['CALWAVE'] # use NEID team wls for first exposure as rough wls
 output_ext = config.ARGUMENT.output_ext
 orderlette_names = config.ARGUMENT.cal_orderlette_name
 quicklook = config.ARGUMENT.quicklook
-save_diagnostics = config.ARGUMENT.save_diagnostics + config.ARGUMENT.obs_list[0] + '/'
-output_dir = config.ARGUMENT.output_dir + config.ARGUMENT.obs_list[0] + '/'
 
-# first file: just compute peak positions & save
-wave_soln = WaveCalibrate(
-    main_etalon_l1, 'Etalon', orderlette_names, True, quicklook, 'NEID', output_ext,
-    rough_wls = rough_wls, save_diagnostics = save_diagnostics, 
-    output_dir=output_dir
-)
+master_linelist_path = config.ARGUMENT.linelist_path
 
-obsname = config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0]
-output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
-result = to_fits(wave_soln, output_filename)
-
-master_linelist_path = config.ARGUMENT.output_dir + '/' + config.ARGUMENT.obs_list[0] + '/Etalon_20210221T' + config.ARGUMENT.obs_list[0] + '.npy'
-
-# rest of files: compute drift
 for ob in config.ARGUMENT.obs_list:
 
-    if ob != config.ARGUMENT.obs_list[0]:
+    L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + ob + '.fits'
+    etalon_l1_obj = kpf1_from_fits(L1_file, data_type='NEID')
 
-        L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + ob + '.fits'
-        etalon_l1_obj = kpf1_from_fits(L1_file, data_type='NEID')
+    output_dir = config.ARGUMENT.output_dir + ob + '/'
+    save_diagnostics = config.ARGUMENT.save_diagnostics + ob
 
-        output_dir = config.ARGUMENT.output_dir + ob + '/'
-        save_diagnostics = config.ARGUMENT.save_diagnostics + ob
+    wave_soln = WaveCalibrate(
+        etalon_l1_obj, 'Etalon', orderlette_names, True, quicklook, 'NEID', output_ext,
+        rough_wls = rough_wls, output_dir=output_dir, linelist_path=master_linelist_path, 
+        save_diagnostics=save_diagnostics
+    )
 
-        wave_soln = WaveCalibrate(
-            etalon_l1_obj, 'Etalon', orderlette_names, True, quicklook, 'NEID', output_ext,
-            rough_wls = rough_wls, output_dir=output_dir, linelist_path=master_linelist_path, 
-            save_diagnostics=save_diagnostics
-        )
-
-        obsname = config.ARGUMENT.obs_prefix + ob
-        output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
-        result = to_fits(wave_soln, output_filename)
+    obsname = config.ARGUMENT.obs_prefix + ob
+    output_filename = config.ARGUMENT.output_dir + obsname + config.ARGUMENT.lev1_suffix + '_wave' + '.fits'
+    result = to_fits(wave_soln, output_filename)
