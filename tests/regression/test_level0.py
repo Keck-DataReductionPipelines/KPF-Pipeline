@@ -89,10 +89,11 @@ def test_NEID():
 def test_exceptions():
     
     f = flist[0]
+
     f_naught = f.split('.')[0] # same file without .fits file extension
     data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
     
-    with pytest.raises(IOError):
+    with pytest.raises(NameError):
         data2 = KPF0()
         # Invalid file extension
         data2.from_fits(os.path.join(fpath, f_naught), 'NEID')
