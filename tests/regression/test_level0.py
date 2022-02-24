@@ -89,7 +89,6 @@ def test_NEID():
 def test_exceptions():
     
     f = flist[0]
-
     f_naught = f.split('.')[0] # same file without .fits file extension
     data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
     
