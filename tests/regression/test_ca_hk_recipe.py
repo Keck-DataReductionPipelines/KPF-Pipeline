@@ -7,7 +7,7 @@ test_data_dir = KPFPIPE_TEST_DATA + config.ARGUMENT.input_dir
 data_type = config.ARGUMENT.data_type
 output_dir = config.ARGUMENT.output_dir
 
-input_hk_pattern = test_data_dir + '2D/' + config.ARGUMENT.input_lev0_file_prefix
+input_hk_pattern = test_data_dir + '2D/' + config.ARGUMENT.input_lev0_file_prefix + '*.fits'
 input_trace_file = test_data_dir + 'masterfiles/' + config.ARGUMENT.input_trace_path
 
 fiber_list = config.ARGUMENT.hk_fiber_list
