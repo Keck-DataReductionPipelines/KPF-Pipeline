@@ -1,8 +1,9 @@
-test_data_dir = KPFPIPE_TEST_DATA
-
-data_type = config.ARGUMENT.data_type
+test_data_dir = KPFPIPE_TEST_DATA + config.ARGUMENT.input_dir
 #output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
 output_dir = config.ARGUMENT.output_dir
+input_2d_dir = test_data_dir + '2D/'
+
+data_type = config.ARGUMENT.data_type
 
 input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
 input_lev0_prefix = config.ARGUMENT.input_lev0_file_prefix
@@ -20,20 +21,9 @@ rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
 orderlet_names = config.ARGUMENT.orderlet_names
 
-op_tag = config.ARGUMENT.op_tag
 wave_from_lev1 = config.ARGUMENT.wave_from_lev1
 wave_fits = config.ARGUMENT.wave_fits
 
-l1_test_files = config.ARGUMENT.l1_test_files
-cal_type = config.ARGUMENT.wave_calibration_type
-save_wl_pixel_toggle = config.ARGUMENT.save_wl_pixel_toggle
-wavecal_output_ext = config.ARGUMENT.wave_calibration_output_fits_ext
-cal_orderlette_names = config.ARGUMENT.cal_orderlette_names
-quicklook = False
-
-#flat_rect = '', obs_rect='' for test_optimal_extraction.recipe (no clip file applied)
-#flat_rect = '_'+rect_method, obs_rect='_clip' for test_optimal_extraction_rect_clip.recipe (create rectification and op by clip file)
-#flat_rect = '_'+rect_method, obs_rect='_byclip' for test_optimal_extraction_clip.recipe (create op by clip file)
 channel_orientation_ref_path = KPFPIPE_TEST_DATA+config.ARGUMENT.channel_orientation_ref_path
 all_bias_files_path = KPFPIPE_TEST_DATA+config.ARGUMENT.all_bias_files_path
 pl_overscan_reg = config.ARGUMENT.pl_overscan_reg
@@ -51,11 +41,12 @@ L0_files_path = KPFPIPE_TEST_DATA+config.ARGUMENT.lev0_files_path
 quicklook = config.ARGUMENT.quicklook
 
 flat_rect = '_'+rect_method
-obs_rect = '_byclip'
+data_row_range = [0, -1]
+data_col_range = [0, -1]
+ccd_idx=[0, 1]
 
-invoke_subrecipe("./examples/test_kpf_bias_flat_corrections.recipe")
-invoke_subrecipe("./examples/test_kpf_order_trace.recipe")
-invoke_subrecipe('./examples/test_kpf_wavelength_calibration.recipe')
-invoke_subrecipe("./examples/test_kpf_optimal_extraction_clip.recipe")
-invoke_subrecipe("./examples/test_kpf_radial_velocity_reweight_2.recipe")
-
+#invoke_subrecipe("./examples/kpf_recipe/test_kpf_bias_flat_corrections.recipe")
+invoke_subrecipe("./examples/kpf_recipe/test_kpf_order_trace.recipe")
+invoke_subrecipe("./examples/kpf_recipe/test_kpf_optimal_extraction.recipe")
+invoke_subrecipe("./examples/kpf_recipe/test_kpf_radial_velocity_reweight.recipe")
+invoke_subrecipe("./examples/kpf_recipe/test_kpf_hk.recipe")

@@ -18,6 +18,6 @@ for flat_file_path in all_flat_files:
     #result = to_fits(final_flat_frames_file,flat_file_path)
 
 master_flat_data = FrameCombinePrimitive('flat',all_flat_files,lev0_ffi_exts,data_type)
-master_flat_result = to_fits(master_flat_data,test_data_dir + input_flat_pattern)
+master_flat_result = to_fits(master_flat_data, masterflat_path)
 
 
