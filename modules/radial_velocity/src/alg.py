@@ -771,7 +771,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         return rv_guess
 
     @staticmethod
-    def fit_ccf(result_ccf, rv_guess, velocities, velocity_cut=100.0):
+    def fit_ccf(result_ccf, rv_guess, velocities, velocity_cut=1000.0):
         """Gaussian fitting to the values of cross correlation vs. velocity steps.
 
         Find the radial velocity from the summation of cross correlation values over orders by the use of
@@ -820,6 +820,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             ccf_table['vel-'+str(i)] = ccf[:, i]
         results = pd.DataFrame(ccf_table)
         # results = pd.DataFrame(ccf)
+
         _, rv_result, _, _ = self.fit_ccf(
             ccf[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP])
 

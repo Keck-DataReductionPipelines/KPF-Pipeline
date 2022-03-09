@@ -1,11 +1,16 @@
 from modules.spectral_extraction.src.order_rectification import OrderRectification
 from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
 
-lev0_flat_pattern = test_data_dir + input_flat_pattern
-lev0_science_pattern = test_data_dir + input_lev0_prefix
+lev0_flat_pattern = input_2d_dir + input_flat_pattern + '*.fits'
+lev0_science_pattern = input_2d_dir + input_lev0_prefix + '*.fits'
+#output_trace = output_dir + config.ARGUMENT.output_trace
+output_trace = test_data_dir + config.ARGUMENT.output_trace
+output_extraction = output_dir + config.ARGUMENT.output_extraction
+output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
+
 origin = [data_col_range[0], data_row_range[0]]
 ccd_idx=[0, 1]
-start_order=[4, 1]
+start_order=[0, 1]
 
 for lev0_flat_file in find_files(lev0_flat_pattern):
 	_, short_lev0_flat = split(lev0_flat_file)
@@ -14,14 +19,14 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 	lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type=data_type)
 
 	# make flat rectification
-	output_lev0_flat_rect = output_dir + lev0_flat_stem + flat_stem_suffix + flat_rect + '.fits'
+	output_lev0_flat_rect = output_extraction + lev0_flat_stem + flat_rect + '.fits'
 	if not find_files(output_lev0_flat_rect):
 		lev0_flat_rect = lev0_flat_data
 		op_data = None
 		for idx in ccd_idx:
 			ccd = ccd_list[idx]
-			clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd 
-			trace_file = output_dir + lev0_flat_stem + '_' + ccd_list[idx] + flat_stem_suffix + '.csv'
+			clip_file = output_clip + lev0_flat_stem + '_' + rect_method + '_' + ccd
+			trace_file = output_trace + lev0_flat_stem + '_' + ccd_list[idx] + '.csv'
 			lev0_flat_rect = OrderRectification(None, lev0_flat_rect, orderlet_names=orderlet_names[idx],
 						start_order=start_order[idx], 
 						trace_file=trace_file, data_extension=ccd,
@@ -35,27 +40,27 @@ for lev0_flat_file in find_files(lev0_flat_pattern):
 	for input_lev0_file in find_files(lev0_science_pattern):
 		_, short_lev0_file = split(input_lev0_file)
 		lev0_stem, lev0_ext = splitext(short_lev0_file)
-		output_lev1_rect_file = output_dir + lev0_stem + obs_rect + '_' + rect_method + '_' + extract_method + op_tag + lev1_stem_suffix + '.fits'    	
+		output_lev1_file = output_extraction + lev0_stem  + '_' + rect_method + '_' + extract_method + lev1_stem_suffix + '.fits'    	
 
-		if not find_files(output_lev1_rect_file):
+		if not find_files(output_lev1_file):
 			lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 			op_data = None
 			for idx in ccd_idx:
 				ccd = ccd_list[idx]
 				order_name = orderlet_names[idx]
-				trace_file = output_dir + lev0_flat_stem + '_' + ccd_list[idx] + flat_stem_suffix + '.csv'
-				clip_file = output_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem+ '_' + ccd
+				trace_file = output_trace + lev0_flat_stem + '_' + ccd_list[idx] + '.csv'
+				clip_file = output_clip + lev0_flat_stem+ '_' + rect_method + '_' +  ccd
 	
 				wavecal_data = None
 				if wave_fits[idx]:
-					wavecal_data = kpf0_from_fits(test_data_dir+wave_fits[idx], data_type='NEID')
+					wavecal_data = kpf0_from_fits(test_data_dir + wave_fits[idx], data_type='NEID')
 							
 				op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data, orderlet_names=order_name,
 						start_order=start_order[idx],
 						rectification_method=rect_method, extraction_method=extract_method, 
 						clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
 						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1[idx])
-			result = to_fits(op_data, output_lev1_rect_file)
+			result = to_fits(op_data, output_lev1_file)
 	
 
 
