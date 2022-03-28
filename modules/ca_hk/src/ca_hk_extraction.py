@@ -17,7 +17,7 @@
                     - `action.args[0] (kpfpipe.models.level0.KPF0|str)`: Instance of `KPF0` or the path of a fits file
                       containing image data for H&K extraction.
                     - `action.args[1] (str)`: Path to a file defining the fiber and order location
-                    - `action.args[2] (list)`: List contaiing the fiber names.
+                    - `action.args[2] (list)`: List containing the fiber names.
                     - `action.args[3] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing spectral
                       extraction results. If not existing, it is None.
                     - `action.args['output_exts'] (str)`: Extension names of the extensions to contain
@@ -93,13 +93,12 @@ class CaHKExtraction(KPF0_Primitive):
         self.trace_path = action.args[1]
         if action.args[2] is not None and isinstance(action.args[2], list):
             self.fibers = action.args[2]
-        elif self.fibers is not None and isinstance(action.args[2], str):
+        elif action.args[2] is not None and isinstance(action.args[2], str):
             self.fibers = [action.args[2]]
         else:
             self.fibers = []
         self.output_level1 = action.args[3]  # kpf1 instance already exist or None
 
-        self.total_fibers = len(self.fibers)
         self.output_exts = []
         if 'output_exts' not in args_keys:
             self.output_exts.extend(self.fibers)
@@ -107,11 +106,6 @@ class CaHKExtraction(KPF0_Primitive):
             self.output_exts.extend(action.args['output_exts'])
         else:
             self.output_exts.append(action.args['output_exts'])
-
-        if len(self.output_exts) < len(self.fibers):
-            for idx in range(len(self.output_exts), len(self.fibers)):
-                self.output_exts.append(self.fibers[idx])
-        self.fiber_loc = None
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -156,12 +150,18 @@ class CaHKExtraction(KPF0_Primitive):
         """
 
         if self.logger:
-            self.logger.info("HKExtraction: define the trace location")
+            self.logger.info("CaHkExtraction: define the trace location")
 
         # load trace location data
-        trace_def = self.alg.load_trace_location(self.trace_path)
+        self.alg.load_trace_location(self.trace_path)
 
-        for idx, fiber in enumerate(self.fibers):
+        fibers = self.alg.get_fibers()
+
+        if len(self.output_exts) < len(fibers):
+            for idx in range(len(self.output_exts), len(fibers)):
+                self.output_exts.append(self.fibers[idx])
+
+        for idx, fiber in enumerate(fibers):
             df_ext_result = self.alg.extract_spectrum(fiber)
 
             data_df = df_ext_result['spectral_extraction_result']

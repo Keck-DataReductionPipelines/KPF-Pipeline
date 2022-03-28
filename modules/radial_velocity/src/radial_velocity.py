@@ -232,6 +232,8 @@ class RadialVelocity(KPF1_Primitive):
         for i in range(self.total_orderlet):
             if i > 0:
                 self.alg.reset_spectrum(self.spectrum_data_set[i], self.header_set[i], self.wave_cal_set[i])
+            if self.logger:
+                self.logger.info('RadialVelocity: computing radial velocity on orderlet '+ self.sci_names[i] + '...')
             rv_results = self.alg.compute_rv_by_cc(start_seg=self.start_seg, end_seg=self.end_seg, ref_ccf=self.ref_ccf)
             one_df = rv_results['ccf_df']
             assert (not one_df.empty and one_df.values.any())

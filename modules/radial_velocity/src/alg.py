@@ -452,10 +452,10 @@ class RadialVelocityAlg(RadialVelocityBase):
         for idx, seg_idx in np.ndenumerate(seg_ary):
             seg_limits = self.get_segment_limits(seg_idx=seg_idx)
             ord_idx = int(seg_limits[self.SEGMENT_ORD])
-            self.d_print("segment", ord_idx, ' ',
+            self.d_print("RadialVelocityAlg: ", "segment", ord_idx, ' ',
                          [int(seg_limits[self.SEGMENT_X1]), int(seg_limits[self.SEGMENT_X2]),
                           seg_limits[self.SEGMENT_W1], seg_limits[self.SEGMENT_W2], int(seg_limits[self.SEGMENT_ORD])],
-                         ' ', end="", info=True)
+                         ' ')
             wavecal = wavecal_all_orders[ord_idx] if self.instrument.lower() != 'kpf' \
                 else wavecal_all_orders[ord_idx]*10.0
             left_x = int(seg_limits[self.SEGMENT_X1])
@@ -471,9 +471,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                 result_ccf[idx, :] = \
                     self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
             else:
-                self.d_print("all wavelength zero")
+                self.d_print("RadialVelocityAlg: all wavelength zero")
 
-        self.d_print("\n", info=True)
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
 
@@ -732,7 +731,6 @@ class RadialVelocityAlg(RadialVelocityBase):
 
                             if n in idx_collection:
                                 print(str(n), ' already taken')
-                                # import pdb;pdb.set_trace()
                             else:
                                 idx_collection.append(n)
             ccf_pixels[c, :] = spectrum * mask_spectra_doppler_shifted * sn
@@ -890,7 +888,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         """
         self.add_file_logger(print_progress)
-        self.d_print('computing radial velocity ... ')
+        self.d_print('RadialVelocityAlg: computing radial velocity ... ')
 
         self.get_segment_limits()
         ccf, msg = self.get_rv_on_spectrum(start_seg=start_seg, end_seg=end_seg)

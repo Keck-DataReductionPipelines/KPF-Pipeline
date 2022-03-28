@@ -20,7 +20,7 @@
                       trace result.
                     - `action.args[2] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing spectral
                       extraction results. If not existing, it is None.
-                    - `action.args['order_name'] (str|list, optional)`: Name or list of names of the order to be
+                    - `action.args['orderlet_names'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
@@ -51,7 +51,7 @@
                 - `input_spectrum (kpfpipe.models.level0.KPF0)`: Instance of `KPF0`, assigned by `actions.args[0]`.
                 - `input_flat (kpfpipe.models.level0.KPF0)`:  Instance of `KPF0`, assigned by `actions.args[1]`.
                 - `output_level1 (kpfpipe.models.level1.KPF1)`: Instance of `KPF1`, assigned by `actions.args[2]`.
-                - `order_name (str)`: Name of the order to be processed.
+                - `orderlet_names (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `max_result_order (int)`: Total orders to be processed.
                 - `rectification_method (int)`: Rectification method code as defined in `SpectralExtractionAlg`.
@@ -59,6 +59,7 @@
                 - `wavecal_fits (str)`: Path of the fits file or `KPF1` instance with wavelength calibration data.
                 - `to_set_wavelength_cal`: Flag indicates if setting wavelength calibration data to wavelength
                   calibration extension from ``wavecal_fits``.
+                - `clip_file (str)`: Prefix of clip file path. Defaults to None.
                 - `config_path (str)`: Path of config file for spectral extraction.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
@@ -78,8 +79,9 @@
             :
             lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
             op_data = SpectralExtraction(lev0_data, lev0_flat_data,
-                                        None, order_name=order_name,
+                                        None, orderlet_names=order_name,
                                         rectification_method=rect_method,
+                                        trace_file=trace_file,
                                         wavecal_fits=input_lev1_file)
             :
 """
@@ -109,7 +111,7 @@ DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
 
 class SpectralExtraction(KPF0_Primitive):
     default_args_val = {
-                    'order_name': 'SCI',
+                    'orderlet_names': ['SCI'],
                     'max_result_order': -1,
                     'start_order': 0,
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical'
@@ -253,6 +255,13 @@ class SpectralExtraction(KPF0_Primitive):
 
         for idx, order_name in enumerate(all_order_names):
             o_set = all_o_sets[idx][0:order_to_process]
+            if self.logger:
+                self.logger.info("SpectralExtraction: do " +
+                                 SpectralExtractionAlg.rectifying_method[self.rectification_method] +
+                                 " rectification and " +
+                                 SpectralExtractionAlg.extracting_method[self.extraction_method] +
+                                 " extraction on " + order_name + " of " + str(o_set.size) + " orders")
+
             opt_ext_result = self.alg.extract_spectrum(order_set=o_set)
 
             assert('spectral_extraction_result' in opt_ext_result and
@@ -265,7 +274,7 @@ class SpectralExtraction(KPF0_Primitive):
 
         if self.output_level1 is not None:
             self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,
-                                                 f'orderlettes={" ".join(all_order_names)}', 'PASS')
+                                                 f'orderlets={" ".join(all_order_names)}', 'PASS')
         if self.logger:
             self.logger.info("SpectralExtraction: Receipt written")
 
@@ -339,7 +348,7 @@ class SpectralExtraction(KPF0_Primitive):
     def add_wavecal_to_level1_data(self, level1_obj: KPF1, order_name: str, level1_sample: KPF1, level0_sample: KPF0):
         if level1_sample is None and level0_sample is None:
             return False
-        ins = self.alg.get_instrument()
+        ins = self.alg.get_instrument().upper()
 
         def get_extension_on(order_name, ext_type):
             if ext_type != 'FLUX':

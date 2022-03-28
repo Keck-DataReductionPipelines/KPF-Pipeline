@@ -237,6 +237,11 @@ class OrderRectification(KPF0_Primitive):
 
         all_orders = np.sort(all_orders)
 
+        if self.logger:
+            self.logger.info("OrderRectification: do " +
+                             SpectralExtractionAlg.rectifying_method[self.rectification_method] +
+                             " rectification on " + str(all_orders.size) + " orders")
+
         opt_ext_result = self.alg.extract_spectrum(order_set=all_orders)
 
         assert('spectral_extraction_result' in opt_ext_result and
