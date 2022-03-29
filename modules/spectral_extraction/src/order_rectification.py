@@ -44,7 +44,7 @@
                 - `rectification_method (int)`: Rectification method code as defined in `SpectralExtractionAlg`.
                 - `extraction_method (str)`: Extraction method code as defined in `SpectralExtractionAlg`.
                 - `config_path (str)`: Path of config file for spectral extraction.
-                - `config (configparser.ConfigParser)`: Config context.
+                - `config (configparser.ConfigParser)`: Config context per the file defined by `config_path`.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
                 - `clip_file (str)`: Prefix of clip file path.
                 - `alg (modules.order_trace.src.alg.SpectralExtractionAlg)`: Instance of `SpectralExtractionAlg` which
