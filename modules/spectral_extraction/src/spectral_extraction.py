@@ -61,7 +61,7 @@
                   calibration extension from ``wavecal_fits``.
                 - `clip_file (str)`: Prefix of clip file path. Defaults to None.
                 - `config_path (str)`: Path of config file for spectral extraction.
-                - `config (configparser.ConfigParser)`: Config context.
+                - `config (configparser.ConfigParser)`: Config context per the file defined by `config_path`.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
                 - `alg (modules.order_trace.src.alg.SpectralExtractionAlg)`: Instance of `SpectralExtractionAlg` which
                   has operation codes for the computation of spectral extraction.

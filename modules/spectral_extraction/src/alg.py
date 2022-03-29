@@ -76,7 +76,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
                   (including VERTICAL, NORMAL or NoRECT rectification method) order trace.
         clip_file (str, optional): Prefix of clip file path. Defaults to None. Clip file is used to store the
             polygon clip data for the rectification method which is not NoRECT.
-        logger_name (str, optional): Logger name for logging logger created with the class instance.
+        logger_name (str, optional): Name of the logger defined for the SpectralExtractionAlg instance.
 
     Note:
         Any rectification method combined with extraction method `NOEXTRACT` means only rectification step and no
