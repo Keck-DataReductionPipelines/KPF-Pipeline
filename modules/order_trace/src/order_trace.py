@@ -73,7 +73,6 @@
 """
 
 import configparser
-import pandas as pd
 
 # Pipeline dependencies
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -88,8 +87,6 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.order_trace.src.alg import OrderTraceAlg
 import ast
 import numpy as np
-import os
-import datetime
 import pandas as pd
 
 # Global read-only variables

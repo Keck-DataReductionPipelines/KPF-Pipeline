@@ -11,22 +11,25 @@ from astropy.time import Time
 from astropy.coordinates import Angle
 import configparser
 from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.alg_base import ModuleAlgBase
 load_dotenv()
 
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
 
 
-class BarycentricCorrectionAlg:
+class BarycentricCorrectionAlg(ModuleAlgBase):
     """Barycentric velocity correction.
 
     This module defines class 'BarycentricCorrectionAlg' and methods to calculate barycentric velocity correction
     and redshift for one single time point or a period of days.
 
     Args:
-        obs_config (dict|configparser.ConfigParser): A dict instance or config context containing the key-value
+        obs_config (dict|configparser.ConfigParser|None): A dict instance or config context containing the key-value
                 pairs related to the observation configuration for barycentric correction calculation.
-        logger (logging.Logger): Instance of logging.Logger.
-
+        logger (logging.Logger): Instance of logging.Logger passed from external application.
+        logger_name (str, optional): Selection of logger by the specified logger name. Defaults to None.
+                Either the defined logger_name or the class name determines the logging.Logger instance for organizing
+                the loggers.
 
     Attributes:
         zb_range (numpy.ndarray): An array containing minimum and maximum redshift value over a period of days.
@@ -61,39 +64,40 @@ class BarycentricCorrectionAlg:
     SPEC = "instrument"
     """ Observation instrument """
 
-    def __init__(self, obs_config, config=None, logger=None):
-        self.logger = logger
+    def __init__(self, obs_config, config=None, logger=None, logger_name=None):
+        ModuleAlgBase.__init__(self, logger_name or self.__class__.__name__, config, logger)
 
         self.obs_config = None
         # obs_config setting take the priority
         if obs_config is not None and isinstance(obs_config, dict):
             self.obs_config = obs_config
         elif config is not None and isinstance(config, configparser.ConfigParser):
-            p_config = ConfigHandler(config, 'PARAM')
-            self.instrument = p_config.get_config_value('instrument', '')
-            ins = self.instrument.upper()
-            bc_section = ConfigHandler(config, ins, p_config)  # handler containing section of instrument or 'PARAM'
-            conf_def = [BarycentricCorrectionAlg.RA,
-                        BarycentricCorrectionAlg.DEC,
-                        BarycentricCorrectionAlg.PMRA,
-                        BarycentricCorrectionAlg.PMDEC,
-                        BarycentricCorrectionAlg.PX,
-                        BarycentricCorrectionAlg.LAT,
-                        BarycentricCorrectionAlg.LON,
-                        BarycentricCorrectionAlg.ALT,
-                        BarycentricCorrectionAlg.RV,
-                        BarycentricCorrectionAlg.SPEC]
-            self.obs_config = {}
-            for c in conf_def:
-                k_val = bc_section.get_config_value(c, '0.0')
-                if c == BarycentricCorrectionAlg.RA:
-                    self.obs_config[c] = Angle(k_val+"hours").deg
-                elif c == self.DEC:
-                    self.obs_config[c] = Angle(k_val+"degrees").deg
-                elif c == BarycentricCorrectionAlg.SPEC:
-                    self.obs_config[c] = self.instrument
-                else:
-                    self.obs_config[c] = float(k_val)
+            ins = self.config_param.get_config_value('instrument', '') if self.config_param is not None else ''
+            self.instrument = ins.upper()
+            if ins:
+                # handler containing section of instrument or 'PARAM'
+                bc_section = ConfigHandler(config, ins, self.config_param)
+                conf_def = [BarycentricCorrectionAlg.RA,
+                            BarycentricCorrectionAlg.DEC,
+                            BarycentricCorrectionAlg.PMRA,
+                            BarycentricCorrectionAlg.PMDEC,
+                            BarycentricCorrectionAlg.PX,
+                            BarycentricCorrectionAlg.LAT,
+                            BarycentricCorrectionAlg.LON,
+                            BarycentricCorrectionAlg.ALT,
+                            BarycentricCorrectionAlg.RV,
+                            BarycentricCorrectionAlg.SPEC]
+                self.obs_config = {}
+                for c in conf_def:
+                    k_val = bc_section.get_config_value(c, '0.0')
+                    if c == BarycentricCorrectionAlg.RA:
+                        self.obs_config[c] = Angle(k_val+"hours").deg
+                    elif c == self.DEC:
+                        self.obs_config[c] = Angle(k_val+"degrees").deg
+                    elif c == BarycentricCorrectionAlg.SPEC:
+                        self.obs_config[c] = self.instrument
+                    else:
+                        self.obs_config[c] = float(k_val)
 
         self.zb_range = None
         self.zb_list = None
@@ -138,11 +142,11 @@ class BarycentricCorrectionAlg:
         if self.zb_list is None:
             if jd is None:
                 jd = Time(date.today().strftime("%Y-%m-%d")).jd - (period if period is not None else 1)
-                if self.logger:
-                    self.logger.info("start time is set " + str(period) + " days before now.")
+                self.d_print("BarycentricCorrectionAlg: start time is set " + str(period) + " days before now.",
+                             info=True)
 
-            if self.logger:
-                self.logger.info("start finding bc..." + " jd is " + str(jd) + " period is "+str(period))
+            self.d_print('BarycentricCorrectionAlg: for redshift on jd: ', str(jd), ' and period:  ', str(period),
+                         info=True)
             self.zb_list = self.get_zb_from_bc_corr(self.obs_config, jd, period, data_path, save_to_path)
 
         return self.zb_list
