@@ -7,6 +7,7 @@ import pandas as pd
 from configparser import ConfigParser
 from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.alg_base import ModuleAlgBase
+from scipy import signal
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -64,7 +65,7 @@ class OrderTraceAlg(ModuleAlgBase):
     LOWER = 0
     name = 'OrderTrace'
 
-    def __init__(self, data, poly_degree=None, config=None, logger=None):
+    def __init__(self, data, poly_degree=None, expected_traces=None, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
         if not isinstance(config, ConfigParser):
@@ -84,6 +85,8 @@ class OrderTraceAlg(ModuleAlgBase):
         self.instrument = ins.upper()
         self.config_ins = ConfigHandler(config, ins, self.config_param)  # section of instrument or 'PARAM'
         self.poly_degree = poly_degree
+        self.trace_ratio = None
+        self.expected_traces = expected_traces
 
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
@@ -138,6 +141,9 @@ class OrderTraceAlg(ModuleAlgBase):
         """
         return self.poly_degree or self.get_config_value('fitting_poly_degree', 3)
 
+    def get_trace_ratio(self):
+        return self.trace_ratio or self.get_config_value('trace_ratio', 0.5)
+
     def get_instrument(self):
         """Get imaging instrument.
 
@@ -182,7 +188,6 @@ class OrderTraceAlg(ModuleAlgBase):
         """
 
         return self.get_config_value('trace_v_gap', 7)
-
 
     def get_spectral_data(self):
         """Get spectral information including data and dimension.
@@ -350,12 +355,17 @@ class OrderTraceAlg(ModuleAlgBase):
         self.d_print('OrderTraceAlg: cols to reset:', cols_to_reset)
         # binary array
         imm = np.zeros((n_row, n_col), dtype=np.uint8)
+        trace_ratio = self.get_trace_ratio()
+        # print("trace_ratio = ", trace_ratio)
 
         for col in range(n_col):
             mm = image_data[:, col] + noise - self.opt_filter(image_data[:, col], filter_par)
             mm_pos = np.where(mm > 0, mm, 0)
-            h = 0.5*np.sort(mm_pos)[mm_pos.size//2]
-            imm[:, col][mm > (h+1)] = mask
+            h = 0.5*np.sort(mm_pos)[int(mm_pos.size*trace_ratio)]
+            if (np.nanmax(image_data[:, col]) - np.nanmin(image_data[:, col])) <= 1.0:
+                imm[:, col][mm > (h)] = mask
+            else:
+                imm[:, col][mm > (h+1)] = mask
 
         y, x = np.where(imm > 0)  # ex: (array([4, 5, 6, 7]), array([2, 2, 2, 2]))
 
@@ -759,6 +769,7 @@ class OrderTraceAlg(ModuleAlgBase):
         _, nx, ny = self.get_spectral_data()
 
         fit_error_th = self.get_fit_error_threshold()
+        # print('fit_error_th: ', str(fit_error_th))
 
         while True:
             p_info, errors, area = self.extract_order_from_cluster(next_idx, index_p, x_p, y_p)
@@ -1295,6 +1306,9 @@ class OrderTraceAlg(ModuleAlgBase):
             raise Exception("size of array of x and index not matched")
 
         m_x, m_y, m_index, m_coeffs = self.merge_clusters(index, x, y)
+        new_x = m_x.copy()
+        new_y = m_y.copy()
+        new_index = m_index.copy()
         new_x, new_y, new_index = self.remove_broken_cluster(m_index, m_x, m_y)
         return new_x, new_y, new_index
 
@@ -1341,9 +1355,15 @@ class OrderTraceAlg(ModuleAlgBase):
         sorted_index = self.sort_cluster_in_y(m_coeffs)
         new_index_sort = np.zeros(np.size(m_index), dtype=int)
         new_coeffs_sort = np.zeros(np.shape(m_coeffs))
+
+        if np.where((new_index - m_index) != 0)[0]:   # this shouldn't happen, for debugging
+            import pdb;pdb.set_trace()
+            print("new_index and m_index not the same")
+
         for i, v_sort in enumerate(sorted_index):
             if i != 0:
-                idx = np.where(new_index == v_sort)[0]
+                # idx = np.where(new_index == v_sort)[0]
+                idx = np.where(m_index == v_sort)[0]
                 new_index_sort[idx] = i
                 new_coeffs_sort[i] = m_coeffs[v_sort]
 
@@ -1845,23 +1865,96 @@ class OrderTraceAlg(ModuleAlgBase):
 
         """
         _, nx, _ = self.get_spectral_data()
-        gap = max(nx//200, 1)
+        gap = max(nx//40, 1)
         # gap = nx//200
         data_x_center = nx//2
         max_idx = np.amax(index)
         changed = 0
 
+        stats = np.zeros((max_idx+1, 6))      # y at 0, center, nx-1, and actual height, curve height, dist
+
+        power = self.get_poly_degree()
+        # stats of all merged curves
+        for c_idx in range(1, max_idx+1):
+            poly, error, area = self.curve_fitting_on_one_cluster(index, c_idx, x, y, power)
+            stats[c_idx, 0:3] = np.polyval(poly[0:power+1], np.array([0, data_x_center, nx-1])) # 3 y positions
+            stats[c_idx, 3] = abs(area[2]-area[3])                                      # real height
+            stats[c_idx, 4] = np.amax([abs(stats[c_idx, 0] - stats[c_idx, 2]),
+                                      abs(stats[c_idx, 0] - stats[c_idx, 1]),
+                                      abs(stats[c_idx, 2] - stats[c_idx, 1])]) + 1      # fitting curve heights
+            stats[c_idx, 5] = abs(stats[c_idx, 1]-stats[c_idx-1, 1])                    # y dist in the middle
+
         for c in range(1, max_idx+1):
+            e_case = 0
             border_idx = np.where(index == c)[0]
             x_border_set = x[border_idx]
             x_before_center = x_border_set[np.where(x_border_set <= data_x_center)[0]]
             x_after_center = x_border_set[np.where(x_border_set > data_x_center)[0]]
             x_before = np.amax(x_before_center) if x_before_center.size > 0 else 0
             x_after = np.amin(x_after_center) if x_after_center.size > 0 else (nx - 1)
-            if (x_after - x_before) > gap:
-                index[border_idx] = 0
-                changed = 1
 
+            unique_x = np.unique(x_border_set)
+            max_x_dist = np.amax(unique_x - np.roll(unique_x, 1))
+
+            # the curve around the image center is usually most traceable.
+            if (x_after - x_before) > gap:
+                changed = 1
+                index[border_idx] = 0
+                # print('cluster ', c, ' case -1')
+                continue
+
+            # the merged curve not pass through the image center, or off the image center
+            if max_x_dist == 1 and (unique_x[-1]-unique_x[0] + 1 > nx//2):   # no gap and more than half of the image
+                continue
+
+            width_c = unique_x[-1]-unique_x[0]+1
+            half_width_c = max(width_c//2, 1)
+
+            # curve black pixels takes small portion and the gap takes bigger portion along the merged trace
+            if unique_x.size < half_width_c:              # majority pixel is zero
+                                                          # gap is larger than 1/2 width and short trace
+                if (max_x_dist > half_width_c) or ((unique_x[-1]-unique_x[0]+1) < nx//3):
+                    e_case = 1
+                elif stats[c, 4] > stats[c, 3] * 2.0:     # the fitting is off the trace a lot at the ends
+                    e_case = 4
+                elif unique_x.size < half_width_c//2:     # few pixels
+                    x_dist = unique_x - np.roll(unique_x, 1)
+                    x_cont_max = 0
+                    total_count = 0
+                    for dist in x_dist:
+                        if dist == 1:
+                            if total_count == 0:
+                                total_count = 1
+                            else:
+                                total_count = total_count + 1
+                            if total_count > x_cont_max:
+                                x_cont_max = total_count
+                        else:
+                            total_count = 0
+                    if max_x_dist > 200 and max_x_dist > x_cont_max * 4.0:  # gap longer than continuous pixels
+                        e_case = 5
+            elif width_c < nx//2 and stats[c, 4] > stats[c, 3] * 4.0:   # check if curve fitting out of the track
+                e_case = 2
+            else:                           # gap larger than maximum continuous pixels
+                x_dist = unique_x - np.roll(unique_x, 1)
+                x_cont_max = 0
+                total_count = 0
+                for dist in x_dist:
+                    if dist == 1:
+                        if total_count == 0:
+                            total_count = 1
+                        else:
+                            total_count = total_count + 1
+                        if total_count > x_cont_max:
+                            x_cont_max = total_count
+                    else:
+                        total_count = 0
+                if max_x_dist > x_cont_max * 1.5:
+                    e_case = 3
+            # print('cluster ', c, ' case ', e_case)
+            if e_case > 0:
+                changed = 1
+                index[border_idx] = 0
         new_x = x.copy()
         new_y = y.copy()
         new_index = index.copy()
@@ -1941,10 +2034,82 @@ class OrderTraceAlg(ModuleAlgBase):
             self.d_print('OrderTraceAlg: after estimation: \n', '\n'.join([str(index+1)+': '+str(w)
                                                             for index, w in enumerate(cluster_widths)]))
 
+        power = self.get_poly_degree()
+        spec, nx, ny = self.get_spectral_data()
+        # fix the widths to make sure no overlap between the traces
+        pre_top_edge = np.zeros(nx)
+        bottom_edge = np.zeros(nx)
+        for n in cluster_set:
+            s_x = int(coeffs[n, power + 1])
+            e_x = int(coeffs[n, power + 2] + 1)
+            x_list = np.arange(s_x, e_x)
+            if n == 1:
+                pre_top_edge[x_list] = cluster_points[n, x_list] + cluster_widths[n-1]['top_edge']
+            else:
+                bottom_edge[x_list] = cluster_points[n, x_list] - cluster_widths[n-1]['bottom_edge']
+                edge_diff = bottom_edge[x_list] - pre_top_edge[x_list]
+                overlapping = np.amin(edge_diff)
+                if overlapping <= 0.0:
+                    reduce_width = -overlapping/2.0
+                    crt_reduce = min(reduce_width, cluster_widths[n-1]['bottom_edge']-1.0)
+                    pre_reduce = min((-overlapping - crt_reduce), cluster_widths[n-2]['top_edge']-1.0)
+                    print('overlapping at ', n, -overlapping, crt_reduce, pre_reduce)
+                    cluster_widths[n - 1]['bottom_edge'] -= crt_reduce
+                    cluster_widths[n - 2]['top_edge'] -= pre_reduce
+
+                pre_top_edge.fill(0.0)
+                pre_top_edge[x_list] = cluster_points[n, x_list] + cluster_widths[n-1]['top_edge']
+                bottom_edge.fill(0.0)
+
+        # remove the cluster which is not in the vertical peaks, need more work on this
+        if self.expected_traces is not None:
+            # self.check_expected_traces(cluster_widths, cluster_points)
+            check_x_pts = np.array([nx//2], dtype=int)
+            cluster_check = np.zeros((len(cluster_set)+1, check_x_pts.size), dtype=int)
+            for x_pt_idx, x_pt in enumerate(check_x_pts):
+                y_vals = spec[:, x_pt]
+                peaks, prop = signal.find_peaks(spec[:, x_pt], distance=self.get_trace_vertical_gap())
+                y_peaks = y_vals[peaks]
+                y_peaks_sorted_idx = np.flip(np.argsort(y_peaks))
+                y_peaks_sorted = y_peaks[y_peaks_sorted_idx]
+                last_peak = y_peaks_sorted[self.expected_traces-1]
+                bottom_mean = np.nanmean(y_peaks_sorted[self.expected_traces:])
+                peaks, prop = signal.find_peaks(spec[:, x_pt], distance=self.get_trace_vertical_gap(),
+                                                height=(last_peak+bottom_mean)/2)
+                num_peaks = peaks.size
+                if x_pt_idx == 0:
+                    peaks_check = np.zeros((1, num_peaks), dtype=int)
+                for c_idx in cluster_set:
+                    if cluster_points[c_idx, x_pt] == 0:
+                        continue
+                    top_edge = cluster_points[c_idx, x_pt] + cluster_widths[c_idx-1]['top_edge']
+                    bot_edge = cluster_points[c_idx, x_pt] - cluster_widths[c_idx-1]['bottom_edge']
+                    for p_idx in range(num_peaks):
+                        if peaks[p_idx] < bot_edge:
+                            continue
+                        if peaks[p_idx] <= top_edge:
+                            if x_pt_idx == 0:
+                                peaks_check[x_pt_idx] = c_idx
+                            cluster_check[c_idx][x_pt_idx] = p_idx+1
+                        break
+
+            rm_cluster = []
+            for c_idx in cluster_set:
+                s_x = int(coeffs[c_idx, power + 1])
+                e_x = int(coeffs[c_idx, power + 2] + 1)
+                sel_pts_idx = np.where((check_x_pts >= s_x) & (check_x_pts < e_x))[0]
+                if np.any(cluster_check[c_idx] == 0):
+                    rm_cluster.insert(0, c_idx)
+            for rm_idx in rm_cluster:
+                np.delete(coeffs, rm_idx, axis=0)
+                np.delete(cluster_points, rm_idx, axis=0)
+                np.delete(cluster_widths, rm_idx-1, axis=0)
+                max_cluster_no -= 1
+
         return cluster_widths, coeffs
 
     def find_cluster_width_by_gaussian(self, cluster_no: int, poly_coeffs: np.ndarray, cluster_points: np.ndarray):
-        """Find the width of the cluster uisng Gaussian to approximate the distribution of collected spectral data.
+        """Find the width of the cluster using Gaussian to approximate the distribution of collected spectral data.
 
         Parameters:
             cluster_no (int): Cluster id.
@@ -1995,6 +2160,7 @@ class OrderTraceAlg(ModuleAlgBase):
         # max_lower = 0
 
         max_gap = self.get_config_value('max_order_distance', 0)
+        # print('sigma for width fitting: ', self.get_sigma_for_width_fititng())
 
         for xs in x_loc:
             cluster_y = cluster_points[cluster_no, xs]
@@ -2106,8 +2272,7 @@ class OrderTraceAlg(ModuleAlgBase):
 
         g_init = models.Gaussian1D(mean=center_y)
 
-        gaussian_fit = FIT_G(g_init, x_set, y_set)
-
+        gaussian_fit = FIT_G(g_init, x_set, y_set-np.amin(y_set))
         max_w = abs(x_set[0] - x_set[-1])//2
         v_at_std = gaussian_fit.stddev.value*sigma
         if abs(gaussian_fit.mean.value - center_y) <= 1.0:
@@ -2226,6 +2391,7 @@ class OrderTraceAlg(ModuleAlgBase):
 
             if np.size(s_idx) == 0 or (np.size(c_idx) <= (poly_fit_power+1)):
                 continue
+
             coeffs = np.polyfit(y_middle_list[c_idx], widths[c_idx], poly_fit_power)  # poly fit on all non-cut width
             w_sel = np.polyval(coeffs, y_middle_list[s_idx])   # approximate the widths by poly fit
             widths[s_idx] = w_sel
@@ -2329,11 +2495,15 @@ class OrderTraceAlg(ModuleAlgBase):
         poly_all = np.zeros((max_index+1, power+5))
         errors = np.zeros(max_index+1)
 
-        for c in range(1, max_index+1):
-            poly, error, area = self.curve_fitting_on_one_cluster(c, index, x, y, power)
-            poly_all[c, ] = poly
-            errors[c] = error
-
+        for c_idx in range(1, max_index+1):
+            idx_at_order = np.where(index == c_idx)[0]
+            if x[idx_at_order].size == 0:       # for debugging
+                import pdb;pdb.set_trace()
+                print('c_idx ', c_idx, x, y)
+            else:
+                poly, error, area = self.curve_fitting_on_one_cluster(c_idx, index, x, y, power)
+                poly_all[c_idx, ] = poly
+                errors[c_idx] = error
         return poly_all, errors
 
     @staticmethod
@@ -2414,7 +2584,7 @@ class OrderTraceAlg(ModuleAlgBase):
         centers = np.zeros(max_idx+1)
         for c in range(1, max_idx+1):
             centers[c] = np.polyval(poly_coeffs[c, 0:power+1], x_loc)
-
+        centers[0] = np.amin(centers[1:])-1         # row 0 is not changed for the sorting
         center_index = np.argsort(centers)
         idx = np.where(center_index == cluster_no)[0]
         return {'idx': idx[0], 'index_v_pos': center_index}

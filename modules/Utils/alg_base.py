@@ -188,7 +188,7 @@ class ModuleAlgBase:
         logger = None
 
         if logger_section is not None:
-            log_start = logger_section.get('start_log', False)
+            log_start = logger_section.getboolean('start_log', False)
 
             if log_start:
                 log_path = logger_section.get('log_path', None)
