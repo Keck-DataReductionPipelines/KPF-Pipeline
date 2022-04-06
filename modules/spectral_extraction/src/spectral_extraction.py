@@ -123,7 +123,9 @@ class SpectralExtraction(KPF0_Primitive):
                     'poly_degree': 3,
                     'origin': [0, 0],
                     'trace_extension': None,
-                    'trace_file': None
+                    'trace_file': None,
+                    'ccd_index': None,
+                    'first_orderlet_idx': None
                 }
 
     NORMAL = 0
@@ -145,6 +147,8 @@ class SpectralExtraction(KPF0_Primitive):
         self.input_spectrum = action.args[0]  # kpf0 instance
         self.input_flat = action.args[1]      # kpf0 instance with flat data
         self.output_level1 = action.args[2]   # kpf1 instance already exist or None
+        self.ccd_index = self.get_args_value('ccd_index', action.args, args_keys)
+        self.first_orderlet_idx = self.get_args_value('first_orderlet_idx', action.args, args_keys)
         self.orderlet_names = self.get_args_value('orderlet_names', action.args, args_keys)
         self.max_result_order = self.get_args_value("max_result_order", action.args, args_keys)
         self.start_order = self.get_args_value("start_order", action.args, args_keys)  # for the result of order trace
@@ -194,6 +198,7 @@ class SpectralExtraction(KPF0_Primitive):
                                         config=self.config, logger=self.logger,
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
+                                        ccd_index=self.ccd_index,
                                         clip_file=self.clip_file)
 
     def _pre_condition(self) -> bool:
@@ -246,23 +251,23 @@ class SpectralExtraction(KPF0_Primitive):
         s_order = self.start_order if self.start_order is not None else 0
 
         for order_name in all_order_names:
-            o_set = self.alg.get_order_set(order_name)
-            if o_set.size > 0:
-                o_set = self.get_order_set(o_set, s_order)
+            o_set = self.get_order_set(order_name, s_order)
             all_o_sets.append(o_set)
 
-        order_to_process = min([len(a_set) for a_set in all_o_sets])
+        # order_to_process = min([len(a_set) for a_set in all_o_sets])
 
         for idx, order_name in enumerate(all_order_names):
-            o_set = all_o_sets[idx][0:order_to_process]
+            o_set = all_o_sets[idx]
+            orderlet_index = self.alg.get_orderlet_index(order_name)
+            first_index = self.first_orderlet_idx[orderlet_index] \
+                if (isinstance(self.first_orderlet_idx, list) and len(self.first_orderlet_idx) > orderlet_index) else 0
             if self.logger:
                 self.logger.info("SpectralExtraction: do " +
                                  SpectralExtractionAlg.rectifying_method[self.rectification_method] +
                                  " rectification and " +
                                  SpectralExtractionAlg.extracting_method[self.extraction_method] +
                                  " extraction on " + order_name + " of " + str(o_set.size) + " orders")
-
-            opt_ext_result = self.alg.extract_spectrum(order_set=o_set)
+            opt_ext_result = self.alg.extract_spectrum(order_set=o_set, first_index=first_index)
 
             assert('spectral_extraction_result' in opt_ext_result and
                    isinstance(opt_ext_result['spectral_extraction_result'], pd.DataFrame))
@@ -283,13 +288,16 @@ class SpectralExtraction(KPF0_Primitive):
 
         return Arguments(self.output_level1)
 
-    def get_order_set(self, o_set, s_order):
-        e_order = min(self.max_result_order, len(o_set)) \
-            if (self.max_result_order is not None and self.max_result_order > 0) else o_set.size
+    def get_order_set(self, order_name, s_order):
+        o_set = self.alg.get_order_set(order_name)
+        if o_set.size > 0:
+            e_order = min(self.max_result_order, len(o_set)) \
+                if (self.max_result_order is not None and self.max_result_order > 0) else o_set.size
 
-        o_set_ary = o_set[0:e_order] + s_order
-
-        return o_set_ary[np.where(o_set_ary < self.alg.get_spectrum_order())]
+            o_set_ary = o_set[0:e_order] + s_order
+            return o_set_ary[np.where((o_set_ary < self.alg.get_spectrum_order()) & (o_set_ary >= 0))]
+        else:
+            return o_set
 
     def construct_level1_data(self, op_result, ins, level1_sample: KPF1, order_name: str, output_level1:KPF1):
         update_primary_header = False if level1_sample is None or ins != 'NEID' else True
@@ -417,7 +425,7 @@ class SpectralExtraction(KPF0_Primitive):
                 method = SpectralExtractionAlg.NoRECT
         elif key == 'extraction_method':
             if v is not None and isinstance(v, str):
-                if 'sum' in v.lower():
+                if 'summ' in v.lower():
                     method = SpectralExtractionAlg.SUM
                 else:
                     method = SpectralExtractionAlg.OPTIMAL
