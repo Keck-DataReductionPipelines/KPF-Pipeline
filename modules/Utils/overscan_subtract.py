@@ -23,6 +23,7 @@ class OverscanSubtraction(KPF0_Primitive):
         self.ref_output = self.action.args[6] #output of ccd reference file
         self.ffi_exts = self.action.args[7] #fits extensions where ffis will be stored
         self.data_type = self.action.args[8] #data type, pertaining to instrument
+        self.prescan_reg = self.action.args[9] #prescan region of raw image
 
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region
@@ -38,7 +39,6 @@ class OverscanSubtraction(KPF0_Primitive):
         # if self.rawfile.header['NOSCN_S'] and self.rawfile.header['NOSCN_P']:
 
         # else:
-      
         srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
         prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
         srl_N_overscan = len(srl_overscan_pxs)
@@ -47,8 +47,8 @@ class OverscanSubtraction(KPF0_Primitive):
         prl_overscan_clipped = prl_overscan_pxs[self.oscan_clip_no:prl_N_overscan-1-self.oscan_clip_no]
         return srl_overscan_pxs,prl_overscan_pxs,srl_overscan_clipped,prl_overscan_clipped
 
-    def mean_subtraction(self,image,overscan_reg): #should work now
-        """Gets mean of overscan data, subtracts value from raw science image data.
+    def median_subtraction(self,image,overscan_reg): #should work now
+        """Gets median of overscan data, subtracts value from raw science image data.
 
         Args:
             image(np.ndarray): Array of image data
@@ -59,7 +59,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         raw_sub_os = np.zeros_like(image)
         for row in range(0,raw_sub_os.shape[0]):
-            raw_sub_os[row,:] = image[row,:] - np.mean(image[row,overscan_reg],keepdims=True) 
+            raw_sub_os[row,:] = image[row,:] - np.median(image[row,overscan_reg],keepdims=True) 
         return raw_sub_os
 
 
@@ -237,10 +237,11 @@ class OverscanSubtraction(KPF0_Primitive):
         # create empty list for final, overscan subtracted/cut arrays
         no_overscan_imgs = []
         for img,key in zip(channel_imgs,channel_keys):
-            new_img = self.orientation_adjust(img,key)
+            new_img_w_prescan = self.orientation_adjust(img,key)
+            new_img = new_img_w_prescan[:,self.prescan_reg[1]:-1]
             # overscan subtraction for chosen method
-            if self.mode=='mean':
-                raw_sub_os = self.mean_subtraction(new_img,srl_clipped_oscan)
+            if self.mode=='median':
+                raw_sub_os = self.median_subtraction(new_img,srl_clipped_oscan)
 
             elif self.mode=='polynomial': # subtract linear fit of overscan
                 raw_sub_os = self.polyfit_subtraction(new_img,srl_clipped_oscan)
