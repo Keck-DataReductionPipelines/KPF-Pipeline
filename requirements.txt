@@ -12,6 +12,7 @@ pytest
 pytest-cov
 coveralls==2.2.0
 barycorrpy
+photutils
 
 # Documentation
 sphinx
