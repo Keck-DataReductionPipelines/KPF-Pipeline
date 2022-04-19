@@ -5,7 +5,7 @@ from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 
-class BiasSubtractionAlg:
+class ImageProcessingAlg:
     """
     Bias subtraction calculation.
 
@@ -61,12 +61,12 @@ class BiasSubtractionAlg:
                     minus_bias = self.rawimage[ffi].data-masterbias[ffi].data
                     self.rawimage[ffi] = minus_bias
                 
-            if self.data_type == 'NEID':
-                print(self.rawimage.info())
-                print('shapes:',self.rawimage['DATA'].shape,masterbias['DATA'].shape)
-                assert self.rawimage['DATA'].shape==masterbias['DATA'].shape, "Bias .fits Dimensions NOT Equal! Check failed"
-                minus_bias=self.rawimage['DATA']-masterbias['DATA']
-                self.rawimage['DATA'] = minus_bias
+            # if self.data_type == 'NEID':
+            #     print(self.rawimage.info())
+            #     print('shapes:',self.rawimage['DATA'].shape,masterbias['DATA'].shape)
+            #     assert self.rawimage['DATA'].shape==masterbias['DATA'].shape, "Bias .fits Dimensions NOT Equal! Check failed"
+            #     minus_bias=self.rawimage['DATA']-masterbias['DATA']
+            #     self.rawimage['DATA'] = minus_bias
                  
     def get(self):
         """Returns bias-corrected raw image result.
@@ -75,7 +75,13 @@ class BiasSubtractionAlg:
             self.rawimage: The bias-corrected data.
         """
         return self.rawimage
-
+    
+    def dark_subtraction(self,dark_frame):
+        for ffi in self.ffi_exts:
+            assert self.rawimage[ffi].data.shape==dark_frame[ffi].data.shape, "Dark frame dimensions don't match raw image. Check failed."
+            assert self.rawimage.header['PRIMARY']['EXPTIME'] == dark_frame.header['PRIMARY']['EXPTIME'], "Dark frame and raw image don't match in exposure time. Check failed."
+            minus_dark = self.rawimage[ffi]-dark_frame[ffi]
+            self.rawimage[ffi] = minus_dark
         
 #quicklook TODO: raise flag when counts are significantly diff from master bias, identify bad pixels
         
