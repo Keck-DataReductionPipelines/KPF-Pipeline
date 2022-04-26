@@ -1,6 +1,7 @@
 #packages
 import numpy as np
 import matplotlib.pyplot as plt
+from modules.Utils.frame_subtract import FrameSubtract
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
@@ -46,20 +47,23 @@ class ImageProcessingAlg:
         In pipeline terms: inputs two L0 files, produces one L0 file. 
 
         Args:
-            masterbias (np.ndarray): The master bias data.
-
-        Raises:
-            Exception: If raw image and bias frame don't have the same dimensions.
+            masterbias (FITS File): The master bias data.
         """
-        if self.quicklook == False: 
+        if self.quicklook == False:
             if self.data_type == 'KPF':
-                for ffi in self.ffi_exts:
-                    print(self.rawimage.info)
-                    print(masterbias.info())
-                    assert self.rawimage[ffi].data.shape==masterbias[ffi].data.shape, "Bias .fits Dimensions NOT Equal! Check failed"
-                    #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
-                    minus_bias = self.rawimage[ffi].data-masterbias[ffi].data
-                    self.rawimage[ffi] = minus_bias
+                sub_init = FrameSubtract(self.rawimage,masterbias,self.ffi_exts,'bias')
+                subbed_raw_file = sub_init.subtraction()
+                self.rawimage = subbed_raw_file
+        
+        # if self.quicklook == False: 
+        #     if self.data_type == 'KPF':
+        #         for ffi in self.ffi_exts:
+        #             print(self.rawimage.info)
+        #             print(masterbias.info())
+        #             assert self.rawimage[ffi].shape==masterbias[ffi].shape, "Bias .fits Dimensions NOT Equal! Check failed"
+        #             #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
+        #             minus_bias = self.rawimage[ffi]-masterbias[ffi]
+        #             self.rawimage[ffi] = minus_bias
                 
             # if self.data_type == 'NEID':
             #     print(self.rawimage.info())
@@ -77,11 +81,22 @@ class ImageProcessingAlg:
         return self.rawimage
     
     def dark_subtraction(self,dark_frame):
+        """Performs dark frame subtraction. 
+        In pipeline terms: inputs two L0 files, produces one L0 file. 
+
+        Args:
+            dark_frame (FITS File): L0 FITS file object
+        """
+        # sub_init = FrameSubtract(self.rawimage,dark_frame,self.ffi_exts,'dark')
+        # subbed_raw_file = sub_init.subtraction()
+        # self.rawimage = subbed_raw_file
+        
         for ffi in self.ffi_exts:
+            print(self.rawimage[ffi].data.shape,dark_frame[ffi].data.shape)
             assert self.rawimage[ffi].data.shape==dark_frame[ffi].data.shape, "Dark frame dimensions don't match raw image. Check failed."
             assert self.rawimage.header['PRIMARY']['EXPTIME'] == dark_frame.header['PRIMARY']['EXPTIME'], "Dark frame and raw image don't match in exposure time. Check failed."
             minus_dark = self.rawimage[ffi]-dark_frame[ffi]
             self.rawimage[ffi] = minus_dark
-        
+            print('CHEESE')
 #quicklook TODO: raise flag when counts are significantly diff from master bias, identify bad pixels
         

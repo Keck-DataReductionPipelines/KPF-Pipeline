@@ -74,7 +74,7 @@ class ImageProcessing(KPF0_Primitive):
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            self.config_path = context.config_path['bias_subtraction']
+            self.config_path = context.config_path['image_processing']
         except:
             self.config_path = DEFAULT_CFG_PATH
 
@@ -104,18 +104,19 @@ class ImageProcessing(KPF0_Primitive):
             Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
         """
         #until master file part of data model is fixed
-        obs_type = self.correcting_file.header['PRIMARY']['OBSTYPE']
+        correcting_file = KPF0.from_fits(self.correcting_file)
+        obs_type = correcting_file.header['PRIMARY']['OBSTYPE']
+        print(obs_type)
+        
         if obs_type == 'BIAS':
-            masterbias = fits.open(self.correcting_file)
             if self.logger:
                 self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
-            bias_subbed = self.alg.bias_subtraction(masterbias)
-            return Arguments(self.alg.get())
+            bias_subbed = self.alg.bias_subtraction(correcting_file)
         
         if obs_type == 'DARK':
-            darkframe = fits.open(self.correcting_file)
             if self.logger:
                 self.logger.info(f'Dark Subtraction: subtracting dark frame from raw FFI(s)')
-            dark_subbed = self.alg.dark_subtraction(darkframe)
-            return Arguments(self.alg.get())
+            dark_subbed = self.alg.dark_subtraction(correcting_file)
+        
+        return Arguments(self.alg.get())
         
