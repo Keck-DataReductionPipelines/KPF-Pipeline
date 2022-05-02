@@ -13,8 +13,8 @@ lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
 prescan_reg = config.ARGUMENT.prescan_reg
 gain_key = config.ARGUMENT.gain_keyword
 
-L0_files_path = '/Users/paminabby/Desktop/green/pre-assembly/20220415/*.fits'
-L0_output_dir = '/Users/paminabby/Desktop/green/post-assembly/20220415/'
+L0_files_path = '/Users/paminabby/Desktop/20220429/post_red/*.fits'
+L0_output_dir = '/Users/paminabby/Desktop/20220429/post_green/'
 
 ref_output = OrientationReference(channel_orientation_ref_path,data_type)
 
@@ -23,5 +23,5 @@ for raw_file_path in find_files(L0_files_path):
     L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,data_type,prescan_reg,gain_key)
     _,file_name_ext = split(raw_file_path)
     file_name,ext = splitext(file_name_ext)
-    output_file_name = file_name + '_2D'
+    output_file_name = file_name
     L0_result = to_fits(L0_with_ffi,L0_output_dir + output_file_name + ext)

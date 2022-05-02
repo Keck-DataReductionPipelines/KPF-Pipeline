@@ -275,12 +275,15 @@ class OverscanSubtraction(KPF0_Primitive):
 
         if self.data_type == 'KPF':
             l0_obj = self.rawfile
+            print(l0_obj.info())
             frames_data = []
             for ext in channel_exts:
                 data = l0_obj[ext]
+                print(data)
                 gain = l0_obj.header[ext][self.gain_key]
                 data = data/(2**16) #don't make hardcoded? only ok for now, output a warning here
                 #####
+                print(data,gain)
                 data_gain_corr = data*gain
                 frames_data.append(data_gain_corr)
             frames_data = np.array(frames_data)
