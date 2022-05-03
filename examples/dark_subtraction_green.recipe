@@ -9,10 +9,10 @@ overscan_method = config.ARGUMENT.overscan_method
 order = config.ARGUMENT.overscan_order
 oscan_clip = config.ARGUMENT.overscan_clip
 
-L0_files = ['/Users/paminabby/Desktop/20220415_green/KP.220415.23100.00_2D.fits',]
+L0_files = ['/Users/paminabby/Desktop/2829/KP.20220429.0781.60_2D.fits', '/Users/paminabby/Desktop/2829/KP.20220429.1193.60_2D.fits']
 
-correcting_file = '/Users/paminabby/Desktop/20220415_green/KP.220415.23400.00_2D.fits'
-ffi_exts = ['GREEN_CCD']
+correcting_file = '/Users/paminabby/Desktop/2829/KP.20220429.1459.22_2D.fits'
+ffi_exts = ['RED_CCD','GREEN_CCD']
 quicklook = 'false'
 
 for file in L0_files: 
