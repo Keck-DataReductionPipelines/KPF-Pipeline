@@ -13,8 +13,8 @@ lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
 prescan_reg = config.ARGUMENT.prescan_reg
 gain_key = config.ARGUMENT.gain_keyword
 
-L0_files_path = '/Users/paminabby/Desktop/20220429/pre/*.fits'
-L0_output_dir = '/Users/paminabby/Desktop/20220429/post_red/'
+L0_files_path = '/Users/paminabby/Desktop/0503/*.fits'
+L0_output_dir = '/Users/paminabby/Desktop/0503/post_red/'
 
 ref_output = OrientationReference(channel_orientation_ref_path,data_type)
 
