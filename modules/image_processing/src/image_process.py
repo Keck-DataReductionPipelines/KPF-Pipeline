@@ -86,7 +86,7 @@ class ImageProcessing(KPF0_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-        #Bias subtraction algorithm setup
+        #Image processing algorithm setup
 
         self.alg=ImageProcessingAlg(self.raw_file,self.ffi_exts,self.quicklook,self.data_type,config=self.config,logger=self.logger)
 
@@ -97,11 +97,11 @@ class ImageProcessing(KPF0_Primitive):
         #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
-        Performs bias subtraction by calling method 'bias_subtraction' from BiasSubtraction.
-        Returns the bias-corrected raw data, L0 object.
+        Performs image processing by calling method 'image_processing' from ImageProcess.
+        Returns the bias/dark/background corrected raw data, L0 object.
 
         Returns:
-            Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
+            Arguments object(np.ndarray): Level 0 observation data
         """
         #until master file part of data model is fixed
         correcting_file = KPF0.from_fits(self.correcting_file)
