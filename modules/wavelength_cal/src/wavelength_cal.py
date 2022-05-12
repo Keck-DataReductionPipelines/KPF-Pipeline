@@ -185,7 +185,8 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
                         'ThAr'
                     ):
-                        raise ValueError('Not a ThAr file!')
+                        pass # TODO: fix
+                        # raise ValueError('Not a ThAr file!')
                     
                     if self.linelist_path is not None:
                         peak_wavelengths_ang = np.load(
