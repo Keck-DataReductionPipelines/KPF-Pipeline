@@ -139,8 +139,9 @@ class WaveCalibration:
             order_list = self.remove_orders(step=1)
             n_orders = len(order_list)
 
-            masked_calflux = self.mask_array_neid(calflux, n_orders)
-
+            # masked_calflux = self.mask_array_neid(calflux, n_orders)
+            masked_calflux = calflux # TODO: fix
+           
             # perform wavelength calibration
             poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
@@ -320,6 +321,7 @@ class WaveCalibration:
 
                 line_wavelengths = expected_peak_locs[order_num]['known_wavelengths_vac']
                 line_pixels_expected = expected_peak_locs[order_num]['line_positions']
+
                 sorted_indices = np.argsort(line_pixels_expected)
                 line_wavelengths = line_wavelengths[sorted_indices]
                 line_pixels_expected = line_pixels_expected[sorted_indices]
@@ -350,9 +352,12 @@ class WaveCalibration:
                 else:
                    peak_heights = fitted_peak_pixels
 
+                # clip out bad fitted lines
+                nonclipped_lines = np.where(fitted_peak_pixels > 0)[0]
+
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
-                    wls, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
+                    wls[nonclipped_lines], n_pixels, fitted_peak_pixels[nonclipped_lines], peak_heights=peak_heights[nonclipped_lines],
                     plot_path=order_plt_path
                 )
                 poly_soln_final_array[order_num,:] = polynomial_wls
@@ -1083,6 +1088,7 @@ class WaveCalibration:
 
         weights = 1 / np.sqrt(peak_heights)
         if self.fit_type == 'Legendre': 
+
             leg_out = Legendre.fit(fitted_peak_pixels, wls, self.fit_order, w=weights)
             our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
