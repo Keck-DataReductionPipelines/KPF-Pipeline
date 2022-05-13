@@ -1,0 +1,27 @@
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+
+channel_orientation_ref_path = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path
+#L0_files = KPFPIPE_TEST_DATA + config.ARGUMENT.lev0_files_path
+data_type = config.ARGUMENT.data_type
+pl_overscan_reg = config.ARGUMENT.pl_overscan_reg
+srl_overscan_reg = config.ARGUMENT.srl_overscan_reg
+overscan_method = config.ARGUMENT.overscan_method
+order = config.ARGUMENT.overscan_order
+oscan_clip = config.ARGUMENT.overscan_clip
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+prescan_reg = config.ARGUMENT.prescan_reg
+gain_key = config.ARGUMENT.gain_keyword
+
+L0_files_path = '/Users/paminabby/Desktop/0503/*.fits'
+L0_output_dir = '/Users/paminabby/Desktop/0503/post_red/'
+
+ref_output = OrientationReference(channel_orientation_ref_path,data_type)
+
+for raw_file_path in find_files(L0_files_path): 
+    raw_file = kpf0_from_fits(raw_file_path,data_type)
+    L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,data_type,prescan_reg,gain_key)
+    _,file_name_ext = split(raw_file_path)
+    file_name,ext = splitext(file_name_ext)
+    output_file_name = file_name + '_2D'
+    L0_result = to_fits(L0_with_ffi,L0_output_dir + output_file_name + ext)
