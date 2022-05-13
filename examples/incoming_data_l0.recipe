@@ -31,10 +31,10 @@ if file_or_direct == 'directory':
         L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg_red,srl_overscan_reg_red,overscan_method,order,oscan_clip,ref_output_red,lev0_ffi_ext_red,data_type,prescan_reg,gain_key)
         _,file_name_ext = split(raw_file_path)
         file_name,ext = splitext(file_name_ext)
-        output_file_name = file_name + '_2D'
+        output_file_name = file_name
         L0_result = to_fits(L0_with_ffi,L0_output_path_1 + output_file_name + ext)
 
-    L0_files_path_2 = l0_path_red_assembled + '*_2D.fits'
+    L0_files_path_2 = l0_path_red_assembled + '*.fits'
     L0_output_path_2 = l0_path_red_green_assembled
 
     for raw_file_path in find_files(L0_files_path_2): 
@@ -53,7 +53,7 @@ if file_or_direct == 'file':
         L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg_red,srl_overscan_reg_red,overscan_method,order,oscan_clip,ref_output_red,lev0_ffi_ext_red,data_type,prescan_reg,gain_key)
         _,file_name_ext = split(raw_file_path)
         file_name,ext = splitext(file_name_ext)
-        output_file_name = file_name + '_2D'
+        output_file_name = file_name
         L0_result = to_fits(L0_with_ffi,L0_output_path_1 + output_file_name + ext)
 
     L0_files_path_2 = l0_path_red_assembled
