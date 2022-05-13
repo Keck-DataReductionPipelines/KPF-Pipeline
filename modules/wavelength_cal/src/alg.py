@@ -352,12 +352,9 @@ class WaveCalibration:
                 else:
                    peak_heights = fitted_peak_pixels
 
-                # clip out bad fitted lines
-                nonclipped_lines = np.where(fitted_peak_pixels > 0)[0]
-
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
-                    wls[nonclipped_lines], n_pixels, fitted_peak_pixels[nonclipped_lines], peak_heights=peak_heights[nonclipped_lines],
+                    wls, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
                     plot_path=order_plt_path
                 )
                 poly_soln_final_array[order_num,:] = polynomial_wls
@@ -1089,12 +1086,15 @@ class WaveCalibration:
         weights = 1 / np.sqrt(peak_heights)
         if self.fit_type == 'Legendre': 
 
-            leg_out = Legendre.fit(fitted_peak_pixels, wls, self.fit_order, w=weights)
+            unclipped_idx = np.where(fitted_peak_pixels > 0)[0]
+
+            leg_out = Legendre.fit(fitted_peak_pixels[unclipped_idx], wls[unclipped_idx], self.fit_order, w=weights[unclipped_idx])
             our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
             if plot_path is not None:
 
-                s = InterpolatedUnivariateSpline(fitted_peak_pixels, wls)
+                sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
+                s = InterpolatedUnivariateSpline(fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx])
                 interpolated_ground_truth = s(np.arange(n_pixels))
 
                 # plot ground truth wls vs our wls
