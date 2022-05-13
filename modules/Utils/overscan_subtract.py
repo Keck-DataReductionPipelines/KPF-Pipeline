@@ -23,6 +23,8 @@ class OverscanSubtraction(KPF0_Primitive):
         self.ref_output = self.action.args[6] #output of ccd reference file
         self.ffi_exts = self.action.args[7] #fits extensions where ffis will be stored
         self.data_type = self.action.args[8] #data type, pertaining to instrument
+        self.prescan_reg = self.action.args[9] #prescan region of raw image
+        self.gain_key = self.action.args[10]
 
     def overscan_arrays(self):
         """Makes array of overscan pixels. For example, if raw image including overscan region
@@ -38,7 +40,6 @@ class OverscanSubtraction(KPF0_Primitive):
         # if self.rawfile.header['NOSCN_S'] and self.rawfile.header['NOSCN_P']:
 
         # else:
-      
         srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
         prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
         srl_N_overscan = len(srl_overscan_pxs)
@@ -47,8 +48,8 @@ class OverscanSubtraction(KPF0_Primitive):
         prl_overscan_clipped = prl_overscan_pxs[self.oscan_clip_no:prl_N_overscan-1-self.oscan_clip_no]
         return srl_overscan_pxs,prl_overscan_pxs,srl_overscan_clipped,prl_overscan_clipped
 
-    def mean_subtraction(self,image,overscan_reg): #should work now
-        """Gets mean of overscan data, subtracts value from raw science image data.
+    def median_subtraction(self,image,overscan_reg): #should work now
+        """Gets median of overscan data, subtracts value from raw science image data.
 
         Args:
             image(np.ndarray): Array of image data
@@ -59,7 +60,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         raw_sub_os = np.zeros_like(image)
         for row in range(0,raw_sub_os.shape[0]):
-            raw_sub_os[row,:] = image[row,:] - np.mean(image[row,overscan_reg],keepdims=True) 
+            raw_sub_os[row,:] = image[row,:] - np.median(image[row,overscan_reg],keepdims=True) 
         return raw_sub_os
 
 
@@ -153,66 +154,66 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
 
-    def neid_setup_run(self,l0_obj,channel_exts):
-        """Runs individual frame overscan subtraction and removal. In progress.
+    # def neid_setup_run(self,l0_obj,channel_exts):
+    #     """Runs individual frame overscan subtraction and removal. In progress.
 
-        Args:
-            l0_obj (fits.HDUList): Raw file object.
-            channel_exts (list): List of extensions with amplifiers. 
+    #     Args:
+    #         l0_obj (fits.HDUList): Raw file object.
+    #         channel_exts (list): List of extensions with amplifiers. 
             
-        Returns:
-            array: Whole assembled image (full frame image)
-        """
-        detsize = self.rawfile.header['PRIMARY']['DETSIZE']
-        detsize = detsize.replace('[','')
-        detsize = detsize.replace(']','')
-        a_detsize,b_detsize = detsize.split(',')
-        a_detsize,b_detsize = int(a_detsize),int(b_detsize)
-        whole_image = np.zeros((b_detsize,a_detsize))
-        for ext in channel_exts:
-            bias1 = self.rawfile.header[ext]['BIASSEC1']
-            bias2 = self.rawfile.header[ext]['BIASSEC2']
-            bias3 = self.rawfile.header[ext]['BIASSEC3']
-            datasec = self.rawfile.header[ext]['DATASEC']
-            detsec = self.rawfile.header[ext]['DETSEC']
+    #     Returns:
+    #         array: Whole assembled image (full frame image)
+    #     """
+    #     detsize = self.rawfile.header['PRIMARY']['DETSIZE']
+    #     detsize = detsize.replace('[','')
+    #     detsize = detsize.replace(']','')
+    #     a_detsize,b_detsize = detsize.split(',')
+    #     a_detsize,b_detsize = int(a_detsize),int(b_detsize)
+    #     whole_image = np.zeros((b_detsize,a_detsize))
+    #     for ext in channel_exts:
+    #         bias1 = self.rawfile.header[ext]['BIASSEC1']
+    #         bias2 = self.rawfile.header[ext]['BIASSEC2']
+    #         bias3 = self.rawfile.header[ext]['BIASSEC3']
+    #         datasec = self.rawfile.header[ext]['DATASEC']
+    #         detsec = self.rawfile.header[ext]['DETSEC']
         
-            col_start_list = []
-            col_end_list = []
-            row_start_list = []
-            row_end_list = []
-            for section in (bias1,bias2,bias3):
-                bias = section.replace('[','')
-                bias = bias.replace(']','')
-                a,b = bias.split(',')
-                col_start,col_end = a.split(':')
-                row_start,row_end = b.split(':')
-                col_start,col_end,row_start,row_end = int(col_start),int(col_end),int(row_start),int(row_end)
-                col_start_list.append(col_start)
-                col_end_list.append(col_end)
-                row_start_list.append(row_start)
-                row_end_list.append(row_end)      
+    #         col_start_list = []
+    #         col_end_list = []
+    #         row_start_list = []
+    #         row_end_list = []
+    #         for section in (bias1,bias2,bias3):
+    #             bias = section.replace('[','')
+    #             bias = bias.replace(']','')
+    #             a,b = bias.split(',')
+    #             col_start,col_end = a.split(':')
+    #             row_start,row_end = b.split(':')
+    #             col_start,col_end,row_start,row_end = int(col_start),int(col_end),int(row_start),int(row_end)
+    #             col_start_list.append(col_start)
+    #             col_end_list.append(col_end)
+    #             row_start_list.append(row_start)
+    #             row_end_list.append(row_end)      
                 
-            #detsec
-            detsec = detsec.replace('[','')
-            detsec = detsec.replace(']','')
-            a_det,b_det = detsec.split(',')
-            aa_det,ab_det = a_det.split(':')
-            ba_det,bb_det = b_det.split(':')
-            aa_det,ab_det,ba_det,bb_det = int(aa_det),int(ab_det),int(ba_det),int(bb_det)    
+    #         #detsec
+    #         detsec = detsec.replace('[','')
+    #         detsec = detsec.replace(']','')
+    #         a_det,b_det = detsec.split(',')
+    #         aa_det,ab_det = a_det.split(':')
+    #         ba_det,bb_det = b_det.split(':')
+    #         aa_det,ab_det,ba_det,bb_det = int(aa_det),int(ab_det),int(ba_det),int(bb_det)    
             
-            #datasec
-            datasec = datasec.replace('[','')
-            datasec = datasec.replace(']','')
-            a_data,b_data = datasec.split(',')
-            aa_data,ab_data = a_data.split(':')
-            ba_data,bb_data = b_data.split(':')
-            aa_data,ab_data,ba_data,bb_data = int(aa_data),int(ab_data),int(ba_data),int(bb_data)            
+    #         #datasec
+    #         datasec = datasec.replace('[','')
+    #         datasec = datasec.replace(']','')
+    #         a_data,b_data = datasec.split(',')
+    #         aa_data,ab_data = a_data.split(':')
+    #         ba_data,bb_data = b_data.split(':')
+    #         aa_data,ab_data,ba_data,bb_data = int(aa_data),int(ab_data),int(ba_data),int(bb_data)            
         
-            self.rawfile.data[ext] = self.rawfile.data[ext][ba_data:bb_data,aa_data:ab_data]
-            # perform poly/mean sub
-            #if self.mode=='mean':
-            whole_image[ba_det:bb_det,aa_det:ab_det] = self.rawfile.data[ext]
-        return whole_image
+    #         self.rawfile.data[ext] = self.rawfile.data[ext][ba_data:bb_data,aa_data:ab_data]
+    #         # perform poly/mean sub
+    #         #if self.mode=='mean':
+    #         whole_image[ba_det:bb_det,aa_det:ab_det] = self.rawfile.data[ext]
+    #     return whole_image
             #elif self.mode=='polynomial': # subtract linear fit of overscan
 
         
@@ -237,10 +238,16 @@ class OverscanSubtraction(KPF0_Primitive):
         # create empty list for final, overscan subtracted/cut arrays
         no_overscan_imgs = []
         for img,key in zip(channel_imgs,channel_keys):
-            new_img = self.orientation_adjust(img,key)
+            ###gain addition###
+            
+            
+            ##########
+            
+            new_img_w_prescan = self.orientation_adjust(img,key)
+            new_img = new_img_w_prescan[:,self.prescan_reg[1]:-1]
             # overscan subtraction for chosen method
-            if self.mode=='mean':
-                raw_sub_os = self.mean_subtraction(new_img,srl_clipped_oscan)
+            if self.mode=='median':
+                raw_sub_os = self.median_subtraction(new_img,srl_clipped_oscan)
 
             elif self.mode=='polynomial': # subtract linear fit of overscan
                 raw_sub_os = self.polyfit_subtraction(new_img,srl_clipped_oscan)
@@ -268,10 +275,16 @@ class OverscanSubtraction(KPF0_Primitive):
 
         if self.data_type == 'KPF':
             l0_obj = self.rawfile
+            #print(l0_obj.info())
             frames_data = []
             for ext in channel_exts:
                 data = l0_obj[ext]
-                frames_data.append(data)
+                gain = l0_obj.header[ext][self.gain_key]
+                #data = data/(2**16) #don't make hardcoded? only ok for now, output a warning here
+                #####
+                #print(ext,data,gain)
+                data_gain_corr = data*gain
+                frames_data.append(data_gain_corr)
             frames_data = np.array(frames_data)
             #full_frame_images=[]
             for frame in range(len(self.ffi_exts)):
