@@ -43,6 +43,8 @@ class ConfigHandler():
                 return self.config_param.getint(param, default)
             elif isinstance(default, float):
                 return self.config_param.getfloat(param, default)
+            elif isinstance(default, bool):
+                return self.config_param.getboolean(param, default)
             else:
                 c_str = self.config_param.get(param, default)
 

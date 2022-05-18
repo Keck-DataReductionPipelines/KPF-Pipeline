@@ -142,12 +142,12 @@ class SpectralExtractionAlg(ModuleAlgBase):
     name = 'SpectralExtraction'
 
     rectifying_method = ['normal', 'vertical', 'norect']
-    extracting_method = ['optimal', 'sum', 'rectonly']
+    extracting_method = ['optimal', 'summ', 'rectonly']
 
     # @profile
     def __init__(self, flat_data, flat_header, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None,
-                 rectification_method=NoRECT, extraction_method=OPTIMAL,
+                 rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
                  clip_file=None, logger_name=None):
 
         if not isinstance(flat_data, np.ndarray):
@@ -210,6 +210,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.output_area_info = list()
         self.poly_clip_dict = dict()
         self.poly_clip_update = False
+        self.total_order_per_ccd = None
+        self.ccd_index = ccd_index
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -1472,7 +1474,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return [num_x/den, num_y/den]
 
-    def write_data_to_dataframe(self, result_data):
+    def write_data_to_dataframe(self, result_data, first_row=None):
         """ Write spectral extraction result to an instance of Pandas DataFrame.
 
         Args:
@@ -1508,7 +1510,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         df_result.attrs['OBSJD'] = mjd + 2400000.5
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
-        df_result.attrs['ORDEROFF'] = self.start_row_index()
+        df_result.attrs['ORDEROFF'] = self.start_row_index() if first_row is None else first_row
         df_result.attrs['DIMWIDTH'] = dim_width
         df_result.attrs['FROMIMGX'] = self.origin[self.X]
         df_result.attrs['FROMIMGY'] = self.origin[self.Y]
@@ -1575,6 +1577,27 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return self.orderlet_names
 
+    def get_total_order_for(self, ccd_index=None):
+        """
+
+        Args:
+            ccd_index (int): ccd index for possible ccd array. eg. ccd_index = 0 is for green else for red for KPF.
+
+        Returns:
+            int: total orders for the specified ccd.
+        """
+        if ccd_index is None:
+            return None
+
+        if self.total_order_per_ccd is None:
+            total_order_per_ccd = self.get_config_value('total_order_per_ccd', '[]')
+            if isinstance(total_order_per_ccd, list):
+                self.total_order_per_ccd = total_order_per_ccd
+            elif isinstance(total_order_per_ccd, str):
+                self.total_order_per_ccd = [int(t) for t in total_order_per_ccd.split(',')]
+
+        return self.total_order_per_ccd[ccd_index] if ccd_index < len(self.total_order_per_ccd) else None
+
     def get_orderlet_index(self, order_name):
         """ Find the index of the order name in the orderlet name list.
 
@@ -1613,8 +1636,11 @@ class SpectralExtractionAlg(ModuleAlgBase):
         orderlet_index = self.get_orderlet_index(order_name)
         traces_per_order = self.get_total_orderlets_from_image()
 
+        total_order_per_ccd = self.get_total_order_for(self.ccd_index) if self.ccd_index is not None else None
+        total_traces = total_order_per_ccd * traces_per_order if total_order_per_ccd is not None else self.total_order
+
         if orderlet_index < traces_per_order:
-            o_set = np.arange(orderlet_index, self.total_order, traces_per_order, dtype=int)
+            o_set = np.arange(orderlet_index, total_traces, traces_per_order, dtype=int)
         else:
             o_set = np.array([])
 
@@ -1701,23 +1727,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
         widths = order_poly['edges'] if order_poly else [None, None]
         clip_areas = order_poly['clip_areas'] if order_poly else None
 
-        """    
-        # infile = open(poly_file, 'rb')
-        order_flux = np.load(poly_file,  allow_pickle=True)
-        # infile.close()
-
-        k = 'y_center'
-        idx = np.where(order_flux[:, 0] == k)[0][0]
-        y_center = order_flux[idx, 1]
-
-        k = 'edges'
-        idx = np.where(order_flux[:, 0] == k)[0][0]
-        lower_width, upper_width = order_flux[idx, 1]
-
-        k = 'clip_areas'
-        idx = np.where(order_flux[:, 0] == k)[0][0]
-        clip_areas = order_flux[idx, 1]
-        """
         return y_center, widths[0], widths[1], clip_areas
 
     def reset_clip_file(self):
@@ -1778,7 +1787,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
                          order_name=None,
                          show_time=False,
                          print_debug=None,
-                         bleeding_file=None):
+                         bleeding_file=None,
+                         first_index=None):
         """ Spectral extraction from 2D flux to 1D. Rectification step is optional.
 
         Args:
@@ -1848,8 +1858,14 @@ class SpectralExtractionAlg(ModuleAlgBase):
         if rectification_on != 'spectrum':
             data_group.append({'data': self.flat_flux, 'is_raw_data': self.is_raw_flat, 'idx': self.FDATA})
 
-        start_row_at = self.start_row_index()
-        result_height = order_set.size + start_row_at if order_set.size > 0 else 0
+        # this is for not self.NOEXTRACT (not rectification)
+        start_row_at = first_index if first_index is not None else self.start_row_index()
+
+        total_order_per_ccd = self.get_total_order_for(self.ccd_index) if self.ccd_index is not None else None
+        if total_order_per_ccd is not None:
+            result_height = max(total_order_per_ccd, order_set.size + start_row_at)
+        else:
+            result_height = order_set.size + start_row_at if order_set.size > 0 else 0
 
         # re-allocate the space to hold the rectified spectrum for the order
         self.allocate_memory_flux(order_set, 2)
@@ -1877,7 +1893,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
         out_data_height, out_data_width = self.update_output_size(order_set, order_result, result_height)
         out_data = np.zeros((out_data_height, out_data_width))
         order_rectification_result = list()
-
         # produce output data
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
@@ -1888,9 +1903,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
             if self.extraction_method == self.NOEXTRACT:
                 order_rectification_result.append({"order": c_order, "rectification": order_result[c_order]})
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
-
         if self.extraction_method == self.NOEXTRACT:
             data_df = self.write_rectified_data_to_dataframe(out_data, order_rectification_result)
         else:
-            data_df = self.write_data_to_dataframe(out_data)
+            data_df = self.write_data_to_dataframe(out_data, first_row=start_row_at)
         return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on}
