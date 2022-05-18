@@ -219,7 +219,7 @@ class OrderRectification(KPF0_Primitive):
 
         if self.logger:
             self.logger.info("OrderRectification: rectifying order...")
-
+        '''
         all_order_names = self.orderlet_names if type(self.orderlet_names) is list else [self.orderlet_names]
         all_orders = []
         all_o_sets = []
@@ -236,7 +236,9 @@ class OrderRectification(KPF0_Primitive):
             all_orders.extend(a_set[0:order_to_process])
 
         all_orders = np.sort(all_orders)
-
+        '''
+        total_orders = np.shape(self.order_trace_data)[0]
+        all_orders = np.arange(0, total_orders, dtype=int)
         if self.logger:
             self.logger.info("OrderRectification: do " +
                              SpectralExtractionAlg.rectifying_method[self.rectification_method] +
@@ -269,13 +271,6 @@ class OrderRectification(KPF0_Primitive):
         for att in data_result.attrs:
             lev0_obj.header[self.data_ext][att] = data_result.attrs[att]
 
-    def get_order_set(self, o_set, s_order):
-        e_order = min(self.max_result_order, len(o_set)) \
-            if (self.max_result_order is not None and self.max_result_order > 0) else o_set.size
-
-        o_set_ary = o_set[0:e_order] + s_order
-
-        return o_set_ary[np.where(o_set_ary < self.alg.get_spectrum_order())]
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):
         if key in args_keys:
