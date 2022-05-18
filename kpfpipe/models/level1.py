@@ -70,3 +70,15 @@ class KPF1(KPF0):
             'KPF':  self._read_from_KPF,
             'NEID': self._read_from_NEID
         }
+
+    @classmethod
+    def from_l0(self, l0):
+        l1 = KPF1()
+        l1header = l1.header['PRIMARY']
+        l1.header['PRIMARY'] = l0.header['PRIMARY']
+
+        for key, val in l1header.items():
+            l1.header['PRIMARY'][key] = val
+
+        return l1
+

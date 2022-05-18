@@ -66,3 +66,14 @@ class KPF2(KPF0):
             if desc is np.nan:
                 desc = None
             self.header[ext_name][key] = (val, desc)
+
+    @classmethod
+    def from_l1(self, l1):
+        l2 = KPF2()
+        l2header = l2.header['PRIMARY']
+        l2.header['PRIMARY'] = l1.header['PRIMARY']
+
+        for key, val in l2header.items():
+            l2.header['PRIMARY'][key] = val
+
+        return l2
