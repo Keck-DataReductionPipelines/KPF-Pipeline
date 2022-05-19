@@ -137,7 +137,7 @@ def main():
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         observer = Observer()
-        al = FileAlarm(framework, arg, patterns=[args.watch+"/KP*.fits"])
+        al = FileAlarm(framework, arg, patterns=[args.watch+"2*/KP*.fits"])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
