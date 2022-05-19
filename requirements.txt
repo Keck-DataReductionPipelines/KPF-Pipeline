@@ -13,6 +13,7 @@ pytest-cov
 coveralls==2.2.0
 barycorrpy
 photutils
+watchdog==2.1.7
 
 # Documentation
 sphinx
