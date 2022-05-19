@@ -73,6 +73,7 @@ class FileAlarm(PatternMatchingEventHandler):
         else:
             os.environ['INPUT_FILE'] = event.src_path
         self.logging.debug("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
+        os.environ['DATE_DIR'] = os.path.dirname(os.environ['INPUT_FILE'])
         if os.environ['INPUT_FILE'].endswith('.fits') and self.check_redundant(event):
             self.framework.append_event('start_recipe', self.arg)
 
