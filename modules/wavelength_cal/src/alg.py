@@ -139,8 +139,9 @@ class WaveCalibration:
             order_list = self.remove_orders(step=1)
             n_orders = len(order_list)
 
-            masked_calflux = self.mask_array_neid(calflux, n_orders)
-
+            # masked_calflux = self.mask_array_neid(calflux, n_orders)
+            masked_calflux = calflux # TODO: fix
+           
             # perform wavelength calibration
             poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
@@ -320,6 +321,7 @@ class WaveCalibration:
 
                 line_wavelengths = expected_peak_locs[order_num]['known_wavelengths_vac']
                 line_pixels_expected = expected_peak_locs[order_num]['line_positions']
+
                 sorted_indices = np.argsort(line_pixels_expected)
                 line_wavelengths = line_wavelengths[sorted_indices]
                 line_pixels_expected = line_pixels_expected[sorted_indices]
@@ -1083,12 +1085,16 @@ class WaveCalibration:
 
         weights = 1 / np.sqrt(peak_heights)
         if self.fit_type == 'Legendre': 
-            leg_out = Legendre.fit(fitted_peak_pixels, wls, self.fit_order, w=weights)
+
+            unclipped_idx = np.where(fitted_peak_pixels > 0)[0]
+
+            leg_out = Legendre.fit(fitted_peak_pixels[unclipped_idx], wls[unclipped_idx], self.fit_order, w=weights[unclipped_idx])
             our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
             if plot_path is not None:
 
-                s = InterpolatedUnivariateSpline(fitted_peak_pixels, wls)
+                sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
+                s = InterpolatedUnivariateSpline(fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx])
                 interpolated_ground_truth = s(np.arange(n_pixels))
 
                 # plot ground truth wls vs our wls
