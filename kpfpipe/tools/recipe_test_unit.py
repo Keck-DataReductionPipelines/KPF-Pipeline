@@ -67,6 +67,7 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
 
     # Try to initialize the framework 
     try:
+        print("ehre")
         framework = Framework(pipe, framework_config, testing=True)
         # Overwrite the framework logger with this instance of logger
         # using framework default logger creates some obscure problem
