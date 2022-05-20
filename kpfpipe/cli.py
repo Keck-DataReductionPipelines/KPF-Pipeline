@@ -73,7 +73,7 @@ class FileAlarm(PatternMatchingEventHandler):
         else:
             os.environ['INPUT_FILE'] = event.src_path
         self.logging.debug("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
-        os.environ['DATE_DIR'] = os.path.dirname(os.environ['INPUT_FILE'])
+        os.environ['DATE_DIR'] = os.path.basename(os.path.dirname(os.environ['INPUT_FILE']))
         if os.environ['INPUT_FILE'].endswith('.fits') and self.check_redundant(event):
             self.framework.append_event('start_recipe', self.arg)
 
@@ -82,7 +82,6 @@ class FileAlarm(PatternMatchingEventHandler):
         self.process(event)
 
     def on_moved(self, event):
-        self.logging.debug("File move event: {}".format(event.dest_path))
         self.process(event)
 
     def on_created(self, event):
