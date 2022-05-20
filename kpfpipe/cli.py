@@ -66,10 +66,10 @@ class FileAlarm(PatternMatchingEventHandler):
 
     def process(self, event):
         if os.path.basename(event.src_path).startswith('.'):
-            final_file = os.path.dirname(event.src_path) + \
+            final_file = os.path.dirname(event.src_path) + "/" + \
                 '.'.join(os.path.basename(event.src_path).split('.')[1:-1])
-            print("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
             while not os.path.exists(final_file):
+                print("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
                 time.sleep(1)
             os.environ['INPUT_FILE'] = os.path.dirname(event.src_path) + final_file
         else:
