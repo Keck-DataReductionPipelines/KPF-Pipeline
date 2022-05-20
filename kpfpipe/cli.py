@@ -76,6 +76,7 @@ class FileAlarm(PatternMatchingEventHandler):
         os.environ['DATE_DIR'] = os.path.basename(os.path.dirname(os.environ['INPUT_FILE']))
         if os.environ['INPUT_FILE'].endswith('.fits') and self.check_redundant(event):
             self.framework.append_event('start_recipe', self.arg)
+            self.framework.append_event('exit', self.arg)
 
     def on_modified(self, event):
         logging.debug("File modification event: {}".format(event.src_path))
