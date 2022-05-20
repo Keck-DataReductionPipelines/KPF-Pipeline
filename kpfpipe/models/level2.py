@@ -26,6 +26,29 @@ class KPF2(KPF0):
 
     '''
 
+    def add_default_headers(self):
+        """Adds the default header keywords as defined in KPF_headers_L1.csv"""
+
+        for i, row in self.header_definitions.iterrows():
+            ext_name = row['Ext']
+            key = row['Keyword']
+            val = row['Value']
+            desc = row['Description']
+            if val is np.nan:
+                val = None
+            if desc is np.nan:
+                desc = None
+            self.header[ext_name][key] = (val, desc)
+
+    @classmethod
+    def from_l1(self, l1):
+        """Create a level2 object from a level1 object in order to inherit headers."""
+        l2 = KPF2()
+        l2.header['PRIMARY'] = l1.header['PRIMARY']
+        self.add_default_headers()
+
+        return l2
+
     def __init__(self):
         '''
         Constructor
@@ -55,25 +78,5 @@ class KPF2(KPF0):
         for key in del_keys:
             del self.header[key]
 
-        # add header keywords
-        for i, row in self.header_definitions.iterrows():
-            ext_name = row['Ext']
-            key = row['Keyword']
-            val = row['Value']
-            desc = row['Description']
-            if val is np.nan:
-                val = None
-            if desc is np.nan:
-                desc = None
-            self.header[ext_name][key] = (val, desc)
+        self.add_default_headers()
 
-    @classmethod
-    def from_l1(self, l1):
-        l2 = KPF2()
-        l2header = l2.header['PRIMARY']
-        l2.header['PRIMARY'] = l1.header['PRIMARY']
-
-        for key, val in l2header.items():
-            l2.header['PRIMARY'][key] = val
-
-        return l2
