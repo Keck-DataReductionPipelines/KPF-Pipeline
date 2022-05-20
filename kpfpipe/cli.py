@@ -66,30 +66,31 @@ class FileAlarm(PatternMatchingEventHandler):
     def process(self, event):
         if event.src_path.startswith('.'):
             final_file = '.'.join(os.path.basename(event.src_path).split('.')[1:-1])
-            self.logging.debug("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
+            logging.debug("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
             while not os.path.exists(final_file):
                 time.sleep(1)
             os.environ['INPUT_FILE'] = final_file
         else:
             os.environ['INPUT_FILE'] = event.src_path
-        self.logging.debug("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
+        logging.debug("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
         os.environ['DATE_DIR'] = os.path.basename(os.path.dirname(os.environ['INPUT_FILE']))
         if os.environ['INPUT_FILE'].endswith('.fits') and self.check_redundant(event):
             self.framework.append_event('start_recipe', self.arg)
 
     def on_modified(self, event):
-        self.logging.debug("File modification event: {}".format(event.src_path))
+        logging.debug("File modification event: {}".format(event.src_path))
         self.process(event)
 
     def on_moved(self, event):
+        logging.debug("File move event: {}".format(event.src_path))
         self.process(event)
 
     def on_created(self, event):
-        self.logging.debug("File creation event: {}".format(event.src_path))
+        logging.debug("File creation event: {}".format(event.src_path))
         self.process(event)
 
     def on_deleted(self, event):
-        self.logging.debug("File removal event: {}".format(event.src_path))
+        logging.debug("File removal event: {}".format(event.src_path))
 
     def stop(self):
         os._exit(0)
@@ -137,7 +138,7 @@ def main():
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         observer = Observer()
-        al = FileAlarm(framework, arg, patterns=[args.watch+"2*/KP*.fits"])
+        al = FileAlarm(framework, arg, patterns=[args.watch+"KP*.fits"])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
