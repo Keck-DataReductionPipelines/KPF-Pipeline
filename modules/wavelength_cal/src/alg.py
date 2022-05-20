@@ -271,6 +271,7 @@ class WaveCalibration:
 
             order_flux = cal_flux[order_num,:]
             rough_wls_order = rough_wls[order_num,:]
+
             n_pixels = len(order_flux)
 
             # find, clip, and compute precise wavelengths for peaks.
@@ -304,8 +305,8 @@ class WaveCalibration:
                         should not be set for Etalon frames.'
 
                     wls = np.interp(
-                        fitted_peak_pixels[good_peak_idx], np.arange(n_pixels), 
-                        rough_wls_order
+                        fitted_peak_pixels[good_peak_idx], np.arange(n_pixels)[rough_wls_order>0], 
+                        rough_wls_order[rough_wls_order>0]
                     )
 
                 fitted_peak_pixels = fitted_peak_pixels[good_peak_idx]
@@ -568,7 +569,7 @@ class WaveCalibration:
         c = order_flux - np.ma.min(order_flux)
 
         # TODO: make this more indep of order_flux flux
-        height = 3 * np.ma.median(c) # 0.5 * np.ma.median(c) works for whole chip
+        height = np.ma.median(c) # 0.5 * np.ma.median(c) works for whole chip
         detected_peaks, properties = signal.find_peaks(c, height=height)
 
         distance = np.median(np.diff(detected_peaks)) // 2
@@ -889,7 +890,7 @@ class WaveCalibration:
 
         n_pixels = len(order_flux)
 
-        s = InterpolatedUnivariateSpline(np.arange(n_pixels), rough_wls_order)
+        s = InterpolatedUnivariateSpline(np.arange(n_pixels)[rough_wls_order>0], rough_wls_order[rough_wls_order>0])
         approx_peaks_lambda = s(fitted_peak_pixels[good_peak_idx])
 
         # approx_peaks_lambda = np.interp(
@@ -898,6 +899,17 @@ class WaveCalibration:
         # Now figure what mode numbers the peaks correspond to
         n_clipped_peaks = len(fitted_peak_pixels[good_peak_idx])
         mode_nums = np.empty(n_clipped_peaks)
+
+        def increment_mode_num(mode_num, backwards=True):
+            if backwards:
+                return mode_num - 1
+            else:
+                 return mode_num + 1
+
+        if len(np.where((rough_wls_order[:-1] <= rough_wls_order[1:])  == 1)[0]) > 10:
+            backwards=False
+        else:
+            backwards=True
 
         peak_mode_num = 0
         for i in range(n_clipped_peaks):
@@ -916,7 +928,7 @@ class WaveCalibration:
             if i==0:
                 for j in np.arange(50):
                     if fitted_peak_pixels[good_peak_idx][i] > (j + 1.5) * running_peak_diff:
-                        peak_mode_num += 1
+                        peak_mode_num = increment_mode_num(peak_mode_num, backwards=backwards)
                 if fitted_peak_pixels[good_peak_idx][i] > 50.5 * running_peak_diff:
                     assert False, 'More than 50 peaks in a row at the start of the chip not detected!'
         
@@ -929,17 +941,17 @@ class WaveCalibration:
                         fitted_peak_pixels[good_peak_idx][i - 1] > 
                         (j + 1.5) * running_peak_diff
                     ):
-                        peak_mode_num += 1
+                        peak_mode_num = increment_mode_num(peak_mode_num, backwards=backwards)
                 if (
                     fitted_peak_pixels[good_peak_idx][i] - 
                     fitted_peak_pixels[good_peak_idx][i - 1] > 
                     8.5 * running_peak_diff
                 ):
-                    assert False, 'More than 8 peaks in a row not detected!'
+                    print('Warning: more than 8 peaks in a row not detected!')
 
             # set mode_nums
             mode_nums[i] = peak_mode_num
-            peak_mode_num += 1
+            peak_mode_num = increment_mode_num(peak_mode_num, backwards=backwards)
 
         idx = (np.abs(comb_lines_angstrom - 
             approx_peaks_lambda[len(approx_peaks_lambda) // 2])).argmin()
@@ -953,14 +965,14 @@ class WaveCalibration:
             plt.figure()
             plt.plot(rough_wls_order, order_flux, alpha=0.2)
             plt.vlines(comb_lines_angstrom, ymin=0, ymax=5000, color='r')
-            plt.xlim(rough_wls_order[200], rough_wls_order[700])
+            plt.xlim(np.nanmin(rough_wls_order), np.nanmin(rough_wls_order) + 3)
             plt.xlabel('wavelength [$\\rm \AA$]')
             plt.savefig('{}/rough_sol_and_lfc_lines.png'.format(plot_path), dpi=250)
             plt.close()
 
             n_zoom_sections = 20
             zoom_section_wavelen = (
-                (np.max(rough_wls_order) - np.min(rough_wls_order)) // 
+                (np.nanmax(rough_wls_order) - np.nanmin(rough_wls_order)) // 
                 n_zoom_sections
             )
             zoom_section_pixels = n_pixels // n_zoom_sections
@@ -972,10 +984,10 @@ class WaveCalibration:
                     if (
                         (
                             comb_lines_angstrom[mode_num.astype(int)] > 
-                            zoom_section_wavelen * i + np.min(rough_wls_order)
+                            zoom_section_wavelen * i + np.nanmin(rough_wls_order)
                         ) and (
                             comb_lines_angstrom[mode_num.astype(int)] < 
-                            zoom_section_wavelen * (i + 1) + np.min(rough_wls_order)
+                            zoom_section_wavelen * (i + 1) + np.nanmin(rough_wls_order)
                         )
                     ):
                         ax.text(
@@ -983,8 +995,8 @@ class WaveCalibration:
                             str(int(mode_num)), fontsize=4
                         )
                 ax.set_xlim(
-                    zoom_section_wavelen * i + np.min(rough_wls_order), 
-                    zoom_section_wavelen * (i + 1) + np.min(rough_wls_order)
+                    zoom_section_wavelen * i + np.nanmin(rough_wls_order), 
+                    zoom_section_wavelen * (i + 1) + np.nanmin(rough_wls_order)
                 )
                 ax.set_ylim(
                     0, 
@@ -1154,8 +1166,8 @@ class WaveCalibration:
         # relative RV precision of order = difference between rough wls wavelengths
         # and our wavelength solution wavelengths for all pixels
         n_pixels = len(rough_wls)
-        rel_residual = (leg_out(np.arange(n_pixels)) -  rough_wls) * scipy.constants.c /rough_wls
-        rel_precision_cm_s = 100 * np.std(rel_residual)/np.sqrt(n_pixels)
+        rel_residual = (leg_out(np.arange(n_pixels)[rough_wls>0]) -  rough_wls[rough_wls>0]) * scipy.constants.c /rough_wls[rough_wls>0]
+        rel_precision_cm_s = 100 * np.std(rel_residual)/np.sqrt(len(rough_wls[rough_wls>0]))
 
         if print_update:
             print('Absolute standard error (this order): {:.2f} cm/s'.format(abs_precision_cm_s))

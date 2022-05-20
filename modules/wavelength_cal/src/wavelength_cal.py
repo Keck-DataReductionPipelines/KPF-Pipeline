@@ -125,11 +125,12 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
                         'LFC'
                     ):
-                        raise ValueError(
-                            'Not an LFC file! CAL-OBJ is {}.'.format(
-                                self.l1_obj.header['PRIMARY']['CAL-OBJ']
-                            )
-                        )
+                        pass # TODO: fix
+                        # raise ValueError(
+                        #     'Not an LFC file! CAL-OBJ is {}.'.format(
+                        #         self.l1_obj.header['PRIMARY']['CAL-OBJ']
+                        #     )
+                        # )
                     
                     if self.logger:
                         self.logger.info(
