@@ -106,6 +106,7 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.register_builtin('split', os.path.split, 1)
         self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
         self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
+        self._recipe_visitor.register_builtin('exists', os.path.exists, 1)
 
     def preload_env(self):
         """
