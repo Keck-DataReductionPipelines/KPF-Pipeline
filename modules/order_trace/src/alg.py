@@ -1306,9 +1306,11 @@ class OrderTraceAlg(ModuleAlgBase):
             raise Exception("size of array of x and index not matched")
 
         m_x, m_y, m_index, m_coeffs = self.merge_clusters(index, x, y)
+        """
         new_x = m_x.copy()
         new_y = m_y.copy()
         new_index = m_index.copy()
+        """
         new_x, new_y, new_index = self.remove_broken_cluster(m_index, m_x, m_y)
         return new_x, new_y, new_index
 
@@ -1906,7 +1908,6 @@ class OrderTraceAlg(ModuleAlgBase):
             # the merged curve not pass through the image center, or off the image center
             if max_x_dist == 1 and (unique_x[-1]-unique_x[0] + 1 > nx//2):   # no gap and more than half of the image
                 continue
-
             width_c = unique_x[-1]-unique_x[0]+1
             half_width_c = max(width_c//2, 1)
 
@@ -1918,24 +1919,17 @@ class OrderTraceAlg(ModuleAlgBase):
                 elif stats[c, 4] > stats[c, 3] * 2.0:     # the fitting is off the trace a lot at the ends
                     e_case = 4
                 elif unique_x.size < half_width_c//2:     # few pixels
-                    x_dist = unique_x - np.roll(unique_x, 1)
-                    x_cont_max = 0
-                    total_count = 0
-                    for dist in x_dist:
-                        if dist == 1:
-                            if total_count == 0:
-                                total_count = 1
-                            else:
-                                total_count = total_count + 1
-                            if total_count > x_cont_max:
-                                x_cont_max = total_count
-                        else:
-                            total_count = 0
+                    x_cont_max = self.count_max_ones(unique_x)
                     if max_x_dist > 200 and max_x_dist > x_cont_max * 4.0:  # gap longer than continuous pixels
                         e_case = 5
+                elif not self.in_peaks(index, c, x, y, power, unique_x):     # no peaks meet with the poly
+                    x_cont_max = self.count_max_ones(unique_x)
+                    if max_x_dist > gap and max_x_dist > x_cont_max * 4.0:
+                        e_case = 6
             elif width_c < nx//2 and stats[c, 4] > stats[c, 3] * 4.0:   # check if curve fitting out of the track
                 e_case = 2
             else:                           # gap larger than maximum continuous pixels
+                """
                 x_dist = unique_x - np.roll(unique_x, 1)
                 x_cont_max = 0
                 total_count = 0
@@ -1949,9 +1943,12 @@ class OrderTraceAlg(ModuleAlgBase):
                             x_cont_max = total_count
                     else:
                         total_count = 0
+                """
+                x_cont_max = self.count_max_ones(unique_x)
+
                 if max_x_dist > x_cont_max * 1.5:
                     e_case = 3
-            # print('cluster ', c, ' case ', e_case)
+            print('cluster ', c, ' case ', e_case)
             if e_case > 0:
                 changed = 1
                 index[border_idx] = 0
@@ -1963,6 +1960,43 @@ class OrderTraceAlg(ModuleAlgBase):
             new_x, new_y, new_index = self.reorganize_index(new_index, new_x, new_y)
 
         return new_x, new_y, new_index
+
+    @staticmethod
+    def count_max_ones(unique_x):
+        x_dist = unique_x - np.roll(unique_x, 1)
+        x_cont_max = 0
+        total_count = 0
+        for dist in x_dist:
+            total_count = total_count + 1 if dist == 1 else 0
+            if total_count > x_cont_max:
+                x_cont_max = total_count
+
+        return x_cont_max
+
+    def in_peaks(self, index, c_idx, x, y, power, unique_x):
+        poly, error, area = self.curve_fitting_on_one_cluster(index, c_idx, x, y, power)
+        spec, nx, ny = self.get_spectral_data()
+        check_x_pts = []
+        t_dist = 10.0
+        t_gap = 10
+        for x_idx in range(unique_x[0:-1].size):
+            if abs(unique_x[x_idx+1] - unique_x[x_idx]) >= t_gap:
+                check_x_pts.append((unique_x[x_idx+1] + unique_x[x_idx])//2)
+                if len(check_x_pts) >= 3:
+                    break
+        check_x_pts = np.array(check_x_pts, dtype=int)
+        check_y_dist = np.ones(check_x_pts.size) * t_dist
+        for x_pt_idx, x_pt in enumerate(check_x_pts):
+            peaks, prop = signal.find_peaks(spec[:, x_pt], distance=self.get_trace_vertical_gap())
+            y_val = np.polyval(poly[0:power+1], x_pt)
+            high_peaks = np.where(peaks > y_val)[0]
+            y_peaks_collection = peaks[0:(high_peaks[0]+1)] if high_peaks.size >= 1 else peaks
+            for y_p in y_peaks_collection:
+                y_dist = abs(y_p - y_val)
+                check_y_dist[x_pt_idx] = y_dist  if y_dist < check_y_dist[x_pt_idx] else t_dist
+        close_to_peak = np.all(check_y_dist <= 2.0)
+
+        return close_to_peak
 
     def find_all_cluster_widths(self, index_t: np.ndarray, new_x: np.ndarray, new_y: np.ndarray,
                                 power_for_width_estimation: int = 3,
@@ -2062,6 +2096,7 @@ class OrderTraceAlg(ModuleAlgBase):
                 bottom_edge.fill(0.0)
 
         # remove the cluster which is not in the vertical peaks, need more work on this
+        """
         if self.expected_traces is not None:
             # self.check_expected_traces(cluster_widths, cluster_points)
             check_x_pts = np.array([nx//2], dtype=int)
@@ -2105,7 +2140,7 @@ class OrderTraceAlg(ModuleAlgBase):
                 np.delete(cluster_points, rm_idx, axis=0)
                 np.delete(cluster_widths, rm_idx-1, axis=0)
                 max_cluster_no -= 1
-
+        """
         return cluster_widths, coeffs
 
     def find_cluster_width_by_gaussian(self, cluster_no: int, poly_coeffs: np.ndarray, cluster_points: np.ndarray):
