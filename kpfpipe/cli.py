@@ -144,9 +144,11 @@ def main():
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
+        framework.start_action_loop()
+
         while True:
-            framework.start_action_loop()
-            framework.wait_for_ever()
+            framework.append_event('no_event', arg)
+            time.sleep(5)
 
     else:
         framework.append_event('start_recipe', arg)
