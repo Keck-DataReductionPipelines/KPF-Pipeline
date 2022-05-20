@@ -46,6 +46,7 @@ class FileAlarm(PatternMatchingEventHandler):
         self.framework = framework
         self.arg = arg
         self.logging = framework.pipeline.logger
+        self.cooldown = 0.5
 
         self.file_cache = {}
 
