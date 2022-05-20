@@ -70,7 +70,7 @@ class FileAlarm(PatternMatchingEventHandler):
             print("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
             while not os.path.exists(final_file):
                 time.sleep(1)
-            os.environ['INPUT_FILE'] = final_file
+            os.environ['INPUT_FILE'] = os.path.dirname(event.src_path) + final_file
         else:
             os.environ['INPUT_FILE'] = event.src_path
         print("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
