@@ -58,7 +58,7 @@ class FileAlarm(PatternMatchingEventHandler):
         if key in self.file_cache:
             last_update = self.file_cache[key]
             if time.time() - last_update < 2 * self.cooldown:
-                logging.debug("Ignoring duplicate file event: {}".format(event.src_path))
+                print("Ignoring duplicate file event: {}".format(event.src_path))
                 return False
 
         self.file_cache[key] = time.time()
@@ -67,32 +67,32 @@ class FileAlarm(PatternMatchingEventHandler):
     def process(self, event):
         if os.path.basename(event.src_path).startswith('.'):
             final_file = '.'.join(os.path.basename(event.src_path).split('.')[1:-1])
-            logging.debug("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
+            print("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
             while not os.path.exists(final_file):
                 time.sleep(1)
             os.environ['INPUT_FILE'] = final_file
         else:
             os.environ['INPUT_FILE'] = event.src_path
-        logging.debug("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
+        print("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
         os.environ['DATE_DIR'] = os.path.basename(os.path.dirname(os.environ['INPUT_FILE']))
         if os.environ['INPUT_FILE'].endswith('.fits') and self.check_redundant(event):
             self.framework.append_event('start_recipe', self.arg)
             self.framework.append_event('exit', self.arg)
 
     def on_modified(self, event):
-        logging.debug("File modification event: {}".format(event.src_path))
+        print("File modification event: {}".format(event.src_path))
         self.process(event)
 
     def on_moved(self, event):
-        logging.debug("File move event: {}".format(event.src_path))
+        print("File move event: {}".format(event.src_path))
         self.process(event)
 
     def on_created(self, event):
-        logging.debug("File creation event: {}".format(event.src_path))
+        print("File creation event: {}".format(event.src_path))
         self.process(event)
 
     def on_deleted(self, event):
-        logging.debug("File removal event: {}".format(event.src_path))
+        print("File removal event: {}".format(event.src_path))
 
     def stop(self):
         os._exit(0)
