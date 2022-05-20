@@ -45,7 +45,7 @@ class KPF2(KPF0):
         """Create a level2 object from a level1 object in order to inherit headers."""
         l2 = KPF2()
         l2.header['PRIMARY'] = l1.header['PRIMARY']
-        self.add_default_headers()
+        l2.add_default_headers()
 
         return l2
 
