@@ -86,7 +86,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None,
                  reweighting_method=None, segment_limits=None, order_limits=None, area_limits=None):
 
-        if not isinstance(spectrum_data, np.ndarray):
+        if spectrum_data is not None and not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
         if header is None:
             raise TypeError('data header type error')
@@ -110,7 +110,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
-        self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
+        self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]             # def_mask
         self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF] \
             if reweighting_method is None or not self.is_good_reweighting_method(reweighting_method) \
             else reweighting_method
@@ -118,7 +118,11 @@ class RadialVelocityAlg(RadialVelocityBase):
             init_data[RadialVelocityAlgInit.CCF_CODE]
 
         self.obs_jd = None
-        ny, nx = np.shape(self.spectrum_data)
+
+        if self.spectrum_data is not None and self.spectrum_data.size != 0:
+            ny, nx = np.shape(self.spectrum_data)
+        else:
+            ny = nx = 0
 
         self.start_order = 0
         self.end_order = ny-1
@@ -135,7 +139,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.total_rv_segment = None
 
     def reset_spectrum(self, spec_data, header, wave_cal):
-        if not isinstance(spec_data, np.ndarray):
+        if spec_data is not None and not isinstance(spec_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
         if header is None:
             raise TypeError('data header type error')
@@ -158,7 +162,11 @@ class RadialVelocityAlg(RadialVelocityBase):
                 * **ny** (*int*): Vertical size.
 
         """
-        ny, nx = np.shape(self.spectrum_data)
+
+        if self.spectrum_data is not None and self.spectrum_data.size != 0:
+            ny, nx = np.shape(self.spectrum_data)
+        else:
+            nx = ny = 0
         return self.spectrum_data, nx, ny
 
     def get_segment_info(self):
@@ -270,7 +278,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         elif self.spectro == 'harps':
             return self.get_obs_time_harps(default=default)
         elif self.spectro == 'kpf':
-            return 2459351.0
+            return self.get_obs_time_kpf(default=default)
         else:
             return None
 
@@ -283,6 +291,14 @@ class RadialVelocityAlg(RadialVelocityBase):
         return obs_time
 
     def get_obs_time_harps(self, default=None):
+        if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
+            obs_time = self.header['MJD-OBS'] + 2400000.5 + self.header['EXPTIME'] * SEC_TO_JD / 2
+        else:
+            obs_time = default
+
+        return obs_time
+
+    def get_obs_time_kpf(self, default=2459351.0):
         if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
             obs_time = self.header['MJD-OBS'] + 2400000.5 + self.header['EXPTIME'] * SEC_TO_JD / 2
         else:
@@ -890,10 +906,14 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.add_file_logger(print_progress)
         self.d_print('RadialVelocityAlg: computing radial velocity ... ')
 
+        if self.spectrum_data is None or self.spectrum_data.size == 0:
+            return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs.jd, 'msg': 'no spectral data'}
+
         self.get_segment_limits()
+
         ccf, msg = self.get_rv_on_spectrum(start_seg=start_seg, end_seg=end_seg)
         if ccf is None:
-            raise Exception(msg)
+            return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': msg}
 
         total_seg_rv = np.shape(ccf)[0] - self.ROWS_FOR_ANALYSIS
         if ref_ccf is not None:
