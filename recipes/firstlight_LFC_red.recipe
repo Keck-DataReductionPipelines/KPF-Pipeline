@@ -2,7 +2,7 @@ from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 
 L1_file = config.ARGUMENT.input_dir + config.ARGUMENT.obs_prefix + config.ARGUMENT.obs_list[0] + '.fits'
 rough_wls_file = config.ARGUMENT.master_wls_file + '.fits'
-rough_wls = kpf1_from_fits(rough_wls_file, data_type='KPF')['GREEN_CAL_WAVE']
+rough_wls = kpf1_from_fits(rough_wls_file, data_type='KPF')['RED_CAL_WAVE']
 
 lfc_l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
 output_ext = config.ARGUMENT.output_ext
