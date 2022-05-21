@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-chip = 'green'
+chip = 'red'
 
 green_echelle_orders = np.arange(103, 138)
 red_echelle_orders = np.arange(71, 103)
@@ -37,8 +37,6 @@ for echelle_order in echelle_orders:
         
         # read in a calibrated wavelength solution
         kpfwave = fits.open('/data/KPF-Pipeline-TestData/DRP_First_Light/KP.20220517.76117.82_L1_L1_wave.fits')
-        # kpfwave = fits.open('/data/KPF-Pipeline-TestData/DRP_First_Light/KP.20220505.79423.49_roughwls_green.fits')
-        # kpfwave = np.append(np.zeros((1, 4080)), kpfwave['GREEN_CAL_WAVE'].data, axis=0)
         kwave = kpfwave['{}_CAL_WAVE'.format(chip.upper())].data[korder]
 
         # read in a NEID spectrum
@@ -52,7 +50,7 @@ for echelle_order in echelle_orders:
         plt.plot(nwave, nspect, alpha=0.5, label='NEID')
         plt.plot(kwave, kspect, alpha=0.5, label='KPF')
         plt.legend()
-        plt.savefig('/data/KPF-Pipeline-TestData/DRP_First_Light/LFC/order_diagnostics/order{}/order{}solar_KPF_vs_NEID.png'.format(korder, korder), dpi=250)
+        plt.savefig('/data/KPF-Pipeline-TestData/DRP_First_Light/LFC-{}/order_diagnostics/order{}/order{}solar_KPF_vs_NEID.png'.format(chip, korder, korder), dpi=250)
         plt.close()
 
     except:

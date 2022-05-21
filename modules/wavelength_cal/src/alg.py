@@ -599,7 +599,7 @@ class WaveCalibration:
         Clips peaks that have detected and Gaussian-fitted central pixels values 
         more than 1 pixel apart. If clipping peaks for an LFC frame with known
         comb wavelengths, then also clips detected peaks which are more than one
-        pixel (delta lambda/lambda) away from an LFC mode wavelength.
+        pixel (delta lambda/lambda) away from an LFC mode wavelength. TODO update.
 
         Args:
             order_flux (np.array): array of order_flux data
@@ -626,8 +626,11 @@ class WaveCalibration:
         n_pixels = len(order_flux)
 
         # clip peaks that have Gaussian-fitted centers more than 1 pixel from
-        # their detected centers
-        good_peak_idx = np.where(np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) [0]
+        # their detected centers & have detected heights below the chip median value
+        good_peak_idx = np.where(
+            (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) &
+            (detected_peak_heights > np.median(order_flux)) # TODO: this currently works for red chip but not green; standardize
+        ) [0]
 
         # # if we know the wavelengths of the peaks (i.e. if dealing with LFC),
         # # then we can clip peaks with derived wavelengths far from the location
