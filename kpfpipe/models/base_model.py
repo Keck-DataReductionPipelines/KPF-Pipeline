@@ -280,6 +280,8 @@ class KPFDataModel(object):
             
         # finish up writing
         hdul = fits.HDUList(hdu_list)
+        if not os.path.isdir(os.path.dirname(fn)):
+            os.makedirs(os.path.dirname(fn), exist_ok=True)
         hdul.writeto(fn, overwrite=True, output_verify='silentfix')
 
 # =============================================================================
