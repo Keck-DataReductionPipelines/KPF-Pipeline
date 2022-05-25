@@ -4,6 +4,7 @@
 import sys
 import os
 from glob import glob
+from copy import copy
 import argparse
 import traceback
 from datetime import datetime
@@ -142,29 +143,27 @@ def main():
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
-        infiles = sorted(glob(args.watch + "*.fits"))
-        if len(infiles) == 0:
-            infiles = sorted(glob(args.watch + "*.fits"))
-        infiles = sorted(glob(args.watch + "20*/*.fits"))
-        infiles = ['./L0/20220522/KP.20220522.01520.92.fits']
+        infiles = sorted(glob(args.watch + "*.fits")) + \
+                    sorted(glob(args.watch + "20*/*.fits"))
         framework.pipeline.logger.info(infiles)
-        framework.ingest_data(args.watch, infiles, False)
+        infiles = infiles[-5:]
         for fname in infiles:
+            arg = copy(arg)
             arg.date_dir = datestr
             arg.file_path = fname
             
             framework.append_event('next_file', arg)
 
-        observer = Observer()
-        al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*"])
+        observer = PollingObserver(framework.config.monitor_interval)
+        al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
+                                                 args.watch+"20*/*.fits"])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
         framework.start_action_loop()
 
         while True:
-            framework.append_event('no_event', arg)
-            time.sleep(5)
+            time.sleep(300)
 
     else:
         framework.append_event('start_recipe', arg)
