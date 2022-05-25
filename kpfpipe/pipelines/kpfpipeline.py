@@ -206,7 +206,7 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         self.logger.info("exiting pipeline...")
-        # os._exit(0)
+        os._exit(0)
 
     # reentry after call
 
