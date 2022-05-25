@@ -122,7 +122,6 @@ def main():
     try:
         framework = Framework(pipe, framework_config)
         framework.pipeline.start(pipe_config)
-        framework.start_action_loop()            
 
         # root = logging.getLogger()
         # map(root.removeHandler, root.handlers[:])
@@ -142,6 +141,7 @@ def main():
 
     # watch mode
     if args.watch != None:
+        framework.start_action_loop()
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits")) + \
