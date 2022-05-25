@@ -183,7 +183,8 @@ class KPFPipeline(BasePipeline):
         else:
             fstr = ''
         self._recipe_ast = ast.parse(fstr)
-        self._recipe_visitor = KpfPipelineNodeVisitor(action=action, pipeline=self, context=context)
+        context.args = action.args
+        self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
         self.register_recipe_builtins()
         ## set up environment
         try:

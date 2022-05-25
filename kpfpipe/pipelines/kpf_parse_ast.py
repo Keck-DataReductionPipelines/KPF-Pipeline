@@ -5,6 +5,7 @@ import _ast
 from collections.abc import Iterable
 from queue import Queue
 import os
+from copy import copy
 
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
@@ -58,7 +59,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     behaviors are covered below in the method documentation.
     """
 
-    def __init__(self, action=None, pipeline=None, context=None):
+    def __init__(self, pipeline=None, context=None):
         """
         __init__() constructs an instance of the class that actually walks ("visits") the recipe nodes,
         after they have been parsed into an Abstract Syntax Tree (AST).  The actual work of the pipeline
@@ -76,7 +77,6 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # KPF framework items
         self.pipeline = pipeline
         self.context = context
-        self.action = action
         # local state flags
         self.awaiting_call_return = False
         self.returning_from_call = False
@@ -247,12 +247,12 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 else:
                     self.pipeline.logger.error(f"Name: No context or context has no config attribute")
                     raise Exception(f"Name: No context or context has no config attribute")
-            elif node.id == "action":
-                if self.action != None and hasattr(self.action, "args"):
-                    value = self.action.args
+            elif node.id == "context":
+                if self.context != None and hasattr(self.context, "args"):
+                    value = self.context.args
                 else:
-                    self.pipeline.logger.error(f"Name: No action or action has no arg attribute")
-                    raise Exception(f"Name: No action or action has no config attribute")
+                    self.pipeline.logger.error(f"Name: No context or context has no args attribute")
+                    raise Exception(f"Name: No context or context has no args attribute")
             elif self._env.get(node.id):
                 value = self._env.get(node.id)
             else:
@@ -784,7 +784,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     for argnode in node.args:
                         self.visit(argnode)
                         event_args.append(self._load.pop())
-                    self.context.append_event(node.func.id, event_args)
+                    self.context.push_event(node.func.id, event_args)
                     self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                     #
                     self.awaiting_call_return = True
