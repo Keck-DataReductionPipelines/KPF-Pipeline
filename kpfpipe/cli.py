@@ -3,6 +3,7 @@
 
 import sys
 import os
+from glob import glob
 import argparse
 import traceback
 import configparser
@@ -140,7 +141,16 @@ def main():
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         observer = Observer()
-        al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*"])
+
+        pattern = args.watch+"/**/*.fits"
+        infiles = sorted(glob(pattern, recursive=True))
+        framework.pipeline.logger.info("Processing existing files: {}".format(infiles))
+        for f in infiles:
+            os.environ['INPUT_FILE'] = f
+            os.environ['DATE_DIR'] = os.path.basename(os.path.dirname(os.environ['INPUT_FILE']))
+            framework.append_event('start_recipe', arg)
+
+        al = FileAlarm(framework, arg, patterns=[pattern])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
