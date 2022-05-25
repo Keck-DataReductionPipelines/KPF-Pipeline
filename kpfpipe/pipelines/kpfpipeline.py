@@ -3,6 +3,7 @@
 from asyncio.log import logger
 import os
 import sys
+from copy import copy
 import importlib
 import configparser as cp
 import logging

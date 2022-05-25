@@ -122,6 +122,7 @@ def main():
     try:
         framework = Framework(pipe, framework_config)
         framework.pipeline.start(pipe_config)
+        framework.start_action_loop()            
 
         # root = logging.getLogger()
         # map(root.removeHandler, root.handlers[:])
@@ -145,13 +146,11 @@ def main():
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits")) + \
                     sorted(glob(args.watch + "20*/*.fits"))
-        framework.pipeline.logger.info(infiles)
-        infiles = infiles[-5:]
+
         for fname in infiles:
-            arg = copy(arg)
+            arg = arg
             arg.date_dir = datestr
             arg.file_path = fname
-            
             framework.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
@@ -159,8 +158,6 @@ def main():
                                                  args.watch+"20*/*.fits"])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
-
-        framework.start_action_loop()
 
         while True:
             time.sleep(300)
