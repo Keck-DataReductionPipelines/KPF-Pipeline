@@ -275,7 +275,7 @@ class OverscanSubtraction(KPF0_Primitive):
 
         if self.data_type == 'KPF':
             l0_obj = self.rawfile
-            #print(l0_obj.info())
+            # print(l0_obj.info())
             frames_data = []
             for ext in channel_exts:
                 data = l0_obj[ext]
