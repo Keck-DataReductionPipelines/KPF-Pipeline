@@ -1,5 +1,6 @@
 # An example pipeline that is used to test the template fitting 
 # algorithm module. 
+from asyncio.log import logger
 import os
 import sys
 import importlib
@@ -247,9 +248,14 @@ class KPFPipeline(BasePipeline):
 
     def next_file(self, action: Action, context: ProcessingContext):
         
+        try:
+            file_path = action.args['file_path']
+        except:
+            logger.info("Defaulting to action.args['name'] for file_path.")
+            file_path = action.args['name']
 
         action.args['date_dir'] = os.path.basename(os.path.dirname(
-                                                   action.args['file_path']))
+                                                   file_path))
 
         self.start_recipe(action, context)
 
