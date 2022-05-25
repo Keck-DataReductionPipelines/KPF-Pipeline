@@ -276,45 +276,46 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
 
-        # if self.data_type == 'KPF':
-        l0_obj = self.rawfile
-        #     NoneType = type(None)
+        if self.data_type == 'KPF':
+            l0_obj = self.rawfile
+            NoneType = type(None)
 
-        #     try:
-        #         if len(l0_obj[channel_exts[0]]) == 0:
-        #             return Arguments(l0_obj)
-        #     except:
-        #         pass
-        #     try:
-        #         if isinstance(l0_obj[channel_exts[0]],NoneType) == True:
-        #             return Arguments(l0_obj)
-        #     except:
-        #         pass
-        #     else:
-        frames_data = []
+            try:
+                if len(l0_obj[channel_exts[0]]) == 0:
+                    return Arguments(l0_obj)
+            except:
+                pass
+            try:
+                if isinstance(l0_obj[channel_exts[0]],NoneType) == True:
+                    return Arguments(l0_obj)
+            except:
+                pass
+            else:
+                frames_data = []
 
-        for ext in channel_exts:
-            data = l0_obj[ext]
-            gain = l0_obj.header[ext][self.gain_key]
-            #data = data/(2**16) #don't make hardcoded? only ok for now, output a warning here
-            #####
-            #print(ext,data,gain)
-            data_gain_corr = data*gain
-            frames_data.append(data_gain_corr)
-        frames_data = np.array(frames_data)
-        #full_frame_images=[]
-        for frame in range(len(self.ffi_exts)):
-            single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
-            full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
-            #full_frame_images.append(full_frame_img)
-            l0_obj[self.ffi_exts[frame]] = full_frame_img
+                for ext in channel_exts:
+                    data = l0_obj[ext]
+                    gain = l0_obj.header[ext][self.gain_key]
+                    #data = data/(2**16) #don't make hardcoded? only ok for now, output a warning here
+                    #####
+                    print(ext,data,gain)
+                    data_gain_corr = data*gain
+                    frames_data.append(data_gain_corr)
+                frames_data = np.array(frames_data)
+                #full_frame_images=[]
+                for frame in range(len(self.ffi_exts)):
+                    single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
+                    full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
+                    #full_frame_images.append(full_frame_img)
+                    l0_obj[self.ffi_exts[frame]] = full_frame_img
 
-        for ext in channel_exts:
-            l0_obj.del_extension(ext)
-                        
+                for ext in channel_exts:
+                    l0_obj.del_extension(ext)
+
+        if self.data_type == 'NEID':
+            l0_obj = self.rawfile
+            whole_image = self.neid_setup_run(l0_obj,channel_exts)
+            l0_obj[self.ffi_exts] = whole_image     
+
         return Arguments(l0_obj)
                 
-        # if self.data_type == 'NEID':
-        #     l0_obj = self.rawfile
-        #     whole_image = self.neid_setup_run(l0_obj,channel_exts)
-        #     l0_obj[self.ffi_exts] = whole_image

@@ -71,8 +71,7 @@ class FromFitsBasePrimitive(BasePrimitive):
         print(f"_perform_common: {filename} data_type is {data_type}")
         data_model = data_model.from_fits(filename, data_type)
 
-        return data_model
-        # return Arguments(data_model, name=name+'_from_fits_result')
+        return Arguments(data_model, name=name+'_from_fits_result')
 
 
 class kpf0_from_fits(FromFitsBasePrimitive):

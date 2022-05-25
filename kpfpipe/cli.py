@@ -12,7 +12,7 @@ import threading
 from multiprocessing import Process, cpu_count
 
 from watchdog.observers import Observer
-from watchdog.observers.polling import PollingObserverVFS
+from watchdog.observers.polling import PollingObserver, PollingObserverVFS
 from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
 
 from keckdrpframework.core.framework import Framework
@@ -134,24 +134,28 @@ def main():
         framework.pipeline.logger.error("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()
         sys.exit(1)
-    
+
+    arg = Arguments(name='action_args')
+    arg.recipe = recipe
 
     # watch mode
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
+        infiles = sorted(glob(args.watch + "*.fits"))
+        if len(infiles) == 0:
+            infiles = sorted(glob(args.watch + "*.fits"))
         infiles = sorted(glob(args.watch + "20*/*.fits"))
+        infiles = ['./L0/20220522/KP.20220522.01520.92.fits']
         framework.pipeline.logger.info(infiles)
-        framework.ingest_data(args.watch, infiles, True)
+        framework.ingest_data(args.watch, infiles, False)
         for fname in infiles:
-            arg = Arguments(name='action_args')
-            arg.recipe = recipe
             arg.date_dir = datestr
             arg.file_path = fname
             
             framework.append_event('next_file', arg)
 
-        observer = PollingObserverVFS(os.stat, os.listdir)
+        observer = Observer()
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*"])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
