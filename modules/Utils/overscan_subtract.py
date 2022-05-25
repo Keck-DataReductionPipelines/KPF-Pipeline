@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
+
+
 class OverscanSubtraction(KPF0_Primitive):
     """
     This utility can perform various types of overscan subtraction and then form channel images 
@@ -14,6 +16,7 @@ class OverscanSubtraction(KPF0_Primitive):
         """Initializes overscan subtraction utility.
         """
         KPF0_Primitive.__init__(self, action, context)
+
         self.rawfile = self.action.args[0]
         self.prl_overscan_reg = self.action.args[1] #overscan region of raw image, start and end pixels of overscan
         self.srl_overscan_reg = self.action.args[2]
@@ -273,41 +276,43 @@ class OverscanSubtraction(KPF0_Primitive):
         """
         channels,channel_keys,channel_rows,channel_cols,channel_exts=self.ref_output
 
-        if self.data_type == 'KPF':
-            l0_obj = self.rawfile
-            NoneType = type(None)
+        # if self.data_type == 'KPF':
+        l0_obj = self.rawfile
+        #     NoneType = type(None)
 
-            try:
-                if len(l0_obj[channel_exts[0]]) == 0:
-                    return Arguments(l0_obj)
-            except:
-                pass
-            try:
-                if isinstance(l0_obj[channel_exts[0]],NoneType) == True:
-                    return Arguments(l0_obj)
-            except:
-                pass
-            
-            else:
-                frames_data = []
-                for ext in channel_exts:
-                    data = l0_obj[ext]
-                    gain = l0_obj.header[ext][self.gain_key]
-                    #data = data/(2**16) #don't make hardcoded? only ok for now, output a warning here
-                    #####
-                    #print(ext,data,gain)
-                    data_gain_corr = data*gain
-                    frames_data.append(data_gain_corr)
-                frames_data = np.array(frames_data)
-                #full_frame_images=[]
-                for frame in range(len(self.ffi_exts)):
-                    single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
-                    full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
-                    #full_frame_images.append(full_frame_img)
-                    l0_obj[self.ffi_exts[frame]] = full_frame_img
-                for ext in channel_exts:
-                    l0_obj.del_extension(ext)
-                return Arguments(l0_obj)
+        #     try:
+        #         if len(l0_obj[channel_exts[0]]) == 0:
+        #             return Arguments(l0_obj)
+        #     except:
+        #         pass
+        #     try:
+        #         if isinstance(l0_obj[channel_exts[0]],NoneType) == True:
+        #             return Arguments(l0_obj)
+        #     except:
+        #         pass
+        #     else:
+        frames_data = []
+
+        for ext in channel_exts:
+            data = l0_obj[ext]
+            gain = l0_obj.header[ext][self.gain_key]
+            #data = data/(2**16) #don't make hardcoded? only ok for now, output a warning here
+            #####
+            #print(ext,data,gain)
+            data_gain_corr = data*gain
+            frames_data.append(data_gain_corr)
+        frames_data = np.array(frames_data)
+        #full_frame_images=[]
+        for frame in range(len(self.ffi_exts)):
+            single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
+            full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        
+            #full_frame_images.append(full_frame_img)
+            l0_obj[self.ffi_exts[frame]] = full_frame_img
+
+        for ext in channel_exts:
+            l0_obj.del_extension(ext)
+                        
+        return Arguments(l0_obj)
                 
         # if self.data_type == 'NEID':
         #     l0_obj = self.rawfile

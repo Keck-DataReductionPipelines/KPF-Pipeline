@@ -58,7 +58,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     behaviors are covered below in the method documentation.
     """
 
-    def __init__(self, pipeline=None, context=None):
+    def __init__(self, action=None, pipeline=None, context=None):
         """
         __init__() constructs an instance of the class that actually walks ("visits") the recipe nodes,
         after they have been parsed into an Abstract Syntax Tree (AST).  The actual work of the pipeline
@@ -76,6 +76,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # KPF framework items
         self.pipeline = pipeline
         self.context = context
+        self.action = action
         # local state flags
         self.awaiting_call_return = False
         self.returning_from_call = False
@@ -246,6 +247,12 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 else:
                     self.pipeline.logger.error(f"Name: No context or context has no config attribute")
                     raise Exception(f"Name: No context or context has no config attribute")
+            elif node.id == "action":
+                if self.action != None and hasattr(self.action, "args"):
+                    value = self.action.args
+                else:
+                    self.pipeline.logger.error(f"Name: No action or action has no arg attribute")
+                    raise Exception(f"Name: No action or action has no config attribute")
             elif self._env.get(node.id):
                 value = self._env.get(node.id)
             else:
@@ -983,7 +990,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         obj = self._load.pop()
         if isinstance(node.ctx, _ast.Load):
             try:
-                value = obj.getValue(node.attr)
+                if 'getValue' in obj.__dir__():
+                    value = obj.getValue(node.attr)
+                else:
+                    value = obj[node.attr]
                 # print(f"Attribute: value is {type(value)}: {value}")
             except (KeyError, AttributeError):
                 self.pipeline.logger.error(
