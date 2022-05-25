@@ -3,16 +3,16 @@
 
 import sys
 import os
+from glob import glob
 import argparse
 import traceback
-import configparser
-import logging
-import copy
+from datetime import datetime
 import time
 import threading
 from multiprocessing import Process, cpu_count
 
 from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserverVFS
 from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
 
 from keckdrpframework.core.framework import Framework
@@ -31,9 +31,10 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
     description = "KPF Pipeline CLI"
 
     parser = argparse.ArgumentParser(description=description, prog='kpf')
-    parser.add_argument('--watch', dest='watch', type=str, default=None, help="Watch for new data arriving in a directory and run the recipe and config on each file.")
-    parser.add_argument('recipe', type=str, help="Recipe file with list of actions to take.")
-    parser.add_argument('config_file', type=str, help="Run configuration file")
+    parser.add_argument('--watch', dest='watch', type=str, default=None,
+                        help="Watch for new data arriving in a directory and run the recipe and config on each file.")
+    parser.add_argument('-r', '--recipe', dest='recipe', type=str, help="Recipe file with list of actions to take.")
+    parser.add_argument('-c', '--config', dest="config_file", type=str, help="Configuration file")
 
     args = parser.parse_args(in_args[1:])
 
@@ -71,13 +72,13 @@ class FileAlarm(PatternMatchingEventHandler):
             while not os.path.exists(final_file):
                 print("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
                 time.sleep(1)
-            os.environ['INPUT_FILE'] = final_file
+            self.arg.file_path = final_file
         else:
-            os.environ['INPUT_FILE'] = event.src_path
-        print("Executing recipe with INPUT_FILE={}".format(os.environ['INPUT_FILE']))
-        os.environ['DATE_DIR'] = os.path.basename(os.path.dirname(os.environ['INPUT_FILE']))
-        if os.environ['INPUT_FILE'].endswith('.fits') and self.check_redundant(event):
-            self.framework.append_event('start_recipe', self.arg)
+            self.arg.file_path = event.src_path
+        print("Executing recipe with file_path={}".format(self.arg.file_path))
+        self.arg.date_dir = os.path.basename(os.path.dirname(self.arg.file_path))
+        if self.arg.file_path.endswith('.fits') and self.check_redundant(event):
+            self.framework.append_event('next_file', self.arg)
 
     def on_modified(self, event):
         print("File modification event: {}".format(event.src_path))
@@ -109,6 +110,7 @@ def main():
     pipe_config = args.config_file
     pipe = KPFPipeline
     recipe = args.recipe
+    datestr = datetime.now().strftime(format='%Y%m%d')
 
     # Setup a pipeline logger
     # This is to differentiate between the loggers of framework and pipeline
@@ -133,13 +135,23 @@ def main():
         traceback.print_exc()
         sys.exit(1)
     
-    arg = Arguments() # Placeholder. actual arguments are set in the pipeline
-    arg.recipe = recipe
 
     # watch mode
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
-        observer = Observer()
+        framework.pipeline.logger.info("Getting existing file list.")
+        infiles = sorted(glob(args.watch + "20*/*.fits"))
+        framework.pipeline.logger.info(infiles)
+        framework.ingest_data(args.watch, infiles, True)
+        for fname in infiles:
+            arg = Arguments(name='action_args')
+            arg.recipe = recipe
+            arg.date_dir = datestr
+            arg.file_path = fname
+            
+            framework.append_event('next_file', arg)
+
+        observer = PollingObserverVFS(os.stat, os.listdir)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*"])
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
