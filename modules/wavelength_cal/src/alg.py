@@ -1101,8 +1101,12 @@ class WaveCalibration:
         weights = 1 / np.sqrt(peak_heights)
         if self.fit_type == 'Legendre': 
 
-            unclipped_idx = np.where(fitted_peak_pixels > 0)[0]
-
+            _, unique_idx, count = np.unique(fitted_peak_pixels, return_index=True, return_counts=True)
+            unclipped_idx = np.where(
+                fitted_peak_pixels > 0
+            )[0]
+            unclipped_idx = np.intersect1d(unclipped_idx, unique_idx[count < 2])
+            
             leg_out = Legendre.fit(fitted_peak_pixels[unclipped_idx], wls[unclipped_idx], self.fit_order, w=weights[unclipped_idx])
             our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
