@@ -351,7 +351,7 @@ class WaveCalibration:
                 if expected_peak_locs is None:
                     peak_heights = detected_peak_heights[good_peak_idx]
                 else:
-                   peak_heights = fitted_peak_pixels
+                    peak_heights = fitted_peak_pixels
 
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
@@ -758,7 +758,7 @@ class WaveCalibration:
 
         Retuns:
             tuple of:
-                np.array: same input linelist
+                np.array: same input linelist, with unfit lines removed
                 np.array: array of size (4, n_peaks) containing best-fit 
                   Gaussian parameters [a, mu, sigma**2, const] for each detected peak  
 
@@ -773,25 +773,36 @@ class WaveCalibration:
             line_location = line_pixels_expected[i]
             peak_pixel = np.floor(line_location).astype(int)
 
-            if peak_pixel < gaussian_fit_width:
-                first_fit_pixel = 0
-            else:
-                first_fit_pixel = peak_pixel - gaussian_fit_width
-            
-            if peak_pixel + gaussian_fit_width > num_pixels:
-                last_fit_pixel = num_pixels
-            else:
-                last_fit_pixel = peak_pixel + gaussian_fit_width
+            # don't fit saturated lines
+            if flux[peak_pixel] <= 1e6:
+                if peak_pixel < gaussian_fit_width:
+                    first_fit_pixel = 0
+                else:
+                    first_fit_pixel = peak_pixel - gaussian_fit_width
+                
+                if peak_pixel + gaussian_fit_width > num_pixels:
+                    last_fit_pixel = num_pixels
+                else:
+                    last_fit_pixel = peak_pixel + gaussian_fit_width
 
-            # fit gaussian to matched peak location
-            coefs[:,i] = self.fit_gaussian(
-                np.arange(first_fit_pixel,last_fit_pixel),
-                flux[first_fit_pixel:last_fit_pixel]
-            )
+                # fit gaussian to matched peak location
+                coefs[:,i] = self.fit_gaussian(
+                    np.arange(first_fit_pixel,last_fit_pixel),
+                    flux[first_fit_pixel:last_fit_pixel]
+                )
 
-            amp = coefs[0,i]
-            if amp < 0:
+                amp = coefs[0,i]
+                if amp < 0:
+                    missed_lines += 1
+                    coefs[:,i] = np.nan
+            else:
+                coefs[:,i] = np.nan
                 missed_lines += 1
+
+        linelist = linelist[np.isfinite(coefs[0,:])]
+        coefs = coefs[:, np.isfinite(coefs[0,:])]
+
+        print('{}/{} lines not fit.'.format(missed_lines, num_input_lines))
         
         if plot_toggle:
 
@@ -850,6 +861,7 @@ class WaveCalibration:
             plt.tight_layout()
             plt.savefig('{}/spectrum_and_gaussian_fits.png'.format(savefig), dpi=250)
             plt.close()
+
 
         return linelist, coefs
 
@@ -1103,7 +1115,7 @@ class WaveCalibration:
 
             _, unique_idx, count = np.unique(fitted_peak_pixels, return_index=True, return_counts=True)
             unclipped_idx = np.where(
-                fitted_peak_pixels > 0
+                (fitted_peak_pixels > 0)
             )[0]
             unclipped_idx = np.intersect1d(unclipped_idx, unique_idx[count < 2])
             
@@ -1168,7 +1180,7 @@ class WaveCalibration:
         # absolute/polynomial precision of order = difference between fundemental wavelengths
         # and our wavelength solution wavelengths for (fractional) peak pixels
         abs_residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
-        abs_precision_cm_s = 100 * np.std(abs_residual)/np.sqrt(len(fitted_peak_pixels))
+        abs_precision_cm_s = 100 * np.nanstd(abs_residual)/np.sqrt(len(fitted_peak_pixels))
 
         # relative RV precision of order = difference between rough wls wavelengths
         # and our wavelength solution wavelengths for all pixels

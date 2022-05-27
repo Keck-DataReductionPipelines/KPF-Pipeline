@@ -121,7 +121,8 @@ class WaveCalibrate(KPF1_Primitive):
             for i, prefix in enumerate(self.cal_orderlet_names):
                 print('\nCalibrating orderlet {}.'.format(prefix))
 
-                self.alg.save_diagnostics_dir = '{}/{}/'.format(self.save_diagnostics, prefix)
+                if self.save_diagnostics is not None:
+                    self.alg.save_diagnostics_dir = '{}/{}/'.format(self.save_diagnostics, prefix)
 
                 try:
                     output_ext = self.output_ext[i]
