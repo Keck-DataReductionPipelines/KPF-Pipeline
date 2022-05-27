@@ -391,6 +391,12 @@ class SpectralExtraction(KPF0_Primitive):
                 return False
 
         wave_ext_name = get_extension_on(order_name, 'WAVE')
+        # temporary code for transport calibration data from GREEN_CAL_WAVE
+        if ins == 'KPF':
+            wave_ext_alternate = 'GREEN_CAL_WAVE' if 'GREEN' in order_name else 'RED_CAL_WAVE'
+        else:
+            wave_ext_alternate = None
+
         if wave_ext_name is None:
             return False
 
@@ -410,14 +416,17 @@ class SpectralExtraction(KPF0_Primitive):
 
         if level1_sample is not None:   # assume wavelength calibration data is from level1 sample
             wave_data = getattr(level1_sample, wave_ext_name) if hasattr(level1_sample, wave_ext_name) else None
+            # temporary solution
+            if wave_data is not None and (np.where(wave_data != 0.0)[0]).size == 0:
+                if wave_ext_alternate is not None:
+                    self.logger.info("get wavelength solution from " + wave_ext_alternate)   # removed
+                    wave_data = getattr(level1_sample, wave_ext_alternate) \
+                        if hasattr(level1_sample, wave_ext_alternate) else wave_data
         else:    # assume wavelength calibration data is in level0 sample, need update ???
             wave_data = getattr(level0_sample, 'DATA') if hasattr(level0_sample, 'DATA') else None
 
         if wave_data is None:               # data setting error
             return False
-
-        if ins == 'KPF':
-            wave_data = wave_data * 1000.0
 
         wave_start = 0
         wave_end = min(np.shape(wave_data)[0], np.shape(getattr(level1_obj, wave_ext_name))[0])

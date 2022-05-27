@@ -40,3 +40,47 @@ class str_replace(KPF_Primitive):
 
         new_string = original_value.replace(old_value, new_value)
         return Arguments(new_string)
+
+
+class date_from_kpffile(KPF_Primitive):
+    """
+    This primitive does string replacement
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
+                  keyword arguments passed by the `str_replace` event issued in the recipe:
+
+            - `action.args[0] (string)`: filename in kpf format
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+        self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) == 1 and isinstance(self.action.args[0], str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        f_name = self.action.args[0]
+        first_key = 'KP.'
+        date_format = 'YYYYMMDD'
+        first_idx = f_name.find(first_key)
+        date_str = ""
+        if first_idx >= 0:
+            start_idx = first_idx + len(first_key)
+            date_str = f_name[start_idx:start_idx+len(date_format)]
+
+        if not date_str:
+            if self.logger:
+                self.logger.info("can not find date from flat file name, " + f_name)
+        else:
+            if self.logger:
+                self.logger.info("flat file is from " + date_str)
+
+        return Arguments(date_str)

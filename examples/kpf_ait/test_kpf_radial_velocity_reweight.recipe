@@ -13,8 +13,8 @@ data_ext_rv = config.ARGUMENT.orderlet_names_rv
 ccf_ext_names = config.ARGUMENT.ccf_ext
 rv_ext = config.ARGUMENT.rv_ext
 
-bc_path = output_dir + '/output_barycorr/'
-rv_init = RadialVelocityInit(start_time="2020-04-18", bc_corr_path=bc_path)
+bc_path = config.ARGUMENT.output_barycorr
+rv_init = RadialVelocityInit(start_time="2021-04-18", bc_corr_path=bc_path)
 
 rv_ext = 'RV'
 rv_idx = [0, 1]
@@ -35,7 +35,7 @@ for input_L1_file in find_files(input_lev1_pattern):
 	# output_lev2_file = output_rv + lev1_stem + lev2_stem_suffix + lev1_ext
 	short_lev2 = str_replace(short_lev1, lev1_stem_suffix, lev2_stem_suffix)
 	output_lev2_file = output_rv + short_lev2
-	# all_lev2_files = all_lev2_files + [output_lev2_file]
+	all_lev2_files = all_lev2_files + [output_lev2_file]
 
 	lev1_data = kpf1_from_fits(input_L1_file, data_type='KPF')
 
@@ -48,10 +48,10 @@ for input_L1_file in find_files(input_lev1_pattern):
                                                 rv_set=idx, area_def=area_def, ccf_engine='c')
 
 		result = to_fits(rv_data, output_lev2_file)
-		# lev2_list = lev2_list + [rv_data]
+		lev2_list = lev2_list + [rv_data]
 	else:
 		rv_data = kpf2_from_fits(output_lev2_file, data_type='KPF')
-		# lev2_list = lev2_list + [rv_data]	
+		lev2_list = lev2_list + [rv_data]	
 
 
 if reweighting_method != None:
@@ -63,13 +63,13 @@ if reweighting_method != None:
 								ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg)
 		else:
 			ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, total_segment, ccf_ratio_file=ccf_ratio_file, is_ratio_data=True)
-			ratio_table = ratio_table + [ratio_ref]
+		ratio_table = ratio_table + [ratio_ref]
 
 	i = 0
 	for f in all_lev2_files:
 		_, short_lev2 = split(f)
 		lev2_stem, lev2_ext = splitext(short_lev2)
-		reweighted_output = output_rv + lev2_stem + '_reweighted_' + reweighting_method +lev2_ext
+		reweighted_output = output_rv + lev2_stem + '_reweighted' + lev2_ext
 
 		lev2_rv = lev2_list[i]
 
