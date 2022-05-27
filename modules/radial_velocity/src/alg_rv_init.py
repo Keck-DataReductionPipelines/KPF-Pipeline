@@ -80,7 +80,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     AIR_TO_VACUUM = 'air_to_vacuum'    # True or False
     REWEIGHTING_CCF = 'reweighting_ccf_method'         # ratio, ccf, or None
     CCF_CODE = 'ccf_engine'     # ccf code language
-    START_VEL = 'start_v'       # start velocity
+    START_VEL = 'start_vel'       # start velocity
 
     # defined in configuration file or star config for NEID
     RA = 'ra'                   # hours, like "01:44:04.0915236842"

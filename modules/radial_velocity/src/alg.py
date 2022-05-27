@@ -137,6 +137,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.segment_limits_table = None
         self.total_segments = None
         self.total_rv_segment = None
+        self.zb = 0.0
 
     def reset_spectrum(self, spec_data, header, wave_cal):
         if spec_data is not None and not isinstance(spec_data, np.ndarray):
@@ -301,6 +302,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     def get_obs_time_kpf(self, default=2459351.0):
         if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
             obs_time = self.header['MJD-OBS'] + 2400000.5 + self.header['EXPTIME'] * SEC_TO_JD / 2
+            # obs_time = self.header['MJD-OBS'] + 2400000.5
         else:
             obs_time = default
 
@@ -337,8 +339,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         obs_time_jd = self.get_obs_time()
         if obs_time_jd is None:
             return default
-        if self.spectro == 'kpf':
-            return 0.0
+        # if self.spectro == 'kpf':
+        #    return 0.0
 
         rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                             RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
@@ -434,6 +436,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             return None, 'observation jd time error'
 
         zb = self.get_redshift()
+        self.zb = zb
         if zb is None:
             return None, 'redshift value error'
 
@@ -472,8 +475,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                          [int(seg_limits[self.SEGMENT_X1]), int(seg_limits[self.SEGMENT_X2]),
                           seg_limits[self.SEGMENT_W1], seg_limits[self.SEGMENT_W2], int(seg_limits[self.SEGMENT_ORD])],
                          ' ')
-            wavecal = wavecal_all_orders[ord_idx] if self.instrument.lower() != 'kpf' \
-                else wavecal_all_orders[ord_idx]*10.0
+            wavecal = wavecal_all_orders[ord_idx]
+
             left_x = int(seg_limits[self.SEGMENT_X1])
             right_x = int(seg_limits[self.SEGMENT_X2])
 
@@ -863,6 +866,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['STARTORD'] = self.start_order
             results.attrs['ENDORDER'] = self.end_order
             results.attrs['TOTALORD'] = self.end_order - self.start_order+1
+            results.attrs['ZB'] = self.zb    # remove later
         return results
 
     def compute_rv_by_cc(self, start_seg=None, end_seg=None, ref_ccf=None, print_progress=None):

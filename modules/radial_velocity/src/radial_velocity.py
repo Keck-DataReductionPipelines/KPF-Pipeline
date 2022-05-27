@@ -243,6 +243,7 @@ class RadialVelocity(KPF1_Primitive):
             self.logger.info("RadialVelocity: Start crorss correlation to find radial velocity... ")
 
         output_df = []
+
         if all( [s is not None and s.size != 0 for s in self.spectrum_data_set]):
             for i in range(self.total_orderlet):
                 if i > 0:
@@ -306,6 +307,7 @@ class RadialVelocity(KPF1_Primitive):
                 new_rv_table.attrs['ccd_rv'+str(o+1)]
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'rv'] = new_rv_table.attrs['rv']
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'jd'] = new_rv_table.attrs['ccd_jd']
+        self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
         return True
 
     def make_ccf_table(self, output_df):
@@ -375,6 +377,7 @@ class RadialVelocity(KPF1_Primitive):
         _, final_rv, _, _ = self.alg.fit_ccf(final_sum_ccf, self.alg.get_rv_guess(), velocities)
         results.attrs['rv'] = (f_decimal(final_rv), 'BaryC RV (km/s)')
         results.attrs['ccd_jd'] = output_df[0].attrs['CCFJDSUM']
+        results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
 
         return results
 
