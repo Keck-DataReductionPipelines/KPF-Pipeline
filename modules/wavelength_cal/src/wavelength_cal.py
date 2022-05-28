@@ -124,10 +124,7 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.save_diagnostics is not None:
                     self.alg.save_diagnostics_dir = '{}/{}/'.format(self.save_diagnostics, prefix)
 
-                try:
-                    output_ext = self.output_ext[i]
-                except:
-                    output_ext = self.output_ext
+                output_ext = self.output_ext[i]
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
                         

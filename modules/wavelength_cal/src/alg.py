@@ -57,6 +57,9 @@ class WaveCalibration:
             'linelist_path_etalon',None
         )
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
+        self.clip_below_median  = configpull.get_config_value('clip_below_median',True)
+        self.peak_height_threshold = configpull.get_config_value('peak_height_threshold',1.5)
+
  
     def run_wavelength_cal(
         self, calflux, rough_wls=None, 
@@ -286,8 +289,8 @@ class WaveCalibration:
                 if self.clip_peaks_toggle:
                     good_peak_idx = self.clip_peaks(
                         order_flux, fitted_peak_pixels, detected_peak_pixels,
-                        gauss_coeffs, detected_peak_heights, rough_wls_order,
-                        comb_lines_angstrom=comb_lines_angstrom, 
+                        gauss_coeffs, detected_peak_heights, 
+                        clip_below_median=self.clip_below_median,
                         plot_path=order_plt_path, print_update=print_update
                     )
                 else:
@@ -490,7 +493,7 @@ class WaveCalibration:
                 )
 
             fitted_peaks_section, detected_peaks_section, peak_heights_section, \
-                gauss_coeffs_section = self.find_peaks(order_flux[indices])
+                gauss_coeffs_section = self.find_peaks(order_flux[indices], peak_height_threshold=self.peak_height_threshold)
 
             detected_peak_heights = np.append(
                 detected_peak_heights, peak_heights_section
@@ -543,7 +546,7 @@ class WaveCalibration:
 
         return fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs
         
-    def find_peaks(self, order_flux):
+    def find_peaks(self, order_flux, peak_height_threshold=1.5):
         """
         Finds all order_flux peaks in an array. This runs scipy.signal.find_peaks 
             twice: once to find the average distance between peaks, and once
@@ -552,6 +555,8 @@ class WaveCalibration:
         Args:
             order_flux (np.array): flux values. Their indices correspond to
                 their pixel numbers. Generally a subset of the full order.
+            peak_height_threshold (float): only detect peaks above this num * sigma
+                above the chip median.
             
         Returns:
             tuple of:
@@ -569,7 +574,7 @@ class WaveCalibration:
         c = order_flux - np.ma.min(order_flux)
 
         # TODO: make this more indep of order_flux flux
-        height = np.ma.median(c) # 0.5 * np.ma.median(c) works for whole chip
+        height = peak_height_threshold * np.ma.median(c)
         detected_peaks, properties = signal.find_peaks(c, height=height)
 
         distance = np.median(np.diff(detected_peaks)) // 2
@@ -592,14 +597,15 @@ class WaveCalibration:
         
     def clip_peaks(
         self, order_flux, fitted_peak_pixels, detected_peak_pixels, gauss_coeffs, 
-        detected_peak_heights, rough_wls_order, comb_lines_angstrom=None,
+        detected_peak_heights, clip_below_median=True,
         print_update=True, plot_path=None #print_update should be false TESTING TODO
     ):
         """
         Clips peaks that have detected and Gaussian-fitted central pixels values 
-        more than 1 pixel apart. If clipping peaks for an LFC frame with known
-        comb wavelengths, then also clips detected peaks which are more than one
-        pixel (delta lambda/lambda) away from an LFC mode wavelength. TODO update.
+        more than 1 pixel apart. Also clip peaks that are immediately next to a
+        flux value of 0 (this prevents peak detection near masked areas). There
+        is also an option to clip detected peaks that are less than the median of 
+        the overall chip flux.
 
         Args:
             order_flux (np.array): array of order_flux data
@@ -610,11 +616,8 @@ class WaveCalibration:
             gauss_coeffs (np.array): array of size (4, n_peaks) containing best-fit 
                 Gaussian parameters [a, mu, sigma**2, const] for each detected peak            
             detected_peak_heights (np.array): array of detected peak heights (pre-Gaussian fitting)
-            rough_wls_order (np.array): array of ThAr solution data
-            comb_lines_angstrom (np.array): theoretical LFC wavelengths
-                as computed by fundamental physics (in Angstroms). If peak
-                clipping is being performed on an etalon frame, this should
-                be set to None. Default None.
+            clip_below_median (bool): if True, clip all peaks below the overall
+                chip median.
             print_update (bool): if True, print how many peaks were clipped
             plot_path (str): if defined, the path to the output directory for
                 diagnostic plots. If None, plots are not made.
@@ -627,10 +630,15 @@ class WaveCalibration:
 
         # clip peaks that have Gaussian-fitted centers more than 1 pixel from
         # their detected centers & have detected heights below the chip median value
-        good_peak_idx = np.where(
-            (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) &
-            (detected_peak_heights > np.median(order_flux)) # TODO: this currently works for red chip but not green; standardize
-        ) [0]
+        if clip_below_median:
+            good_peak_idx = np.where(
+                (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) &
+                (detected_peak_heights > np.median(order_flux))
+            ) [0]
+        else:
+            good_peak_idx = np.where(
+                (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1)
+            ) [0]
 
         # # if we know the wavelengths of the peaks (i.e. if dealing with LFC),
         # # then we can clip peaks with derived wavelengths far from the location
@@ -1024,10 +1032,6 @@ class WaveCalibration:
             plt.savefig('{}/labeled_line_locs.png'.format(plot_path), dpi=250)
             plt.close()
 
-        if print_update:
-            print(
-                '{} LFC modes not detected'.format(peak_mode_num - n_clipped_peaks)
-            )
         wls = comb_lines_angstrom[mode_nums.astype(int)]
 
         return wls, mode_nums
