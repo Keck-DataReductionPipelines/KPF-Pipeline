@@ -431,7 +431,9 @@ class SpectralExtraction(KPF0_Primitive):
         wave_start = 0
         wave_end = min(np.shape(wave_data)[0], np.shape(getattr(level1_obj, wave_ext_name))[0])
         wave_arr = getattr(level1_obj, wave_ext_name)
-        wave_arr[wave_start:wave_end, :] = wave_data[wave_start:wave_end, :]
+
+        if wave_arr.size != 0 and wave_end > wave_start:
+            wave_arr[wave_start:wave_end, :] = wave_data[wave_start:wave_end, :]
         return True
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):
