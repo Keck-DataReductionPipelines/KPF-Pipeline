@@ -1948,7 +1948,7 @@ class OrderTraceAlg(ModuleAlgBase):
 
                 if max_x_dist > x_cont_max * 1.5:
                     e_case = 3
-            print('cluster ', c, ' case ', e_case)
+            # print('cluster ', c, ' case ', e_case)
             if e_case > 0:
                 changed = 1
                 index[border_idx] = 0
@@ -2087,7 +2087,7 @@ class OrderTraceAlg(ModuleAlgBase):
                     reduce_width = -overlapping/2.0
                     crt_reduce = min(reduce_width, cluster_widths[n-1]['bottom_edge']-1.0)
                     pre_reduce = min((-overlapping - crt_reduce), cluster_widths[n-2]['top_edge']-1.0)
-                    print('overlapping at ', n, -overlapping, crt_reduce, pre_reduce)
+                    # print('overlapping at ', n, -overlapping, crt_reduce, pre_reduce)
                     cluster_widths[n - 1]['bottom_edge'] -= crt_reduce
                     cluster_widths[n - 2]['top_edge'] -= pre_reduce
 
