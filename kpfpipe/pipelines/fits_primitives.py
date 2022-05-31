@@ -34,9 +34,11 @@ class to_fits(BasePrimitive):
         Returns:
             data model object
         """
+
         data_model = self.action.args[0]
         file_name = self.action.args[1]
         data_model.to_fits(file_name)
+
         return Arguments(True, name='to_fits_result')
 
 class FromFitsBasePrimitive(BasePrimitive):
@@ -68,6 +70,7 @@ class FromFitsBasePrimitive(BasePrimitive):
             data_type = 'KPF'
         print(f"_perform_common: {filename} data_type is {data_type}")
         data_model = data_model.from_fits(filename, data_type)
+
         return Arguments(data_model, name=name+'_from_fits_result')
 
 
