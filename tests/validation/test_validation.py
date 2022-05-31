@@ -28,3 +28,6 @@ def test_bias_subtraction(test_raw=os.getenv('KPFPIPE_TEST_DATA') + '/NEIDdata/T
     raw_minus_bias = rawdata - biasdata
 
     return raw_minus_bias
+
+if __name__ == '__main__':
+    test_bias_subtraction()

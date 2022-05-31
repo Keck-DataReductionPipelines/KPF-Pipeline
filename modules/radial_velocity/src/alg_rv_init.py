@@ -3,8 +3,6 @@ import numpy as np
 from astropy.coordinates import Angle
 import os
 import os.path
-import json
-import pandas as pd
 from dotenv import load_dotenv
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_rv_mask_line import RadialVelocityMaskLine
@@ -81,7 +79,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_WID = 'mask_width'     # km/s
     AIR_TO_VACUUM = 'air_to_vacuum'    # True or False
     REWEIGHTING_CCF = 'reweighting_ccf_method'         # ratio, ccf, or None
-    CCF_CODE = 'ccf_engine'       # ccf code language
+    CCF_CODE = 'ccf_engine'     # ccf code language
+    START_VEL = 'start_vel'       # start velocity
 
     # defined in configuration file or star config for NEID
     RA = 'ra'                   # hours, like "01:44:04.0915236842"
@@ -98,10 +97,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
 
-
     def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None):
         RadialVelocityBase.__init__(self, config, logger)
-        if self.config_param is None or self.config_param.get_section() is None:
+        if self.config_ins is None or self.config_ins.get_section() is None:
             raise Exception("No config is set")
 
         load_dotenv()
@@ -224,15 +222,20 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if not ret['status']:
             return self.ret_status(ret['msg'])
 
-        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID) # in rv_config
+        # in rv_config
+        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
+
         for rv_k in rv_keys:
             val = self.get_rv_config_value(rv_k)
             if val is None:
-                return self.ret_status(rv_k + ' not defined in config')
+                if rv_k == self.START_VEL:   # optional
+                    self.rv_config[self.START_VEL] = val
+                else:
+                    return self.ret_status(rv_k + ' not defined in config')
             else:
                 self.rv_config[rv_k] = float(val)
 
-        self.rv_config[self.AIR_TO_VACUUM] = self.get_rv_config_value(self.AIR_TO_VACUUM, default=False) # in rv_config
+        self.rv_config[self.AIR_TO_VACUUM] = self.get_rv_config_value(self.AIR_TO_VACUUM, default=False)  # in rv_config
         self.get_reweighting_ccf_method()
         self.get_step_range()
         self.get_velocity_loop()   # based on step_range and step, star_rv in rv_config
@@ -250,7 +253,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         Args:
             prop (str): Name of the parameter to be searched.
-            star_config (configparser.SectionProxy): Section of designated star in star configuration file.
+            star_config (ConfigHandler): Section of designated star in star configuration file.
             default (Union[int, float, str, bool], optional): Default value for the searched parameter.
                 Defaults to None.
 
@@ -297,7 +300,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         """
         if config is None:
-            config = self.config_param
+            config = self.config_ins
 
         return config.get_config_value(prop, default)
 
@@ -342,7 +345,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         """
         if self.STEP_RANGE not in self.rv_config:
-            self.rv_config[self.STEP_RANGE] = json.loads(self.get_rv_config_value(self.STEP_RANGE, default=default))
+            self.rv_config[self.STEP_RANGE] = self.get_rv_config_value(self.STEP_RANGE, default=default)
         return self.rv_config[self.STEP_RANGE]
 
     def get_velocity_loop(self):
@@ -354,8 +357,12 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         if self.velocity_loop is None:
             v_range = self.get_step_range()
-            self.velocity_loop = np.arange(v_range[0], v_range[1]) * self.rv_config[self.STEP] + \
-                self.rv_config[self.STAR_RV]
+            if self.rv_config[self.START_VEL] is not None:
+                self.velocity_loop = np.arange(0, v_range[1]-v_range[0]) * self.rv_config[self.STEP] + \
+                                     self.rv_config[self.START_VEL]
+            else:
+                self.velocity_loop = np.arange(v_range[0], v_range[1]) * self.rv_config[self.STEP] + \
+                                     self.rv_config[self.STAR_RV]
         return self.velocity_loop
 
     def get_velocity_steps(self):
@@ -391,7 +398,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         if self.zb_range is None:
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
-            rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc)
+            rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
             bc_path = bc_path or self.bc_corr_path
             bc_output = bc_output or self.bc_corr_output
             jd_time = jd_time or self.bc_jd
@@ -422,11 +429,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             zb_range = self.get_redshift_range()
             rv_mask_line = RadialVelocityMaskLine()
             self.mask_line = rv_mask_line.get_mask_line(self.mask_path, self.get_velocity_loop(),
-                                                       zb_range, self.rv_config[self.MASK_WID],
-                                                       self.rv_config[self.AIR_TO_VACUUM])
+                                                        zb_range, self.rv_config[self.MASK_WID],
+                                                        self.rv_config[self.AIR_TO_VACUUM])
 
         return self.mask_line
-
 
     def collect_init_data(self):
         """ Collect init data for radial velocity analysis.
@@ -473,16 +479,11 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         self.add_file_logger(print_debug)
 
-        self.d_print("init ... ")
-        if self.logger:
-            self.logger.info('starting init...')
+        self.d_print("RadialVelocityAlgInit: starting ... ")
         init_status = self.init_calculation()
 
         if init_status['status']:
             init_status['data'] = self.collect_init_data()
-            self.d_print('init data is: ', init_status['data'])
-
-        if self.logger:
-            self.logger.info('collecting init done')
+            self.d_print('RadialVelocityAlgInit: result data is ', init_status['data'])
 
         return init_status

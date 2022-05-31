@@ -1,0 +1,45 @@
+test_data_dir = KPFPIPE_TEST_DATA + '/DRP_V2_Testing/NEID_HD73344/'
+data_type = config.ARGUMENT.data_type
+output_dir = config.ARGUMENT.output_dir
+# output_dir = test_data_dir
+
+input_flat_pattern = config.ARGUMENT.input_flat_file_dir + config.ARGUMENT.lev0_file_pattern
+input_lev0_prefix = config.ARGUMENT.input_lev0_file_dir + config.ARGUMENT.lev0_file_pattern
+input_lev1_prefix = config.ARGUMENT.input_lev1_file_dir + config.ARGUMENT.lev1_file_pattern
+input_lev2_prefix = config.ARGUMENT.input_lev2_file_dir + config.ARGUMENT.lev2_file_pattern
+
+obs_list = config.ARGUMENT.obs_list
+flat_stem_suffix = config.ARGUMENT.output_flat_suffix
+lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
+lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
+
+cal_flat_list = config.ARGUMENT.cal_flat_list
+cal_object = config.ARGUMENT.cal_object
+cal_fibers = config.ARGUMENT.cal_fibers
+
+max_result_order = config.ARGUMENT.max_result_order
+start_result_order = config.ARGUMENT.start_result_order
+rect_method = config.ARGUMENT.rectification_method
+extract_method = config.ARGUMENT.extraction_method
+orderlet_names = config.ARGUMENT.orderlet_names
+
+wave_from_lev1 = config.ARGUMENT.wave_from_lev1
+
+flat_rect = '_'+rect_method
+
+data_row_range = config.ARGUMENT.data_row_range
+data_col_range = config.ARGUMENT.data_col_range
+
+if data_row_range is None:
+        data_row_range = [0, -1]
+if data_col_range is None:
+        data_col_range = [0, -1]
+
+
+poly_degree = config.ARGUMENT.fitting_poly_degree
+data_ext = config.ARGUMENT.order_trace_data_extension
+
+#invoke_subrecipe("./examples/hd73344_recipe/test_order_trace_neid_hd73344.recipe")
+invoke_subrecipe("./examples/hd73344_recipe/test_optimal_extraction_neid_hd73344.recipe")
+invoke_subrecipe("./examples/hd73344_recipe/test_wave_cal_hd73344.recipe")
+invoke_subrecipe("./examples/hd73344_recipe/test_radial_velocity_reweight_neid_hd73344.recipe")
