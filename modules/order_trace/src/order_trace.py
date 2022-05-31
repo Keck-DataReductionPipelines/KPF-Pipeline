@@ -88,6 +88,7 @@ from modules.order_trace.src.alg import OrderTraceAlg
 import ast
 import numpy as np
 import pandas as pd
+import os
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/order_trace/configs/default.cfg'
@@ -226,6 +227,8 @@ class OrderTrace(KPF0_Primitive):
 
         if self.result_path:
             if self.is_output_file:
+                if not os.path.isdir(os.path.dirname(self.result_path)):
+                    os.makedirs(os.path.dirname(self.result_path), exist_ok=True)
                 df.to_csv(self.result_path)
             else:
                 self.input[self.result_path]= df
