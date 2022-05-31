@@ -73,7 +73,6 @@
 """
 
 import configparser
-import pandas as pd
 
 # Pipeline dependencies
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -88,8 +87,6 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.order_trace.src.alg import OrderTraceAlg
 import ast
 import numpy as np
-import os
-import datetime
 import pandas as pd
 
 # Global read-only variables
@@ -121,6 +118,7 @@ class OrderTrace(KPF0_Primitive):
         self.rows_to_reset = None
         self.result_path = None
         self.poly_degree = None
+        self.expected_traces = None
 
         if 'data_row_range' in args_keys and action.args['data_row_range'] is not None:
             self.row_range = self.find_range(action.args['data_row_range'], row)
@@ -142,6 +140,9 @@ class OrderTrace(KPF0_Primitive):
         if 'fitting_poly_degree' in args_keys and action.args['fitting_poly_degree'] is not None:
             self.poly_degree = action.args['fitting_poly_degree']
 
+        if 'expected_traces' in args_keys and action.args['expected_traces'] is not None:
+            self.expected_traces = action.args['expected_traces']
+
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -159,7 +160,8 @@ class OrderTrace(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = OrderTraceAlg(self.flat_data, poly_degree=self.poly_degree, config=self.config, logger=self.logger)
+        self.alg = OrderTraceAlg(self.flat_data, poly_degree=self.poly_degree,
+                                 expected_traces=self.expected_traces, config=self.config, logger=self.logger)
 
     def _pre_condition(self) -> bool:
         """

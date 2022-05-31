@@ -1,7 +1,9 @@
 # An example pipeline that is used to test the template fitting 
 # algorithm module. 
+from asyncio.log import logger
 import os
 import sys
+from copy import copy
 import importlib
 import configparser as cp
 import logging
@@ -46,6 +48,7 @@ class KPFPipeline(BasePipeline):
     event_table = {
         'start_recipe': ('start_recipe', 'starting recipe', None), 
         'resume_recipe': ('resume_recipe', 'resuming recipe', None),
+        'next_file': ('next_file', 'updating file name', None),
         'to_fits': ('to_fits', 'processing', 'resume_recipe'),
         'kpf0_from_fits': ('kpf0_from_fits', 'processing', 'resume_recipe'),
         'kpf1_from_fits': ('kpf1_from_fits', 'processing', 'resume_recipe'),
@@ -97,6 +100,10 @@ class KPFPipeline(BasePipeline):
             Same behavior as os.path.dirname.  It returns the directory portion of
             a file path, excluding the file name itself, with no trailing separator.
 
+        exists:
+            Same behavior as os.path.exists() It returns True if the file or directory
+            exists at the specified path.
+
         """
         self._recipe_visitor.register_builtin('int', int, 1)
         self._recipe_visitor.register_builtin('float', float, 1)
@@ -106,6 +113,7 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.register_builtin('split', os.path.split, 1)
         self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
         self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
+        self._recipe_visitor.register_builtin('exists', os.path.exists, 1)
 
     def preload_env(self):
         """
@@ -169,10 +177,14 @@ class KPFPipeline(BasePipeline):
             action (keckdrpframework.models.action.Action): Keck DRPF Action object
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
-        recipe_file = action.args.recipe
-        with open(recipe_file) as f:
-            fstr = f.read()
-            self._recipe_ast = ast.parse(fstr)
+        recipe_file = getattr(action.args, 'recipe', None)
+        if recipe_file is not None:
+            with open(recipe_file) as f:
+                fstr = f.read()
+        else:
+            fstr = ''
+        self._recipe_ast = ast.parse(fstr)
+        context.args = action.args
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
         self.register_recipe_builtins()
         ## set up environment
@@ -182,6 +194,7 @@ class KPFPipeline(BasePipeline):
             self.logger.error(f"KPF-Pipeline couldn't load environment due to exception {e}")
         
         self._recipe_visitor.visit(self._recipe_ast)
+
         return Arguments(name="start_recipe_return")
 
     def exit_loop(self, action, context):
@@ -193,7 +206,7 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         self.logger.info("exiting pipeline...")
-        # os._exit(0)
+        os._exit(0)
 
     # reentry after call
 
@@ -213,4 +226,39 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.awaiting_call_return = False
         self._recipe_visitor.call_output = action.args # framework put previous output here
         self._recipe_visitor.visit(self._recipe_ast)
+
         return Arguments(name="resume_recipe_return")  # nothing to actually return, but meet the Framework requirement
+
+    def resume_recipe(self, action: Action, context: ProcessingContext):
+        """
+        Continues evaluating the recipe started in start_recipe().  resume_recipe() will run immediately
+        after each data processing primitive, and makes return values from the previous primitive, stored in an
+        Arguments class instance in action.args, available back to the recipe.
+
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        # pick up the recipe processing where we left off
+        self.logger.debug("resume_recipe")
+        self._recipe_visitor.returning_from_call = True
+        self._recipe_visitor.awaiting_call_return = False
+        self._recipe_visitor.call_output = action.args # framework put previous output here
+        self._recipe_visitor.visit(self._recipe_ast)
+
+        return Arguments(name="resume_recipe_return")  # nothing to actually return, but meet the Framework requirement
+
+    def next_file(self, action: Action, context: ProcessingContext):
+        
+        try:
+            file_path = action.args['file_path']
+        except:
+            logger.info("Defaulting to action.args['name'] for file_path.")
+            file_path = action.args['name']
+
+        action.args['date_dir'] = os.path.basename(os.path.dirname(
+                                                   file_path))
+
+        self.start_recipe(action, context)
+
+        return Arguments(name="next_file")

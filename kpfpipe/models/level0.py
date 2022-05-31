@@ -20,6 +20,7 @@ from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
 from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
+
 class KPF0(KPFDataModel):
     """
     The level 0 KPF data. Initialized with empty fields.
@@ -98,6 +99,18 @@ class KPF0(KPFDataModel):
                 continue
             
             self.header[hdu.name] = hdu.header
+        if self.level == 0:
+            self.l0filename = self.filename
+            self.l1filename = self.filename.replace('.fits', '_L1.fits')
+            self.l2filename = self.filename.replace('.fits', '_L2.fits')
+        if self.level == 1:
+            self.l0filename = self.filename.replace('_L1.fits', '.fits')
+            self.l1filename = self.filename
+            self.l2filename = self.filename.replace('_L1.fits', '_L2.fits')
+        if self.level == 2:
+            self.l0filename = self.filename.replace('_L2.fits', '.fits')
+            self.l1filename = self.filename.replace('_L2.fits', '_L1.fits')
+            self.l2filename = self.filename
 
     def _read_from_NEID(self, hdul):
         '''

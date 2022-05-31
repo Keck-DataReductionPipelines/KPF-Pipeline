@@ -151,6 +151,10 @@ class RadialVelocityInit(KPF_Primitive):
             Init result including status, error message if the status is false and the data from init. Please refer to
             `Returns` section of :func:`~alg_rv_init.RadialVelocityAlgInit.start()`
         """
+
+        if self.logger:
+            self.logger.info("RadialVelocityInit: Start RV init ")
+
         init_result = self.alg_rv_init.start()
 
         assert(init_result['status'] and 'data' in init_result)

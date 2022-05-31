@@ -51,7 +51,7 @@ def start_paras_order_trace():
         'trace_v_gap': 8,
         'fit_error_threshold': 2.5,
         'sigma_for_width_estimation': 3.0,
-        'max_order_distance':  -1
+        'max_order_distance': -1
     }
 
     test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
@@ -241,6 +241,8 @@ def test_find_widths_paras():
     c_df = order_t.write_cluster_info_to_dataframe(all_widths, coeffs)
 
     test_csv = result_data + cluster_curve+"_paras.csv"
+    # c_df.to_csv(test_csv, index=False, header=False)
+
     if os.path.isfile(test_csv):
         df = pd.read_csv(test_csv, header=None)
         assert np.all((np.absolute(df.values - c_df.values)) < 0.000001), "find_widths: unmatched fitting curves"

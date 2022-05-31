@@ -1,0 +1,68 @@
+from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
+from modules.Utils.data_handler import ExtCopy
+
+output_wavelength = output_dir + config.ARGUMENT.output_wavelength
+
+data_exts = config.ARGUMENT.wcal_orderlet_names
+wcal_exts = config.ARGUMENT.wcal_output_ext
+quicklook = config.ARGUMENT.quicklook
+wcal_etalon = config.ARGUMENT.wcal_type
+obs_list = config.ARGUMENT.obs_list
+
+ext_idx = 0
+wcal_orderlet_names = [data_exts[ext_idx]]
+wcal_output_ext = wcal_exts[ext_idx]
+output_prefix = output_wavelength + config.ARGUMENT.lev1_file_pattern
+output_ext_dir = output_dir + config.ARGUMENT.output_extraction
+orderlet_rv = config.ARGUMENT.orderlet_names_rv
+
+# compute peak positions & save
+main_ob = str(config.ARGUMENT.wcal_main_ob)
+main_etalon_L1 =   KPFPIPE_TEST_DATA + '/DRP_V2_Testing/' + config.ARGUMENT.wcal_main_prefix + main_ob  + '.fits'
+if find_files(main_etalon_L1):
+	_, short_etalon_L1 = split(main_etalon_L1)
+	etalon_L1_stem, etalon_L1_ext = splitext(short_etalon_L1)
+	
+	main_etalon_l1 =  kpf1_from_fits(main_etalon_L1, data_type=data_type)
+	rough_wls = main_etalon_l1[wcal_output_ext]
+	save_diagnostics = output_wavelength + main_ob + '/'
+	wcal_output_dir = output_wavelength + main_ob + '/'
+
+	# first file: just compute peak positions & save
+	wave_soln = WaveCalibrate(
+    		main_etalon_l1, wcal_etalon, wcal_orderlet_names, True, quicklook, data_type, wcal_output_ext,
+    		rough_wls = rough_wls, save_diagnostics = save_diagnostics,
+		output_dir=wcal_output_dir
+	)
+	main_etalon_file = output_wavelength + etalon_L1_stem + '_wave.fits'	
+	result = to_fits(wave_soln, main_etalon_file)
+
+if find_files(main_etalon_file):
+	master_linelist_path = output_wavelength + main_ob + config.ARGUMENT.linelist_path_pattern + main_ob + '.npy'
+
+	for ob in obs_list:
+		# L1_file = test_data_dir + input_lev1_prefix + ob + '.fits'
+
+		# get L1 data from spectral extraction result, data type is 'KPF'
+		L1_file = output_ext_dir + config.ARGUMENT.lev1_file_pattern + ob + '.fits'
+		etalon_l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
+
+		output_filename = output_prefix + ob + '_wave.fits'
+		if not find_files(output_filename):
+		
+			wcal_output_dir = output_wavelength + ob + '/'
+			save_diagnostics = output_wavelength + ob
+
+			wave_soln = WaveCalibrate(
+                		etalon_l1_obj, wcal_etalon, wcal_orderlet_names, True, quicklook, data_type, wcal_output_ext,
+                		rough_wls=rough_wls, output_dir=wcal_output_dir, linelist_path=master_linelist_path,
+                		save_diagnostics=save_diagnostics
+			)
+
+			result = to_fits(wave_soln, output_filename)
+	
+		output_filename_2 = output_prefix + ob + '_wave2.fits'
+		if not find_files(output_filename_2):
+			wave_soln = kpf1_from_fits(output_filename)
+			wave_soln_2 = ExtCopy(wave_soln, wcal_exts[ext_idx], wcal_exts[1], size_as=orderlet_rv[0])
+			result = to_fits(wave_soln_2, output_filename_2)
