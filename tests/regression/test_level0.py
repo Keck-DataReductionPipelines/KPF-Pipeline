@@ -102,5 +102,5 @@ def test_exceptions():
         data.read(os.path.join(fpath, f), 'NEID')
         
 if __name__ == '__main__':
-    pass
+    test_NEID()
     
