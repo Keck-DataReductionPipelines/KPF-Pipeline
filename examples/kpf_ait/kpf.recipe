@@ -122,8 +122,9 @@ for input_flat_file in find_files(lev0_flat_pattern):
 				clip_file = None
 				
 				wavecal_data = None
-				if find_files(wave_fits[idx]):
-					wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+				if wave_fits[idx] != None:
+					if find_files(wave_fits[idx]):
+						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
 
 				op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data, 
 						orderlet_names=order_name,
