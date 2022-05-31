@@ -95,6 +95,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 from modules.radial_velocity.src.alg import RadialVelocityAlg
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
+from astropy.time import Time
 
 DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
@@ -182,8 +183,21 @@ class RadialVelocity(KPF1_Primitive):
             wave = sci.replace('FLUX', 'WAVE') if 'FLUX' in sci else None
             self.wave_cal_set.append(getattr(self.input, wave) if (wave is not None and hasattr(self.input, wave))
                                      else None)
-            if 'SSBJD100' in self.input.header['PRIMARY']:
-                self.input.header[sci]['SSBJD100'] = self.input.header['PRIMARY']['SSBJD100']
+            neid_ssb = 'SSBJD100'   # neid case
+            if neid_ssb in self.input.header['PRIMARY'] and neid_ssb not in self.input.header[sci]:
+                self.input.header[sci][neid_ssb] = self.input.header['PRIMARY'][neid_ssb]
+            elif ('DATE-OBS' in self.input.header['PRIMARY']) or ('DATE' in self.input.header['PRIMARY']): # kpf case
+                if 'MJD-OBS' not in self.input.header[sci]:
+                    if 'DATE-OBS' in self.input.header['PRIMARY']:
+                        d_obs = 'DATE-OBS'
+                        exptime = 'EXPTIME' if 'EXPTIME' in self.input.header['PRIMARY'] else None
+                    else:
+                        d_obs = 'DATE'
+                        exptime = 'ELASPED' if 'ELASPED' in self.input.header['PRIMARY'] else None
+
+                    self.input.header[sci]['MJD-OBS'] = Time(self.input.header['PRIMARY'][d_obs]).jd - 2400000.5
+                    self.input.header[sci]['EXPTIME'] = self.input.header['PRIMARY'][exptime] if exptime else 1.0
+
             self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
                                    else None)
 
@@ -223,21 +237,31 @@ class RadialVelocity(KPF1_Primitive):
             (this part will be updated after level 2 data model is made.)
         """
 
-        _, nx, ny = self.alg.get_spectrum()
+        # _, nx, ny = self.alg.get_spectrum()
 
         if self.logger:
             self.logger.info("RadialVelocity: Start crorss correlation to find radial velocity... ")
 
         output_df = []
-        for i in range(self.total_orderlet):
-            if i > 0:
-                self.alg.reset_spectrum(self.spectrum_data_set[i], self.header_set[i], self.wave_cal_set[i])
-            if self.logger:
-                self.logger.info('RadialVelocity: computing radial velocity on orderlet '+ self.sci_names[i] + '...')
-            rv_results = self.alg.compute_rv_by_cc(start_seg=self.start_seg, end_seg=self.end_seg, ref_ccf=self.ref_ccf)
-            one_df = rv_results['ccf_df']
-            assert (not one_df.empty and one_df.values.any())
-            output_df.append(rv_results['ccf_df'])
+
+        if all( [s is not None and s.size != 0 for s in self.spectrum_data_set]):
+            for i in range(self.total_orderlet):
+                if i > 0:
+                    self.alg.reset_spectrum(self.spectrum_data_set[i], self.header_set[i], self.wave_cal_set[i])
+
+                if self.logger:
+                    self.logger.info('RadialVelocity: computing radial velocity on orderlet '+ self.sci_names[i] + '...')
+                rv_results = self.alg.compute_rv_by_cc(start_seg=self.start_seg, end_seg=self.end_seg, ref_ccf=self.ref_ccf)
+                one_df = rv_results['ccf_df']
+                if one_df is None:
+                    if self.logger:
+                        self.logger.info('RadialVelocity: orderlet ' + self.sci_names[i] + 'error => ' +
+                                rv_results['msg'])
+                    output_df = []
+                    break
+                else:
+                    assert (not one_df.empty and one_df.values.any())
+                    output_df.append(rv_results['ccf_df'])
 
         self.construct_level2_data(output_df)
         self.output_level2.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')
@@ -252,7 +276,10 @@ class RadialVelocity(KPF1_Primitive):
 
     def construct_level2_data(self, output_df):
         if self.output_level2 is None:
-            self.output_level2 = KPF2()
+            self.output_level2 = KPF2.from_l1(self.input)
+
+        if (len(output_df) == 0):
+            return True
 
         self.make_ccf_table(output_df)
 
@@ -280,6 +307,7 @@ class RadialVelocity(KPF1_Primitive):
                 new_rv_table.attrs['ccd_rv'+str(o+1)]
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'rv'] = new_rv_table.attrs['rv']
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'jd'] = new_rv_table.attrs['ccd_jd']
+        self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
         return True
 
     def make_ccf_table(self, output_df):
@@ -306,10 +334,12 @@ class RadialVelocity(KPF1_Primitive):
         def f_decimal(num):
             return float("{:.10f}".format(num))
 
+        rv_table = {}
+
         total_orderlet = len(output_df)
         total_segment = np.shape(output_df[0].values)[0] - self.alg.ROWS_FOR_ANALYSIS
         segment_table = self.alg.get_segment_info()
-        rv_table = {}
+
         velocities = self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP]
         col_orderlets = np.zeros((total_segment, total_orderlet))
         col_rv = np.zeros(total_segment)
@@ -347,6 +377,7 @@ class RadialVelocity(KPF1_Primitive):
         _, final_rv, _, _ = self.alg.fit_ccf(final_sum_ccf, self.alg.get_rv_guess(), velocities)
         results.attrs['rv'] = (f_decimal(final_rv), 'BaryC RV (km/s)')
         results.attrs['ccd_jd'] = output_df[0].attrs['CCFJDSUM']
+        results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
 
         return results
 

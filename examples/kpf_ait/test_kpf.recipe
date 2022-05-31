@@ -1,5 +1,3 @@
-test_data_dir = KPFPIPE_TEST_DATA + config.ARGUMENT.input_dir
-#output_dir = KPFPIPE_TEST_DATA+config.ARGUMENT.output_dir
 output_dir = config.ARGUMENT.output_dir
 output_dir_flat = config.ARGUMENT.output_dir_flat
 
@@ -36,8 +34,7 @@ ccd_idx= config.ARGUMENT.ccd_idx
 
 bkg = ''
 
-#invoke_subrecipe("./examples/kpf_recipe_newdata/test_kpf_bias_flat_corrections.recipe")
 invoke_subrecipe("./examples/kpf_ait/test_kpf_order_trace.recipe")
 invoke_subrecipe("./examples/kpf_ait/test_kpf_optimal_extraction.recipe")
-#invoke_subrecipe("./examples/kpf_red_041222/test_kpf_radial_velocity_reweight.recipe")
+#invoke_subrecipe("./examples/kpf_ait/test_kpf_radial_velocity_reweight.recipe")
 #invoke_subrecipe("./examples/kpf_red_041222/test_kpf_hk.recipe")

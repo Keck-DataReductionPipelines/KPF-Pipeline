@@ -7,6 +7,7 @@ from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.alg_base import ModuleAlgBase
 import os
 import json
+from astropy.time import Time
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -1494,24 +1495,30 @@ class SpectralExtractionAlg(ModuleAlgBase):
         flux_header = self.spectrum_header
 
         mjd = 0.0
+        m_d = 2400000.5
         if 'SSBJD100' in header_keys:
-            mjd = flux_header['SSBJD100'] - 2400000.5
+            mjd = flux_header['SSBJD100'] - m_d
         elif 'OBSJD' in header_keys:
-            mjd = flux_header['OBSJD'] - 2400000.5
+            mjd = flux_header['OBSJD'] - m_d
         elif 'OBS MJD' in header_keys:
             mjd = flux_header['OBS MJD']
-        exptime = flux_header['EXPTIME'] if 'EXPTIME' in header_keys else 600.0
+
+        expt = 'EXPTIME'
+        if expt in header_keys:
+            exptime = flux_header[expt]
+        else:
+            exptime = 600.0
 
         total_order, dim_width = np.shape(result_data)
         # result_table = {'order_'+str(i): result_data[i, :] for i in range(total_order) }
         # df_result = pd.DataFrame(result_table)
         df_result = pd.DataFrame(result_data)
-        df_result.attrs['MJD-OBS'] = mjd
-        df_result.attrs['OBSJD'] = mjd + 2400000.5
+        if mjd != 0.0:
+            df_result.attrs['MJD-OBS'] = mjd
+            df_result.attrs['OBSJD'] = mjd + 2400000.5
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
-        df_result.attrs['ORDEROFF'] = self.start_row_index() if first_row is None else first_row
-        df_result.attrs['DIMWIDTH'] = dim_width
+        df_result.attrs['FIRSTORD'] = self.start_row_index() if first_row is None else first_row
         df_result.attrs['FROMIMGX'] = self.origin[self.X]
         df_result.attrs['FROMIMGY'] = self.origin[self.Y]
 
