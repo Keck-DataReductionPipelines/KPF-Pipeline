@@ -71,6 +71,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
+import os
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
@@ -106,7 +107,8 @@ class RadialVelocityInit(KPF_Primitive):
                 pd = None
 
         self.bc_period = pd if pd is not None else 380
-
+        self.test_data = action.args['test_data_path'] if 'test_data_path' in args_keys \
+            else os.getenv('KPFPIPE_TEST_DATA')
         # barycentric correction default period: 380 day, start date: apr-18-2019
         self.bc_data = action.args['bc_corr_path'] if 'bc_corr_path' in args_keys else None
         self.bc_output_data = None
@@ -126,7 +128,8 @@ class RadialVelocityInit(KPF_Primitive):
         self.logger.info('Loading config form: {}'.format(self.config_path))
         # Order trace algorithm setup
         self.alg_rv_init = RadialVelocityAlgInit(self.config, self.logger, bc_time=self.bc_start_jd,
-                                                 bc_period=self.bc_period, bc_corr_path = self.bc_data)
+                                                 bc_period=self.bc_period, bc_corr_path = self.bc_data,
+                                                 test_data=self.test_data)
 
     def _pre_condition(self) -> bool:
         """
