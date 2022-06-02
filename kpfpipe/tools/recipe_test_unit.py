@@ -87,7 +87,7 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
         f.seek(0)
         arg = Arguments(name="start_recipe_args", recipe=f.name)
         framework.append_event('start_recipe', arg)
-        framework.main_loop()
+        framework.start_action_loop()
 
 
 def recipe_test(recipe: str, pipe_config: str=pipe_config):
