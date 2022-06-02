@@ -23,16 +23,16 @@ notebook:
 
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
-	docker run -it -p 8888:8888 -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
+	docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/data kpf-drp:latest bash
 
 regression_tests:
 	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
-	pytest -s --pyargs tests.performance
+	pytest --pyargs tests.performance
 
 validation_tests:
-	pytest -s --pyargs tests.validation
+	pytest --pyargs tests.validation
 
 .PHONY: init
