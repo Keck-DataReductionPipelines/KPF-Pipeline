@@ -16,6 +16,7 @@ LIGHT_SPEED_M = const.c.value  # light speed in m/s
 SEC_TO_JD = 1.0 / 86400.0
 FIT_G = fitting.LevMarLSQFitter()
 
+from barycorrpy import get_BC_vel, utc_tdb
 
 class RadialVelocityAlg(RadialVelocityBase):
     """Radial velocity calculation using cross correlation method.
@@ -221,7 +222,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                                          self.wave_cal[r, self.end_x_pos], r])
             self.total_segments = len(segment_list)
             self.segment_limits_table = np.array(segment_list)
-        return self.segment_limits_table[seg_idx]
+
+        idx = np.where(self.segment_limits_table[:, self.SEGMENT_IDX]==seg_idx)[0][0]
+        return self.segment_limits_table[idx]
 
     def set_order_range(self, lower_order=None, upper_order=None):
         """Set the order range for radial velocity calculation.
@@ -346,7 +349,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                             RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
                             RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
                             RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV,
-                            RadialVelocityAlgInit.SPEC]
+                            RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
         bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
@@ -434,11 +437,12 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.obs_jd = self.get_obs_time()
         if not self.obs_jd:
             return None, 'observation jd time error'
-
         zb = self.get_redshift()
-        self.zb = zb
+
         if zb is None:
             return None, 'redshift value error'
+        else:
+            self.zb = zb
 
         self.set_x_range()
         self.set_order_range()
@@ -459,7 +463,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             s_seg_idx = 0
         if end_seg is not None:
-            e_seg_idx = end_seg if end_seg >= 0 else (total_seg-1+start_seg)
+            e_seg_idx = end_seg if end_seg >= 0 else (total_seg-1+end_seg)
         else:
             e_seg_idx = total_seg-1
 
@@ -467,7 +471,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         wavecal_all_orders = self.wavelength_calibration(spectrum_x)     # from s_order to e_order, s_x to e_x
 
         seg_ary = np.arange(total_seg)[s_seg_idx:e_seg_idx+1]
-
         for idx, seg_idx in np.ndenumerate(seg_ary):
             seg_limits = self.get_segment_limits(seg_idx=seg_idx)
             ord_idx = int(seg_limits[self.SEGMENT_ORD])
@@ -482,8 +485,10 @@ class RadialVelocityAlg(RadialVelocityBase):
 
             if np.any(wavecal != 0.0):
                 if wavecal[-1] < wavecal[0]:
-                    ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx])[left_x:right_x]) # check??
-                    ordered_wavecal = np.flip(wavecal)[left_x:right_x]
+                    ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx][left_x:right_x]))   # check??
+                    ordered_wavecal = np.flip(wavecal[left_x:right_x])
+                    # ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx][left_x:right_x]))
+                    # ordered_wavecal = np.flip(wavecal[left_x:right_x])
                 else:
                     ordered_spec = self.fix_nan_spectrum(new_spectrum[ord_idx][left_x:right_x])
                     ordered_wavecal = wavecal[left_x:right_x]
@@ -609,7 +614,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         # shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)  # Shifting mask in redshift space
         if self.ccf_code == 'c':
             # ccf_pixels_c = np.zeros([v_steps, n_pixel])
-            v_b = zb * LIGHT_SPEED
+
+            v_b = zb * 1.0e-3               # m/s -> km/s
             for c in range(v_steps):
                 # add one pixel before and after the original array in order to uniform the calculation between c code
                 # and python code
@@ -619,12 +625,11 @@ class RadialVelocityAlg(RadialVelocityBase):
 
                 new_spec = np.pad(spectrum, (1, 1), 'constant')
                 new_spec[1:n_pixel+1] = spectrum
-
                 sn = np.ones(n_pixel+2)
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
-                                                 self.velocity_loop[c], v_b)
+                                                 self.velocity_loop[c], v_b)    # need check??
                 """
                 ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
                                                             new_line_end.astype('float64'),
@@ -661,7 +666,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    x_pixel_wave.astype('float64'),
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
-                                                   sn_p, zb)
+                                                   sn_p, zb/LIGHT_SPEED_M)
         return ccf
 
     def calc_ccf(self, v_steps, new_line_start, new_line_end, x_pixel_wave, spectrum, new_line_weight, sn, zb):
