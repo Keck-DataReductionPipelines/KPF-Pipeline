@@ -63,6 +63,8 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
     """ star radial velocity estimation (km/s) """
     SPEC = "instrument"
     """ Observation instrument """
+    STARNAME = 'starname'
+    """ star name """
 
     def __init__(self, obs_config, config=None, logger=None, logger_name=None):
         ModuleAlgBase.__init__(self, logger_name or self.__class__.__name__, config, logger)
@@ -86,7 +88,8 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             BarycentricCorrectionAlg.LON,
                             BarycentricCorrectionAlg.ALT,
                             BarycentricCorrectionAlg.RV,
-                            BarycentricCorrectionAlg.SPEC]
+                            BarycentricCorrectionAlg.SPEC,
+                            BarycentricCorrectionAlg.STARNAME]
                 self.obs_config = {}
                 for c in conf_def:
                     k_val = bc_section.get_config_value(c, '0.0')
@@ -118,10 +121,10 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             numpy.ndarray: Minimum and maximum redshift values during the period starting from
             `jd`.  The first element in the array is the minimum and the second one is the maximum.
         """
-
         if self.zb_list is None:
             self.zb_list = self.get_zb_list(jd, period, data_path, save_to_path)
-            self.zb_range = np.array([min(self.zb_list), max(self.zb_list)]) if np.size(self.zb_list) > 0 else None
+            self.zb_range = np.array([min(self.zb_list), max(self.zb_list)])/LIGHT_SPEED_M \
+                if np.size(self.zb_list) > 0 else None
         return self.zb_range
 
     def get_zb_list(self, jd, period, data_path=None, save_to_path=None):
@@ -182,8 +185,9 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
         # if a period of time is assigned, check if a file storing the data already exists or not
         if days_period is not None and days_period > 1:
             instrument = obs_config.get(BarycentricCorrectionAlg.SPEC, '')
+            target = obs_config.get(BarycentricCorrectionAlg.STARNAME, 'nostar')
             zb_bc_file = BarycentricCorrectionAlg.find_existing_zb_file(instrument.lower(),
-                                                                        start_jd, days_period, data_path)
+                                                                start_jd, days_period, target.lower(), data_path)
             if zb_bc_file is not None and os.path.isfile(zb_bc_file):
                 df = pd.read_csv(zb_bc_file, header=None)
                 zb_bc_corr = np.reshape(df.values, (np.size(df.values), ))
@@ -203,35 +207,39 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
         return zb_bc_corr
 
     @staticmethod
-    def find_existing_zb_file(ins, start_jd, days_period, data_path=None):
+    def find_existing_zb_file(ins, start_jd, days_period, target, data_path):
         """ Compose the file path storing the redshift values from barycentric correction over a period of days.
 
         Args:
             ins (str): Observation instrument.
             start_jd (float): Start day in Julian Date format.
             days_period (int): Total days.
+            target (str): star name.
             data_path (str): Path of the data file. Defaults to None, meaning a default path based on
                 the setting of `start_jd`, `days_period` and instrument under KPF data test directory is applied.
 
         Returns:
-            str: Data path. The default path is like *<directory of KPFPIPE_TEST_DATA>/radial_velocity_test/data/
+            str: Data path. The default path is like './+default_bc_file'
             bc_corr_<start_jd>_<days_period>_<instrument>.csv*
         """
-        is_dir = True
-        zb_bc_file = None
-        if data_path is not None:
-            is_dir = os.path.isdir(data_path)
-        else:    # default directory containing file storing the baraycentric correction data
-            data_path = os.getenv('KPFPIPE_TEST_DATA') + '/radial_velocity_test/data/'
+        default_bc_file = 'bc_corr' + '_' + str(start_jd) + '_' + str(days_period) + '_' + ins + '_' + target + '.csv'
 
-        # if the output path is a directory,
-        # the filename is like "bc_corr_<start_jd>_<days_period>_<ins>.csv"in default.
-        if is_dir and data_path is not None:
-            ins = '_' + ins if ins else ''
-            zb_bc_file = (data_path if data_path.endswith("/") else (data_path + "/")) + \
-                         'bc_corr' + str(start_jd) + '_' + str(days_period) + ins + '.csv'
-        elif not is_dir and data_path is not None:
-            zb_bc_file = data_path
+        if data_path is not None and data_path:
+            if os.path.isdir(data_path):
+                zb_bc_file = (data_path if data_path.endswith("/") else (data_path + "/")) + default_bc_file
+            elif os.path.isfile(data_path):
+                zb_bc_file = data_path
+            else:  # a non-existing dir or non-existing file
+                dirname = os.path.dirname(data_path)
+                basename = os.path.basename(data_path)
+                if not os.path.isdir(dirname):
+                    os.makedirs(os.path.dirname(data_path), exist_ok=True)
+                if basename:
+                    zb_bc_file = data_path
+                else:
+                    zb_bc_file = dirname + '/' + default_bc_file
+        else:
+            zb_bc_file = './' + default_bc_file
 
         return zb_bc_file
 
@@ -251,12 +259,12 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
         jds = np.arange(days_period, dtype=float) + start_jd if days_period else [start_jd]
         # jds = np.arange(days_period+1, dtype=float) + start_jd
         zb_list = list()
-        i = 0    # to remove
         for jd in jds:
             # iso_t = Time(jd, format='jd', scale='utc')
             bc = BarycentricCorrectionAlg.get_bc_corr(obs_config, jd)
             if bc:
-                zb_list.append(bc / LIGHT_SPEED_M)
+                # zb_list.append(bc / LIGHT_SPEED_M)
+                zb_list.append(bc)
             else:
                 zb_list.append(None)
         return zb_list
@@ -273,9 +281,21 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             float: Barycentric velocity correction number from get_BC_vel.
 
         """
-
-        # bc_obj = get_BC_vel(JDUTC=Time(jd, format='jd', scale='utc'),
-        bc_obj = get_BC_vel(JDUTC=jd,
+        if obs_config[BarycentricCorrectionAlg.STARNAME].lower() == 'sun':
+            bc_obj = get_BC_vel(JDUTC=jd,
+                                ra=None,
+                                dec=None,
+                                pmra=None,
+                                pmdec=None,
+                                px=None,
+                                lat=obs_config[BarycentricCorrectionAlg.LAT],
+                                longi=obs_config[BarycentricCorrectionAlg.LON],
+                                alt=obs_config[BarycentricCorrectionAlg.ALT],
+                                SolSystemTarget='Sun',
+                                predictive=True,
+                                rv=obs_config[BarycentricCorrectionAlg.RV])
+        else:
+            bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],
                             dec=obs_config[BarycentricCorrectionAlg.DEC],
                             pmra=obs_config[BarycentricCorrectionAlg.PMRA],

@@ -97,13 +97,14 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
 
-    def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None):
+    def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
+                test_data=None):
         RadialVelocityBase.__init__(self, config, logger)
         if self.config_ins is None or self.config_ins.get_section() is None:
             raise Exception("No config is set")
 
         load_dotenv()
-        self.test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/'
+        self.test_data_dir = os.getenv('KPFPIPE_TEST_DATA') + '/' if test_data is None else test_data
         if not os.path.isdir(self.test_data_dir):
             raise Exception('no test data directory found')
 
@@ -160,6 +161,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         config_star = None
         if star_config_file is not None:
             f_config = configparser.ConfigParser()
+            self.d_print("RadialVelocityAlgInit: star config file: ", self.test_data_dir + star_config_file)
             if len(f_config.read(self.test_data_dir + star_config_file)) == 1:
                 config_star = ConfigHandler(f_config, star_name)
 
@@ -192,6 +194,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 return self.ret_status('default mask of '+default_mask + ' is not defined')
 
             self.mask_path = self.test_data_dir + 'rv_test/stellarmasks/'+mask_file_map[default_mask]
+            self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
         return self.ret_status('ok')
 
     def init_calculation(self):
@@ -394,7 +397,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         """
         rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.OBSLAT,
-                            self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC]
+                            self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC, self.STARNAME]
 
         if self.zb_range is None:
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
