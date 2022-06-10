@@ -64,13 +64,6 @@ class ImageProcessingAlg:
         #             #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
         #             minus_bias = self.rawimage[ffi]-masterbias[ffi]
         #             self.rawimage[ffi] = minus_bias
-                
-            # if self.data_type == 'NEID':
-            #     print(self.rawimage.info())
-            #     print('shapes:',self.rawimage['DATA'].shape,masterbias['DATA'].shape)
-            #     assert self.rawimage['DATA'].shape==masterbias['DATA'].shape, "Bias .fits Dimensions NOT Equal! Check failed"
-            #     minus_bias=self.rawimage['DATA']-masterbias['DATA']
-            #     self.rawimage['DATA'] = minus_bias
                  
     def get(self):
         """Returns bias-corrected raw image result.
