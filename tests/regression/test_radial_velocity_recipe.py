@@ -23,7 +23,7 @@ for input_L1_file in find_files(input_lev1_pattern):
                             start_seg=20, end_seg=24)
 """
 
-radial_velocity_neid_config = "examples/default_recipe_test_neid.cfg"
+radial_velocity_neid_config = "examples/default_neid.cfg"
 
 
 def test_recipe_radial_velocity_neid():

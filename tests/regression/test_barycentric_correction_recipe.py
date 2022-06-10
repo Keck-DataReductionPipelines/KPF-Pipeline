@@ -42,3 +42,5 @@ barycentric_correction_neid_config = "examples/default_bc.cfg"
 def test_barycentric_correction_neid():
     recipe_test(barycentric_correction_neid_recipe, barycentric_correction_neid_config)
 
+if __name__ == '__main__':
+    test_barycentric_correction_neid()
