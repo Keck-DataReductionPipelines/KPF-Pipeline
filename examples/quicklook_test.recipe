@@ -1,0 +1,6 @@
+from modules.quicklook.src.quick_prim import Quicklook
+
+file_path = config.ARGUMENT.path_to_twod
+open_file = kpf0_from_fits(file_path,data_type='KPF')
+
+Quicklook(open_file)
