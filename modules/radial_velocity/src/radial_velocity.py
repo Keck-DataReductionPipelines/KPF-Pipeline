@@ -289,7 +289,10 @@ class RadialVelocity(KPF1_Primitive):
         crt_rv_ext = self.output_level2[self.rv_ext] if hasattr(self.output_level2, self.rv_ext) else None
         if crt_rv_ext is None or np.shape(crt_rv_ext)[0] == 0:
             self.output_level2[self.rv_ext] = new_rv_table
+            self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'row'] = 0
+
         else:
+            first_row = np.shape(crt_rv_ext)[0]
             new_table_list = {}
             for c_name in self.rv_col_names:
                 if c_name in self.rv_col_on_orderlet:
@@ -301,13 +304,14 @@ class RadialVelocity(KPF1_Primitive):
                     new_list = crt_rv_ext[c_name].tolist() + new_rv_table[c_name].tolist()
                     new_table_list[c_name] = new_list
             self.output_level2[self.rv_ext] = pd.DataFrame(new_table_list)
+            self.output_level2.header[self.rv_ext]['ccd' + str(self.rv_set_idx + 1) + 'row'] = first_row
 
         for o in range(len(output_df)):
             self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'rv'+str(o+1)] = \
                 new_rv_table.attrs['ccd_rv'+str(o+1)]
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'rv'] = new_rv_table.attrs['rv']
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'jd'] = new_rv_table.attrs['ccd_jd']
-        self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
+        # self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
         return True
 
     def make_ccf_table(self, output_df):
@@ -377,7 +381,7 @@ class RadialVelocity(KPF1_Primitive):
         _, final_rv, _, _ = self.alg.fit_ccf(final_sum_ccf, self.alg.get_rv_guess(), velocities)
         results.attrs['rv'] = (f_decimal(final_rv), 'BaryC RV (km/s)')
         results.attrs['ccd_jd'] = output_df[0].attrs['CCFJDSUM']
-        results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
+        # results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
 
         return results
 

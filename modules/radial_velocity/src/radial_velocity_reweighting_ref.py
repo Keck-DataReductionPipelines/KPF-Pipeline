@@ -194,6 +194,8 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
 
             for ccf_file in self.files:
                 ccf_ref = get_template_observation(ccf_file, self.ccf_hdu_name, "observation with ccf error")
+                if ccf_ref.size == 0:
+                    continue
 
                 header = ccf_file.header[self.ccf_hdu_name]
                 total_orderlet = np.shape(ccf_ref)[0] if header['NAXIS'] == 3 else 1
