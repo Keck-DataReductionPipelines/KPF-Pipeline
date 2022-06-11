@@ -173,6 +173,11 @@ class RadialVelocityReweighting(KPF2_Primitive):
             (this part will be updated after level 2 data model is made.)
         """
 
+        if self.ccf_data.size == 0:
+            if self.logger:
+                self.logger.info("RadialVelocityReweighting: No data in " + self.ccf_ext)
+            return Arguments(self.lev2_obj)
+
         header = self.lev2_obj.header[self.ccf_ext]
         ccf_dim = header['NAXIS']
 
@@ -240,10 +245,10 @@ class RadialVelocityReweighting(KPF2_Primitive):
         rv_ext_values = self.lev2_obj[self.rv_ext].values
         rv_ext_header = self.lev2_obj.header[self.rv_ext]
         rv_name_list = [name.lower() for name in self.rv_col_names]
-        rv_start_idx = self.rv_ext_idx * self.total_segment
+        # rv_start_idx = self.rv_ext_idx * self.total_segment
+        rv_start_idx = rv_ext_header['ccd'+str(self.rv_ext_idx+1)+'row']
 
         rv_orderlet_colnames = [self.RV_COL_ORDERLET + str(o + 1) for o in range(total_orderlet)]
-
         def col_idx_rv_table(colname, orderlet_idx=0):
             colname = colname.lower()
 
