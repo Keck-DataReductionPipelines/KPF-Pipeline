@@ -12,6 +12,7 @@ from modules.Utils.data_handler import FromCSV
 from modules.Utils.data_handler import GetHeaderValue
 from modules.Utils.data_handler import SelectObs
 
+
 date_dir = DATE_DIR + '/'
 flat_file_pattern = FLAT_FILE
 date_dir_flat = date_from_kpffile(flat_file_pattern) 
@@ -168,6 +169,7 @@ if do_rv:
 	selected_lev1_files = []
 
 	# select lev1 files 
+<<<<<<< HEAD
 	lev1_list = find_files(input_lev1_pattern)
 	list_socal = output_dir + config.ARGUMENT.output_rv + "List_KPF_observations_using_SoCal.csv"
 	selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=DATE_DIR)
@@ -204,7 +206,6 @@ if do_rv:
 						data_ext_rv[idx], ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,
 						area_def=area_def[idx], start_seg=area_def[idx][0], end_seg=area_def[idx][1],
 						rv_set=idx, ccf_engine='c', obstime=obstime, exptime=exptime)
-
 			
 			result = to_fits(rv_data, output_lev2_file)
 		else:
