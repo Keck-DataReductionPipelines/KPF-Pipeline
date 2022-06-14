@@ -119,10 +119,6 @@ class FromCSV(KPF_Primitive):
 
         self.csvfile = action.args[0]
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 56a619d8ee04776087f10385b782c2f133e470fb
         usecols = action.args['usecols'] if 'usecols' in args_keys else None
         if isinstance(usecols, str):
             self.usecols = [usecols]
@@ -188,7 +184,6 @@ class FromCSV(KPF_Primitive):
 
         return Arguments(data_sels)
 
-<<<<<<< HEAD
 
 class GetHeaderValue(KPF_Primitive):
     """
@@ -313,6 +308,4 @@ class SelectObs(KPF_Primitive):
         if self.logger:
             self.logger.info("SelectObs: done")
         return Arguments(file_selected)
-=======
 
->>>>>>> 56a619d8ee04776087f10385b782c2f133e470fb
