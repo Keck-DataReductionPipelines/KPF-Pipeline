@@ -169,7 +169,7 @@ if do_rv:
 	selected_lev1_files = []
 
 	# select lev1 files 
-<<<<<<< HEAD
+
 	lev1_list = find_files(input_lev1_pattern)
 	list_socal = output_dir + config.ARGUMENT.output_rv + "List_KPF_observations_using_SoCal.csv"
 	selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=DATE_DIR)
