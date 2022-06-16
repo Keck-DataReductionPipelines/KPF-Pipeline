@@ -8,23 +8,23 @@ import os
 
 class QuicklookAlg:
     """
-    
+
     """
-    
+
     def __init__(self,config=None,logger=None):
-        
+
         """
-        
+
         """
         self.config=config
         self.logger=logger
-        
+
     def plot_2d_frames(self,hdulist,output_dir):
         #print(self.config['output']['qlp_outdir'])
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
         plt.rcParams['legend.fontsize'] = plt.rcParams['font.size']
-        
+
         #check if output location exist, if not create it
 
         if not os.path.exists(output_dir):
@@ -37,7 +37,7 @@ class QuicklookAlg:
         #print(hdulist.header)
         hdr = hdulist.header
         version = hdr['PRIMARY']['IMTYPE']
-        
+
         exposure_name = hdr['PRIMARY']['OFNAME'][:-5]
         print('exp here',exposure_name)
 
@@ -60,7 +60,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
-        
+
         ccd_color = ['GREEN_CCD','RED_CCD']
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -71,8 +71,8 @@ class QuicklookAlg:
                 hdulist1 = fits.open(master_file)
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
-            
-            
+
+
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
@@ -106,7 +106,7 @@ class QuicklookAlg:
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
             #print('test',np.nanmax(flatten_counts))
-            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f' % np.nanmedian(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.5)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
+            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f' % np.nanmedian(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
             if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
             plt.xlabel('Counts')
@@ -137,13 +137,12 @@ class QuicklookAlg:
             plt.legend()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
- 
+
 
         #plt.figure()
         #plt.imshow(hdulist['GREEN_CCD'])
         #plt.savefig(output_dir+'green_ccd.png')
-        
+
         #plt.figure()
         #plt.imshow(hdulist['RED_CCD'])
         #plt.savefig(output_dir+'red_ccd.png')
-
