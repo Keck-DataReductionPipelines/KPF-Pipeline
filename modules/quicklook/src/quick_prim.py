@@ -28,7 +28,7 @@ class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/
 
         #Input arguments
         self.input_file=self.action.args[0]
-
+        self.output_dir=self.action.args[1]
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -48,4 +48,4 @@ class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/
         self.alg=QuicklookAlg(config=self.config,logger=self.logger)
         
     def _perform(self) -> None:
-        self.alg.testrun(self.input_file)
+        self.alg.plot_2d_frames(self.input_file,self.output_dir)
