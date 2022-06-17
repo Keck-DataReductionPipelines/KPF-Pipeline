@@ -137,7 +137,7 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
-
+        '''
         #moving on the 1D data
         print('working on', L1_data)
         hdulist = fits.open(L1_data)
@@ -193,7 +193,7 @@ class QuicklookAlg:
         plt.xlabel('Wavelength (Ang)',fontsize = 20)
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
-        '''
+
 
         #now onto the plotting of CCF
         ccf_file = '/data/L2/20220524/KP.20220524.02360.58_L2.fits'
