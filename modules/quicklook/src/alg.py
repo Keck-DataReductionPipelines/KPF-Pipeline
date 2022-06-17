@@ -41,7 +41,7 @@ class QuicklookAlg:
 
         print(hdulist.info())
         ccd_color = ['GREEN_CCD','RED_CCD']
-        if len(hdulist[ccd_color[0]])<1 and len(hdulist[ccd_color[1]])<1:
+        if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
             return
 
