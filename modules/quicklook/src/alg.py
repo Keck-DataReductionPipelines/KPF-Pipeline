@@ -199,30 +199,34 @@ class QuicklookAlg:
         ccf_file = '/data/L2/20220524/KP.20220524.02360.58_L2.fits'
         hdulist = fits.open(ccf_file)
         print(hdulist.info())
-        ccf = np.array(hdulist[7].data,'d')
-        print(np.shape(ccf))
-        step = double(self.config['RV']['step'])
-        vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
-        fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
-        ax = plt.subplot()
-        plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
-        mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
-        #print('test',np.shape(mean_ccf))
-        mean_ccf = np.nanmedian(mean_ccf,axis = 0)
-        plt.plot(vel_grid,mean_ccf)
+        ccf_color = ['GREEN_CCF','RED_CCF']
+        for i_color in range(len(ccd_color)):
+            ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+            print(np.shape(ccf))
+            step = double(self.config['RV']['step'])
+            vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
-        #fit the center of the ccf
-        fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
-        model = modeling.models.Gaussian1D()
-        fitted_model = fitter(model, vel_grid, 1.-mean_ccf)
-        gamma =fitted_model.mean.value
-        std =fitted_model.stddev.value
-        plt.plot([gamma,gamma],[np.nanmin(np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])),1.],':',color ='gray')
-        ax.text(0.6,0.3,'$\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
-        ax.text(0.6,0.2,'$\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
+            fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
+            ax = plt.subplot()
+            plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
+            mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
+            #print('test',np.shape(mean_ccf))
+            mean_ccf = np.nanmedian(mean_ccf,axis = 0)
+            plt.plot(vel_grid,mean_ccf,label = hdulist[ccf_color[i_color])
+
+            #fit the center of the ccf
+            fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
+            model = modeling.models.Gaussian1D()
+            fitted_model = fitter(model, vel_grid, 1.-mean_ccf)
+            gamma =fitted_model.mean.value
+            std =fitted_model.stddev.value
+            plt.plot([gamma,gamma],[np.nanmin(np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])),1.],':',color ='gray')
+            ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
+            ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+'$\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
         plt.xlabel('RV (km/s)')
         plt.ylabel('CCF')
         plt.title('Mean CCF')
+        plt.legend()
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
         plt.close()
