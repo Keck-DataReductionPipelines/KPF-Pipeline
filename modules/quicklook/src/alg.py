@@ -208,7 +208,7 @@ class QuicklookAlg:
             step = float(self.config['RV']['step'])
             vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
             print('step',step,len(vel_grid))
-
+            '''
             fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
             ax = plt.subplot()
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
@@ -232,4 +232,4 @@ class QuicklookAlg:
         plt.legend()
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
         plt.close()
-        
+        '''
