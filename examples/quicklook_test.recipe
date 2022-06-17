@@ -1,8 +1,12 @@
 from modules.quicklook.src.quick_prim import Quicklook
 
-file_path_twod = config.ARGUMENT.path_to_twod
-file_path_oned = config.ARGUMENT.path_to_oned
-output_dir = config.ARGUMENT.output_dir
-open_file = kpf0_from_fits(file_path_twod,data_type='KPF')
+path_to_twod = config.ARGUMENT.path_to_twod
+lev0_files= path_to_twod + '*' + '.fits'
 
-Quicklook(open_file,file_path_oned,output_dir)
+
+
+output_dir = config.ARGUMENT.output_dir
+for input_lev0_file in find_files(lev0_files)
+    open_file = kpf0_from_fits(input_lev0_file,data_type='KPF')
+
+    Quicklook(open_file,output_dir)

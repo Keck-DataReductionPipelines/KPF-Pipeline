@@ -20,7 +20,7 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
-    def qlp_procedures(self,hdulist,L1_data,output_dir):
+    def qlp_procedures(self,hdulist,output_dir):
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
@@ -140,6 +140,8 @@ class QuicklookAlg:
 
 
         #moving on the 1D data
+        date = exposure_name[3:11]
+        L1_data = '/data/L1/'+date+'/'+exposure_name+'_L1.fits'
         print('working on', L1_data)
         hdulist = fits.open(L1_data)
 
@@ -194,7 +196,7 @@ class QuicklookAlg:
         plt.xlabel('Wavelength (Ang)',fontsize = 20)
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
-        
+
 
         #now onto the plotting of CCF
         date = exposure_name[3:11]
@@ -242,7 +244,7 @@ class QuicklookAlg:
 
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
-                ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
+                #ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
             plt.xlabel('RV (km/s)')
             plt.ylabel('CCF')
