@@ -201,6 +201,9 @@ class QuicklookAlg:
         print(hdulist.info())
 
         ccf_color = ['GREEN_CCF','RED_CCF']
+        fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
+        ax = plt.subplot()
+        plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
         for i_color in range(len(ccf_color)):
             ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
             #print(np.shape(ccf))
@@ -209,9 +212,7 @@ class QuicklookAlg:
             vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
             #print('step',step,len(vel_grid))
 
-            fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
-            ax = plt.subplot()
-            plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
+
             mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
             #print('test',mean_ccf)
 
