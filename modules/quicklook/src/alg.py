@@ -160,7 +160,7 @@ class QuicklookAlg:
         flux = np.concatenate((flux_green,flux_red),axis = 0)
         #print(np.shape(wav_green),np.shape(wav))
 
-        n = int(self.config['L1']['wave_soln']) #number of orders per panel
+        n = int(self.config['L1']['n_per_row']) #number of orders per panel
         cm = plt.cm.get_cmap('rainbow')
 
         from matplotlib import gridspec
