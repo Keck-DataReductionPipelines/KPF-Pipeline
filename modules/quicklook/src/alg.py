@@ -44,6 +44,9 @@ class QuicklookAlg:
 
         exposure_name = hdr['PRIMARY']['OFNAME'][:-5]
         print('working on',exposure_name)
+        L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
+        tmp = fits.open(L0_data)
+        print('read_with_fits',tmp.info())
 
         master_file = 'None'
         if version == 'Sol_All':
