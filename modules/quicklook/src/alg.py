@@ -33,7 +33,7 @@ class QuicklookAlg:
             os.makedirs(output_dir+'/fig')
 
         print('header',hdulist.info(),hdulist.info()==None, hdulist.info()=='None')
-        print(hdulist['GREEN_CCD'])
+        print(hdulist['GREEN_CCD'],hdulist['GREEN_CCD']==None)
         #if hdulist.info() == None:
         #    print('skipping',hdulist)
         #    return
