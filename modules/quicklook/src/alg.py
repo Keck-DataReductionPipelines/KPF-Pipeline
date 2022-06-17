@@ -139,5 +139,5 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
-    def plot_1d_spectrum(self,hdulist_1d,output_dir):
-        print('L1 runs', hdulist_1d, output_dir)
+    #def plot_1d_spectrum(self,hdulist_1d,output_dir):
+        #print('L1 runs', hdulist_1d, output_dir)
