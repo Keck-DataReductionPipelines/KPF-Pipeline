@@ -207,17 +207,18 @@ class QuicklookAlg:
         plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
         for i_color in range(len(ccf_color)):
             ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+            ccf = np.sum(ccf,axis =0)#sum over orderlets
             #print(np.shape(ccf))
 
             step = float(self.config['RV']['step'])
-            vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
+            vel_grid = np.array(range(-int(np.shape(ccf)[1]/2),int(np.shape(ccf)[1]/2),1),'d')*step
             #print('step',step,len(vel_grid))
 
 
-            mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
-            print('test',np.shape(np.nanmean(ccf,axis = 1)))
+            mean_ccf = np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])
+            print('test',np.shape(np.nanmean(ccf,axis = 0)))
 
-            mean_ccf = np.nanmedian(mean_ccf,axis = 0)
+            #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
             plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color])
 
 
