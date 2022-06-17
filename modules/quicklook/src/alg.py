@@ -42,7 +42,9 @@ class QuicklookAlg:
         hdr = hdulist.header
         version = hdr['PRIMARY']['IMTYPE']
 
+
         exposure_name = hdr['PRIMARY']['OFNAME'][:-5]
+        date = exposure_name[3:11]
         print('working on',exposure_name)
         L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
         tmp = fits.open(L0_data)
@@ -149,7 +151,7 @@ class QuicklookAlg:
 
 
         #moving on the 1D data
-        date = exposure_name[3:11]
+
         L1_data = '/data/L1/'+date+'/'+exposure_name+'_L1.fits'
         print('working on', L1_data)
         hdulist = fits.open(L1_data)
@@ -208,7 +210,7 @@ class QuicklookAlg:
 
 
         #now onto the plotting of CCF
-        date = exposure_name[3:11]
+        #date = exposure_name[3:11]
         ccf_file = '/data/L2/'+date+'/'+exposure_name+'_L2.fits'
         print(date,ccf_file)
         if os.path.exists(ccf_file):
