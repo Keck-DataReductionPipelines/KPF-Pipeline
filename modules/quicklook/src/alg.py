@@ -202,6 +202,9 @@ class QuicklookAlg:
 
         ccf_color = ['GREEN_CCF','RED_CCF']
         color_grid = ['Green','Red']
+
+        plt.rcParams.update({'font.size': 8})
+        plt.rcParams['legend.fontsize'] = plt.rcParams['font.size']
         fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
         ax = plt.subplot()
         plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
