@@ -208,12 +208,13 @@ class QuicklookAlg:
             step = float(self.config['RV']['step'])
             vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
             print('step',step,len(vel_grid))
-            '''
+
             fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
             ax = plt.subplot()
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
             mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
-            #print('test',np.shape(mean_ccf))
+            print('test',mean_ccf)
+            '''
             mean_ccf = np.nanmedian(mean_ccf,axis = 0)
             plt.plot(vel_grid,mean_ccf,label = hdulist[ccf_color[i_color])
 
