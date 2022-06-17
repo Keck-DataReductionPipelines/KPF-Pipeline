@@ -48,4 +48,4 @@ class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/
         self.alg=QuicklookAlg(config=self.config,logger=self.logger)
 
     def _perform(self) -> None:
-        self.alg.plot_2d_frames(self.input_file,self.output_dir)
+        self.alg.qlp_procedures(self.input_file,self.output_dir)
