@@ -201,6 +201,7 @@ class QuicklookAlg:
         print(hdulist.info())
 
         ccf_color = ['GREEN_CCF','RED_CCF']
+        color_grid = ['Green','Red']
         fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
         ax = plt.subplot()
         plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
@@ -213,11 +214,11 @@ class QuicklookAlg:
             #print('step',step,len(vel_grid))
 
 
-            mean_ccf = np.nanmean(ccf,axis = 1)#/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
-            #print('test',mean_ccf)
+            mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
+            print('test',np.shape(np.nanmean(ccf,axis = 1)))
 
             mean_ccf = np.nanmedian(mean_ccf,axis = 0)
-            plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color])
+            plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color])
 
 
 
