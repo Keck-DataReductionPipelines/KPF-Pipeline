@@ -137,7 +137,7 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
-        
+
         #moving on the 1D data
         print('working on', L1_data)
         hdulist = fits.open(L1_data)
@@ -199,14 +199,16 @@ class QuicklookAlg:
         ccf_file = '/data/L2/20220524/KP.20220524.02360.58_L2.fits'
         hdulist = fits.open(ccf_file)
         print(hdulist.info())
-        '''
+
         ccf_color = ['GREEN_CCF','RED_CCF']
         for i_color in range(len(ccd_color)):
             ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
             print(np.shape(ccf))
-            step = double(self.config['RV']['step'])
-            vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
+            step = float(self.config['RV']['step'])
+            vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
+            print('step',step,vel_grid)
+        '''
             fig, ax = plt.subplots(1,1, sharex=True,figsize=(5,4))
             ax = plt.subplot()
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
