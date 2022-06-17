@@ -58,7 +58,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
-        '''
+        
         ccd_color = ['GREEN_CCD','RED_CCD']
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -193,7 +193,7 @@ class QuicklookAlg:
         plt.xlabel('Wavelength (Ang)',fontsize = 20)
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
-        '''
+
 
         #now onto the plotting of CCF
         ccf_file = '/data/L2/20220524/KP.20220524.02360.58_L2.fits'
@@ -232,7 +232,7 @@ class QuicklookAlg:
 
             print(i_color,gamma,std)
 
-            plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray')
+            plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
             ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
             ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
