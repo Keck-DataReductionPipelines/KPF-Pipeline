@@ -270,6 +270,7 @@ class QuicklookAlg:
             plt.xlabel('RV (km/s)')
             plt.ylabel('CCF')
             plt.title('Mean CCF')
+            plt.xlim(np.min(vel_grid),np.max(vel_grid))
             plt.legend()
             plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
