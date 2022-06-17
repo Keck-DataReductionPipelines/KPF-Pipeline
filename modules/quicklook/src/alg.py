@@ -43,7 +43,7 @@ class QuicklookAlg:
         version = hdr['PRIMARY']['IMTYPE']
 
 
-        exposure_name = file_name[17:-5]#hdr['PRIMARY']['OFNAME'][:-5]
+        exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         date = exposure_name[3:11]
         print('working on',exposure_name)
         L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
