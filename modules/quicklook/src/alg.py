@@ -20,7 +20,7 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
-    def qlp_procedures(self,hdulist,output_dir):
+    def qlp_procedures(self,hdulist,file_name,output_dir):
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
@@ -32,7 +32,7 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-
+        print(file_name)
         print(hdulist.info())
         ccd_color = ['GREEN_CCD','RED_CCD']
         if len(hdulist[ccd_color[0]])<1 and len(hdulist[ccd_color[1]])<1:
