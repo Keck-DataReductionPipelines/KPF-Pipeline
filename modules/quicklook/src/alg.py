@@ -236,6 +236,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+                print('ccf',np.shape(ccf))
                 ccf = np.sum(ccf,axis =0)#sum over orderlets
                 #print(np.shape(ccf))
 
