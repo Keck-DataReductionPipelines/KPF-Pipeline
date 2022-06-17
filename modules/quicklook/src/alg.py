@@ -213,7 +213,7 @@ class QuicklookAlg:
             #print('step',step,len(vel_grid))
 
 
-            mean_ccf = np.nanmean(ccf,axis = 1)/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
+            mean_ccf = np.nanmean(ccf,axis = 1)#/np.percentile(np.nanmean(ccf,axis = 1),[99.9])
             #print('test',mean_ccf)
 
             mean_ccf = np.nanmedian(mean_ccf,axis = 0)
@@ -230,9 +230,9 @@ class QuicklookAlg:
 
             print(i_color,gamma,std)
 
-            plt.plot([gamma,gamma],[np.nanmin(np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])),1.],':',color ='gray')
+            plt.plot([gamma,gamma],[np.nanmmin(mean_ccf),1.],':',color ='gray')
             ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
-            ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+'$\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
+            ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
         plt.xlabel('RV (km/s)')
         plt.ylabel('CCF')
