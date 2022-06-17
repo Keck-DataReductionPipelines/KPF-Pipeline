@@ -41,7 +41,7 @@ class QuicklookAlg:
 
         master_file = 'None'
         if version == 'Sol_All':
-            master_file = self.onfig['2D']['master_socal']
+            master_file = self.config['2D']['master_socal']
         if version == 'Etalon_All':
             master_file = self.config['2D']['master_etalon']
         if version == 'Sol_All':
@@ -60,7 +60,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_LFC']
 
         ccd_color = ['GREEN_CCD','RED_CCD']
-        '''
+
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
             flatten_counts = np.ravel(counts)
@@ -194,7 +194,7 @@ class QuicklookAlg:
         plt.xlabel('Wavelength (Ang)',fontsize = 20)
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
-        '''
+        
 
         #now onto the plotting of CCF
         date = exposure_name[3:11]
