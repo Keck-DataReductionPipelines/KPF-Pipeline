@@ -7,6 +7,6 @@ lev0_files= path_to_twod + '*' + '.fits'
 
 output_dir = config.ARGUMENT.output_dir
 for input_lev0_file in find_files(lev0_files):
-    open_file = kpf0_from_fits(input_lev0_file,data_type='KPF')
+    #open_file = kpf0_from_fits(input_lev0_file,data_type='KPF')
 
-    Quicklook(open_file,input_lev0_file,output_dir)
+    Quicklook(input_lev0_file,output_dir)
