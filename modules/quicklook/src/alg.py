@@ -33,9 +33,10 @@ class QuicklookAlg:
             os.makedirs(output_dir+'/fig')
 
 
+        print(hdulist.info())
         ccd_color = ['GREEN_CCD','RED_CCD']
         if len(hdulist[ccd_color[0]])<1 and len(hdulist[ccd_color[1]])<1:
-            print('skipping empty file',hdulist.info())
+            print('skipping empty file')
             return
 
         hdr = hdulist.header
@@ -231,7 +232,7 @@ class QuicklookAlg:
 
 
                 mean_ccf = np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])
-                print('test',np.shape(np.nanmean(ccf,axis = 0)))
+                #print('test',np.shape(np.nanmean(ccf,axis = 0)))
 
                 #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
                 plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
@@ -245,7 +246,7 @@ class QuicklookAlg:
                 gamma =fitted_model.mean.value
                 std =fitted_model.stddev.value
 
-                print(i_color,gamma,std)
+                #print(i_color,gamma,std)
 
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
