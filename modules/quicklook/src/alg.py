@@ -32,7 +32,7 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-
+        print('input file', hdulist)
         hdr = hdulist.header
         version = hdr['PRIMARY']['IMTYPE']
 
