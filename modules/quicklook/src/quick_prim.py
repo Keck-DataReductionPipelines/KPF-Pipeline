@@ -28,7 +28,8 @@ class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/
 
         #Input arguments
         self.input_file=self.action.args[0]
-        self.output_dir=self.action.args[1]
+        self.file_name=self.action.args[1]
+        self.output_dir=self.action.args[2]
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -48,4 +49,4 @@ class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/
         self.alg=QuicklookAlg(config=self.config,logger=self.logger)
 
     def _perform(self) -> None:
-        self.alg.qlp_procedures(self.input_file,self.output_dir)
+        self.alg.qlp_procedures(self.input_file,self.file_name,self.output_dir)
