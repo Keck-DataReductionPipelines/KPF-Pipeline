@@ -19,7 +19,7 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
-    def qlp_procedures(self,hdulist,output_dir):
+    def qlp_procedures(self,hdulist,L1_data,output_dir):
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
@@ -136,5 +136,6 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
-    #def plot_1d_spectrum(self,hdulist_1d,output_dir):
-        #print('L1 runs', hdulist_1d, output_dir)
+        #moving on the 1D data
+        print('working on', L1_data)
+        hdulist1 = fits.open(L1_data)
