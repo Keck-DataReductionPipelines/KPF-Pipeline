@@ -32,6 +32,7 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
+        print(hdulist.info())
         if hdulist.info() == None:
             print('skipping',hdulist)
             return
