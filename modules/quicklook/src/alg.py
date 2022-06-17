@@ -70,6 +70,8 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_bias']
         if version == 'Th_All':
             master_file = self.config['2D']['master_ThAr']
+        if version == 'Une_All':
+            master_file = self.config['2D']['master_Une']
         if version == 'UNe_All':
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
