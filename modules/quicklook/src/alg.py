@@ -100,7 +100,7 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
             #2D difference image
             plt.close()
-            print('master file',i_color,master_file,len(master_flatten_counts))
+            print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
