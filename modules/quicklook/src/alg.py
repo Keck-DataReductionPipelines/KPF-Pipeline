@@ -58,7 +58,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
-        
+
         ccd_color = ['GREEN_CCD','RED_CCD']
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -243,3 +243,380 @@ class QuicklookAlg:
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
         plt.close()
+
+        #output the results to html
+        f = open(output_dir+exposure_name+'_summary.html','w')
+
+        message = """<html><head><title>""" +exposure_name+ """</title>
+        <script type='text/javascript'>
+        </script>
+        <style>
+        </style>
+        <style type="text/css">
+        .column {
+        float: left;
+        width: 33.33%;
+        padding: 0px;
+        }
+
+        /* Clear floats after image containers */
+        .row::after {
+        content: "";
+        clear: both;
+        display: table;
+        }
+        .column2 {
+        float: left;
+        width: 49.5%;
+        padding: 0px;
+        }
+
+        /* Clear floats after image containers */
+        .row::after {
+        content: "";
+        clear: both;
+        display: table;
+        }
+
+        .zoomleft img {
+        }
+        .zoomleft img:hover {
+        z-index:0;
+        display : inline;
+        visibility : visible;
+        position:relative;
+        margin-top: 50%;
+        margin-left: 70%;
+        transform: scale(2.5);
+        }
+        .zoom img {
+        }
+        .zoom img:hover {
+        z-index:0;
+        display : inline;
+        visibility : visible;
+        position:relative;
+        margin-top: 50%;
+        margin-left: 0%;
+        transform: scale(2.5);
+        }
+        .zoomright img {
+        }
+        .zoomright img:hover {
+        z-index:0;
+        display : inline;
+        visibility : visible;
+        position:relative;
+        margin-top: 50%;
+        margin-left: -70%;
+        transform: scale(2.5);
+        }
+        .zoomleft2 img {
+        }
+        .zoomleft2 img:hover {
+        z-index:0;
+        display : inline;
+        visibility : visible;
+        position:relative;
+        margin-top: 50%;
+        margin-left: 50%;
+        transform: scale(1.8);
+        }
+
+        .zoomright2 img {
+        }
+        .zoomright2 img:hover {
+        z-index:0;
+        display : inline;
+        visibility : visible;
+        position:relative;
+        margin-top: 50%;
+        margin-left: -50%;
+        transform: scale(1.8);
+        }
+        </style>
+        </head><center><h1> """ +exposure_name+ """ </h1><br><br></center>
+        <div class="row">
+        <div class="column">
+        <div class="zoomleft">
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.pdf">
+        <img src="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column">
+        <div class="zoom">
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column">
+        <div class="zoomright">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Histogram_GREEN_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_Histogram_GREEN_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+        <br>
+        <br>
+        <br>
+
+
+        <div class="row">
+        <div class="column">
+        <div class="zoomleft">
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column">
+        <div class="zoom">
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_2D_Difference_RED_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column">
+        <div class="zoomright">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Histogram_RED_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_Histogram_RED_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+        <br>
+        <br>
+        <br>
+
+        <div class="row">
+        <div class="column2">
+        <div class="zoomleft2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column2">
+        <div class="zoomright2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.pdf" >
+        <img src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+        <br>
+        <br>
+        <br>
+
+        <figure>
+        <a target="_blank" href="fig/""" +exposure_name+ """_wavlength_calibration.pdf" >
+        <img src="fig/""" +exposure_name+ """_wavlength_calibration.png" width="38%" alt="" title="">
+        </a>
+        <a target="_blank" href="fig/""" +exposure_name+ """_wav_drift.pdf" >
+        <img src="fig/""" +exposure_name+ """_wav_drift.png" width="38%" alt="" title="">
+        </a>
+        <a target="_blank" href="fig/""" +exposure_name+ """_simple_ccf.pdf" >
+        <img src="fig/""" +exposure_name+ """_simple_ccf.png" width="22%" alt="" title="">
+        </a>
+        </figure>
+        <br>
+        <figure>
+        <a target="_blank" href="fig/""" +exposure_name+ """_sky.pdf" >
+        <img src="fig/""" +exposure_name+ """_sky.png" width="22%" alt="" title="">
+        </a>
+
+        <a target="_blank" href="fig/""" +exposure_name+ """_guider_cam.png" >
+        <img src="fig/""" +exposure_name+ """_guider_cam.png" width="35%" alt="" title="">
+        </a>
+
+        <a target="_blank" href="fig/""" +exposure_name+ """_Fiber_Light_Curve.pdf"  >
+        <img src="fig/""" +exposure_name+ """_Fiber_Light_Curve.png" width="42%" alt="" title="">
+        </a>
+        </figure>
+
+        <br>
+        <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.pdf"  >
+        <figure>
+        <span><img src="fig/""" +exposure_name+ """_1D_spectrum.png" style="width:100%" alt="" title=""></span>
+        </figure>
+        </a>
+        <br>
+
+        <a target="_blank" href="fig/""" +exposure_name+ """_CaHK.png"  >
+        <figure>
+        <img src="fig/""" +exposure_name+ """_CaHK.png" style="width:100%" alt="" title="">
+        </figure>
+        </a>
+
+        <hr />
+        <img id="imgZoom" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn(event)" onmouseout="zoomOut()" src="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png">
+        <div style="border: 1px solid black;
+        width: 500px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay"
+        onmousemove="zoomIn(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn(event) {
+        var element = document.getElementById("overlay");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+
+        }
+
+        function zoomOut() {
+        var element = document.getElementById("overlay");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom1" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn1(event)" onmouseout="zoomOut1()" src="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png">
+        <div style="border: 1px solid black;
+        width: 500px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay1"
+        onmousemove="zoomIn1(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn1(event) {
+        var element = document.getElementById("overlay1");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom1");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+
+        }
+
+        function zoomOut1() {
+        var element = document.getElementById("overlay1");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom2" style="border: 1px solid black; align: right;" width="600px" height="300px" align="right" onmousemove="zoomIn2(event)" onmouseout="zoomOut2()" src="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png">
+        <div style="border: 1px solid black;
+        width: 400px;
+        height: 300px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay2"
+        onmousemove="zoomIn2(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn2(event) {
+        var element = document.getElementById("overlay2");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom2");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
+
+        }
+
+        function zoomOut2() {
+        var element = document.getElementById("overlay2");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom3" style="border: 1px solid black; align: right;" width="600px" height="300px" align="right" onmousemove="zoomIn3(event)" onmouseout="zoomOut3()" src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png">
+        <div style="border: 1px solid black;
+        width: 400px;
+        height: 300px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_Column_cut_RED_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay3"
+        onmousemove="zoomIn3(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn3(event) {
+        var element = document.getElementById("overlay3");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom3");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
+
+        }
+
+        function zoomOut3() {
+        var element = document.getElementById("overlay3");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom4" style="border: 1px solid black; align: right;" width="600px" height="400px" align="right" onmousemove="zoomIn4(event)" onmouseout="zoomOut4()" src="fig/""" +exposure_name+ """_1D_spectrum.png">
+        <div style="border: 1px solid black;
+        width: 400px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_1D_spectrum.png');
+        background-repeat: no-repeat;"
+        id="overlay4"
+        onmousemove="zoomIn4(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn4(event) {
+        var element = document.getElementById("overlay4");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom4");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 8) + "px " + (-posY * 8) + "px";
+
+        }
+
+        function zoomOut4() {
+        var element = document.getElementById("overlay4");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+        """
+
+
+        f.write(message)
+        f.close()
