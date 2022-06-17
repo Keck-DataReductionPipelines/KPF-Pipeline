@@ -19,16 +19,17 @@ from modules.quicklook.src.alg import QuicklookAlg
 DEFAULT_CFG_PATH = 'modules/quicklook/configs/default.cfg'
 
 class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/kpf2_primitive?
-    
-    def __init__(self, 
-                    action:Action, 
+
+    def __init__(self,
+                    action:Action,
                     context:ProcessingContext) -> None:
-        
+
         KPF0_Primitive.__init__(self,action,context)
 
         #Input arguments
-        self.input_file=self.action.args[0]
-        self.output_dir=self.action.args[1]
+        self.input_file_L0=self.action.args[0]
+        self.input_file_L1=self.action.args[1]
+        self.output_dir=self.action.args[2]
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -46,6 +47,7 @@ class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/
 
         #Algorithm set up
         self.alg=QuicklookAlg(config=self.config,logger=self.logger)
-        
+
     def _perform(self) -> None:
-        self.alg.plot_2d_frames(self.input_file,self.output_dir)
+        self.alg.plot_2d_frames(self.input_file_L0,self.output_dir)
+        self.alg.plot_1d_spectrum(self.input_file_L1,self.output_dir)

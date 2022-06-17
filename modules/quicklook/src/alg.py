@@ -39,7 +39,7 @@ class QuicklookAlg:
         version = hdr['PRIMARY']['IMTYPE']
 
         exposure_name = hdr['PRIMARY']['OFNAME'][:-5]
-        print('exp here',exposure_name)
+        print('working on',exposure_name)
 
         master_file = 'None'
         if version == 'Sol_All':
@@ -106,7 +106,7 @@ class QuicklookAlg:
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
-            print(np.percentile(flatten_counts,99.9),saturation_limit)
+            #print(np.percentile(flatten_counts,99.9),saturation_limit)
             plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f' % np.nanmedian(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
             if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
@@ -139,11 +139,5 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
-
-        #plt.figure()
-        #plt.imshow(hdulist['GREEN_CCD'])
-        #plt.savefig(output_dir+'green_ccd.png')
-
-        #plt.figure()
-        #plt.imshow(hdulist['RED_CCD'])
-        #plt.savefig(output_dir+'red_ccd.png')
+    def plot_1d_spectrum(self,hdulist_1d,output_dir):
+        print('L1 runs', hdulist_1d, output_dir)
