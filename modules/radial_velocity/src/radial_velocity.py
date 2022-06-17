@@ -209,7 +209,7 @@ class RadialVelocity(KPF1_Primitive):
                     exptime_v = self.input.header['PRIMARY'][exptime] if exptime else 1.0
                     m_obs = Time(self.input.header['PRIMARY'][d_obs]).jd - 2400000.5
 
-                if 'MJD-OBS' not in self.input.header[sci] or self.input.header[sci]['MJD-PBS'] != m_obs:
+                if 'MJD-OBS' not in self.input.header[sci] or self.input.header[sci]['MJD-OBS'] != m_obs:
                     self.input.header[sci]['MJD-OBS'] = m_obs
                     self.input.header[sci]['EXPTIME'] = exptime_v
 
