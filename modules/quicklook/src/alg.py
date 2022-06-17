@@ -19,8 +19,8 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
-    def plot_2d_frames(self,hdulist,output_dir):
-        #print(self.config['output']['qlp_outdir'])
+    def qlp_procedures(self,hdulist,output_dir):
+
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
         plt.rcParams['legend.fontsize'] = plt.rcParams['font.size']
@@ -32,9 +32,6 @@ class QuicklookAlg:
             os.makedirs(output_dir+'/fig')
 
 
-        #print(hdulist)
-        exposure_name = '1'
-        #print(hdulist.header)
         hdr = hdulist.header
         version = hdr['PRIMARY']['IMTYPE']
 
