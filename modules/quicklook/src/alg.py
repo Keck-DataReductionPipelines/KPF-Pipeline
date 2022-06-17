@@ -32,11 +32,11 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-        print('header',hdulist.info(),hdulist.info()==None, hdulist.info()=='None')
-        print(hdulist['GREEN_CCD'],len(hdulist['GREEN_CCD']))
-        #if hdulist.info() == None:
-        #    print('skipping',hdulist)
-        #    return
+
+        ccd_color = ['GREEN_CCD','RED_CCD']
+        if len(hdulist[ccd_color[0]])<1 and len(hdulist[ccd_color[1]])<1:
+            print('skipping empty file',hdulist)
+            return
 
         hdr = hdulist.header
         version = hdr['PRIMARY']['IMTYPE']
@@ -64,7 +64,7 @@ class QuicklookAlg:
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
 
-        ccd_color = ['GREEN_CCD','RED_CCD']
+
 
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
