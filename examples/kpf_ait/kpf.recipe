@@ -13,8 +13,13 @@ from modules.Utils.data_handler import GetHeaderValue
 from modules.Utils.data_handler import SelectObs
 
 
+sel_obsid = DATE_DIR
 date_dir = DATE_DIR + '/'
 flat_file_pattern = FLAT_FILE
+
+#test_data_dir = KPFPIPE_TEST_DATA + '/'
+test_data_dir = '/testdata/'
+
 date_dir_flat = date_from_kpffile(flat_file_pattern) 
 date_dir_flat = date_dir_flat + '/'
 
@@ -58,8 +63,13 @@ output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
 # spectra extraction I/O
 lev0_science_pattern = input_2d_dir + '*' + fits_ext
 output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
+
 # only need it when rect_method != norect
-output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
+if rect_method != 'norect':
+	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
+else:
+	output_clip = None
+
 orders_per_ccd = config.ARGUMENT.orders_per_ccd
 
 # rv I/O
@@ -104,7 +114,7 @@ if do_order_trace:
 			lev0_flat_rect = flat_data
 			for idx in ccd_idx:
 				ccd = ccd_list[idx]
-				# clip_file = output_clip + flat_stem + '_' + ccd
+				#clip_file = output_clip + flat_stem + '_' + ccd
 				clip_file = None
 				trace_file = output_order_trace + flat_stem + '_' + ccd + csv_ext
 				lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
@@ -159,7 +169,7 @@ if do_order_trace:
 
 if do_rv:
 	# do rv init
-	rv_star_dir = KPFPIPE_TEST_DATA + '/'
+	rv_star_dir = test_data_dir
 	rv_init = RadialVelocityInit(start_time="2021-03-01", bc_corr_path=bc_path, test_data_path=rv_star_dir)
 
 	# do rv, the order range and x range are defined by area_def
@@ -172,7 +182,7 @@ if do_rv:
 
 	lev1_list = find_files(input_lev1_pattern)
 	list_socal = output_dir + config.ARGUMENT.output_rv + "List_KPF_observations_using_SoCal.csv"
-	selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=DATE_DIR)
+	selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=sel_obsid)
  
 	for input_lev1_file in selected_lev1_files:
 		_, short_lev1 = split(input_lev1_file)
