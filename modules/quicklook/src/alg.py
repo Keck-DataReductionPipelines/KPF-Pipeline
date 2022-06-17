@@ -20,7 +20,7 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
-    def qlp_procedures(self,hdulist,file_name,output_dir):
+    def qlp_procedures(self,file_name,output_dir):
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
@@ -32,23 +32,28 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-        print(file_name)
+        print('working on',file_name)
+
+        exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
+        date = exposure_name[3:11]
+        L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
+        hdulist = fits.open(L0_data)
+
         print(hdulist.info())
         ccd_color = ['GREEN_CCD','RED_CCD']
         if len(hdulist[ccd_color[0]])<1 and len(hdulist[ccd_color[1]])<1:
             print('skipping empty file')
             return
 
-        hdr = hdulist.header
-        version = hdr['PRIMARY']['IMTYPE']
+        #hdr = hdulist.header
+        #version = hdr['PRIMARY']['IMTYPE']
+        hdr = hdulist[0].header
+        version = hdr['IMTYPE']
 
 
-        exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
-        date = exposure_name[3:11]
-        print('working on',exposure_name)
-        L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
-        tmp = fits.open(L0_data)
-        print('read_with_fits',tmp.info())
+
+
+        #print('read_with_fits',tmp.info())
 
         master_file = 'None'
         if version == 'Sol_All':
