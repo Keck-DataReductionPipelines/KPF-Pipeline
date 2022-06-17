@@ -35,7 +35,7 @@ class QuicklookAlg:
 
         ccd_color = ['GREEN_CCD','RED_CCD']
         if len(hdulist[ccd_color[0]])<1 and len(hdulist[ccd_color[1]])<1:
-            print('skipping empty file',hdulist)
+            print('skipping empty file',hdulist.info())
             return
 
         hdr = hdulist.header
@@ -95,7 +95,7 @@ class QuicklookAlg:
                 #pcrint(counts,master_counts)
                 counts_norm = np.percentile(counts,99)
                 master_counts_norm = np.percentile(master_counts,99)
-
+                if np.shape(counts)!=np.shape(master_counts): continue
                 difference = counts/counts_norm-master_counts/master_counts_norm
 
                 plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
