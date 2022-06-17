@@ -230,7 +230,7 @@ class QuicklookAlg:
 
             print(i_color,gamma,std)
 
-            plt.plot([gamma,gamma],[np.nanmmin(mean_ccf),1.],':',color ='gray')
+            plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray')
             ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
             ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
