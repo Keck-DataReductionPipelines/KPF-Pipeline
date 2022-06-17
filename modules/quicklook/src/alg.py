@@ -201,7 +201,7 @@ class QuicklookAlg:
         print(hdulist.info())
 
         ccf_color = ['GREEN_CCF','RED_CCF']
-        for i_color in range(len(ccd_color)):
+        for i_color in range(len(ccf_color)):
             ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
             print(np.shape(ccf))
 
