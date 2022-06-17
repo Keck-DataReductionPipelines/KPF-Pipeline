@@ -176,6 +176,8 @@ class QuicklookAlg:
         flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
         flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
 
+        if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
+        if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
         print(np.shape(flux_green),np.shape(flux_red))
         wav = np.concatenate((wav_green,wav_red),axis = 0)
         flux = np.concatenate((flux_green,flux_red),axis = 0)
