@@ -219,7 +219,7 @@ class QuicklookAlg:
             print('test',np.shape(np.nanmean(ccf,axis = 0)))
 
             #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
-            plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color])
+            plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 1)
 
 
 
@@ -241,4 +241,5 @@ class QuicklookAlg:
         plt.title('Mean CCF')
         plt.legend()
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
+        plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
         plt.close()
