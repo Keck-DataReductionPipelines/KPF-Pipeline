@@ -237,6 +237,7 @@ class QuicklookAlg:
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
+                if if np.shape(ccf)==(0,): continue
                 ccf = np.sum(ccf,axis =0)#sum over orderlets
                 #print(np.shape(ccf))
 
