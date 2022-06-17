@@ -194,7 +194,7 @@ class QuicklookAlg:
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
         plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
 
-
+        '''
         #now onto the plotting of CCF
         ccf_file = '/data/L2/20220524/KP.20220524.02360.58_L2.fits'
         hdulist = fits.open(ccf_file)
@@ -230,3 +230,4 @@ class QuicklookAlg:
         plt.legend()
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
         plt.close()
+        '''
