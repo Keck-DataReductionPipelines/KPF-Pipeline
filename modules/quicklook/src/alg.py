@@ -216,7 +216,7 @@ class QuicklookAlg:
             #print('test',mean_ccf)
 
             mean_ccf = np.nanmedian(mean_ccf,axis = 0)
-            plt.plot(vel_grid,mean_ccf,label = hdulist[ccf_color[i_color])
+            plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color])
 
 
             '''
