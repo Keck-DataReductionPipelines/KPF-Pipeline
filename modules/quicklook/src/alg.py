@@ -219,6 +219,7 @@ class QuicklookAlg:
             plt.plot(vel_grid,mean_ccf,label = hdulist[ccf_color[i_color])
 
 
+            '''
             #fit the center of the ccf
             fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
             model = modeling.models.Gaussian1D()
@@ -227,15 +228,14 @@ class QuicklookAlg:
             std =fitted_model.stddev.value
 
             print(gamma,std)
-            '''
+
             plt.plot([gamma,gamma],[np.nanmin(np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])),1.],':',color ='gray')
             ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
             ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+'$\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
-
+            '''
         plt.xlabel('RV (km/s)')
         plt.ylabel('CCF')
         plt.title('Mean CCF')
         plt.legend()
         plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
         plt.close()
-        '''
