@@ -230,6 +230,7 @@ class QuicklookAlg:
 
 
             ccf_color = ['GREEN_CCF','RED_CCF']
+            ccf_rv = ['CCD1RV','CCD2RV']
             color_grid = ['Green','Red']
 
             plt.rcParams.update({'font.size': 8})
@@ -258,16 +259,19 @@ class QuicklookAlg:
 
 
                 #fit the center of the ccf
+                '''
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
                 model = modeling.models.Gaussian1D()
                 fitted_model = fitter(model, vel_grid, 1.-mean_ccf)
                 gamma =fitted_model.mean.value
                 std =fitted_model.stddev.value
-
                 #print(i_color,gamma,std)
+                '''
 
+                #read the RV from headers directly
+                gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
-                ax.text(0.6,0.3+i_color*0.2,ccf_color[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
+                ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
                 #ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
             plt.xlabel('RV (km/s)')
