@@ -1047,7 +1047,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 tval = reweighting_table_or_ccf[0:total_segment, -1]
 
             new_crt_rv = np.zeros((total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
-            max_index = np.where(tval == np.max(tval))[0]       # the max from ratio table, 1.0 if ratio max is 1.0
+            max_index = np.where(tval == np.max(tval))[0][0]       # the max from ratio table, 1.0 if ratio max is 1.0
             oval = np.nanpercentile(crt_rv[0:total_segment], 95, axis=1) if reweighting_method == 'ccf_max' \
                 else np.nanmean(crt_rv[0:total_segment], axis=1)  # max or mean from each order
 
