@@ -26,13 +26,13 @@ docker:
 	docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data kpf-drp:latest bash
 
 regression_tests:
-	pytest -s --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
-	pytest -s --pyargs tests.performance
+	pytest --pyargs tests.performance
 
 validation_tests:
-	pytest -s --pyargs tests.validation
+	pytest --pyargs tests.validation
 
 .PHONY: init
