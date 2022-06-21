@@ -149,9 +149,10 @@ if do_order_trace:
 					wavecal_data = None
 					wave_from_lev1 = False
 					if do_sp_wavecopy:
-						if wave_fits[idx] != None: 
-							if find_files(wave_fits[idx]):
-								wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+						if wave_fits[idx] != None:
+							wave_file = output_dir + wave_fits[idx] 
+							if find_files(wave_file):
+								wavecal_data = kpf1_from_fits(wave_file, data_type=data_type)
 								wave_from_lev1 = True
 
 					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
@@ -205,8 +206,9 @@ if do_rv:
 				# copy wls to the proper extension of lev1 data
 				if do_rv_wavecopy:
 					if wave_fits[idx] != None:
-						if find_files(wave_fits[idx]):
-							wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+						wave_file = output_dir + wave_fits[idx]
+						if find_files(wave_file):
+							wavecal_data = kpf1_from_fits(wave_file, data_type=data_type)
 							from_ext = wave_from_ext[idx]
 
 							for to_ext in wave_to_ext[idx]:
