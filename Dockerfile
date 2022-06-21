@@ -1,6 +1,8 @@
 # Use python 3.6 
 FROM python:3.6-slim
 
+ENV KPFPIPE_TEST_DATA=/data/KPF-Pipeline-TestData
+ENV KPFPIPE_DATA=/data/kpf
 ENV KPFPIPE_TEST_OUTPUTS=/outputs
 ENV COVERALLS_REPO_TOKEN=YLrA2Q2Af7VGwyULXbs0KujYSjUBdn2jP
 
