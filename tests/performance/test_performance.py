@@ -28,11 +28,10 @@ lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
 max_result_order = config.ARGUMENT.max_result_order
 start_result_order = config.ARGUMENT.start_result_order
 rect_method = config.ARGUMENT.rectification_method
-order_name = config.ARGUMENT.order_name
 
-invoke_subrecipe("./examples/test_order_trace.recipe")
-invoke_subrecipe("./examples/test_optimal_extraction.recipe")
-invoke_subrecipe("./examples/test_neid_radial_velocity.recipe")
+invoke_subrecipe("./examples/neid_recipe/test_order_trace.recipe")
+invoke_subrecipe("./examples/neid_recipe/test_optimal_extraction.recipe")
+invoke_subrecipe("./examples/neid_recipe/test_neid_radial_velocity.recipe")
 """
 
 # Load .env file for test path 
