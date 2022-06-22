@@ -19,20 +19,25 @@ clean: clear
 
 notebook:
 	pip3 install jupyter
-	jupyter notebook --port 8888 --allow-root --ip=0.0.0.0 ""&
+	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 ""&
 
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
-	docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data kpf-drp:latest bash
+
+	$(if $(KPFPIPE_TEST_DATA),,$(error Must set KPFPIPE_TEST_DATA))
+	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
+	$(if $(KPFPIPE_PORT),,docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data kpf-drp:latest bash)
+	docker run -it -p ${KPFPIPE_PORT}:${KPFPIPE_PORT} -e KPFPIPE_PORT=${KPFPIPE_PORT} -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data kpf-drp:latest bash
+	
 
 regression_tests:
-	pytest -s --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
-	pytest -s --pyargs tests.performance
+	pytest --pyargs tests.performance
 
 validation_tests:
-	pytest -s --pyargs tests.validation
+	pytest --pyargs tests.validation
 
 .PHONY: init
