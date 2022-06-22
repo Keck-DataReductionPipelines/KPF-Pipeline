@@ -37,8 +37,5 @@ class KPFModExample(KPF_Primitive):
     def _perform(self):
         result = 'KPFModeExample done'
         print('[{}] Performed!'.format(self.__class__.__name__))
-        if self.logger:
-            self.logger.info("KPFModExample info: done!");
-            self.logger.warning("KPFModExample warning: done!")
         return Arguments(result)
 

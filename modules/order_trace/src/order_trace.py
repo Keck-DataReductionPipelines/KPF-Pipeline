@@ -192,31 +192,37 @@ class OrderTrace(KPF0_Primitive):
                                 self.row_range[0], self.row_range[1]])
         # 1) Locate cluster
         if self.logger:
-            self.logger.info("OrderTrace: locating cluster...")
+            #self.logger.info("OrderTrace: locating cluster...")
+            self.logger.warning("OrderTrace: locating cluster...")
         cluster_xy = self.alg.locate_clusters(self.rows_to_reset, self.cols_to_reset)
         # 2) assign cluster id and do basic cleaning
         if self.logger:
-            self.logger.info("OrderTrace: assigning cluster id and cleaning...")
+            #self.logger.info("OrderTrace: assigning cluster id and cleaning...")
+            self.logger.warning("OrderTrace: assigning cluster id and cleaning...")
         x, y, index = self.alg.form_clusters(cluster_xy['x'], cluster_xy['y'])
 
         # 3) advanced cleaning and border cleaning
         if self.logger:
-            self.logger.info("OrderTrace: advanced cleaning...")
+            #self.logger.info("OrderTrace: advanced cleaning...")
+            self.logger.warning("OrderTrace: advanced cleaning...")
         new_x, new_y, new_index, all_status = self.alg.advanced_cluster_cleaning_handler(index, x, y)
         new_x, new_y, new_index = self.alg.clean_clusters_on_borders(new_x, new_y, new_index)
 
         # 5) Merge cluster
         if self.logger:
-            self.logger.info("OrderTrace: merging cluster...")
+            #self.logger.info("OrderTrace: merging cluster...")
+            self.logger.warning("OrderTrace: merging cluster...")
         c_x, c_y, c_index = self.alg.merge_clusters_and_clean(new_index, new_x, new_y)
 
         # 6) Find width
         if self.logger:
-            self.logger.info("OrderTrace: finding width...")
+            #self.logger.info("OrderTrace: finding width...")
+            self.logger.warning("OrderTrace: finding width...")
         all_widths, cluster_coeffs = self.alg.find_all_cluster_widths(c_index, c_x, c_y, power_for_width_estimation=3)
 
         if self.logger:
-            self.logger.info("OrderTrace: writing cluster into dataframe...")
+            #self.logger.info("OrderTrace: writing cluster into dataframe...")
+            self.logger.warning("OrderTrace: writing cluster into dataframe...")
 
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         assert(isinstance(df, pd.DataFrame))
@@ -241,7 +247,8 @@ class OrderTrace(KPF0_Primitive):
             self.logger.info("OrderTrace: Receipt written")
 
         if self.logger:
-            self.logger.info("OrderTrace: Done!")
+            #self.logger.info("OrderTrace: Done!")
+            self.logger.warning("OrderTrace: Done!")
 
         return Arguments(df)
 
