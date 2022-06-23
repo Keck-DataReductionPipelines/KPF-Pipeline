@@ -1,10 +1,11 @@
+outputs/*
 examples/V1/BiasRecipe/BiasRecipeRes/
 examples/V1/recipe_results/
 *.npy
 *~
 *.DS_Store
 .idea/
-logs/
+#logs/
 receipts/
 __pycache__/
 *.py[cod]

@@ -43,7 +43,7 @@ class KpfPipelineForTesting(KPFPipeline):
 
 
 # This is the default framework configuration file path
-framework_config = 'configs/framework.cfg'
+framework_config = 'configs/framework_test.cfg'
 framework_logcfg= 'configs/framework_logger.cfg'
 pipe_config = "examples/default_simple.cfg"
 
@@ -87,7 +87,6 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
         arg = Arguments(name="start_recipe_args", recipe=f.name)
         framework.append_event('start_recipe', arg)
         framework.main_loop()
-
 
 def recipe_test(recipe: str, pipe_config: str=pipe_config):
     try:

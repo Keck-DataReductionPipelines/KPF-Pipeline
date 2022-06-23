@@ -16,7 +16,6 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.bias_subtraction.src.alg import BiasSubtractionAlg
-from modules.Utils.overscan_subtract import OverscanSubtraction
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
@@ -69,7 +68,7 @@ class BiasSubtract(KPF0_Primitive):
         self.masterbias=self.action.args[1]
         self.ffi_exts=self.action.args[2]
         self.data_type=self.action.args[3]
-        self.quicklook=self.action.args[4] #True or False
+        self.quicklook=self.action.args[4]
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -88,7 +87,7 @@ class BiasSubtract(KPF0_Primitive):
 
         #Bias subtraction algorithm setup
 
-        self.alg=BiasSubtractionAlg(self.raw_file,self.ffi_exts,self.quicklook,config=self.config,logger=self.logger)
+        self.alg=BiasSubtractionAlg(self.raw_file,self.ffi_exts,self.quicklook,self.data_type,config=self.config,logger=self.logger)
 
         #Preconditions
         
@@ -104,10 +103,10 @@ class BiasSubtract(KPF0_Primitive):
             Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
         """
         #until master file part of data model is fixed
-        self.masterbias = fits.open(self.masterbias)
+        masterbias = fits.open(self.masterbias)
         if self.logger:
             self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
-        bias_subbed = self.alg.bias_subtraction(self.masterbias)
+        bias_subbed = self.alg.bias_subtraction(masterbias)
         return Arguments(self.alg.get())
         
         # for frame_no in range(len(self.ffi_exts)):

@@ -1,177 +1,290 @@
-# Standard dependencies
+# standard dependencies
 import configparser
 import numpy as np
-import pandas as pd
+import os
+from astropy import constants as cst, units as u
 
-# Pipeline dependencies
-from kpfpipe.logger import start_logger
+# pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
-from kpfpipe.models.level1 import KPF1
+from kpfpipe.logger import start_logger
 
-# External dependencies
+# external dependencies
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
-# Local dependencies
-from modules.wavelength_cal.src.alg import LFCWaveCalibration
+# local dependencies
+from modules.wavelength_cal.src.alg import WaveCalibration, calcdrift_polysolution
 
-# Global read-only variables
-DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default_recipe_neid.cfg'
+# global read-only variables
+DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
 
 class WaveCalibrate(KPF1_Primitive):
     """
-    This module defines class `WaveCalibrate,` which inherits from KPF1_Primitive and provides methods
-    to perform the event `LFC wavelength calibration` in the recipe.
-
+    This module defines class `WaveCalibrate,` which inherits from `KPF1_Primitive` and provides methods 
+    to perform the event `wavelength calibration` in the recipe.
+    
     Args:
         KPF1_Primitive: Parent class
-        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCalibration` event issued in recipe.
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveCalibrate` event issued in recipe.
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
-
+    
     Attributes:
-        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[0]`
-        master_wavelength (kpfpipe.models.level1.KPF1): Instance of `KPF1`, assigned by `actions.args[1]`
-        data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
-        config_path (str): Path of config file for LFC wavelength calibration.
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[0]`
+        cal_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[1]`
+        cal_orderlet_names (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
+        save_wl_pixel_toggle (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[3]`
+        quicklook (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[4]`
+        data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[5]`
+        output_ext (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[6]`
+        config_path (str): Path of config file for the computation of wavelength_calibration.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger
-        alg (modules.wavelength_cal.src.alg.LFCWaveCalibration): Instance of `LFCWaveCalibration,` which has operation codes for LFC Wavelength Calibration.
+        alg (modules.wavelength_cal.src.alg.WaveCalibrate): Instance of `WaveCalibrate,` which has operation codes for wavelength calibration.
     """
-
-    default_args_val = {
-            'data_type': 'KPF'
-        }
-
-    def __init__(self, 
-                action:Action,
-                context:ProcessingContext) -> None:
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
         """
         WaveCalibrate constructor.
-
         Args:
-            action (Action): Contains positional arguments and keyword arguments passed by the `LFCWaveCal` event issued in recipe:
-              
-                `action.args[0] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 file
-                `action.args[1] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing master file
-                `action.args[2] (kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data type
-
-            context (ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
-        """
-        #Initialize parent class
-        KPF1_Primitive.__init__(self,action,context)
-
-        #Input arguments
-        args_keys = [item for item in action.args.iter_kw() if item != "name"]
-
-        self.l1_obj=self.action.args[0]
-        self.master_wavelength=self.action.args[1]
-        self.f0_key = self.action.args[2]
-        self.frep_key = self.action.args[3]
+            action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveCalibrate` event issued in recipe:
+                `action.args[0]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing level 1 data
+                `action.args[1]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing calibration type
+                `action.args[2]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing names of calibration extensions
+                `action.args[3]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing bool regarding saving of wavelength-pixel solution
+                `action.args[4]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing bool regarding running of quicklook algorithms
+                `action.args[5]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data/instrument type
+                `action.args[6]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing name of FITS extension to output result to
+            context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+        """ 
+        KPF1_Primitive.__init__(self, action, context)
+        
+        self.l1_obj = self.action.args[0]
+        self.cal_type = self.action.args[1]
+        self.cal_orderlet_names = self.action.args[2]
+        self.save_wl_pixel_toggle = self.action.args[3]
         self.quicklook = self.action.args[4]
-        self.data_type = self.get_args_value('data_type', action.args, args_keys)
+        self.data_type =self.action.args[5]
+        self.output_ext = self.action.args[6]
+        
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.filename = action.args['filename'] if \
+            'filename' in args_keys else None
+        self.save_diagnostics = action.args['save_diagnostics'] if \
+            'save_diagnostics' in args_keys else None
+        #getting filename so as to steal its date suffix 
+        self.rough_wls = action.args['rough_wls'] if \
+            'rough_wls' in args_keys else None
+        self.linelist_path = action.args['linelist_path'] if \
+            'linelist_path' in args_keys else None
+        self.output_dir = action.args['output_dir'] if \
+            'output_dir' in args_keys else None
+        if not os.path.exists(self.output_dir):
+            os.mkdir(self.output_dir)
 
+        self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
+        self.clip_peaks_toggle = action.args['clip_peaks_toggle'] if \
+            'clip_peaks_toggle' in args_keys else None
+        self.frep_key = action.args['frep_key'] if 'frep_key' in args_keys \
+            else None
+    
         #Input configuration
         self.config=configparser.ConfigParser()
         try:
-            self.config_path=context.config_path['wavelength_cal']
+            config_path=context.config_path['wavelength_cal']
         except:
-            self.config_path = DEFAULT_CFG_PATH
-        self.config.read(self.config_path)
+            config_path = DEFAULT_CFG_PATH
+        self.config.read(config_path)
 
         #Start logger
-        self.logger=None
-        #self.logger=start_logger(self.__class__.__name__,config_path)
+        self.logger=start_logger(self.__class__.__name__,config_path)
         if not self.logger:
             self.logger=self.context.logger
-        self.logger.info('Loading config from: {}'.format(self.config_path))
+        self.logger.info('Loading config from: {}'.format(config_path))
 
+        self.alg = WaveCalibration(
+            self.cal_type, self.clip_peaks_toggle, self.quicklook,
+            self.save_diagnostics, self.config, self.logger
+        )
 
-        #Wavelength calibration algorithm setup
-        self.alg=LFCWaveCalibration(self.config,self.logger)
-
-        #Preconditions
-       
-        #Postconditions
-        
-    #Perform - primitive's action
-    def _perform(self) -> None:
-        """Primitive action - 
-        Performs wavelength calibration by calling method 'run_wave_cal' from alg.py, and saves result in FITS extensions.
-
-        Returns:
-            Level 1 data, containing wavelength-per-pixel result.
+    def _perform(self) -> None: 
         """
-        # 1. extracting master data
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Extracting master data")  
-        master_data=self.alg.get_master_data(self.master_wavelength)
-        # master_data = self.master_wavelength.data['SCI1'][1,:,:]
-        # 2. get comb frequency values
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Getting comb frequency values ")
+        Primitive action - perform wavelength calibration by calling method `wavelength_cal` from WaveCalibrate.
+        Depending on the type of calibration, will save/compute some combination of wavelength solution, 
+        wavelength-pixel map, instrument drift.
+        
+        Returns:
+            Level 1 Data Object
+        """
+        if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
+            file_name_split = self.l1_obj.filename.split('_')[0]
 
-        print ('f0 key and frep keys:', type(self.f0_key), type(self.frep_key))
+            for i, prefix in enumerate(self.cal_orderlet_names):
+                print('\nCalibrating orderlet {}.'.format(prefix))
 
-        if self.f0_key:
-            if type(self.f0_key) == str:
-                comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
-                print("comb_f0:",comb_f0)
-            if type(self.f0_key) == float:
-                comb_f0 = self.f0_key
-                print("comb_f0:",comb_f0)
-            # else:
-            #     raise ValueError('F_0 incorrectly formatted')
+                if self.save_diagnostics is not None:
+                    self.alg.save_diagnostics_dir = '{}/{}/'.format(self.save_diagnostics, prefix)
+
+                output_ext = self.output_ext[i]
+                calflux = self.l1_obj[prefix]
+                calflux = np.nan_to_num(calflux)
+                        
+                #### lfc ####
+                if self.cal_type == 'LFC':
+                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
+                        'LFC'
+                    ):
+                        pass # TODO: fix
+                        # raise ValueError(
+                        #     'Not an LFC file! CAL-OBJ is {}.'.format(
+                        #         self.l1_obj.header['PRIMARY']['CAL-OBJ']
+                        #     )
+                        # )
+                    
+                    if self.logger:
+                        self.logger.info(
+                            "Wavelength Calibration: Getting comb frequency \
+                                values."
+                        )
+
+                    if self.f0_key is not None:
+                        if type(self.f0_key) == str:
+                            comb_f0 = float(
+                                self.l1_obj.header['PRIMARY'][self.f0_key]
+                            )
+                        if type(self.f0_key) == float:
+                            comb_f0 = self.f0_key
+
+                    else:
+                        raise ValueError('f_0 value not found.')
+                    
+                    if self.frep_key is not None:
+                        if type(self.frep_key) == str:
+                            comb_fr = float(
+                                self.l1_obj.header['PRIMARY'][self.frep_key]
+                            )
+                        if type(self.frep_key) == float:
+                            comb_fr = self.frep_key
+                    else:
+                        raise ValueError('f_rep value not found')
+                    
+                    if self.linelist_path is not None:
+                        peak_wavelengths_ang = np.load(
+                            self.linelist_path, allow_pickle=True
+                        ).tolist()
+                    else:
+                        peak_wavelengths_ang = None
+                    
+                    lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
+                                        
+                    wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+                        calflux, peak_wavelengths_ang=peak_wavelengths_ang,
+                        rough_wls=self.rough_wls, 
+                        lfc_allowed_wls=lfc_allowed_wls
+                    )
+                    
+                    if self.save_wl_pixel_toggle == True:
+                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        if not os.path.exists(wlpixelwavedir):
+                            os.mkdir(wlpixelwavedir)
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                            file_name_split + '{}.npy'.format(prefix)
+                        self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
+                        
+                    self.l1_obj[output_ext] = wl_soln
+                
+                #### thar ####    
+                elif self.cal_type == 'ThAr':
+                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
+                        'ThAr'
+                    ):
+                        pass # TODO: fix
+                        # raise ValueError('Not a ThAr file!')
+                    
+                    if self.linelist_path is not None:
+                        peak_wavelengths_ang = np.load(
+                            self.linelist_path, allow_pickle=True
+                        ).tolist()
+                    else:
+                        raise ValueError('ThAr run requires linelist_path')
+                    
+                    wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+                        calflux,peak_wavelengths_ang=peak_wavelengths_ang, 
+                        rough_wls=self.rough_wls
+                    )
+                    
+                    if self.save_wl_pixel_toggle == True:
+                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        if not os.path.exists(wlpixelwavedir):
+                            os.mkdir(wlpixelwavedir)
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                            file_name_split + '{}.npy'.format(prefix)
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(
+                            file_name, wls_and_pixels
+                        )
+
+                    self.l1_obj[output_ext] = wl_soln
+
+                #### etalon ####    
+                elif self.cal_type == 'Etalon':
+                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
+                        'Etalon'
+                    ):
+                        raise ValueError('Not an Etalon file!')
+                    
+                    if self.linelist_path is not None:
+                        peak_wavelengths_ang = np.load(
+                            self.linelist_path, allow_pickle=True
+                        ).tolist()
+                    else:
+                        peak_wavelengths_ang = None
+
+                    _, wls_and_pixels = self.alg.run_wavelength_cal(
+                        calflux, self.rough_wls, 
+                        peak_wavelengths_ang=peak_wavelengths_ang
+                    )
+
+                    if self.save_wl_pixel_toggle == True:
+                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        if not os.path.exists(wlpixelwavedir):
+                            os.mkdir(wlpixelwavedir)
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                            file_name_split + '{}.npy'.format(prefix)
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(
+                            file_name, wls_and_pixels
+                        )
+                
+                    # if we've just got one etalon frame, the wl solution
+                    # that should be assigned to the file is the master (usually 
+                    # LFC) solution
+                    wl_soln = self.rough_wls
+                    if peak_wavelengths_ang is not None:
+
+                        # calculate drift [cm/s]
+                        drift_all_orders = calcdrift_polysolution(
+                            self.linelist_path, file_name
+                        )
+                        avg_drift = np.mean(drift_all_orders[:,1])
+
+                        # convert drift to angstroms
+                        beta = avg_drift / cst.c.to(u.cm/u.s).value
+                        delta_lambda_over_lambda = -1 + np.sqrt(
+                            (1 + beta)/ (1 - beta)
+                        )
+                        delta_lambda = delta_lambda_over_lambda * wl_soln
+
+                        # update wls using calculated average drift
+                        wl_soln = wl_soln + delta_lambda
+
+                    self.l1_obj[output_ext] = wl_soln
+
         else:
-            raise ValueError('F_0 value not found')
-
-        if self.frep_key:
-            if type(self.frep_key) == str:
-                comb_fr = float(self.l1_obj.header['PRIMARY'][self.frep_key])
-                print("comb_fr:",comb_fr)
-            if type(self.frep_key) == float:
-                comb_fr = self.frep_key
-                print("comb_fr:",comb_fr)
-            # else:
-            #     raise ValueError('F_Rep incorrectly formatted')
-        else:
-            raise ValueError('F_Rep value not found')
-
-        # 2. starting loop
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Starting wavelength calibration loop")
-
-        for prefix in ['CAL']: #change to recipe config: 'orderlette_names' 
-            if prefix in self.l1_obj.data and self.l1_obj.data[prefix] is not None:
-                self.logger.info("Wavelength Calibration: Running {prefix}")
-                if self.logger:
-                    self.logger.info("Wavelength Calibration: Extracting flux")
-                flux = self.l1_obj.data[prefix][0,:,:]#0 referring to 'flux'
-                #print('flux shape:', np.shape(flux))
-                flux = np.nan_to_num(flux)
-                if self.logger:
-                    self.logger.info("Wavelength Calibration: Running algorithm")  
-                wl_soln=self.alg.open_and_run(flux,master_data,comb_f0,comb_fr,self.quicklook)
-                #print('soln shape:', np.shape(wl_soln))
-                if self.logger:
-                    self.logger.info("Wavelength Calibration: Saving solution output")  
-                self.l1_obj.data[prefix][1,:,:]=wl_soln
-        print(np.shape(self.l1_obj.data[prefix][1,:,:]),self.l1_obj.data[prefix][1,:,:])
-        if self.l1_obj is not None:
-            self.l1_obj.receipt_add_entry('Wavelength Calibration', self.__module__,
-                                          f'config_path={self.config_path}', 'PASS')
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Receipt written")
-
-        if self.logger:
-            self.logger.info("Wavelength Calibration: Done!")
-
+            raise ValueError(
+                'cal_type {} not recognized. Available options are LFC, ThAr, \
+                & Etalon'.format(self.cal_type)
+            )
+                            
         return Arguments(self.l1_obj)
-
-    def get_args_value(self, key: str, args: Arguments, args_keys: list):
-        v = None
-        if key in args_keys and args[key] is not None:
-            v = args[key]
-        else:
-            v = self.default_args_val[key]
-        return v
+            ## where to save final polynomial solution
+            
+                
+        

@@ -20,6 +20,7 @@ from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
 from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
+
 class KPF0(KPFDataModel):
     """
     The level 0 KPF data. Initialized with empty fields.
@@ -57,13 +58,17 @@ class KPF0(KPFDataModel):
             setattr(self, key, atr)
 
         # add level0 header keywords for PRIMARY header
-        self.header_definitions = KPF_definitions.LEVEL0_HEADER_KEYWORDS.items()
-        for key, value in self.header_definitions:
-            # assume 2D image
-            if key == 'NAXIS':
-                self.header['PRIMARY'][key] = 2
-            else:
-                self.header['PRIMARY'][key] = value()
+        self.header_definitions = pd.read_csv(KPF_definitions.LEVEL0_HEADER_FILE)
+        for i, row in self.header_definitions.iterrows():
+            ext_name = row['Ext']
+            key = row['Keyword']
+            val = row['Value']
+            desc = row['Description']
+            if val is np.nan:
+                val = None
+            if desc is np.nan:
+                desc = None
+            self.header[ext_name][key] = (val, desc)
 
         self.read_methods: dict = {
             'KPF':   self._read_from_KPF,
@@ -94,6 +99,18 @@ class KPF0(KPFDataModel):
                 continue
             
             self.header[hdu.name] = hdu.header
+        if self.level == 0:
+            self.l0filename = self.filename
+            self.l1filename = self.filename.replace('.fits', '_L1.fits')
+            self.l2filename = self.filename.replace('.fits', '_L2.fits')
+        if self.level == 1:
+            self.l0filename = self.filename.replace('_L1.fits', '.fits')
+            self.l1filename = self.filename
+            self.l2filename = self.filename.replace('_L1.fits', '_L2.fits')
+        if self.level == 2:
+            self.l0filename = self.filename.replace('_L2.fits', '.fits')
+            self.l1filename = self.filename.replace('_L2.fits', '_L1.fits')
+            self.l2filename = self.filename
 
     def _read_from_NEID(self, hdul):
         '''
