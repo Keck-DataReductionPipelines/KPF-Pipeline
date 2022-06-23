@@ -12,6 +12,8 @@ Then clone the repository and navigate into it::
 
     git clone https://github.com/California-Planet-Search/KPF-Pipeline.git
     cd KPF-Pipeline
+    chmod +x drp_setup
+    ./drp_setup
 
 .. warning:: Refer to :doc:`install_develop` for setting up other branches
 
