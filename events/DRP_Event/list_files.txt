@@ -1,0 +1,43 @@
+root@6b5c27630a9a:/code/KPF-Pipeline# ls -R test_data
+test_data:
+data
+
+test_data/data:
+kpf
+
+test_data/data/kpf:
+2D  L1	L2  bary  masters  order_trace
+
+test_data/data/kpf/2D:
+20220517
+
+test_data/data/kpf/2D/20220517:
+KP.20220517.52876.04.fits  KP.20220517.81006.53.fits  KP.20220517.81724.44.fits
+
+test_data/data/kpf/L1:
+20220517
+
+test_data/data/kpf/L1/20220517:
+KP.20220517.52876.04_L1.fits  KP.20220517.81006.53_L1.fits  KP.20220517.81724.44_L1.fits
+
+test_data/data/kpf/L2:
+20220517
+
+test_data/data/kpf/L2/20220517:
+KP.20220517.81006.53_L2.fits  KP.20220517.81724.44_L2.fits  reweighting
+
+test_data/data/kpf/L2/20220517/reweighting:
+KP.20220517.81724.44_L2.fits  ccf_ratio_table_norect_summ_ccf_max_RED_CCF.csv
+KP.20220517.81006.53_L2.fits  ccf_ratio_table_norect_summ_ccf_max_GREEN_CCF.csv
+
+test_data/data/kpf/bary:
+bc_corr_2459274.5_380_kpf_sun.csv
+
+test_data/data/kpf/masters:
+KP.20220517.76117.82_allwave.fits
+
+test_data/data/kpf/order_trace:
+20220517
+
+test_data/data/kpf/order_trace/20220517:
+KP.20220517.52876.04_GREEN_CCD.csv  KP.20220517.52876.04_RED_CCD.csv  KP.20220517.52876.04_norect.fits
