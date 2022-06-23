@@ -1,7 +1,6 @@
-#channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_red
-#channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_green
-channel_orientation_ref_path_red = config.ARGUMENT.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = config.ARGUMENT.channel_orientation_ref_path_green
+channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_green
+
 data_type = config.ARGUMENT.data_type
 pl_overscan_reg_red = config.ARGUMENT.pl_overscan_reg_red
 srl_overscan_reg_red = config.ARGUMENT.srl_overscan_reg_red
@@ -12,12 +11,19 @@ order = config.ARGUMENT.overscan_order
 oscan_clip = config.ARGUMENT.overscan_clip
 lev0_ffi_ext_red = config.ARGUMENT.lev0_ffi_ext_red
 lev0_ffi_ext_green = config.ARGUMENT.lev0_ffi_ext_green
+ffi_exts = config.ARGUMENT.ffi_exts
 prescan_reg = config.ARGUMENT.prescan_reg
 gain_key = config.ARGUMENT.gain_keyword
 file_or_direct = config.ARGUMENT.file_or_direct
 l0_path_input = config.ARGUMENT.l0_path_input
 l0_path_red_assembled = config.ARGUMENT.l0_path_red_assembled
 l0_path_red_green_assembled = config.ARGUMENT.l0_path_red_green_assembled
+l0_path_dark_sub = config.ARGUMENT.l0_path_dark_sub
+quicklook = config.ARGUMENT.quicklook
+process_toggle = config.ARGUMENT.process_toggle
+raw_file_name = config.ARGUMENT.raw_file_name
+dark_file_name = config.ARGUMENT.dark_file_name
 
 invoke_subrecipe("./examples/image_assembly.recipe")
-#invoke_subrecipe("./examples/image_processing.recipe")
+if process_toggle == True:
+    invoke_subrecipe("./examples/image_processing.recipe")
