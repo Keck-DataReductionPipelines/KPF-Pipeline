@@ -193,7 +193,7 @@ class RadialVelocity(KPF1_Primitive):
 
             if neid_ssb in self.input.header['PRIMARY'] and neid_ssb not in self.input.header[sci]:
                 self.input.header[sci][neid_ssb] = self.input.header['PRIMARY'][neid_ssb]
-            else:      # kpf case
+            elif neid_ssb not in self.input.header[sci]:     # kpf case
                 if obstime_v != None:
                     m_obs = Time(obstime_v).jd - 2400000.5
                     if exptime_v is None:

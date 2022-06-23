@@ -133,6 +133,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         self.ccf_ref = action.args[2].values if isinstance(action.args[2], pd.DataFrame) else action.args[2]
         self.total_segment = action.args[3] if action.args[3] is not None else np.shape(self.ccf_ref)[0]
         self.rv_init = action.args[4]
+        self.processed_row = action.args['processed_row'] if 'processed_row' in args_keys else None
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -246,7 +247,13 @@ class RadialVelocityReweighting(KPF2_Primitive):
         rv_ext_header = self.lev2_obj.header[self.rv_ext]
         rv_name_list = [name.lower() for name in self.rv_col_names]
         # rv_start_idx = self.rv_ext_idx * self.total_segment
-        rv_start_idx = rv_ext_header['ccd'+str(self.rv_ext_idx+1)+'row']
+        ccdrow = 'ccd'+str(self.rv_ext_idx+1)+'row'
+        if ccdrow in rv_ext_header:
+            rv_start_idx = rv_ext_header[ccdrow]
+        elif self.processed_row is not None:
+            rv_start_idx = self.processed_row
+        else:
+            rv_start_idx = 0   # for only one ccd or old L2 file with no such key defined
 
         rv_orderlet_colnames = [self.RV_COL_ORDERLET + str(o + 1) for o in range(total_orderlet)]
         def col_idx_rv_table(colname, orderlet_idx=0):
