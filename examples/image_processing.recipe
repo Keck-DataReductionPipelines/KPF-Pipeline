@@ -1,0 +1,8 @@
+from modules.image_processing.src.image_process import ImageProcessing
+
+raw_file_path = l0_path_red_green_assembled + raw_file_name
+dark_file = l0_path_red_green_assembled + dark_file_name
+
+raw_file = kpf0_from_fits(raw_file_path,data_type)
+dark_subbed = ImageProcessing(raw_file,dark_file,ffi_exts,data_type,quicklook)
+result = to_fits(dark_subbed, l0_path_dark_sub+raw_file_name)
