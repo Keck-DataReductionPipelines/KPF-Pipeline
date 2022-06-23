@@ -71,6 +71,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
+import os
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
@@ -86,6 +87,7 @@ class RadialVelocityInit(KPF_Primitive):
         """
         # Initialize parent class
         KPF_Primitive.__init__(self, action, context)
+
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         st = action.args['start_time'] if 'start_time' in args_keys else None
         if st is not None:
@@ -106,7 +108,8 @@ class RadialVelocityInit(KPF_Primitive):
                 pd = None
 
         self.bc_period = pd if pd is not None else 380
-
+        self.test_data = action.args['test_data_path'] if 'test_data_path' in args_keys \
+            else (os.getenv('KPFPIPE_TEST_DATA') + '/')
         # barycentric correction default period: 380 day, start date: apr-18-2019
         self.bc_data = action.args['bc_corr_path'] if 'bc_corr_path' in args_keys else None
         self.bc_output_data = None
@@ -126,7 +129,8 @@ class RadialVelocityInit(KPF_Primitive):
         self.logger.info('Loading config form: {}'.format(self.config_path))
         # Order trace algorithm setup
         self.alg_rv_init = RadialVelocityAlgInit(self.config, self.logger, bc_time=self.bc_start_jd,
-                                                 bc_period=self.bc_period, bc_corr_path = self.bc_data)
+                                                 bc_period=self.bc_period, bc_corr_path = self.bc_data,
+                                                 test_data=self.test_data)
 
     def _pre_condition(self) -> bool:
         """
@@ -151,6 +155,10 @@ class RadialVelocityInit(KPF_Primitive):
             Init result including status, error message if the status is false and the data from init. Please refer to
             `Returns` section of :func:`~alg_rv_init.RadialVelocityAlgInit.start()`
         """
+
+        if self.logger:
+            self.logger.info("RadialVelocityInit: Start RV init ")
+
         init_result = self.alg_rv_init.start()
 
         assert(init_result['status'] and 'data' in init_result)

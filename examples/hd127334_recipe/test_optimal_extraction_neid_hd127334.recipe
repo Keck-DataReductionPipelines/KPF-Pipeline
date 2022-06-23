@@ -1,0 +1,53 @@
+from modules.spectral_extraction.src.order_rectification import OrderRectification
+from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
+
+#input_trace = output_dir + config.ARGUMENT.output_trace
+input_trace = test_data_dir + config.ARGUMENT.input_dir + config.ARGUMENT.output_trace
+
+trace_file = input_trace+cal_object[0]+'_'+cal_flat_list[0]+'_'+cal_flat_list[1]+'_'+cal_object[2]+'_'+cal_flat_list[2]+'_'+cal_flat_list[3]+'.csv'
+output_ext_dir = output_dir + config.ARGUMENT.output_extraction
+
+# input: a cal ldls as flat data
+lev0_flat_pattern = test_data_dir + input_flat_pattern + cal_flat_list[0] + '.fits'
+origin = [data_col_range[0], data_row_range[0]]
+
+for lev0_flat_file in find_files(lev0_flat_pattern):
+	_, short_lev0_flat = split(lev0_flat_file)
+	lev0_flat_stem, lev0_flat_ext = splitext(short_lev0_flat)
+	
+	# output: clip and rectified (or norect) flat
+	clip_file = output_ext_dir + 'clip_np/' + rect_method + '/' + lev0_flat_stem + '_' + rect_method
+	output_lev0_flat_rect = output_ext_dir + lev0_flat_stem + flat_stem_suffix + flat_rect + '.fits'
+	if not find_files(output_lev0_flat_rect):
+		lev0_flat_data = kpf0_from_fits(lev0_flat_file, data_type=data_type)
+		lev0_flat_rect = OrderRectification(None, lev0_flat_data, orderlet_names=orderlet_names,
+						trace_file = trace_file,
+						rectification_method=rect_method, clip_file=clip_file,
+						origin=origin, poly_degree=poly_degree)
+		# output file
+		result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
+	else:
+		lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type='KPF')
+	
+	# make lev0 rectification based on existing clip file and spectral extraction on rectification
+	for code in obs_list:
+		# input: a lev0 file
+		input_lev0_file = test_data_dir + input_lev0_prefix + code + '.fits'
+		_, short_lev0_file = split(input_lev0_file)
+		lev0_stem, lev0_ext = splitext(short_lev0_file)
+		
+		# output files: lev1 
+		output_lev1_rect_file = output_ext_dir + config.ARGUMENT.lev1_file_pattern + code + '.fits'
+		if not find_files(output_lev1_rect_file):
+			lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+			input_lev1_file = test_data_dir + input_lev1_prefix + code + '.fits'
+			wavecal_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
+			op_data = SpectralExtraction(lev0_data, lev0_flat_rect, None, orderlet_names=orderlet_names,
+						rectification_method=rect_method, extraction_method=extract_method, 
+						clip_file=clip_file, data_extension=data_ext, trace_file=trace_file,
+						origin=origin, poly_degree=poly_degree,
+						wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
+			result = to_fits(op_data, output_lev1_rect_file)
+	
+
+

@@ -1,0 +1,27 @@
+This is central list of goals and TODOs for the wavelength calibration and inst 
+drift modules. Notes are at the bottom. 
+
+Long-term:
+1. Make a database rather than saving individual intermediate files
+2. Try a 2d polynomial (second dimension across orders))
+3. Option to return spline instead of polynomial, with node at every LFC peak
+4. Implement excalibur & test follow-up methods:
+ - Directly model image as a linear combo of past images, rather than computing 
+   peaks then computing principle components?
+ - Full Bayesian method?
+ - Test others
+5. Think more about pixel PSF shape. Look at Dumusque paper about stitch boundaries.
+6. Ideas for improving peak finding:
+ - Use blaze information to more reliably find peaks
+7. Compute autocorrelation of comb lines as a function of detector location to probe PSF
+8. Make sure residuals are being calculated correctly (see Zhao+ eq 5)
+9. Incorporate flux uncertainties in Gaussian fitting
+10. Clip peaks at polynomial step, see if this improves precision
+
+NOTES:
+1. KPF/NEID pixels span ~850 m/s, so the ThAr wls precision in one order should be below that.
+2. Cuts to make when deciding on pared-down ThAr line list:
+ - cut out blended or saturated lines
+ - cut out Ar lines
+ - intensity cut to remove shallowest lines
+ - cut out lines that are consistently misfit

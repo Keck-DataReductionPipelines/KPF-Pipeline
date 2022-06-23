@@ -1,0 +1,266 @@
+from modules.order_trace.src.order_trace import OrderTrace
+from modules.spectral_extraction.src.order_rectification import OrderRectification
+from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
+from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
+from modules.radial_velocity.src.radial_velocity import RadialVelocity
+from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
+from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
+from modules.Utils.string_proc import str_replace
+from modules.Utils.string_proc import date_from_kpffile
+from modules.Utils.data_handler import ExtCopy
+from modules.Utils.data_handler import FromCSV
+from modules.Utils.data_handler import GetHeaderValue
+from modules.Utils.data_handler import SelectObs
+
+
+sel_obsid = DATE_DIR
+date_dir = DATE_DIR + '/'
+flat_file_pattern = FLAT_FILE
+
+#test_data_dir = KPFPIPE_TEST_DATA + '/'
+test_data_dir = '/testdata/'
+
+date_dir_flat = date_from_kpffile(flat_file_pattern) 
+date_dir_flat = date_dir_flat + '/'
+
+output_dir = config.ARGUMENT.output_dir
+input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
+input_2d_dir_flat = config.ARGUMENT.input_dir_root + date_dir_flat
+
+data_type = config.ARGUMENT.data_type
+
+ccd_list = config.ARGUMENT.ccd_list
+lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
+lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
+
+poly_degree = config.ARGUMENT.fitting_poly_degree
+ccd_idx= config.ARGUMENT.ccd_idx
+
+start_order= config.ARGUMENT.start_order
+rect_method = config.ARGUMENT.rectification_method
+extract_method = config.ARGUMENT.extraction_method
+orderlet_names = config.ARGUMENT.orderlet_names
+
+wave_fits = config.ARGUMENT.wave_fits
+
+reweighting_method = config.ARGUMENT.reweighting_method
+data_ext_rv = config.ARGUMENT.orderlet_names_rv
+ccf_ext_names = config.ARGUMENT.ccf_ext
+rv_ext = config.ARGUMENT.rv_ext
+
+flat_rect = '_'+rect_method
+data_row_range = [0, -1]
+data_col_range = [0, -1]
+origin = [data_col_range[0], data_row_range[0]]
+
+fits_ext = '.fits'
+csv_ext = '.csv'
+
+# order trace I/O
+lev0_flat_pattern = input_2d_dir_flat + flat_file_pattern + fits_ext
+output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
+
+# spectra extraction I/O
+lev0_science_pattern = input_2d_dir + '*' + fits_ext
+output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
+
+# only need it when rect_method != norect
+if rect_method != 'norect':
+	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
+else:
+	output_clip = None
+
+orders_per_ccd = config.ARGUMENT.orders_per_ccd
+
+# rv I/O
+input_lev1_pattern = output_extraction + '*' + lev1_stem_suffix + fits_ext
+output_rv = output_dir + config.ARGUMENT.output_rv + date_dir
+output_rv_rw = output_rv + config.ARGUMENT.output_rv_reweighting
+bc_path = output_dir + config.ARGUMENT.output_barycorr
+wave_from_ext = config.ARGUMENT.wave_from_ext
+wave_to_ext = config.ARGUMENT.wave_to_ext
+
+
+do_order_trace = config.ARGUMENT.do_order_trace
+do_spectral_extraction = config.ARGUMENT.do_spectral_extraction
+do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
+do_rv = config.ARGUMENT.do_rv
+do_rv_reweighting = config.ARGUMENT.do_rv_reweighting
+do_rv_wavecopy = not do_sp_wavecopy
+
+if do_order_trace:
+	input_flat_file = lev0_flat_pattern
+	# for input_flat_file in find_files(lev0_flat_pattern):
+	if find_files(input_flat_file):
+		_, short_flat_file = split(input_flat_file)
+		flat_stem, flat_ext = splitext(short_flat_file)
+		flat_data = kpf0_from_fits(input_flat_file)
+
+		for idx in ccd_idx:
+			ccd = ccd_list[idx]
+			output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
+			if not find_files(output_lev0_trace_csv):
+				order_result_data = OrderTrace(flat_data, data_extension=ccd,
+					result_path=output_lev0_trace_csv, is_output_file=True,
+					data_col_range=data_col_range, data_row_range=data_row_range,
+					fitting_poly_degree=poly_degree)
+
+		output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+		lev0_flat_rect = None
+
+		# do rectification
+		if not find_files(output_lev0_flat_rect):
+			# generate rectification result to the same level0 object
+			lev0_flat_rect = flat_data
+			for idx in ccd_idx:
+				ccd = ccd_list[idx]
+				#clip_file = output_clip + flat_stem + '_' + ccd
+				clip_file = None
+				trace_file = output_order_trace + flat_stem + '_' + ccd + csv_ext
+				lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
+						orderlet_names=orderlet_names[idx],	
+						trace_file=trace_file, data_extension=ccd,
+						rectification_method=rect_method,
+						clip_file=clip_file,
+						origin=origin, poly_degree=poly_degree)
+			result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
+		else:
+			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
+
+
+	if do_spectral_extraction:
+		for input_lev0_file in find_files(lev0_science_pattern):
+			_, short_lev0_file = split(input_lev0_file)
+			lev1_stem, lev1_ext = splitext(short_lev0_file)
+			output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
+
+			if not find_files(output_lev1_file):
+				lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+				op_data = None
+	
+				for idx in ccd_idx:
+					ccd = ccd_list[idx]
+					order_name = orderlet_names[idx]
+					trace_file = output_order_trace + flat_stem + '_' + ccd + csv_ext
+	
+					# clip_file = output_clip + flat_stem + '_' + ccd
+					clip_file = None
+		
+					wavecal_data = None
+					wave_from_lev1 = False
+					if do_sp_wavecopy:
+						if wave_fits[idx] != None:
+							wave_file = output_dir + wave_fits[idx] 
+							if find_files(wave_file):
+								wavecal_data = kpf1_from_fits(wave_file, data_type=data_type)
+								wave_from_lev1 = True
+
+					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
+							orderlet_names=order_name,
+							orderlets_on_image=order_name,
+							total_order_per_ccd=orders_per_ccd,
+							start_order=start_order[idx],
+							ccd_index = idx,
+							rectification_method=rect_method, extraction_method=extract_method,
+							clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
+							wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
+				result = to_fits(op_data, output_lev1_file)
+			else:
+				op_data = kpf1_from_fits(output_lev1_file, data_type=data_type)
+
+if do_rv:
+	# do rv init
+	rv_star_dir = test_data_dir
+	rv_init = RadialVelocityInit(start_time="2021-03-01", bc_corr_path=bc_path, test_data_path=rv_star_dir)
+
+	# do rv, the order range and x range are defined by area_def
+	area_def = [[2, 33, 500, -500], [2, 30, 500, -500]]
+	lev2_list = []
+	all_lev2_files = []
+	selected_lev1_files = []
+
+	# select lev1 files 
+
+	lev1_list = find_files(input_lev1_pattern)
+	list_socal = output_dir + config.ARGUMENT.output_rv + "List_KPF_observations_using_SoCal.csv"
+	selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=sel_obsid)
+ 
+	for input_lev1_file in selected_lev1_files:
+		_, short_lev1 = split(input_lev1_file)
+		short_lev0 = str_replace(short_lev1, lev1_stem_suffix, '')
+		short_lev2 = str_replace(short_lev1, lev1_stem_suffix, lev2_stem_suffix)
+		output_lev2_file = output_rv + short_lev2
+			
+		if not find_files(output_lev2_file):
+			lev1_data = kpf1_from_fits(input_lev1_file, data_type='KPF')
+
+			# temporay method to get obstime and exptime
+			# lev0_data = kpf0_from_fits(input_2d_dir + short_lev0, data_type='KPF')
+			# obstime = GetHeaderValue(lev0_data, ["DATE-OBS", "DATE", "DATE-MID"])
+			# exptime = GetHeaderValue(lev0_data, ["EXPTIME", "ELAPSED"]) 
+			obstime = None
+			exptime = None
+
+			rv_data = None
+			for idx in ccd_idx:
+				# copy wls to the proper extension of lev1 data
+				if do_rv_wavecopy:
+					if wave_fits[idx] != None:
+						wave_file = output_dir + wave_fits[idx]
+						if find_files(wave_file):
+							wavecal_data = kpf1_from_fits(wave_file, data_type=data_type)
+							from_ext = wave_from_ext[idx]
+
+							for to_ext in wave_to_ext[idx]:
+								ExtCopy(wavecal_data, from_ext, to_ext, to_data_model=lev1_data)
+
+				rv_data = RadialVelocity(lev1_data, rv_init, rv_data,
+						data_ext_rv[idx], ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,
+						area_def=area_def[idx], start_seg=area_def[idx][0], end_seg=area_def[idx][1],
+						rv_set=idx, ccf_engine='c', obstime=obstime, exptime=exptime)
+			
+			result = to_fits(rv_data, output_lev2_file)
+		else:
+			rv_data = kpf2_from_fits(output_lev2_file, data_type=data_type)
+
+		if do_rv_reweighting:
+			all_lev2_files = all_lev2_files + [output_lev2_file]
+			lev2_list = lev2_list + [rv_data]
+
+	# do rv reweighting
+
+	if not lev2_list:
+		do_rv_reweighting = False
+
+	if do_rv_reweighting:
+		ratio_table = []
+
+		# output ratio table and reweighted L2 at output_rv_rw
+
+		for idx in ccd_idx:
+			ccf_ratio_file = output_rv_rw  + 'ccf_ratio_table_'+ rect_method + '_' + extract_method + '_' + reweighting_method+ '_' + ccf_ext_names[idx] + csv_ext
+			start_seg = area_def[idx][0]
+			t_segment = area_def[idx][1] - start_seg + 1
+			if not find_files(ccf_ratio_file):
+				ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, t_segment, ccf_hdu_name=ccf_ext_names[idx],
+								ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg)
+			else:
+				ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, t_segment, ccf_ratio_file=ccf_ratio_file, is_ratio_data=True)
+			ratio_table = ratio_table + [ratio_ref]
+
+		i = 0
+		for f in all_lev2_files:
+			_, short_lev2 = split(f)
+			reweighted_output = output_rv_rw + short_lev2
+
+			# reweighted_output = f
+
+			lev2_rv = lev2_list[i]
+			for idx in ccd_idx:
+				start_seg = area_def[idx][0]
+				t_segment = area_def[idx][1] - start_seg + 1
+				lev2_rv = RadialVelocityReweighting(lev2_rv, reweighting_method, ratio_table[idx], t_segment, rv_init,
+						ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
+			result = to_fits(lev2_rv, reweighted_output)
+			i = i + 1
+		
