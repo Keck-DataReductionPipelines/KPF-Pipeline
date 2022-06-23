@@ -5,6 +5,7 @@ import _ast
 from collections.abc import Iterable
 from queue import Queue
 import os
+from copy import copy
 
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
@@ -246,6 +247,12 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 else:
                     self.pipeline.logger.error(f"Name: No context or context has no config attribute")
                     raise Exception(f"Name: No context or context has no config attribute")
+            elif node.id == "context":
+                if self.context != None and hasattr(self.context, "args"):
+                    value = self.context.args
+                else:
+                    self.pipeline.logger.error(f"Name: No context or context has no args attribute")
+                    raise Exception(f"Name: No context or context has no args attribute")
             elif self._env.get(node.id):
                 value = self._env.get(node.id)
             else:
@@ -777,7 +784,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     for argnode in node.args:
                         self.visit(argnode)
                         event_args.append(self._load.pop())
-                    self.context.append_event(node.func.id, event_args)
+                    try:
+                        self.context.push_event(node.func.id, event_args)
+                    except:
+                        self.context.append_event(node.func.id, event_args)
                     self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                     #
                     self.awaiting_call_return = True
@@ -983,7 +993,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         obj = self._load.pop()
         if isinstance(node.ctx, _ast.Load):
             try:
-                value = obj.getValue(node.attr)
+                if 'getValue' in obj.__dir__():
+                    value = obj.getValue(node.attr)
+                else:
+                    value = obj[node.attr]
                 # print(f"Attribute: value is {type(value)}: {value}")
             except (KeyError, AttributeError):
                 self.pipeline.logger.error(

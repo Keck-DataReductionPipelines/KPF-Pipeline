@@ -20,6 +20,7 @@ from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
 from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
+
 class KPF0(KPFDataModel):
     """
     The level 0 KPF data. Initialized with empty fields.
