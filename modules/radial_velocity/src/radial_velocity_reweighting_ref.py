@@ -174,6 +174,10 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
             assert r_ccf is not None, msg
             return r_ccf
 
+        if self.logger:
+            self.logger.info("RadialVelocityReweightingRef: find reweighting reference by method " +
+                                self.reweighting_method)
+
         if self.reweighting_method == 'ccf_steps':
             ccf_ref = get_template_observation(self.files[0], self.ccf_hdu_name,
                                                'template observation error')
@@ -190,6 +194,8 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
 
             for ccf_file in self.files:
                 ccf_ref = get_template_observation(ccf_file, self.ccf_hdu_name, "observation with ccf error")
+                if ccf_ref.size == 0:
+                    continue
 
                 header = ccf_file.header[self.ccf_hdu_name]
                 total_orderlet = np.shape(ccf_ref)[0] if header['NAXIS'] == 3 else 1
