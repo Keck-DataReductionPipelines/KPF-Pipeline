@@ -1,0 +1,20 @@
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.image_processing.src.image_process import ImageProcessing
+
+channel_orientation_ref_path = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path
+data_type = config.ARGUMENT.data_type
+pl_overscan_reg = config.ARGUMENT.pl_overscan_reg
+srl_overscan_reg = config.ARGUMENT.srl_overscan_reg
+overscan_method = config.ARGUMENT.overscan_method
+order = config.ARGUMENT.overscan_order
+oscan_clip = config.ARGUMENT.overscan_clip
+
+L0_files = ['/Users/paminabby/Desktop/20220415_red/KP.20220415.23560.00_2D.fits']
+correcting_file = '/Users/paminabby/Desktop/20220415_red/KP.20220416.00370.00_2D.fits'
+ffi_exts = ['RED_CCD']
+quicklook = 'false'
+
+for file in L0_files: 
+    l0_file = kpf0_from_fits(file)
+    dark_corrected = ImageProcessing(l0_file,correcting_file,ffi_exts,data_type,quicklook)
+    save_dark_corr = to_fits(dark_corrected,file)
