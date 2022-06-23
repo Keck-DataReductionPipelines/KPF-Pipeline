@@ -86,6 +86,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             BarycentricCorrectionAlg.PMRA,
                             BarycentricCorrectionAlg.PMDEC,
                             BarycentricCorrectionAlg.PX,
+                            BarycentricCorrectionAlg.EPOCH,
                             BarycentricCorrectionAlg.LAT,
                             BarycentricCorrectionAlg.LON,
                             BarycentricCorrectionAlg.ALT,
@@ -101,9 +102,10 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                         self.obs_config[c] = Angle(k_val+"degrees").deg
                     elif c == BarycentricCorrectionAlg.SPEC:
                         self.obs_config[c] = self.instrument
+                    elif c == BarycentricCorrectionAlg.STARNAME:
+                        self.obs_config[c] = k_val
                     else:
                         self.obs_config[c] = float(k_val)
-
         self.zb_range = None
         self.zb_list = None
 
