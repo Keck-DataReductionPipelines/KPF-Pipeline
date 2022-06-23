@@ -8,7 +8,7 @@ from keckdrpframework.models.arguments import Arguments
 class OverscanSubtraction(KPF0_Primitive):
     """
     This utility can perform various types of overscan subtraction and then form channel images 
-    into one full frame image .
+    into one full frame image.
     """
     def __init__(self,action,context):
         """Initializes overscan subtraction utility.
