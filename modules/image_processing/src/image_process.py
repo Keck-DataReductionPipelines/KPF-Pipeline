@@ -105,15 +105,15 @@ class ImageProcessing(KPF0_Primitive):
         """
         #until master file part of data model is fixed
         correcting_file = KPF0.from_fits(self.correcting_file)
-        obs_type = correcting_file.header['PRIMARY']['OBSTYPE']
+        obs_type = correcting_file.header['PRIMARY']['IMTYPE']
         print(obs_type)
         
-        if obs_type == 'BIAS':
+        if obs_type == 'Bias':
             if self.logger:
                 self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
             bias_subbed = self.alg.bias_subtraction(correcting_file)
-        
-        if obs_type == 'DARK':
+            print(bias_subbed)
+        if obs_type == 'Dark':
             if self.logger:
                 self.logger.info(f'Dark Subtraction: subtracting dark frame from raw FFI(s)')
             dark_subbed = self.alg.dark_subtraction(correcting_file)

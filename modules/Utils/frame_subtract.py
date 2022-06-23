@@ -10,7 +10,7 @@ class FrameSubtract(KPF0_Primitive):
         "FrameSubtract constructor."
         
         #Initialize parent class
-        KPF0_Primitive.__init__(self,action,context)
+        KPF0_Primitive.__init__(self, action, context)
 
         #Input arguments
         self.principal_file = self.action.args[0]
@@ -22,10 +22,13 @@ class FrameSubtract(KPF0_Primitive):
         for ffi in self.ffi_exts:
             assert self.principal_file[ffi].data.shape==self.correcting_file[ffi].data.shape, "Frames' dimensions don't match. Check failed."
             if self.sub_type == 'bias':
-                assert self.correcting_file.header['PRIMARY']['OBSTYPE'] == 'BIAS', "Correcting file is not a master bias. Check failed."
+                assert self.correcting_file.header['PRIMARY']['OBSTYPE'] == 'Bias', "Correcting file is not a master bias. Check failed."
             if self.sub_type == 'dark':
-                assert self.correcting_file.header['PRIMARY']['OBSTYPE'] == 'DARK', "Correcting file is not a dark frame file. Check failed."
+                assert self.correcting_file.header['PRIMARY']['OBSTYPE'] == 'Dark', "Correcting file is not a dark frame file. Check failed."
                 assert self.principal_file.header['PRIMARY']['EXPTIME'] == self.correcting_file.header['PRIMARY']['EXPTIME'], "Frames' exposure times don't match. Check failed."
             subtracted = self.principal_file[ffi] - self.correcting_file[ffi]
-            
+                
+    def _perform(self):
+        
+        subtracted = self.subtraction()
         return Arguments(subtracted)
