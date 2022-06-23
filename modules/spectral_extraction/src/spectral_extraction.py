@@ -22,6 +22,8 @@
                       extraction results. If not existing, it is None.
                     - `action.args['orderlet_names'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
+                    - `action.args['orderlets_on_image'] (str|list, optional)`: Name or list of names of the order on
+                      the image. Defaults to None.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
                     - `action.args['max_result_order']: (int, optional)`: Total orders to be processed, Defaults to -1.
@@ -125,7 +127,9 @@ class SpectralExtraction(KPF0_Primitive):
                     'trace_extension': None,
                     'trace_file': None,
                     'ccd_index': None,
-                    'first_orderlet_idx': None
+                    'first_orderlet_idx': None,
+                    'total_order_per_ccd': None,
+                    'orderlets_on_image': None
                 }
 
     NORMAL = 0
@@ -147,7 +151,6 @@ class SpectralExtraction(KPF0_Primitive):
         self.input_flat = action.args[1]      # kpf0 instance with flat data
         self.output_level1 = action.args[2]   # kpf1 instance already exist or None
         self.ccd_index = self.get_args_value('ccd_index', action.args, args_keys)
-        # self.first_orderlet_idx = self.get_args_value('first_orderlet_idx', action.args, args_keys)
         self.orderlet_names = self.get_args_value('orderlet_names', action.args, args_keys)
         self.max_result_order = self.get_args_value("max_result_order", action.args, args_keys)
         self.start_order = self.get_args_value("start_order", action.args, args_keys)  # for the result of order trace
@@ -156,10 +159,12 @@ class SpectralExtraction(KPF0_Primitive):
         self.wavecal_fits = self.get_args_value('wavecal_fits', action.args, args_keys) # providing wavelength calib.
         self.to_set_wavelength_cal = self.get_args_value('to_set_wavelength_cal', action.args, args_keys) # set wave cal
         self.clip_file = self.get_args_value('clip_file', action.args, args_keys)
+        self.total_order_per_ccd = self.get_args_value('total_order_per_ccd', action.args, args_keys)
 
         data_ext = self.get_args_value('data_extension', action.args, args_keys)
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
+        orderlets_on_image = self.get_args_value("orderlets_on_image", action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -199,6 +204,8 @@ class SpectralExtraction(KPF0_Primitive):
                                         rectification_method=self.rectification_method,
                                         extraction_method=self.extraction_method,
                                         ccd_index=self.ccd_index,
+                                        orderlet_names=orderlets_on_image,
+                                        total_order_per_ccd=self.total_order_per_ccd,
                                         clip_file=self.clip_file)
 
     def _pre_condition(self) -> bool:

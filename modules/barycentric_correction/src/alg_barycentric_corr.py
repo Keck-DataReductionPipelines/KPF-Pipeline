@@ -51,6 +51,8 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
     """proper motion in RA (mas/yr) """
     PMDEC = 'pmdec'
     """ proper motion in DEC (mas/yr) """
+    EPOCH = 'epoch'
+    """ epoch in julian date """
     PX = 'parallax'
     """ parallax of the target (mas) """
     LAT = 'obslat'
@@ -84,6 +86,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             BarycentricCorrectionAlg.PMRA,
                             BarycentricCorrectionAlg.PMDEC,
                             BarycentricCorrectionAlg.PX,
+                            BarycentricCorrectionAlg.EPOCH,
                             BarycentricCorrectionAlg.LAT,
                             BarycentricCorrectionAlg.LON,
                             BarycentricCorrectionAlg.ALT,
@@ -99,9 +102,10 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                         self.obs_config[c] = Angle(k_val+"degrees").deg
                     elif c == BarycentricCorrectionAlg.SPEC:
                         self.obs_config[c] = self.instrument
+                    elif c == BarycentricCorrectionAlg.STARNAME:
+                        self.obs_config[c] = k_val
                     else:
                         self.obs_config[c] = float(k_val)
-
         self.zb_range = None
         self.zb_list = None
 
@@ -282,9 +286,11 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
 
         """
         if obs_config[BarycentricCorrectionAlg.STARNAME].lower() == 'sun':
+            # epoch, SolSystemTarget, predictive
             bc_obj = get_BC_vel(JDUTC=jd,
                                 ra=None,
                                 dec=None,
+                                epoch=None,
                                 pmra=None,
                                 pmdec=None,
                                 px=None,
@@ -298,6 +304,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],
                             dec=obs_config[BarycentricCorrectionAlg.DEC],
+                            epoch=obs_config[BarycentricCorrectionAlg.EPOCH],
                             pmra=obs_config[BarycentricCorrectionAlg.PMRA],
                             pmdec=obs_config[BarycentricCorrectionAlg.PMDEC],
                             px=obs_config[BarycentricCorrectionAlg.PX],
@@ -305,4 +312,5 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             longi=obs_config[BarycentricCorrectionAlg.LON],
                             alt=obs_config[BarycentricCorrectionAlg.ALT],
                             rv=obs_config[BarycentricCorrectionAlg.RV])
+
         return bc_obj[0][0]

@@ -5,6 +5,7 @@ from astropy import constants as const
 import warnings
 import datetime
 import pandas as pd
+import os
 
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
@@ -326,6 +327,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             # recompute zb and compare the value in header
             rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                                 RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                                RadialVelocityAlgInit.EPOCH,
                                 RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
                                 RadialVelocityAlgInit.OBSLON,
                                 RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV, 
@@ -346,7 +348,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         #    return 0.0
 
         rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
-                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC, RadialVelocityAlgInit.EPOCH,
                             RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
                             RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV,
                             RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
@@ -437,6 +439,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.obs_jd = self.get_obs_time()
         if not self.obs_jd:
             return None, 'observation jd time error'
+
         zb = self.get_redshift()
 
         if zb is None:
@@ -615,7 +618,11 @@ class RadialVelocityAlg(RadialVelocityBase):
         if self.ccf_code == 'c':
             # ccf_pixels_c = np.zeros([v_steps, n_pixel])
 
-            v_b = zb * 1.0e-3               # m/s -> km/s
+            # update redshift
+
+            zb = zb/LIGHT_SPEED_M              # zb in (m/s)/3*10e8 m/s
+            v_b = ((1.0/(1+zb)) - 1.0) * LIGHT_SPEED
+
             for c in range(v_steps):
                 # add one pixel before and after the original array in order to uniform the calculation between c code
                 # and python code
@@ -778,7 +785,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         total_seg_rv = np.shape(ccf)[0] - self.ROWS_FOR_ANALYSIS
         ccf[total_seg_rv+1, :] = self.velocity_loop
         if row_for_analysis is None:
-            row_for_analysis = np.arange(1, total_seg_rv, dtype=int)
+            row_for_analysis = np.arange(0, total_seg_rv, dtype=int)
         # skip order 0
         ccf[total_seg_rv + self.ROWS_FOR_ANALYSIS - 1, :] = np.nansum(ccf[row_for_analysis, :], axis=0)
         return ccf
@@ -980,6 +987,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         df = pd.DataFrame(ratio_table)
         if output_csv:
+            if not os.path.isdir(os.path.dirname(output_csv)):
+                os.makedirs(os.path.dirname(output_csv), exist_ok=True)
             df.to_csv(output_csv, index=False)
 
         return df
@@ -1038,7 +1047,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 tval = reweighting_table_or_ccf[0:total_segment, -1]
 
             new_crt_rv = np.zeros((total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
-            max_index = np.where(tval == np.max(tval))[0]       # the max from ratio table, 1.0 if ratio max is 1.0
+            max_index = np.where(tval == np.max(tval))[0][0]       # the max from ratio table, 1.0 if ratio max is 1.0
             oval = np.nanpercentile(crt_rv[0:total_segment], 95, axis=1) if reweighting_method == 'ccf_max' \
                 else np.nanmean(crt_rv[0:total_segment], axis=1)  # max or mean from each order
 
@@ -1060,7 +1069,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                            np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
 
         if do_analysis:
-            row_for_analysis = np.arange(1, total_segment, dtype=int)
+            row_for_analysis = np.arange(0, total_segment, dtype=int)
             new_crt_rv[total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :] = \
                 np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
             if velocities is not None and np.size(velocities) == nx:

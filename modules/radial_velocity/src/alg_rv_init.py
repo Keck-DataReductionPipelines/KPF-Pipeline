@@ -8,7 +8,7 @@ from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_rv_mask_line import RadialVelocityMaskLine
 from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
 from modules.Utils.config_parser import ConfigHandler
-
+from astropy.time import Time
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -37,7 +37,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             configuration file if there is. The instance includes the following keys (these are constants defined
             in the source):
 
-                `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, `STAR_RV`,
+                `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `EPOCH`, `PARALLAX`, `STAR_RV`,
                 `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`, `AIR_TO_VACUUM`, `STEP_RANGE`.
 
         mask_path (str): Mask file path.
@@ -88,6 +88,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     PMRA = 'pmra'               # mas/yr
     PMDEC = 'pmdec'             # mas/yr
     PARALLAX = 'parallax'       # mas
+    EPOCH = 'epoch'
     DEF_MASK = 'mask'
 
     # defined for attribute access
@@ -145,7 +146,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 }
 
             Attribute `mask_path` is updated and the values of the following keys in `rv_config`,
-            `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, and `PARALLAX`, are updated.
+            `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `EPOCH`, and `PARALLAX`, are updated.
 
         """
 
@@ -165,7 +166,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if len(f_config.read(self.test_data_dir + star_config_file)) == 1:
                 config_star = ConfigHandler(f_config, star_name)
 
-        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX)  # in rv_config
+        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)  # in rv_config
 
         for star_key in star_info:
             k_val = self.get_rv_config_value(star_key, config_star)
@@ -176,6 +177,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                     val = Angle(k_val+"hours").deg
                 elif star_key == self.DEC:
                     val = Angle(k_val+"degrees").deg
+                elif star_key == self.EPOCH:
+                    year_days = 365.25
+                    val = (float(k_val) - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
                 else:
                     val = float(k_val)
                 self.rv_config[star_key] = val
@@ -211,7 +215,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
             The following attributes and values are updated,
 
-                * `rv_config`: values of `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`,
+                * `rv_config`: values of `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, `EPOCH`,
                   `STAR_RV`, `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`,  `AIR_TO_VACUUM`, `STEP_RANGE`.
                 * `velocity_steps`
                 * `velocity_loop`
@@ -396,7 +400,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             in the array is the minimum and the second one is the maximum. Attributes `zb_range` is updated.
 
         """
-        rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.OBSLAT,
+        rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.EPOCH, self.OBSLAT,
                             self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC, self.STARNAME]
 
         if self.zb_range is None:
