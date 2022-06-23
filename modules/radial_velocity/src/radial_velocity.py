@@ -108,7 +108,9 @@ class RadialVelocity(KPF1_Primitive):
         'ccf_engine': 'c',
         'ccf_ext': 'CCF',
         'rv_ext': 'RV',
-        'rv_set': 0
+        'rv_set': 0,
+        'obstime': None,
+        'exptime': None
     }
 
     RV_COL_ORDERLET = 'orderlet'
@@ -177,6 +179,10 @@ class RadialVelocity(KPF1_Primitive):
         self.spectrum_data_set = list()
         self.wave_cal_set = list()
         self.header_set = list()
+
+        exptime_v = action.args['exptime'] if 'exptime' in args_keys else self.default_args_val['exptime']
+        obstime_v = action.args['obstime'] if 'obstime' in args_keys else self.default_args_val['obstime']
+
         for sci in self.sci_names:
             self.spectrum_data_set.append(getattr(self.input, sci) if hasattr(self.input, sci) else None)
 
@@ -184,10 +190,15 @@ class RadialVelocity(KPF1_Primitive):
             self.wave_cal_set.append(getattr(self.input, wave) if (wave is not None and hasattr(self.input, wave))
                                      else None)
             neid_ssb = 'SSBJD100'   # neid case
+
             if neid_ssb in self.input.header['PRIMARY'] and neid_ssb not in self.input.header[sci]:
                 self.input.header[sci][neid_ssb] = self.input.header['PRIMARY'][neid_ssb]
-            elif ('DATE-OBS' in self.input.header['PRIMARY']) or ('DATE' in self.input.header['PRIMARY']): # kpf case
-                if 'MJD-OBS' not in self.input.header[sci]:
+            elif neid_ssb not in self.input.header[sci]:     # kpf case
+                if obstime_v != None:
+                    m_obs = Time(obstime_v).jd - 2400000.5
+                    if exptime_v is None:
+                        exptime_v = 1.0
+                elif ('DATE-OBS' in self.input.header['PRIMARY']) or ('DATE' in self.input.header['PRIMARY']): # kpf case
                     if 'DATE-OBS' in self.input.header['PRIMARY']:
                         d_obs = 'DATE-OBS'
                         exptime = 'EXPTIME' if 'EXPTIME' in self.input.header['PRIMARY'] else None
@@ -195,8 +206,13 @@ class RadialVelocity(KPF1_Primitive):
                         d_obs = 'DATE'
                         exptime = 'ELASPED' if 'ELASPED' in self.input.header['PRIMARY'] else None
 
-                    self.input.header[sci]['MJD-OBS'] = Time(self.input.header['PRIMARY'][d_obs]).jd - 2400000.5
-                    self.input.header[sci]['EXPTIME'] = self.input.header['PRIMARY'][exptime] if exptime else 1.0
+                    exptime_v = self.input.header['PRIMARY'][exptime] if exptime else 1.0
+                    m_obs = Time(self.input.header['PRIMARY'][d_obs]).jd - 2400000.5
+
+                if 'MJD-OBS' not in self.input.header[sci] or self.input.header[sci]['MJD-OBS'] != m_obs:
+                    self.input.header[sci]['MJD-OBS'] = m_obs
+                    self.input.header[sci]['EXPTIME'] = exptime_v
+
 
             self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
                                    else None)
@@ -289,7 +305,10 @@ class RadialVelocity(KPF1_Primitive):
         crt_rv_ext = self.output_level2[self.rv_ext] if hasattr(self.output_level2, self.rv_ext) else None
         if crt_rv_ext is None or np.shape(crt_rv_ext)[0] == 0:
             self.output_level2[self.rv_ext] = new_rv_table
+            self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'row'] = 0
+
         else:
+            first_row = np.shape(crt_rv_ext)[0]
             new_table_list = {}
             for c_name in self.rv_col_names:
                 if c_name in self.rv_col_on_orderlet:
@@ -301,13 +320,14 @@ class RadialVelocity(KPF1_Primitive):
                     new_list = crt_rv_ext[c_name].tolist() + new_rv_table[c_name].tolist()
                     new_table_list[c_name] = new_list
             self.output_level2[self.rv_ext] = pd.DataFrame(new_table_list)
+            self.output_level2.header[self.rv_ext]['ccd' + str(self.rv_set_idx + 1) + 'row'] = first_row
 
         for o in range(len(output_df)):
             self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'rv'+str(o+1)] = \
                 new_rv_table.attrs['ccd_rv'+str(o+1)]
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'rv'] = new_rv_table.attrs['rv']
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'jd'] = new_rv_table.attrs['ccd_jd']
-        self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
+        # self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
         return True
 
     def make_ccf_table(self, output_df):
@@ -377,7 +397,7 @@ class RadialVelocity(KPF1_Primitive):
         _, final_rv, _, _ = self.alg.fit_ccf(final_sum_ccf, self.alg.get_rv_guess(), velocities)
         results.attrs['rv'] = (f_decimal(final_rv), 'BaryC RV (km/s)')
         results.attrs['ccd_jd'] = output_df[0].attrs['CCFJDSUM']
-        results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
+        # results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
 
         return results
 

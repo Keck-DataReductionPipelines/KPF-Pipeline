@@ -5,7 +5,7 @@ radial_velocity_neid_recipe = """# test recipe for readial velocity on NEID data
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 
-lev1_data_dir = KPFPIPE_TEST_DATA + config.ARGUMENT.lev1_data_dir
+lev1_data_dir = KPFPIPE_TEST_DATA + '/radial_velocity_test/for_pytest/'
 output_dir = config.ARGUMENT.output_dir
 lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
 lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix

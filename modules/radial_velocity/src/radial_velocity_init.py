@@ -87,6 +87,7 @@ class RadialVelocityInit(KPF_Primitive):
         """
         # Initialize parent class
         KPF_Primitive.__init__(self, action, context)
+
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         st = action.args['start_time'] if 'start_time' in args_keys else None
         if st is not None:
@@ -108,7 +109,7 @@ class RadialVelocityInit(KPF_Primitive):
 
         self.bc_period = pd if pd is not None else 380
         self.test_data = action.args['test_data_path'] if 'test_data_path' in args_keys \
-            else os.getenv('KPFPIPE_TEST_DATA')
+            else (os.getenv('KPFPIPE_TEST_DATA') + '/')
         # barycentric correction default period: 380 day, start date: apr-18-2019
         self.bc_data = action.args['bc_corr_path'] if 'bc_corr_path' in args_keys else None
         self.bc_output_data = None

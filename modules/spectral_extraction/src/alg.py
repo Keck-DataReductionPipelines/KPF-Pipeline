@@ -149,6 +149,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
     def __init__(self, flat_data, flat_header, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None,
                  rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
+                 total_order_per_ccd=None, orderlet_names=None, total_image_orderlets=None,
                  clip_file=None, logger_name=None):
 
         if not isinstance(flat_data, np.ndarray):
@@ -201,8 +202,10 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.order_edges = None
         self.order_xrange = None
 
-        self.total_image_orderlets = None
-        self.orderlet_names = None
+        self.orderlet_names = orderlet_names
+        self.total_image_orderlets = len(orderlet_names) \
+            if ((isinstance(orderlet_names, list)) and (len(orderlet_names) > 0)) else None
+        self.total_order_per_ccd = total_order_per_ccd
         self.extracted_flux_pixels = None
         self.is_raw_flat = self.RECTIFYKEY not in self.flat_header
         self.is_raw_spectrum = self.RECTIFYKEY not in spectrum_header if spectrum_header is not None else True
@@ -211,7 +214,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.output_area_info = list()
         self.poly_clip_dict = dict()
         self.poly_clip_update = False
-        self.total_order_per_ccd = None
         self.ccd_index = ccd_index
 
     def get_config_value(self, prop, default=''):
