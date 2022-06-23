@@ -19,6 +19,9 @@ echo "done"
 echo "copy level 0 files..."
 cp /data/kpf/2D/20220517_2/KP.20220517.81*.fits  ${KPFPIPE_DATA}/2D/20220517/
 echo "done"
+echo "copy solar list"
+cp /data/kpf/L2/List_KPF_observations_using_SoCal.csv ${KPFPIPE_DATA}/L2/
+echo "done"
 
 #export DATE_DIR=20220517
 #export FLAT_FILE=KP.20220517.52876.04
