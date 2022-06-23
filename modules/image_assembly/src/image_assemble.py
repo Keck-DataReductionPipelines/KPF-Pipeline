@@ -52,6 +52,17 @@ class ImageAssembly(KPF0_Primitive):
         
         #Initialize parent class
         KPF0_Primitive.__init__(self,action,context)
+        self.rawfile = self.action.args[0]
+        self.prl_overscan_reg = self.action.args[1]
+        self.srl_overscan_reg = self.action.args[2]
+        self.mode = self.action.args[3]
+        self.order = self.action.args[4]
+        self.oscan_clip_no = self.action.args[5]
+        self.ref_output = self.action.args[6]
+        self.ffi_exts = self.action.args[7]
+        self.data_type = self.action.args[8]
+        self.prescan_reg = self.action.args[9]
+        self.gain_key = self.action.args[10]
         
         #Input arguments
 
