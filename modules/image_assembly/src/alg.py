@@ -58,7 +58,7 @@ class ImageAssemblyAlg:
 
 
     def polyfit_subtraction(self,image,overscan_reg): #need to double check that this works w fixes
-        """Performs linear fit on overscan data, subtracts fit values from raw science image data.
+        """Performs least squares fit on overscan data, subtracts fit values from raw science image data.
 
         Args:
             image(np.ndarray): Array of image data

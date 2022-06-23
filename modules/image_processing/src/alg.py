@@ -49,11 +49,11 @@ class ImageProcessingAlg:
         Args:
             masterbias (FITS File): The master bias data.
         """
-        if self.quicklook == False:
-            if self.data_type == 'KPF':
-                sub_init = FrameSubtract(self.rawimage,masterbias,self.ffi_exts,'bias')
-                subbed_raw_file = sub_init.subtraction()
-                self.rawimage = subbed_raw_file
+        # if self.quicklook == False:
+        for ffi in self.ffi_exts:
+            sub_init = FrameSubtract(self.rawimage,masterbias,self.ffi_exts,'bias')
+            subbed_raw_file = sub_init.subtraction()
+            self.rawimage[ffi] = subbed_raw_file[ffi]
         
         # if self.quicklook == False: 
         #     if self.data_type == 'KPF':
@@ -64,14 +64,6 @@ class ImageProcessingAlg:
         #             #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
         #             minus_bias = self.rawimage[ffi]-masterbias[ffi]
         #             self.rawimage[ffi] = minus_bias
-                 
-    def get(self):
-        """Returns bias-corrected raw image result.
-
-        Returns:
-            self.rawimage: The bias-corrected data.
-        """
-        return self.rawimage
     
     def dark_subtraction(self,dark_frame):
         """Performs dark frame subtraction. 
@@ -79,17 +71,25 @@ class ImageProcessingAlg:
 
         Args:
             dark_frame (FITS File): L0 FITS file object
+
         """
-        # sub_init = FrameSubtract(self.rawimage,dark_frame,self.ffi_exts,'dark')
-        # subbed_raw_file = sub_init.subtraction()
-        # self.rawimage = subbed_raw_file
         
         for ffi in self.ffi_exts:
             print(self.rawimage[ffi].data.shape,dark_frame[ffi].data.shape)
             assert self.rawimage[ffi].data.shape==dark_frame[ffi].data.shape, "Dark frame dimensions don't match raw image. Check failed."
             assert self.rawimage.header['PRIMARY']['EXPTIME'] == dark_frame.header['PRIMARY']['EXPTIME'], "Dark frame and raw image don't match in exposure time. Check failed."
-            minus_dark = self.rawimage[ffi]-dark_frame[ffi]
-            self.rawimage[ffi] = minus_dark
-            print('CHEESE')
+            #minus_dark = self.rawimage[ffi]-dark_frame[ffi]
+            sub_init = FrameSubtract(self.raw_image,dark_frame,self.ffi_exts,'dark')
+            subbed_raw_file = sub_init.subtraction()
+            self.rawimage[ffi] = subbed_raw_file[ffi]
+            
+    def get(self):
+        """Returns bias-corrected raw image result.
+
+        Returns:
+            self.rawimage: The bias-corrected data.
+        """
+        return self.rawimage
+            
 #quicklook TODO: raise flag when counts are significantly diff from master bias, identify bad pixels
         
