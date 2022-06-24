@@ -126,7 +126,7 @@ class QuicklookAlg:
                 plt.xlabel('Counts')
                 plt.ylabel('Number of Pixels')
                 plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
-                plt.plot(np.array(bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
+                plt.plot(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
                 plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
