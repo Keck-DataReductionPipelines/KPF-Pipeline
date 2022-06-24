@@ -121,7 +121,7 @@ class QuicklookAlg:
                 print('2nd gaussian',amp2,gamma2,std2)
 
                 plt.plot(count_fit,amp2*np.exp(-0.5*(count_fit-gamma2)**2/std2**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
-                plt.ylim(1,10**7)
+                #plt.ylim(1,10**7)
                 plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
                 plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
                 plt.legend()
