@@ -111,17 +111,17 @@ class QuicklookAlg:
                 print(amp,gamma,std)
                 plt.close('all')
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'red', label = '1st component')#1/std/np.sqrt(2*np.pi)*
-                plt.ylim(1,10*amp)
+                #plt.ylim(1,10*amp)
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
                 model = modeling.models.Gaussian1D()
-                fitted_model = fitter(model,count_fit[(count_fit<gamma-2*std) | (count_fit>gamma+2*std)]-a_med, pdf[(count_fit<gamma-2*std) | (count_fit>gamma+2*std)])
+                fitted_model = fitter(model,count_fit[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)]-a_med, pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)])
                 amp =fitted_model.amplitude.value
                 gamma =fitted_model.mean.value+a_med
                 std =fitted_model.stddev.value
                 print(amp,gamma,std)
 
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
-                plt.ylim(1,10*amp)
+                plt.ylim(1,10**7)
                 plt.legend()
                 plt.xlabel('Counts')
                 plt.ylabel('Number of Pixels')
