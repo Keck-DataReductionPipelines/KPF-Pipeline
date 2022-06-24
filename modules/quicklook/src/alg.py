@@ -108,7 +108,7 @@ class QuicklookAlg:
                 amp =fitted_model.amplitude.value
                 gamma =fitted_model.mean.value+a_med
                 std =fitted_model.stddev.value
-                print('1st gaussian',amp2,gamma2,std2)
+                print('1st gaussian',amp,gamma,std)
                 plt.close('all')
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'red', label = '1st component')#1/std/np.sqrt(2*np.pi)*
                 #plt.ylim(1,10*amp)
