@@ -24,17 +24,7 @@ class QuicklookAlg:
         
 
     def qlp_procedures(self,file_name,output_dir):
-        def fixed_pattern_noise(counts,output_dir,exposure_name):
-            plt.close('all')
-            plt.hist(counts.ravel(),bins =100)
-            plt.text(300,200,'STD: %3.1f' % np.nanstd(counts))
-            #plt.plot([low_bound,low_bound],[0.5,1e6],color = 'red')
-            #plt.plot([upp_bound,upp_bound],[0.5,1e6],color = 'red')
-            plt.yscale('log')
-            plt.xlabel('Counts')
-            plt.ylabel('Number of Pixels')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_bias.pdf')
-            plt.close('all')
+
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
@@ -104,8 +94,7 @@ class QuicklookAlg:
                 master_flatten_counts = np.ravel(master_counts)
             
             #looking at the fixed noise patterns
-            if version == 'Dark' or version == 'Bias':
-                fixed_pattern_noise(counts,output_dir,exposure_name)
+
 
             #2D image
             plt.figure(figsize=(5,4))
@@ -142,8 +131,8 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
             #print(np.percentile(flatten_counts,99.9),saturation_limit)
-            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f' % np.nanmedian(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
-            if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
+            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
+            if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
             plt.xlabel('Counts')
             plt.ylabel('Number of Pixels')
