@@ -98,7 +98,7 @@ class QuicklookAlg:
                 a = np.copy(counts)
                 a_med = np.nanmedian(a.ravel())
                 a_std = np.nanstd(a.ravel())
-                pdf, bin_edges = np.histogram(a.ravel(),bins=50, range = (a_med-10*a_std,a_med+10*a_std))
+                pdf, bin_edges = np.histogram(a.ravel(),bins=80, range = (a_med-10*a_std,a_med+10*a_std))
                 print('bin edges',bin_edges)
                 count_fit = (bin_edges[1:]+bin_edges[:-1])/2
                 from astropy import modeling
@@ -122,11 +122,11 @@ class QuicklookAlg:
 
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
                 plt.ylim(1,10**7)
+                plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
+                plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
                 plt.legend()
                 plt.xlabel('Counts')
                 plt.ylabel('Number of Pixels')
-                plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
-                plt.plot(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
                 plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
