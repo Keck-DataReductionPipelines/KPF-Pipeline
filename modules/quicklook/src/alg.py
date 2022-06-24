@@ -19,9 +19,9 @@ class QuicklookAlg:
         """
         self.config=config
         self.logger=logger
-        
 
-        
+
+
 
     def qlp_procedures(self,file_name,output_dir):
 
@@ -92,10 +92,40 @@ class QuicklookAlg:
                 hdulist1 = fits.open(master_file)
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
-            
+
             #looking at the fixed noise patterns
+            if version =='Bias':
+                a = np.copy(counts)
+                a_med = np.nanmedian(a.ravel())
+                a_std = np.nanstd(a.ravel())
+                pdf, bin_edges = np.histogram(a.ravel(),bins=100, range = (a_med-10*a_std,a_med+10*a_std))
+                count_fit = (bin_edges[1:]+bin_edges[:-1])/2
+                from astropy import modeling
+                fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
+                model = modeling.models.Gaussian1D()
+                fitted_model = fitter(model,count_fit-a_med, pdf)
+                amp =fitted_model.amplitude.value
+                gamma =fitted_model.mean.value+a_med
+                std =fitted_model.stddev.value
+                #print(amp,gamma,std)
 
+                plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'red', label = '1st component')#1/std/np.sqrt(2*np.pi)*
+                plt.ylim(1,10*amp)
+                fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
+                model = modeling.models.Gaussian1D()
+                fitted_model = fitter(model,count_fit[(count_fit<gamma-2*std) | (count_fit>gamma+2*std)]-a_med, pdf[(count_fit<gamma-2*std) | (count_fit>gamma+2*std)])
+                amp =fitted_model.amplitude.value
+                gamma =fitted_model.mean.value+a_med
+                std =fitted_model.stddev.value
+                #print(amp,gamma,std)
 
+                plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
+                plt.ylim(1,10*amp)
+                plt.legend()
+                plt.xlabel('Counts')
+                plt.ylabel('Number of Pixels')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
+                plt.close()
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
