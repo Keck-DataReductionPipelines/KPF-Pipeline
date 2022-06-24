@@ -98,7 +98,7 @@ class QuicklookAlg:
                 a = np.copy(counts)
                 a_med = np.nanmedian(a.ravel())
                 a_std = np.nanstd(a.ravel())
-                pdf, bin_edges = np.histogram(a.ravel(),bins=80, range = (a_med-10*a_std,a_med+10*a_std))
+                pdf, bin_edges = np.histogram(a.ravel(),bins=80, range = (a_med-8*a_std,a_med+8*a_std))
                 print('bin edges',bin_edges)
                 count_fit = (bin_edges[1:]+bin_edges[:-1])/2
                 from astropy import modeling
