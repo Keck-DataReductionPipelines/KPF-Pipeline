@@ -99,7 +99,7 @@ class QuicklookAlg:
                 a_med = np.nanmedian(a.ravel())
                 a_std = np.nanstd(a.ravel())
                 pdf, bin_edges = np.histogram(a.ravel(),bins=80, range = (a_med-8*a_std,a_med+8*a_std))
-                print('bin edges',bin_edges)
+                print('bin edges',a_med,a_std,bin_edges)
                 count_fit = (bin_edges[1:]+bin_edges[:-1])/2
                 from astropy import modeling
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
@@ -114,7 +114,8 @@ class QuicklookAlg:
                 #plt.ylim(1,10*amp)
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
                 model = modeling.models.Gaussian1D()
-                fitted_model = fitter(model,count_fit[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)]-a_med, pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)])
+                select =[((count_fit<gamma-2*std) & (count_fit>gamma-8*std))| ((count_fit>gamma+2*std) & (count_fit<gamma+8*std))]
+                fitted_model = fitter(model,count_fit[select]-a_med, pdf[select])
                 amp2 =fitted_model.amplitude.value
                 gamma2 =fitted_model.mean.value+a_med
                 std2 =fitted_model.stddev.value
@@ -123,7 +124,7 @@ class QuicklookAlg:
                 plt.plot(count_fit,amp2*np.exp(-0.5*(count_fit-gamma2)**2/std2**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
                 #plt.ylim(1,10**7)
                 plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
-                plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
+                plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[select],pdf[select], label = 'Larger Var Component')
                 plt.legend()
                 plt.xlabel('Counts')
                 plt.ylabel('Number of Pixels')
