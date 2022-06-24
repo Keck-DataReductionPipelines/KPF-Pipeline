@@ -108,19 +108,19 @@ class QuicklookAlg:
                 amp =fitted_model.amplitude.value
                 gamma =fitted_model.mean.value+a_med
                 std =fitted_model.stddev.value
-                print(amp,gamma,std)
+                print('1st gaussian',amp2,gamma2,std2)
                 plt.close('all')
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'red', label = '1st component')#1/std/np.sqrt(2*np.pi)*
                 #plt.ylim(1,10*amp)
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
                 model = modeling.models.Gaussian1D()
                 fitted_model = fitter(model,count_fit[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)]-a_med, pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)])
-                amp =fitted_model.amplitude.value
-                gamma =fitted_model.mean.value+a_med
-                std =fitted_model.stddev.value
-                print(amp,gamma,std)
+                amp2 =fitted_model.amplitude.value
+                gamma2 =fitted_model.mean.value+a_med
+                std2 =fitted_model.stddev.value
+                print('2nd gaussian',amp2,gamma2,std2)
 
-                plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
+                plt.plot(count_fit,amp2*np.exp(-0.5*(count_fit-gamma2)**2/std2**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
                 plt.ylim(1,10**7)
                 plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
                 plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
