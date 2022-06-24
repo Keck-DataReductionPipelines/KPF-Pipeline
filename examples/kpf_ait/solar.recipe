@@ -171,7 +171,7 @@ if do_order_trace:
 if do_rv:
 	# do rv init
 	rv_star_dir = test_data_dir
-	rv_init = RadialVelocityInit(start_time="2021-03-01", bc_corr_path=bc_path, test_data_path=rv_star_dir)
+	rv_init = RadialVelocityInit(start_time="2022-03-01", bc_corr_path=bc_path, test_data_path=rv_star_dir)
 
 	# do rv, the order range and x range are defined by area_def
 	area_def = [[2, 33, 500, -500], [2, 30, 500, -500]]
@@ -194,10 +194,7 @@ if do_rv:
 		if not find_files(output_lev2_file):
 			lev1_data = kpf1_from_fits(input_lev1_file, data_type='KPF')
 
-			# temporay method to get obstime and exptime
-			# lev0_data = kpf0_from_fits(input_2d_dir + short_lev0, data_type='KPF')
-			# obstime = GetHeaderValue(lev0_data, ["DATE-OBS", "DATE", "DATE-MID"])
-			# exptime = GetHeaderValue(lev0_data, ["EXPTIME", "ELAPSED"]) 
+			# These get extracted from FITS header inside RadialVelocity
 			obstime = None
 			exptime = None
 
