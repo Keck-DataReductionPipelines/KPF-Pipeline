@@ -19,6 +19,17 @@ class QuicklookAlg:
         """
         self.config=config
         self.logger=logger
+        
+    def fixed_pattern_noise(counts,output_dir,exposure_name):
+        plt.hist(counts.ravel(),bins =100)
+        plt.text(300,200,'STD: %3.1f' % np.nanstd(counts))
+        #plt.plot([low_bound,low_bound],[0.5,1e6],color = 'red')
+        #plt.plot([upp_bound,upp_bound],[0.5,1e6],color = 'red')
+        plt.yscale('log')
+        plt.xlabel('Counts')
+        plt.ylabel('Number of Pixels')
+        plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_bias.pdf')
+        
 
     def qlp_procedures(self,file_name,output_dir):
 
@@ -88,7 +99,10 @@ class QuicklookAlg:
                 hdulist1 = fits.open(master_file)
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
-
+            
+            #looking at the fixed noise patterns
+            if version == 'Dark' or version == 'Bias':
+                fixed_pattern_noise(counts,output_dir,exposure_name)
 
             #2D image
             plt.figure(figsize=(5,4))
@@ -156,6 +170,7 @@ class QuicklookAlg:
             plt.legend()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
+
 
 
         #moving on the 1D data
