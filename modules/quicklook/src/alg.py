@@ -99,6 +99,7 @@ class QuicklookAlg:
                 a_med = np.nanmedian(a.ravel())
                 a_std = np.nanstd(a.ravel())
                 pdf, bin_edges = np.histogram(a.ravel(),bins=100, range = (a_med-10*a_std,a_med+10*a_std))
+                print('bin edges',bin_edges)
                 count_fit = (bin_edges[1:]+bin_edges[:-1])/2
                 from astropy import modeling
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
@@ -107,8 +108,8 @@ class QuicklookAlg:
                 amp =fitted_model.amplitude.value
                 gamma =fitted_model.mean.value+a_med
                 std =fitted_model.stddev.value
-                #print(amp,gamma,std)
-
+                print(amp,gamma,std)
+                plt.close('all')
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'red', label = '1st component')#1/std/np.sqrt(2*np.pi)*
                 plt.ylim(1,10*amp)
                 fitter = modeling.fitting.LevMarLSQFitter()#the gaussian fit of the ccf
@@ -117,7 +118,7 @@ class QuicklookAlg:
                 amp =fitted_model.amplitude.value
                 gamma =fitted_model.mean.value+a_med
                 std =fitted_model.stddev.value
-                #print(amp,gamma,std)
+                print(amp,gamma,std)
 
                 plt.plot(count_fit,amp*np.exp(-0.5*(count_fit-gamma)**2/std**2),':',color = 'green', label = '2nd component')#1/std/np.sqrt(2*np.pi)*
                 plt.ylim(1,10*amp)
@@ -125,7 +126,7 @@ class QuicklookAlg:
                 plt.xlabel('Counts')
                 plt.ylabel('Number of Pixels')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
-                plt.close()
+                plt.close('all')
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
