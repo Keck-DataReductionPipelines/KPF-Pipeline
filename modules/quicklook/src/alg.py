@@ -125,6 +125,8 @@ class QuicklookAlg:
                 plt.legend()
                 plt.xlabel('Counts')
                 plt.ylabel('Number of Pixels')
+                plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'Bias')
+                plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
             #2D image
