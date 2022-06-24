@@ -25,6 +25,7 @@ class QuicklookAlg:
 
     def qlp_procedures(self,file_name,output_dir):
         def fixed_pattern_noise(counts,output_dir,exposure_name):
+            plt.close('all')
             plt.hist(counts.ravel(),bins =100)
             plt.text(300,200,'STD: %3.1f' % np.nanstd(counts))
             #plt.plot([low_bound,low_bound],[0.5,1e6],color = 'red')
@@ -33,6 +34,7 @@ class QuicklookAlg:
             plt.xlabel('Counts')
             plt.ylabel('Number of Pixels')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_bias.pdf')
+            plt.close('all')
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
