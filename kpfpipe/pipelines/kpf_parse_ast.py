@@ -491,12 +491,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         self._unary_op_impl(node, "Not", lambda x : not x)
 
-    # BinOp and the binary operators
+    # BinOp, BoolOp and the binary operators
 
     def visit_BinOp(self, node):
         """
-        visit_BinOp() implements binary operations, i.e. "x + y", "x - y", "x * y", "x / y",
-        "x and y", "x or y".
+        visit_BinOp() implements binary operations, i.e. "x + y", "x - y", "x * y", "x / y".
         The actual work is done in the operator visitor method, e.g. visit_Add or visit_Mult.
 
         Implementor Note:
@@ -513,6 +512,27 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         # right before left because they're being pushed on a stack, so left comes off first
         self.visit(node.right)
         self.visit(node.left)
+        self.visit(node.op)
+
+    def visit_BoolOp(self, node):
+        """
+        visit_BoolOp() implements boolean binary operations, i.e. "x and y" and "x or y".
+        The actual work is done in the operator visitor method, e.g. visit_And.
+
+        Implementor Note:
+            This implementation doesn't support calls within boolOp expressions,
+            so we don't bother guarding for self.awaiting_call_return here, nor in
+            the binary operator methods.
+        """
+        if self._reset_visited_states:
+            for item in reversed(node.values):
+                self.visit(item)
+            self.visit(node.op)
+            return
+        self.pipeline.logger.debug("BoolOp:")
+        # list is reversed because items are being pushed on a stack, so they come off last first
+        for item in reversed(node.values):
+            self.visit(item)
         self.visit(node.op)
 
     # binary operators
