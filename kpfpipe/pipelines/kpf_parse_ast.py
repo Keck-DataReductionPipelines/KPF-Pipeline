@@ -495,7 +495,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def visit_BinOp(self, node):
         """
-        visit_BinOp() implements binary operations, i.e. "x + y", "x - y", "x * y", "x / y".
+        visit_BinOp() implements binary operations, i.e. "x + y", "x - y", "x * y", "x / y",
+        "x and y", "x or y".
         The actual work is done in the operator visitor method, e.g. visit_Add or visit_Mult.
 
         Implementor Note:
