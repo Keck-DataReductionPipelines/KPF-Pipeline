@@ -1791,6 +1791,12 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return output_data_height, output_data_width
 
+    @staticmethod
+    def compute_variance(flux_data):
+        var_ext = np.array(flux_data)
+        var_ext = np.sqrt(np.absolute(var_ext))
+        return var_ext
+
     def extract_spectrum(self,
                          order_set=None,
                          order_name=None,
