@@ -34,7 +34,7 @@ lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
 lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
 
 poly_degree = config.ARGUMENT.fitting_poly_degree
-ccd_idx= config.ARGUMENT.ccd_idx
+ccd_idx=config.ARGUMENT.ccd_idx
 
 start_order= config.ARGUMENT.start_order
 rect_method = config.ARGUMENT.rectification_method
@@ -69,7 +69,6 @@ if rect_method != 'norect':
 	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
 else:
 	output_clip = None
-
 orders_per_ccd = config.ARGUMENT.orders_per_ccd
 
 # rv I/O
@@ -88,60 +87,81 @@ do_rv = config.ARGUMENT.do_rv
 do_rv_reweighting = config.ARGUMENT.do_rv_reweighting
 do_rv_wavecopy = not do_sp_wavecopy
 
+input_flat_file = lev0_flat_pattern
+_, short_flat_file = split(input_flat_file)
+flat_stem, flat_ext = splitext(short_flat_file)
+
 if do_order_trace:
-	input_flat_file = lev0_flat_pattern
 	# for input_flat_file in find_files(lev0_flat_pattern):
-	if find_files(input_flat_file):
-		_, short_flat_file = split(input_flat_file)
-		flat_stem, flat_ext = splitext(short_flat_file)
+	if exists(input_flat_file):
 		flat_data = kpf0_from_fits(input_flat_file)
 
 		for idx in ccd_idx:
 			ccd = ccd_list[idx]
 			output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
-			if not find_files(output_lev0_trace_csv):
+			if not exists(output_lev0_trace_csv):
 				order_result_data = OrderTrace(flat_data, data_extension=ccd,
 					result_path=output_lev0_trace_csv, is_output_file=True,
 					data_col_range=data_col_range, data_row_range=data_row_range,
 					fitting_poly_degree=poly_degree)
 
-		output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-		lev0_flat_rect = None
+if do_spectral_extraction:
+	output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+	lev0_flat_rect = None
+	if exists(input_flat_file):
+		lev0_flat_rect = kpf0_from_fits(input_flat_file)
 
-		# do rectification
-		if not find_files(output_lev0_flat_rect):
-			# generate rectification result to the same level0 object
-			lev0_flat_rect = flat_data
+	trace_list = []
+	b_all_traces = True
+	for idx in ccd_idx:
+		trace_file = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
+		trace_list = trace_list + [trace_file]
+		b_all_traces = b_all_traces and exists(trace_file)
+
+	# generate rectification result to flat level0 to avoid repeating the same process in
+	# SpectralExtraction
+	if not exists(output_lev0_flat_rect):
+		b_lev0_rect = lev0_flat_rect != None and b_all_traces
+		if b_lev0_rect:
 			for idx in ccd_idx:
 				ccd = ccd_list[idx]
-				#clip_file = output_clip + flat_stem + '_' + ccd
+				# no clip file if rect_method is norect, or
+				# it is output_clip + flat_stem + '_' + ccd
 				clip_file = None
-				trace_file = output_order_trace + flat_stem + '_' + ccd + csv_ext
-				lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
-						orderlet_names=orderlet_names[idx],	
-						trace_file=trace_file, data_extension=ccd,
-						rectification_method=rect_method,
-						clip_file=clip_file,
-						origin=origin, poly_degree=poly_degree)
-			result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
-		else:
-			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
+				trace_file = trace_list[idx]
 
+				if b_lev0_rect:
+					lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
+							orderlet_names=orderlet_names[idx],
+							trace_file=trace_file, data_extension=ccd,
+							rectification_method=rect_method,
+							clip_file=clip_file,
+							origin=origin, poly_degree=poly_degree)
+				b_lev0_rect = b_lev0_rect and lev0_flat_rect != None
+			if b_lev0_rect:
+				result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
+			else:
+				lev0_flat_rect = None
+	else:
+		lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
 
-	if do_spectral_extraction:
-		for input_lev0_file in find_files(lev0_science_pattern):
-			_, short_lev0_file = split(input_lev0_file)
-			lev1_stem, lev1_ext = splitext(short_lev0_file)
-			output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
+	# do process if lev0 flat and trace exists
+	for input_lev0_file in find_files(lev0_science_pattern):
+		_, short_lev0_file = split(input_lev0_file)
+		lev1_stem, lev1_ext = splitext(short_lev0_file)
+		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 
-			if not find_files(output_lev1_file):
+		# produce level 1 per trace file and level 0 or rectified level 0
+		if not exists(output_lev1_file):
+			b_level1 = lev0_flat_rect != None and b_all_traces
+			if b_level1:
 				lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 				op_data = None
-	
+
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
 					order_name = orderlet_names[idx]
-					trace_file = output_order_trace + flat_stem + '_' + ccd + csv_ext
+					trace_file = trace_list[idx]
 	
 					# clip_file = output_clip + flat_stem + '_' + ccd
 					clip_file = None
@@ -151,11 +171,11 @@ if do_order_trace:
 					if do_sp_wavecopy:
 						if wave_fits[idx] != None:
 							wave_file = output_dir + wave_fits[idx] 
-							if find_files(wave_file):
+							if exists(wave_file):
 								wavecal_data = kpf1_from_fits(wave_file, data_type=data_type)
 								wave_from_lev1 = True
-
-					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
+					if b_level1:
+						op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
 							orderlet_names=order_name,
 							orderlets_on_image=order_name,
 							total_order_per_ccd=orders_per_ccd,
@@ -164,9 +184,9 @@ if do_order_trace:
 							rectification_method=rect_method, extraction_method=extract_method,
 							clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
 							wavecal_fits=wavecal_data, to_set_wavelength_cal= wave_from_lev1)
-				result = to_fits(op_data, output_lev1_file)
-			else:
-				op_data = kpf1_from_fits(output_lev1_file, data_type=data_type)
+						b_level1 = b_level1 and op_data != None
+				if b_level1 and op_data != None:
+					result = to_fits(op_data, output_lev1_file)
 
 if do_rv:
 	# do rv init
@@ -191,7 +211,7 @@ if do_rv:
 		short_lev2 = str_replace(short_lev1, lev1_stem_suffix, lev2_stem_suffix)
 		output_lev2_file = output_rv + short_lev2
 			
-		if not find_files(output_lev2_file):
+		if not exists(output_lev2_file):
 			lev1_data = kpf1_from_fits(input_lev1_file, data_type='KPF')
 
 			# temporay method to get obstime and exptime
@@ -207,7 +227,7 @@ if do_rv:
 				if do_rv_wavecopy:
 					if wave_fits[idx] != None:
 						wave_file = output_dir + wave_fits[idx]
-						if find_files(wave_file):
+						if exists(wave_file):
 							wavecal_data = kpf1_from_fits(wave_file, data_type=data_type)
 							from_ext = wave_from_ext[idx]
 
@@ -241,7 +261,7 @@ if do_rv:
 			ccf_ratio_file = output_rv_rw  + 'ccf_ratio_table_'+ rect_method + '_' + extract_method + '_' + reweighting_method+ '_' + ccf_ext_names[idx] + csv_ext
 			start_seg = area_def[idx][0]
 			t_segment = area_def[idx][1] - start_seg + 1
-			if not find_files(ccf_ratio_file):
+			if not exists(ccf_ratio_file):
 				ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, t_segment, ccf_hdu_name=ccf_ext_names[idx],
 								ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg)
 			else:
