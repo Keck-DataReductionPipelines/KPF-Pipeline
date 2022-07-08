@@ -94,7 +94,6 @@ class QuicklookAlg:
                 master_flatten_counts = np.ravel(master_counts)
 
             #looking at the fixed noise patterns
-            '''
             if version =='Bias':
                 a = np.copy(counts)
                 a_med = np.nanmedian(a.ravel())
@@ -132,7 +131,6 @@ class QuicklookAlg:
                 plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
-            '''
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
