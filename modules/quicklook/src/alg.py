@@ -42,11 +42,13 @@ class QuicklookAlg:
         exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         date = exposure_name[3:11]
         print('working on',date,exposure_name)
+        print(kpf0_file.header['PRIMARY'])
         L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
 
         #print(hdulist.info())
         ccd_color = self.config['2D']['CCD_COLOR']#['GREEN_CCD','RED_CCD']
+        print(ccd_color)
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
             return
