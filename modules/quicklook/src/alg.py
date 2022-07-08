@@ -23,7 +23,7 @@ class QuicklookAlg:
 
 
 
-    def qlp_procedures(self,file_name,output_dir):
+    def qlp_procedures(self,kpf0_file,file_name,output_dir):
 
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
@@ -36,6 +36,7 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
+        print('working on',kpf0_file)
         print('working on',file_name)
 
         exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
