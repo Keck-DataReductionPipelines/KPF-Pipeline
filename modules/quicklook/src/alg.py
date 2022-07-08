@@ -41,7 +41,7 @@ class QuicklookAlg:
         #file_name =
 
         #print('working on',file_name)
-        '''
+
         exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         date = exposure_name[3:11]
         L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
@@ -707,4 +707,4 @@ class QuicklookAlg:
 
         f.write(message)
         f.close()
-        '''
+        
