@@ -23,7 +23,7 @@ class QuicklookAlg:
 
 
 
-    def qlp_procedures(self,file_name,output_dir):
+    def qlp_procedures(self,input_file0,output_dir):
 
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
@@ -36,8 +36,11 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-        print('working on',file_name)
+        print(input_file0)
+        #file_name =
 
+        #print('working on',file_name)
+        '''
         exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         date = exposure_name[3:11]
         L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
@@ -94,6 +97,7 @@ class QuicklookAlg:
                 master_flatten_counts = np.ravel(master_counts)
 
             #looking at the fixed noise patterns
+
             if version =='Bias':
                 a = np.copy(counts)
                 a_med = np.nanmedian(a.ravel())
@@ -131,6 +135,7 @@ class QuicklookAlg:
                 plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
+
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
@@ -701,3 +706,4 @@ class QuicklookAlg:
 
         f.write(message)
         f.close()
+        '''
