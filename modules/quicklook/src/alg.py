@@ -24,7 +24,7 @@ class QuicklookAlg:
 
 
 
-    def qlp_procedures(self,kpf0_file,file_name,output_dir):
+    def qlp_procedures(self,kpf0_file,output_dir):
 
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
