@@ -46,7 +46,8 @@ class QuicklookAlg:
 
 
 
-        read ccd directly
+        #read ccd directly
+        print(self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits')
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
 
