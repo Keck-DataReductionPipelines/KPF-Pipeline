@@ -45,8 +45,8 @@ class QuicklookAlg:
         L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
 
-        print(hdulist.info())
-        ccd_color = ['GREEN_CCD','RED_CCD']
+        #print(hdulist.info())
+        ccd_color = self.config['2D']['CCD_COLOR']#['GREEN_CCD','RED_CCD']
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
             return
