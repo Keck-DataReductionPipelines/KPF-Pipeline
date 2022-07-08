@@ -49,7 +49,7 @@ class QuicklookAlg:
 
         #print(hdulist.info())
         ccd_color = self.config['2D']['CCD_COLOR']#['GREEN_CCD','RED_CCD']
-        print(ccd_color,type(ccd_color))
+        print(ccd_color,type(ccd_color),lev0_ffi_exts)
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
             return
