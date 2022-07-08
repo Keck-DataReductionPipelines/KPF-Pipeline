@@ -47,7 +47,6 @@ class QuicklookAlg:
 
 
         #read ccd directly
-        print(self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits')
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
 
@@ -55,7 +54,6 @@ class QuicklookAlg:
         ccd_color=[]
         ccd_list = self.config.items( "CCD_LIST")
         for key, path in ccd_list:
-            print(key,path)
             ccd_color.append(path)
 
 
@@ -286,8 +284,19 @@ class QuicklookAlg:
             hdulist = fits.open(ccf_file)
 
 
-            ccf_color = ['GREEN_CCF','RED_CCF']
-            ccf_rv = ['CCD1RV','CCD2RV']
+
+            ccf_color=[]
+            ccf_list = self.config.items( "CCF_LIST")
+            for key, path in ccf_list:
+                ccf_color.append(path)
+            #ccf_rv = ['GREEN_CCF','RED_CCF']
+
+            ccf_rv=[]
+            ccf_rv_list = self.config.items( "CCF_RV_LIST")
+            for key, path in ccf_rv_list:
+                ccf_rv.append(path)
+            #ccf_rv = ['CCD1RV','CCD2RV']
+
             color_grid = ['Green','Red']
 
             plt.rcParams.update({'font.size': 8})
