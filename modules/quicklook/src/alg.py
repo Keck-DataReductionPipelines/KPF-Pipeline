@@ -43,18 +43,21 @@ class QuicklookAlg:
         exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         date = exposure_name[3:11]
         print('working on',date,exposure_name)
-        print(kpf0_file.header['PRIMARY'])
-        L0_data = '/data/2D/'+date+'/'+exposure_name+'.fits'
+
+
+
+        read ccd directly
+        L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
 
-        #print(hdulist.info())
+        #get ccd names
         ccd_color=[]
-        ccd_list = self.config.items( "CCD_LIST" )
+        ccd_list = self.config.items( "CCD_LIST")
         for key, path in ccd_list:
             print(key,path)
             ccd_color.append(path)
-        #ccd_color = self.config['2D']['CCD_COLOR']#['GREEN_CCD','RED_CCD']
-        print(ccd_color,type(ccd_color))
+
+
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
             return
@@ -213,7 +216,7 @@ class QuicklookAlg:
 
         #moving on the 1D data
 
-        L1_data = '/data/L1/'+date+'/'+exposure_name+'_L1.fits'
+        L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         print('working on', L1_data)
         hdulist = fits.open(L1_data)
 
@@ -275,7 +278,7 @@ class QuicklookAlg:
 
         #now onto the plotting of CCF
         #date = exposure_name[3:11]
-        ccf_file = '/data/L2/'+date+'/'+exposure_name+'_L2.fits'
+        ccf_file = self.config['IO']['input_prefix_l2']+date+'/'+exposure_name+'_L2.fits'
         print(date,ccf_file)
         if os.path.exists(ccf_file):
             print('Working on L2 file')
