@@ -49,7 +49,7 @@ class QuicklookAlg:
         #read ccd directly
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
-        print(L0_data.header)
+        print(L0_data.info())
 
         #get ccd names
         ccd_color=[]
