@@ -51,7 +51,8 @@ class QuicklookAlg:
         ccd_color=[]
         ccd_list = self.config.items( "CCD_LIST" )
         for key, path in ccd_list:
-            ccd_color.append(ccd_list[key][path])
+            print(key,path)
+            ccd_color.append('1')
         #ccd_color = self.config['2D']['CCD_COLOR']#['GREEN_CCD','RED_CCD']
         print(ccd_color,type(ccd_color))
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
