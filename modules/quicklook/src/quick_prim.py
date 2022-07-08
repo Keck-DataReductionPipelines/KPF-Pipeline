@@ -18,7 +18,7 @@ from modules.quicklook.src.alg import QuicklookAlg
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/quicklook/configs/default.cfg'
 
-class Quicklook(KPF0_Primitive): #ask:should this be kpf0, or should it be kpf1/kpf2_primitive?
+class Quicklook(KPF0_Primitive): 
 
     def __init__(self,
                     action:Action,
