@@ -1,7 +1,7 @@
 from modules.quicklook.src.quick_prim import Quicklook
 
 path_to_twod = config.ARGUMENT.path_to_twod
-lev0_files= path_to_twod + 'KP.20220517.22981.24' + '.fits'
+lev0_files= path_to_twod + 'KP.20220518.68630.94' + '.fits'
 
 
 
