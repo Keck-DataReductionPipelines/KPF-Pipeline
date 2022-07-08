@@ -49,7 +49,7 @@ class QuicklookAlg:
 
         #print(hdulist.info())
         ccd_color=[]
-        ccd_list = config.items( "CCD_LIST" )
+        ccd_list = self.config.items( "CCD_LIST" )
         for key, path in ccd_list:
             ccd_color.append(ccd_list[key][path])
         #ccd_color = self.config['2D']['CCD_COLOR']#['GREEN_CCD','RED_CCD']
