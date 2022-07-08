@@ -36,7 +36,7 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-        print(input_file0)
+        print('test here',input_file0)
         #file_name =
 
         #print('working on',file_name)
