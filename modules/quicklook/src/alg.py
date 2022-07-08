@@ -36,7 +36,7 @@ class QuicklookAlg:
             os.makedirs(output_dir)
             os.makedirs(output_dir+'/fig')
 
-        print('working on',kpf0_file)
+        print('working on',kpf0_file.header['PRIMARY'])
         print('working on',file_name)
 
         exposure_name = file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
