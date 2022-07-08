@@ -146,12 +146,19 @@ def main():
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits")) + \
                     sorted(glob(args.watch + "20*/*.fits"))
+        framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
 
-        for fname in infiles:
+        frameworks = []
+        for fname in infiles[:1]:
+            fm = Framework(pipe, framework_config)
+            fm.pipeline.start(pipe_config)
+            frameworks.append(fm)
+            fm.start_action_loop()
+
             arg = arg
             arg.date_dir = datestr
             arg.file_path = fname
-            framework.append_event('next_file', arg)
+            fm.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
@@ -163,7 +170,6 @@ def main():
             time.sleep(300)
 
     else:
-        print("here")
         framework.append_event('start_recipe', arg)
         framework.append_event('exit', arg)
         framework.start()
