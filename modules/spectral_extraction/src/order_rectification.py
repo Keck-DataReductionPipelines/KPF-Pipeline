@@ -152,6 +152,12 @@ class OrderRectification(KPF0_Primitive):
         spec_header = self.input_spectrum.header[self.data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, self.data_ext)) else None
 
+        flat_data = self.input_flat[self.data_ext] \
+            if self.input_flat is not None and hasattr(self.input_flat, self.data_ext) else None
+        flat_header = self.input_flat.header[self.data_ext] \
+            if (self.input_flat is not None and hasattr(self.input_flat, self.data_ext)) else None
+
+
         self.order_trace_data = None
         if order_trace_file:
             self.order_trace_data = pd.read_csv(order_trace_file, header=0, index_col=0)
@@ -162,8 +168,8 @@ class OrderRectification(KPF0_Primitive):
             self.order_trace_data = self.input_flat[order_trace_ext]
             order_trace_header = self.input_flat.header[order_trace_ext]
 
-        self.alg = SpectralExtractionAlg(self.input_flat[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
-                                        self.input_flat.header[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
+        self.alg = SpectralExtractionAlg(flat_data,
+                                        flat_header,
                                         spec_data,
                                         spec_header,
                                         self.order_trace_data,
@@ -216,6 +222,11 @@ class OrderRectification(KPF0_Primitive):
             if SpectralExtractionAlg.RECTIFYKEY in self.input_flat.header[self.data_ext]:
                 self.logger.info("OrderRectification: the order of the flat is rectified already")
                 return Arguments(self.input_flat)
+        # no spectrum data case
+        if self.input_flat is not None and self.input_flat[self.data_ext].size == 0:
+            if self.logger:
+                self.logger.info("OrderRectification: no spectrum data to rectify")
+            return Arguments(None)
 
         if self.logger:
             self.logger.info("OrderRectification: rectifying order...")
