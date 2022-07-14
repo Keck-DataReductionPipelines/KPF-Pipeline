@@ -263,8 +263,12 @@ class SpectralExtraction(KPF0_Primitive):
             all_o_sets.append(o_set)
             first_trace_at.append(f_idx)
 
+        good_result = True
         # order_to_process = min([len(a_set) for a_set in all_o_sets])
+
         for idx, order_name in enumerate(all_order_names):
+            if not good_result:       # process stops once an empty result is made
+                continue
             o_set = all_o_sets[idx]
             # orderlet_index = self.alg.get_orderlet_index(order_name)
             first_index = first_trace_at[idx]
@@ -295,20 +299,23 @@ class SpectralExtraction(KPF0_Primitive):
 
                 data_df = opt_ext_result['spectral_extraction_result']
 
-            self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
+            good_result = good_result and data_df is not None
+            if good_result:
+                self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
                                                             order_name, self.output_level1)
-            self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
+                self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
 
-        if self.output_level1 is not None:
+        if good_result and self.output_level1 is not None:
             self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,
                                                  f'orderlets={" ".join(all_order_names)}', 'PASS')
-        if self.logger:
-            self.logger.info("SpectralExtraction: Receipt written")
 
-        if self.logger:
+        if not good_result and self.logger:
+            self.logger.info("SpectralExtraction: no spectrum extracted")
+        elif good_result and self.logger:
+            self.logger.info("SpectralExtraction: Receipt written")
             self.logger.info("SpectralExtraction: Done for orders " + " ".join(all_order_names) + "!")
 
-        return Arguments(self.output_level1)
+        return Arguments(self.output_level1) if good_result else Arguments(None)
 
     def get_order_set(self, order_name, s_order, orderlet_index):
         o_set = self.alg.get_order_set(order_name)
@@ -325,6 +332,10 @@ class SpectralExtraction(KPF0_Primitive):
             return o_set
 
     def construct_level1_data(self, op_result, ins, level1_sample: KPF1, order_name: str, output_level1:KPF1):
+        FLUX_EXT = 0
+        VAR_EXT = 1
+        WAVE_EXT = 2
+
         update_primary_header = False if level1_sample is None or ins != 'NEID' else True
         if output_level1 is not None:
             kpf1_obj = output_level1
@@ -345,32 +356,37 @@ class SpectralExtraction(KPF0_Primitive):
                             order_name.replace('FLUX', 'WAVE')] if 'FLUX' in order_name else [order_name]
             return ext_name
 
+        if total_order <= 0:
+            return kpf1_obj
         # if no data in op_result, not build data extension and the associated header
 
-        if total_order > 0:
-            ext_names = get_data_extensions_on(order_name, ins)
-            data_ext_name = ext_names[0]
+        ext_names = get_data_extensions_on(order_name, ins)
+        data_ext_name = ext_names[FLUX_EXT]
 
-            # data = op_result.values
-            kpf1_obj[data_ext_name] = op_result.values
+        # data = op_result.values
+        kpf1_obj[data_ext_name] = op_result.values
 
-            for att in op_result.attrs:
-                kpf1_obj.header[data_ext_name][att] = op_result.attrs[att]
+        for att in op_result.attrs:
+            kpf1_obj.header[data_ext_name][att] = op_result.attrs[att]
 
-            if len(ext_names) > 1:   # init var and wave extension if there is
-                for ext_idx in range(1, 3):
-                    if not hasattr(kpf1_obj, ext_names[ext_idx]) or \
-                            np.size(getattr(kpf1_obj, ext_names[ext_idx])) == 0:  # no ext name yet or zero size
-                        zero_data = np.zeros((total_order, width))
-                        kpf1_obj[ext_names[ext_idx]] = zero_data
+        if len(ext_names) > VAR_EXT:   # init var and wave extension if there is
+            # get data for variance extension
+            var_ext_data = self.alg.compute_variance(op_result.values)
+            kpf1_obj[ext_names[VAR_EXT]] = var_ext_data
 
-            # for neid data with level 1 sample:
+        if len(ext_names) > WAVE_EXT:
+            # no wave ext yet or zero size
+            if not hasattr(kpf1_obj, ext_names[WAVE_EXT]) or np.size(getattr(kpf1_obj, ext_names[WAVE_EXT])) == 0:
+                kpf1_obj[ext_names[WAVE_EXT]] = np.zeros((total_order, width))
+
+        # for neid data with level 1 sample:
+        if ins == "NEID":
             if update_primary_header and level1_sample is not None and hasattr(kpf1_obj, data_ext_name):
                 sample_primary_header = level1_sample.header['PRIMARY']
             else:
                 sample_primary_header = self.spec_header
 
-            if sample_primary_header is not None and ins == 'NEID':
+            if sample_primary_header is not None:
                 # for h_key in sample_primary_header:
                 for h_key in ['SSBZ100', 'SSBJD100', 'CAL-OBJ']:
                     if h_key in sample_primary_header:
