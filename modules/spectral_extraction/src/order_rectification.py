@@ -44,7 +44,7 @@
                 - `rectification_method (int)`: Rectification method code as defined in `SpectralExtractionAlg`.
                 - `extraction_method (str)`: Extraction method code as defined in `SpectralExtractionAlg`.
                 - `config_path (str)`: Path of config file for spectral extraction.
-                - `config (configparser.ConfigParser)`: Config context.
+                - `config (configparser.ConfigParser)`: Config context per the file defined by `config_path`.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
                 - `clip_file (str)`: Prefix of clip file path.
                 - `alg (modules.order_trace.src.alg.SpectralExtractionAlg)`: Instance of `SpectralExtractionAlg` which
@@ -152,6 +152,12 @@ class OrderRectification(KPF0_Primitive):
         spec_header = self.input_spectrum.header[self.data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, self.data_ext)) else None
 
+        flat_data = self.input_flat[self.data_ext] \
+            if self.input_flat is not None and hasattr(self.input_flat, self.data_ext) else None
+        flat_header = self.input_flat.header[self.data_ext] \
+            if (self.input_flat is not None and hasattr(self.input_flat, self.data_ext)) else None
+
+
         self.order_trace_data = None
         if order_trace_file:
             self.order_trace_data = pd.read_csv(order_trace_file, header=0, index_col=0)
@@ -162,8 +168,8 @@ class OrderRectification(KPF0_Primitive):
             self.order_trace_data = self.input_flat[order_trace_ext]
             order_trace_header = self.input_flat.header[order_trace_ext]
 
-        self.alg = SpectralExtractionAlg(self.input_flat[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
-                                        self.input_flat.header[self.data_ext] if hasattr(self.input_flat, self.data_ext) else None,
+        self.alg = SpectralExtractionAlg(flat_data,
+                                        flat_header,
                                         spec_data,
                                         spec_header,
                                         self.order_trace_data,
@@ -216,10 +222,15 @@ class OrderRectification(KPF0_Primitive):
             if SpectralExtractionAlg.RECTIFYKEY in self.input_flat.header[self.data_ext]:
                 self.logger.info("OrderRectification: the order of the flat is rectified already")
                 return Arguments(self.input_flat)
+        # no spectrum data case
+        if self.input_flat is not None and self.input_flat[self.data_ext].size == 0:
+            if self.logger:
+                self.logger.info("OrderRectification: no spectrum data to rectify")
+            return Arguments(None)
 
         if self.logger:
             self.logger.info("OrderRectification: rectifying order...")
-
+        '''
         all_order_names = self.orderlet_names if type(self.orderlet_names) is list else [self.orderlet_names]
         all_orders = []
         all_o_sets = []
@@ -236,6 +247,13 @@ class OrderRectification(KPF0_Primitive):
             all_orders.extend(a_set[0:order_to_process])
 
         all_orders = np.sort(all_orders)
+        '''
+        total_orders = np.shape(self.order_trace_data)[0]
+        all_orders = np.arange(0, total_orders, dtype=int)
+        if self.logger:
+            self.logger.info("OrderRectification: do " +
+                             SpectralExtractionAlg.rectifying_method[self.rectification_method] +
+                             " rectification on " + str(all_orders.size) + " orders")
 
         opt_ext_result = self.alg.extract_spectrum(order_set=all_orders)
 
@@ -264,13 +282,6 @@ class OrderRectification(KPF0_Primitive):
         for att in data_result.attrs:
             lev0_obj.header[self.data_ext][att] = data_result.attrs[att]
 
-    def get_order_set(self, o_set, s_order):
-        e_order = min(self.max_result_order, len(o_set)) \
-            if (self.max_result_order is not None and self.max_result_order > 0) else o_set.size
-
-        o_set_ary = o_set[0:e_order] + s_order
-
-        return o_set_ary[np.where(o_set_ary < self.alg.get_spectrum_order())]
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):
         if key in args_keys:

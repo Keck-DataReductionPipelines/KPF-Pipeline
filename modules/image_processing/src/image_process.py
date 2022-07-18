@@ -15,12 +15,12 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.bias_subtraction.src.alg import BiasSubtractionAlg
+from modules.image_processing.src.alg import ImageProcessingAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/bias_subtraction/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/image_processing/configs/default.cfg'
 
-class BiasSubtract(KPF0_Primitive):
+class ImageProcessing(KPF0_Primitive):
     """This module defines class `BiasSubtraction,` which inherits from `KPF0_Primitive` and provides methods
     to perform the event `bias subtraction` in the recipe.
 
@@ -65,7 +65,8 @@ class BiasSubtract(KPF0_Primitive):
 
         #Input arguments
         self.raw_file=self.action.args[0]
-        self.masterbias=self.action.args[1]
+        self.correcting_file=self.action.args[1]
+        #self.masterbias=self.action.args[1]
         self.ffi_exts=self.action.args[2]
         self.data_type=self.action.args[3]
         self.quicklook=self.action.args[4]
@@ -73,7 +74,7 @@ class BiasSubtract(KPF0_Primitive):
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            self.config_path = context.config_path['bias_subtraction']
+            self.config_path = context.config_path['image_processing']
         except:
             self.config_path = DEFAULT_CFG_PATH
 
@@ -85,9 +86,9 @@ class BiasSubtract(KPF0_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
-        #Bias subtraction algorithm setup
+        #Image processing algorithm setup
 
-        self.alg=BiasSubtractionAlg(self.raw_file,self.ffi_exts,self.quicklook,self.data_type,config=self.config,logger=self.logger)
+        self.alg=ImageProcessingAlg(self.raw_file,self.ffi_exts,self.quicklook,self.data_type,config=self.config,logger=self.logger)
 
         #Preconditions
         
@@ -96,21 +97,26 @@ class BiasSubtract(KPF0_Primitive):
         #Perform - primitive's action
     def _perform(self) -> None:
         """Primitive action - 
-        Performs bias subtraction by calling method 'bias_subtraction' from BiasSubtraction.
-        Returns the bias-corrected raw data, L0 object.
+        Performs image processing by calling method 'image_processing' from ImageProcess.
+        Returns the bias/dark/background corrected raw data, L0 object.
 
         Returns:
-            Arguments object(np.ndarray): Level 0, bias-corrected, raw observation data
+            Arguments object(np.ndarray): Level 0 observation data
         """
         #until master file part of data model is fixed
-        masterbias = fits.open(self.masterbias)
-        if self.logger:
-            self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
-        bias_subbed = self.alg.bias_subtraction(masterbias)
+        correcting_file = KPF0.from_fits(self.correcting_file)
+        obs_type = correcting_file.header['PRIMARY']['IMTYPE']
+        print(obs_type)
+        
+        if obs_type == 'Bias':
+            if self.logger:
+                self.logger.info(f'Bias Subtraction: subtracting master bias from raw FFI(s)')
+            bias_subbed = self.alg.bias_subtraction(correcting_file)
+            print(bias_subbed)
+        if obs_type == 'Dark':
+            if self.logger:
+                self.logger.info(f'Dark Subtraction: subtracting dark frame from raw FFI(s)')
+            dark_subbed = self.alg.dark_subtraction(correcting_file)
+        
         return Arguments(self.alg.get())
         
-        # for frame_no in range(len(self.ffi_exts)):
-        #     if self.logger:
-        #         self.logger.info(f"Bias Subtraction: subtracting master bias from raw full frame image for {frame_no+1} of {len(self.ffi_exts)}...")
-        #     bias_subbed = self.alg.bias_subtraction(self.ffi, self.masterbias)
-        #     rawdata[self.ffi_exts[frame_no]].data = bias_subbed

@@ -5,7 +5,7 @@ examples/V1/recipe_results/
 *~
 *.DS_Store
 .idea/
-logs/
+#logs/
 receipts/
 __pycache__/
 *.py[cod]

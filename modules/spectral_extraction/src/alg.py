@@ -1,13 +1,13 @@
 import numpy as np
 import math
-import time
 import pandas as pd
 from astropy.io import fits
 import re
 from modules.Utils.config_parser import ConfigHandler
-#from memory_profiler import profile
+from modules.Utils.alg_base import ModuleAlgBase
 import os
 import json
+from astropy.time import Time
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger
@@ -15,7 +15,7 @@ import json
 # from kpfpipe.models.level0 import KPF0
 
 
-class SpectralExtractionAlg:
+class SpectralExtractionAlg(ModuleAlgBase):
     """
     This module defines class 'SpectralExtractionAlg' and methods to perform the optimal or summation
     extraction which reduces 2D spectrum to 1D spectrum for each order, or perform the rectification on either 2D
@@ -77,6 +77,7 @@ class SpectralExtractionAlg:
                   (including VERTICAL, NORMAL or NoRECT rectification method) order trace.
         clip_file (str, optional): Prefix of clip file path. Defaults to None. Clip file is used to store the
             polygon clip data for the rectification method which is not NoRECT.
+        logger_name (str, optional): Name of the logger defined for the SpectralExtractionAlg instance.
 
     Note:
         Any rectification method combined with extraction method `NOEXTRACT` means only rectification step and no
@@ -84,32 +85,32 @@ class SpectralExtractionAlg:
         original curved ones.
 
     Attributes:
-        logger (logging.Logger): Instance of logging.Logger.
         flat_flux (numpy.ndarray): Numpy array storing 2d flat data.
+        flat_header (fits.header.Header): fit header of flat data.
         spectrum_flux (numpy.ndarray): Numpy array storing 2d spectrum data for spectral extraction. None is allowed.
         spectrum_header (fits.header.Header): Header of the fits for spectrum data. None is allowed.
+        extraction_method (int): Extraction method.
+        rectification_method (int): Rectification method.
         poly_order (int): Polynomial order for the approximation made on the order trace.
         origin (list): The origin of the image from the original raw image.
         instrument (str): Instrument of the observation.
-        config_param (ConfigHandler): Related to 'PARAM' section or the section associated with
-            the instrument if it is defined in the config file.
+        config_ins (ConfigHandler): Instance of ConfigHandler related to section for the instrument or 'PARAM' section.
         order_trace (numpy.ndarrary): Order trace results from order trace module including polynomial coefficients,
             top/bottom edges and  area coverage of the order trace.
         total_order (int): Total order in order trace object.
         order_coeffs (numpy.ndarray): Polynomial coefficients for order trace from higher to lower order.
         order_edges (numpy.ndarray): Bottom and top edges along order trace.
         order_xrange (numpy.ndarray): Left and right boundary of order trace.
-        debug_output (str): File path for the file that the debug information is printed to. The printing goes to
-            standard output if it is an empty string or no printing is made if it is None.
-        is_time_profile (bool): Print out the time status while running.
-        is_debug (bool): Print out the debug information while running.
+
+        orderlet_names (list): A list containing orderlet names.
+        total_image_orderlets (int): Total orderlet contained in the image.
         extracted_flux_pixels (numpy.ndarray): Container to hold the rectified data.
         is_raw_flat (bool): If the flat data is raw image or rectified image.
         is_raw_spectrum (bool): If the spectrum data is raw image or rectified image.
         clip_file_prefix (str): Prefix of the clip files.
         output_clip_area (bool): Flag to indicate if outputting the polygon clipping information to clip file or not.
         output_area_info (list): Container to store the dimension of the order at rectification step. The data of
-            each order has to be added into the list in the ascending order of oorder's vertical position.
+            each order has to be added into the list in the ascending order of trace's vertical position.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -139,15 +140,17 @@ class SpectralExtractionAlg:
     FDATA = 1
     RECTIFYKEY = 'RECTIFYM'
     RAWSIZEKEY = 'RAWSIZE'
+    name = 'SpectralExtraction'
 
     rectifying_method = ['normal', 'vertical', 'norect']
-    extracting_method = ['optimal', 'sum', 'rectonly']
+    extracting_method = ['optimal', 'summ', 'rectonly']
 
     # @profile
     def __init__(self, flat_data, flat_header, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None,
-                 rectification_method=NoRECT, extraction_method=OPTIMAL,
-                 clip_file=None):
+                 rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
+                 total_order_per_ccd=None, orderlet_names=None, total_image_orderlets=None,
+                 clip_file=None, logger_name=None):
 
         if not isinstance(flat_data, np.ndarray):
             raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
@@ -169,7 +172,8 @@ class SpectralExtractionAlg:
         if extraction_method < SpectralExtractionAlg.OPTIMAL or rectification_method > SpectralExtractionAlg.NOEXTRACT:
             raise TypeError('illegal extraction method code, cannot construct object from SpectralExtractionAlg')
 
-        self.logger = logger
+        ModuleAlgBase.__init__(self, logger_name or self.name, config, logger)
+
         self.flat_flux = flat_data
         self.flat_header = flat_header
         self.spectrum_flux = spectrum_data   # None is allowed
@@ -184,11 +188,11 @@ class SpectralExtractionAlg:
         self.origin = [order_trace_header['STARTCOL'] if 'STARTCOL' in order_trace_header else 0,
                        order_trace_header['STARTROW'] if 'STARTROW' in order_trace_header else 0]
 
-        config_h = ConfigHandler(config, 'PARAM')
-        self.instrument = config_h.get_config_value('instrument', '')
-        ins = self.instrument.upper()
+        ins = self.config_param.get_config_value('instrument', '') if self.config_param is not None else ''
+        self.instrument = ins.upper()
         # section of instrument or 'PARAM'
-        self.config_param = ConfigHandler(config, ins, config_h)
+        self.config_ins = ConfigHandler(config, ins, self.config_param)
+
         self.total_order = np.shape(order_trace_data)[0]
         if isinstance(order_trace_data, pd.DataFrame):
             self.order_trace = order_trace_data.values
@@ -198,11 +202,10 @@ class SpectralExtractionAlg:
         self.order_edges = None
         self.order_xrange = None
 
-        self.is_debug = True if self.logger else False
-        self.debug_output = None
-        self.is_time_profile = False
-        self.total_image_orderlettes = None
-        self.orderlette_names = None
+        self.orderlet_names = orderlet_names
+        self.total_image_orderlets = len(orderlet_names) \
+            if ((isinstance(orderlet_names, list)) and (len(orderlet_names) > 0)) else None
+        self.total_order_per_ccd = total_order_per_ccd
         self.extracted_flux_pixels = None
         self.is_raw_flat = self.RECTIFYKEY not in self.flat_header
         self.is_raw_spectrum = self.RECTIFYKEY not in spectrum_header if spectrum_header is not None else True
@@ -211,11 +214,12 @@ class SpectralExtractionAlg:
         self.output_area_info = list()
         self.poly_clip_dict = dict()
         self.poly_clip_update = False
+        self.ccd_index = ccd_index
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
 
-        Search the value of the specified property fom config section. The default value is returned if not found.
+        Search the value of the specified property from instrument section. The default value is returned if not found.
 
         Args:
             prop (str): Name of the parameter to be searched.
@@ -225,7 +229,7 @@ class SpectralExtractionAlg:
             Union[int, float, str]: Value for the searched parameter.
 
         """
-        return self.config_param.get_config_value(prop, default)
+        return self.config_ins.get_config_value(prop, default)
 
     def get_order_edges(self, idx=0):
         """ Get the top and bottom edges of the specified order.
@@ -309,76 +313,6 @@ class SpectralExtractionAlg:
         """
         return self.instrument
 
-    def enable_debug_print(self, to_print=True):
-        """ Enable or disable debug printing.
-
-        Args:
-            to_print (bool, optional): Print out the debug information of the execution. Defaults to False.
-
-        Returns:
-            None.
-
-        """
-        self.is_debug = to_print or bool(self.logger)
-
-    def enable_time_profile(self, is_time=False):
-        """ Enable or disable time profiling printing.
-
-        Args:
-            is_time (bool, optional): Print out the time of the execution. Defaults to False.
-
-        Returns:
-            None.
-
-        """
-        self.is_time_profile = is_time
-
-    def d_print(self, *args, end='\n', info=False):
-        """ Print out running status to logger or debug information to a file.
-
-        Args:
-            *args: Variable length argument list to print.
-            end (str, optional): Specify what to print at the end.
-            info (bool): Print out for information level, not for debug level.
-
-        Returns:
-            This function handles the print-out to the logger defined in the config file or other file as specified in
-            :func:`~alg.SpectralExtractionAlg.add_file_logger()`.
-
-        """
-        if self.is_debug:
-            out_str = ' '.join([str(item) for item in args])
-            if self.logger:
-                if info:
-                    self.logger.info(out_str)
-                else:
-                    self.logger.debug(out_str)
-            if self.debug_output is not None and not info:
-                if self.debug_output:
-                    with open(self.debug_output, 'a') as f:
-                        f.write(' '.join([str(item) for item in args]) + end)
-                        f.close()
-                else:
-                    print(out_str, end=end)
-
-    def t_print(self, *args):
-        """ Print out message with time stamp.
-
-        Args:
-            *args: Variable length argument list to print including the time stamp.
-
-        Returns:
-            This function handles the time stamp related print-out to the logger defined in the config file.
-        """
-        """
-        if self.is_time_profile:
-            out_str = ' '.join([str(item) for item in args])
-            print(out_str)
-        """
-        if self.is_time_profile and self.logger:
-            out_str = ' '.join([str(item) for item in args])
-            self.logger.info(out_str)
-
     def update_spectrum_flux(self, bleeding_cure_file=None):
         """ Update the spectrum flux per specified bleeding cure file or 'nan_pixels' set in config file.
 
@@ -403,7 +337,7 @@ class SpectralExtractionAlg:
         nan_pixels = self.get_config_value('nan_pixels').replace(' ', '')
         if nan_pixels:
             pixel_groups = re.findall("^\\((.*)\\)$", nan_pixels)
-
+            
             if len(pixel_groups) > 0:            # group of nan pixels is set
                 res = [i.start()+1 for i in re.finditer('\\],\\[', pixel_groups[0])]
                 res.insert(0, -1)
@@ -416,6 +350,7 @@ class SpectralExtractionAlg:
                         r_idx = [int(y_idx[i]) if y_idx[i] else (0 if i == 0 else dim_height) for i in range(2)]
                         c_idx = [int(x_idx[i]) if x_idx[i] else (0 if i == 0 else dim_width) for i in range(2)]
                         self.spectrum_flux[r_idx[0]:r_idx[1], c_idx[0]:c_idx[1]] = np.nan
+
 
     def allocate_memory_flux(self, order_set, total_data_group, s_rate_y=1):
         """Allocate memory to hold the extracted flux from either rectified or not-rectified order trace
@@ -508,9 +443,8 @@ class SpectralExtractionAlg:
 
         gap = 2
         # get order information from poly clip file
-
         if self.rectification_method != self.NoRECT and poly_file and os.path.exists(poly_file):
-            y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file, c_order)
+            y_output_mid, lower_width, upper_width, clip_areas = self.read_clip_file(poly_file)
         else:
             # get order information from rectified lev0 fits
             order_key = 'ORD_' + str(c_order)
@@ -776,7 +710,8 @@ class SpectralExtractionAlg:
 
         if self.output_clip_area:
             self.poly_clip_update = True
-            self.write_clip_file(None, int(y_output_mid), [int(lower_width), int(upper_width)], clip_areas, order_idx)
+            self.write_clip_file(poly_file, int(y_output_mid), [int(lower_width), int(upper_width)], clip_areas,
+                                 order_idx)
 
         result_data = {'y_center': y_output_mid,
                        'widths': [lower_width, upper_width],
@@ -1302,7 +1237,7 @@ class SpectralExtractionAlg:
         y_2 = max([border['intersect_with_borders']['max_cell_y'] for border in borders])
 
         flux_polygon, total_area_polygon, clipped_areas = self.compute_flux_from_polygon_clipping2(borders,
-                                                        [x_1, x_2, y_1, y_2], input_data, total_data_group)
+                                                        [x_1, x_2, y_1, y_2],input_data, total_data_group)
         return flux_polygon, clipped_areas
 
     def compute_flux_from_polygon_clipping2(self, borders, clipper_borders, input_data, total_data_group):
@@ -1542,7 +1477,7 @@ class SpectralExtractionAlg:
 
         return [num_x/den, num_y/den]
 
-    def write_data_to_dataframe(self, result_data):
+    def write_data_to_dataframe(self, result_data, first_row=None):
         """ Write spectral extraction result to an instance of Pandas DataFrame.
 
         Args:
@@ -1562,24 +1497,30 @@ class SpectralExtractionAlg:
         flux_header = self.spectrum_header
 
         mjd = 0.0
+        m_d = 2400000.5
         if 'SSBJD100' in header_keys:
-            mjd = flux_header['SSBJD100'] - 2400000.5
+            mjd = flux_header['SSBJD100'] - m_d
         elif 'OBSJD' in header_keys:
-            mjd = flux_header['OBSJD'] - 2400000.5
+            mjd = flux_header['OBSJD'] - m_d
         elif 'OBS MJD' in header_keys:
             mjd = flux_header['OBS MJD']
-        exptime = flux_header['EXPTIME'] if 'EXPTIME' in header_keys else 600.0
+
+        expt = 'EXPTIME'
+        if expt in header_keys:
+            exptime = flux_header[expt]
+        else:
+            exptime = 600.0
 
         total_order, dim_width = np.shape(result_data)
         # result_table = {'order_'+str(i): result_data[i, :] for i in range(total_order) }
         # df_result = pd.DataFrame(result_table)
         df_result = pd.DataFrame(result_data)
-        df_result.attrs['MJD-OBS'] = mjd
-        df_result.attrs['OBSJD'] = mjd + 2400000.5
+        if mjd != 0.0:
+            df_result.attrs['MJD-OBS'] = mjd
+            df_result.attrs['OBSJD'] = mjd + 2400000.5
         df_result.attrs['EXPTIME'] = exptime
         df_result.attrs['TOTALORD'] = total_order
-        df_result.attrs['ORDEROFF'] = self.start_row_index()
-        df_result.attrs['DIMWIDTH'] = dim_width
+        df_result.attrs['FIRSTORD'] = self.start_row_index() if first_row is None else first_row
         df_result.attrs['FROMIMGX'] = self.origin[self.X]
         df_result.attrs['FROMIMGY'] = self.origin[self.Y]
 
@@ -1619,79 +1560,67 @@ class SpectralExtractionAlg:
 
         return df_result
 
-    def time_check(self, t_start, step_msg):
-        """Count and display the execution time.
-
-        Args:
-            t_start (float): Start time to count.
-            step_msg (str): Message to print.
-
-        Returns:
-            float: End of time.
-
-        """
-        t_end = time.time()
-        self.t_print(step_msg, (t_end - t_start), 'sec.')
-        return t_end
-
-    def add_file_logger(self, filename=None):
-        """ Add file to log debug information.
-
-        Args:
-            filename (str, optional): Filename of the log file. Defaults to None.
-
-        Returns:
-            None.
-
-        """
-        self.enable_debug_print(filename is not None)
-        self.debug_output = filename
-
-    def get_total_orderlettes_from_image(self):
-        """ Get total orderlettes from level 0 image, defined in config
+    def get_total_orderlets_from_image(self):
+        """ Get total orderlets from level 0 image, defined in config
 
         Returns:
             int: total orderdelettes.
         """
-        if self.total_image_orderlettes is None:
-            self.total_image_orderlettes = self.get_config_value("total_image_orderlettes", 1)
+        if self.total_image_orderlets is None:
+            self.total_image_orderlets = self.get_config_value("total_image_orderlets", 1)
 
-        return self.total_image_orderlettes
+        return self.total_image_orderlets
 
-    def get_orderlette_names(self):
+    def get_orderlet_names(self):
         """ Get Orderlette names defined in config.
 
         Returns:
-            list: list of orderlette names
+            list: list of orderlet names
         """
-        if self.orderlette_names is None:
-            o_names_str = self.get_config_value('orderlette_names')
-            order_names = list()
-            if o_names_str is not None:
-                o_names = o_names_str.strip('][ ').split(',')
-                for o_nm in o_names:
-                    order_names.append(o_nm.strip("' "))
+        if self.orderlet_names is None:
+            o_list = self.get_config_value('orderlet_names', "['SCI']")
+            if isinstance(o_list, list):
+                self.orderlet_names = o_list
+            elif isinstance(o_list, str):
+                self.orderlet_names = o_list.split(',')
 
-                if len(order_names) == 0:
-                    order_names.append('SCI')
-                self.orderlette_names = order_names
+        return self.orderlet_names
 
-        return self.orderlette_names
+    def get_total_order_for(self, ccd_index=None):
+        """
 
-    def get_orderlette_index(self, order_name):
-        """ Find the index of the order name in the orderlette name list.
+        Args:
+            ccd_index (int): ccd index for possible ccd array. eg. ccd_index = 0 is for green else for red for KPF.
+
+        Returns:
+            int: total orders for the specified ccd.
+        """
+        if ccd_index is None:
+            return None
+
+        if self.total_order_per_ccd is None:
+            total_order_per_ccd = self.get_config_value('total_order_per_ccd', '[]')
+            if isinstance(total_order_per_ccd, list):
+                self.total_order_per_ccd = total_order_per_ccd
+            elif isinstance(total_order_per_ccd, str):
+                self.total_order_per_ccd = [int(t) for t in total_order_per_ccd.split(',')]
+
+        return self.total_order_per_ccd[ccd_index] if ccd_index < len(self.total_order_per_ccd) else None
+
+    def get_orderlet_index(self, order_name):
+        """ Find the index of the order name in the orderlet name list.
 
         Args:
             order_name (str): Fiber name
 
         Returns:
-            int: index of order name in the orderlette name list. If not existing, return is 0.
+            int: index of order name in the orderlet name list. If not existing, return is 0.
 
         """
-        all_names = self.get_orderlette_names()
-        traces_per_order = self.get_total_orderlettes_from_image()
+        all_names = self.get_orderlet_names()
+        traces_per_order = self.get_total_orderlets_from_image()
         order_name_idx = all_names.index(order_name) if order_name in all_names else 0
-        order_name_idx = order_name_idx%traces_per_order
+        order_name_idx = order_name_idx % traces_per_order
 
         return order_name_idx
 
@@ -1713,17 +1642,21 @@ class SpectralExtractionAlg:
             list: list of the trace index.
 
         """
-        orderlette_index = self.get_orderlette_index(order_name)
-        traces_per_order = self.get_total_orderlettes_from_image()
+        orderlet_index = self.get_orderlet_index(order_name)
+        traces_per_order = self.get_total_orderlets_from_image()
 
-        if orderlette_index < traces_per_order:
-            o_set = np.arange(orderlette_index, self.total_order, traces_per_order, dtype=int)
+        total_order_per_ccd = self.get_total_order_for(self.ccd_index) if self.ccd_index is not None else None
+        total_traces = total_order_per_ccd * traces_per_order if total_order_per_ccd is not None else self.total_order
+
+        if orderlet_index < traces_per_order:
+            o_set = np.arange(orderlet_index, total_traces, traces_per_order, dtype=int)
         else:
             o_set = np.array([])
 
         return o_set
 
-    def write_clip_file(self, poly_file, y_center=None, edges=None, clip_areas=None, order=None):
+    @staticmethod
+    def write_clip_file(poly_file, y_center=None, edges=None, clip_areas=None, order=None):
         """Write polygon clipping information to file.
 
         Args:
@@ -1747,7 +1680,6 @@ class SpectralExtractionAlg:
         Returns:
             The polygon clipping information is written to .npy file.
         """
-
         order_clip = dict()
         if y_center is not None:
             order_clip['y_center'] = y_center
@@ -1756,18 +1688,26 @@ class SpectralExtractionAlg:
         if clip_areas is not None:
             order_clip['clip_areas'] = clip_areas
         # order_clip_array = np.array(list(order_clip.items()))
-        if order is not None:
-            self.poly_clip_dict[int(order)] = order_clip
+
+        # if order is not None:
+        #    self.poly_clip_dict[int(order)] = order_clip
 
         # f = open(poly_file, "wb")
         if poly_file is not None:
             with open(poly_file, "w") as outfile:
-                json.dump(self.poly_clip_dict, outfile)
+                json.dump(order_clip, outfile)
+
+        #    order_set = self.poly_clip_dict.keys()
+        #    for od in order_set:
+        #        poly_file_order = poly_file + str(od) + '.json'
+        #        with open(poly_file_order, "w") as outfile:
+        #            json.dump(self.poly_clip_dict[od], outfile)
 
         # np.save(poly_file, order_clip_array)
         # f.close()
 
-    def read_clip_file(self, poly_file, c_order):
+    @staticmethod
+    def read_clip_file(poly_file):
         """Read order polygon data from clip file.
 
         Args:
@@ -1782,41 +1722,28 @@ class SpectralExtractionAlg:
                 * **clip_areas** (*dict*): polygon clip information for the order.
 
         """
-        if self.poly_clip_dict is None or len(self.poly_clip_dict)==0:
-            with open(poly_file) as clip_input:
-                f = json.load(clip_input)
-                self.poly_clip_dict = f
+        with open(poly_file) as clip_input:
+            order_poly = json.load(clip_input)
 
-        order_poly = self.poly_clip_dict[str(c_order)]
-        y_center = order_poly['y_center']
-        lower_width, upper_width = order_poly['edges']
-        clip_areas = order_poly['clip_areas']
+        # if self.poly_clip_dict is None or len(self.poly_clip_dict)==0:
+        #    with open(poly_file) as clip_input:
+        #        f = json.load(clip_input)
+        #        self.poly_clip_dict = f
 
-        """    
-        # infile = open(poly_file, 'rb')
-        order_flux = np.load(poly_file,  allow_pickle=True)
-        # infile.close()
+        # order_poly = self.poly_clip_dict[str(c_order)]
 
-        k = 'y_center'
-        idx = np.where(order_flux[:, 0] == k)[0][0]
-        y_center = order_flux[idx, 1]
+        y_center = order_poly['y_center'] if order_poly else None
+        widths = order_poly['edges'] if order_poly else [None, None]
+        clip_areas = order_poly['clip_areas'] if order_poly else None
 
-        k = 'edges'
-        idx = np.where(order_flux[:, 0] == k)[0][0]
-        lower_width, upper_width = order_flux[idx, 1]
-
-        k = 'clip_areas'
-        idx = np.where(order_flux[:, 0] == k)[0][0]
-        clip_areas = order_flux[idx, 1]
-        """
-        return y_center, lower_width, upper_width, clip_areas
+        return y_center, widths[0], widths[1], clip_areas
 
     def reset_clip_file(self):
         """Reset the flag to output the clip information.
         """
         self.output_clip_area = False
 
-    def get_clip_file(self, order_idx):
+    def get_clip_file(self, order_idx=None):
         """Compute the full path of the clip file for the specified order per clip file prefix.
 
         Args:
@@ -1828,7 +1755,11 @@ class SpectralExtractionAlg:
         """
         # crt_order_clip_file = self.clip_file_prefix + '_order_' + str(order_idx) + '.npy' \
         #    if (self.clip_file_prefix and order_idx is not None) else None
-        crt_order_clip_file = self.clip_file_prefix + '_poly.json' if self.clip_file_prefix else None
+        if order_idx is None:
+            return self.clip_file_prefix + '_order_' if self.clip_file_prefix else None
+        else:
+            crt_order_clip_file = self.clip_file_prefix + '_order_' + str(order_idx) + '.json' \
+                if self.clip_file_prefix else None
 
         return crt_order_clip_file
 
@@ -1860,17 +1791,24 @@ class SpectralExtractionAlg:
 
         return output_data_height, output_data_width
 
+    @staticmethod
+    def compute_variance(flux_data):
+        var_ext = np.array(flux_data)
+        var_ext = np.sqrt(np.absolute(var_ext))
+        return var_ext
+
     def extract_spectrum(self,
                          order_set=None,
                          order_name=None,
                          show_time=False,
                          print_debug=None,
-                         bleeding_file=None):
+                         bleeding_file=None,
+                         first_index=None):
         """ Spectral extraction from 2D flux to 1D. Rectification step is optional.
 
         Args:
             order_set (numpy.ndarray, optional): Set of orders to extract. Defaults to None for all orders.
-            order_name (str, optional): Name of the orderlette to be processed.
+            order_name (str, optional): Name of the orderlet to be processed.
             show_time (bool, optional):  Show running time of the steps. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
                 a file with path `print_debug` if it is non empty string, or no print if it is None.
@@ -1900,11 +1838,12 @@ class SpectralExtractionAlg:
         if order_set is None:
             order_set = self.get_order_set(order_name)
 
-        self.d_print("do ", self.rectifying_method[self.rectification_method], 'rectification and ',
+        self.d_print('SpectralExtractionAlg: do ', self.rectifying_method[self.rectification_method],
+                     'rectification and ',
                      self.extracting_method[self.extraction_method], 'extraction on ',
-                     order_set.size, ' orders', info=True)
+                     order_set.size, ' orders')
 
-        t_start = time.time()
+        t_start = self.start_time()
         noop = False
         data_df = None
         rectification_on = ''
@@ -1934,8 +1873,14 @@ class SpectralExtractionAlg:
         if rectification_on != 'spectrum':
             data_group.append({'data': self.flat_flux, 'is_raw_data': self.is_raw_flat, 'idx': self.FDATA})
 
-        start_row_at = self.start_row_index()
-        result_height = order_set.size + start_row_at if order_set.size > 0 else 0
+        # this is for not self.NOEXTRACT (not rectification)
+        start_row_at = first_index if first_index is not None else self.start_row_index()
+
+        total_order_per_ccd = self.get_total_order_for(self.ccd_index) if self.ccd_index is not None else None
+        if total_order_per_ccd is not None:
+            result_height = max(total_order_per_ccd, order_set.size + start_row_at)
+        else:
+            result_height = order_set.size + start_row_at if order_set.size > 0 else 0
 
         # re-allocate the space to hold the rectified spectrum for the order
         self.allocate_memory_flux(order_set, 2)
@@ -1946,8 +1891,8 @@ class SpectralExtractionAlg:
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             self.reset_clip_file()
-            self.d_print(c_order, ' edges: ', self.get_order_edges(c_order),
-                         ' xrange: ', self.get_order_xrange(c_order), end=" ", info=True)
+            self.d_print('SpectralExtractionAlg: ', c_order, ' edges: ', self.get_order_edges(c_order),
+                         ' xrange: ', self.get_order_xrange(c_order))
 
             order_flux = self.get_flux_from_order(data_group, c_order)
             # order_flux = self.get_flux_from_order(self.order_coeffs[c_order], self.get_order_edges(c_order),
@@ -1958,12 +1903,11 @@ class SpectralExtractionAlg:
             order_result[c_order] = order_flux
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
-        if self.poly_clip_update:
-            self.write_clip_file(self.get_clip_file(0))
+        # if self.poly_clip_update:
+        #    self.write_clip_file(self.get_clip_file())
         out_data_height, out_data_width = self.update_output_size(order_set, order_result, result_height)
         out_data = np.zeros((out_data_height, out_data_width))
         order_rectification_result = list()
-
         # produce output data
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
@@ -1974,11 +1918,8 @@ class SpectralExtractionAlg:
             if self.extraction_method == self.NOEXTRACT:
                 order_rectification_result.append({"order": c_order, "rectification": order_result[c_order]})
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
-
-        self.d_print(" ")
-
         if self.extraction_method == self.NOEXTRACT:
             data_df = self.write_rectified_data_to_dataframe(out_data, order_rectification_result)
         else:
-            data_df = self.write_data_to_dataframe(out_data)
+            data_df = self.write_data_to_dataframe(out_data, first_row=start_row_at)
         return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on}

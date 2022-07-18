@@ -11,22 +11,25 @@ from astropy.time import Time
 from astropy.coordinates import Angle
 import configparser
 from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.alg_base import ModuleAlgBase
 load_dotenv()
 
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
 
 
-class BarycentricCorrectionAlg:
+class BarycentricCorrectionAlg(ModuleAlgBase):
     """Barycentric velocity correction.
 
     This module defines class 'BarycentricCorrectionAlg' and methods to calculate barycentric velocity correction
     and redshift for one single time point or a period of days.
 
     Args:
-        obs_config (dict|configparser.ConfigParser): A dict instance or config context containing the key-value
+        obs_config (dict|configparser.ConfigParser|None): A dict instance or config context containing the key-value
                 pairs related to the observation configuration for barycentric correction calculation.
-        logger (logging.Logger): Instance of logging.Logger.
-
+        logger (logging.Logger): Instance of logging.Logger passed from external application.
+        logger_name (str, optional): Selection of logger by the specified logger name. Defaults to None.
+                Either the defined logger_name or the class name determines the logging.Logger instance for organizing
+                the loggers.
 
     Attributes:
         zb_range (numpy.ndarray): An array containing minimum and maximum redshift value over a period of days.
@@ -48,6 +51,8 @@ class BarycentricCorrectionAlg:
     """proper motion in RA (mas/yr) """
     PMDEC = 'pmdec'
     """ proper motion in DEC (mas/yr) """
+    EPOCH = 'epoch'
+    """ epoch in julian date """
     PX = 'parallax'
     """ parallax of the target (mas) """
     LAT = 'obslat'
@@ -60,41 +65,47 @@ class BarycentricCorrectionAlg:
     """ star radial velocity estimation (km/s) """
     SPEC = "instrument"
     """ Observation instrument """
+    STARNAME = 'starname'
+    """ star name """
 
-    def __init__(self, obs_config, config=None, logger=None):
-        self.logger = logger
+    def __init__(self, obs_config, config=None, logger=None, logger_name=None):
+        ModuleAlgBase.__init__(self, logger_name or self.__class__.__name__, config, logger)
 
         self.obs_config = None
         # obs_config setting take the priority
         if obs_config is not None and isinstance(obs_config, dict):
             self.obs_config = obs_config
         elif config is not None and isinstance(config, configparser.ConfigParser):
-            p_config = ConfigHandler(config, 'PARAM')
-            self.instrument = p_config.get_config_value('instrument', '')
-            ins = self.instrument.upper()
-            bc_section = ConfigHandler(config, ins, p_config)  # handler containing section of instrument or 'PARAM'
-            conf_def = [BarycentricCorrectionAlg.RA,
-                        BarycentricCorrectionAlg.DEC,
-                        BarycentricCorrectionAlg.PMRA,
-                        BarycentricCorrectionAlg.PMDEC,
-                        BarycentricCorrectionAlg.PX,
-                        BarycentricCorrectionAlg.LAT,
-                        BarycentricCorrectionAlg.LON,
-                        BarycentricCorrectionAlg.ALT,
-                        BarycentricCorrectionAlg.RV,
-                        BarycentricCorrectionAlg.SPEC]
-            self.obs_config = {}
-            for c in conf_def:
-                k_val = bc_section.get_config_value(c, '0.0')
-                if c == BarycentricCorrectionAlg.RA:
-                    self.obs_config[c] = Angle(k_val+"hours").deg
-                elif c == self.DEC:
-                    self.obs_config[c] = Angle(k_val+"degrees").deg
-                elif c == BarycentricCorrectionAlg.SPEC:
-                    self.obs_config[c] = self.instrument
-                else:
-                    self.obs_config[c] = float(k_val)
-
+            ins = self.config_param.get_config_value('instrument', '') if self.config_param is not None else ''
+            self.instrument = ins.upper()
+            if ins:
+                # handler containing section of instrument or 'PARAM'
+                bc_section = ConfigHandler(config, ins, self.config_param)
+                conf_def = [BarycentricCorrectionAlg.RA,
+                            BarycentricCorrectionAlg.DEC,
+                            BarycentricCorrectionAlg.PMRA,
+                            BarycentricCorrectionAlg.PMDEC,
+                            BarycentricCorrectionAlg.PX,
+                            BarycentricCorrectionAlg.EPOCH,
+                            BarycentricCorrectionAlg.LAT,
+                            BarycentricCorrectionAlg.LON,
+                            BarycentricCorrectionAlg.ALT,
+                            BarycentricCorrectionAlg.RV,
+                            BarycentricCorrectionAlg.SPEC,
+                            BarycentricCorrectionAlg.STARNAME]
+                self.obs_config = {}
+                for c in conf_def:
+                    k_val = bc_section.get_config_value(c, '0.0')
+                    if c == BarycentricCorrectionAlg.RA:
+                        self.obs_config[c] = Angle(k_val+"hours").deg
+                    elif c == self.DEC:
+                        self.obs_config[c] = Angle(k_val+"degrees").deg
+                    elif c == BarycentricCorrectionAlg.SPEC:
+                        self.obs_config[c] = self.instrument
+                    elif c == BarycentricCorrectionAlg.STARNAME:
+                        self.obs_config[c] = k_val
+                    else:
+                        self.obs_config[c] = float(k_val)
         self.zb_range = None
         self.zb_list = None
 
@@ -114,10 +125,10 @@ class BarycentricCorrectionAlg:
             numpy.ndarray: Minimum and maximum redshift values during the period starting from
             `jd`.  The first element in the array is the minimum and the second one is the maximum.
         """
-
         if self.zb_list is None:
             self.zb_list = self.get_zb_list(jd, period, data_path, save_to_path)
-            self.zb_range = np.array([min(self.zb_list), max(self.zb_list)]) if np.size(self.zb_list) > 0 else None
+            self.zb_range = np.array([min(self.zb_list), max(self.zb_list)])/LIGHT_SPEED_M \
+                if np.size(self.zb_list) > 0 else None
         return self.zb_range
 
     def get_zb_list(self, jd, period, data_path=None, save_to_path=None):
@@ -138,11 +149,11 @@ class BarycentricCorrectionAlg:
         if self.zb_list is None:
             if jd is None:
                 jd = Time(date.today().strftime("%Y-%m-%d")).jd - (period if period is not None else 1)
-                if self.logger:
-                    self.logger.info("start time is set " + str(period) + " days before now.")
+                self.d_print("BarycentricCorrectionAlg: start time is set " + str(period) + " days before now.",
+                             info=True)
 
-            if self.logger:
-                self.logger.info("start finding bc..." + " jd is " + str(jd) + " period is "+str(period))
+            self.d_print('BarycentricCorrectionAlg: for redshift on jd: ', str(jd), ' and period:  ', str(period),
+                         info=True)
             self.zb_list = self.get_zb_from_bc_corr(self.obs_config, jd, period, data_path, save_to_path)
 
         return self.zb_list
@@ -178,8 +189,9 @@ class BarycentricCorrectionAlg:
         # if a period of time is assigned, check if a file storing the data already exists or not
         if days_period is not None and days_period > 1:
             instrument = obs_config.get(BarycentricCorrectionAlg.SPEC, '')
+            target = obs_config.get(BarycentricCorrectionAlg.STARNAME, 'nostar')
             zb_bc_file = BarycentricCorrectionAlg.find_existing_zb_file(instrument.lower(),
-                                                                        start_jd, days_period, data_path)
+                                                                start_jd, days_period, target.lower(), data_path)
             if zb_bc_file is not None and os.path.isfile(zb_bc_file):
                 df = pd.read_csv(zb_bc_file, header=None)
                 zb_bc_corr = np.reshape(df.values, (np.size(df.values), ))
@@ -199,35 +211,39 @@ class BarycentricCorrectionAlg:
         return zb_bc_corr
 
     @staticmethod
-    def find_existing_zb_file(ins, start_jd, days_period, data_path=None):
+    def find_existing_zb_file(ins, start_jd, days_period, target, data_path):
         """ Compose the file path storing the redshift values from barycentric correction over a period of days.
 
         Args:
             ins (str): Observation instrument.
             start_jd (float): Start day in Julian Date format.
             days_period (int): Total days.
+            target (str): star name.
             data_path (str): Path of the data file. Defaults to None, meaning a default path based on
                 the setting of `start_jd`, `days_period` and instrument under KPF data test directory is applied.
 
         Returns:
-            str: Data path. The default path is like *<directory of KPFPIPE_TEST_DATA>/radial_velocity_test/data/
+            str: Data path. The default path is like './+default_bc_file'
             bc_corr_<start_jd>_<days_period>_<instrument>.csv*
         """
-        is_dir = True
-        zb_bc_file = None
-        if data_path is not None:
-            is_dir = os.path.isdir(data_path)
-        else:    # default directory containing file storing the baraycentric correction data
-            data_path = os.getenv('KPFPIPE_TEST_DATA') + '/radial_velocity_test/data/'
+        default_bc_file = 'bc_corr' + '_' + str(start_jd) + '_' + str(days_period) + '_' + ins + '_' + target + '.csv'
 
-        # if the output path is a directory,
-        # the filename is like "bc_corr_<start_jd>_<days_period>_<ins>.csv"in default.
-        if is_dir and data_path is not None:
-            ins = '_' + ins if ins else ''
-            zb_bc_file = (data_path if data_path.endswith("/") else (data_path + "/")) + \
-                         'bc_corr' + str(start_jd) + '_' + str(days_period) + ins + '.csv'
-        elif not is_dir and data_path is not None:
-            zb_bc_file = data_path
+        if data_path is not None and data_path:
+            if os.path.isdir(data_path):
+                zb_bc_file = (data_path if data_path.endswith("/") else (data_path + "/")) + default_bc_file
+            elif os.path.isfile(data_path):
+                zb_bc_file = data_path
+            else:  # a non-existing dir or non-existing file
+                dirname = os.path.dirname(data_path)
+                basename = os.path.basename(data_path)
+                if not os.path.isdir(dirname):
+                    os.makedirs(os.path.dirname(data_path), exist_ok=True)
+                if basename:
+                    zb_bc_file = data_path
+                else:
+                    zb_bc_file = dirname + '/' + default_bc_file
+        else:
+            zb_bc_file = './' + default_bc_file
 
         return zb_bc_file
 
@@ -247,12 +263,12 @@ class BarycentricCorrectionAlg:
         jds = np.arange(days_period, dtype=float) + start_jd if days_period else [start_jd]
         # jds = np.arange(days_period+1, dtype=float) + start_jd
         zb_list = list()
-        i = 0    # to remove
         for jd in jds:
             # iso_t = Time(jd, format='jd', scale='utc')
             bc = BarycentricCorrectionAlg.get_bc_corr(obs_config, jd)
             if bc:
-                zb_list.append(bc / LIGHT_SPEED_M)
+                # zb_list.append(bc / LIGHT_SPEED_M)
+                zb_list.append(bc)
             else:
                 zb_list.append(None)
         return zb_list
@@ -269,11 +285,26 @@ class BarycentricCorrectionAlg:
             float: Barycentric velocity correction number from get_BC_vel.
 
         """
-
-        # bc_obj = get_BC_vel(JDUTC=Time(jd, format='jd', scale='utc'),
-        bc_obj = get_BC_vel(JDUTC=jd,
+        if obs_config[BarycentricCorrectionAlg.STARNAME].lower() == 'sun':
+            # epoch, SolSystemTarget, predictive
+            bc_obj = get_BC_vel(JDUTC=jd,
+                                ra=None,
+                                dec=None,
+                                epoch=None,
+                                pmra=None,
+                                pmdec=None,
+                                px=None,
+                                lat=obs_config[BarycentricCorrectionAlg.LAT],
+                                longi=obs_config[BarycentricCorrectionAlg.LON],
+                                alt=obs_config[BarycentricCorrectionAlg.ALT],
+                                SolSystemTarget='Sun',
+                                predictive=True,
+                                rv=obs_config[BarycentricCorrectionAlg.RV])
+        else:
+            bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],
                             dec=obs_config[BarycentricCorrectionAlg.DEC],
+                            epoch=obs_config[BarycentricCorrectionAlg.EPOCH],
                             pmra=obs_config[BarycentricCorrectionAlg.PMRA],
                             pmdec=obs_config[BarycentricCorrectionAlg.PMDEC],
                             px=obs_config[BarycentricCorrectionAlg.PX],
@@ -281,4 +312,5 @@ class BarycentricCorrectionAlg:
                             longi=obs_config[BarycentricCorrectionAlg.LON],
                             alt=obs_config[BarycentricCorrectionAlg.ALT],
                             rv=obs_config[BarycentricCorrectionAlg.RV])
+
         return bc_obj[0][0]

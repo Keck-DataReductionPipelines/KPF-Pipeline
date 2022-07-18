@@ -5,6 +5,7 @@ from astropy import constants as const
 import warnings
 import datetime
 import pandas as pd
+import os
 
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
@@ -16,6 +17,7 @@ LIGHT_SPEED_M = const.c.value  # light speed in m/s
 SEC_TO_JD = 1.0 / 86400.0
 FIT_G = fitting.LevMarLSQFitter()
 
+from barycorrpy import get_BC_vel, utc_tdb
 
 class RadialVelocityAlg(RadialVelocityBase):
     """Radial velocity calculation using cross correlation method.
@@ -86,7 +88,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None,
                  reweighting_method=None, segment_limits=None, order_limits=None, area_limits=None):
 
-        if not isinstance(spectrum_data, np.ndarray):
+        if spectrum_data is not None and not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
         if header is None:
             raise TypeError('data header type error')
@@ -110,7 +112,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
-        self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]       # def_mask,
+        self.mask_line = init_data[RadialVelocityAlgInit.MASK_LINE]             # def_mask
         self.reweighting_ccf_method = init_data[RadialVelocityAlgInit.REWEIGHTING_CCF] \
             if reweighting_method is None or not self.is_good_reweighting_method(reweighting_method) \
             else reweighting_method
@@ -118,7 +120,11 @@ class RadialVelocityAlg(RadialVelocityBase):
             init_data[RadialVelocityAlgInit.CCF_CODE]
 
         self.obs_jd = None
-        ny, nx = np.shape(self.spectrum_data)
+
+        if self.spectrum_data is not None and self.spectrum_data.size != 0:
+            ny, nx = np.shape(self.spectrum_data)
+        else:
+            ny = nx = 0
 
         self.start_order = 0
         self.end_order = ny-1
@@ -133,9 +139,10 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.segment_limits_table = None
         self.total_segments = None
         self.total_rv_segment = None
+        self.zb = 0.0
 
     def reset_spectrum(self, spec_data, header, wave_cal):
-        if not isinstance(spec_data, np.ndarray):
+        if spec_data is not None and not isinstance(spec_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
         if header is None:
             raise TypeError('data header type error')
@@ -158,7 +165,11 @@ class RadialVelocityAlg(RadialVelocityBase):
                 * **ny** (*int*): Vertical size.
 
         """
-        ny, nx = np.shape(self.spectrum_data)
+
+        if self.spectrum_data is not None and self.spectrum_data.size != 0:
+            ny, nx = np.shape(self.spectrum_data)
+        else:
+            nx = ny = 0
         return self.spectrum_data, nx, ny
 
     def get_segment_info(self):
@@ -212,7 +223,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                                          self.wave_cal[r, self.end_x_pos], r])
             self.total_segments = len(segment_list)
             self.segment_limits_table = np.array(segment_list)
-        return self.segment_limits_table[seg_idx]
+
+        idx = np.where(self.segment_limits_table[:, self.SEGMENT_IDX]==seg_idx)[0][0]
+        return self.segment_limits_table[idx]
 
     def set_order_range(self, lower_order=None, upper_order=None):
         """Set the order range for radial velocity calculation.
@@ -270,7 +283,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         elif self.spectro == 'harps':
             return self.get_obs_time_harps(default=default)
         elif self.spectro == 'kpf':
-            return 2459351.0
+            return self.get_obs_time_kpf(default=default)
         else:
             return None
 
@@ -285,6 +298,15 @@ class RadialVelocityAlg(RadialVelocityBase):
     def get_obs_time_harps(self, default=None):
         if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
             obs_time = self.header['MJD-OBS'] + 2400000.5 + self.header['EXPTIME'] * SEC_TO_JD / 2
+        else:
+            obs_time = default
+
+        return obs_time
+
+    def get_obs_time_kpf(self, default=2459351.0):
+        if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
+            obs_time = self.header['MJD-OBS'] + 2400000.5 + self.header['EXPTIME'] * SEC_TO_JD / 2
+            # obs_time = self.header['MJD-OBS'] + 2400000.5
         else:
             obs_time = default
 
@@ -305,6 +327,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             # recompute zb and compare the value in header
             rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                                 RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                                RadialVelocityAlgInit.EPOCH,
                                 RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
                                 RadialVelocityAlgInit.OBSLON,
                                 RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV, 
@@ -321,14 +344,14 @@ class RadialVelocityAlg(RadialVelocityBase):
         obs_time_jd = self.get_obs_time()
         if obs_time_jd is None:
             return default
-        if self.spectro == 'kpf':
-            return 0.0
+        # if self.spectro == 'kpf':
+        #    return 0.0
 
         rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
-                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC, RadialVelocityAlgInit.EPOCH,
                             RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
                             RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV,
-                            RadialVelocityAlgInit.SPEC]
+                            RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
         bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
@@ -418,8 +441,11 @@ class RadialVelocityAlg(RadialVelocityBase):
             return None, 'observation jd time error'
 
         zb = self.get_redshift()
+
         if zb is None:
             return None, 'redshift value error'
+        else:
+            self.zb = zb
 
         self.set_x_range()
         self.set_order_range()
@@ -440,7 +466,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             s_seg_idx = 0
         if end_seg is not None:
-            e_seg_idx = end_seg if end_seg >= 0 else (total_seg-1+start_seg)
+            e_seg_idx = end_seg if end_seg >= 0 else (total_seg-1+end_seg)
         else:
             e_seg_idx = total_seg-1
 
@@ -448,32 +474,32 @@ class RadialVelocityAlg(RadialVelocityBase):
         wavecal_all_orders = self.wavelength_calibration(spectrum_x)     # from s_order to e_order, s_x to e_x
 
         seg_ary = np.arange(total_seg)[s_seg_idx:e_seg_idx+1]
-
         for idx, seg_idx in np.ndenumerate(seg_ary):
             seg_limits = self.get_segment_limits(seg_idx=seg_idx)
             ord_idx = int(seg_limits[self.SEGMENT_ORD])
-            self.d_print("segment", ord_idx, ' ',
+            self.d_print("RadialVelocityAlg: ", "segment", ord_idx, ' ',
                          [int(seg_limits[self.SEGMENT_X1]), int(seg_limits[self.SEGMENT_X2]),
                           seg_limits[self.SEGMENT_W1], seg_limits[self.SEGMENT_W2], int(seg_limits[self.SEGMENT_ORD])],
-                         ' ', end="", info=True)
-            wavecal = wavecal_all_orders[ord_idx] if self.instrument.lower() != 'kpf' \
-                else wavecal_all_orders[ord_idx]*10.0
+                         ' ')
+            wavecal = wavecal_all_orders[ord_idx]
+
             left_x = int(seg_limits[self.SEGMENT_X1])
             right_x = int(seg_limits[self.SEGMENT_X2])
 
             if np.any(wavecal != 0.0):
                 if wavecal[-1] < wavecal[0]:
-                    ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx])[left_x:right_x]) # check??
-                    ordered_wavecal = np.flip(wavecal)[left_x:right_x]
+                    ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx][left_x:right_x]))   # check??
+                    ordered_wavecal = np.flip(wavecal[left_x:right_x])
+                    # ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx][left_x:right_x]))
+                    # ordered_wavecal = np.flip(wavecal[left_x:right_x])
                 else:
                     ordered_spec = self.fix_nan_spectrum(new_spectrum[ord_idx][left_x:right_x])
                     ordered_wavecal = wavecal[left_x:right_x]
                 result_ccf[idx, :] = \
                     self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
             else:
-                self.d_print("all wavelength zero")
+                self.d_print("RadialVelocityAlg: all wavelength zero")
 
-        self.d_print("\n", info=True)
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
 
@@ -591,7 +617,12 @@ class RadialVelocityAlg(RadialVelocityBase):
         # shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)  # Shifting mask in redshift space
         if self.ccf_code == 'c':
             # ccf_pixels_c = np.zeros([v_steps, n_pixel])
-            v_b = zb * LIGHT_SPEED
+
+            # update redshift
+
+            zb = zb/LIGHT_SPEED_M              # zb in (m/s)/3*10e8 m/s
+            v_b = ((1.0/(1+zb)) - 1.0) * LIGHT_SPEED
+
             for c in range(v_steps):
                 # add one pixel before and after the original array in order to uniform the calculation between c code
                 # and python code
@@ -601,12 +632,11 @@ class RadialVelocityAlg(RadialVelocityBase):
 
                 new_spec = np.pad(spectrum, (1, 1), 'constant')
                 new_spec[1:n_pixel+1] = spectrum
-
                 sn = np.ones(n_pixel+2)
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
-                                                 self.velocity_loop[c], v_b)
+                                                 self.velocity_loop[c], v_b)    # need check??
                 """
                 ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
                                                             new_line_end.astype('float64'),
@@ -643,7 +673,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    x_pixel_wave.astype('float64'),
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
-                                                   sn_p, zb)
+                                                   sn_p, zb/LIGHT_SPEED_M)
         return ccf
 
     def calc_ccf(self, v_steps, new_line_start, new_line_end, x_pixel_wave, spectrum, new_line_weight, sn, zb):
@@ -732,7 +762,6 @@ class RadialVelocityAlg(RadialVelocityBase):
 
                             if n in idx_collection:
                                 print(str(n), ' already taken')
-                                # import pdb;pdb.set_trace()
                             else:
                                 idx_collection.append(n)
             ccf_pixels[c, :] = spectrum * mask_spectra_doppler_shifted * sn
@@ -756,7 +785,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         total_seg_rv = np.shape(ccf)[0] - self.ROWS_FOR_ANALYSIS
         ccf[total_seg_rv+1, :] = self.velocity_loop
         if row_for_analysis is None:
-            row_for_analysis = np.arange(1, total_seg_rv, dtype=int)
+            row_for_analysis = np.arange(0, total_seg_rv, dtype=int)
         # skip order 0
         ccf[total_seg_rv + self.ROWS_FOR_ANALYSIS - 1, :] = np.nansum(ccf[row_for_analysis, :], axis=0)
         return ccf
@@ -849,6 +878,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['STARTORD'] = self.start_order
             results.attrs['ENDORDER'] = self.end_order
             results.attrs['TOTALORD'] = self.end_order - self.start_order+1
+            results.attrs['ZB'] = self.zb    # remove later
         return results
 
     def compute_rv_by_cc(self, start_seg=None, end_seg=None, ref_ccf=None, print_progress=None):
@@ -890,12 +920,16 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         """
         self.add_file_logger(print_progress)
-        self.d_print('computing radial velocity ... ')
+        self.d_print('RadialVelocityAlg: computing radial velocity ... ')
+
+        if self.spectrum_data is None or self.spectrum_data.size == 0:
+            return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs.jd, 'msg': 'no spectral data'}
 
         self.get_segment_limits()
+
         ccf, msg = self.get_rv_on_spectrum(start_seg=start_seg, end_seg=end_seg)
         if ccf is None:
-            raise Exception(msg)
+            return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': msg}
 
         total_seg_rv = np.shape(ccf)[0] - self.ROWS_FOR_ANALYSIS
         if ref_ccf is not None:
@@ -953,6 +987,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         df = pd.DataFrame(ratio_table)
         if output_csv:
+            if not os.path.isdir(os.path.dirname(output_csv)):
+                os.makedirs(os.path.dirname(output_csv), exist_ok=True)
             df.to_csv(output_csv, index=False)
 
         return df
@@ -1011,7 +1047,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 tval = reweighting_table_or_ccf[0:total_segment, -1]
 
             new_crt_rv = np.zeros((total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
-            max_index = np.where(tval == np.max(tval))[0]       # the max from ratio table, 1.0 if ratio max is 1.0
+            max_index = np.where(tval == np.max(tval))[0][0]       # the max from ratio table, 1.0 if ratio max is 1.0
             oval = np.nanpercentile(crt_rv[0:total_segment], 95, axis=1) if reweighting_method == 'ccf_max' \
                 else np.nanmean(crt_rv[0:total_segment], axis=1)  # max or mean from each order
 
@@ -1033,7 +1069,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                            np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
 
         if do_analysis:
-            row_for_analysis = np.arange(1, total_segment, dtype=int)
+            row_for_analysis = np.arange(0, total_segment, dtype=int)
             new_crt_rv[total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :] = \
                 np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
             if velocities is not None and np.size(velocities) == nx:

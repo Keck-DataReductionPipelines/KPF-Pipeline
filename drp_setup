@@ -1,0 +1,29 @@
+export KPFPIPE_TEST_DATA=/data/KPF-Pipeline-TestData
+export KPFPIPE_DATA=${PWD}/test_data/data/kpf
+
+echo "create folders..."
+mkdir -p ${KPFPIPE_DATA}/2D/20220517
+mkdir -p ${KPFPIPE_DATA}/L1
+mkdir -p ${KPFPIPE_DATA}/L2
+mkdir -p ${KPFPIPE_DATA}/bary
+mkdir -p ${KPFPIPE_DATA}/order_trace
+mkdir -p ${KPFPIPE_DATA}/masters
+echo "done"
+
+echo "copy masters file ..."
+cp /data/kpf/masters/*_allwave.fits  ${KPFPIPE_DATA}/masters
+echo "done"
+echo "copy flat file"
+cp /data/kpf/2D/20220517/KP.20220517.52876.04.fits ${KPFPIPE_DATA}/2D/20220517/
+echo "done"
+echo "copy level 0 files..."
+cp /data/kpf/2D/20220517_2/KP.20220517.81*.fits  ${KPFPIPE_DATA}/2D/20220517/
+echo "done"
+echo "copy solar list"
+cp /data/kpf/L2/List_KPF_observations_using_SoCal.csv ${KPFPIPE_DATA}/L2/
+echo "done"
+
+#export DATE_DIR=20220517
+#export FLAT_FILE=KP.20220517.52876.04
+#kpf -r examples/kpf_ait/kpf.recipe -c examples/kpf_ait/kpf.cfg
+

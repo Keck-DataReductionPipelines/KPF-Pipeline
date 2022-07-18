@@ -1,6 +1,7 @@
 # standard dependencies
 import configparser
 import numpy as np
+import os
 from astropy import constants as cst, units as u
 
 # pipeline dependencies
@@ -31,7 +32,7 @@ class WaveCalibrate(KPF1_Primitive):
     Attributes:
         l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[0]`
         cal_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[1]`
-        cal_orderlette_names (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
+        cal_orderlet_names (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[2]`
         save_wl_pixel_toggle (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[3]`
         quicklook (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[4]`
         data_type (kpfpipe.models.level1.KPF1): Instance of `KPF1`,  assigned by `actions.args[5]`
@@ -59,7 +60,7 @@ class WaveCalibrate(KPF1_Primitive):
         
         self.l1_obj = self.action.args[0]
         self.cal_type = self.action.args[1]
-        self.cal_orderlette_names = self.action.args[2]
+        self.cal_orderlet_names = self.action.args[2]
         self.save_wl_pixel_toggle = self.action.args[3]
         self.quicklook = self.action.args[4]
         self.data_type =self.action.args[5]
@@ -77,7 +78,8 @@ class WaveCalibrate(KPF1_Primitive):
             'linelist_path' in args_keys else None
         self.output_dir = action.args['output_dir'] if \
             'output_dir' in args_keys else None
-        ## ^ TODO: how will we automate cycling through the most recent files?
+        if not os.path.exists(self.output_dir):
+            os.mkdir(self.output_dir)
 
         self.f0_key = action.args['f0_key'] if 'f0_key' in args_keys else None
         self.clip_peaks_toggle = action.args['clip_peaks_toggle'] if \
@@ -114,9 +116,15 @@ class WaveCalibrate(KPF1_Primitive):
             Level 1 Data Object
         """
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
-            file_name_split = self.l1_obj.filename.split('_')
-            datetime_suffix = file_name_split[-1].split('.')[0]
-            for prefix in self.cal_orderlette_names:
+            file_name_split = self.l1_obj.filename.split('_')[0]
+
+            for i, prefix in enumerate(self.cal_orderlet_names):
+                print('\nCalibrating orderlet {}.'.format(prefix))
+
+                if self.save_diagnostics is not None:
+                    self.alg.save_diagnostics_dir = '{}/{}/'.format(self.save_diagnostics, prefix)
+
+                output_ext = self.output_ext[i]
                 calflux = self.l1_obj[prefix]
                 calflux = np.nan_to_num(calflux)
                         
@@ -125,11 +133,12 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
                         'LFC'
                     ):
-                        raise ValueError(
-                            'Not an LFC file! CAL-OBJ is {}.'.format(
-                                self.l1_obj.header['PRIMARY']['CAL-OBJ']
-                            )
-                        )
+                        pass # TODO: fix
+                        # raise ValueError(
+                        #     'Not an LFC file! CAL-OBJ is {}.'.format(
+                        #         self.l1_obj.header['PRIMARY']['CAL-OBJ']
+                        #     )
+                        # )
                     
                     if self.logger:
                         self.logger.info(
@@ -174,18 +183,22 @@ class WaveCalibrate(KPF1_Primitive):
                     )
                     
                     if self.save_wl_pixel_toggle == True:
-                        file_name = self.output_dir + self.cal_type + '_' + \
-                            datetime_suffix + '.npy'
+                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        if not os.path.exists(wlpixelwavedir):
+                            os.mkdir(wlpixelwavedir)
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                            file_name_split + '{}.npy'.format(prefix)
                         self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
                         
-                    self.l1_obj[self.output_ext] = wl_soln
+                    self.l1_obj[output_ext] = wl_soln
                 
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
                         'ThAr'
                     ):
-                        raise ValueError('Not a ThAr file!')
+                        pass # TODO: fix
+                        # raise ValueError('Not a ThAr file!')
                     
                     if self.linelist_path is not None:
                         peak_wavelengths_ang = np.load(
@@ -200,13 +213,16 @@ class WaveCalibrate(KPF1_Primitive):
                     )
                     
                     if self.save_wl_pixel_toggle == True:
-                        file_name = self.output_dir + self.cal_type + '_' + \
-                            datetime_suffix + '.npy'
+                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        if not os.path.exists(wlpixelwavedir):
+                            os.mkdir(wlpixelwavedir)
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                            file_name_split + '{}.npy'.format(prefix)
                         wl_pixel_filename = self.alg.save_wl_pixel_info(
                             file_name, wls_and_pixels
                         )
 
-                    self.l1_obj[self.output_ext] = wl_soln
+                    self.l1_obj[output_ext] = wl_soln
 
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
@@ -228,8 +244,11 @@ class WaveCalibrate(KPF1_Primitive):
                     )
 
                     if self.save_wl_pixel_toggle == True:
-                        file_name = self.output_dir + self.cal_type + '_' + \
-                            datetime_suffix + '.npy'
+                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        if not os.path.exists(wlpixelwavedir):
+                            os.mkdir(wlpixelwavedir)
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                            file_name_split + '{}.npy'.format(prefix)
                         wl_pixel_filename = self.alg.save_wl_pixel_info(
                             file_name, wls_and_pixels
                         )
@@ -256,7 +275,7 @@ class WaveCalibrate(KPF1_Primitive):
                         # update wls using calculated average drift
                         wl_soln = wl_soln + delta_lambda
 
-                    self.l1_obj[self.output_ext] = wl_soln
+                    self.l1_obj[output_ext] = wl_soln
 
         else:
             raise ValueError(

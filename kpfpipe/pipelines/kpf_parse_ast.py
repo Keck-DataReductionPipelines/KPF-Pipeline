@@ -5,6 +5,7 @@ import _ast
 from collections.abc import Iterable
 from queue import Queue
 import os
+from copy import copy
 
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
@@ -105,7 +106,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
 
     def load_env_value(self, key, value):
         self._env[key] = value
-    
+
     def visit_Module(self, node):
         """
         visit_Module() processes "module" node of a parsed recipe.
@@ -201,7 +202,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self._load.append((node.name, node.asname))
             self.pipeline.logger.debug(f"alias: {node.name} as {node.asname}")
             setattr(node, 'kpf_completed', True)
-    
+
     def visit_Name(self, node):
         """
         visit_Name() processes variable names encountered in a recipe.
@@ -246,6 +247,12 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 else:
                     self.pipeline.logger.error(f"Name: No context or context has no config attribute")
                     raise Exception(f"Name: No context or context has no config attribute")
+            elif node.id == "context":
+                if self.context != None and hasattr(self.context, "args"):
+                    value = self.context.args
+                else:
+                    self.pipeline.logger.error(f"Name: No context or context has no args attribute")
+                    raise Exception(f"Name: No context or context has no args attribute")
             elif self._env.get(node.id):
                 value = self._env.get(node.id)
             else:
@@ -261,11 +268,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         else:
             raise RecipeError(
                 f"visit_Name: on recipe line {node.lineno}, ctx is unexpected type: {type(node.ctx)}")
-    
+
     def visit_For(self, node):
         """
         visit_For() processes the "for" node of an AST.
-        
+
         Handling looping correctly in a recipe is made more complex because of
         the need to support calls to data processing primitives within the loop,
         which cause start_recipe() or resume_recipe() to stop walking the AST tree
@@ -300,7 +307,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             for subnode in node.body:
                 self.visit(subnode)
             return
-            
+
         if not getattr(node, 'kpf_completed', False):
             if not getattr(node, 'kpf_started', False):
                 params = {}
@@ -309,7 +316,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 if self.awaiting_call_return:
                     return
                 target = self._store.pop() if len(self._store) > storeQSizeBefore else None
-                params['target'] = target 
+                params['target'] = target
                 loadQSizeBefore = len(self._load)
                 self.visit(node.iter)
                 args = []
@@ -363,7 +370,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.pipeline.logger.info(f"Starting For loop on recipe line {node.lineno} with arg {current_arg}")
             setattr(node, 'kpf_completed', True)
 
-    
+
     def visit_Assign(self, node):
         """
         visit_Assign() processes the assignment of one or more constant or calculated
@@ -429,7 +436,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             setattr(node, 'kpf_completed', True)
 
     # UnaryOp and the unary operators
-    
+
     def visit_UnaryOp(self, node):
         """
         visit_UnaryOp() implements the UnaryOps "-x", "+x" and "not x".  The actual
@@ -461,7 +468,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._load.append(func(self._load.pop()))
 
     def visit_UAdd(self, node):
-        """ 
+        """
         visit_UAdd() implements the operator for unary +, as in "+x" by invoking the internal
         method _unary_op_impl() with an appropriate lambda function.
         See also visit_UnaryOp().
@@ -469,7 +476,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._unary_op_impl(node, "UAdd", lambda x : x)
 
     def visit_USub(self, node):
-        """ 
+        """
         visit_USub() implements the operator for unary -, as in "-x" by invoking the internal
         method _unary_op_impl() with an appropriate lambda function.
         See also visit_UnaryOp().
@@ -477,14 +484,14 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._unary_op_impl(node, "USub", lambda x : -x)
 
     def visit_Not(self, node):
-        """ 
+        """
         visit_Not() implements the operator for not, as in " not x" by invoking the internal
         method _unary_op_impl() with an appropriate lambda function.
         See also visit_UnaryOp().
         """
         self._unary_op_impl(node, "Not", lambda x : not x)
 
-    # BinOp and the binary operators
+    # BinOp, BoolOp and the binary operators
 
     def visit_BinOp(self, node):
         """
@@ -507,6 +514,27 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.visit(node.left)
         self.visit(node.op)
 
+    def visit_BoolOp(self, node):
+        """
+        visit_BoolOp() implements boolean binary operations, i.e. "x and y" and "x or y".
+        The actual work is done in the operator visitor method, e.g. visit_And.
+
+        Implementor Note:
+            This implementation doesn't support calls within boolOp expressions,
+            so we don't bother guarding for self.awaiting_call_return here, nor in
+            the binary operator methods.
+        """
+        if self._reset_visited_states:
+            for item in reversed(node.values):
+                self.visit(item)
+            self.visit(node.op)
+            return
+        self.pipeline.logger.debug("BoolOp:")
+        # list is reversed because items are being pushed on a stack, so they come off last first
+        for item in reversed(node.values):
+            self.visit(item)
+        self.visit(node.op)
+
     # binary operators
 
     def _binary_op_impl(self, node, name, func):
@@ -521,7 +549,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._load.append(func(self._load.pop(), self._load.pop()))
 
     def visit_Add(self, node):
-        """ 
+        """
         visit_Add() implements the binary addition operator by invoking the internal
         method _binary_op_impl() with an appropriate lambda function.
         See also visit_BinOp()
@@ -529,29 +557,45 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._binary_op_impl(node, "Add", lambda x, y: x + y)
 
     def visit_Sub(self, node):
-        """ 
+        """
         visit_Sub() implements the binary subtraction operator by invoking the internal
         method _binary_op_impl() with an appropriate lambda function.
         See also visit_BinOp()
         """
         self._binary_op_impl(node, "Sub", lambda x, y: x - y)
-    
+
     def visit_Mult(self, node):
-        """ 
+        """
         visit_Mult() implements the binary multiplication operator by invoking the internal
         method _binary_op_impl() with an appropriate lambda function.
         See also visit_BinOp()
         """
         self._binary_op_impl(node, "Mult", lambda x, y: x * y)
-    
+
     def visit_Div(self, node):
-        """ 
+        """
         visit_Div() implements the binary division operator by invoking the internal
         method _binary_op_impl() with an appropriate lambda function.
         See also visit_BinOp()
         """
         self._binary_op_impl(node, "Div", lambda x, y: x / y)
-    
+
+    def visit_And(self, node):
+        """
+        visit_And() implements the boolean "and" function by invoking the internal
+        method _binary_op_impl() with an appropriate lambda function.
+        See also visit_BinOp()
+        """
+        self._binary_op_impl(node, "And", lambda x, y: x and y)
+
+    def visit_Or(self, node):
+        """
+        visit_Or() implements the boolean "or" function by invoking the internal
+        method _binary_op_impl() with an appropriate lambda function.
+        See also visit_BinOp()
+        """
+        self._binary_op_impl(node, "Or", lambda x, y: x or y)
+
     # Compare and comparison operators
 
     def visit_Compare(self, node):
@@ -597,62 +641,62 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._load.append(func(self._load.pop(), self._load.pop()))
 
     def visit_Eq(self, node):
-        """ 
+        """
         visit_Eq() implements the equality comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
         """
         self._compare_op_impl(node, "Eq", lambda x, y: x == y)
-    
+
     def visit_NotEq(self, node):
-        """ 
+        """
         visit_NotEq() implements the inequality comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
         """
         self._compare_op_impl(node, "NotEq", lambda x, y: x != y)
-    
+
     def visit_Lt(self, node):
-        """ 
+        """
         visit_Lt() implements the less than comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
         """
         self._compare_op_impl(node, "Lt", lambda x, y: x < y)
-    
+
     def visit_LtE(self, node):
-        """ 
+        """
         visit_LtE() implements the less than or equal comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
         """
         self._compare_op_impl(node, "LtE", lambda x, y: x <= y)
-    
+
     def visit_Gt(self, node):
-        """ 
+        """
         visit_Gt() implements the greater than comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         """
         self._compare_op_impl(node, "Gt", lambda x, y: x > y)
-    
+
     def visit_GtE(self, node):
-        """ 
+        """
         visit_GtE() implements the greater than or equal comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
         """
         self._compare_op_impl(node, "GtE", lambda x, y: x >= y)
-    
+
     def visit_Is(self, node):
-        """ 
+        """
         visit_Is() implements the "is" comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
         """
         self._compare_op_impl(node, "Is", lambda x, y: x is y)
-    
+
     def visit_IsNot(self, node):
-        """ 
+        """
         visit_Eq() implements the "is not" comparison operator by invoking
         the internal method _compare_op_impl() with an appropriate lambda function.
         See also visit_Compare().
@@ -660,13 +704,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self._compare_op_impl(node, "IsNot", lambda x, y: not (x is y))
 
     def visit_In(self, node):
-        """ 
+        """
         visit_In() implements the "in" range comparison operator by invoking
         See also visit_Compare().
         the internal method _compare_op_impl() with an appropriate lambda function.
         """
         self._compare_op_impl(node, "In", lambda x, y: x in y)
-    
+
     # TODO: implement visit_In and visit_NotIn.  Depends on support for Tuple and maybe others
 
     def visit_Call(self, node):
@@ -777,7 +821,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     for argnode in node.args:
                         self.visit(argnode)
                         event_args.append(self._load.pop())
-                    self.context.append_event(node.func.id, event_args)
+                    try:
+                        self.context.push_event(node.func.id, event_args)
+                    except:
+                        self.context.append_event(node.func.id, event_args)
                     self.pipeline.logger.info(f"Queued {node.func.id} with args {str(event_args)}; awaiting return.")
                     #
                     self.awaiting_call_return = True
@@ -815,7 +862,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         visit_If() implements conditional execution triggered by an "if" or "if ... else"
         statement.
         Evaluate the test and visit one of the two branches, body or orelse.
-        
+
         Note:
             The python "if" expression, e.g. x = a if <condition> else b, is not
             supported in recipes.
@@ -863,7 +910,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
     def visit_List(self, node):
         """
         visit_List() implements the "[<list item>, <list item>, ...]" list syntax from
-        Python.  It does this by visiting the tree node representing each list element in 
+        Python.  It does this by visiting the tree node representing each list element in
         turn.  Visiting each node results in a new item pushed onto the _load stack.  After
         visiting each subtree, the new items on the _load stack are popped and appended onto
         a list object.  Finally, the list object is pushed onto the _load stack.
@@ -885,11 +932,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                     raise RecipeError("List: expected item to append to list, but none was found")
             self._load.append(l)
             setattr(node, "kpf_completed", True)
-    
+
     def visit_Tuple(self, node):
         """
         visit_Tuple() implements the "(<tuple item>, <tuple item>, ...)" tuple syntax from
-        Python.  It does this by visiting the tree node representing each tuple element in 
+        Python.  It does this by visiting the tree node representing each tuple element in
         turn.  Visiting each node results in a new item pushed onto the _load stack.  After
         visiting each subtree, the new items on the _load stack are popped and appended onto
         a list object.  Finally, the list object is pushed onto the _load stack.
@@ -917,7 +964,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             else:
                 raise RecipeError(
                     f"visit_Tuple: on recipe line {node.lineno}, ctx is unexpected type: {type(node.ctx)}")
-        
+
     def visit_NameConstant(self, node):
         """
         visit_NameConstant() implements python NameConstant syntax element by pushing the value
@@ -928,7 +975,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(f"NameConstant: {node.value}")
         #ctx of NameConstant is always Load
         self._load.append(node.value)
-    
+
     def visit_Num(self, node):
         """
         visit_Num() implements a numeric constant by pushing it on the _load stack.
@@ -951,7 +998,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(f"Str: {node.s}")
         # ctx of Str is always Load
         self._load.append(node.s)
-    
+
     def visit_Expr(self, node):
         """
         visit_Expr() implements an expression by pushing the resulting value on the _load
@@ -968,7 +1015,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             if self.awaiting_call_return:
                 return
             setattr(node, 'kpf_complted', True)
-    
+
     def visit_Attribute(self, node):
         """
         visit_Attribute() implements the syntax e.g. of an object attribute access, e.g. "a.key".
@@ -983,7 +1030,10 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         obj = self._load.pop()
         if isinstance(node.ctx, _ast.Load):
             try:
-                value = obj.getValue(node.attr)
+                if 'getValue' in obj.__dir__():
+                    value = obj.getValue(node.attr)
+                else:
+                    value = obj[node.attr]
                 # print(f"Attribute: value is {type(value)}: {value}")
             except (KeyError, AttributeError):
                 self.pipeline.logger.error(
@@ -997,7 +1047,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 f"Assigning to dictionary attribute on line {node.lineno} not supported")
             raise RecipeError(
                 f"Assigning to dictionary attribute on line {node.lineno} not supported")
-    
+
     def visit_Subscript(self, node):
         """
         visit_Subscript() implements subscript syntax of the form a[i], where the subscript value
@@ -1005,7 +1055,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         of the indexed item.  See also visit_Index().
 
         Note:
-            Slice subscripts of the form a[i:j] are not supported.  
+            Slice subscripts of the form a[i:j] are not supported.
         """
         if self._reset_visited_states:
             return
@@ -1020,7 +1070,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
             raise RecipeError(
                 f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
-    
+
     def visit_Index(self, node):
         """
         visit_Index() doesn't do anything special.  It simply visits the subtree corresponding to the
@@ -1042,7 +1092,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             f"generic_visit: got unsupported node {node.__class__.__name__}")
         raise RecipeError(
             f"Unsupported language feature: {node.__class__.__name__}")
-    
+
     def reset_visited_states(self, node):
         """
         reset_visited_states() walks the tree below the node where the call is made after setting
