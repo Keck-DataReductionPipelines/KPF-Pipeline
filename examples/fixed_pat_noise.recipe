@@ -1,0 +1,18 @@
+from modules.Utils.noise_pattern import NoisePattern
+from modules.Utils.orientation_ref_reader import OrientationReference
+
+l0_files = /Users/paminabby/Desktop/fpn_test_dir/in/KP.20220511.78175.01.fits
+master_frames = None
+ccd_ref_path = /Users/paminabby/Desktop/fpn_test_dir/kpfsim_ccd_orient.txt
+csv_output_dir = /Users/paminabby/Desktop/fpn_test_dir/out/
+
+if assembly_stage == 'pre':
+    ccd_info = OrientationReference(ccd_ref_path,'KPF')
+
+if assembly_stage == 'post':
+    ccd_info == ['RED_CCD','GREEN_CCD']
+
+NoisePattern(l0_files,master_frames,ccd_info,csv_output_dir,assembly_stage)
+
+
+#ccd_info = config.ARGUMENT.ffi_exts
