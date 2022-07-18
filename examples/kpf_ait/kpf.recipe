@@ -283,4 +283,4 @@ if do_rv:
 						ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
 			result = to_fits(lev2_rv, reweighted_output)
 			i = i + 1
-		
+
