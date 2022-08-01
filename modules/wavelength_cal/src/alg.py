@@ -141,10 +141,9 @@ class WaveCalibration:
         if self.quicklook == False:
             order_list = self.remove_orders(step=1)
             n_orders = len(order_list)
-
+            print('n_orders:',n_orders)
             # masked_calflux = self.mask_array_neid(calflux, n_orders)
             masked_calflux = calflux # TODO: fix
-           
             # perform wavelength calibration
             poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
@@ -232,7 +231,7 @@ class WaveCalibration:
                         - the corresponding (fractional) pixels on which the 
                           peaks fall
         """    
-
+        print(cal_flux)
         # 2D extracted spectra
         if plt_path is not None:
             plt.figure(figsize=(20,10))

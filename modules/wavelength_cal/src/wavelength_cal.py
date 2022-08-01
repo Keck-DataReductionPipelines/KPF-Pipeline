@@ -115,6 +115,7 @@ class WaveCalibrate(KPF1_Primitive):
         Returns:
             Level 1 Data Object
         """
+        print(self.l1_obj.info())
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
             file_name_split = self.l1_obj.filename.split('_')[0]
 
@@ -175,7 +176,6 @@ class WaveCalibrate(KPF1_Primitive):
                         peak_wavelengths_ang = None
                     
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
-                                        
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux, peak_wavelengths_ang=peak_wavelengths_ang,
                         rough_wls=self.rough_wls, 
@@ -252,7 +252,7 @@ class WaveCalibrate(KPF1_Primitive):
                         wl_pixel_filename = self.alg.save_wl_pixel_info(
                             file_name, wls_and_pixels
                         )
-                
+                #TODO: Drift for all types hack
                     # if we've just got one etalon frame, the wl solution
                     # that should be assigned to the file is the master (usually 
                     # LFC) solution

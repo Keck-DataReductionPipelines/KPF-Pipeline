@@ -1,0 +1,2 @@
+invoke_subrecipe('examples/thar_red.recipe')
+invoke_subrecipe('examples/thar_green.recipe')
