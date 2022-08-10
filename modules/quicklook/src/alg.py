@@ -5,6 +5,7 @@ from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 import os
+import pandas as pd
 from astropy import modeling
 
 
@@ -144,6 +145,11 @@ class QuicklookAlg:
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
             '''
+            #read in the order trace
+            order_trace_file = self.config['L1']['order_trace']
+            order_trace_data = pd.read_csv(order_trace_file)
+            print(order_trace_data)
+
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
