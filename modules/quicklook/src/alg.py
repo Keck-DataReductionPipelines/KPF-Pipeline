@@ -147,8 +147,13 @@ class QuicklookAlg:
             '''
             #read in the order trace
             order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
-            order_trace_data = pd.read_csv(order_trace_file)
-            print(order_trace_file,order_trace_data)
+            order_trace = pd.read_csv(order_trace_file)
+            print(order_trace_file,order_trace)
+
+            for i in range(np.shape(order_trace)):
+                x_grid = np.linspace(order_trace['X1'][i],order_trace['X2'][i],order_trace['X2'][i]-order_trace['X2'][i])
+                print(x_grid)
+                #midorder = np.array(polynomial(X, *ordercoeffs[order]))
 
             #2D image
             plt.figure(figsize=(5,4))
