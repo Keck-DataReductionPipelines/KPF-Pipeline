@@ -174,9 +174,11 @@ def main():
     else:
         arg.watch = False
         if hasattr(args, 'date'):
-            arg.date_dir = args.date
+            arg.date_dir = os.path.basename(args.date)
+            arg.file_path = args.date
         else:
             arg.date_dir = datestr
+            arg.file_path = datestr
         framework.append_event('start_recipe', arg)
         framework.append_event('exit', arg)
         framework.start()
