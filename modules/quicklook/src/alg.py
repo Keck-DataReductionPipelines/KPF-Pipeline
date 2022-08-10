@@ -152,7 +152,7 @@ class QuicklookAlg:
 
             for i in range(np.shape(order_trace)[0]):
                 print(order_trace.iloc[i]['X1'])
-                x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X2']))
+                x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
 
                 #midorder = np.array(polynomial(X, *ordercoeffs[order]))
 
