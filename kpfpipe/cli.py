@@ -36,6 +36,8 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
+    parser.add_argument('--date', dest='date', type=str, default=None,
+                        help="Date for the data to be processed.")
 
     args = parser.parse_args(in_args[1:])
 
@@ -137,10 +139,8 @@ def main():
         framework.pipeline.logger.error("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()
         sys.exit(1)
-
     arg = Arguments(name='action_args')
     arg.recipe = recipe
-
     # watch mode
     if args.watch != None:
         framework.start_action_loop()
@@ -160,8 +160,8 @@ def main():
             arg = arg
             arg.date_dir = datestr
             arg.file_path = fname
+            arg.watch = True
             fm.append_event('next_file', arg)
-        
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
@@ -171,8 +171,12 @@ def main():
 
         while True:
             time.sleep(300)
-
     else:
+        arg.watch = False
+        if hasattr(args, 'date'):
+            arg.date_dir = args.date
+        else:
+            arg.date_dir = datestr
         framework.append_event('start_recipe', arg)
         framework.append_event('exit', arg)
         framework.start()
