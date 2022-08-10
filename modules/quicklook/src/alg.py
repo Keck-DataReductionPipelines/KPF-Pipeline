@@ -146,9 +146,9 @@ class QuicklookAlg:
                 plt.close('all')
             '''
             #read in the order trace
-            order_trace_file = self.config['L1']['order_trace']
+            order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
             order_trace_data = pd.read_csv(order_trace_file)
-            print(order_trace_data)
+            print(order_trace_file,order_trace_data)
 
             #2D image
             plt.figure(figsize=(5,4))
