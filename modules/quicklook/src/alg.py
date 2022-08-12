@@ -145,10 +145,7 @@ class QuicklookAlg:
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
             '''
-            #read in the order trace
-            order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
-            order_trace = pd.read_csv(order_trace_file)
-            print(order_trace_file,order_trace)
+
 
 
 
@@ -162,20 +159,29 @@ class QuicklookAlg:
             plt.colorbar(label = 'Counts')
 
 
-            for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
-                #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
-                x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
-                y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
-                plt.plot(x_grid,y_grid,color ='red',linewidth = 0.1)
-                plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],color ='red',linewidth = 0.1,alpha = 0.5)
-                plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='magenta',linewidth = 0.1,alpha = 0.5)
-                #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
-                #print(x_grid,y_grid)
-            plt.xlim(3200,4000)
-            plt.ylim(3200,4000)
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
             #2D difference image
+
+
+            #if the frame is a flat, let's plot the order trace
+            if version == 'Flat_All':
+                order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
+                order_trace = pd.read_csv(order_trace_file)
+                print(order_trace_file,order_trace)
+                for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
+                    #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
+                    x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
+                    y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
+                    plt.plot(x_grid,y_grid,color ='red',linewidth = 0.1)
+                    plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],color ='white',linewidth = 0.1,alpha = 0.5)
+                    plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='white',linewidth = 0.1,alpha = 0.5)
+                    #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
+                    #print(x_grid,y_grid)
+                plt.xlim(3200,4000)
+                plt.ylim(3200,4000)
+                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.pdf')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=1000)
             plt.close()
             print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
