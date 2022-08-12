@@ -237,6 +237,7 @@ class QuicklookAlg:
             plt.title(ccd_color[i_color]+' '+version+' Column Cut Through Column '+str(which_column))#(Middle of CCD)
             plt.ylim(1,1.2*np.nanmax(counts[:,which_column]))
             plt.legend()
+            '''
             #show the order order_trace
             if version == 'Flat_All':
                  for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
@@ -247,7 +248,7 @@ class QuicklookAlg:
                      plt.plot([y_grid[which_column],y_grid[which_column]],[1,1.*np.nanmax(counts[:,which_column]],color ='red',linewidth = 0.2)
                      #plt.plot(x_grid[which_column],y_grid[which_column]-order_trace.iloc[i]['BottomEdge'],color ='white',linewidth = 0.2,alpha = 1)
                      #plt.plot(x_grid[which_column],y_grid[which_column]+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
-
+            '''
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
