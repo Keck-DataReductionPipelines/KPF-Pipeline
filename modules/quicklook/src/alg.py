@@ -79,7 +79,7 @@ class QuicklookAlg:
             for order_trace_file in order_trace_list:
                 order_trace = pd.read_csv(order_trace_file)
                 order_trace_master = pd.read_csv(order_trace_master_file)
-                print(order_trace_file,order_trace)
+                print(np.shape(order_trace),np.shape(order_trace_master))
                 for i in range(1,np.shape(order_trace)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
                     x_grid_master = np.linspace(order_trace_master.iloc[i]['X1'],order_trace_master.iloc[i]['X2'],int(order_trace_master.iloc[i]['X2']-order_trace_master.iloc[i]['X1']))
                     y_grid_master = order_trace_master.iloc[i]['Coeff0']+x_grid_master*order_trace_master.iloc[i]['Coeff1']+x_grid_master**2*order_trace_master.iloc[i]['Coeff2']+x_grid_master**3*order_trace_master.iloc[i]['Coeff3']
