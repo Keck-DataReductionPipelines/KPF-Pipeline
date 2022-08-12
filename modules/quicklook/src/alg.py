@@ -8,7 +8,7 @@ import os
 import pandas as pd
 import glob
 from astropy import modeling
-
+from astropy.time import Time
 
 class QuicklookAlg:
     """
@@ -53,13 +53,20 @@ class QuicklookAlg:
             #print(len(file_list),file_list)
 
             #pull temps from all the fits header and draw the temps
+            date_obs = []
+            temp = []
             for file in file_list:
                 print(file)
                 hdulist = fits.open(file)
                 print(hdulist.info())
                 hdr = hdulist[0].header
-                print(hdr)
-                #temp = hdr['IMTYPE']
+
+                date_obs.append(hdr['DATE-OBS'])
+                temp.append(hdr['TEMP'])
+            date_obs = np.array(date_obs,'str')
+            date_obs = Time(date_obs, format='isot', scale='utc')
+            plt.plot(date_obs.jd,temp)
+            plt.savefig(output_dir+'fig/end_of_night_summary_temp.pdf')
             return
         print('working on',date,exposure_name)
 
