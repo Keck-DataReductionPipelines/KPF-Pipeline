@@ -168,7 +168,7 @@ class QuicklookAlg:
                 y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
                 #plt.plot(x_grid,y_grid,color ='red',linewidth = 0.1)
                 plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],color ='red',linewidth = 0.1,alpha = 0.5)
-                plt.plot(x_grid,y_grid-order_trace.iloc[i]['TopEdge'],color ='green',linewidth = 0.1,alpha = 0.5)
+                plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='green',linewidth = 0.1,alpha = 0.5)
                 #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
                 print(x_grid,y_grid)
 
