@@ -54,6 +54,7 @@ class QuicklookAlg:
 
             #pull temps from all the fits header and draw the temps
             for file in file_list[0]:
+                print(file)
                 hdulist = fits.open(file)
                 print(hdulist.info())
                 hdr = hdulist[0].header
