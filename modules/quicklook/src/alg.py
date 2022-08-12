@@ -171,8 +171,8 @@ class QuicklookAlg:
                 plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='magenta',linewidth = 0.1,alpha = 0.5)
                 #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
                 #print(x_grid,y_grid)
-            plt.xlim(3800,4000)
-            plt.ylim(3800,4000)
+            plt.xlim(3200,4000)
+            plt.ylim(3200,4000)
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
             #2D difference image
