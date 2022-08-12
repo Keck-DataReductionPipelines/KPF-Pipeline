@@ -25,7 +25,8 @@ class QuicklookAlg:
 
 
 
-    def qlp_procedures(self,kpf0_file,output_dir):
+    def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
+        #end of night summary mode:
 
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
@@ -43,10 +44,12 @@ class QuicklookAlg:
 
         exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         date = exposure_name[3:11]
+
+
+        if end_of_night_summary == True:
+            print('working on end of night summary of '+data)
+            return
         print('working on',date,exposure_name)
-
-
-
         #read ccd directly
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
@@ -198,7 +201,7 @@ class QuicklookAlg:
                 plt.imshow(high_var_counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version)
+                plt.title(ccd_color[i_color]+' '+version+' High Variance')
                 plt.colorbar(label = 'Counts')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.pdf')
                 plt.close()
@@ -209,7 +212,7 @@ class QuicklookAlg:
                 plt.imshow(low_var_counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version)
+                plt.title(ccd_color[i_color]+' '+version+' Low Variance')
                 plt.colorbar(label = 'Counts')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.pdf')
 
