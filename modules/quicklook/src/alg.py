@@ -65,8 +65,10 @@ class QuicklookAlg:
                 temp.append(hdr['TEMP'])
             date_obs = np.array(date_obs,'str')
             date_obs = Time(date_obs, format='isot', scale='utc')
-            plt.plot(date_obs.jd,temp)
-            plt.savefig(output_dir+'fig/end_of_night_summary_temp.pdf')
+            plt.scatter(date_obs,temp)
+            plt.xlable('Time')
+            plt.ylable('Temperature')
+            plt.savefig(output_dir+'fig/end_of_night_summary_temperature.pdf')
             return
         print('working on',date,exposure_name)
 
