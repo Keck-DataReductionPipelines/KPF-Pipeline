@@ -164,6 +164,7 @@ class QuicklookAlg:
             #2D difference image
 
 
+
             #if the frame is a flat, let's plot the order trace
             if version != '':#if version == 'Flat_All':
                 order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
@@ -184,6 +185,33 @@ class QuicklookAlg:
                 plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=1000)
             plt.close()
 
+            #diagnostic for fixed noise patterns
+            if version =='Bias':
+                plt.figure(figsize=(5,4))
+                plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
+                threshold = 2
+                high_var_counts = np.copy(counts)
+                low_var_counts = np.copy(counts)
+                high_var_counts[abs(counts-np.nanmedian(counts))<threshold*np.nanstd(counts)] = np.nan
+                low_var_counts[abs(counts-np.nanmedian(counts))<threshold*np.nanstd(counts)] = np.nan
+
+                plt.imshow(high_var_counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
+                plt.xlabel('x (pixel number)')
+                plt.ylabel('y (pixel number)')
+                plt.title(ccd_color[i_color]+' '+version)
+                plt.colorbar(label = 'Counts')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.pdf')
+                plt.close()
+
+                plt.figure(figsize=(5,4))
+                plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
+
+                plt.imshow(low_var_counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
+                plt.xlabel('x (pixel number)')
+                plt.ylabel('y (pixel number)')
+                plt.title(ccd_color[i_color]+' '+version)
+                plt.colorbar(label = 'Counts')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.pdf')
 
             print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
