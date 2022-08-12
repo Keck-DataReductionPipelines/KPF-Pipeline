@@ -6,6 +6,7 @@ from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 import os
 import pandas as pd
+import glob
 from astropy import modeling
 
 
@@ -26,7 +27,7 @@ class QuicklookAlg:
 
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
-        #end of night summary mode:
+
 
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
@@ -48,8 +49,19 @@ class QuicklookAlg:
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
+            file_list = glob.glob(self.config['IO']['input_prefix_l0']+date+'/*.fits')
+            print(len(file_list),file_list)
+            #pull temps from all exposures
+
             return
         print('working on',date,exposure_name)
+
+
+
+
+
+
+
         #read ccd directly
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
         hdulist = fits.open(L0_data)
