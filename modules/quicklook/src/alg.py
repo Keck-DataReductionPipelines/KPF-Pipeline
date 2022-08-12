@@ -74,7 +74,7 @@ class QuicklookAlg:
             '''
 
             #plot how the order trace changes
-            order_trace_list = glob.glob('/data/order_trace/*', recursive = True)
+            order_trace_list = glob.glob('/data/order_trace/*/*.csv', recursive = True)
             print(order_trace_list)
             return
         print('working on',date,exposure_name)
