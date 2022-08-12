@@ -74,7 +74,7 @@ class QuicklookAlg:
             '''
 
             #plot how the order trace changes
-            order_trace_master_file = '/data/order_trace/20220517/KP.20220517.52876.04_GREEN_CCD.csv'
+            order_trace_master_file = '/data/order_trace/20220517/KP.20220601.02770.09_GREEN_CCD.csv'
             order_trace_list = glob.glob('/data/order_trace/*/*_GREEN_CCD.csv', recursive = True)
             for order_trace_file in order_trace_list:
                 order_trace = pd.read_csv(order_trace_file)
