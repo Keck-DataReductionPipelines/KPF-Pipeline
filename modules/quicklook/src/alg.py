@@ -52,6 +52,7 @@ class QuicklookAlg:
             file_list = glob.glob(self.config['IO']['input_prefix_l0']+date+'/*.fits')
             #print(len(file_list),file_list)
 
+            '''
             #pull temps from all the fits header and draw the temps
             date_obs = []
             temp = []
@@ -65,10 +66,16 @@ class QuicklookAlg:
                 temp.append(hdr['TEMP'])
             date_obs = np.array(date_obs,'str')
             date_obs = Time(date_obs, format='isot', scale='utc')
-            plt.scatter(date_obs.jd,temp)
+            plt.scatter(date_obs.jd,temp, marker = '.')
             plt.xlabel('Time')
             plt.ylabel('Temperature')
             plt.savefig(output_dir+'fig/end_of_night_summary_temperature.pdf')
+            plt.close()
+            '''
+
+            #plot how the order trace changes
+            order_trace_list = glob.glob('/data/order_trace/*')
+            print(order_trace_list)
             return
         print('working on',date,exposure_name)
 
