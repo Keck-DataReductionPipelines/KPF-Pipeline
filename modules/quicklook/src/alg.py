@@ -53,12 +53,12 @@ class QuicklookAlg:
             #print(len(file_list),file_list)
 
             #pull temps from all the fits header and draw the temps
-            for file in file_list[0]:
+            for file in file_list:
                 print(file)
-                hdulist = fits.open(file)
-                print(hdulist.info())
-                hdr = hdulist[0].header
-                temp = hdr['IMTYPE']
+                #hdulist = fits.open(file)
+                #print(hdulist.info())
+                #hdr = hdulist[0].header
+                #temp = hdr['IMTYPE']
             return
         print('working on',date,exposure_name)
 
