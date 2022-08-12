@@ -58,7 +58,7 @@ class QuicklookAlg:
             for file in file_list:
                 print(file)
                 hdulist = fits.open(file)
-                print(hdulist.info())
+                #print(hdulist.info())
                 hdr = hdulist[0].header
 
                 date_obs.append(hdr['DATE-OBS'])
