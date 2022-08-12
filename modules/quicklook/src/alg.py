@@ -47,7 +47,7 @@ class QuicklookAlg:
 
 
         if end_of_night_summary == True:
-            print('working on end of night summary of '+data)
+            print('working on end of night summary of '+date)
             return
         print('working on',date,exposure_name)
         #read ccd directly
