@@ -50,9 +50,14 @@ class QuicklookAlg:
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
             file_list = glob.glob(self.config['IO']['input_prefix_l0']+date+'/*.fits')
-            print(len(file_list),file_list)
-            #pull temps from all exposures
+            #print(len(file_list),file_list)
 
+            #pull temps from all the fits header and draw the temps
+            for file in file_list[0]:
+                hdulist = fits.open(L0_data)
+                print(hdulist.info())
+                hdr = hdulist[0].header
+                temp = hdr['IMTYPE']
             return
         print('working on',date,exposure_name)
 
