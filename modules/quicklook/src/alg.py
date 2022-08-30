@@ -302,7 +302,7 @@ class QuicklookAlg:
             plt.ylabel('Number of Pixels')
             plt.yscale('log')
             plt.title(ccd_color[i_color]+' '+version+' Histogram')
-            plt.legend(location='bottom right')
+            plt.legend(loc='bottom right')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
 
