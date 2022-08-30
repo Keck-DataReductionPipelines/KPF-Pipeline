@@ -253,7 +253,7 @@ class QuicklookAlg:
                 high_var_counts[abs(counts-np.nanmedian(counts))<threshold*np.nanstd(counts)] = np.nan
                 low_var_counts[abs(counts-np.nanmedian(counts))>threshold*np.nanstd(counts)] = np.nan
 
-                plt.imshow(high_var_counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
+                plt.imshow(high_var_counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower',cmap = 'bwr')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' High Variance')
@@ -852,12 +852,12 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <img id="imgZoom5" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn5(event)" onmouseout="zoomOut5()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png">
+        <img id="imgZoom5" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn5(event)" onmouseout="zoomOut5()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
         height: 400px;
         display: inline-block;
-        background-image: url('fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png');
+        background-image: url('fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png');
         background-repeat: no-repeat;"
         id="overlay5"
         onmousemove="zoomIn5(event)"></div>
@@ -878,6 +878,39 @@ class QuicklookAlg:
 
         function zoomOut5() {
         var element = document.getElementById("overlay5");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom6" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn6(event)" onmouseout="zoomOut6()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png">
+        <div style="border: 1px solid black;
+        width: 500px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay6"
+        onmousemove="zoomIn6(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn6(event) {
+        var element = document.getElementById("overlay6");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom6");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+
+        }
+
+        function zoomOut6() {
+        var element = document.getElementById("overlay6");
         element.style.display = "inline-block";
         }
         </script>
