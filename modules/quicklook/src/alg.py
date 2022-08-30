@@ -857,7 +857,7 @@ class QuicklookAlg:
         width: 500px;
         height: 400px;
         display: inline-block;
-        background-image: url('fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png');
+        background-image: url('fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png");
         background-repeat: no-repeat;"
         id="overlay"
         onmousemove="zoomIn(event)"></div>
