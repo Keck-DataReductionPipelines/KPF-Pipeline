@@ -71,7 +71,7 @@ class QuicklookAlg:
             plt.ylabel('Temperature')
             plt.savefig(output_dir+'fig/end_of_night_summary_temperature.pdf')
             plt.close()
-            '''
+
 
             #plot how the order trace changes
             order_trace_master_file = '/data/order_trace/20220601/KP.20220601.37734.61_GREEN_CCD.csv'
@@ -88,7 +88,7 @@ class QuicklookAlg:
                     y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
 
                     print(order_trace_file,'order',i,np.nanstd(y_grid_master-y_grid),abs(order_trace.iloc[i]['BottomEdge']-order_trace_master.iloc[i]['BottomEdge']),abs(order_trace.iloc[i]['TopEdge']-order_trace_master.iloc[i]['TopEdge']))
-                    '''
+
                     plt.plot(x_grid,y_grid,color ='red',linewidth = 0.2)
                     plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],color ='white',linewidth = 0.2,alpha = 1)
                     plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
@@ -302,7 +302,7 @@ class QuicklookAlg:
             plt.ylabel('Number of Pixels')
             plt.yscale('log')
             plt.title(ccd_color[i_color]+' '+version+' Histogram')
-            plt.legend()
+            plt.legend(location='bottom right')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.pdf')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
 
@@ -911,6 +911,72 @@ class QuicklookAlg:
 
         function zoomOut6() {
         var element = document.getElementById("overlay6");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom7" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn7(event)" onmouseout="zoomOut7()" src="fig/""" +exposure_name+ """_order_trace_GREEN_CCD.png">
+        <div style="border: 1px solid black;
+        width: 500px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_order_trace_GREEN_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay7"
+        onmousemove="zoomIn6(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn7(event) {
+        var element = document.getElementById("overlay7");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom7");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+
+        }
+
+        function zoomOut7() {
+        var element = document.getElementById("overlay7");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom8" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn8(event)" onmouseout="zoomOut8()" src="fig/""" +exposure_name+ """_order_trace_RED_CCD.png">
+        <div style="border: 1px solid black;
+        width: 500px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_order_trace_RED_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay8"
+        onmousemove="zoomIn6(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn8(event) {
+        var element = document.getElementById("overlay8");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom8");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+
+        }
+
+        function zoomOut8() {
+        var element = document.getElementById("overlay8");
         element.style.display = "inline-block";
         }
         </script>
