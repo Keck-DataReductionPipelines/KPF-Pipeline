@@ -852,32 +852,32 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <img id="imgZoom4" style="border: 1px solid black; align: right;" width="600px" height="400px" align="right" onmousemove="zoomIn4(event)" onmouseout="zoomOut4()" src="fig/""" +exposure_name+ """_1D_spectrum.png">
+        <img id="imgZoom" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn(event)" onmouseout="zoomOut()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png">
         <div style="border: 1px solid black;
-        width: 400px;
+        width: 500px;
         height: 400px;
         display: inline-block;
-        background-image: url('fig/""" +exposure_name+ """_high_var_GREEN_CCD.png');
+        background-image: url('fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png');
         background-repeat: no-repeat;"
-        id="overlay4"
-        onmousemove="zoomIn4(event)"></div>
+        id="overlay"
+        onmousemove="zoomIn(event)"></div>
         <p>&nbsp;</p>
 
 
 
         <script>
-        function zoomIn4(event) {
-        var element = document.getElementById("overlay4");
+        function zoomIn(event) {
+        var element = document.getElementById("overlay");
         element.style.display = "inline-block";
-        var img = document.getElementById("imgZoom4");
+        var img = document.getElementById("imgZoom");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 8) + "px " + (-posY * 8) + "px";
+        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
 
         }
 
-        function zoomOut4() {
-        var element = document.getElementById("overlay4");
+        function zoomOut() {
+        var element = document.getElementById("overlay");
         element.style.display = "inline-block";
         }
         </script>
