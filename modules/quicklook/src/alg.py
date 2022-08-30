@@ -259,8 +259,9 @@ class QuicklookAlg:
                 plt.title(ccd_color[i_color]+' '+version+' High Variance')
                 plt.colorbar(label = 'Counts')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.pdf')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png', dpi=1000)
                 plt.close()
-
+                '''
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
@@ -270,7 +271,7 @@ class QuicklookAlg:
                 plt.title(ccd_color[i_color]+' '+version+' Low Variance')
                 plt.colorbar(label = 'Counts')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.pdf')
-
+                '''
             print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
                 plt.figure(figsize=(5,4))
@@ -824,6 +825,39 @@ class QuicklookAlg:
         height: 400px;
         display: inline-block;
         background-image: url('fig/""" +exposure_name+ """_1D_spectrum.png');
+        background-repeat: no-repeat;"
+        id="overlay4"
+        onmousemove="zoomIn4(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn4(event) {
+        var element = document.getElementById("overlay4");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom4");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 8) + "px " + (-posY * 8) + "px";
+
+        }
+
+        function zoomOut4() {
+        var element = document.getElementById("overlay4");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <img id="imgZoom4" style="border: 1px solid black; align: right;" width="600px" height="400px" align="right" onmousemove="zoomIn4(event)" onmouseout="zoomOut4()" src="fig/""" +exposure_name+ """_1D_spectrum.png">
+        <div style="border: 1px solid black;
+        width: 400px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_high_var_GREEN_CCD.png');
         background-repeat: no-repeat;"
         id="overlay4"
         onmousemove="zoomIn4(event)"></div>
