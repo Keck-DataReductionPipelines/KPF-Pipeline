@@ -239,6 +239,7 @@ class QuicklookAlg:
                     #print(x_grid,y_grid)
                 plt.xlim(3200,4000)
                 plt.ylim(3200,4000)
+                plt.title(ccd_color[i_color]+' '+version+' Order Trace')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.pdf')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=1000)
             plt.close()
@@ -687,6 +688,7 @@ class QuicklookAlg:
         </a>
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.pdf" >
         <img id="imgZoom" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn(event)" onmouseout="zoomOut()" src="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -720,6 +722,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.pdf" >
         <img id="imgZoom1" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn1(event)" onmouseout="zoomOut1()" src="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -753,6 +756,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.pdf" >
         <img id="imgZoom2" style="border: 1px solid black; align: right;" width="600px" height="300px" align="right" onmousemove="zoomIn2(event)" onmouseout="zoomOut2()" src="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 400px;
@@ -786,6 +790,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.pdf" >
         <img id="imgZoom3" style="border: 1px solid black; align: right;" width="600px" height="300px" align="right" onmousemove="zoomIn3(event)" onmouseout="zoomOut3()" src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 400px;
@@ -819,6 +824,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.pdf" >
         <img id="imgZoom4" style="border: 1px solid black; align: right;" width="600px" height="400px" align="right" onmousemove="zoomIn4(event)" onmouseout="zoomOut4()" src="fig/""" +exposure_name+ """_1D_spectrum.png">
         <div style="border: 1px solid black;
         width: 400px;
@@ -852,6 +858,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.pdf" >
         <img id="imgZoom5" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn5(event)" onmouseout="zoomOut5()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -885,6 +892,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.pdf" >
         <img id="imgZoom6" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn6(event)" onmouseout="zoomOut6()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -918,6 +926,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_order_trace_GREEN_CCD.pdf" >
         <img id="imgZoom7" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn7(event)" onmouseout="zoomOut7()" src="fig/""" +exposure_name+ """_order_trace_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -951,6 +960,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_order_trace_RED_CCD.pdf" >
         <img id="imgZoom8" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn8(event)" onmouseout="zoomOut8()" src="fig/""" +exposure_name+ """_order_trace_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
