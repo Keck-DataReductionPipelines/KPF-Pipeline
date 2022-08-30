@@ -852,7 +852,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <img id="imgZoom5" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn1(event)" onmouseout="zoomOut5()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png">
+        <img id="imgZoom5" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn5(event)" onmouseout="zoomOut5()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
         height: 400px;
