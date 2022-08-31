@@ -245,7 +245,7 @@ class QuicklookAlg:
             plt.close()
 
             #diagnostic for fixed noise patterns
-            if version =='Bias':
+            if version =='Bias' or version == 'Dark':
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
                 threshold = 2
@@ -441,11 +441,12 @@ class QuicklookAlg:
                 step = float(self.config['RV']['step'])
                 vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
+                ''' plot the individual orders?
                 for kk in range(np.shape(ccf)[1]):
                     plt.plot(vel_grid,ccf[0,kk,:])
                     plt.plot(vel_grid,ccf[1,kk,:])
                     plt.plot(vel_grid,ccf[2,kk,:])
-
+                '''
 
                 if np.shape(ccf)==(0,): continue
                 ccf = np.sum(ccf,axis =0)#sum over orderlets
