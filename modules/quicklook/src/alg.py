@@ -443,6 +443,8 @@ class QuicklookAlg:
 
                 for kk in range(np.shape(ccf)[1]):
                     plt.plot(vel_grid,ccf[0,kk,:])
+                    plt.plot(vel_grid,ccf[1,kk,:])
+                    plt.plot(vel_grid,ccf[2,kk,:])
 
 
                 if np.shape(ccf)==(0,): continue
