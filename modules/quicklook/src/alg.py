@@ -413,7 +413,7 @@ class QuicklookAlg:
         if os.path.exists(ccf_file):
             print('Working on L2 file')
             hdulist = fits.open(ccf_file)
-
+            print(hdulist.info())
 
 
             ccf_color=[]
