@@ -232,9 +232,9 @@ class QuicklookAlg:
                     #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
                     x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
                     y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
-                    plt.plot(x_grid,y_grid,color ='red',linewidth = 0.2)
-                    plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],color ='white',linewidth = 0.2,alpha = 1)
-                    plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
+                    plt.plot(x_grid,y_grid,color ='magenta',linewidth = 0.2)
+                    plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],':',color ='white',linewidth = 0.2,alpha = 1)
+                    plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],'--',color ='black',linewidth = 0.2,alpha = 1)
                     #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
                     #print(x_grid,y_grid)
                 plt.xlim(3200,4000)
