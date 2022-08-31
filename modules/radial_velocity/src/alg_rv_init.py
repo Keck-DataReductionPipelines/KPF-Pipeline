@@ -80,7 +80,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     AIR_TO_VACUUM = 'air_to_vacuum'    # True or False
     REWEIGHTING_CCF = 'reweighting_ccf_method'         # ratio, ccf, or None
     CCF_CODE = 'ccf_engine'     # ccf code language
-    START_VEL = 'start_vel'       # start velocity
+    START_VEL = 'start_vel'     # start velocity
+    STELLAR_DIR = 'stellarmask_dir' # stellarmask directory
 
     # defined in configuration file or star config for NEID
     RA = 'ra'                   # hours, like "01:44:04.0915236842"
@@ -168,6 +169,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)  # in rv_config
 
+        stellar_dir = self.get_value_from_config(self.STELLAR_DIR, default='rv_test/stellarmasks/')
         for star_key in star_info:
             k_val = self.get_rv_config_value(star_key, config_star)
             if k_val is None:
@@ -197,7 +199,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if default_mask not in mask_file_map:
                 return self.ret_status('default mask of '+default_mask + ' is not defined')
 
-            self.mask_path = self.test_data_dir + 'rv_test/stellarmasks/'+mask_file_map[default_mask]
+            self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask]
             self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
         return self.ret_status('ok')
 

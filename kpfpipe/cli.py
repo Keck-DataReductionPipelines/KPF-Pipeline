@@ -174,8 +174,9 @@ def main():
     else:
         arg.watch = False
         if hasattr(args, 'date'):
-            arg.date_dir = os.path.basename(args.date)
-            arg.file_path = args.date
+            datedir = args.date
+            arg.date_dir = os.path.basename(datedir[0:-1] if str.endswith(datedir, "/") else datedir)
+            arg.file_path = datedir
         else:
             arg.date_dir = datestr
             arg.file_path = datestr
