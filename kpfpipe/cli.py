@@ -36,8 +36,7 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
-    parser.add_argument('--date', dest='date', type=str, default=None,
-                        help="Date for the data to be processed.")
+    parser.add_argument('--date', dest='date', type=str, default=None, help="Date for the data to be processed.")
 
     args = parser.parse_args(in_args[1:])
 
