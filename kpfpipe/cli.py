@@ -122,7 +122,7 @@ def main():
     # and individual modules.
     # The configs related to the logger is under the section [LOGGER]
 
-    # Try to initialize the framework 
+    # Try to initialize the framework
     try:
         framework = Framework(pipe, framework_config)
         framework.pipeline.start(pipe_config)
@@ -173,13 +173,14 @@ def main():
             time.sleep(300)
     else:
         arg.watch = False
-        if hasattr(args, 'date'):
+        if hasattr(args, 'date') and args.date:
             datedir = args.date
             arg.date_dir = os.path.basename(datedir[0:-1] if str.endswith(datedir, "/") else datedir)
             arg.file_path = datedir
         else:
             arg.date_dir = datestr
             arg.file_path = datestr
+
         framework.append_event('start_recipe', arg)
         framework.append_event('exit', arg)
         framework.start()
