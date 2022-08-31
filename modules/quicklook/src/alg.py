@@ -438,6 +438,7 @@ class QuicklookAlg:
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
+                step = float(self.config['RV']['step'])
                 vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
                 for kk in range(np.shape(ccf)[1]):
@@ -448,7 +449,7 @@ class QuicklookAlg:
                 ccf = np.sum(ccf,axis =0)#sum over orderlets
                 #print(np.shape(ccf))
 
-                step = float(self.config['RV']['step'])
+
 
                 #print('step',step,len(vel_grid))
 
