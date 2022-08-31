@@ -6,8 +6,11 @@ selected_lev1_files = []
 if not lev1_list:
 	lev1_list = find_files(input_lev1_pattern)
 
-list_socal = output_dir + config.ARGUMENT.output_rv + "List_KPF_observations_using_SoCal.csv"
-selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=sel_obsid)
+if do_rv:
+	list_socal = output_dir + config.ARGUMENT.output_rv + "List_KPF_observations_using_SoCal.csv"
+	selected_lev1_files = SelectObs(lev1_list, selection_ref=list_socal, observation_id=sel_obsid)
+else:
+	selected_lev1_files = []
 
 for input_lev1_file in selected_lev1_files:
 	_, short_lev1 = split(input_lev1_file)
@@ -79,6 +82,7 @@ for input_lev1_file in selected_lev1_files:
 
 if not context.watch and do_rv_reweighting:
 	all_lev2_files = find_files(lev2_pattern)
+	lev2_list = []
 	for lev2_file in all_lev2_files:
 		lev2_data = kpf2_from_fits(lev2_file, data_type=data_type)
 		lev2_list = lev2_list + [lev2_data]
