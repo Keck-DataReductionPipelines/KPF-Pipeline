@@ -1,3 +1,5 @@
+import ast
+
 class ConfigHandler():
     """Config file handler.
 
@@ -41,7 +43,21 @@ class ConfigHandler():
                 return self.config_param.getint(param, default)
             elif isinstance(default, float):
                 return self.config_param.getfloat(param, default)
+            elif isinstance(default, bool):
+                return self.config_param.getboolean(param, default)
             else:
-                return self.config_param.get(param, default)
+                c_str = self.config_param.get(param, default)
+
+                if c_str and isinstance(c_str, str):
+                    b_pairs = [['[', ']']]
+
+                    for p in b_pairs:
+                        if c_str[0] == p[0] and c_str[-1] == p[1]:
+                            try:
+                                c_list = ast.literal_eval(c_str)
+                                return c_list
+                            except ValueError:
+                                return c_str
+                return c_str
         else:
             return default
