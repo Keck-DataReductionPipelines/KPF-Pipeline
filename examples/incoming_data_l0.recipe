@@ -1,0 +1,68 @@
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+
+channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_green
+data_type = config.ARGUMENT.data_type
+pl_overscan_reg_red = config.ARGUMENT.pl_overscan_reg_red
+srl_overscan_reg_red = config.ARGUMENT.srl_overscan_reg_red
+pl_overscan_reg_green = config.ARGUMENT.pl_overscan_reg_green
+srl_overscan_reg_green = config.ARGUMENT.srl_overscan_reg_green
+overscan_method = config.ARGUMENT.overscan_method
+order = config.ARGUMENT.overscan_order
+oscan_clip = config.ARGUMENT.overscan_clip
+lev0_ffi_ext_red = config.ARGUMENT.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.ARGUMENT.lev0_ffi_ext_green
+prescan_reg = config.ARGUMENT.prescan_reg
+gain_key = config.ARGUMENT.gain_keyword
+file_or_direct = config.ARGUMENT.file_or_direct
+l0_path_input = config.ARGUMENT.l0_path_input
+l0_path_red_assembled = config.ARGUMENT.l0_path_red_assembled
+l0_path_red_green_assembled = config.ARGUMENT.l0_path_red_green_assembled
+
+ref_output_red = OrientationReference(channel_orientation_ref_path_red,data_type)
+ref_output_green = OrientationReference(channel_orientation_ref_path_green,data_type)
+
+if file_or_direct == 'directory':
+    L0_files_path_1 = l0_path_input + '*.fits'
+    L0_output_path_1 = l0_path_red_assembled
+    for raw_file_path in find_files(L0_files_path_1): 
+        raw_file = kpf0_from_fits(raw_file_path,data_type)
+        L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg_red,srl_overscan_reg_red,overscan_method,order,oscan_clip,ref_output_red,lev0_ffi_ext_red,data_type,prescan_reg,gain_key)
+        _,file_name_ext = split(raw_file_path)
+        file_name,ext = splitext(file_name_ext)
+        output_file_name = file_name
+        L0_result = to_fits(L0_with_ffi,L0_output_path_1 + output_file_name + ext)
+
+    L0_files_path_2 = l0_path_red_assembled + '*.fits'
+    L0_output_path_2 = l0_path_red_green_assembled
+
+    for raw_file_path in find_files(L0_files_path_2): 
+        raw_file = kpf0_from_fits(raw_file_path,data_type)
+        L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg_green,srl_overscan_reg_green,overscan_method,order,oscan_clip,ref_output_green,lev0_ffi_ext_green,data_type,prescan_reg,gain_key)
+        _,file_name_ext = split(raw_file_path)
+        file_name,ext = splitext(file_name_ext)
+        output_file_name = file_name
+        L0_result = to_fits(L0_with_ffi,L0_output_path_2 + output_file_name + ext)
+
+if file_or_direct == 'file':
+    L0_files_path_1 = l0_path_input
+    L0_output_path_1 = l0_path_red_assembled
+    for raw_file_path in find_files(L0_files_path_1): 
+        raw_file = kpf0_from_fits(raw_file_path,data_type)
+        L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg_red,srl_overscan_reg_red,overscan_method,order,oscan_clip,ref_output_red,lev0_ffi_ext_red,data_type,prescan_reg,gain_key)
+        _,file_name_ext = split(raw_file_path)
+        file_name,ext = splitext(file_name_ext)
+        output_file_name = file_name
+        L0_result = to_fits(L0_with_ffi,L0_output_path_1 + output_file_name + ext)
+
+    L0_files_path_2 = l0_path_red_assembled
+    L0_output_path_2 = l0_path_red_green_assembled
+
+    for raw_file_path in find_files(L0_files_path_2): 
+        raw_file = kpf0_from_fits(raw_file_path,data_type)
+        L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg_green,srl_overscan_reg_green,overscan_method,order,oscan_clip,ref_output_green,lev0_ffi_ext_green,data_type,prescan_reg,gain_key)
+        _,file_name_ext = split(raw_file_path)
+        file_name,ext = splitext(file_name_ext)
+        output_file_name = file_name
+        L0_result = to_fits(L0_with_ffi,L0_output_path_2 + output_file_name + ext)

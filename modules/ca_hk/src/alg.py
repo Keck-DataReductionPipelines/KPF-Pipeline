@@ -3,9 +3,10 @@ import pandas as pd
 from os.path import exists
 from configparser import ConfigParser
 from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.alg_base import ModuleAlgBase
 
 
-class CaHKAlg:
+class CaHKAlg(ModuleAlgBase):
     """Ca H&K spectrum extraction.
 
     This module defines class 'HKExtractionAlg' and methods to extract spectrum from H&K science data.
@@ -14,21 +15,15 @@ class CaHKAlg:
         data (numpy.ndarray): Ca H&K 2D image data.
         fibers (list): List containing the interested fibers to be extracted.
         config (configparser.ConfigParser): config context.
-        logger (logging.Logger): Instance of logging.Logger.
+        logger (logging.Logger): Instance of logging.Logger from external application.
 
     Attributes:
-        logger (logging.Logger): Instance of logging.Logger.
         instrument (str): Imaging instrument.
-        config_param (ConfigHandler): Related to 'PARAM' section or section associated with the instrument
-            if it is defined in the config file.
-        config_logger (ConfigHandler): Related to 'LOGGER' section defined in the config file.
         hk_data (numpy.ndarray): Numpy array storing 2d image data.
         fibers (list): List storing fibers to be processed.
         data_range (list): Index range of all pixels.
-        debug_output (str): File path for the file that the debug information is printed to. The printing goes to
-            standard output if it is an empty string or no printing is made if it is None.
-        is_time_profile (bool): Print out the time status while running.
-        is_debug (bool): Print out the debug information while running.
+        trace_location (dict): Trace location per order per fiber.
+        order_buffer (numpy.ndarray): Buffer to contain flux computation.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -43,48 +38,33 @@ class CaHKAlg:
     LOC_x2 = 'xf'
     LOC_y1 = 'y0'
     LOC_y2 = 'yf'
+    name = 'CaHK'
 
     def __init__(self, data, fibers, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from CaHKAlg')
         if not isinstance(config, ConfigParser):
             raise TypeError('config type error, cannot construct object from CaHKAlg')
-        if not isinstance(fibers, list):
+
+        ModuleAlgBase.__init__(self, self.name, config, logger)
+        ins = self.config_param.get_config_value('instrument', '').upper() if self.config_param is not None else ''
+        self.config_ins = ConfigHandler(config, ins, self.config_param)  # section of instrument or 'PARAM'
+
+        if not fibers and self.config_ins:                               # get fibers from configuration
+            fibers = self.config_ins.get_config_value('fibers', '')
+            if fibers and isinstance(fibers, str):
+                fibers = fibers.split(',')
+
+        if not fibers:
             raise TypeError('fiber content error, cannot construct object from CaHKAlg')
 
-        self.logger = logger
+        self.instrument = ins
         self.hk_data = data
-        self.fibers = fibers
         ny, nx = np.shape(data)
         self.data_range = [0, ny - 1, 0, nx - 1]
-        config_h = ConfigHandler(config, 'PARAM')
-        self.instrument = config_h.get_config_value('instrument', '')
-        ins = self.instrument.upper()
-        self.config_param = ConfigHandler(config, ins, config_h)  # section of instrument or 'PARAM'
-        self.config_logger = ConfigHandler(config, 'LOGGER')  # section of 'LOGGER'
-        self.debug_output = None
-        self.is_time_profile = False
-        self.is_debug = True if self.logger else False
+        self.fibers = fibers if isinstance(fibers, list) else [str(fibers)]
         self.trace_location = {fiber: None for fiber in self.fibers}
         self.order_buffer = np.zeros((1, nx), dtype=float)
-
-    def enable_debug_print(self, to_print=True):
-        """Enable or disable debug printing.
-
-        Args:
-            to_print (bool, optional): Print out the debug information while running. Defaults to True.
-
-        """
-        self.is_debug = to_print or bool(self.logger)
-
-    def enable_time_profile(self, is_time=False):
-        """Enable or disable time profiling printing.
-
-        Args:
-            is_time (bool, optional): Print out the time information while running. Defaults to False.
-        """
-
-        self.is_time_profile = is_time
 
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
@@ -99,7 +79,7 @@ class CaHKAlg:
             int/float/str: Value for the searched parameter.
 
         """
-        return self.config_param.get_config_value(param, default)
+        return self.config_ins.get_config_value(param, default)
 
     def get_data_range(self):
         """Get image size range
@@ -117,6 +97,16 @@ class CaHKAlg:
 
         """
         return self.instrument
+
+    def get_fibers(self):
+        """Get imaging fibers
+
+        Returns:
+            list: list with fibers
+
+        """
+
+        return self.fibers
 
     def get_trace_location(self, fiber=None):
         """Get the trace location on specified fibers
@@ -182,59 +172,9 @@ class CaHKAlg:
                                                               'x2': loc[loc_idx[self.LOC_x2]],
                                                               'y1': loc[loc_idx[self.LOC_y1]],
                                                               'y2': loc[loc_idx[self.LOC_y2]]}
+
+            self.d_print("CaHKAlg: load trace location on fiber "+fiber + ": " + str(self.trace_location[fiber]))
         return self.trace_location
-
-    def d_print(self, *args, end='\n', info=False):
-        """Print out running status to logger or debug information to a file.
-
-        Args:
-            *args: Variable length argument list to print.
-            end (str, optional): Specify what to print at the end.
-            info (bool): Print out for information level, not for debug level.
-
-        Notes:
-            This function handles the print-out to the logger defined in the config file or other file as specified in
-            :func:`~alg.OrderTraceAlg.add_file_logger()`.
-
-        """
-        if self.is_debug:
-            out_str = ' '.join([str(item) for item in args])
-            if self.logger:
-                if info:
-                    self.logger.info(out_str)
-                else:
-                    self.logger.debug(out_str)
-            if self.debug_output is not None and not info:
-                if self.debug_output:
-                    with open(self.debug_output, 'a') as f:
-                        f.write(' '.join([str(item) for item in args]) + end)
-                        f.close()
-                else:
-                    print(out_str, end=end)
-
-    def t_print(self, *args):
-        """Print time profiling information to the logger.
-
-        Args:
-             *args: Variable length argument list to print.
-
-        """
-        if self.is_time_profile and self.logger:
-            out_str = ' '.join([str(item) for item in args])
-            self.logger.info(out_str)
-
-    def add_file_logger(self, filename: str = None):
-        """Add file to log debug information.
-
-        Args:
-            filename (str, optional): Filename of the log file. Defaults to None.
-
-        Returns:
-            None.
-
-        """
-        self.enable_debug_print(filename is not None)
-        self.debug_output = filename
 
     def get_spectral_data(self):
         """Get spectral information including data and dimension.

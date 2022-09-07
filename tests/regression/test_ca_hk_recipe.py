@@ -28,3 +28,5 @@ ca_hk_config = "examples/default_hk.cfg"
 def test_recipe_ca_hk_kpf():
     recipe_test(ca_hk_recipe, ca_hk_config)
 
+if __name__ == '__main__':
+    test_recipe_ca_hk_kpf()

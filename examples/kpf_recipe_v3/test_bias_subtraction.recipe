@@ -1,0 +1,17 @@
+from modules.bias_subtraction.src.bias_subtraction import BiasSubtract
+from modules.Utils.frame_combine import FrameCombinePrimitive
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+
+ref_output = OrientationReference(channel_orientation_ref_path,data_type)
+
+for raw_file_path in find_files(L0_files_path):
+    raw_file = kpf0_from_fits(raw_file_path,data_type)
+    L0_with_ffi = OverscanSubtraction(raw_file,pl_overscan_reg,srl_overscan_reg,overscan_method,order,oscan_clip,ref_output,lev0_ffi_exts,data_type)
+    L0_result = to_fits(L0_with_ffi,raw_file_path)
+
+for raw_file_path in find_files(L0_files_path):
+    raw_file = kpf0_from_fits(raw_file_path,data_type)
+    final_raw_frames_file = BiasSubtract(raw_file,masterbias_path,lev0_ffi_exts,data_type,quicklook)
+    result = to_fits(final_raw_frames_file,raw_file_path)
+
