@@ -9,7 +9,6 @@ def test_help():
 
     assert rc == 2, "running command '{}' failed".format(cmd)
 
-"""
 def test_launch():
     cmd = 'kpf -r examples/simple.recipe -c examples/default_simple.cfg'
     child = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
@@ -17,4 +16,3 @@ def test_launch():
     rc = child.returncode
     print(rc)
     assert rc == 1, "running command '{}' failed".format(cmd)
-"""
