@@ -24,6 +24,7 @@
                     - `action.args['output_wave_exts'] (str)`: Extension names of the extensions to contain
                       the wavelength solution for each fiber, optional, Defaults to fiber list prefixed with '_wave'.
                     - `action.args['dark'] (KPF0, optional)`: dark master file for dark subtraction. Defaults to None.
+                    - `action.args['bias'] (KPF0, optional)`: bias master file for bias subtraction. Defaults to None.
                     - `action.args['wave_files'] (list, optional)`: Wavelength solution files per fiber list.
                       Defaults to None.
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
@@ -213,9 +214,9 @@ class CaHKExtraction(KPF0_Primitive):
         self.output_exts = self.alg.get_output_exts()
         self.output_wave_exts = self.alg.get_wavelength_exts()
 
-        result = self.alg.img_subtraction(self.dark_img, self.bias_img)
+        result, msg = self.alg.img_subtraction(self.dark_img, self.bias_img)
         if not result and self.logger:
-            self.logger.info("CaHKExtraction: dark/bias subtraction error")
+            self.logger.info("CaHKExtraction: dark/bias subtraction error: "+msg)
             return Arguments(None)
 
         self.alg.img_scaling()

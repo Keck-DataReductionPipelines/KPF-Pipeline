@@ -121,7 +121,6 @@ class CaHKAlg(ModuleAlgBase):
                 self.output_exts.append(self.fibers[idx])
         return self.output_exts
 
-
     def get_wavelength_exts(self):
         if not self.output_wl_exts:
             self.output_wl_exts = self.get_config_value('hk_wave_exts', [f+'_wave' for f in self.fibers])
@@ -321,20 +320,19 @@ class CaHKAlg(ModuleAlgBase):
             if np.shape(self.hk_data) == np.shape(dark_img):
                 self.hk_data -= dark_img
             else:
-                return False
+                return False, "image dimension between the raw image and dark image doesn't match"
         if bias_img is not None:
             if np.shape(self.hk_data) == np.shape(bias_img):
                 self.hk_data -= bias_img
             else:
-                return False
-        return True
+                return False, "image dimension between the raw image and bias image doesn't match"
+        return True, ""
 
     def img_scaling(self):
         """ Scale the hk data based on the defined gain that converts the image from the count to electron charge """
 
         self.get_gain()
-        if self.ca_hk_gain != 1.0:
-            self.hk_data = self.hk_data * self.ca_hk_gain
+        self.hk_data = self.hk_data * self.ca_hk_gain
 
     def load_wavelength_table(self, wave_table_file: str, fiber: str):
         """ load the csv file with wavelength solution table. The table size is also checked.
