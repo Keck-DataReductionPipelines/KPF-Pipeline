@@ -347,64 +347,65 @@ class QuicklookAlg:
         #moving on the 1D data
 
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
-        print('working on', L1_data)
-        hdulist = fits.open(L1_data)
+        if os.path.exists(L1_data):
+            print('working on', L1_data)
+            hdulist = fits.open(L1_data)
 
-        wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
-        wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
+            wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
+            wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
 
-        wave_soln = self.config['L1']['wave_soln']
-        if wave_soln!='None':#use the master the wavelength solution
-            hdulist1 = fits.open(wave_soln)
-            wav_green = np.array(hdulist1['GREEN_CAL_WAVE'].data,'d')
-            wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
-
-
-        #print(hdulist1.info())
-
-        flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
-        flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
-        print(np.shape(flux_green),np.shape(flux_red))
-        if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
-        if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
-
-        wav = np.concatenate((wav_green,wav_red),axis = 0)
-        flux = np.concatenate((flux_green,flux_red),axis = 0)
+            wave_soln = self.config['L1']['wave_soln']
+            if wave_soln!='None':#use the master the wavelength solution
+                hdulist1 = fits.open(wave_soln)
+                wav_green = np.array(hdulist1['GREEN_CAL_WAVE'].data,'d')
+                wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
 
 
-        n = int(self.config['L1']['n_per_row']) #number of orders per panel
-        cm = plt.cm.get_cmap('rainbow')
+            #print(hdulist1.info())
 
-        from matplotlib import gridspec
-        gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+            flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
+            flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
+            print(np.shape(flux_green),np.shape(flux_red))
+            if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
 
-        plt.rcParams.update({'font.size': 15})
-        fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+            wav = np.concatenate((wav_green,wav_red),axis = 0)
+            flux = np.concatenate((flux_green,flux_red),axis = 0)
 
-        plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
-        fig.subplots_adjust(hspace=0.4)
 
-        for i in range(np.shape(wav)[0]):
-            low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
-            flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
-            j = int(i/n)
-            rgba = cm((i % n)/n*1.)
-            #print(j,rgba)
-            ax[j].plot(wav[i,:],flux[i,:], linewidth =  0.3,color = rgba)
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
 
-        for j in range(int(np.shape(flux)[0]/n)):
-            low, high = np.nanpercentile(flux[j*n:(j+1)*n,:],[.1,99.9])
-            #print(j,high*1.5)
-            ax[j].set_ylim(-high*0.1, high*1.2)
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
 
-        low, high = np.nanpercentile(flux,[0.1,99.9])
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
 
-        ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
-        ax[0].set_title('1D Spectrum',fontsize = 20)
-        plt.xlabel('Wavelength (Ang)',fontsize = 20)
-        plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
-        plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
 
+            for i in range(np.shape(wav)[0]):
+                low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
+                flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux)[0]/n)):
+                low, high = np.nanpercentile(flux[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
+            ax[0].set_title('1D Spectrum',fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
+            plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
+        else: print('L1 file does not exist')
 
         #now onto the plotting of CCF
         #date = exposure_name[3:11]
