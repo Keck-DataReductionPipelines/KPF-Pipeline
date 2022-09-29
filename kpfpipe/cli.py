@@ -154,13 +154,15 @@ def main():
             fm = Framework(pipe, framework_config)
             fm.pipeline.start(pipe_config)
             frameworks.append(fm)
-            fm.start_action_loop()
+            # fm.start_action_loop()
 
             arg = arg
             arg.date_dir = datestr
             arg.file_path = fname
             arg.watch = True
             fm.append_event('next_file', arg)
+            fm.append_event('exit', arg)
+            fm.start()
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
