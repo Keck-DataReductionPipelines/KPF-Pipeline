@@ -38,6 +38,7 @@ class QuicklookAlg:
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+        if not os.path.exists(output_dir+'/fig'):
             os.makedirs(output_dir+'/fig')
 
 
