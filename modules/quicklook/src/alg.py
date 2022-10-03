@@ -261,8 +261,8 @@ class QuicklookAlg:
                 plt.title(ccd_color[i_color]+' '+version+' High Variance')
                 plt.colorbar(label = 'Counts')
 
-                plt.text(2800,3600, 'Nominal STD: %5.2f' % np.nanstd(low_var_counts))
-                plt.text(2800,3300, 'Fixed Pattern STD: %5.2f' % np.nanstd(high_var_counts))
+                plt.text(2400,3600, 'Nominal STD: %5.1f' % np.nanstd(low_var_counts))
+                plt.text(2400,3300, 'Fixed Pattern STD: %5.1f' % np.nanstd(high_var_counts))
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.pdf')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png', dpi=1000)
                 plt.close()
