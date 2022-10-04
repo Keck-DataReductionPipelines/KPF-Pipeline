@@ -255,7 +255,7 @@ class QuicklookAlg:
                 high_var_counts[abs(counts-np.nanmedian(counts))<threshold*np.nanstd(counts)] = np.nan
                 low_var_counts[abs(counts-np.nanmedian(counts))>threshold*np.nanstd(counts)] = np.nan
 
-                plt.imshow(high_var_counts, vmin = np.percentile(np.ravel(high_var_counts),1),vmax = np.percentile(np.ravel(high_var_counts),99),interpolation = 'None',origin = 'lower',cmap = 'bwr')
+                plt.imshow(high_var_counts, vmin = np.percentile(flatten_counts,0.1),vmax = np.percentile(flatten_counts,99.9),interpolation = 'None',origin = 'lower',cmap = 'bwr')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' High Variance')
