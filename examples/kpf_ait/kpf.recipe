@@ -239,7 +239,6 @@ if do_rv or do_rv_reweighting:
 	rv_init = RadialVelocityInit(start_time="2021-03-01", bc_corr_path=bc_path, test_data_path=rv_star_dir)
 	area_def = [[2, 33, 500, -500], [2, 30, 500, -500]]
 
-invoke_subrecipe("./examples/kpf_ait/test_kpf_qlp.recipe")
 lev1_list = []
 if do_spectral_extraction:
 	output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
@@ -258,6 +257,8 @@ if do_spectral_extraction:
 
 	# do process if lev0 flat and trace exists
 	for input_lev0_file in find_files(lev0_science_pattern):
+		# lev0_data is kpf0 associated with input_lev0_file
+		lev0_data = None
 		_, short_lev0_file = split(input_lev0_file)
 		lev1_stem, lev1_ext = splitext(short_lev0_file)
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
@@ -268,6 +269,10 @@ if do_spectral_extraction:
 			b_level1 = lev0_flat_rect != None and b_all_traces
 			if b_level1:
 				lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+
+				if do_qlp:
+					Quicklook(lev0_data, output_qlp, end_of_night_summary)
+
 				op_data = None
 
 				for idx in ccd_idx:
@@ -302,8 +307,10 @@ if do_spectral_extraction:
 
 		if b_level1:
 			lev1_list = lev1_list + [output_lev1_file]
-
-invoke_subrecipe("./examples/kpf_ait/test_kpf_qlp.recipe")
+			if do_qlp:
+				if lev0_data is None:
+					lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
+				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 if do_hk:
 	hk_lev0_list = find_files(input_hk_pattern)
@@ -348,7 +355,6 @@ if do_rv or do_rv_reweighting:
 	else:
 		selected_lev1_files = []
 
-
 	for input_lev1_file in selected_lev1_files:
 		_, short_lev1 = split(input_lev1_file)
 		short_lev2 = str_replace(short_lev1, lev1_stem_suffix, lev2_stem_suffix)
@@ -375,6 +381,12 @@ if do_rv or do_rv_reweighting:
 						rv_set=idx, ccf_engine='c', obstime=obstime, exptime=exptime)
 			result = to_fits(rv_data, output_lev2_file)
 
+		if do_qlp:
+			short_lev0 = str_replace(short_lev1, lev1_stem_suffix, "")
+			input_lev0_file = input_2d_dir + short_lev0
+			lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
+			Quicklook(lev0_data, output_qlp, end_of_night_summary)
+
 		# do reweighting on each new L2 for watch mode
 		if context.watch and do_rv_reweighting:
 			invoke_subrecipe("./examples/kpf_ait/test_kpf_rvreweighting.recipe")
@@ -382,6 +394,4 @@ if do_rv or do_rv_reweighting:
 	# do reweighting on all L2 for non-watch mode
 	if not context.watch and do_rv_reweighting:
 		invoke_subrecipe("./examples/kpf_ait/test_kpf_rvreweighting.recipe")
-
-invoke_subrecipe("./examples/kpf_ait/test_kpf_qlp.recipe")
 
