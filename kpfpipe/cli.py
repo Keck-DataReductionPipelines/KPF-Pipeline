@@ -49,6 +49,7 @@ class FileAlarm(PatternMatchingEventHandler):
         
         self.framework = framework
         self.arg = arg
+        self.arg.watch = True
         self.logging = framework.pipeline.logger
         self.cooldown = 0.5
 
@@ -149,20 +150,18 @@ def main():
                     sorted(glob(args.watch + "20*/*.fits"), reverse=True)
         framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
 
-        frameworks = []
-        for fname in infiles:
-            fm = Framework(pipe, framework_config)
-            fm.pipeline.start(pipe_config)
-            frameworks.append(fm)
-            # fm.start_action_loop()
+        # frameworks = []
+        # for fname in infiles:
+        #     fm = Framework(pipe, framework_config)
+        #     fm.pipeline.start(pipe_config)
+        #     frameworks.append(fm)
+        #     fm.start_action_loop()
 
-            arg = arg
-            arg.date_dir = datestr
-            arg.file_path = fname
-            arg.watch = True
-            fm.append_event('next_file', arg)
-            fm.append_event('exit', arg)
-            fm.start()
+        #     arg = arg
+        #     arg.date_dir = datestr
+        #     arg.file_path = fname
+        #     arg.watch = True
+        #     fm.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
