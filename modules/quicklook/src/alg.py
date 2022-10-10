@@ -218,8 +218,8 @@ class QuicklookAlg:
             plt.colorbar(label = 'Counts')
 
 
-            plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=500)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
+            plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
             #2D difference image
 
 
@@ -241,8 +241,8 @@ class QuicklookAlg:
                 plt.xlim(3200,4000)
                 plt.ylim(3200,4000)
                 plt.title(ccd_color[i_color]+' '+version+' Order Trace')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=500)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=1000)
             plt.close()
 
             #diagnostic for fixed noise patterns
@@ -263,8 +263,8 @@ class QuicklookAlg:
 
                 plt.text(2200,3600, 'Nominal STD: %5.1f' % np.nanstd(np.ravel(low_var_counts)))
                 plt.text(2200,3300, 'Fixed Pattern STD: %5.1f' % np.nanstd(np.ravel(high_var_counts)))
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png', dpi=500)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png', dpi=1000)
                 plt.close()
                 '''
                 plt.figure(figsize=(5,4))
@@ -292,8 +292,8 @@ class QuicklookAlg:
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+'- Master '+version)
                 plt.colorbar(label = 'Fractional Difference')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png', dpi=500)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png', dpi=1000)
              #Hisogram
             plt.close()
             plt.figure(figsize=(5,4))
@@ -308,7 +308,7 @@ class QuicklookAlg:
             plt.yscale('log')
             plt.title(ccd_color[i_color]+' '+version+' Histogram')
             plt.legend(loc='lower right')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
 
             #Column cut
@@ -343,7 +343,7 @@ class QuicklookAlg:
                      #plt.plot(x_grid[which_column],y_grid[which_column]-order_trace.iloc[i]['BottomEdge'],color ='white',linewidth = 0.2,alpha = 1)
                      #plt.plot(x_grid[which_column],y_grid[which_column]+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
             '''
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
 
@@ -407,7 +407,7 @@ class QuicklookAlg:
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
             ax[0].set_title('1D Spectrum',fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
         else: print('L1 file does not exist')
 
@@ -492,7 +492,7 @@ class QuicklookAlg:
             plt.title('Mean CCF')
             plt.xlim(np.min(vel_grid),np.max(vel_grid))
             plt.legend()
-            plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.close()
         else: print('L2 file does not exist')
