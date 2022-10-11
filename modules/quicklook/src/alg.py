@@ -70,7 +70,7 @@ class QuicklookAlg:
             plt.scatter(date_obs.jd,temp, marker = '.')
             plt.xlabel('Time')
             plt.ylabel('Temperature')
-            plt.savefig(output_dir+'fig/end_of_night_summary_temperature.pdf')
+            plt.savefig(output_dir+'fig/end_of_night_summary_temperature.png')
             plt.close()
 
 
@@ -95,7 +95,7 @@ class QuicklookAlg:
                     plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
             plt.xlim(3200,4000)
             plt.ylim(3200,4000)
-            plt.savefig(output_dir+'fig/order_trace_evolution.pdf')
+            plt.savefig(output_dir+'fig/order_trace_evolution.png')
             '''
             return
         print('working on',date,exposure_name)
@@ -218,7 +218,7 @@ class QuicklookAlg:
             plt.colorbar(label = 'Counts')
 
 
-            plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.pdf')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
             #2D difference image
 
@@ -241,8 +241,8 @@ class QuicklookAlg:
                 plt.xlim(3200,4000)
                 plt.ylim(3200,4000)
                 plt.title(ccd_color[i_color]+' '+version+' Order Trace')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.pdf')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=1000)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=300)
             plt.close()
 
             #diagnostic for fixed noise patterns
@@ -263,7 +263,7 @@ class QuicklookAlg:
 
                 plt.text(2200,3600, 'Nominal STD: %5.1f' % np.nanstd(np.ravel(low_var_counts)))
                 plt.text(2200,3300, 'Fixed Pattern STD: %5.1f' % np.nanstd(np.ravel(high_var_counts)))
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.pdf')
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png', dpi=1000)
                 plt.close()
                 '''
@@ -275,7 +275,7 @@ class QuicklookAlg:
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' Low Variance')
                 plt.colorbar(label = 'Counts')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.pdf')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.png')
                 '''
             print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
@@ -292,8 +292,8 @@ class QuicklookAlg:
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+'- Master '+version)
                 plt.colorbar(label = 'Fractional Difference')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.pdf')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png', dpi=500)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png', dpi=1000)
              #Hisogram
             plt.close()
             plt.figure(figsize=(5,4))
@@ -308,7 +308,7 @@ class QuicklookAlg:
             plt.yscale('log')
             plt.title(ccd_color[i_color]+' '+version+' Histogram')
             plt.legend(loc='lower right')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.pdf')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
 
             #Column cut
@@ -343,7 +343,7 @@ class QuicklookAlg:
                      #plt.plot(x_grid[which_column],y_grid[which_column]-order_trace.iloc[i]['BottomEdge'],color ='white',linewidth = 0.2,alpha = 1)
                      #plt.plot(x_grid[which_column],y_grid[which_column]+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
             '''
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.pdf')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
 
@@ -407,7 +407,7 @@ class QuicklookAlg:
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
             ax[0].set_title('1D Spectrum',fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.pdf')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
         else: print('L1 file does not exist')
 
@@ -492,7 +492,7 @@ class QuicklookAlg:
             plt.title('Mean CCF')
             plt.xlim(np.min(vel_grid),np.max(vel_grid))
             plt.legend()
-            plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.pdf')
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.close()
         else: print('L2 file does not exist')
@@ -591,21 +591,21 @@ class QuicklookAlg:
         <div class="row">
         <div class="column">
         <div class="zoomleft">
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.pdf">
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png">
         <img src="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
         <div class="column">
         <div class="zoom">
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.png" >
         <img src="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
         <div class="column">
         <div class="zoomright">
-        <a target="_blank" href="fig/""" +exposure_name+ """_Histogram_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Histogram_GREEN_CCD.png" >
         <img src="fig/""" +exposure_name+ """_Histogram_GREEN_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
@@ -619,21 +619,21 @@ class QuicklookAlg:
         <div class="row">
         <div class="column">
         <div class="zoomleft">
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png" >
         <img src="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
         <div class="column">
         <div class="zoom">
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Difference_GREEN_CCD.png" >
         <img src="fig/""" +exposure_name+ """_2D_Difference_RED_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
         <div class="column">
         <div class="zoomright">
-        <a target="_blank" href="fig/""" +exposure_name+ """_Histogram_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Histogram_RED_CCD.png" >
         <img src="fig/""" +exposure_name+ """_Histogram_RED_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
@@ -646,14 +646,14 @@ class QuicklookAlg:
         <div class="row">
         <div class="column2">
         <div class="zoomleft2">
-        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png" >
         <img src="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
         <div class="column2">
         <div class="zoomright2">
-        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" >
         <img src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" style="width:100%" alt="" title="">
         </a>
         </div>
@@ -664,19 +664,19 @@ class QuicklookAlg:
         <br>
 
         <figure>
-        <a target="_blank" href="fig/""" +exposure_name+ """_wavlength_calibration.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_wavlength_calibration.png" >
         <img src="fig/""" +exposure_name+ """_wavlength_calibration.png" width="38%" alt="" title="">
         </a>
-        <a target="_blank" href="fig/""" +exposure_name+ """_wav_drift.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_wav_drift.png" >
         <img src="fig/""" +exposure_name+ """_wav_drift.png" width="38%" alt="" title="">
         </a>
-        <a target="_blank" href="fig/""" +exposure_name+ """_simple_ccf.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_simple_ccf.png" >
         <img src="fig/""" +exposure_name+ """_simple_ccf.png" width="22%" alt="" title="">
         </a>
         </figure>
         <br>
         <figure>
-        <a target="_blank" href="fig/""" +exposure_name+ """_sky.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_sky.png" >
         <img src="fig/""" +exposure_name+ """_sky.png" width="22%" alt="" title="">
         </a>
 
@@ -684,13 +684,13 @@ class QuicklookAlg:
         <img src="fig/""" +exposure_name+ """_guider_cam.png" width="35%" alt="" title="">
         </a>
 
-        <a target="_blank" href="fig/""" +exposure_name+ """_Fiber_Light_Curve.pdf"  >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Fiber_Light_Curve.png"  >
         <img src="fig/""" +exposure_name+ """_Fiber_Light_Curve.png" width="42%" alt="" title="">
         </a>
         </figure>
 
         <br>
-        <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.pdf"  >
+        <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.png"  >
         <figure>
         <span><img src="fig/""" +exposure_name+ """_1D_spectrum.png" style="width:100%" alt="" title=""></span>
         </figure>
@@ -704,7 +704,7 @@ class QuicklookAlg:
         </a>
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png" >
         <img id="imgZoom" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn(event)" onmouseout="zoomOut()" src="fig/""" +exposure_name+ """_2D_Frame_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -738,7 +738,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png" >
         <img id="imgZoom1" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn1(event)" onmouseout="zoomOut1()" src="fig/""" +exposure_name+ """_2D_Frame_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -772,7 +772,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png" >
         <img id="imgZoom2" style="border: 1px solid black; align: right;" width="600px" height="300px" align="right" onmousemove="zoomIn2(event)" onmouseout="zoomOut2()" src="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 400px;
@@ -806,7 +806,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" >
         <img id="imgZoom3" style="border: 1px solid black; align: right;" width="600px" height="300px" align="right" onmousemove="zoomIn3(event)" onmouseout="zoomOut3()" src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 400px;
@@ -840,7 +840,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.png" >
         <img id="imgZoom4" style="border: 1px solid black; align: right;" width="600px" height="400px" align="right" onmousemove="zoomIn4(event)" onmouseout="zoomOut4()" src="fig/""" +exposure_name+ """_1D_spectrum.png">
         <div style="border: 1px solid black;
         width: 400px;
@@ -874,7 +874,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png" >
         <img id="imgZoom5" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn5(event)" onmouseout="zoomOut5()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -908,7 +908,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png" >
         <img id="imgZoom6" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn6(event)" onmouseout="zoomOut6()" src="fig/""" +exposure_name+ """_2D_Frame_high_var_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -942,7 +942,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_order_trace_GREEN_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_order_trace_GREEN_CCD.png" >
         <img id="imgZoom7" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn7(event)" onmouseout="zoomOut7()" src="fig/""" +exposure_name+ """_order_trace_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
@@ -976,7 +976,7 @@ class QuicklookAlg:
         <hr />
 
         <hr />
-        <a target="_blank" href="fig/""" +exposure_name+ """_order_trace_RED_CCD.pdf" >
+        <a target="_blank" href="fig/""" +exposure_name+ """_order_trace_RED_CCD.png" >
         <img id="imgZoom8" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn8(event)" onmouseout="zoomOut8()" src="fig/""" +exposure_name+ """_order_trace_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 500px;
