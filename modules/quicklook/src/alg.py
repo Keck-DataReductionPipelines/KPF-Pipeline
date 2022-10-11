@@ -242,7 +242,7 @@ class QuicklookAlg:
                 plt.ylim(3200,4000)
                 plt.title(ccd_color[i_color]+' '+version+' Order Trace')
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=1000)
+                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=300)
             plt.close()
 
             #diagnostic for fixed noise patterns
