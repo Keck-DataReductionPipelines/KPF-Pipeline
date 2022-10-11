@@ -206,7 +206,7 @@ class WaveCalibrate(KPF1_Primitive):
                         ).tolist()
                     else:
                         raise ValueError('ThAr run requires linelist_path')
-                    
+
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux,peak_wavelengths_ang=peak_wavelengths_ang, 
                         rough_wls=self.rough_wls

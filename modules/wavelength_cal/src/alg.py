@@ -274,7 +274,6 @@ class WaveCalibration:
 
             order_flux = cal_flux[order_num,:]
             rough_wls_order = rough_wls[order_num,:]
-
             n_pixels = len(order_flux)
 
             # find, clip, and compute precise wavelengths for peaks.
@@ -782,7 +781,7 @@ class WaveCalibration:
             peak_pixel = np.floor(line_location).astype(int)
 
             # don't fit saturated lines
-            if flux[peak_pixel] <= 1e6:
+            if peak_pixel < len(flux) and flux[peak_pixel] <= 1e6:
                 if peak_pixel < gaussian_fit_width:
                     first_fit_pixel = 0
                 else:
@@ -811,7 +810,6 @@ class WaveCalibration:
         coefs = coefs[:, np.isfinite(coefs[0,:])]
 
         print('{}/{} lines not fit.'.format(missed_lines, num_input_lines))
-        
         if plot_toggle:
 
             n_zoom_sections = 10
