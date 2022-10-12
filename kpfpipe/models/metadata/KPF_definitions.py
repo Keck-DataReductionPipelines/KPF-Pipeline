@@ -38,8 +38,8 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RED_VAR': fits.ImageHDU,
                      
                      'CA_HK': fits.ImageHDU,
-                     'EXPMETER_SCI': fits.ImageHDU,
-                     'EXPMETER_SKY': fits.ImageHDU,
+                     'EXPMETER_SCI': fits.BinTableHDU,
+                     'EXPMETER_SKY': fits.BinTableHDU,
                      'GUIDECAM': fits.ImageHDU,
 
                      'RECEIPT': fits.BinTableHDU,
