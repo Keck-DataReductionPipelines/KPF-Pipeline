@@ -1056,7 +1056,7 @@ class QuicklookAlg:
         var img = document.getElementById("imgZoom9");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 3) + "px " + (-posY * 5) + "px";
+        element.style.backgroundPosition = (-posX * 2) + "px " + (-posY * 2) + "px";
 
         }
 
@@ -1090,7 +1090,7 @@ class QuicklookAlg:
         var img = document.getElementById("imgZoom10");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 3) + "px " + (-posY * 5) + "px";
+        element.style.backgroundPosition = (-posX * 2) + "px " + (-posY * 2) + "px";
 
         }
 
