@@ -413,10 +413,13 @@ class QuicklookAlg:
             #make a comparison plot of the three science fibres
             plt.close()
             plt.figure(figsize=(8,4))
-            plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.9)
+            plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
-                plt.plot(wav_green[10,:],flux_tmp[10,:])
+                plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
+            plt.legend()
+            plt.ylabel('Counts',fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
             plt.close()
         else: print('L1 file does not exist')
@@ -1035,7 +1038,7 @@ class QuicklookAlg:
 
 
         <script>
-        function zoomIn8(event) {
+        function zoomIn9(event) {
         var element = document.getElementById("overlay9");
         element.style.display = "inline-block";
         var img = document.getElementById("imgZoom9");
