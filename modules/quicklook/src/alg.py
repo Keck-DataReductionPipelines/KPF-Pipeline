@@ -951,7 +951,7 @@ class QuicklookAlg:
         background-image: url('fig/""" +exposure_name+ """_order_trace_GREEN_CCD.png');
         background-repeat: no-repeat;"
         id="overlay7"
-        onmousemove="zoomIn6(event)"></div>
+        onmousemove="zoomIn7(event)"></div>
         <p>&nbsp;</p>
 
 
@@ -963,7 +963,7 @@ class QuicklookAlg:
         var img = document.getElementById("imgZoom7");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
 
         }
 
@@ -985,7 +985,7 @@ class QuicklookAlg:
         background-image: url('fig/""" +exposure_name+ """_order_trace_RED_CCD.png');
         background-repeat: no-repeat;"
         id="overlay8"
-        onmousemove="zoomIn6(event)"></div>
+        onmousemove="zoomIn8(event)"></div>
         <p>&nbsp;</p>
 
 
@@ -997,7 +997,7 @@ class QuicklookAlg:
         var img = document.getElementById("imgZoom8");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 10) + "px " + (-posY * 10) + "px";
+        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
 
         }
 
