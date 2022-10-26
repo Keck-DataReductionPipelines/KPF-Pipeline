@@ -409,6 +409,16 @@ class QuicklookAlg:
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
+
+            #make a comparison plot of the three science fibres
+            plt.close()
+            plt.figure(figsize=(8,4))
+            plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.9)
+            for i_orderlet in [1,2,3]:
+                flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
+                plt.plot(wav_green[10,:],flux_tmp[10,:])
+            plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
+            plt.close()
         else: print('L1 file does not exist')
 
         #now onto the plotting of CCF
@@ -1003,6 +1013,40 @@ class QuicklookAlg:
 
         function zoomOut8() {
         var element = document.getElementById("overlay8");
+        element.style.display = "inline-block";
+        }
+        </script>
+
+        <hr />
+
+        <hr />
+        <a target="_blank" href="fig/""" +exposure_name+ """_3_science_fibres_GREEN_CCD.png" >
+        <img id="imgZoom9" style="border: 1px solid black; align: right;" width="500px" height="400px" align="right" onmousemove="zoomIn9(event)" onmouseout="zoomOut9()" src="fig/""" +exposure_name+ """_3_science_fibres_GREEN_CCD.png">
+        <div style="border: 1px solid black;
+        width: 500px;
+        height: 400px;
+        display: inline-block;
+        background-image: url('fig/""" +exposure_name+ """_3_science_fibres_GREEN_CCD.png');
+        background-repeat: no-repeat;"
+        id="overlay9"
+        onmousemove="zoomIn9(event)"></div>
+        <p>&nbsp;</p>
+
+
+
+        <script>
+        function zoomIn8(event) {
+        var element = document.getElementById("overlay9");
+        element.style.display = "inline-block";
+        var img = document.getElementById("imgZoom9");
+        var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
+        var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
+        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
+
+        }
+
+        function zoomOut9() {
+        var element = document.getElementById("overlay9");
         element.style.display = "inline-block";
         }
         </script>
