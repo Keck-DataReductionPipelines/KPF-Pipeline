@@ -412,7 +412,7 @@ class QuicklookAlg:
 
             #make a comparison plot of the three science fibres
             plt.close()
-            plt.figure(figsize=(8,4))
+            plt.figure(figsize=(10,4))
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
@@ -424,7 +424,7 @@ class QuicklookAlg:
             plt.close()
 
             plt.close()
-            plt.figure(figsize=(8,4))
+            plt.figure(figsize=(10,4))
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
@@ -1036,7 +1036,7 @@ class QuicklookAlg:
 
         <hr />
         <a target="_blank" href="fig/""" +exposure_name+ """_3_science_fibres_GREEN_CCD.png" >
-        <img id="imgZoom9" style="border: 1px solid black; align: right;" width="800px" height="400px" align="right" onmousemove="zoomIn9(event)" onmouseout="zoomOut9()" src="fig/""" +exposure_name+ """_3_science_fibres_GREEN_CCD.png">
+        <img id="imgZoom9" style="border: 1px solid black; align: right;" width="1000px" height="400px" align="right" onmousemove="zoomIn9(event)" onmouseout="zoomOut9()" src="fig/""" +exposure_name+ """_3_science_fibres_GREEN_CCD.png">
         <div style="border: 1px solid black;
         width: 400px;
         height: 400px;
@@ -1056,7 +1056,7 @@ class QuicklookAlg:
         var img = document.getElementById("imgZoom9");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
+        element.style.backgroundPosition = (-posX * 3) + "px " + (-posY * 5) + "px";
 
         }
 
@@ -1070,7 +1070,7 @@ class QuicklookAlg:
 
         <hr />
         <a target="_blank" href="fig/""" +exposure_name+ """_3_science_fibres_RED_CCD.png" >
-        <img id="imgZoom10" style="border: 1px solid black; align: right;" width="800px" height="400px" align="right" onmousemove="zoomIn10(event)" onmouseout="zoomOut10()" src="fig/""" +exposure_name+ """_3_science_fibres_RED_CCD.png">
+        <img id="imgZoom10" style="border: 1px solid black; align: right;" width="1000px" height="400px" align="right" onmousemove="zoomIn10(event)" onmouseout="zoomOut10()" src="fig/""" +exposure_name+ """_3_science_fibres_RED_CCD.png">
         <div style="border: 1px solid black;
         width: 400px;
         height: 400px;
@@ -1090,7 +1090,7 @@ class QuicklookAlg:
         var img = document.getElementById("imgZoom10");
         var posX = event.offsetX ? (event.offsetX) : event.pageX - img.offsetLeft;
         var posY = event.offsetY ? (event.offsetY) : event.pageY - img.offsetTop;
-        element.style.backgroundPosition = (-posX * 2.5) + "px " + (-posY * 2.5) + "px";
+        element.style.backgroundPosition = (-posX * 3) + "px " + (-posY * 5) + "px";
 
         }
 
