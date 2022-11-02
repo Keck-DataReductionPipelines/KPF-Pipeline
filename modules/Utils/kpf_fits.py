@@ -43,10 +43,18 @@ class FitsHeaders:
             for i in range(self.n_header_keywords):
 
                 input_value = (self.header_values[i]).lower()
-                fits_value = (fits.getval(fits_file, self.header_keywords[i])).lower()
 
-                if (fits_value == input_value): match_count += 1
+                try:
 
+                    val = fits.getval(fits_file, self.header_keywords[i])
+                    fits_value = (val).lower()
+
+                    if (fits_value == input_value): match_count += 1
+
+                except KeyError as err:
+
+                    print("KeyError:", err)
+                    
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
         return matched_fits_files
@@ -63,9 +71,23 @@ class FitsHeaders:
             for i in range(self.n_header_keywords):
 
                 input_value = float(self.header_values[i])
-                fits_value = float(fits.getval(fits_file, self.header_keywords[i]))
 
-                if (fits_value <= input_value): match_count += 1
+                try:
+
+                    val = fits.getval(fits_file, self.header_keywords[i])
+
+                    try:
+                        fits_value = float(val)
+
+                        if (fits_value <= input_value): match_count += 1
+
+                    except ValueError as err2:
+
+                        print("ValueError:", err2)
+
+                except KeyError as err:
+
+                    print("KeyError:", err)
 
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
