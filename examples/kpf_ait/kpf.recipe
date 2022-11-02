@@ -162,8 +162,8 @@ output_hk_dir = output_dir + "ca_hk/"
 #output_hk_dir = output_dir + config.ARGUMENT.output_extraction + date_dir
 
 # path containing L0 with ca_hk data, the L0 data sample is temporarily put at output_dir+'ca_hk/'
-input_hk_pattern = output_hk_dir + config.ARGUMENT.hk_data_fits
-#input_hk_pattern = lev0_science_pattern
+#input_hk_pattern = output_hk_dir + config.ARGUMENT.hk_data_fits
+input_hk_pattern = lev0_science_pattern
 
 # path containing ca_hk trace file and wavelength table => masters/
 input_hk_data_dir = output_dir
@@ -188,6 +188,7 @@ flat_stem, flat_ext = splitext(short_flat_file)
 
 trace_list = []
 b_all_traces = False
+lev0_flat_rect = None
 
 if do_order_trace:
 	# for input_flat_file in find_files(lev0_flat_pattern):
@@ -244,106 +245,102 @@ if do_rv or do_rv_reweighting:
 	area_def = [[2, 33, 500, -500], [2, 30, 500, -500]]
 
 lev1_list = []
-if do_spectral_extraction:
-	output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-	if exists(output_lev0_flat_rect):
-		lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
-	else:
-		lev0_flat_rect = None
 
-	if not trace_list:
-		b_all_traces = True
-		for idx in ccd_idx:
-			lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
-			trace_list = trace_list + [lev0_trace_csv]
-			b_all_traces = b_all_traces and exists(lev0_trace_csv)
+if do_spectral_extraction or do_hk:
+	lev0_flat_rect = None
+	if do_spectral_extraction:
+		# existence of flat and trace files
+		output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+		if exists(output_lev0_flat_rect):
+			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
+		
+		if not trace_list:
+			b_all_traces = True
+			for idx in ccd_idx:
+				lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
+				trace_list = trace_list + [lev0_trace_csv]
+				b_all_traces = b_all_traces and exists(lev0_trace_csv)
+		
+	if do_hk:
+		hk_dark_data = config.ARGUMENT.hk_dark_fits
+		hk_bias_data = config.ARGUMENT.hk_bias_fits
+		if hk_dark_data:
+			hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
+		else:
+			hk_dark_data = None
 
+		if hk_bias_data:
+			hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
+		else:
+			hk_bias_data = None
 
-	# do process if lev0 flat and trace exists
+	# loop through each L0 
 	for input_lev0_file in find_files(lev0_science_pattern):
 		# lev0_data is kpf0 associated with input_lev0_file
-		lev0_data = None
+		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 		_, short_lev0_file = split(input_lev0_file)
 		lev1_stem, lev1_ext = splitext(short_lev0_file)
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
-
-		b_level1 = True
-		# produce level 1 per trace file and level 0 or rectified level 0
-		if overwrite or not exists(output_lev1_file):
-			b_level1 = lev0_flat_rect != None and b_all_traces
-			if b_level1:
-				lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-
-				if do_qlp:
-					Quicklook(lev0_data, output_qlp, end_of_night_summary)
-
-				op_data = None
-
-				for idx in ccd_idx:
-					ccd = ccd_list[idx]
-					order_name = orderlet_names[idx]
-					trace_file = trace_list[idx]
 	
-					# clip_file = output_clip + flat_stem + '_' + ccd
-					clip_file = None
 		
-					if b_level1:
+		# produce level 1 by spectral extraction or hk extraction
+		if overwrite or not exists(output_lev1_file):
+			b_level1_sp = False
+			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
+				b_level1_sp = True
+			b_level1_hk = do_hk
+			if (b_level1_sp or b_level1_hk) and do_qlp:
+				Quicklook(lev0_data, output_qlp, end_of_night_summary)
+			
+			if b_level1_sp:
+				op_data = None
+				for idx in ccd_idx:
+					if b_level1_sp:
+						ccd = ccd_list[idx]
+						order_name = orderlet_names[idx]
+						trace_file = trace_list[idx]
+
+						# clip_file = output_clip + flat_stem + '_' + ccd
+						clip_file = None
+
 						op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
-							orderlet_names=order_name,
-							orderlets_on_image=order_name,
-							total_order_per_ccd=orders_per_ccd,
-							start_order=start_order[idx],
-							ccd_index = idx,
-							rectification_method=rect_method, extraction_method=extract_method,
-							clip_file=clip_file, data_extension=ccd, trace_file=trace_file)
-						b_level1 = b_level1 and op_data != None
+								orderlet_names=order_name,
+								orderlets_on_image=order_name,
+								total_order_per_ccd=orders_per_ccd,
+								start_order=start_order[idx],
+								ccd_index = idx,
+								rectification_method=rect_method, extraction_method=extract_method,
+								clip_file=clip_file, data_extension=ccd, trace_file=trace_file)
+						b_level1_sp = b_level1_sp and op_data != None
 
 						# copy wls to the proper extension of lev1 data
-						if b_level1 and do_sp_wavecopy and  wave_fits[idx] != None and exists(wave_fits[idx]):
+						if b_level1_sp and do_sp_wavecopy and  wave_fits[idx] != None and exists(wave_fits[idx]):
 							wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
 							for ext in wave_to_ext[idx]:
 								ExtCopy(wavecal_data, ext, ext, to_data_model=op_data)
 
-				if b_level1 and op_data != None:
+				if b_level1_sp and op_data != None:
 					result = to_fits(op_data, output_lev1_file)
+			if b_level1_hk:
+				if not exists(output_lev1_file):
+                        		output_data = None
+				else:
+					output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
 
-		if b_level1:
-			lev1_list = lev1_list + [output_lev1_file]
-			if do_qlp:
-				if lev0_data is None:
-					lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
-				Quicklook(lev0_data, output_qlp, end_of_night_summary)
+				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
+						output_wave_exts=hk_wave_exts,
+						dark=hk_dark_data, wave_files=hk_wavelength_tables)
+				b_level1_hk = b_level1_hk and output_data != None
 
-if do_hk:
-	hk_lev0_list = find_files(input_hk_pattern)
-	hk_dark_data = config.ARGUMENT.hk_dark_fits
-	hk_bias_data = config.ARGUMENT_hk_bias_fits
+				if b_level1_hk and output_data != None:
+					result = to_fits(output_data, output_lev1_file)
+					
 
-	if hk_dark_data:
-		hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
-	else:
-		hk_dark_data = None
+			if b_level1_sp or b_level1_hk:
+				lev1_list = lev1_list + [output_lev1_file]
+				if do_qlp:
+					Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
-	if hk_bias_data:
-		hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
-	else:
-		hk_bias_data = None
-
-	for input_lev0_file in hk_lev0_list:
-		_, short_lev0_file = split(input_lev0_file)
-		lev1_stem, lev1_ext = splitext(short_lev0_file)
-		hk_data = kpf0_from_fits(input_lev0_file, data_type = data_type)
-		output_lev1_file = output_hk_dir + lev1_stem + lev1_stem_suffix + fits_ext
-
-		if not exists(output_lev1_file):
-			output_data = None
-		else:
-			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-		output_data = CaHKExtraction(hk_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
-					output_wave_exts=hk_wave_exts,
-					dark=hk_dark_data, wave_files=hk_wavelength_tables)
-		if output_data != None:
-			result = to_fits(output_data, output_lev1_file)
 
 
 if do_rv or do_rv_reweighting:
