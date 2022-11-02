@@ -41,6 +41,7 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'EXPMETER_SCI': fits.BinTableHDU,
                      'EXPMETER_SKY': fits.BinTableHDU,
                      'GUIDECAM': fits.ImageHDU,
+                     'TELEMETRY': fits.BinTableHDU,
 
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
@@ -93,7 +94,9 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'CA_HK_SCI': fits.ImageHDU,
                      'CA_HK_SKY': fits.ImageHDU,
                      'CA_HK_SCI_WAVE': fits.ImageHDU,
-                     'CA_HK_SKY_WAVE': fits.ImageHDU
+                     'CA_HK_SKY_WAVE': fits.ImageHDU,
+
+                     'TELEMETRY': fits.BinTableHDU
                     }
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
@@ -106,7 +109,9 @@ LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RED_CCF': fits.ImageHDU,
 
                      'RV': fits.BinTableHDU,
-                     'ACTIVITY': fits.BinTableHDU}
+                     'ACTIVITY': fits.BinTableHDU,
+                     
+                     'TELEMETRY': fits.BinTableHDU}
 
 # mapping between fits extension data types and Python object data types
 FITS_TYPE_MAP = {fits.PrimaryHDU: OrderedDict,
