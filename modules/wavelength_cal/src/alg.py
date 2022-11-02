@@ -144,7 +144,7 @@ class WaveCalibration:
 
             # masked_calflux = self.mask_array_neid(calflux, n_orders)
             masked_calflux = calflux # TODO: fix
-           
+
             # perform wavelength calibration
             poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
@@ -345,7 +345,7 @@ class WaveCalibration:
                 )
 
                 fitted_peak_pixels = gauss_coeffs[1,:]
-            
+
             # if we don't have an etalon frame, we won't use drift to 
             # calculate the wls
             if self.cal_type != 'Etalon':
