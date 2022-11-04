@@ -62,7 +62,11 @@ class CaHKAlg(ModuleAlgBase):
 
         self.instrument = ins
         self.hk_data = data
-        ny, nx = np.shape(data)
+        if data.size == 0:
+            ny = 0
+            nx = 0
+        else:
+            ny, nx = np.shape(data)
         self.data_range = [0, ny - 1, 0, nx - 1]
         self.fibers = fibers if isinstance(fibers, list) else [str(fibers)]
         self.trace_location = {fiber: None for fiber in self.fibers}
