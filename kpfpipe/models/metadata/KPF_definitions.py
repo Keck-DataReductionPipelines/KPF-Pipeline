@@ -41,10 +41,10 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'EXPMETER_SCI': fits.BinTableHDU,
                      'EXPMETER_SKY': fits.BinTableHDU,
                      'GUIDECAM': fits.ImageHDU,
-                     'TELEMETRY': fits.BinTableHDU,
 
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
+                     'TELEMETRY': fits.BinTableHDU,
                      
                      'SOLAR_IRRADIANCE': fits.BinTableHDU}
 
@@ -54,6 +54,7 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
+                     'TELEMETRY': fits.BinTableHDU,
 
                      'GREEN_SCI_FLUX1': fits.ImageHDU,
                      'GREEN_SCI_FLUX2': fits.ImageHDU,
@@ -95,8 +96,6 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'CA_HK_SKY': fits.ImageHDU,
                      'CA_HK_SCI_WAVE': fits.ImageHDU,
                      'CA_HK_SKY_WAVE': fits.ImageHDU,
-
-                     'TELEMETRY': fits.BinTableHDU
                     }
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
@@ -104,14 +103,13 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
+                     'TELEMETRY': fits.BinTableHDU,
                     
                      'GREEN_CCF': fits.ImageHDU,                     
                      'RED_CCF': fits.ImageHDU,
 
                      'RV': fits.BinTableHDU,
-                     'ACTIVITY': fits.BinTableHDU,
-                     
-                     'TELEMETRY': fits.BinTableHDU}
+                     'ACTIVITY': fits.BinTableHDU}
 
 # mapping between fits extension data types and Python object data types
 FITS_TYPE_MAP = {fits.PrimaryHDU: OrderedDict,
