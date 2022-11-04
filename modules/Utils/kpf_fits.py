@@ -23,7 +23,7 @@ class FitsHeaders:
 
     """
 
-    def __init__(self, search_path, header_keywords, header_values):
+    def __init__(self, search_path, header_keywords, header_values, logger=None):
         self.n_header_keywords = np.size(header_keywords)
         if self.n_header_keywords == 1:
             header_keywords = [header_keywords]
@@ -31,6 +31,12 @@ class FitsHeaders:
         self.header_keywords = header_keywords
         self.header_values = header_values
         self.found_fits_files = glob.glob(search_path)
+        if logger:
+            self.logger = logger
+            self.logger.debug('FitsHeaders class constructor: self.found_fits_files = {}'.format(self.found_fits_files))
+        else:
+            self.logger = None
+            print('---->FitsHeaders class constructor: self.found_fits_files = {}'.format(self.found_fits_files))
 
     # Return list of files that each has lowercase string matches
     # to all input FITS kewords/values of interest.
@@ -54,13 +60,13 @@ class FitsHeaders:
                 except KeyError as err:
 
                     print("KeyError:", err)
-                    
+
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
         return matched_fits_files
 
     # Return list of files that each has floating-point
-    # values that are less than or equal to 
+    # values that are less than or equal to
     # all input FITS kewords/values of interest.
 
     def match_headers_float_le(self):
@@ -71,6 +77,13 @@ class FitsHeaders:
             for i in range(self.n_header_keywords):
 
                 input_value = float(self.header_values[i])
+
+                if self.logger:
+                    self.logger.debug('FitsHeaders.match_headers_float_le(): file,i,keyword,value = {},{},{},{}'.\
+                        format(fits_file,i,self.header_keywords[i],input_value))
+                else:
+                    print('---->FitsHeaders.match_headers_float_le(): file,i,keyword,value = {},{},{},{}'.\
+                        format(fits_file,i,self.header_keywords[i],input_value))
 
                 try:
 

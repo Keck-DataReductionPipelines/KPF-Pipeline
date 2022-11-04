@@ -1,15 +1,19 @@
 from modules.Utils.kpf_fits import FitsHeaders
 
+from kpfpipe.logger import *
+
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
+
+DEFAULT_CFG_PATH = "examples/kpf_recipe/default_master_bias.cfg"
 
 class FitsHeadersMatchFloatLe(KPF0_Primitive):
 
     """
     Description:
         This class sets up and executed the match_headers_float_le function of
-        the FitsHeader class within the Keck framework. 
+        the FitsHeader class within the Keck framework.
 
     Arguments:
         search_path (str, which can include file glob): Directory path of FITS files.
@@ -32,12 +36,24 @@ class FitsHeadersMatchFloatLe(KPF0_Primitive):
         self.header_keywords = self.action.args[1]
         self.header_values = self.action.args[2]
 
-        self.fh = FitsHeaders(self.search_path,self.header_keywords,self.header_values)
+        try:
+            self.config_path = context.config_path['master_bias']
+        except:
+            self.config_path = DEFAULT_CFG_PATH
+
+        print("FitsHeadersMatchFloatLe class: self.config_path =",self.config_path)
+
+        self.logger = start_logger(self.__class__.__name__, self.config_path)
+
+        self.logger.info('Started {}'.format(self.__class__.__name__))
+        self.logger.debug('config_path = {}'.format(self.config_path))
+
+        self.fh = FitsHeaders(self.search_path,self.header_keywords,self.header_values,self.logger)
 
     """
 
     Return list of files that each has floating-point
-    values that are less than or equal to 
+    values that are less than or equal to
     all input FITS kewords/values of interest.
 
     """
@@ -45,5 +61,7 @@ class FitsHeadersMatchFloatLe(KPF0_Primitive):
     def _perform(self):
 
         matched_fits_files = self.fh.match_headers_float_le()
+
+        self.logger.info('Finished {}'.format(self.__class__.__name__))
 
         return Arguments(matched_fits_files)
