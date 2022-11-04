@@ -46,7 +46,7 @@ class KPF0(KPFDataModel):
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
         # add empty level0 extensions and empty headers for each extension
         for key, value in extensions.items():
-            if key not in ['PRIMARY', 'RECEIPT', 'CONFIG', 'TELEMETRY']:
+            if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
                 if python_types[value] == np.ndarray:
                     atr = np.array([])
                 else:    
