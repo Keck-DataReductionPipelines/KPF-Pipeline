@@ -88,7 +88,6 @@ class CaHKExtraction(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
 
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
-
         # CA_HK data from level 0 data
         if isinstance(action.args[0], str):
             img = KPF0.from_fits(action.args[0])
@@ -181,10 +180,13 @@ class CaHKExtraction(KPF0_Primitive):
         """
         # input argument must be KPF0
 
-        success = not self.input_img or (isinstance(self.input_img, np.ndarray) and
-                                        self.trace_path is not None and exists(self.trace_path) and \
-                    ((self.dark_img is None) or (np.shape(self.dark_img) == np.shape(self.input_img))) and \
-                    ((self.bias_img is None) or (np.shape(self.bias_img) == np.shape(self.input_img))))
+        if self.input_img is None or self.input_img.size == 0:
+            return True
+
+        success =  isinstance(self.input_img, np.ndarray) and \
+                   (self.trace_path is not None) and exists(self.trace_path) and \
+                   ((self.dark_img is None) or (np.shape(self.dark_img) == np.shape(self.input_img))) and \
+                   ((self.bias_img is None) or (np.shape(self.bias_img) == np.shape(self.input_img)))
 
         return success
 
