@@ -346,10 +346,18 @@ class QuicklookAlg:
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
-
-
+        #exposure meter plots
+        if len(hdulist['EXPMETER_SCI'].data)<1:
+            print('no exposure meter data')
+            return
+        from astropy.table import Table
+        dat_SKY = Table.read(L0_data, format='fits',hdu='EXPMETER_SKY')
+        dat_SCI = Table.read(L0_data, format='fits',hdu='EXPMETER_SCI')
+        df_SKY_EM = dat_SKY.to_pandas()
+        df_SCI_EM = dat_SCI.to_pandas()
         #moving on the 1D data
-
+        input("Press Enter to continue...")
+        
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
             print('working on', L1_data)
