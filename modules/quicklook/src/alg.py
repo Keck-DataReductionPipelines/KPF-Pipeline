@@ -789,6 +789,26 @@ class QuicklookAlg:
         <br>
         <br>
 
+        <div class="row">
+        <div class="column2">
+        <div class="zoomleft2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Exposure_Meter_Time_Series.png" >
+        <img src="fig/""" +exposure_name+ """_Column_cut_GREEN_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column2">
+        <div class="zoomright2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" >
+        <img src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+        <br>
+        <br>
+        <br>
+
         <figure>
         <a target="_blank" href="fig/""" +exposure_name+ """_wavlength_calibration.png" >
         <img src="fig/""" +exposure_name+ """_wavlength_calibration.png" width="38%" alt="" title="">
