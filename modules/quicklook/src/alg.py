@@ -577,9 +577,12 @@ class QuicklookAlg:
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
-                print(hdulist['PRIMARY'])
-                print(hdulist['RECEIPT'])
-                print(hdulist['CONFIG'])
+                print(hdulist['PRIMARY'].data)
+                print(hdulist['PRIMARY'].header)
+                print(hdulist['RECEIPT'].data)
+                print(hdulist['RECEIPT'].header)
+                print(hdulist['CONFIG'].data)
+                print(hdulist['CONFIG'].header)
                 step = float(self.config['RV']['step'])
                 vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
