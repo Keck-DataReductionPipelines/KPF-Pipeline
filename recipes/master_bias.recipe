@@ -1,0 +1,14 @@
+from modules.master_bias.src.master_bias_framework import MasterBiasFramework
+
+# Required inputs for generating a master-bias file
+# from 2D L0 FITS files (under (/data/kpf/2D).
+
+data_type = config.ARGUMENT.data_type
+n_sigma = config.ARGUMENT.n_sigma
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+all_fits_files_path = config.ARGUMENT.all_fits_files_path
+masterbias_path = config.ARGUMENT.masterbias_path
+
+exit_list = MasterBiasFramework(data_type,n_sigma,all_fits_files_path,lev0_ffi_exts,masterbias_path)
+
+
