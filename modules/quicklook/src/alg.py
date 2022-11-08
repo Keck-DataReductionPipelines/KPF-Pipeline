@@ -439,9 +439,9 @@ class QuicklookAlg:
             plt.axvspan(550, 650, alpha=0.5, color='g')
             plt.axvspan(650, 750, alpha=0.5, color='orange')
             plt.axvspan(750, 849, alpha=0.5, color='red')
-            ax1.plot(wav_SCI, int_SCI_spec, marker='o', color='k', label ='SCI')
+            ln1 = ax1.plot(wav_SCI, int_SCI_spec, marker='o', color='k', label ='SCI')
             ax2 = ax1.twinx()
-            ax2.plot(wav_SKY, int_SKY_spec, marker='o', color='brown', label = 'SKY')
+            ln2 = ax2.plot(wav_SKY, int_SKY_spec, marker='o', color='brown', label = 'SKY')
             plt.xlabel("Wavelength (nm)",fontsize=12)
             ax1.set_ylabel("SCI Exposure Meter Flux (e-/nm/s)",fontsize=12)
             ax2.set_ylabel("SKY Exposure Meter Flux (e-/nm/s)",fontsize=12)
@@ -450,8 +450,9 @@ class QuicklookAlg:
             plt.xticks(fontsize=12)
             plt.yticks(fontsize=12)
             plt.xlim(450,850)
-            ax1.legend(fontsize=12, loc='best')
-            ax2.legend(fontsize=12, loc='best')
+            lns = lns1+lns2
+            labs = [l.get_label() for l in lns]
+            ax.legend(lns, labs, loc=0)
             #plt.show()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
             plt.close()
