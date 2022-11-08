@@ -415,6 +415,12 @@ class QuicklookAlg:
             plt.plot(time_em, int_SCI_flux_550_650 / (650-550)                   / tdur_sec, marker='o', color='g', label = 'SCI 550-650 nm')
             plt.plot(time_em, int_SCI_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec, marker='o', color='b', label = 'SCI 449-550 nm')
             plt.plot(time_em, int_SCI_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec, marker='o', color='k', label = 'SCI 449-849 nm')
+
+            plt.plot(time_em, int_SKY_flux_750p    / ((847+4.8/2)-750)           / tdur_sec,':', marker='o', color='r', label = 'SKY 750-849 nm')
+            plt.plot(time_em, int_SKY_flux_650_750 / (750-650)                   / tdur_sec,':', marker='o', color='orange', label = 'SKY 650-750 nm')
+            plt.plot(time_em, int_SKY_flux_550_650 / (650-550)                   / tdur_sec,':', marker='o', color='g', label = 'SKY 550-650 nm')
+            plt.plot(time_em, int_SKY_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec,':', marker='o', color='b', label = 'SKY 449-550 nm')
+            plt.plot(time_em, int_SKY_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec,':', marker='o', color='k', label = 'SKY 449-849 nm')
             plt.xlabel("Time (sec)")
             plt.ylabel("Exposure Meter Flux (e-/nm/s)")
             plt.title(exposure_name)
