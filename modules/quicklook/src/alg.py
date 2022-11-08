@@ -7,6 +7,7 @@ from keckdrpframework.models.arguments import Arguments
 import os
 import pandas as pd
 import glob
+import math
 from astropy import modeling
 from astropy.time import Time
 
@@ -214,7 +215,7 @@ class QuicklookAlg:
             plt.imshow(counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
             plt.xlabel('x (pixel number)')
             plt.ylabel('y (pixel number)')
-            plt.title(ccd_color[i_color]+' '+version)
+            plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
             plt.colorbar(label = 'Counts')
 
 
@@ -240,7 +241,7 @@ class QuicklookAlg:
                     #print(x_grid,y_grid)
                 plt.xlim(3200,4000)
                 plt.ylim(3200,4000)
-                plt.title(ccd_color[i_color]+' '+version+' Order Trace')
+                plt.title(ccd_color[i_color]+' '+version+' Order Trace ' +exposure_name)
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=300)
             plt.close()
@@ -258,7 +259,7 @@ class QuicklookAlg:
                 plt.imshow(high_var_counts, vmin = np.percentile(flatten_counts,0.1),vmax = np.percentile(flatten_counts,99.9),interpolation = 'None',origin = 'lower',cmap = 'bwr')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version+' High Variance')
+                plt.title(ccd_color[i_color]+' '+version+' High Variance '+exposure_name)
                 plt.colorbar(label = 'Counts')
 
                 plt.text(2200,3600, 'Nominal STD: %5.1f' % np.nanstd(np.ravel(low_var_counts)))
@@ -290,7 +291,7 @@ class QuicklookAlg:
                 plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version+'- Master '+version)
+                plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name)
                 plt.colorbar(label = 'Fractional Difference')
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png', dpi=1000)
@@ -306,7 +307,7 @@ class QuicklookAlg:
             plt.xlabel('Counts')
             plt.ylabel('Number of Pixels')
             plt.yscale('log')
-            plt.title(ccd_color[i_color]+' '+version+' Histogram')
+            plt.title(ccd_color[i_color]+' '+version+' Histogram '+exposure_name)
             plt.legend(loc='lower right')
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
@@ -326,7 +327,7 @@ class QuicklookAlg:
             plt.yscale('log')
             plt.ylabel('log(Counts)')
             plt.xlabel('Row Number')
-            plt.title(ccd_color[i_color]+' '+version+' Column Cut Through Column '+str(which_column))#(Middle of CCD)
+            plt.title(ccd_color[i_color]+' '+version+' Column Cut Through Column '+str(which_column) + ' '+exposure_name)#(Middle of CCD)
             plt.ylim(1,1.2*np.nanmax(counts[:,which_column]))
             plt.legend()
             '''
@@ -346,10 +347,119 @@ class QuicklookAlg:
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
+        #exposure meter plots
+        if len(hdulist['EXPMETER_SCI'].data)>=1:
+            print('working on exposure meter data')
 
+            EM_gain = np.float(self.config['EM']['gain'])
+            from astropy.table import Table
+            from scipy.ndimage import gaussian_filter1d
+            def gaussian_1d_apply(row):
+                newrow = gaussian_filter1d(row,20)
+                return newrow
 
+            dat_SKY = Table.read(L0_data, format='fits',hdu='EXPMETER_SKY')
+            dat_SCI = Table.read(L0_data, format='fits',hdu='EXPMETER_SCI')
+            df_SKY_EM = dat_SKY.to_pandas()
+            df_SCI_EM = dat_SCI.to_pandas()
+
+            wav_SCI_str = df_SCI_EM.columns[2:]
+            wav_SCI     = df_SCI_EM.columns[2:].astype(float)
+            wav_SKY_str = df_SKY_EM.columns[2:]
+            wav_SKY     = df_SKY_EM.columns[2:].astype(float)
+
+            disp_SCI = wav_SCI*0+np.gradient(wav_SCI,1)*-1
+            disp_SKY = wav_SKY*0+np.gradient(wav_SKY,1)*-1
+            df_SCI_EM_norm        = df_SCI_EM[wav_SCI_str] * EM_gain /disp_SCI
+            df_SCI_EM_norm_smooth = df_SCI_EM_norm
+            df_SCI_EM_norm_smooth.apply(gaussian_1d_apply, axis=1)
+            df_SKY_EM_norm        = df_SKY_EM[wav_SCI_str] * EM_gain /disp_SKY
+            df_SKY_EM_norm_smooth = df_SKY_EM_norm
+            df_SKY_EM_norm_smooth.apply(gaussian_1d_apply, axis=1)
+
+            # define time arrays
+            date_beg = np.array(df_SCI_EM["Date-Beg"], dtype=np.datetime64)
+            date_end = np.array(df_SCI_EM["Date-End"], dtype=np.datetime64)
+            tdur_sec = (date_end-date_beg).astype(float)/1000. # exposure duration in sec
+            time_em     = (date_beg-date_beg[0])/1000 # seconds since beginning
+            ind_550m    = np.where((wav_SCI <  550))
+            ind_550_650 = np.where((wav_SCI >= 550) & (wav_SCI < 650))
+            ind_650_750 = np.where((wav_SCI >= 650) & (wav_SCI < 750))
+            ind_750p    = np.where((wav_SCI >= 750))
+            int_SCI_spec         = df_SCI_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
+            int_SCI_flux         = df_SCI_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+            int_SCI_flux_550m    = df_SCI_EM[wav_SCI_str[np.where((wav_SCI <  550))]].sum(axis=1)
+            int_SCI_flux_550_650 = df_SCI_EM[wav_SCI_str[np.where((wav_SCI >= 550) & (wav_SCI < 650))]].sum(axis=1)
+            int_SCI_flux_650_750 = df_SCI_EM[wav_SCI_str[np.where((wav_SCI >= 650) & (wav_SCI < 750))]].sum(axis=1)
+            int_SCI_flux_750p    = df_SCI_EM[wav_SCI_str[np.where((wav_SCI >= 750))]].sum(axis=1)
+
+            int_SKY_spec         = df_SKY_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
+            int_SKY_flux         = df_SKY_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+            int_SKY_flux_550m    = df_SKY_EM[wav_SKY_str[np.where((wav_SKY <  550))]].sum(axis=1)
+            int_SKY_flux_550_650 = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 550) & (wav_SKY < 650))]].sum(axis=1)
+            int_SKY_flux_650_750 = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 650) & (wav_SKY < 750))]].sum(axis=1)
+            int_SKY_flux_750p    = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 750))]].sum(axis=1)
+
+            plt.style.use('seaborn-whitegrid')
+            plt.figure(figsize=(12, 6), tight_layout=True)
+            od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
+            total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
+
+            grid_width = math.ceil(total_duration*1.1/10/10)*10
+            #print('grid_width',grid_width)
+            #for i_grid in range(12):
+            #    plt.axvspan(  i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
+
+            plt.plot(time_em, int_SCI_flux_750p    / (870-750)           / tdur_sec, marker='o', color='r', label = '750-870 nm')
+            plt.plot(time_em, int_SCI_flux_650_750 / (750-650)                   / tdur_sec, marker='o', color='orange', label = '650-750 nm')
+            plt.plot(time_em, int_SCI_flux_550_650 / (650-550)                   / tdur_sec, marker='o', color='g', label = '550-650 nm')
+            plt.plot(time_em, int_SCI_flux_550m    / (550-445)         / tdur_sec, marker='o', color='b', label = '445-550 nm')
+            plt.plot(time_em, int_SCI_flux         / (870-445) / tdur_sec, marker='o', color='k', label = 'SCI 445-870 nm')
+
+            plt.plot(time_em, int_SKY_flux_750p    / (870-750)           / tdur_sec,':', marker='o', color='r')
+            plt.plot(time_em, int_SKY_flux_650_750 / (750-650)                   / tdur_sec,':', marker='o', color='orange')
+            plt.plot(time_em, int_SKY_flux_550_650 / (650-550)                   / tdur_sec,':', marker='o', color='g')
+            plt.plot(time_em, int_SKY_flux_550m    / (550-445)         / tdur_sec,':', marker='o', color='b')
+            plt.plot(time_em, int_SKY_flux         / (870-445) / tdur_sec,':', marker='o', color='k', label = 'SKY 445-870 nm')
+            plt.xlabel("Time (sec)",fontsize=12)
+            plt.ylabel("Exposure Meter Flux (e-/nm/s)",fontsize=12)
+            plt.title('Exposure Meter Time Series '+exposure_name,fontsize=12)
+            plt.yscale('log')
+            plt.xlim([-total_duration*0.1,total_duration*1.1])
+            plt.xticks(fontsize=12)
+            plt.yticks(fontsize=12)
+            plt.legend(fontsize=12, loc='best')
+            plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Time_Series.png', dpi=200)
+            plt.close()
+
+            plt.style.use('seaborn-whitegrid')
+            plt.figure(figsize=(12, 6))
+            fig, ax1 = plt.subplots(figsize=(12, 6), tight_layout=True)
+            plt.axvspan(445, 550, alpha=0.5, color='b')
+            plt.axvspan(550, 650, alpha=0.5, color='g')
+            plt.axvspan(650, 750, alpha=0.5, color='orange')
+            plt.axvspan(750, 870, alpha=0.5, color='red')
+            lns1 = ax1.plot(wav_SCI, int_SCI_spec, marker='.', color='k', label ='SCI',zorder = 1)
+            ax2 = ax1.twinx()
+            lns2 = ax2.plot(wav_SKY, int_SKY_spec, marker='.', color='brown', label = 'SKY',zorder = 0, alpha = 0.5)
+            ax1.set_ylim(0,np.percentile(int_SCI_spec,99.9)*1.1)
+            ax2.set_ylim(0,np.percentile(int_SKY_spec,99.9)*1.1)
+            ax1.set_xlabel("Wavelength (nm)",fontsize=12)
+            ax1.set_ylabel("SCI Exposure Meter Flux (e-/nm/s)",fontsize=12)
+            ax2.set_ylabel("SKY Exposure Meter Flux (e-/nm/s)",fontsize=12)
+            plt.title('Exposure Meter Spectrum '+exposure_name,fontsize=12)
+            #plt.yscale('log')
+            plt.xticks(fontsize=12)
+            plt.yticks(fontsize=12)
+            plt.xlim(445,870)
+            lns = lns1+lns2
+            labs = [l.get_label() for l in lns]
+            ax1.legend(lns, labs, loc=0,fontsize=12)
+            #plt.show()
+            plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
+            plt.close()
+            #input("Press Enter to continue...")
         #moving on the 1D data
-
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
             print('working on', L1_data)
@@ -390,6 +500,7 @@ class QuicklookAlg:
             fig.subplots_adjust(hspace=0.4)
 
             for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
                 low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
                 flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
                 j = int(i/n)
@@ -405,7 +516,7 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
-            ax[0].set_title('1D Spectrum',fontsize = 20)
+            ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
@@ -418,6 +529,7 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
+            plt.title('3 Science Orderlets in GREEN'+exposure_name)
             plt.ylabel('Counts',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
@@ -430,6 +542,7 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
+            plt.title('3 Science Orderlets in RED'+exposure_name)
             plt.ylabel('Counts',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
@@ -509,12 +622,12 @@ class QuicklookAlg:
                 #print('gamma',hdulist['RV'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
-                ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
+                ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
                 #ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
             plt.xlabel('RV (km/s)')
             plt.ylabel('CCF')
-            plt.title('Mean CCF')
+            plt.title('Mean CCF '+exposure_name)
             plt.xlim(np.min(vel_grid),np.max(vel_grid))
             plt.legend()
             #plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
@@ -680,6 +793,26 @@ class QuicklookAlg:
         <div class="zoomright2">
         <a target="_blank" href="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" >
         <img src="fig/""" +exposure_name+ """_Column_cut_RED_CCD.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+        <br>
+        <br>
+        <br>
+
+        <div class="row">
+        <div class="column2">
+        <div class="zoomleft2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Exposure_Meter_Time_Series.png" >
+        <img src="fig/""" +exposure_name+ """_Exposure_Meter_Time_Series.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column2">
+        <div class="zoomright2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" >
+        <img src="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
