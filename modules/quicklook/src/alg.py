@@ -452,7 +452,7 @@ class QuicklookAlg:
             plt.xlim(450,850)
             lns = lns1+lns2
             labs = [l.get_label() for l in lns]
-            ax.legend(lns, labs, loc=0)
+            ax1.legend(lns, labs, loc=0)
             #plt.show()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
             plt.close()
