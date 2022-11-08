@@ -403,10 +403,11 @@ class QuicklookAlg:
             plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6), tight_layout=True)
             od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
-            #print('tdur_sec',np.float(time_em[-1]-time_em[0]))
-            #grid_width = math.ceil(np.float(time_em[-1]-time_em[0])*1.1/10)*10
-            #for i_grid in range(12):
-            #    plt.axvspan(  0+i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
+            total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
+
+            grid_width = math.ceil(total_duration*1.1/10)*10
+            for i_grid in range(12):
+                plt.axvspan(  0+i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
 
             plt.plot(time_em, int_SCI_flux_750p    / ((847+4.8/2)-750)           / tdur_sec, marker='o', color='r', label = 'SCI 750-849 nm')
             plt.plot(time_em, int_SCI_flux_650_750 / (750-650)                   / tdur_sec, marker='o', color='orange', label = 'SCI 650-750 nm')
@@ -417,7 +418,7 @@ class QuicklookAlg:
             plt.ylabel("Exposure Meter Flux (e-/nm/s)")
             plt.title(exposure_name)
             plt.yscale('log')
-            plt.xlim([0,np.nanmax(time_em)*1.1])
+            plt.xlim([0,total_duration*1.1])
             plt.xticks(fontsize=14)
             plt.yticks(fontsize=14)
             plt.legend(fontsize=15, loc='best')
