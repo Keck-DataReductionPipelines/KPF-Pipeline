@@ -406,20 +406,20 @@ class QuicklookAlg:
             total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
 
             grid_width = math.ceil(total_duration*1.1/10/10)*10
-            print('grid_width',grid_width)
-            for i_grid in range(12):
-                plt.axvspan(  i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
+            #print('grid_width',grid_width)
+            #for i_grid in range(12):
+            #    plt.axvspan(  i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
 
-            plt.plot(time_em, int_SCI_flux_750p    / ((847+4.8/2)-750)           / tdur_sec, marker='o', color='r', label = 'SCI 750-849 nm')
-            plt.plot(time_em, int_SCI_flux_650_750 / (750-650)                   / tdur_sec, marker='o', color='orange', label = 'SCI 650-750 nm')
-            plt.plot(time_em, int_SCI_flux_550_650 / (650-550)                   / tdur_sec, marker='o', color='g', label = 'SCI 550-650 nm')
-            plt.plot(time_em, int_SCI_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec, marker='o', color='b', label = 'SCI 449-550 nm')
+            plt.plot(time_em, int_SCI_flux_750p    / ((847+4.8/2)-750)           / tdur_sec, marker='o', color='r', label = '750-849 nm')
+            plt.plot(time_em, int_SCI_flux_650_750 / (750-650)                   / tdur_sec, marker='o', color='orange', label = '650-750 nm')
+            plt.plot(time_em, int_SCI_flux_550_650 / (650-550)                   / tdur_sec, marker='o', color='g', label = '550-650 nm')
+            plt.plot(time_em, int_SCI_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec, marker='o', color='b', label = '449-550 nm')
             plt.plot(time_em, int_SCI_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec, marker='o', color='k', label = 'SCI 449-849 nm')
 
-            plt.plot(time_em, int_SKY_flux_750p    / ((847+4.8/2)-750)           / tdur_sec,':', marker='o', color='r', label = 'SKY 750-849 nm')
-            plt.plot(time_em, int_SKY_flux_650_750 / (750-650)                   / tdur_sec,':', marker='o', color='orange', label = 'SKY 650-750 nm')
-            plt.plot(time_em, int_SKY_flux_550_650 / (650-550)                   / tdur_sec,':', marker='o', color='g', label = 'SKY 550-650 nm')
-            plt.plot(time_em, int_SKY_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec,':', marker='o', color='b', label = 'SKY 449-550 nm')
+            plt.plot(time_em, int_SKY_flux_750p    / ((847+4.8/2)-750)           / tdur_sec,':', marker='o', color='r')
+            plt.plot(time_em, int_SKY_flux_650_750 / (750-650)                   / tdur_sec,':', marker='o', color='orange')
+            plt.plot(time_em, int_SKY_flux_550_650 / (650-550)                   / tdur_sec,':', marker='o', color='g')
+            plt.plot(time_em, int_SKY_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec,':', marker='o', color='b')
             plt.plot(time_em, int_SKY_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec,':', marker='o', color='k', label = 'SKY 449-849 nm')
             plt.xlabel("Time (sec)")
             plt.ylabel("Exposure Meter Flux (e-/nm/s)")
