@@ -374,7 +374,7 @@ class QuicklookAlg:
         df_SKY_EM_norm        = df_SKY_EM[wav_SCI_str] * EM_gain /disp_SKY
         df_SKY_EM_norm_smooth = df_SKY_EM_norm
         df_SKY_EM_norm_smooth.apply(gaussian_1d_appy, axis=1)
-
+        '''
         # define time arrays
         date_beg = np.array(df_SCI_EM["Date-Beg"], dtype=np.datetime64)
         date_end = np.array(df_SCI_EM["Date-End"], dtype=np.datetime64)
@@ -420,7 +420,7 @@ class QuicklookAlg:
         plt.yticks(fontsize=14)
         plt.legend(fontsize=15, loc='best')
         plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter.png', dpi=200)
-
+        '''
         input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
