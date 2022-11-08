@@ -430,15 +430,17 @@ class QuicklookAlg:
             plt.yticks(fontsize=12)
             plt.legend(fontsize=12, loc='best')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Time_Series.png', dpi=200)
-
+            plt.close()
             plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6), tight_layout=True)
+            fig, ax1 = plt.subplots()
             plt.axvspan(449, 550, alpha=0.5, color='b')
             plt.axvspan(550, 650, alpha=0.5, color='g')
             plt.axvspan(650, 750, alpha=0.5, color='orange')
             plt.axvspan(750, 849, alpha=0.5, color='red')
-            plt.plot(wav_SCI, int_SCI_spec, marker='o', color='k')
-            plt.plot(wav_SKY, int_SKY_spec, marker='o', color='brown')
+            ax1.plot(wav_SCI, int_SCI_spec, marker='o', color='k')
+            ax2 = ax1.twinx()
+            ax2.plot(wav_SKY, int_SKY_spec, marker='o', color='brown')
             plt.xlabel("Wavelength (nm)",fontsize=12)
             plt.ylabel("Average Exposure Meter Flux (e-/nm/s)",fontsize=12)
             plt.title('Exposure Meter Spectrum',fontsize=12)
@@ -449,6 +451,7 @@ class QuicklookAlg:
             plt.legend(["SCI","SKY"], fontsize=12, loc='best')
             #plt.show()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
+            plt.close()
             input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
