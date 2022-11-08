@@ -7,6 +7,7 @@ from keckdrpframework.models.arguments import Arguments
 import os
 import pandas as pd
 import glob
+import math
 from astropy import modeling
 from astropy.time import Time
 
@@ -403,7 +404,7 @@ class QuicklookAlg:
             plt.figure(figsize=(12, 6), tight_layout=True)
             od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
 
-            grid_width = np.int(np.nanmax(time_em)*1.1/10)*10
+            grid_width = math.ceil(np.nanmax(time_em)*1.1/10)*10
             for i_grid in range(12):
                 plt.axvspan(  0+i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
 
@@ -421,7 +422,7 @@ class QuicklookAlg:
             plt.yticks(fontsize=14)
             plt.legend(fontsize=15, loc='best')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter.png', dpi=200)
-            
+
             input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
