@@ -421,7 +421,7 @@ class QuicklookAlg:
             plt.yticks(fontsize=14)
             plt.legend(fontsize=15, loc='best')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter.png', dpi=200)
-            '''
+            
             input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
