@@ -20,7 +20,6 @@ class FitsHeaders:
         header_values (str or list of str): Value(s) of FITS keyword(s), in list order.
         n_header_keywords (int): Number of FITS keyword(s) of interest.
         found_fits_files (list of str): Individual FITS filename(s) that match.
-
     """
 
     def __init__(self, search_path, header_keywords, header_values, logger=None):
@@ -38,10 +37,13 @@ class FitsHeaders:
             self.logger = None
             print('---->FitsHeaders class constructor: self.found_fits_files = {}'.format(self.found_fits_files))
 
-    # Return list of files that each has lowercase string matches
-    # to all input FITS kewords/values of interest.
-
     def match_headers_string_lower(self):
+
+    """
+    Return list of files that each has lowercase string matches
+    to all input FITS kewords/values of interest.
+    """
+
         matched_fits_files = []
         for fits_file in self.found_fits_files:
 
@@ -65,11 +67,14 @@ class FitsHeaders:
                 matched_fits_files.append(fits_file)
         return matched_fits_files
 
-    # Return list of files that each has floating-point
-    # values that are less than or equal to
-    # all input FITS kewords/values of interest.
-
     def match_headers_float_le(self):
+
+    """
+    Return list of files that each has floating-point
+    values that are less than or equal to
+    all input FITS kewords/values of interest.
+    """
+
         matched_fits_files = []
         for fits_file in self.found_fits_files:
 

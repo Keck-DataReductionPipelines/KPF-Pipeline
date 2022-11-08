@@ -25,7 +25,6 @@ class FitsHeadersMatchFloatLe(KPF0_Primitive):
         header_values (str or list of str): Value(s) of FITS keyword(s), in list order.
         n_header_keywords (int): Number of FITS keyword(s) of interest.
         found_fits_files (list of str): Individual FITS filename(s) that match.
-
     """
 
     def __init__(self, action, context):
@@ -50,15 +49,14 @@ class FitsHeadersMatchFloatLe(KPF0_Primitive):
 
         self.fh = FitsHeaders(self.search_path,self.header_keywords,self.header_values,self.logger)
 
-    """
 
+    def _perform(self):
+
+    """
     Return list of files that each has floating-point
     values that are less than or equal to
     all input FITS kewords/values of interest.
-
     """
-
-    def _perform(self):
 
         matched_fits_files = self.fh.match_headers_float_le()
 
