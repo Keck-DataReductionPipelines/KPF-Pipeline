@@ -351,13 +351,78 @@ class QuicklookAlg:
             print('no exposure meter data')
             return
         from astropy.table import Table
+        from scipy.ndimage import gaussian_filter1d
+        def gaussian_1d_appy(row):
+            newrow = gaussian_filter1d(row,20)
+            return newrow
+
         dat_SKY = Table.read(L0_data, format='fits',hdu='EXPMETER_SKY')
         dat_SCI = Table.read(L0_data, format='fits',hdu='EXPMETER_SCI')
         df_SKY_EM = dat_SKY.to_pandas()
         df_SCI_EM = dat_SCI.to_pandas()
-        #moving on the 1D data
+
+        wav_SCI_str = df_SCI_EM.columns[2:]
+        wav_SCI     = df_SCI_EM.columns[2:].astype(float)
+        wav_SKY_str = df_SKY_EM.columns[2:]
+        wav_SKY     = df_SKY_EM.columns[2:].astype(float)
+
+        disp_SCI = wav_SCI*0+np.gradient(wav_SCI,1)*-1
+        disp_SKY = wav_SKY*0+np.gradient(wav_SKY,1)*-1
+        df_SCI_EM_norm        = df_SCI_EM[wav_SCI_str] * EM_gain /disp_SCI
+        df_SCI_EM_norm_smooth = df_SCI_EM_norm
+        df_SCI_EM_norm_smooth.apply(gaussian_1d_appy, axis=1)
+        df_SKY_EM_norm        = df_SKY_EM[wav_SCI_str] * EM_gain /disp_SKY
+        df_SKY_EM_norm_smooth = df_SKY_EM_norm
+        df_SKY_EM_norm_smooth.apply(gaussian_1d_appy, axis=1)
+
+        # define time arrays
+        date_beg = np.array(df_SCI_EM["Date-Beg"], dtype=np.datetime64)
+        date_end = np.array(df_SCI_EM["Date-End"], dtype=np.datetime64)
+        tdur_sec = (date_end-date_beg).astype(float)/1000. # exposure duration in sec
+        time_em     = (date_beg-date_beg[0])/1000 # seconds since beginning
+        ind_550m    = np.where((wav_SCI <  550))
+        ind_550_650 = np.where((wav_SCI >= 550) & (wav_SCI < 650))
+        ind_650_750 = np.where((wav_SCI >= 650) & (wav_SCI < 750))
+        ind_750p    = np.where((wav_SCI >= 750))
+        int_SCI_spec         = df_SCI_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
+        int_SCI_flux         = df_SCI_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+        int_SCI_flux_550m    = df_SCI_EM[wav_SCI_str[np.where((wav_SCI <  550))]].sum(axis=1)
+        int_SCI_flux_550_650 = df_SCI_EM[wav_SCI_str[np.where((wav_SCI >= 550) & (wav_SCI < 650))]].sum(axis=1)
+        int_SCI_flux_650_750 = df_SCI_EM[wav_SCI_str[np.where((wav_SCI >= 650) & (wav_SCI < 750))]].sum(axis=1)
+        int_SCI_flux_750p    = df_SCI_EM[wav_SCI_str[np.where((wav_SCI >= 750))]].sum(axis=1)
+
+        int_SKY_spec         = df_SKY_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
+        int_SKY_flux         = df_SKY_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+        int_SKY_flux_550m    = df_SKY_EM[wav_SKY_str[np.where((wav_SKY <  550))]].sum(axis=1)
+        int_SKY_flux_550_650 = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 550) & (wav_SKY < 650))]].sum(axis=1)
+        int_SKY_flux_650_750 = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 650) & (wav_SKY < 750))]].sum(axis=1)
+        int_SKY_flux_750p    = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 750))]].sum(axis=1)
+
+        plt.style.use('seaborn-whitegrid')
+        plt.figure(figsize=(12, 6), tight_layout=True)
+        od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
+
+        grid_width = np.int(np.nanmax(time_em)*1.1/10)*10
+        for i_grid in range(12):
+        plt.axvspan(  0+i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
+
+        plt.plot(time_em, int_SCI_flux_750p    / ((847+4.8/2)-750)           / tdur_sec, marker='o', color='r', label = 'SCI 750-849 nm')
+        plt.plot(time_em, int_SCI_flux_650_750 / (750-650)                   / tdur_sec, marker='o', color='orange', label = 'SCI 650-750 nm')
+        plt.plot(time_em, int_SCI_flux_550_650 / (650-550)                   / tdur_sec, marker='o', color='g', label = 'SCI 550-650 nm')
+        plt.plot(time_em, int_SCI_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec, marker='o', color='b', label = 'SCI 449-550 nm')
+        plt.plot(time_em, int_SCI_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec, marker='o', color='k', label = 'SCI 449-849 nm')
+        plt.xlabel("Time (sec)")
+        plt.ylabel("Exposure Meter Flux (e-/nm/s)")
+        plt.title(exposure_name)
+        plt.yscale('log')
+        plt.xlim([0,np.nanmax(time_em)*1.1])
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.legend(fontsize=15, loc='best')
+        plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter.png', dpi=200)
+
         input("Press Enter to continue...")
-        
+        #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
             print('working on', L1_data)
