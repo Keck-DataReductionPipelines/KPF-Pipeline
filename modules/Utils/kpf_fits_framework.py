@@ -52,11 +52,11 @@ class FitsHeadersMatchFloatLe(KPF0_Primitive):
 
     def _perform(self):
 
-    """
-    Return list of files that each has floating-point
-    values that are less than or equal to
-    all input FITS kewords/values of interest.
-    """
+        """
+        Return list of files that each has floating-point
+        values that are less than or equal to
+        all input FITS kewords/values of interest.
+        """
 
         matched_fits_files = self.fh.match_headers_float_le()
 

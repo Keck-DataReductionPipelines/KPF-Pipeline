@@ -39,10 +39,10 @@ class FitsHeaders:
 
     def match_headers_string_lower(self):
 
-    """
-    Return list of files that each has lowercase string matches
-    to all input FITS kewords/values of interest.
-    """
+        """
+        Return list of files that each has lowercase string matches
+        to all input FITS kewords/values of interest.
+        """
 
         matched_fits_files = []
         for fits_file in self.found_fits_files:
@@ -69,11 +69,11 @@ class FitsHeaders:
 
     def match_headers_float_le(self):
 
-    """
-    Return list of files that each has floating-point
-    values that are less than or equal to
-    all input FITS kewords/values of interest.
-    """
+        """
+        Return list of files that each has floating-point
+        values that are less than or equal to
+        all input FITS kewords/values of interest.
+        """
 
         matched_fits_files = []
         for fits_file in self.found_fits_files:
