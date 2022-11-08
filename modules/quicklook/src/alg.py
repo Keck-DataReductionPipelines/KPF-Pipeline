@@ -350,7 +350,7 @@ class QuicklookAlg:
         if len(hdulist['EXPMETER_SCI'].data)>=1:
             print('working on exposure meter data')
 
-            EM_gain = self.config['EM']['gain']
+            EM_gain = np.float(self.config['EM']['gain'])
             from astropy.table import Table
             from scipy.ndimage import gaussian_filter1d
             def gaussian_1d_appy(row):
