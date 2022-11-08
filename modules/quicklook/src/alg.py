@@ -491,6 +491,7 @@ class QuicklookAlg:
             fig.subplots_adjust(hspace=0.4)
 
             for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
                 low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
                 flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
                 j = int(i/n)
