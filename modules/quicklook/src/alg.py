@@ -410,17 +410,17 @@ class QuicklookAlg:
             #for i_grid in range(12):
             #    plt.axvspan(  i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
 
-            plt.plot(time_em, int_SCI_flux_750p    / ((847+4.8/2)-750)           / tdur_sec, marker='o', color='r', label = '750-849 nm')
+            plt.plot(time_em, int_SCI_flux_750p    / (870-750)           / tdur_sec, marker='o', color='r', label = '750-870 nm')
             plt.plot(time_em, int_SCI_flux_650_750 / (750-650)                   / tdur_sec, marker='o', color='orange', label = '650-750 nm')
             plt.plot(time_em, int_SCI_flux_550_650 / (650-550)                   / tdur_sec, marker='o', color='g', label = '550-650 nm')
-            plt.plot(time_em, int_SCI_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec, marker='o', color='b', label = '449-550 nm')
-            plt.plot(time_em, int_SCI_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec, marker='o', color='k', label = 'SCI 449-849 nm')
+            plt.plot(time_em, int_SCI_flux_550m    / (550-445)         / tdur_sec, marker='o', color='b', label = '445-550 nm')
+            plt.plot(time_em, int_SCI_flux         / (870-445) / tdur_sec, marker='o', color='k', label = 'SCI 445-870 nm')
 
-            plt.plot(time_em, int_SKY_flux_750p    / ((847+4.8/2)-750)           / tdur_sec,':', marker='o', color='r')
+            plt.plot(time_em, int_SKY_flux_750p    / (870-750)           / tdur_sec,':', marker='o', color='r')
             plt.plot(time_em, int_SKY_flux_650_750 / (750-650)                   / tdur_sec,':', marker='o', color='orange')
             plt.plot(time_em, int_SKY_flux_550_650 / (650-550)                   / tdur_sec,':', marker='o', color='g')
-            plt.plot(time_em, int_SKY_flux_550m    / (550-(450.1-0.4/2))         / tdur_sec,':', marker='o', color='b')
-            plt.plot(time_em, int_SKY_flux         / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec,':', marker='o', color='k', label = 'SKY 449-849 nm')
+            plt.plot(time_em, int_SKY_flux_550m    / (550-445)         / tdur_sec,':', marker='o', color='b')
+            plt.plot(time_em, int_SKY_flux         / (870-445) / tdur_sec,':', marker='o', color='k', label = 'SKY 445-870 nm')
             plt.xlabel("Time (sec)",fontsize=12)
             plt.ylabel("Exposure Meter Flux (e-/nm/s)",fontsize=12)
             plt.title('Exposure Meter Time Series',fontsize=12)
@@ -435,13 +435,15 @@ class QuicklookAlg:
             plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6))
             fig, ax1 = plt.subplots(figsize=(12, 6), tight_layout=True)
-            plt.axvspan(449, 550, alpha=0.5, color='b')
+            plt.axvspan(445, 550, alpha=0.5, color='b')
             plt.axvspan(550, 650, alpha=0.5, color='g')
             plt.axvspan(650, 750, alpha=0.5, color='orange')
-            plt.axvspan(750, 849, alpha=0.5, color='red')
+            plt.axvspan(750, 870, alpha=0.5, color='red')
             lns1 = ax1.plot(wav_SCI, int_SCI_spec, marker='o', color='k', label ='SCI')
             ax2 = ax1.twinx()
             lns2 = ax2.plot(wav_SKY, int_SKY_spec, marker='o', color='brown', label = 'SKY')
+            ax1.set_ylim(0,np.percentile(int_SCI_spec,99.5)*1.1)
+            ax2.set_ylim(0,np.percentile(int_SKY_spec,99.5)*1.1)
             ax1.set_xlabel("Wavelength (nm)",fontsize=12)
             ax1.set_ylabel("SCI Exposure Meter Flux (e-/nm/s)",fontsize=12)
             ax2.set_ylabel("SKY Exposure Meter Flux (e-/nm/s)",fontsize=12)
@@ -449,7 +451,7 @@ class QuicklookAlg:
             #plt.yscale('log')
             plt.xticks(fontsize=12)
             plt.yticks(fontsize=12)
-            plt.xlim(450,850)
+            plt.xlim(445,870)
             lns = lns1+lns2
             labs = [l.get_label() for l in lns]
             ax1.legend(lns, labs, loc=0,fontsize=12)
@@ -577,12 +579,6 @@ class QuicklookAlg:
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
-                print(hdulist['PRIMARY'].data)
-                print(hdulist['PRIMARY'].header)
-                print(hdulist['RECEIPT'].data)
-                print(hdulist['RECEIPT'].header)
-                print(hdulist['CONFIG'].data)
-                print(hdulist['CONFIG'].header)
                 step = float(self.config['RV']['step'])
                 vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
@@ -624,7 +620,7 @@ class QuicklookAlg:
                 #print('gamma',hdulist['RV'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
-                ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes)
+                ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
                 #ax.text(0.6,0.2+i_color*0.2,ccf_color[i_color]+' $\sigma$ (km/s): %5.2f' % std,transform=ax.transAxes)
 
             plt.xlabel('RV (km/s)')
