@@ -456,7 +456,7 @@ class QuicklookAlg:
             #plt.show()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
             plt.close()
-            input("Press Enter to continue...")
+            #input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
@@ -577,6 +577,9 @@ class QuicklookAlg:
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
+                print(hdulist['PRIMARY'])
+                print(hdulist['RECEIPT'])
+                print(hdulist['CONFIG'])
                 step = float(self.config['RV']['step'])
                 vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
