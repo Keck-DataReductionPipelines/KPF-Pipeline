@@ -404,7 +404,7 @@ class QuicklookAlg:
             plt.figure(figsize=(12, 6), tight_layout=True)
             od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
 
-            grid_width = math.ceil(np.nanmax(time_em)*1.1/10)*10
+            grid_width = math.ceil(tdur_sec*1.1/10)*10
             for i_grid in range(12):
                 plt.axvspan(  0+i_grid*grid_width,  (i_grid+1)*grid_width, alpha=od_arr[i_grid%6], color='gray')
 
