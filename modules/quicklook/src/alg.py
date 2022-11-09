@@ -400,7 +400,7 @@ class QuicklookAlg:
             int_SKY_flux_650_750 = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 650) & (wav_SKY < 750))]].sum(axis=1)
             int_SKY_flux_750p    = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 750))]].sum(axis=1)
 
-            #plt.style.use('seaborn-whitegrid')
+            plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6), tight_layout=True)
             od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
             total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
@@ -458,6 +458,7 @@ class QuicklookAlg:
             #plt.show()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
             plt.close()
+            plt.style.use('default')
             #input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
