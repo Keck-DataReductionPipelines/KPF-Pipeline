@@ -400,7 +400,7 @@ class QuicklookAlg:
             int_SKY_flux_650_750 = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 650) & (wav_SKY < 750))]].sum(axis=1)
             int_SKY_flux_750p    = df_SKY_EM[wav_SKY_str[np.where((wav_SKY >= 750))]].sum(axis=1)
 
-            plt.style.use('seaborn-whitegrid')
+            #plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6), tight_layout=True)
             od_arr = [0.1, 0.4, 0.5, 0.6, 0.7, 0.8] # OD0.1, OD1.0, OD1.3, OD2.0, OD3.0, OD4.0
             total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
@@ -432,7 +432,7 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Time_Series.png', dpi=200)
             plt.close()
 
-            plt.style.use('seaborn-whitegrid')
+            #plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6))
             fig, ax1 = plt.subplots(figsize=(12, 6), tight_layout=True)
             plt.axvspan(445, 550, alpha=0.5, color='b')
@@ -529,7 +529,7 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
-            plt.title('3 Science Orderlets in GREEN'+exposure_name)
+            plt.title('Science Orderlets in GREEN '+exposure_name)
             plt.ylabel('Counts',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
@@ -542,7 +542,7 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
-            plt.title('3 Science Orderlets in RED'+exposure_name)
+            plt.title('Science Orderlets in RED '+exposure_name)
             plt.ylabel('Counts',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
