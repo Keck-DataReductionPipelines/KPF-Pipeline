@@ -152,7 +152,6 @@ else:
 output_rv = output_dir + config.ARGUMENT.output_rv + date_dir
 output_rv_rw = output_rv + config.ARGUMENT.output_rv_reweighting
 bc_path = output_dir + config.ARGUMENT.output_barycorr
-wave_from_ext = config.ARGUMENT.wave_from_ext
 wave_to_ext = config.ARGUMENT.wave_to_ext
 lev2_pattern = output_rv + '*' + lev2_stem_suffix + fits_ext
 
