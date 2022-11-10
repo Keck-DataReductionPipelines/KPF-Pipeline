@@ -432,7 +432,7 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Time_Series.png', dpi=200)
             plt.close()
 
-            plt.style.use('seaborn-whitegrid')
+            #plt.style.use('seaborn-whitegrid')
             plt.figure(figsize=(12, 6))
             fig, ax1 = plt.subplots(figsize=(12, 6), tight_layout=True)
             plt.axvspan(445, 550, alpha=0.5, color='b')
@@ -458,6 +458,7 @@ class QuicklookAlg:
             #plt.show()
             plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
             plt.close()
+            plt.style.use('default')
             #input("Press Enter to continue...")
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
@@ -529,7 +530,7 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
-            plt.title('3 Science Orderlets in GREEN'+exposure_name)
+            plt.title('Science Orderlets in GREEN '+exposure_name)
             plt.ylabel('Counts',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
@@ -542,7 +543,7 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
-            plt.title('3 Science Orderlets in RED'+exposure_name)
+            plt.title('Science Orderlets in RED '+exposure_name)
             plt.ylabel('Counts',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
