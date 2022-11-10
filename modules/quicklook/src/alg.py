@@ -583,7 +583,7 @@ class QuicklookAlg:
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
                 step = float(self.config['RV']['step'])
-                vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step/2
+                vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
                 ''' plot the individual orders?
                 for kk in range(np.shape(ccf)[1]):
@@ -605,7 +605,7 @@ class QuicklookAlg:
                 #print('test',np.shape(np.nanmean(ccf,axis = 0)))
 
                 #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
-                plt.plot(-vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
+                plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
 
 
 
