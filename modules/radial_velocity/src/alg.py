@@ -823,6 +823,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                   cross correlation summation values along *g_x*.
 
         """
+        # g_init = models.Gaussian1D(amplitude=-1e7, mean=rv_guess, stddev=5.0)
+        # print("rv_guss: ", rv_guess, "\n")
         g_init = models.Gaussian1D(amplitude=-1e7, mean=rv_guess, stddev=5.0)
         ccf = result_ccf
         i_cut = (velocities >= rv_guess - velocity_cut) & (velocities <= rv_guess + velocity_cut)
