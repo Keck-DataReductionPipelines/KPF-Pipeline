@@ -583,7 +583,7 @@ class QuicklookAlg:
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
                 step = float(self.config['RV']['step'])
-                vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
+                vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step/2
 
                 ''' plot the individual orders?
                 for kk in range(np.shape(ccf)[1]):
@@ -593,9 +593,9 @@ class QuicklookAlg:
                 '''
 
                 if np.shape(ccf)==(0,): continue
-                print('ccf shape', np.shape(ccf))
+                #print('ccf shape', np.shape(ccf))
                 ccf = np.sum(ccf,axis =0)#sum over orderlets
-                print('ccf shape', np.shape(ccf))
+                #print('ccf shape', np.shape(ccf))
 
 
                 #print('step',step,len(vel_grid))
