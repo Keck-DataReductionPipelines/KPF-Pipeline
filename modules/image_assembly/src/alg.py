@@ -268,9 +268,9 @@ class ImageAssemblyAlg:
                 data = l0_obj[ext]
                 
                 # raw data needs to be divided by 2^16 if read out in 32 bit mode
-                if np.abs(np.min(data)) > (2**16):
-                    data = data / (2**16)
-
+                # if np.abs(np.min(data)) > (2**16):
+                # data = data / (2.0**16)
+                import pdb; pdb.set_trace()
                 frames_data.append(data)
 
             frames_data = np.array(frames_data)
