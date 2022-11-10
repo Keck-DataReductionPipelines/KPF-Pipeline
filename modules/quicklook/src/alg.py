@@ -585,12 +585,13 @@ class QuicklookAlg:
                 step = float(self.config['RV']['step'])
                 vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
 
+                '''
                 # plot the individual orders?
                 for kk in range(np.shape(ccf)[1]):
                     plt.plot(vel_grid,ccf[0,kk,:])
                     plt.plot(vel_grid,ccf[1,kk,:])
                     plt.plot(vel_grid,ccf[2,kk,:])
-
+                '''
 
                 if np.shape(ccf)==(0,): continue
                 #print('ccf shape', np.shape(ccf))
