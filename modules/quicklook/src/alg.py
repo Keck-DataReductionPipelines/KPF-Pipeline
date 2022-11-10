@@ -598,7 +598,6 @@ class QuicklookAlg:
                 print('ccf shape', np.shape(ccf))
 
 
-
                 #print('step',step,len(vel_grid))
 
 
@@ -606,7 +605,7 @@ class QuicklookAlg:
                 #print('test',np.shape(np.nanmean(ccf,axis = 0)))
 
                 #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
-                plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
+                plt.plot(-vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
 
 
 
