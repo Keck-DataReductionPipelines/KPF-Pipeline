@@ -642,6 +642,22 @@ class QuicklookAlg:
             #plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.close()
+
+            #plot ccf in individual orders
+            for i_color in range(len(ccf_color)):
+                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+                step = float(hdulist[ccf_color[i_color]].header['STEPV'])
+                startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
+                vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
+
+                fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
+                ax = plt.subplot()
+                plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
+                for kk in range(np.shape(ccf)[1]):
+                    plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.5)
+                    plt.text(vel_grid[-1]+2,1+kk*0.5,verticalalignment = center)
+                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color+'.png')
+                plt.close()
         else: print('L2 file does not exist')
         #output the results to html
         f = open(output_dir+exposure_name+'_summary.html','w')
@@ -822,6 +838,26 @@ class QuicklookAlg:
         <div class="zoomright2">
         <a target="_blank" href="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" >
         <img src="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+
+        <br>
+        <br>
+        <br>
+        <div class="row">
+        <div class="column2">
+        <div class="zoomleft2">
+        <a target="_blank" href="fig/""" +exposure_name+ """'_ccf_GREEN_CCF.png'" >
+        <img src="fig/""" +exposure_name+ """_ccf_GREEN_CCF.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column2">
+        <div class="zoomright2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_ccf_RED_CCF.png" >
+        <img src="fig/""" +exposure_name+ """_ccf_RED_CCF.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
