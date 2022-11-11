@@ -659,7 +659,7 @@ class QuicklookAlg:
                 plt.xlabel('RV (km/s)')
                 plt.ylabel('CCF')
                 plt.title(ccf_color[i_color]+' by Order '+exposure_name)
-                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png',dpi =200)
                 plt.close()
         else: print('L2 file does not exist')
         #output the results to html
