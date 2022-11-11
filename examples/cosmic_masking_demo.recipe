@@ -1,0 +1,30 @@
+# Author: Luke Bouma
+# Date: Thu Nov 10 15:55:03 2022
+# Purpose:
+#     Run astroscrappy to mask cosmic rays on a dark image, save output to
+#     disk.
+# Usage (from docker):
+#     $ kpf -r cosmic_masking_demo.recipe -c examples/default_simple.cfg
+
+from modules.image_processing.src.image_process import ImageProcessing
+
+quicklook = 'false'
+data_type = 'KPF'
+# assume /testdata/ has been mounted in docker to point to these fits files
+raw_file_path = '/testdata/20220519/KP.20220519.00346.34.fits'
+dark_file_path = '/testdata/20220518/KP.20220518.08534.24.fits'
+output_path = '/testdata/temp/whatever.fits'
+
+# NOTE: this does not work with 'RED_CCD', due to issues with the data model
+# that I do not understand
+ffi_exts = ['RED_AMP1']
+
+correcting_file = 'remove_cosmics'
+
+file_to_process = kpf0_from_fits(dark_file_path, data_type)
+
+cr_corrected = ImageProcessing(
+  file_to_process, correcting_file, ffi_exts, data_type, quicklook
+)
+
+result = to_fits(cr_corrected, output_path)
