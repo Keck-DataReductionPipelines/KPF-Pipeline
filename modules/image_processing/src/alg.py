@@ -25,7 +25,9 @@ class ImageProcessingAlg:
         Exception: If raw image and bias frame don't have the same dimensions.
     """
 
-    def __init__(self,rawimage,ffi_exts,quicklook,data_type,config=None,logger=None):
+    def __init__(self, rawimage, ffi_exts, quicklook, data_type,
+                 config=None, logger=None):
+
         """Inits BiasSubtraction class with raw data, config, logger.
 
         Args:
@@ -53,7 +55,7 @@ class ImageProcessingAlg:
         self.config=config
         self.logger=logger
 
-    def bias_subtraction(self,masterbias):
+    def bias_subtraction(self, masterbias):
         """Subtracts bias data from raw data.
         In pipeline terms: inputs two L0 files, produces one L0 file.
 
@@ -77,7 +79,7 @@ class ImageProcessingAlg:
         #             minus_bias = self.rawimage[ffi]-masterbias[ffi]
         #             self.rawimage[ffi] = minus_bias
 
-    def dark_subtraction(self,dark_frame):
+    def dark_subtraction(self, dark_frame):
         """Performs dark frame subtraction.
         In pipeline terms: inputs two L0 files, produces one L0 file.
 
@@ -95,6 +97,61 @@ class ImageProcessingAlg:
             # sub_init = FrameSubtract(self.raw_image,dark_frame,self.ffi_exts,'dark')
             # subbed_raw_file = sub_init.subtraction()
             self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]
+
+    def cosmic_ray_masking(self, verbose=True):
+        """Masks cosmic rays from input rawimage.
+        """
+        # https://astroscrappy.readthedocs.io/en/latest/api/astroscrappy.detect_cosmics.html
+        from astroscrappy import detect_cosmics
+
+        # Andrew quotes read noise of 3.5 electrons.
+        # https://github.com/California-Planet-Search/KPF-Pipeline/issues/277
+        # All of these parameters are fed into astroscrappy.
+        cosmic_args={'sigclip':4, 'sigfrac':0.1, 'readnoise':3.5}
+
+        for ffi in self.ffi_exts:
+
+            # gain: preferably, these would be read from the appropriate FITS
+            # headers.  for now, I am trying to make a MWE.
+            gain = 5.
+
+            # see astroscrappy docs: this pre-determined background image can
+            # improve performance of the algorithm.
+            inbkg = None
+
+            # NOTE: I would love to get logger writing to work, but it does
+            # not, probably for configuration reasons that I do not undersatnd.
+            if verbose:
+                N = np.sum(np.isnan(self.rawimage[ffi]))
+                #self.logger.info(
+                print(
+                    f'Number NaNs before cosmic ray masking: {N}'
+                )
+                #)
+
+            # detect cosmic rays in the resulting image
+            recov_mask, clean_img = detect_cosmics(
+                self.rawimage[ffi],
+                inbkg=inbkg,
+                gain=gain,
+                readnoise=cosmic_args['readnoise'],
+                sigclip=cosmic_args['sigclip'],
+                sigfrac=cosmic_args['sigfrac']
+            )
+
+            # NaN-mask cosmic ray pixels.
+            clean_img[recov_mask] = np.nan
+
+            self.rawimage[ffi] = clean_img
+
+            if verbose:
+                N = np.sum(np.isnan(clean_img))
+                #self.logger.info(
+                print(
+                    f'Number NaNs after CR masking: {N}'
+                )
+                #)
+
 
     def get(self):
         """Returns bias-corrected raw image result.

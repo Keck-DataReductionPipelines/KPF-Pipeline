@@ -21,15 +21,15 @@ from modules.image_processing.src.alg import ImageProcessingAlg
 DEFAULT_CFG_PATH = 'modules/image_processing/configs/default.cfg'
 
 class ImageProcessing(KPF0_Primitive):
-    """This module defines class `BiasSubtraction,` which inherits from
+    """This module defines class `ImageProcessing` which inherits from
     `KPF0_Primitive` and provides methods to perform the event `bias
-    subtraction` in the recipe.
+    subtraction`, `dark_subtraction`, and `cosmic_ray_masking` in the recipe.
 
     Args:
         KPF0_Primitive: Parent class
 
         action (keckdrpframework.models.action.Action): Contains positional
-        arguments and keyword arguments passed by the `BiasSubtraction` event
+        arguments and keyword arguments passed by the `ImageProcessing` event
         issued in recipe.
 
         context (keckdrpframework.models.processing_context.ProcessingContext):
@@ -58,25 +58,28 @@ class ImageProcessing(KPF0_Primitive):
 
         logger (logging.Logger): Instance of logging.Logger
 
-        alg (modules.bias_subtraction.src.alg.BiasSubtraction): Instance of
-            `BiasSubtraction,` which has operation codes for bias subtraction.
+        alg (modules.bias_subtraction.src.alg.ImageProcessing): Instance of
+            `ImageProcessing,` which has operation codes for image processing.
     """
     def __init__(self,
                 action:Action,
                 context:ProcessingContext) -> None:
         """
-        BiasSubtraction constructor.
+        ImageProcessing constructor.
 
         Args:
             action (keckdrpframework.models.action.Action): Contains positional
-                arguments and keyword arguments passed by the `BiasSubtraction`
+                arguments and keyword arguments passed by the `ImageProcessing`
                 event issued in recipe:
 
                 `action.args[0]`(kpfpipe.models.level0.KPF0)`: Instance of
-                    `KPF0` containing raw image data
+                    `KPF0` containing target image data (e.g., a raw image)
 
                 `action.args[1]`(kpfpipe.models.level0.KPF0)`: Instance of
-                    `KPF0` containing master bias data
+                    `KPF0` containing either correcting file data (e.g., master
+                    bias data, dark data) OR an action string, specifying the
+                    in-place image processing action to perform.  Currently,
+                    the only implemented action is "remove_cosmics".
 
                 `action.args[2]`(kpfpipe.models.level0.KPF0)`: Instance of
                     `KPF0` containing FITS FFI extension(s) list
@@ -96,12 +99,12 @@ class ImageProcessing(KPF0_Primitive):
         KPF0_Primitive.__init__(self,action,context)
 
         #Input arguments
-        self.raw_file=self.action.args[0]
-        self.correcting_file=self.action.args[1]
-        #self.masterbias=self.action.args[1]
-        self.ffi_exts=self.action.args[2]
-        self.data_type=self.action.args[3]
-        self.quicklook=self.action.args[4]
+        self.raw_file = self.action.args[0]
+        self.correcting_file_or_action = self.action.args[1]
+        #self.masterbias = self.action.args[1]
+        self.ffi_exts = self.action.args[2]
+        self.data_type = self.action.args[3]
+        self.quicklook = self.action.args[4]
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -138,23 +141,42 @@ class ImageProcessing(KPF0_Primitive):
         Returns:
             Arguments object(np.ndarray): Level 0 observation data
         """
-        #until master file part of data model is fixed
-        correcting_file = KPF0.from_fits(self.correcting_file)
-        obs_type = correcting_file.header['PRIMARY']['IMTYPE']
-        print(obs_type)
 
-        if obs_type == 'Bias':
+        DEFINED_ACTIONS = ['remove_cosmics']
+
+        if self.correcting_file_or_action not in DEFINED_ACTIONS:
+            #until master file part of data model is fixed
+            correcting_file_or_action = KPF0.from_fits(
+                self.correcting_file_or_action
+            )
+            action_type = correcting_file_or_action.header['PRIMARY']['IMTYPE']
+            print(action_type)
+
+        else:
+            if self.correcting_file_or_action == 'remove_cosmics':
+                action_type = 'Remove_Cosmics'
+
+        if action_type == 'Bias':
             if self.logger:
                 self.logger.info(
                     f'Bias Subtraction: subtracting master bias from raw FFI(s)'
                 )
-            bias_subbed = self.alg.bias_subtraction(correcting_file)
+            bias_subbed = self.alg.bias_subtraction(correcting_file_or_action)
             print(bias_subbed)
-        if obs_type == 'Dark':
+
+        if action_type == 'Dark':
             if self.logger:
                 self.logger.info(
                     f'Dark Subtraction: subtracting dark frame from raw FFI(s)'
                 )
-            dark_subbed = self.alg.dark_subtraction(correcting_file)
+            dark_subbed = self.alg.dark_subtraction(correcting_file_or_action)
+
+        if action_type == 'Remove_Cosmics':
+            if self.logger:
+                self.logger.info(
+                    f'Cosmic ray removal: running astroscrappy on raw FFI(s)'
+                )
+            cosmicray_subbed = self.alg.cosmic_ray_masking()
+
 
         return Arguments(self.alg.get())
