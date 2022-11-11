@@ -590,7 +590,7 @@ class QuicklookAlg:
 
                 print('gamma',hdulist['GREEN_CCF'].header)
                 #vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
-                vel_grid = startv+np.array(range(np.shape(ccf)[2])),'d')*step
+                vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
 
                 '''
                 # plot the individual orders?
