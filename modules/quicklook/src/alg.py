@@ -649,12 +649,14 @@ class QuicklookAlg:
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
+                gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
                 ax = plt.subplot()
                 plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
                 for kk in range(np.shape(ccf)[1]):
                     plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3)
+                    plt.plot([gamma,gamma][0,1+kk*0.3],':',color = 'gray')
                     plt.text(vel_grid[-1]+2,1+kk*0.3,str(kk),verticalalignment = 'center')
                 plt.xlabel('RV (km/s)')
                 plt.ylabel('CCF')
