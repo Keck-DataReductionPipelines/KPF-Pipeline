@@ -656,7 +656,7 @@ class QuicklookAlg:
                 for kk in range(np.shape(ccf)[1]):
                     plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.5)
                     plt.text(vel_grid[-1]+2,1+kk*0.5,str(kk),verticalalignment = 'center')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png')
                 plt.close()
         else: print('L2 file does not exist')
         #output the results to html
