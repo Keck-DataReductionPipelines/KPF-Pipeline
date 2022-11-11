@@ -133,14 +133,16 @@ class QuicklookAlg:
 
 
         master_file = 'None'
-        if version == 'Sol_All':
-            master_file = self.config['2D']['master_socal']
+        if version == 'Solar':
+            master_file = self.config['2D']['master_solar']
+        if version == 'Arclamp':
+            master_file = self.config['2D']['master_arclamp']
         if version == 'Etalon_All':
             master_file = self.config['2D']['master_etalon']
         if version == 'Sol_All':
             master_file = self.config['2D']['master_socal']
-        if version == 'Flat_All':
-            master_file = self.config['2D']['master_flat']
+        if version == 'Flatlamp':
+            master_file = self.config['2D']['master_flatlamp']
         if version == 'Dark':
             master_file = self.config['2D']['master_dark']
         if version == 'Bias':
@@ -621,7 +623,7 @@ class QuicklookAlg:
                 '''
 
                 #read the RV from headers directly
-                print('gamma',hdulist['RV'].header)
+                #print('gamma',hdulist['RV'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
