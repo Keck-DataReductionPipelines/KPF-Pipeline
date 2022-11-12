@@ -45,9 +45,12 @@ class QuicklookAlg:
 
         #print('working on',file_name)
 
-        exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
+        # try:
+        #     exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
+        # except:
+        exposure_name = kpf0_file.filename.replace('_L1.fits', '.fits')[:-5]
         date = exposure_name[3:11]
-
+        # print(exposure_name, date)
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
@@ -348,7 +351,7 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
 
         #exposure meter plots
-        if len(hdulist['EXPMETER_SCI'].data)>=1:
+        if 'EXPMETER_SCI' in hdulist and len(hdulist['EXPMETER_SCI'].data)>=1:
             print('working on exposure meter data')
 
             EM_gain = np.float(self.config['EM']['gain'])
