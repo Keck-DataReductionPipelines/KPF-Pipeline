@@ -19,7 +19,7 @@ mask_file_map = {'G2_espresso': 'G2.espresso.mas',
                  'G2_harps': 'G2.harps.mas',
                  'G2_neid_v1': 'G2.neid.v1.mas',
                  'G2_neid_v2': 'G2.neid.v2.mas',
-                 'thar': 'thorium_mask_031921.txt'}
+                 'thar': 'thorium_mask_031921.mas'}
 
 
 class RadialVelocityAlgInit(RadialVelocityBase):
