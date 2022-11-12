@@ -52,8 +52,10 @@ class WaveCalibrate(KPF1_Primitive):
                 `action.args[2]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing names of calibration extensions
                 `action.args[3]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing bool regarding saving of wavelength-pixel solution
                 `action.args[4]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing bool regarding running of quicklook algorithms
-                `action.args[5]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data/instrument type
-                `action.args[6]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing name of FITS extension to output result to
+                `action.args[5]`(kpfpipe.models.level1.KPF1)`: minimum order to fit
+                `action.args[6]`(kpfpipe.models.level1.KPF1)`: maximum order to fit
+                `action.args[7]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing data/instrument type
+                `action.args[8]`(kpfpipe.models.level1.KPF1)`: Instance of `KPF1` containing name of FITS extension to output result to
             context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
         """ 
         KPF1_Primitive.__init__(self, action, context)
@@ -63,9 +65,10 @@ class WaveCalibrate(KPF1_Primitive):
         self.cal_orderlet_names = self.action.args[2]
         self.save_wl_pixel_toggle = self.action.args[3]
         self.quicklook = self.action.args[4]
-        self.data_type =self.action.args[5]
-        self.output_ext = self.action.args[6]
-        
+        self.min_order = self.action.args[5]
+        self.max_order = self.action.args[6]
+        self.data_type =self.action.args[7]
+        self.output_ext = self.action.args[8]
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         self.filename = action.args['filename'] if \
             'filename' in args_keys else None
@@ -103,7 +106,7 @@ class WaveCalibrate(KPF1_Primitive):
 
         self.alg = WaveCalibration(
             self.cal_type, self.clip_peaks_toggle, self.quicklook,
-            self.save_diagnostics, self.config, self.logger
+            self.min_order, self.max_order, self.save_diagnostics, self.config, self.logger
         )
 
     def _perform(self) -> None: 

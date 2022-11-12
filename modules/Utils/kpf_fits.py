@@ -56,8 +56,8 @@ class FitsHeaders:
 
                     val = fits.getval(fits_file, self.header_keywords[i])
                     fits_value = (val).lower()
-
-                    if (fits_value == input_value): match_count += 1
+                    if (fits_value == input_value):
+                        match_count += 1
 
                 except KeyError as err:
 
