@@ -491,6 +491,7 @@ class QuicklookAlg:
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
+            print(hdulist1.info())
             flux = np.concatenate((flux_green,flux_red),axis = 0)
 
 
