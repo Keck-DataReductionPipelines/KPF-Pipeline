@@ -21,7 +21,7 @@ class WaveCalibration:
     """
     
     def __init__(
-        self, cal_type, clip_peaks_toggle, quicklook, save_diagnostics=None, 
+        self, cal_type, clip_peaks_toggle, quicklook, min_order, max_order, save_diagnostics=None, 
         config=None, logger=None
     ):
         """Initializes WaveCalibration class.
@@ -29,6 +29,8 @@ class WaveCalibration:
         Args:
             clip_peaks_toggle (bool): Whether or not to clip any peaks. True to clip, false to not clip.          
             quicklook (bool): Whether or not to run quicklook-specific algorithmic steps. False runs non-quicklook, full pipeline version.
+            min_order (int): minimum order to fit
+            max_order (int): maximum order to fit
             save_diagnostics (str) : Directory in which to save diagnostic plots and information. Defaults to None, which results 
                 in no saved diagnostics info.
             config (configparser.ConfigParser, optional): Config context. 
@@ -39,6 +41,8 @@ class WaveCalibration:
         self.cal_type = cal_type
         self.clip_peaks_toggle = clip_peaks_toggle
         self.quicklook = quicklook
+        self.min_order = min_order
+        self.max_order = max_order
         self.save_diagnostics_dir = save_diagnostics
         configpull = ConfigHandler(config,'PARAM')
         self.figsave_name = configpull.get_config_value(
@@ -50,8 +54,6 @@ class WaveCalibration:
         self.max_wave = configpull.get_config_value('max_wave',9300)
         self.fit_order = configpull.get_config_value('fit_order',9)
         self.fit_type = configpull.get_config_value('fit_type', 'Legendre')
-        self.min_order = configpull.get_config_value('min_order',0)
-        self.max_order = configpull.get_config_value('max_order',100)
         self.n_sections = configpull.get_config_value('n_sections',1)
         self.linelist_path = configpull.get_config_value(
             'linelist_path_etalon',None
@@ -144,7 +146,7 @@ class WaveCalibration:
 
             # masked_calflux = self.mask_array_neid(calflux, n_orders)
             masked_calflux = calflux # TODO: fix
-           
+
             # perform wavelength calibration
             poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
@@ -345,7 +347,7 @@ class WaveCalibration:
                 )
 
                 fitted_peak_pixels = gauss_coeffs[1,:]
-            
+
             # if we don't have an etalon frame, we won't use drift to 
             # calculate the wls
             if self.cal_type != 'Etalon':

@@ -61,8 +61,12 @@ class CaHKAlg(ModuleAlgBase):
             raise TypeError('fiber content error, cannot construct object from CaHKAlg')
 
         self.instrument = ins
-        self.hk_data = data
-        ny, nx = np.shape(data)
+        self.hk_data = data.astype('float64')
+        if data.size == 0:
+            ny = 0
+            nx = 0
+        else:
+            ny, nx = np.shape(data)
         self.data_range = [0, ny - 1, 0, nx - 1]
         self.fibers = fibers if isinstance(fibers, list) else [str(fibers)]
         self.trace_location = {fiber: None for fiber in self.fibers}
@@ -197,7 +201,8 @@ class CaHKAlg(ModuleAlgBase):
             loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
             self.trace_location[fiber] = dict()
             for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
-                self.trace_location[fiber][loc[order_idx]] = {'x1': loc[loc_idx[self.LOC_X1]],
+                if loc[order_idx] >= 0:
+                    self.trace_location[fiber][loc[order_idx]] = {'x1': loc[loc_idx[self.LOC_X1]],
                                                               'x2': loc[loc_idx[self.LOC_x2]],
                                                               'y1': loc[loc_idx[self.LOC_y1]],
                                                               'y2': loc[loc_idx[self.LOC_y2]]}
@@ -318,12 +323,12 @@ class CaHKAlg(ModuleAlgBase):
         """
         if dark_img is not None:
             if np.shape(self.hk_data) == np.shape(dark_img):
-                self.hk_data -= dark_img
+                self.hk_data -= dark_img.astype('float64')
             else:
                 return False, "image dimension between the raw image and dark image doesn't match"
         if bias_img is not None:
             if np.shape(self.hk_data) == np.shape(bias_img):
-                self.hk_data -= bias_img
+                self.hk_data -= bias_img.astype('float64')
             else:
                 return False, "image dimension between the raw image and bias image doesn't match"
         return True, ""

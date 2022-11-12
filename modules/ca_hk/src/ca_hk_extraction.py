@@ -88,7 +88,6 @@ class CaHKExtraction(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
 
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
-
         # CA_HK data from level 0 data
         if isinstance(action.args[0], str):
             img = KPF0.from_fits(action.args[0])
@@ -96,7 +95,7 @@ class CaHKExtraction(KPF0_Primitive):
             img = action.args[0]
         else:
             img = None
-        self.input_img = img[CAHK_EXT] if img else None
+        self.input_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
 
         # trace path
         self.trace_path = action.args[1]
@@ -120,7 +119,7 @@ class CaHKExtraction(KPF0_Primitive):
                 img = None
         else:
             img = None
-        self.dark_img = img[CAHK_EXT] if img else None
+        self.dark_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
 
         if "bias" in args_keys:
             if isinstance(action.args['bias'], str):
@@ -131,7 +130,7 @@ class CaHKExtraction(KPF0_Primitive):
                 img = None
         else:
             img = None
-        self.bias_img = img[CAHK_EXT] if img else None
+        self.bias_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
 
         self.wave_table_files = []
         if 'wave_files' in args_keys:
@@ -181,10 +180,13 @@ class CaHKExtraction(KPF0_Primitive):
         """
         # input argument must be KPF0
 
-        success = isinstance(self.input_img, np.ndarray) and self.trace_path is not None and \
-                    exists(self.trace_path) and \
-                    ((self.dark_img is None) or (np.shape(self.dark_img) == np.shape(self.input_img))) and \
-                    ((self.bias_img is None) or (np.shape(self.bias_img) == np.shape(self.input_img)))
+        if self.input_img is None or self.input_img.size == 0:
+            return True
+
+        success =  isinstance(self.input_img, np.ndarray) and \
+                   (self.trace_path is not None) and exists(self.trace_path) and \
+                   ((self.dark_img is None) or (np.shape(self.dark_img) == np.shape(self.input_img))) and \
+                   ((self.bias_img is None) or (np.shape(self.bias_img) == np.shape(self.input_img)))
 
         return success
 
@@ -202,9 +204,9 @@ class CaHKExtraction(KPF0_Primitive):
         Returns:
             KPF1 instance
         """
-
-        if self.logger:
-            self.logger.info("CaHkExtraction: define the trace location")
+        if self.input_img is None or self.input_img.size == 0:
+            self.logger.warning("CaHKExtraction: no CA_HK data")
+            return Arguments(None)
 
         # load trace location data
         self.alg.load_trace_location(self.trace_path)
@@ -216,7 +218,7 @@ class CaHKExtraction(KPF0_Primitive):
 
         result, msg = self.alg.img_subtraction(self.dark_img, self.bias_img)
         if not result and self.logger:
-            self.logger.info("CaHKExtraction: dark/bias subtraction error: "+msg)
+            self.logger.warning("CaHKExtraction: dark/bias subtraction error: "+msg)
             return Arguments(None)
 
         self.alg.img_scaling()
