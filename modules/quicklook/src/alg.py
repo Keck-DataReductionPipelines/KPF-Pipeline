@@ -136,14 +136,16 @@ class QuicklookAlg:
 
 
         master_file = 'None'
-        if version == 'Sol_All':
-            master_file = self.config['2D']['master_socal']
+        if version == 'Solar':
+            master_file = self.config['2D']['master_solar']
+        if version == 'Arclamp':
+            master_file = self.config['2D']['master_arclamp']
         if version == 'Etalon_All':
             master_file = self.config['2D']['master_etalon']
         if version == 'Sol_All':
             master_file = self.config['2D']['master_socal']
-        if version == 'Flat_All':
-            master_file = self.config['2D']['master_flat']
+        if version == 'Flatlamp':
+            master_file = self.config['2D']['master_flatlamp']
         if version == 'Dark':
             master_file = self.config['2D']['master_dark']
         if version == 'Bias':
@@ -585,10 +587,16 @@ class QuicklookAlg:
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
                 print('ccf',np.shape(ccf))
-                step = float(self.config['RV']['step'])
-                vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
+                #step = float(self.config['RV']['step'])
+                step = float(hdulist[ccf_color[i_color]].header['STEPV'])
+                startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
 
-                ''' plot the individual orders?
+                print('gamma',hdulist['GREEN_CCF'].header)
+                #vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
+                vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
+
+                '''
+                # plot the individual orders?
                 for kk in range(np.shape(ccf)[1]):
                     plt.plot(vel_grid,ccf[0,kk,:])
                     plt.plot(vel_grid,ccf[1,kk,:])
@@ -596,9 +604,9 @@ class QuicklookAlg:
                 '''
 
                 if np.shape(ccf)==(0,): continue
+                #print('ccf shape', np.shape(ccf))
                 ccf = np.sum(ccf,axis =0)#sum over orderlets
-                #print(np.shape(ccf))
-
+                #print('ccf shape', np.shape(ccf))
 
 
                 #print('step',step,len(vel_grid))
@@ -623,7 +631,7 @@ class QuicklookAlg:
                 '''
 
                 #read the RV from headers directly
-                #print('gamma',hdulist['RV'].header)
+                print('gamma',hdulist['GREEN_CCF'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
@@ -637,6 +645,27 @@ class QuicklookAlg:
             #plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
             plt.close()
+
+            #plot ccf in individual orders
+            for i_color in range(len(ccf_color)):
+                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+                step = float(hdulist[ccf_color[i_color]].header['STEPV'])
+                startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
+                vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
+                gamma = hdulist['RV'].header[ccf_rv[i_color]]
+
+                fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
+                ax = plt.subplot()
+                plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
+                for kk in range(np.shape(ccf)[1]):
+                    plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3)
+                    plt.plot([gamma,gamma],[0,1+kk*0.3],':',color = 'gray')
+                    plt.text(vel_grid[-1]+2,1+kk*0.3,str(kk),verticalalignment = 'center')
+                plt.xlabel('RV (km/s)')
+                plt.ylabel('CCF')
+                plt.title(ccf_color[i_color]+' by Order '+exposure_name)
+                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png',dpi =200)
+                plt.close()
         else: print('L2 file does not exist')
         #output the results to html
         f = open(output_dir+exposure_name+'_summary.html','w')
@@ -817,6 +846,26 @@ class QuicklookAlg:
         <div class="zoomright2">
         <a target="_blank" href="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" >
         <img src="fig/""" +exposure_name+ """_Exposure_Meter_Spectrum.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        </div>
+
+        <br>
+        <br>
+        <br>
+        <div class="row">
+        <div class="column2">
+        <div class="zoomleft2">
+        <a target="_blank" href="fig/""" +exposure_name+ """'_ccf_GREEN_CCF.png'" >
+        <img src="fig/""" +exposure_name+ """_ccf_GREEN_CCF.png" style="width:100%" alt="" title="">
+        </a>
+        </div>
+        </div>
+        <div class="column2">
+        <div class="zoomright2">
+        <a target="_blank" href="fig/""" +exposure_name+ """_ccf_RED_CCF.png" >
+        <img src="fig/""" +exposure_name+ """_ccf_RED_CCF.png" style="width:100%" alt="" title="">
         </a>
         </div>
         </div>
