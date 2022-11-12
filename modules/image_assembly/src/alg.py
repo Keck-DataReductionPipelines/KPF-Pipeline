@@ -231,6 +231,7 @@ class ImageAssemblyAlg:
         # create empty list for final, overscan subtracted/cut arrays
         no_overscan_imgs = []
         for img,key in zip(channel_imgs,channel_keys):
+
             new_img = self.orientation_adjust(img,key)
             # overscan subtraction for chosen method
             if self.mode=='mean':
@@ -265,9 +266,15 @@ class ImageAssemblyAlg:
             frames_data = []
             for ext in channel_exts:
                 data = l0_obj[ext]
+                
+                # raw data needs to be divided by 2^16 if read out in 32 bit mode
+                # if np.abs(np.min(data)) > (2**16):
+                # data = data / (2.0**16)
+                import pdb; pdb.set_trace()
                 frames_data.append(data)
+
             frames_data = np.array(frames_data)
-            #full_frame_images=[]
+
             for frame in range(len(self.ffi_exts)):
                 single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
                 full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)        

@@ -74,6 +74,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     OBSLON = 'obslon'           # degree
     OBSLAT = 'obslat'           # degree
     OBSALT = 'obsalt'           # meters
+
     STEP = 'step'               # km/s
     STEP_RANGE = 'step_range'   # in format of list
     MASK_WID = 'mask_width'     # km/s
@@ -99,7 +100,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
 
-    def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
+    def __init__(self, config=None, logger=None, l1_data=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
                 test_data=None):
         RadialVelocityBase.__init__(self, config, logger)
         if self.config_ins is None or self.config_ins.get_section() is None:
@@ -125,6 +126,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.bc_corr_output = bc_corr_output
         self.bc_period = bc_period
         self.ccf_engine = None
+        self.pheader = l1_data.header['PRIMARY'] if l1_data is not None else None
+        self.star_config_file = None
 
     @staticmethod
     def ret_status(msg='ok'):
@@ -133,6 +136,66 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         ret['msg'] = msg if msg != 'ok' else ''
 
         return ret
+
+    def init_star_from_header(self):
+        if self.pheader is None:
+            return self.ret_status('fits header is None')
+
+        not_defined = " not defined in config"
+        not_key_defined = " not defined in header"
+
+        star_name_key = self.get_value_from_config(self.STARNAME, default=None)
+        if star_name_key is None:
+            return self.ret_status(star_name_key + not_defined)
+        elif not star_name_key in self.pheader:
+            return self.ret_status(star_name_key + not_key_defined)
+        else:
+            self.rv_config[self.STARNAME] = self.pheader[star_name_key]
+
+        self.d_print("RadialVelocityAlgInit: get star info from header")
+        self.rv_config[self.SPEC] = self.instrument or 'neid'
+        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)
+
+        for s_key in star_info:
+            h_key = self.get_value_from_config(s_key, None)
+            if h_key is None:
+                return self.ret_status(s_key + not_defined)
+            elif h_key not in self.pheader:
+                return self.ret_status(h_key + not_key_defined)
+            else:
+                h_val = self.pheader[h_key]
+                if s_key == self.RA:
+                    val = Angle(h_val + "hours").deg
+                elif s_key == self.DEC:
+                    val = Angle(h_val + "degrees").deg
+                elif s_key == self.EPOCH:
+                    year_days = 365.25
+                    val = (float(h_val) - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+                else:
+                    val = float(h_val)
+                self.rv_config[s_key] = val
+
+        s_key = 'mask'
+        default_mask = self.get_rv_config_value(s_key, None)
+        if default_mask is None:
+            return self.ret_status(s_key + not_defined)
+        quote = ['"', '\'']
+        for q in quote:
+            if default_mask.startswith(q) and default_mask.endswith(q):
+                default_mask = default_mask.strip(q)
+                break
+        if default_mask not in mask_file_map:
+            return self.ret_status('default mask of ' + default_mask + ' is not defined')
+
+        stellar_dir = self.get_value_from_config(self.STELLAR_DIR, default=None)
+        if stellar_dir is None:
+            return self.ret_status(self.STELLAR_DIR + not_defined)
+
+        self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask]
+        self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
+
+        return self.ret_status('ok')
+
 
     def init_star_config(self):
         """ Data initialization from star related configuration, including ra, dec, pmra, pmdec, parallax and
@@ -151,6 +214,11 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         """
 
+        self.star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
+
+        if self.star_config_file is not None and self.star_config_file.lower() == 'fits_header':
+            return self.init_star_from_header()
+
         not_defined = ' not defined in config'
         star_name = self.get_value_from_config(self.STARNAME, default=None)
         if star_name is None:
@@ -158,13 +226,12 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         self.rv_config[self.STARNAME] = star_name                       # in rv_config
         self.rv_config[self.SPEC] = self.instrument or 'neid'           # in rv_config
-        star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
 
         config_star = None
-        if star_config_file is not None:
+        if self.star_config_file is not None:
             f_config = configparser.ConfigParser()
-            self.d_print("RadialVelocityAlgInit: star config file: ", self.test_data_dir + star_config_file)
-            if len(f_config.read(self.test_data_dir + star_config_file)) == 1:
+            self.d_print("RadialVelocityAlgInit: star config file: ", self.test_data_dir + self.star_config_file)
+            if len(f_config.read(self.test_data_dir + self.star_config_file)) == 1:
                 config_star = ConfigHandler(f_config, star_name)
 
         star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)  # in rv_config
@@ -232,7 +299,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             return self.ret_status(ret['msg'])
 
         # in rv_config
-        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
+        if self.star_config_file.lower() == 'fits_header':
+            rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT,  self.STEP, self.MASK_WID, self.START_VEL)
+        else:
+            rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
 
         for rv_k in rv_keys:
             val = self.get_rv_config_value(rv_k)
