@@ -18,7 +18,8 @@ from astropy.time import Time
 mask_file_map = {'G2_espresso': 'G2.espresso.mas',
                  'G2_harps': 'G2.harps.mas',
                  'G2_neid_v1': 'G2.neid.v1.mas',
-                 'G2_neid_v2': 'G2.neid.v2.mas'}
+                 'G2_neid_v2': 'G2.neid.v2.mas',
+                 'thar': 'thorium_mask_031921.txt'}
 
 
 class RadialVelocityAlgInit(RadialVelocityBase):
@@ -175,8 +176,16 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                     val = float(h_val)
                 self.rv_config[s_key] = val
 
-        s_key = 'mask'
-        default_mask = self.get_rv_config_value(s_key, None)
+        #s_key = 'mask'
+        #default_mask = self.get_rv_config_value(s_key, None)
+        skyobj = self.pheader['SKY-OBJ']
+        sciobj = self.pheader['SCI-OBJ']
+        calobj = self.pheader['CAL-OBJ']
+        if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
+            default_mask = 'thar'
+        else:
+            default_mask = 'G2_espresso'
+
         if default_mask is None:
             return self.ret_status(s_key + not_defined)
         quote = ['"', '\'']
