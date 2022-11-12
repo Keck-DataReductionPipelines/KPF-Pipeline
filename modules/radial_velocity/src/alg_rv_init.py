@@ -19,7 +19,8 @@ mask_file_map = {'G2_espresso': 'G2.espresso.mas',
                  'G2_harps': 'G2.harps.mas',
                  'G2_neid_v1': 'G2.neid.v1.mas',
                  'G2_neid_v2': 'G2.neid.v2.mas',
-                 'thar': 'thorium_mask_031921.mas'}
+                 'thar': 'Thorium_mask_031921.mas',
+                 'lfc': 'kpf_lfc_mask_1025.mas'}
 
 
 class RadialVelocityAlgInit(RadialVelocityBase):
@@ -183,6 +184,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         calobj = self.pheader['CAL-OBJ']
         if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
             default_mask = 'thar'
+        elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
+            default_mask = 'lfc'
         else:
             default_mask = 'G2_espresso'
 
