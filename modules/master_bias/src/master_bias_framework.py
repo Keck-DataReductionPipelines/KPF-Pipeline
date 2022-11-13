@@ -19,7 +19,7 @@ class MasterBiasFramework(KPF0_Primitive):
     """
     Description:
         This class works within the Keck pipeline framework to compute
-        the master bias by stacking input images for exposures with 
+        the master bias by stacking input images for exposures with
         EXPTIME <= 0.0 selected from the given path, which can include
         many kinds of FITS files, not just biases.
 
@@ -95,18 +95,30 @@ class MasterBiasFramework(KPF0_Primitive):
             mjd_obs_list.append(mjd_obs)
 
         tester = KPF0.from_fits(all_bias_files[0])
-        ext_list = []
+        del_ext_list = []
         for i in tester.extensions.keys():
-            if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
-                ext_list.append(i)
+            if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'CA_HK' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
+                del_ext_list.append(i)
         master_holder = tester
         for ffi in self.lev0_ffi_exts:
+            keep_ffi = 0
             frames_data=[]
             for path in all_bias_files:
                 obj = KPF0.from_fits(path)
-                frames_data.append(obj[ffi])
-            frames_data = np.array(frames_data)
+                np_obj_ffi = np.array(obj[ffi])
+                np_obj_ffi_shape = np.shape(np_obj_ffi)
+                n_dims = len(np_obj_ffi_shape)
+                self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
+                if n_dims == 2:       # Check if valid data extension
+                     keep_ffi = 1
+                     frames_data.append(obj[ffi])
 
+            if keep_ffi == 0:
+                self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
+                del_ext_list.append(ffi)
+                break
+
+            frames_data = np.array(frames_data)
             fs = FrameStacker(frames_data,self.n_sigma)
             avg,var,cnt,unc = fs.compute()
 
@@ -127,9 +139,9 @@ class MasterBiasFramework(KPF0_Primitive):
             n_pixels = rows * cols
             pcent_diff = 100 * n_samples_lt_10 / n_pixels
 
-            # Set appropriate infobit if number of pixels with less than 10 samples in 
+            # Set appropriate infobit if number of pixels with less than 10 samples in
             # current FITS extension is greater than 1% of total number of pixels in image.
-            
+
             if pcent_diff > 1.0:
                 self.logger.info('ffi,n_samples_lt_10 = {},{}'.format(ffi,n_samples_lt_10))
                 if "GREEN_CCD" in (ffi).upper():
@@ -138,13 +150,16 @@ class MasterBiasFramework(KPF0_Primitive):
                    master_bias_infobits |= 2**1
                 elif "CA_HK" in (ffi).upper():
                    master_bias_infobits |= 2**2
-            
-        for ext in ext_list:
+
+        for ext in del_ext_list:
             master_holder.del_extension(ext)
 
         # Add informational keywords to FITS header.
 
+        master_holder.header['PRIMARY']['IMTYPE'] = ('Bias','Master bias')
+
         for ffi in self.lev0_ffi_exts:
+            if ffi in del_ext_list: continue
             master_holder.header[ffi]['NFRAMES'] = (len(all_bias_files),'Number of frames in stack')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (min(mjd_obs_list),'Minimum MJD of bias observations')
@@ -154,10 +169,10 @@ class MasterBiasFramework(KPF0_Primitive):
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-bias creation')
             master_holder.header[ffi]['INFOBITS'] = (master_bias_infobits,'Bit-wise flags defined below')
 
-            master_holder.header[ffi]['BIT00'] = ('2**0 = 1', 'GREEN_CCD has >1% pixels with <10 samples')
-            master_holder.header[ffi]['BIT01'] = ('2**1 = 2', 'RED_CCD has >1% pixels with <10 samples')
-            master_holder.header[ffi]['BIT02'] = ('2**2 = 4', 'CA_HK" has >1% pixels with <10 samples')
-            
+            master_holder.header[ffi]['BIT00'] = ('2**0 = 1', 'GREEN_CCD has gt 1% pixels with lt 10 samples')
+            master_holder.header[ffi]['BIT01'] = ('2**1 = 2', 'RED_CCD has gt 1% pixels with lt 10 samples')
+            master_holder.header[ffi]['BIT02'] = ('2**2 = 4', 'CA_HK" has gt 1% pixels with lt 10 samples')
+
         master_holder.to_fits(self.masterbias_path)
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
