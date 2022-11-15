@@ -160,6 +160,7 @@ class MasterBiasFramework(KPF0_Primitive):
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
+            master_holder.header[ffi]['BUNIT'] = ('DN','Units of master bias')
             master_holder.header[ffi]['NFRAMES'] = (len(all_bias_files),'Number of frames in stack')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (min(mjd_obs_list),'Minimum MJD of bias observations')
@@ -172,6 +173,12 @@ class MasterBiasFramework(KPF0_Primitive):
             master_holder.header[ffi]['BIT00'] = ('2**0 = 1', 'GREEN_CCD has gt 1% pixels with lt 10 samples')
             master_holder.header[ffi]['BIT01'] = ('2**1 = 2', 'RED_CCD has gt 1% pixels with lt 10 samples')
             master_holder.header[ffi]['BIT02'] = ('2**2 = 4', 'CA_HK" has gt 1% pixels with lt 10 samples')
+
+            ffi_unc_ext_name = ffi + '_UNC'
+            master_holder.header[ffi_unc_ext_name]['BUNIT'] = ('DN','Units of master-bias uncertainty')
+
+            ffi_cnt_ext_name = ffi + '_CNT'
+            master_holder.header[ffi_cnt_ext_name]['BUNIT'] = ('Count','Number of stack samples')
 
         master_holder.to_fits(self.masterbias_path)
 
