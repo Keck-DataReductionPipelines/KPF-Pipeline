@@ -1,0 +1,14 @@
+from modules.master_dark.src.master_dark_framework import MasterDarkFramework
+
+# Required inputs for generating a master-dark file
+# from 2D L0 FITS files (under (/data/kpf/2D).
+
+data_type = config.ARGUMENT.data_type
+n_sigma = config.ARGUMENT.n_sigma
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+all_fits_files_path = config.ARGUMENT.all_fits_files_path
+masterbias_path = config.ARGUMENT.masterbias_path
+masterdark_path = config.ARGUMENT.masterdark_path
+
+exit_list = MasterDarkFramework(data_type,n_sigma,all_fits_files_path,lev0_ffi_exts,masterbias_path,masterdark_path)
+
