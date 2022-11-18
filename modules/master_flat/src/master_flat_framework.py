@@ -17,55 +17,6 @@ from keckdrpframework.models.arguments import Arguments
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/master_flat/configs/default.cfg'
 
-#
-# Documentation:
-#
-# Required inputs for generating a master-flat file are 2D L0 FITS files (under (/data/kpf/2D).
-#
-# Requirements for FITS-header keywords of inputs:
-# 1. IMTYPE = 'Flatlamp'
-# 2. SCI-OBJ = CAL-OBJ = SKY-OBJ
-# 3. SCI-OBJ <> 'None' and SCI-OBJ not blank
-# 4. EXPTIME <= 2.0 seconds (GREEN), 1.0 seconds (RED) to avoid saturation
-#
-# Assumptions and caveats:
-# 1. Does not include correcting for the color of the lamp, and other subtleties
-#    specific to spectral data.
-# 2. Currently "master" flat-lamp pattern made "on the fly" by
-#    2-D Gaussian blurring (sigma=2 pixel) the stacked-image mean.
-# 3. Further modifications to this recipe are needed in order to use
-#    a master flat-lamp pattern from a prior night.
-# 4. Less than 500-DN/sec pixels cannot be reliably used to
-#    compute the flat-field correction.
-# 5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
-#
-# Algorithm:
-# 1. Marshal inputs with above specifications for a given observation date.
-# 2. Subtract master bias and master dark from inputs.
-# 3. Separately normalize debiased images by EXPTIME.
-# 4. Perform image-stacking with data-clipping at 2.1 sigma (aggressive to
-#    eliminate rad hits and possible saturation).
-# 5. Divide clipped mean of stack by the smoothed Flatlamp pattern.
-# 6. Reset unnormalized-flat values to unity if corresponding stacked-image value
-#    is less than 500 DN/sec (insufficient illumination).
-# 7. Normalize flat by the image average.
-# 8. Set appropriate infobit if number of pixels with less than 10 samples
-#    is greater than 1% of total number of image pixels.
-#
-# Full-frame-image FITS extensions in output master flat
-#
-# EXTNAME = 'GREEN_CCD'          / GREEN flat-field corrections
-# EXTNAME = 'RED_CCD '           / RED flat-field corrections
-# EXTNAME = 'GREEN_CCD_UNC'      / GREEN flat-field uncertainties
-# EXTNAME = 'GREEN_CCD_CNT'      / GREEN stack sample numbers (after data-clipping)
-# EXTNAME = 'GREEN_CCD_STACK'    / GREEN stacked-image averages
-# EXTNAME = 'GREEN_CCD_LAMP'     / GREEN smooth flat-lamp pattern
-# EXTNAME = 'RED_CCD_UNC'        / RED flat-field uncertainties
-# EXTNAME = 'RED_CCD_CNT'        / RED stack sample numbers (after data-clipping)
-# EXTNAME = 'RED_CCD_STACK'      / RED stacked-image averages
-# EXTNAME = 'RED_CCD_LAMP'       / RED smooth flat-lamp pattern
-#
-
 class MasterFlatFramework(KPF0_Primitive):
 
     """
@@ -74,10 +25,31 @@ class MasterFlatFramework(KPF0_Primitive):
         by stacking input images for exposures with IMTYPE.lower() == 'flatlamp'
         (and other selection criteria), selected from the given path that can include
         many kinds of FITS files, not just flats.
+
+        Requirements for FITS-header keywords of inputs:
+        1. IMTYPE = 'Flatlamp'
+        2. SCI-OBJ = CAL-OBJ = SKY-OBJ
+        3. SCI-OBJ <> 'None' and SCI-OBJ not blank
+        4. EXPTIME <= 2.0 seconds (GREEN), 1.0 seconds (RED) to avoid saturation
+
+        Assumptions and caveats:
+        1. Does not include correcting for the color of the lamp, and other subtleties
+           specific to spectral data.
+        2. Currently "master" flat-lamp pattern made "on the fly" by
+           2-D Gaussian blurring (sigma=2 pixel) the stacked-image mean.
+        3. Further modifications to this recipe are needed in order to use
+           a master flat-lamp pattern from a prior night.
+        4. Less than 500-DN/sec pixels cannot be reliably used to
+           compute the flat-field correction.
+        5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
+
+        Algorithm:
+        Marshal inputs with above specifications for a given observation date.
         Subtract master bias and master dark from each input flat 2D raw image.
         Separately normalize debiased images by EXPTIME.
-        Stack all normalized debiased images.
-        Divide stack clipped mean by the smoothed Flatlamp pattern.
+        Perform image-stacking with data-clipping at 2.1 sigma (aggressive to
+        eliminate rad hits and possible saturation).
+        Divide clipped mean of stack by the smoothed Flatlamp pattern.
         Reset unnormalized-flat values to unity if corresponding stacked-image value
         is less than 500 DN/sec (insufficient illumination).
         Normalize flat by the image average.
@@ -106,6 +78,19 @@ class MasterFlatFramework(KPF0_Primitive):
         logger (object): Log messages written to log_path specified in default config file.
         gaussian_filter_sigma (float): 2-D Gaussian-blur sigma for smooth lamp pattern calculation (default = 2.0 pixels)
         low_light_limit = Low-light limit where flat is set to unity (default = 500.0 DN/sec)
+
+    Outputs:
+        Full-frame-image FITS extensions in output master flat:
+        EXTNAME = 'GREEN_CCD'          / GREEN flat-field corrections
+        EXTNAME = 'RED_CCD '           / RED flat-field corrections
+        EXTNAME = 'GREEN_CCD_UNC'      / GREEN flat-field uncertainties
+        EXTNAME = 'GREEN_CCD_CNT'      / GREEN stack sample numbers (after data-clipping)
+        EXTNAME = 'GREEN_CCD_STACK'    / GREEN stacked-image averages
+        EXTNAME = 'GREEN_CCD_LAMP'     / GREEN smooth flat-lamp pattern
+        EXTNAME = 'RED_CCD_UNC'        / RED flat-field uncertainties
+        EXTNAME = 'RED_CCD_CNT'        / RED stack sample numbers (after data-clipping)
+        EXTNAME = 'RED_CCD_STACK'      / RED stacked-image averages
+        EXTNAME = 'RED_CCD_LAMP'       / RED smooth flat-lamp pattern
 
     """
 
@@ -222,6 +207,7 @@ class MasterFlatFramework(KPF0_Primitive):
             frames_data = []
             frames_data_exptimes = []
             frames_data_mjdobs = []
+            frames_data_path = []
             n_all_flat_files = len(all_flat_files)
             for i in range(0, n_all_flat_files):
 
@@ -252,6 +238,7 @@ class MasterFlatFramework(KPF0_Primitive):
                      frames_data.append(obj[ffi])
                      frames_data_exptimes.append(exp_time)
                      frames_data_mjdobs.append(mjd_obs)
+                     frames_data_path.append(path)
                      self.logger.debug('Keeping flat image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_flat_files[i],ffi,mjd_obs,exp_time))
 
             if keep_ffi == 0:
@@ -275,7 +262,7 @@ class MasterFlatFramework(KPF0_Primitive):
                 single_frame_data = frames_data[i]
                 exp_time = frames_data_exptimes[i]
 
-                self.logger.debug('Normalizing flat image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,all_flat_files[i],ffi,exp_time))
+                self.logger.debug('Normalizing flat image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
 
                 single_normalized_frame_data = single_frame_data / exp_time       # Separately normalize by EXPTIME.
 
