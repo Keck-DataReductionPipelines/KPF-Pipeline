@@ -1,0 +1,25 @@
+from modules.master_arclamp.src.master_arclamp_framework import MasterArclampFramework
+
+# Required inputs for generating a master-arclamp file
+# from 2D L0 FITS files (under (/data/kpf/2D).
+
+data_type = config.ARGUMENT.data_type
+n_sigma = config.ARGUMENT.n_sigma
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+all_fits_files_path = config.ARGUMENT.all_fits_files_path
+arclamp_object = config.ARGUMENT.arclamp_object
+masterbias_path = config.ARGUMENT.masterbias_path
+masterdark_path = config.ARGUMENT.masterdark_path
+masterflat_path = config.ARGUMENT.masterflat_path
+masterarclamp_path = config.ARGUMENT.masterarclamp_path
+
+exit_list = MasterArclampFramework(data_type,\
+                                   n_sigma,\
+                                   all_fits_files_path,\
+                                   lev0_ffi_exts,\
+                                   arclamp_object,\
+                                   masterbias_path,\
+                                   masterdark_path,\
+                                   masterflat_path,\
+                                   masterarclamp_path)
+
