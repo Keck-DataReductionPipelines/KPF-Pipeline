@@ -1,3 +1,4 @@
+from os.path import exists
 import numpy as np
 import configparser as cp
 from datetime import datetime, timezone
@@ -167,6 +168,18 @@ class MasterFlatFramework(KPF0_Primitive):
         Returns [exitcode, infobits] after computing and writing master-flat FITS file.
 
         """
+
+        masterbias_path_exists = exists(self.masterbias_path)
+        if not masterbias_path_exists:
+            raise FileNotFoundError('File does not exist: {}'.format(self.masterbias_path))
+        self.logger.info('self.masterbias_path = {}'.format(self.masterbias_path))
+        self.logger.info('masterbias_path_exists = {}'.format(masterbias_path_exists))
+
+        masterdark_path_exists = exists(self.masterdark_path)
+        if not masterdark_path_exists:
+            raise FileNotFoundError('File does not exist: {}'.format(self.masterdark_path))
+        self.logger.info('self.masterdark_path = {}'.format(self.masterdark_path))
+        self.logger.info('masterdark_path_exists = {}'.format(masterdark_path_exists))
 
         master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
         master_dark_data = KPF0.from_fits(self.masterdark_path,self.data_type)
