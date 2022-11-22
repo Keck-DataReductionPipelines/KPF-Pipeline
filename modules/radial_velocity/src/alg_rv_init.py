@@ -101,6 +101,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     VELOCITY_STEPS = 'velocity_steps'
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
+    MASK_TYPE = 'mask_type'
 
     def __init__(self, config=None, logger=None, l1_data=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
                 test_data=None):
@@ -118,6 +119,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         # star_config_file, default_mask
         self.rv_config = dict()
         self.mask_path = None       # from init_star_config()
+        self.mask_type = None
         self.velocity_loop = None   # loop of velocities for rv finding, from get_velocity_loop(), get_step_range()
         self.velocity_steps = None  # total steps in velocity_loop, from get_velocity_steps(), get_velocity_loop()
         self.zb_range = None        # redshift min and max, from get_redshift_range()
@@ -204,6 +206,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             return self.ret_status(self.STELLAR_DIR + not_defined)
 
         self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask]
+        self.mask_type = default_mask
         self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
 
         return self.ret_status('ok')
@@ -540,7 +543,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         # star_rv in rv_config, mask_width, step, step_range
         collection = [self.RV_CONFIG, self.MASK_LINE, self.VELOCITY_STEPS,
                       self.VELOCITY_LOOP, self.REWEIGHTING_CCF,
-                      self.ZB_RANGE, self.CCF_CODE]
+                      self.ZB_RANGE, self.CCF_CODE, self.MASK_TYPE]
 
         attrs = self.__dict__.keys()
         for c in collection:
