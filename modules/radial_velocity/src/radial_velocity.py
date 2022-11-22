@@ -342,9 +342,9 @@ class RadialVelocity(KPF1_Primitive):
         self.output_level2[self.ccf_ext] = all_ccf
         self.output_level2.header[self.ccf_ext]['startseg'] = self.start_seg
         self.output_level2.header[self.ccf_ext]['startv'] = \
-            (self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP][0], 'm/sec')
+            (self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP][0], 'km/sec')
         self.output_level2.header[self.ccf_ext]['stepv'] = \
-            (self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STEP], 'm/sec')
+            (self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STEP], 'km/sec')
         for i in range(total_orderlet):
             self.output_level2.header[self.ccf_ext]['ccf'+str(i+1)] = self.sci_names[i]
 
@@ -368,9 +368,11 @@ class RadialVelocity(KPF1_Primitive):
             for o in range(total_orderlet):
                 ccf_orderlet = output_df[o].values[s, :]   # ccf from one orderlet at one segment
                 sum_segment += ccf_orderlet
-                _,  orderlet_rv, _, _ = self.alg.fit_ccf(ccf_orderlet, self.alg.get_rv_guess(), velocities)
+                _,  orderlet_rv, _, _ = self.alg.fit_ccf(ccf_orderlet, self.alg.get_rv_guess(), velocities,
+                                                        self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
                 col_orderlets[s, o] = orderlet_rv
-            _, col_rv[s], _, _ = self.alg.fit_ccf(sum_segment, self.alg.get_rv_guess(), velocities)
+            _, col_rv[s], _, _ = self.alg.fit_ccf(sum_segment, self.alg.get_rv_guess(), velocities,
+                                                    self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
 
         col_sources = np.empty((total_segment, total_orderlet), dtype=object)
         final_sum_ccf = np.zeros(np.shape(velocities)[0])
@@ -394,7 +396,8 @@ class RadialVelocity(KPF1_Primitive):
         results = pd.DataFrame(rv_table)
         for o in range(total_orderlet):
             results.attrs['ccd_rv'+str(o+1)] = output_df[o].attrs['CCF-RVC']
-        _, final_rv, _, _ = self.alg.fit_ccf(final_sum_ccf, self.alg.get_rv_guess(), velocities)
+        _, final_rv, _, _ = self.alg.fit_ccf(final_sum_ccf, self.alg.get_rv_guess(), velocities,
+                                             self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
         results.attrs['rv'] = (f_decimal(final_rv), 'BaryC RV (km/s)')
         results.attrs['ccd_jd'] = output_df[0].attrs['CCFJDSUM']
         # results.attrs['zb'] = output_df[0].attrs['ZB']    # removed
