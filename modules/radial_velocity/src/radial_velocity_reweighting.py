@@ -83,6 +83,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 from modules.radial_velocity.src.alg import RadialVelocityAlg
+from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 
 DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
@@ -214,7 +215,8 @@ class RadialVelocityReweighting(KPF2_Primitive):
                 self.ccf_data[o, -1, :] = rw_ccf[-1]
             final_sum_ccf += rw_ccf[-1]
             _, ccd_rv, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[-1], RadialVelocityAlg.get_rv_estimation(rv_ext_header,
-                                                                                    self.rv_init['data']), velocities)
+                                                                self.rv_init['data']), velocities,
+                                                                self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
 
             # update rv on each orderlet in rv extension
             if is_rv_ext:
@@ -225,7 +227,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         # update final rv on all orderlets
         _, ccd, _, _ = RadialVelocityAlg.fit_ccf(final_sum_ccf,
                                     RadialVelocityAlg.get_rv_estimation(rv_ext_header, self.rv_init['data']),
-                                    velocities)
+                                    velocities, self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
         rv_ext_header['ccd'+ str(self.rv_ext_idx+1) + 'rv'] = ccd        # header: ccdnrv
 
         if is_rv_ext:
@@ -275,14 +277,15 @@ class RadialVelocityReweighting(KPF2_Primitive):
                 sum_segment += ccf_orderlet
                 _, orderlet_rv, _, _ = RadialVelocityAlg.fit_ccf(ccf_orderlet,
                                                                 RadialVelocityAlg.get_rv_estimation(rv_ext_header,
-                                                                self.rv_init['data']), velocities)
+                                                                self.rv_init['data']), velocities,
+                                                                self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
                 c_idx = col_idx_rv_table(rv_orderlet_colnames[o], o)
                 rv_ext_values[s+rv_start_idx, c_idx] = orderlet_rv
 
             # update orderletn column at segment s
             _, seg_rv, _, _ = RadialVelocityAlg.fit_ccf(sum_segment,
                                             RadialVelocityAlg.get_rv_estimation(rv_ext_header, self.rv_init['data']),
-                                            velocities)
+                                            velocities, self.rv_init['data'][RadialVelocityAlgInit.MASK_TYPE])
             rv_ext_values[s+rv_start_idx, col_idx_rv_table(self.RV_COL_RV)] = seg_rv     # update rv column\
 
         new_rv_table = {}

@@ -800,7 +800,25 @@ class RadialVelocityAlg(RadialVelocityBase):
         return rv_guess
 
     @staticmethod
-    def fit_ccf(result_ccf, rv_guess, velocities, velocity_cut=1000.0):
+    def rv_estimation_from_ccf_order(ccf_v, velocities, mask_method=None):
+        abs_min_idx = np.argmin(np.absolute(ccf_v))
+        abs_max_idx = np.argmax(np.absolute(ccf_v))
+        ccf_dir = 1 if (mask_method is not None) and (mask_method in ['thar', 'lfc']) else -1
+
+        if abs_min_idx == abs_max_idx:         # no ccf result (all zero)
+            vel_order = 0.0
+            ccf_order = ccf_v[abs_min_idx]
+        elif ccf_dir > 0:                      # pointing upwards
+            vel_order = 0.0
+            ccf_order = ccf_v[abs_max_idx]
+        else:                                   # pointing downwards
+            vel_order = velocities[abs_min_idx]
+            ccf_order = ccf_v[abs_min_idx]
+
+        return vel_order, ccf_order, ccf_dir
+
+    @staticmethod
+    def fit_ccf(result_ccf, rv_guess, velocities, mask_method=None, velocity_cut=1000.0):
         """Gaussian fitting to the values of cross correlation vs. velocity steps.
 
         Find the radial velocity from the summation of cross correlation values over orders by the use of
@@ -812,6 +830,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             rv_guess (float): Approximation of radial velocity.
             velocities (np.array): An array of velocity steps.
             velocity_cut (float, optional): Range limit around the guessed radial velocity. Defaults to 100.0 (km/s).
+            mask_method (str): mask method used for ccf. default to None.
         Returns:
             tuple: Gaussian fitting mean and values for the fitting,
 
@@ -823,9 +842,15 @@ class RadialVelocityAlg(RadialVelocityBase):
                   cross correlation summation values along *g_x*.
 
         """
-        # g_init = models.Gaussian1D(amplitude=-1e7, mean=rv_guess, stddev=5.0)
-        # print("rv_guss: ", rv_guess, "\n")
-        g_init = models.Gaussian1D(amplitude=-1e7, mean=rv_guess, stddev=5.0)
+
+        if rv_guess == 0.0:
+            rv_guess, ccf_guess, ccf_dir = RadialVelocityAlg.rv_estimation_from_ccf_order(result_ccf, velocities,
+                                                                                          mask_method)
+        else:
+            ccf_dir = -1
+        amp = -1e7 if ccf_dir < 0 else 1e7
+        g_init = models.Gaussian1D(amplitude=amp, mean=rv_guess, stddev=5.0)
+        # g_init = models.Gaussian1D(amplitude=-1e7, stddev=5.0)
         ccf = result_ccf
         i_cut = (velocities >= rv_guess - velocity_cut) & (velocities <= rv_guess + velocity_cut)
         g_x = velocities[i_cut]
@@ -853,7 +878,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         # results = pd.DataFrame(ccf)
 
         _, rv_result, _, _ = self.fit_ccf(
-            ccf[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP])
+            ccf[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
+            self.init_data[RadialVelocityAlgInit.MASK_TYPE])
 
         def f_decimal(num):
             return float("{:.10f}".format(num))
