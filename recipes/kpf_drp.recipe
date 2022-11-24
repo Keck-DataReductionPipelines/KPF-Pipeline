@@ -65,6 +65,7 @@ if context.watch:
 		do_order_trace = False
 		do_spectral_extraction = True
 		do_rv = True
+		# do_rv_reweighting = True
 
 	# do spectral extraction if 2D data is watched
 	if '2D' in file_path:
@@ -73,6 +74,7 @@ if context.watch:
 		do_order_trace = False
 		do_spectral_extraction = True
 		do_rv = True
+		# do_rv_reweighting = True
 
 	# do rv if L1 data is watched
 	if 'L1' in file_path:
@@ -81,6 +83,7 @@ if context.watch:
 		do_order_trace = False
 		do_spectral_extraction = False
 		do_rv = True
+		# do_rv_reweighting = True
 
 else:
 	sel_obsid = context.date_dir
@@ -92,18 +95,21 @@ else:
 		do_order_trace = False
 		do_spectral_extraction = True
 		do_rv = True
+		# do_rv_reweighting = True
 
 	# if including L1, do l1->l2
 	if 'L1' in file_path:
 		do_order_trace = False
 		do_spectral_extraction = False
 		do_rv = True
+		# do_rv_reweighting = True
 
 	# if doing reweighted L2
 	if 'L2' in file_path:
 		do_order_trace = False
 		do_spectral_extraction = False
 		do_rv = False
+		# do_rv_reweighting = True
 
 date_dir = sel_obsid + '/'
 
