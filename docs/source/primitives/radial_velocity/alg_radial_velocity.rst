@@ -1,5 +1,5 @@
 Radial Velocity Algorithm
-============================
+==========================
 
 .. module:: modules
     :noindex:

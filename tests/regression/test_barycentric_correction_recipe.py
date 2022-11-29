@@ -1,4 +1,4 @@
-# test_radial_velocity_recipe.py
+# test_barycentric_correction_recipe.py
 from kpfpipe.tools.recipe_test_unit import recipe_test
 
 barycentric_correction_neid_recipe = """# test recipe for barycentric correction for Tau Ceti from NEID
@@ -19,7 +19,7 @@ L1_dataset = []
 L1_files = []
 
 for code in obs_list:
-    L1_file = L1_file_prefix + code + '_' + rectification + L1 + '.fits'
+    L1_file = L1_file_prefix + code + '_' + rectification + '_optimal_all' + L1 + '.fits'
     if find_files(L1_file):
         lev1_data = kpf1_from_fits(L1_file)
         L1_dataset = L1_dataset + [lev1_data]

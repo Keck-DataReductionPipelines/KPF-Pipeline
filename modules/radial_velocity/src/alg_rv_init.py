@@ -147,6 +147,39 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         return ret
 
+    @staticmethod
+    def check_epoch(epoch_data, p_header):
+        """check epoch value from the primary header for kpf case
+
+        Args:
+            epoch_data (float): Epoch value.
+            p_header (fits.header.Header): header
+
+        Returns:
+            float: epoch value or None. 
+        """
+
+        targfram_key = 'TARGFRAM'
+        if epoch_data == 0.0:
+            try:
+                targfram = p_header[targfram_key]
+                if targfram.lower() == 'fk4':
+                    epoch_data = 1950.0
+                elif targfram.lower() in ['fk5', 'apparent']:
+                    epoch_data = 2000.0
+                else:
+                    epoch_data = None
+            except KeyError:
+                epoch_data = None
+
+        if epoch_data is not None:
+            year_days = 365.25
+            val = (epoch_data - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+        else:
+            val = None
+        print("from check_epoch", val)
+        return val
+
     def init_star_from_header(self):
         if self.pheader is None:
             return self.ret_status('fits header is None')
@@ -179,8 +212,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 elif s_key == self.DEC:
                     val = Angle(h_val + "degrees").deg
                 elif s_key == self.EPOCH:
-                    year_days = 365.25
-                    val = (float(h_val) - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+                    val = self.check_epoch(float(h_val), self.pheader)
                 else:
                     val = float(h_val)
                 self.rv_config[s_key] = val
