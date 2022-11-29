@@ -3,9 +3,6 @@
     This module defines class OrderRectification which inherits from `KPF0_Primitive` and provides methods to perform
     the event on order rectification in the recipe.
 
-    Attributes:
-        OrderRectification
-
     Description:
         * Method `__init__`:
 
