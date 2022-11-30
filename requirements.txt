@@ -19,6 +19,10 @@ watchdog==2.1.7
 sphinx
 sphinx-rtd-theme
 sphinxcontrib-napoleon
+nbsphinx
+pandoc
+ipython
+pygments
 
 # Framework
 # --TODO-- tracking master for now. Need to settle on a release in the future 
