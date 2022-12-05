@@ -4,7 +4,7 @@
 import sys
 import os
 from glob import glob
-from copy import copy
+from copy import copy, deepcopy
 import argparse
 import traceback
 from datetime import datetime
@@ -150,18 +150,18 @@ def main():
                     sorted(glob(args.watch + "20*/*.fits"), reverse=True)
         framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
 
-        # frameworks = []
-        # for fname in infiles:
-        #     fm = Framework(pipe, framework_config)
-        #     fm.pipeline.start(pipe_config)
-        #     frameworks.append(fm)
-        #     fm.start_action_loop()
+        frameworks = []
+        for fname in infiles[0:24]:
+            fm = Framework(pipe, framework_config)
+            fm.pipeline.start(pipe_config)
+            frameworks.append(fm)
+            fm.start_action_loop()
 
-        #     arg = arg
-        #     arg.date_dir = datestr
-        #     arg.file_path = fname
-        #     arg.watch = True
-        #     fm.append_event('next_file', arg)
+            arg = arg
+            arg.date_dir = datestr
+            arg.file_path = fname
+            arg.watch = True
+            fm.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
