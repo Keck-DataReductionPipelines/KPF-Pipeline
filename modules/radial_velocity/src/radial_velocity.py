@@ -198,13 +198,9 @@ class RadialVelocity(KPF1_Primitive):
                     m_obs = Time(obstime_v).jd - 2400000.5
                     if exptime_v is None:
                         exptime_v = 1.0
-                elif ('DATE-OBS' in self.input.header['PRIMARY']) or ('DATE' in self.input.header['PRIMARY']): # kpf case
-                    if 'DATE-OBS' in self.input.header['PRIMARY']:
-                        d_obs = 'DATE-OBS'
-                        exptime = 'EXPTIME' if 'EXPTIME' in self.input.header['PRIMARY'] else None
-                    else:
-                        d_obs = 'DATE'
-                        exptime = 'ELASPED' if 'ELASPED' in self.input.header['PRIMARY'] else None
+                if ('DATE-MID' in self.input.header['PRIMARY']): # kpf case
+                    d_obs = 'DATE-MID'
+                    exptime = 'EXPTIME' if 'EXPTIME' in self.input.header['PRIMARY'] else None
 
                     exptime_v = self.input.header['PRIMARY'][exptime] if exptime else 1.0
                     m_obs = Time(self.input.header['PRIMARY'][d_obs]).jd - 2400000.5
@@ -212,7 +208,6 @@ class RadialVelocity(KPF1_Primitive):
                 if 'MJD-OBS' not in self.input.header[sci] or self.input.header[sci]['MJD-OBS'] != m_obs:
                     self.input.header[sci]['MJD-OBS'] = m_obs
                     self.input.header[sci]['EXPTIME'] = exptime_v
-
 
             self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
                                    else None)
