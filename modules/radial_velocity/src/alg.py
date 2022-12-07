@@ -6,6 +6,7 @@ import warnings
 import datetime
 import pandas as pd
 import os
+from astropy.time import Time
 
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
@@ -305,8 +306,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
     def get_obs_time_kpf(self, default=2459351.0):
         if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
-            obs_time = self.header['MJD-OBS'] + 2400000.5 + self.header['EXPTIME'] * SEC_TO_JD / 2
-            # obs_time = self.header['MJD-OBS'] + 2400000.5
+            obs_time = self.header['MJD-OBS'] + 2400000.5# + self.header['EXPTIME'] * SEC_TO_JD / 2
         else:
             obs_time = default
 
@@ -355,6 +355,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
         bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
+
         return bc_corr[0]
 
     def wavelength_calibration(self, spectrum_x):
@@ -636,7 +637,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
-                                                 self.velocity_loop[c], v_b)    # need check??
+                                                 self.velocity_loop[c], -v_b)    # need check??
                 """
                 ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
                                                             new_line_end.astype('float64'),
