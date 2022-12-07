@@ -149,8 +149,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
     def __init__(self, flat_data, flat_header, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None,
                  rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
-                 total_order_per_ccd=None, orderlet_names=None, total_image_orderlets=None,
-                 clip_file=None, logger_name=None):
+                 total_order_per_ccd=None, orderlet_names=None, clip_file=None, logger_name=None):
 
         if not isinstance(flat_data, np.ndarray):
             raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
