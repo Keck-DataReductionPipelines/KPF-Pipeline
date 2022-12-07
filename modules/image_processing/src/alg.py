@@ -1,12 +1,11 @@
 #packages
 import numpy as np
-import matplotlib.pyplot as plt
-from modules.Utils.frame_subtract import FrameSubtract
+from astropy.stats import SigmaClip
+from photutils.background import Background2D, MedianBackground
 from modules.Utils.config_parser import ConfigHandler
-from kpfpipe.models.level0 import KPF0
-from keckdrpframework.models.arguments import Arguments
 
-class ImageProcessingAlg:
+
+class ImageProcessingAlg():
     """
     Bias subtraction calculation.
 
@@ -14,7 +13,7 @@ class ImageProcessingAlg:
     subtraction by subtracting a master bias frame from the raw data frame.
 
     Attributes:
-        rawimage (np.ndarray): From parameter 'rawimage'.
+        rawimage (KPF0): From parameter 'rawimage'.
         ffi_exts (list): From parameter 'ffi_exts'.
         quicklook (bool): From parameter 'quicklook'.
         data_type (str): From parameter 'data_type'.
@@ -31,7 +30,7 @@ class ImageProcessingAlg:
         """Inits BiasSubtraction class with raw data, config, logger.
 
         Args:
-            rawimage (np.ndarray): The FITS raw data.
+            rawimage (KPF0): The FITS raw data.
 
             ffi_exts (list): The extensions in L0 FITS files where FFIs (full
             frame images) are stored.
@@ -54,6 +53,9 @@ class ImageProcessingAlg:
         self.data_type=data_type
         self.config=config
         self.logger=logger
+        cfg_params = ConfigHandler(config, 'PARAM')
+        ins = cfg_params.get_config_value('instrument', '') if cfg_params is not None else ''
+        self.config_ins = ConfigHandler(config, ins, cfg_params)
 
     def bias_subtraction(self, masterbias):
         """Subtracts bias data from raw data.
@@ -152,6 +154,32 @@ class ImageProcessingAlg:
                 )
                 #)
 
+    def background_subtraction(self, order_masks):
+        """ Background subtraction
+        Args:
+            order_masks(KPF0): order mask in Level 0 data format with fiber based extensions
+
+        Returns:
+            KPF0: KPF0 instance of raw image with background subtraction.
+        """
+        for ffi in self.ffi_exts:
+            raw = self.rawimage[ffi]
+            clip = SigmaClip(sigma=3.)
+            est = MedianBackground()
+            bkg = np.zeros_like(raw)
+            t_box = self.config_ins.get_config_value('BS_BOX', '(40, 28)')
+            t_fs = self.config_ins.get_config_value('BS_FILTER', '(5, 5)')
+            box = eval(t_box)  # box size for estimating background
+            fs = eval(t_fs)    # window size for 2D low resolution median filtering
+
+            if self.logger:
+                self.logger.info(f"Background Subtraction box_size: "+ t_box + ' filter_size: '+t_fs)
+
+            bkg[:, :] = Background2D(raw, box, mask=order_masks[ffi], filter_size=fs, sigma_clip=clip,
+                                                bkg_estimator=est).background
+            self.rawimage[ffi] = self.rawimage[ffi] - bkg
+
+        return self.rawimage
 
     def get(self):
         """Returns bias-corrected raw image result.
