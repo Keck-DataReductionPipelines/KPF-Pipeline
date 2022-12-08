@@ -208,7 +208,8 @@ class RadialVelocity(KPF1_Primitive):
                 if 'MJD-OBS' not in self.input.header[sci] or self.input.header[sci]['MJD-OBS'] != m_obs:
                     self.input.header[sci]['MJD-OBS'] = m_obs
                     self.input.header[sci]['EXPTIME'] = exptime_v
-
+    
+            self.input.header[sci]['MASK'] = self.rv_init['data']['mask_type']
             self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
                                    else None)
 
