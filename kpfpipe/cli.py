@@ -28,6 +28,7 @@ from kpfpipe.logger import start_logger
 # This is the default framework configuration file path
 framework_config = 'configs/framework.cfg'
 framework_logcfg= 'configs/framework_logger.cfg'
+pipeline_logcfg = 'configs/logger.cfg'
 
 update_lock = threading.Lock()
 
@@ -72,12 +73,13 @@ def worker(worker_num, pipeline_config, framework_logcfg_file, framework_config_
         sys.exit(1)
 
     # Create a logger to use for this instance
-    framework.logger = start_logger(f'DRPFrame_{worker_num}', framework_logcfg)
+    framework.logger = start_logger(f'KPFPipe-{worker_num}', framework_logcfg_file)
     framework.logger.info("Framework initialized")
 
     # Start the framework. We set wait_for_event and continous to true, which
     # tells this instance to wait for something to happen, forever
-    # qm_only=False, ingest_data_only=False, 
+    # qm_only=False, ingest_data_only=False,
+    framework.pipeline.start(pipeline_config)
     framework.start(wait_for_event=True, continuous=True)
 
 
@@ -122,6 +124,8 @@ class FileAlarm(PatternMatchingEventHandler):
 
         self.arg.date_dir = os.path.basename(os.path.dirname(self.arg.file_path))
         if self.arg.file_path.endswith('.fits') and self.check_redundant(event):
+            logname = os.path.basename(self.arg.file_path).replace('.fits', '.log')
+            self.framework.pipeline.logger = start_logger(logname, pipeline_logcfg)
             self.framework.append_event('next_file', self.arg)
 
     def on_modified(self, event):
@@ -162,23 +166,11 @@ def main():
         p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
         p.start()
 
-    # Setup a pipeline logger
-    # This is to differentiate between the loggers of framework and pipeline
-    # and individual modules.
-    # The configs related to the logger is under the section [LOGGER]
 
     # Try to initialize the framework
     try:
         framework = Framework(pipe, framework_config)
         # framework.pipeline.start(pipe_config)
-
-        # root = logging.getLogger()
-        # map(root.removeHandler, root.handlers[:])
-        # map(root.removeFilter, root.filters[:])
-
-        # Overwrite the framework logger with this instance of logger
-        # using framework default logger creates some obscure problem
-        # framework.logger = start_logger('DRPFrame', framework_logcfg)
 
     except Exception as e:
         framework.pipeline.logger.error("Failed to initialize framework, exiting ...", e)
@@ -196,14 +188,14 @@ def main():
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
                     sorted(glob(args.watch + "20*/*.fits"), reverse=True)
-        framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
+        # framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
 
-        for fname in infiles[0:1]:
-            arg = arg
-            arg.date_dir = datestr
-            arg.file_path = fname
-            arg.watch = True
-            framework.append_event('next_file', arg)
+        # for fname in infiles:
+        #     arg = arg
+        #     arg.date_dir = datestr
+        #     arg.file_path = fname
+        #     arg.watch = True
+        #     framework.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
