@@ -38,7 +38,7 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=description, prog='kpf')
     parser.add_argument('--watch', dest='watch', type=str, default=None,
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
-    parser.add_argument('--reprocess', dest='reprocess', type=bool, default=False,
+    parser.add_argument('--reprocess', dest='reprocess', action='store_true',
                         help="For use in watch mode. Process any existing files found in the watch mode path.")
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
