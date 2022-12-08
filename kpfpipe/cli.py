@@ -38,10 +38,13 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=description, prog='kpf')
     parser.add_argument('--watch', dest='watch', type=str, default=None,
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
+    parser.add_argument('--reprocess', dest='reprocess', type=str, default=None,
+                        help="For use in watch mode. Process any existing files found in the watch mode path.")
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
     parser.add_argument('--date', dest='date', type=str, default=None, help="Date for the data to be processed.")
     parser.add_argument('-n', '--ncpus', dest='ncpus', type=int, default=cpu_count(), help="Number of CPU cores to utilize.")
+
 
     args = parser.parse_args(in_args[1:])
 
@@ -188,14 +191,15 @@ def main():
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
                     sorted(glob(args.watch + "20*/*.fits"), reverse=True)
-        # framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
+        if args.reprocess:
+            framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
 
-        # for fname in infiles:
-        #     arg = arg
-        #     arg.date_dir = datestr
-        #     arg.file_path = fname
-        #     arg.watch = True
-        #     framework.append_event('next_file', arg)
+            for fname in infiles:
+                arg = arg
+                arg.date_dir = datestr
+                arg.file_path = fname
+                arg.watch = True
+                framework.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
