@@ -1,4 +1,4 @@
-Opening, examining, and manipulating KPF files
+Opening, Examining, and Manipulating KPF Files
 ==============================================
 
 The bullet points below are Jupyter Notebooks showing how to open, examine, and manipulate files from the KPF DRP.
