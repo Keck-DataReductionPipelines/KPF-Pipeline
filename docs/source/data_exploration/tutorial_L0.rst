@@ -1,5 +1,5 @@
-Reading KPF L0/2D files and examining the data products
-=======================================================
+Reading L0/2D files and examining the data products
+===================================================
 
 .. toctree::
    :maxdepth: 0
