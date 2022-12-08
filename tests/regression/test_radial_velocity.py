@@ -68,7 +68,6 @@ def init_radial_velocity():
         'step': 0.25,
         'step_range': '[-82, 82]',
         'mask_width': 0.5,
-        'air_to_vacuum': True,
         'header_date_obs': 'DATE-OBS'
     }
 
@@ -95,7 +94,6 @@ def init_radial_velocity_c():
         'step': 0.25,
         'step_range': '[-82, 82]',
         'mask_width': 0.5,
-        'air_to_vacuum': True,
         'header_date_obs': 'DATE-OBS',
         'ccf_engine': 'c'
     }
