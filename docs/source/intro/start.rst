@@ -54,4 +54,3 @@ To start a notebook server run the following and follow the on-screen instructio
     example_trivial.rst
     logging.rst
     config.rst
-    tutorial_1.rst
