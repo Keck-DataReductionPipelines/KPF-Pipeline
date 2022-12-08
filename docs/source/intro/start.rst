@@ -1,5 +1,5 @@
-Getting Started
-===============
+Getting Started with the KPF DRP
+================================
 
 This section contains topics about getting started with using 
 the ``KPF-Pipeline`` module.
@@ -52,6 +52,5 @@ To start a notebook server run the following and follow the on-screen instructio
 
     install_develop.rst
     example_trivial.rst
-    tutorial_1.rst
     logging.rst
     config.rst
