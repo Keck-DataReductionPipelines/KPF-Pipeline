@@ -109,7 +109,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.init_data = init_data
 
         # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, star_rv, step
-        # air_to_vacuum, step_range, mask_width
+        # step_range, mask_width
         self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
@@ -354,6 +354,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                             RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
+        if self.init_data['mask_type'] in ['lfc', 'thar']:
+            return 0.0
+
         bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
 
         return bc_corr[0]
@@ -583,6 +586,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         # from the original
         line_index = np.where((line.get('bc_corr_start') > np.min(wave_cal)) &
                               (line.get('bc_corr_end') < np.max(wave_cal)))[0]
+
         # line_index = np.where((line.get('bc_corr_end') > np.min(wave_cal)) &
         #                       (line.get('bc_corr_start') < np.max(wave_cal)))[0]
         n_line_index = len(line_index)
@@ -634,6 +638,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 new_spec = np.pad(spectrum, (1, 1), 'constant')
                 new_spec[1:n_pixel+1] = spectrum
                 sn = np.ones(n_pixel+2)
+
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
@@ -675,6 +680,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
                                                    sn_p, zb/LIGHT_SPEED_M)
+
         return ccf
 
     def calc_ccf(self, v_steps, new_line_start, new_line_end, x_pixel_wave, spectrum, new_line_weight, sn, zb):
@@ -762,7 +768,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                                 (x_pixel_wave_end[n] - x_pixel_wave_start[n])
 
                             if n in idx_collection:
-                                print(str(n), ' already taken')
+                                pass
+                                # print(str(n), ' already taken')
                             else:
                                 idx_collection.append(n)
             ccf_pixels[c, :] = spectrum * mask_spectra_doppler_shifted * sn
