@@ -58,7 +58,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'KPFPipeline'
-copyright = u'2020, Arpita Roy, BJ Fulton, Andrew Howard'
+copyright = u'2020-2023, Arpita Roy, BJ Fulton, Andrew Howard'
 author = u'Arpita Roy, BJ Fulton, Andrew Howard, Qifan Wang, David Rumph'
 
 # The version info for the project you're documenting, acts as replacement for
