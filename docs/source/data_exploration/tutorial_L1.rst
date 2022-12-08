@@ -1,5 +1,5 @@
-Reading KPF L1 files and examining the data products
-====================================================
+Reading L1 files and examining the data products
+================================================
 
 .. toctree::
    :maxdepth: 0
