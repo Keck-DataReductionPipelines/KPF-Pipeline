@@ -8,6 +8,7 @@ a.shape = (4,2,3)
 
 a[3][1][2] = 42.0    # Stick in an outlier.
 
+
 def test_compute():
 
     """
