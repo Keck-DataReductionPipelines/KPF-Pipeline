@@ -164,10 +164,11 @@ def main():
     datestr = datetime.now().strftime(format='%Y%m%d')
 
     # Using the multiprocessing library, create the specified number of instances
-    for i in range(int(args.ncpus)):
-        # This could be done with a careful use of subprocess.Popen, if that's more your style
-        p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
-        p.start()
+    if args.ncpus > 1:
+        for i in range(int(args.ncpus)):
+            # This could be done with a careful use of subprocess.Popen, if that's more your style
+            p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
+            p.start()
 
 
     # Try to initialize the framework
