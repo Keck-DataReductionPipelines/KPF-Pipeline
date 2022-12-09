@@ -128,7 +128,7 @@ class FileAlarm(PatternMatchingEventHandler):
         self.arg.date_dir = os.path.basename(os.path.dirname(self.arg.file_path))
         if self.arg.file_path.endswith('.fits') and self.check_redundant(event):
             logname = os.path.basename(self.arg.file_path).replace('.fits', '.log')
-            self.framework.pipeline.logger = start_logger(logname, pipeline_logcfg)
+            # self.framework.pipeline.logger = start_logger(logname, pipeline_logcfg)
             self.framework.append_event('next_file', self.arg)
 
     def on_modified(self, event):
