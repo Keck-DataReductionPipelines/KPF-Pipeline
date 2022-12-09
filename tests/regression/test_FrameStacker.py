@@ -1,6 +1,13 @@
 import numpy as np
 from modules.Utils.frame_stacker import FrameStacker
 
+nsigma = 2.5
+
+a = np.arange(24)
+a.shape = (4,2,3)
+
+a[3][1][2] = 42.0    # Stick in an outlier.
+
 def test_compute():
 
     """
@@ -19,12 +26,6 @@ def test_compute():
 
 if __name__ == '__main__':
 
-    nsigma = 2.5
-
-    a = np.arange(24)
-    a.shape = (4,2,3)
-
-    a[3][1][2] = 42.0    # Stick in an outlier.
 
     print("a=",a)
 
