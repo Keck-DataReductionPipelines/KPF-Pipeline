@@ -49,7 +49,7 @@ if context.watch and do_l0_to_2d:
         lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
         prescan_reg = config.WATCHFOR_L0.prescan_reg
         gain_key = config.WATCHFOR_L0.gain_keyword
-		masterbias_path = config.WATCHFOR_L0.masterbias_path
+        masterbias_path = config.WATCHFOR_L0.masterbias_path
 
         search_string = config.WATCHFOR_L0.input_dir + context.date_dir + '/*.fits'
 
