@@ -165,7 +165,7 @@ def main():
 
     # Using the multiprocessing library, create the specified number of instances
     if args.ncpus > 1:
-        for i in range(int(args.ncpus)):
+        for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
             p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
             p.start()
@@ -174,7 +174,7 @@ def main():
     # Try to initialize the framework
     try:
         framework = Framework(pipe, framework_config)
-        # framework.pipeline.start(pipe_config)
+        framework.pipeline.start(pipe_config)
 
     except Exception as e:
         framework.pipeline.logger.error("Failed to initialize framework, exiting ...", e)
