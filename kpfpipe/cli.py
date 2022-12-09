@@ -164,7 +164,7 @@ def main():
     datestr = datetime.now().strftime(format='%Y%m%d')
 
     # Using the multiprocessing library, create the specified number of instances
-    if args.ncpus > 1:
+    if args.ncpus > 1 and args.watch:
         for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
             p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
@@ -174,8 +174,6 @@ def main():
     # Try to initialize the framework
     try:
         framework = Framework(pipe, framework_config)
-        framework.pipeline.start(pipe_config)
-
     except Exception as e:
         framework.pipeline.logger.error("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()
@@ -184,10 +182,11 @@ def main():
     arg.recipe = recipe
     # watch mode
 
-    framework.logger.info("Starting queue manager only, no processing")
-    framework._get_queue_manager(ConfigClass(framework_config))
 
     if args.watch != None:
+        framework.logger.info("Starting queue manager only, no processing")
+        framework._get_queue_manager(ConfigClass(framework_config))
+
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
@@ -220,6 +219,7 @@ def main():
             arg.date_dir = datestr
             arg.file_path = datestr
 
+        framework.pipeline.start(pipe_config)
         framework.append_event('start_recipe', arg)
         framework.append_event('exit', arg)
         framework.start()
