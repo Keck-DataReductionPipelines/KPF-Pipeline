@@ -6,6 +6,7 @@ else:
 
 file_path = context.file_path
 date_dir = context.date_dir
+lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
 for raw_file_path in file_list:
     date_dir = context.date_dir
