@@ -43,7 +43,7 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
     parser.add_argument('--date', dest='date', type=str, default=None, help="Date for the data to be processed.")
-    parser.add_argument('-n', '--ncpus', dest='ncpus', type=int, default=cpu_count(), help="Number of CPU cores to utilize.")
+    parser.add_argument('-n', '--ncpus', dest='ncpus', type=int, default=1, help="Number of CPU cores to utilize.")
 
 
     args = parser.parse_args(in_args[1:])
