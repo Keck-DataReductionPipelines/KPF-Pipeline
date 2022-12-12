@@ -6,6 +6,7 @@ else:
 
 file_path = context.file_path
 date_dir = context.date_dir
+lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
 for raw_file_path in file_list:
     date_dir = context.date_dir
@@ -48,4 +49,6 @@ for raw_file_path in file_list:
                                           prescan_reg,
                                           gain_key)
 
-        recipe_complete = to_fits(L0_with_ffi, output_file_name)
+        bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts, data_type, quicklook)
+
+        recipe_complete = to_fits(bias_subbed, output_file_name)
