@@ -229,7 +229,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `EPOCH`, and `PARALLAX`, are updated.
 
         """
-
         self.star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
 
         if self.star_config_file is not None and self.star_config_file.lower() == 'fits_header':
@@ -283,6 +282,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 return self.ret_status('default mask of '+default_mask + ' is not defined')
 
             self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
+            self.mask_type = default_mask
             self.mask_wavelengths = mask_file_map[default_mask][1]
             self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
         return self.ret_status('ok')
