@@ -1,5 +1,8 @@
 from modules.Utils.kpf_fits import FitsHeaders
 
+fits_files_path = '/data'
+files_in_dir = fits_files_path+'/KP*.fits'
+
 def test_match_headers_float_le():
 
     """
@@ -35,8 +38,6 @@ def test_match_headers_string_lower():
 
 if __name__ == '__main__':
 
-    fits_files_path = '/data'
-    files_in_dir = fits_files_path+'/KP*.fits'
     print('files_in_dir = ', files_in_dir)
 
     test_match_headers_float_le()
