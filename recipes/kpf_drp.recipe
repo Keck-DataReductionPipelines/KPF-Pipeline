@@ -15,6 +15,7 @@ from modules.Utils.data_handler import GetHeaderValue
 from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.image_processing.src.image_process import ImageProcessing
 
 do_l0_to_2d = config.ARGUMENT.do_l0_to_2d
 do_order_trace = config.ARGUMENT.do_order_trace
@@ -49,6 +50,8 @@ if context.watch and do_l0_to_2d:
         lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
         prescan_reg = config.WATCHFOR_L0.prescan_reg
         gain_key = config.WATCHFOR_L0.gain_keyword
+        masterbias_path = config.WATCHFOR_L0.masterbias_path
+        quicklook = config.WATCHFOR_L0.quicklook
 
         search_string = config.WATCHFOR_L0.input_dir + context.date_dir + '/*.fits'
 
