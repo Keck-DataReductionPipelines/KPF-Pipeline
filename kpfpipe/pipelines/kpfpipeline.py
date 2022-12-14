@@ -200,8 +200,9 @@ class KPFPipeline(BasePipeline):
 
         logname = os.path.basename(log_path)
         self.logger.info("Starting new log with path: {}".format(log_path))
-        if not os.path.exists(os.path.dirname(log_path)):
-            os.makedirs(os.path.dirname(log_path))
+        dirpath = os.path.dirname(log_path)
+        if not os.path.exists(dirpath) and len(dirpath) > 0:
+            os.makedirs(dirpath, exist_ok=True)
         self.logger = start_logger(logname, self.configfile, log_path=log_path)
         self.context.logger = self.logger
         self.logger.info("*************** Executing recipe {} ***************".format(recipe_file))
