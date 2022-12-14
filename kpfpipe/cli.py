@@ -205,8 +205,10 @@ def main():
         observer.start()
 
         if args.ncpus > 1:
+            framework.config['DEFAULT']['want_multiprocessing'] = 'True'
             framework.start(qm_only=True)
         else:
+            framework.config['DEFAULT']['want_multiprocessing'] = 'False'
             framework.pipeline.start(pipe_config)
             framework.start()
 
