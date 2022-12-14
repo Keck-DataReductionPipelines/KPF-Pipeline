@@ -187,9 +187,9 @@ class KPFPipeline(BasePipeline):
         self._recipe_ast = ast.parse(fstr)
         context.args = action.args
 
-        if 'file_path' in context.args:
+        if 'file_path' in context.args.iter_kw():
             log_path = context.args['file_path'].replace('.fits', '.log')
-        elif 'date_dir' in context.args:
+        elif 'date_dir' in context.args.iter_kw():
             log_path = context.args['date_dir'] + '.log'
         else:
             log_path = os.path.basename(recipe_file).split('.')[0] + '.log'
