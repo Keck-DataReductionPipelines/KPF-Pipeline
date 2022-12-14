@@ -345,6 +345,7 @@ class RadialVelocity(KPF1_Primitive):
             (self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP][0], 'km/sec')
         self.output_level2.header[self.ccf_ext]['stepv'] = \
             (self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STEP], 'km/sec')
+        self.output_level2.header[self.ccf_ext]['totalv'] = self.rv_init['data']['velocity_steps']
         self.output_level2.header[self.ccf_ext]['masktype'] = output_df[0].attrs['MASKTYPE']
         for i in range(total_orderlet):
             self.output_level2.header[self.ccf_ext]['ccf'+str(i+1)] = self.sci_names[i]
