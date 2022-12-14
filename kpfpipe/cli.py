@@ -163,9 +163,10 @@ def main():
 
     # Using the multiprocessing library, create the specified number of instances
     if args.watch and args.ncpus > 1:
+        frame_config = 'configs/framework_multi.cfg'
         for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
-            p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
+            p = Process(target=worker, args=(i, pipe_config, framework_logcfg, frame_config))
             p.start()
 
     # Try to initialize the framework
@@ -205,12 +206,10 @@ def main():
         observer.start()
 
         if args.ncpus > 1:
-            framework.config['DEFAULT']['want_multiprocessing'] = 'True'
             framework.start(qm_only=True)
         else:
-            framework.config['DEFAULT']['want_multiprocessing'] = 'False'
             framework.pipeline.start(pipe_config)
-            framework.start()
+            framework.start(wait_for_event=True, continuous=True)
 
     else:
         arg.watch = False
