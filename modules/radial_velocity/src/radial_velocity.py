@@ -117,12 +117,14 @@ class RadialVelocity(KPF1_Primitive):
     RV_COL_START_W = 's_wavelength'
     RV_COL_END_W = 'e_wavelength'
     RV_COL_SEG_NO = 'segment no.'
+    RV_COL_ORD_NO = 'order no.'
     RV_COL_RV = 'RV'
     RV_COL_RV_ERR = 'RV error'
     RV_COL_CCFJD = 'CCFJD'
+    RV_COL_BARY = 'Bary_RVC'
     RV_COL_SOURCE = 'source'
-    rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_RV, RV_COL_RV_ERR,
-                    RV_COL_CCFJD, RV_COL_SOURCE]
+    rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_ORD_NO,
+                    RV_COL_RV, RV_COL_RV_ERR, RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE]
     rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
 
     def __init__(self,
@@ -382,9 +384,11 @@ class RadialVelocity(KPF1_Primitive):
         rv_table[self.RV_COL_START_W] = segment_table[s_seg:e_seg, RadialVelocityAlg.SEGMENT_W1]
         rv_table[self.RV_COL_END_W] = segment_table[s_seg:e_seg, RadialVelocityAlg.SEGMENT_W2]
         rv_table[self.RV_COL_SEG_NO] = segment_table[s_seg:e_seg, RadialVelocityAlg.SEGMENT_IDX].astype(int)
+        rv_table[self.RV_COL_ORD_NO] = segment_table[s_seg:e_seg,  RadialVelocityAlg.SEGMENT_ORD].astype(int)
         rv_table[self.RV_COL_RV] = col_rv
         rv_table[self.RV_COL_RV_ERR] =  np.zeros(total_segment)
         rv_table[self.RV_COL_CCFJD] = np.ones(total_segment) * output_df[0].attrs['CCFJDSUM']
+        rv_table[self.RV_COL_BARY] = np.ones(total_segment) * output_df[0].attrs['BARY']
 
         for o in range(total_orderlet):
             rv_table[self.RV_COL_SOURCE+str(o+1)] = col_sources[:, o]
