@@ -1,3 +1,27 @@
+data_type = config.ARGUMENT.data_type
+overwrite = config.ARGUMENT.overwrite
+channel_datasec_ncols_green = config.WATCHFOR_L0.channel_datasec_ncols_green
+channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
+channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
+channel_datasec_nrows_red = config.WATCHFOR_L0.channel_datasec_nrows_red
+channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + "/" + config.WATCHFOR_L0.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + "/" + config.WATCHFOR_L0.channel_orientation_ref_path_green
+pl_overscan_reg_red = config.WATCHFOR_L0.pl_overscan_reg_red
+srl_overscan_reg_red = config.WATCHFOR_L0.srl_overscan_reg_red
+pl_overscan_reg_green = config.WATCHFOR_L0.pl_overscan_reg_green
+srl_overscan_reg_green = config.WATCHFOR_L0.srl_overscan_reg_green
+overscan_method = config.WATCHFOR_L0.overscan_method
+order = config.WATCHFOR_L0.overscan_order
+oscan_clip = config.WATCHFOR_L0.overscan_clip
+lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
+prescan_reg = config.WATCHFOR_L0.prescan_reg
+gain_key = config.WATCHFOR_L0.gain_keyword
+masterbias_path = config.WATCHFOR_L0.masterbias_path
+quicklook = config.WATCHFOR_L0.quicklook
+n_sigma = config.WATCHFOR_L0.n_sigma
+
+search_string = config.WATCHFOR_L0.input_dir + "/" + context.date_dir + '/*.fits'
 
 if context.watch:
     file_list = find_files(context.file_path)
@@ -6,14 +30,15 @@ else:
 
 file_path = context.file_path
 date_dir = context.date_dir
+lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
 for raw_file_path in file_list:
     date_dir = context.date_dir
-    output_dir = config.WATCHFOR_L0.output_dir + date_dir + "/"
+    output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
 
     _,file_name_ext = split(raw_file_path)
     file_name,ext = splitext(file_name_ext)
-    output_file_name = output_dir + file_name + ext
+    output_file_name = output_dir + file_name + "_2D" + ext
     output_file_exists = exists(output_file_name)
 
     if overwrite or not output_file_exists:
@@ -31,7 +56,10 @@ for raw_file_path in file_list:
                                       lev0_ffi_ext_red,
                                       data_type,
                                       prescan_reg,
-                                      gain_key)
+                                      gain_key,
+                                      channel_datasec_ncols_red,
+                                      channel_datasec_nrows_red,
+                                      n_sigma)
 
         ref_output_green = OrientationReference(channel_orientation_ref_path_green, data_type)
 
@@ -46,6 +74,11 @@ for raw_file_path in file_list:
                                           lev0_ffi_ext_green,
                                           data_type,
                                           prescan_reg,
-                                          gain_key)
+                                          gain_key,
+                                          channel_datasec_ncols_green,
+                                          channel_datasec_nrows_green,
+                                          n_sigma)
 
-        recipe_complete = to_fits(L0_with_ffi, output_file_name)
+        bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts, data_type, quicklook)
+
+        recipe_complete = to_fits(bias_subbed, output_file_name)
