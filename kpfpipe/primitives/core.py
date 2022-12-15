@@ -19,3 +19,4 @@ class KPF_Primitive(BasePrimitive):
 
         self.action = action
         self.context = context
+        self.logger = self.context.logger
