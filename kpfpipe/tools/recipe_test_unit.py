@@ -43,7 +43,7 @@ class KpfPipelineForTesting(KPFPipeline):
 
 
 # This is the default framework configuration file path
-framework_config = 'configs/framework_test.cfg'
+framework_config = 'configs/framework.cfg'
 framework_logcfg= 'configs/framework_logger.cfg'
 pipe_config = "examples/default_simple.cfg"
 
