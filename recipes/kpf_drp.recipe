@@ -368,7 +368,7 @@ if do_spectral_extraction or do_hk:
 
 if do_rv or do_rv_reweighting:
 	rv_star_dir = test_data_dir
-	area_def = [[2, 33, 500, -500], [2, 30, 500, -500]]
+	area_def = [[0, orders_per_ccd[0]-1, 500, -500], [0, orders_per_ccd[1]-1, 500, -500]]
 	if not lev1_list:
 		lev1_list = find_files(input_lev1_pattern)
 
@@ -410,4 +410,3 @@ if do_rv or do_rv_reweighting:
 	# do reweighting on all L2 for non-watch mode
 	if not context.watch and do_rv_reweighting:
 		invoke_subrecipe("./recipes/kpf_rvreweighting.recipe")
-
