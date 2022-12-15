@@ -36,7 +36,7 @@ lev1_file_path = ""
 
 # do L0->2D conversion for watch mode
 if context.watch and do_l0_to_2d:
-        invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
+    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
 if context.watch:
 	sel_obsid = context.date_dir

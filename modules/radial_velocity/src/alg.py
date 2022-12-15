@@ -38,7 +38,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         reweighting_method (string): reweighting method, ccf_max or ccf_mean, of ccf_steps. Defaults to None.
         segment_list (pandas.DataFrame): Table containing segment list containing segment index, start wavelength,
             and end wavelength. Defaults to None.
-        order_limits_mask (pandas.DataFrame): Table containing order index the and the left and right limits of the
+        order_limits_mask (pandas.DataFrame): Table containing order index and the left and right limits of the
             order. Defaults to None.
 
     Attributes:
@@ -109,7 +109,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.init_data = init_data
 
         # ra, dec, pm_ra, pm_dec, parallax, def_mask, obslon, obslan, obsalt, star_rv, step
-        # air_to_vacuum, step_range, mask_width
+        # step_range, mask_width
         self.rv_config = init_data[RadialVelocityAlgInit.RV_CONFIG]
         self.velocity_loop = init_data[RadialVelocityAlgInit.VELOCITY_LOOP]    # loop of velocities for rv finding
         self.velocity_steps = init_data[RadialVelocityAlgInit.VELOCITY_STEPS]  # total steps in velocity_loop
@@ -178,31 +178,31 @@ class RadialVelocityAlg(RadialVelocityBase):
 
     def get_segment_limits(self, seg_idx=0):
         if self.segment_limits_table is None:
-            segment_list = []   # segment_index, start_wavelength, end_wavelength, start_x, end_x, order_index
+            segment_list = []   # segment_index,  start_x, end_x, start_wavelength, end_wavelength, order_index
 
-            idx = 0
-            if self.segment_limits is not None:
+            seg_idx = 0
+            if self.segment_limits is not None:   # per what segment limits define
                 seg_total, col_num = np.shape(self.segment_limits)
                 col_num = min(col_num-2, 2)
                 for s in range(seg_total):
                     wlen = [self.segment_limits[s, 1], self.segment_limits[s, col_num]]
                     sel_w = np.where((self.wave_cal >= wlen[0]) & (self.wave_cal <= wlen[1]))
                     if np.size(sel_w[0]) > 0:
-                        sel_order = self.segment_limits[s, -1] if self.segment_limits[s, -1] in sel_w[0] else sel_w[0][0]                              # order index
+                        sel_order = self.segment_limits[s, -1] if self.segment_limits[s, -1] in sel_w[0] else sel_w[0][0]
                         sel_pixel = sel_w[1][np.where(sel_w[0] == sel_order)[0]]
                         sel_pixel.sort()
-                        segment_list.append([idx, sel_pixel[0], sel_pixel[-1], wlen[0], wlen[1], int(sel_order)])
-                        idx += 1
-            elif self.order_limits_mask is not None:
+                        segment_list.append([seg_idx, sel_pixel[0], sel_pixel[-1], wlen[0], wlen[1], int(sel_order)])
+                        seg_idx += 1
+            elif self.order_limits_mask is not None:  # 1-1 between segments and orders
                 order_total, col_num = np.shape(self.order_limits_mask)
                 num_limits = min(col_num - 1, 2)  # 1 or 2 limit columns
-                for r in range(order_total):
+                for r in range(order_total):    # per what order limit mask defines [order_idx, left_mask, right_mask]
                     ord_idx = self.order_limits_mask[r, 0]
                     limits = [self.order_limits_mask[r, 1], self.end_x_pos - self.order_limits_mask[r, num_limits]]
                     segment_list.append([ord_idx, limits[0], limits[1],
                                          self.wave_cal[ord_idx, limits[0]],
                                          self.wave_cal[ord_idx, limits[1]], ord_idx])
-            elif self.area_limits is not None:
+            elif self.area_limits is not None:     # all orders are counted, 1-1 between segments and orders
                 order_range = [self.area_limits[i] if self.area_limits[i] >= 0
                                else self.end_order + self.area_limits[i] for i in [0, 1]]
 
@@ -217,7 +217,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                     else:
                         segment_list.append([r, self.start_x_pos, self.end_x_pos,
                                              self.wave_cal[r, 0], self.wave_cal[r, -1], r])
-            else:
+            else:         # order between start_order and end_order are counted, 1-1 between segments and orders
                 for r in range(self.start_order, self.end_order+1):
                     segment_list.append([r, self.start_x_pos, self.end_x_pos,
                                          self.wave_cal[r, self.start_x_pos],
@@ -225,7 +225,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             self.total_segments = len(segment_list)
             self.segment_limits_table = np.array(segment_list)
 
-        idx = np.where(self.segment_limits_table[:, self.SEGMENT_IDX]==seg_idx)[0][0]
+        idx = np.where(self.segment_limits_table[:, self.SEGMENT_IDX] == seg_idx)[0][0]
         return self.segment_limits_table[idx]
 
     def set_order_range(self, lower_order=None, upper_order=None):
@@ -354,6 +354,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                             RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
         rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
+        if self.init_data['mask_type'] in ['lfc', 'thar']:
+            return 0.0
+
         bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
 
         return bc_corr[0]
@@ -446,7 +449,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         if zb is None:
             return None, 'redshift value error'
         else:
-            self.zb = zb
+            self.zb = zb     # barycentric correction in unit of
 
         self.set_x_range()
         self.set_order_range()
@@ -583,6 +586,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         # from the original
         line_index = np.where((line.get('bc_corr_start') > np.min(wave_cal)) &
                               (line.get('bc_corr_end') < np.max(wave_cal)))[0]
+
         # line_index = np.where((line.get('bc_corr_end') > np.min(wave_cal)) &
         #                       (line.get('bc_corr_start') < np.max(wave_cal)))[0]
         n_line_index = len(line_index)
@@ -634,6 +638,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 new_spec = np.pad(spectrum, (1, 1), 'constant')
                 new_spec[1:n_pixel+1] = spectrum
                 sn = np.ones(n_pixel+2)
+
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
@@ -675,6 +680,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
                                                    sn_p, zb/LIGHT_SPEED_M)
+
         return ccf
 
     def calc_ccf(self, v_steps, new_line_start, new_line_end, x_pixel_wave, spectrum, new_line_weight, sn, zb):
@@ -762,7 +768,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                                 (x_pixel_wave_end[n] - x_pixel_wave_start[n])
 
                             if n in idx_collection:
-                                print(str(n), ' already taken')
+                                pass
+                                # print(str(n), ' already taken')
                             else:
                                 idx_collection.append(n)
             ccf_pixels[c, :] = spectrum * mask_spectra_doppler_shifted * sn
@@ -908,6 +915,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['ENDORDER'] = self.end_order
             results.attrs['TOTALORD'] = self.end_order - self.start_order+1
             results.attrs['ZB'] = self.zb    # remove later
+            results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec
         return results
 
     def compute_rv_by_cc(self, start_seg=None, end_seg=None, ref_ccf=None, print_progress=None):
