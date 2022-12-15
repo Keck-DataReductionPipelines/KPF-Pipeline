@@ -1,3 +1,6 @@
+
+import os
+
 import logging
 import configparser as cp
 
@@ -13,12 +16,13 @@ def get_level(lvl:str) -> int:
     elif lvl == 'critical': return logging.CRITICAL
     else: return logging.NOTSET
 
-def start_logger(logger_name: str, config: str) -> logging.Logger:
+def start_logger(logger_name: str, config: str, log_path=None) -> logging.Logger:
     '''
 
     Args:
         logger_name (str): name of primitive, which will be shown in each log msg. 
         config (str): path to configuration file
+        log_path (str): (optional) path to the logfile if different than whats defined in the configuration file
     '''
     # start a logger instance:
     # if logger_name in logging.Logger.manager.loggerDict.keys():
@@ -41,26 +45,11 @@ def start_logger(logger_name: str, config: str) -> logging.Logger:
     log_cfg = config_obj['LOGGER']
 
     log_start = log_cfg.get('start_log', False)
-    log_path = log_cfg.get('log_path', 'log')
+    if log_path is None:
+        log_path = log_cfg.get('log_path', 'log')
+        
     log_lvl = log_cfg.get('log_level', 'warning')
     log_verbose = log_cfg.getboolean('log_verbose', True)
-
-    # if log_start:
-    #     # setup a log format
-    #     formatter = logging.Formatter('[%(name)s][%(levelname)s]:%(message)s')
-    #     # setup a log file
-    #     f_handle = logging.FileHandler(log_path, mode='w') # logging to file
-    #     f_handle.setLevel(get_level(log_lvl))
-    #     f_handle.setFormatter(formatter)
-    #     logger.addHandler(f_handle)
-
-    #     if log_verbose: 
-    #         # also print to terminal 
-    #         s_handle = logging.StreamHandler()
-    #         s_handle.setLevel(get_level(log_lvl))
-    #         s_handle.setFormatter(formatter)
-    #         logger.addHandler(s_handle)
-    # return logger
 
     logger = logging.getLogger(logger_name)
     logger.setLevel(get_level(log_lvl))

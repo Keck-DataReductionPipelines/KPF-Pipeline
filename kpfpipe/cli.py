@@ -107,7 +107,7 @@ class FileAlarm(PatternMatchingEventHandler):
         if key in self.file_cache:
             last_update = self.file_cache[key]
             if time.time() - last_update < 2 * self.cooldown:
-                print("Ignoring duplicate file event: {}".format(event.src_path))
+                self.logging.info("Ignoring duplicate file event: {}".format(event.src_path))
                 return False
 
         self.file_cache[key] = time.time()
@@ -118,33 +118,31 @@ class FileAlarm(PatternMatchingEventHandler):
             final_file = os.path.dirname(event.src_path) + "/" + \
                 '.'.join(os.path.basename(event.src_path).split('.')[1:-1])
             while not os.path.exists(final_file):
-                print("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
+                self.logging.info("Temporary rsync file detected. Waiting for transfer of {} to complete.".format(final_file))
                 time.sleep(1)
             self.arg.file_path = final_file
         else:
             self.arg.file_path = event.src_path
-        print("Executing {} with context.file_path={}".format(self.arg.recipe, self.arg.file_path))
+        self.logging.info("Executing {} with context.file_path={}".format(self.arg.recipe, self.arg.file_path))
 
         self.arg.date_dir = os.path.basename(os.path.dirname(self.arg.file_path))
         if self.arg.file_path.endswith('.fits') and self.check_redundant(event):
-            logname = os.path.basename(self.arg.file_path).replace('.fits', '.log')
-            # self.framework.pipeline.logger = start_logger(logname, pipeline_logcfg)
             self.framework.append_event('next_file', self.arg)
 
     def on_modified(self, event):
-        print("File modification event: {}".format(event.src_path))
+        self.logging.info("File modification event: {}".format(event.src_path))
         self.process(event)
 
     def on_moved(self, event):
-        print("File move event: {}".format(event.src_path))
+        self.logging.info("File move event: {}".format(event.src_path))
         self.process(event)
 
     def on_created(self, event):
-        print("File creation event: {}".format(event.src_path))
+        self.logging.info("File creation event: {}".format(event.src_path))
         self.process(event)
 
     def on_deleted(self, event):
-        print("File removal event: {}".format(event.src_path))
+        self.logging.info("File removal event: {}".format(event.src_path))
 
     def stop(self):
         os._exit(0)
@@ -164,12 +162,12 @@ def main():
     datestr = datetime.now().strftime(format='%Y%m%d')
 
     # Using the multiprocessing library, create the specified number of instances
-    if args.ncpus > 1 and args.watch:
+    if args.watch and args.ncpus > 1:
+        frame_config = 'configs/framework_multi.cfg'
         for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
-            p = Process(target=worker, args=(i, pipe_config, framework_logcfg, framework_config))
+            p = Process(target=worker, args=(i, pipe_config, framework_logcfg, frame_config))
             p.start()
-
 
     # Try to initialize the framework
     try:
@@ -207,7 +205,11 @@ def main():
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
-        framework.start(qm_only=True)
+        if args.ncpus > 1:
+            framework.start(qm_only=True)
+        else:
+            framework.pipeline.start(pipe_config)
+            framework.start(wait_for_event=True, continuous=True)
 
     else:
         arg.watch = False
