@@ -32,8 +32,6 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      
                      'RED_AMP1': fits.ImageHDU,
                      'RED_AMP2': fits.ImageHDU,
-                     'RED_AMP3': fits.ImageHDU,
-                     'RED_AMP4': fits.ImageHDU,
                      'RED_CCD': fits.ImageHDU,
                      'RED_VAR': fits.ImageHDU,
                      
