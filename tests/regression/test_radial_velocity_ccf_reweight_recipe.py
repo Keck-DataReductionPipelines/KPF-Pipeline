@@ -13,8 +13,8 @@ rv_init = RadialVelocityInit()
 lev2_files_pattern = test_data_dir + '*_L1_L2.fits'
 all_lev2_files = find_files(lev2_files_pattern)
 lev2_list = []
-start_seg=10
-end_seg=89
+start_seg=0
+end_seg=79
 total_segment=end_seg-start_seg+1
 for f in all_lev2_files:
     lev2_obj = kpf2_from_fits(f, data_type='KPF')
@@ -24,7 +24,7 @@ ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, total_se
 
 for f in all_lev2_files:
     lev2_obj = kpf2_from_fits(f, data_type='KPF')
-    reweighted_lev2 = RadialVelocityReweighting(lev2_obj, reweighting_method, ratio_ref, total_segment, rv_init,
+    reweighted_lev2 = RadialVelocityReweighting(lev2_obj, reweighting_method, ratio_ref, total_segment, 
                         ccf_ext='CCF', rv_ext='RV', rv_ext_idx=0, ccf_start_index=start_seg)
 """
 
