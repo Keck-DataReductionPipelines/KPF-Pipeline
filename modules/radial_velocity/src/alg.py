@@ -196,9 +196,16 @@ class RadialVelocityAlg(RadialVelocityBase):
             elif self.order_limits_mask is not None:  # 1-1 between segments and orders
                 order_total, col_num = np.shape(self.order_limits_mask)
                 num_limits = min(col_num - 1, 2)  # 1 or 2 limit columns
-                for r in range(order_total):    # per what order limit mask defines [order_idx, left_mask, right_mask]
-                    ord_idx = self.order_limits_mask[r, 0]
-                    limits = [self.order_limits_mask[r, 1], self.end_x_pos - self.order_limits_mask[r, num_limits]]
+                seg_list = np.arange(0, self.end_order+1, dtype=int)       # list with full orders
+                order_list = self.order_limits_mask[:, 0]                  # order_index in order limits mask
+                for ord_idx in range(seg_list):
+
+                    if ord_idx in order_list:
+                        r = np.where(order_list == ord_idx)[0][0]
+                        limits = [self.order_limits_mask[r, 1], self.end_x_pos - self.order_limits_mask[r, num_limits]]
+                    else:
+                        limits = [self.start_x_pos, self.end_x_pos]
+
                     segment_list.append([ord_idx, limits[0], limits[1],
                                          self.wave_cal[ord_idx, limits[0]],
                                          self.wave_cal[ord_idx, limits[1]], ord_idx])
@@ -474,7 +481,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             e_seg_idx = total_seg-1
 
-        result_ccf = np.zeros([(e_seg_idx - s_seg_idx + 1) + self.ROWS_FOR_ANALYSIS, self.velocity_steps])
+        result_ccf = np.zeros([ny + self.ROWS_FOR_ANALYSIS, self.velocity_steps])
+        # result_ccf = np.zeros([(e_seg_idx - s_seg_idx + 1) + self.ROWS_FOR_ANALYSIS, self.velocity_steps])
         wavecal_all_orders = self.wavelength_calibration(spectrum_x)     # from s_order to e_order, s_x to e_x
 
         seg_ary = np.arange(total_seg)[s_seg_idx:e_seg_idx+1]
@@ -494,16 +502,13 @@ class RadialVelocityAlg(RadialVelocityBase):
                 if wavecal[-1] < wavecal[0]:
                     ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx][left_x:right_x]))   # check??
                     ordered_wavecal = np.flip(wavecal[left_x:right_x])
-                    # ordered_spec = self.fix_nan_spectrum(np.flip(new_spectrum[ord_idx][left_x:right_x]))
-                    # ordered_wavecal = np.flip(wavecal[left_x:right_x])
                 else:
                     ordered_spec = self.fix_nan_spectrum(new_spectrum[ord_idx][left_x:right_x])
                     ordered_wavecal = wavecal[left_x:right_x]
-                result_ccf[idx, :] = \
+                result_ccf[seg_idx, :] = \
                     self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
             else:
                 self.d_print("RadialVelocityAlg: all wavelength zero")
-
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
 
@@ -802,9 +807,14 @@ class RadialVelocityAlg(RadialVelocityBase):
         return self.get_rv_estimation(self.header, self.init_data)
 
     @staticmethod
-    def get_rv_estimation(hdu_header, init_data):
-        rv_guess = hdu_header['QRV'] if 'QRV' in hdu_header\
-            else init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
+    def get_rv_estimation(hdu_header, init_data=None):
+        rv_guess = 0.0
+        if 'QRV' in hdu_header:
+            rv_guess = hdu_header['QRV']
+        elif 'STAR_RV' in hdu_header:
+            rv_guess = hdu_header['STAR_RV']
+        elif init_data != None:
+            rv_guess = init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
         return rv_guess
 
     @staticmethod
@@ -816,6 +826,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         if abs_min_idx == abs_max_idx:         # no ccf result (all zero)
             vel_order = 0.0
             ccf_order = ccf_v[abs_min_idx]
+            ccf_dir = 0
         elif ccf_dir > 0:                      # pointing upwards
             vel_order = 0.0
             ccf_order = ccf_v[abs_max_idx]
@@ -856,6 +867,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                                                           mask_method)
         else:
             ccf_dir = -1
+        if ccf_dir == 0 and rv_guess == 0.0:
+            return None, rv_guess, None, None
+
         amp = -1e7 if ccf_dir < 0 else 1e7
         g_init = models.Gaussian1D(amplitude=amp, mean=rv_guess, stddev=5.0)
         # g_init = models.Gaussian1D(amplitude=-1e7, stddev=5.0)
@@ -916,6 +930,9 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['TOTALORD'] = self.end_order - self.start_order+1
             results.attrs['ZB'] = self.zb    # remove later
             results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec
+            results.attrs['MASKTYPE'] = self.init_data[RadialVelocityAlgInit.MASK_TYPE]
+            results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
+
         return results
 
     def compute_rv_by_cc(self, start_seg=None, end_seg=None, ref_ccf=None, print_progress=None):
@@ -1004,7 +1021,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         if not RadialVelocityAlg.is_good_reweighting_method(reweighting_method, for_ratio=True):
             raise Exception('invalid reweighting method to build the ratio table')
 
-        row_val = order_val[np.arange(0, e_idx-s_idx+1, dtype=int), :]
+        #row_val = order_val[np.arange(0, e_idx-s_idx+1, dtype=int), :]
+        row_val = order_val[np.arange(s_idx, e_idx+1, dtype=int), :]
         row_val = np.where((row_val < 0.0), 0.0, row_val)
 
         # t_val = np.zeros(np.shape(row_val)[0])  # check if this setting is needed
@@ -1019,8 +1037,12 @@ class RadialVelocityAlg(RadialVelocityBase):
             max_t_val = np.max(t_val)
             if max_t_val != 0.0:
                 t_val = (t_val/max_t_val) * max_ratio
-        ratio_table = {'segment': np.arange(s_idx, e_idx + 1, dtype=int),
-                       'ratio': t_val}
+        t_seg = np.shape(order_val)[0]
+        result_ratio_table = np.zeros(t_seg)
+        result_ratio_table[s_idx:e_idx+1] = t_val
+
+        ratio_table = {'segment': np.arange(0, t_seg, dtype=int),
+                       'ratio': result_ratio_table}
 
         df = pd.DataFrame(ratio_table)
         if output_csv:
@@ -1078,12 +1100,14 @@ class RadialVelocityAlg(RadialVelocityBase):
                 c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_seg) &
                                  (reweighting_table_or_ccf[:, 0] <= e_seg))[0]
                 tval = reweighting_table_or_ccf[c_idx, -1]
+                sval = reweighting_table_or_ccf[c_idx, 0].astype(int)
                 crt_rv = crt_rv[c_idx, :]
                 total_segment = np.size(tval)
             else:
                 tval = reweighting_table_or_ccf[0:total_segment, -1]
+                sval = np.arange(0, total_segment, dtype=int)
 
-            new_crt_rv = np.zeros((total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
+            new_crt_rv = np.zeros([ny + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx])
             max_index = np.where(tval == np.max(tval))[0][0]       # the max from ratio table, 1.0 if ratio max is 1.0
             oval = np.nanpercentile(crt_rv[0:total_segment], 95, axis=1) if reweighting_method == 'ccf_max' \
                 else np.nanmean(crt_rv[0:total_segment], axis=1)  # max or mean from each order
@@ -1095,7 +1119,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
             for order in range(total_segment):
                 if oval[order] != 0.0:
-                    new_crt_rv[order, :] = crt_rv[order, :] * tval[order]/oval[order]
+                    new_crt_rv[sval[order], :] = crt_rv[order, :] * tval[order]/oval[order]
         elif reweighting_method == 'ccf_steps':             # assume crt_rv and reweighting ccf cover the same orders
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -1106,9 +1130,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                                            np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
 
         if do_analysis:
-            row_for_analysis = np.arange(0, total_segment, dtype=int)
-            new_crt_rv[total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :] = \
+            row_for_analysis = np.arange(0, ny, dtype=int)
+            new_crt_rv[ny + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 1, :] = \
                 np.nansum(new_crt_rv[row_for_analysis, :], axis=0)
             if velocities is not None and np.size(velocities) == nx:
-                new_crt_rv[total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 2, :] = velocities
-        return new_crt_rv, total_segment
+                new_crt_rv[ny + RadialVelocityAlg.ROWS_FOR_ANALYSIS - 2, :] = velocities
+        return new_crt_rv, ny
