@@ -24,7 +24,7 @@ if all_lev2_files:
 		for idx in ccd_idx:
 			start_seg = area_def[idx][0]
 			t_segment = area_def[idx][1] - start_seg + 1
-			lev2_rv = RadialVelocityReweighting(lev2_rv, reweighting_method, ratio_table[idx], t_segment, rv_init,
+			lev2_rv = RadialVelocityReweighting(lev2_rv, reweighting_method, ratio_table[idx], t_segment,
 							ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
 		result = to_fits(lev2_rv, reweighted_output)
 		i = i + 1
