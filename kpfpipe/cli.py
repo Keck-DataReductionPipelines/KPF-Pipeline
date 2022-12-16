@@ -168,10 +168,13 @@ def main():
             # This could be done with a careful use of subprocess.Popen, if that's more your style
             p = Process(target=worker, args=(i, pipe_config, framework_logcfg, frame_config))
             p.start()
+    else:
+        frame_config = framework_config
 
     # Try to initialize the framework
     try:
-        framework = Framework(pipe, framework_config)
+        framework = Framework(pipe, frame_config)
+        framework.pipeline.start(pipe_config)
     except Exception as e:
         framework.pipeline.logger.error("Failed to initialize framework, exiting ...", e)
         traceback.print_exc()
@@ -183,7 +186,7 @@ def main():
 
     if args.watch != None:
         framework.logger.info("Starting queue manager only, no processing")
-        framework._get_queue_manager(ConfigClass(framework_config))
+        framework._get_queue_manager(ConfigClass(frame_config))
 
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
@@ -208,7 +211,6 @@ def main():
         if args.ncpus > 1:
             framework.start(qm_only=True)
         else:
-            framework.pipeline.start(pipe_config)
             framework.start(wait_for_event=True, continuous=True)
 
     else:

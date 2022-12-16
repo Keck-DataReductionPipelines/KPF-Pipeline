@@ -194,11 +194,11 @@ class KPFPipeline(BasePipeline):
         else:
             log_path = os.path.basename(recipe_file).split('.')[0] + '.log'
         
+        logname = os.path.basename(log_path)
         if 'log_directory' in self.config['LOGGER']:
             log_path = os.path.join(self.config.get('LOGGER', 'log_directory'),
-                                    self.context.args['date_dir'], log_path)
+                                    self.context.args['date_dir'], logname)
 
-        logname = os.path.basename(log_path)
         self.logger.info("Starting new log with path: {}".format(log_path))
         dirpath = os.path.dirname(log_path)
         if not os.path.exists(dirpath) and len(dirpath) > 0:
