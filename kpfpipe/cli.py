@@ -192,15 +192,6 @@ def main():
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
                     sorted(glob(args.watch + "20*/*.fits"), reverse=True)
-        if args.reprocess:
-            framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
-
-            for fname in infiles:
-                arg = arg
-                arg.date_dir = datestr
-                arg.file_path = fname
-                arg.watch = True
-                framework.append_event('next_file', arg)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
@@ -212,6 +203,18 @@ def main():
             framework.start(qm_only=True)
         else:
             framework.start(wait_for_event=True, continuous=True)
+
+        if args.reprocess:
+            framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
+
+            for fname in infiles:
+                arg = arg
+                arg.date_dir = datestr
+                arg.file_path = fname
+                arg.watch = True
+                framework.append_event('next_file', arg)
+            
+            framework.append_event('exit', arg)
 
     else:
         arg.watch = False

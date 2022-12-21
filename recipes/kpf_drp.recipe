@@ -45,6 +45,7 @@ if context.watch:
 	# do spectral extraction if 2D data is made after watching L0
 	if 'L0' in file_path:
 		lev0_file_path = str_replace(file_path, 'L0', '2D')
+		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
 		do_order_trace = False
 		do_spectral_extraction = True
@@ -108,6 +109,7 @@ input_2d_dir_flat = config.ARGUMENT.input_dir_root + date_dir_flat
 test_data_dir = output_dir + "masters/"
 
 ccd_list = config.ARGUMENT.ccd_list
+lev0_stem_suffix = config.ARGUMENT.output_lev0_suffix
 lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
 lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
 
@@ -289,6 +291,11 @@ if do_spectral_extraction or do_hk:
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 		_, short_lev0_file = split(input_lev0_file)
 		lev1_stem, lev1_ext = splitext(short_lev0_file)
+
+		# lev1_stem is w/o "_2D" suffix
+		if lev0_stem_suffix != None:
+			if lev0_stem_suffix in lev1_stem:
+				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 
 
@@ -386,10 +393,15 @@ if do_rv or do_rv_reweighting:
 						rv_set=idx, ccf_engine='c', obstime=obstime, exptime=exptime)
 			result = to_fits(rv_data, output_lev2_file)
 		if do_qlp:
+			# get lev0 w/o _2D suffix
 			short_lev0 = str_replace(short_lev1, lev1_stem_suffix, "")
 			input_lev0_file = input_2d_dir + short_lev0
-			lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
-			Quicklook(lev0_data, output_qlp, end_of_night_summary)
+			if not find_files(input_lev0_file):
+				short_lev0 = str_replace(short_lev1, lev1_stem_suffix, lev0_stem_suffix)
+				input_lev0_file = input_2d_dir + short_lev0
+			if find_files(input_lev0_file):
+				lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
+				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 		# do reweighting on each new L2 
 		if do_rv_reweighting:
