@@ -45,6 +45,7 @@ if context.watch:
 	# do spectral extraction if 2D data is made after watching L0
 	if 'L0' in file_path:
 		lev0_file_path = str_replace(file_path, 'L0', '2D')
+		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
 		do_order_trace = False
 		do_spectral_extraction = True
