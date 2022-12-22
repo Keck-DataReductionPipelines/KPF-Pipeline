@@ -403,18 +403,19 @@ if do_rv or do_rv_reweighting:
 				lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
 				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
-		# do reweighting on each new L2 
-		if do_rv_reweighting:
+		# do reweighting on each new L2
+		if do_rv_reweighting and ((reweighting_method == 'ccf_static') or context.watch):
 			if rv_data == None:
 				rv_data = kpf2_from_fits(output_lev2_file)
 
-			# collect lev2 to be reweighted
 			if reweighting_method == 'ccf_static':
 				lev2_list = [rv_data]
 				all_lev2_files = [output_lev2_file]
 			else:
-				lev2_list = lev2_list + [rv_data]
-				all_lev2_files = all_lev2_files + [output_lev2_file]
+				all_lev2_files = find_files(lev2_pattern)
+				lev2_list = []
+				for lev2_file in all_lev2_files:
+					lev2_list = lev2_list + [kpf2_from_fits(lev2_file, data_type=data_type)]
 
 			# config ratio table for each ccd, the ratio table is updated on new L2 if not 'ccf_static'
 			ratio_table = []
@@ -424,7 +425,6 @@ if do_rv or do_rv_reweighting:
 				for idx in ccd_idx:
 					start_seg = area_def[idx][0]
 					t_segment = area_def[idx][1] - start_seg + 1
-
 					if reweighting_method == 'ccf_static':
 						ccf_ratio_file = ccf_ratio_files[idx]
 						is_ratio_data = True
@@ -433,9 +433,8 @@ if do_rv or do_rv_reweighting:
 						ccf_ratio_file = rw_csv + '_' + ccf_ext_names[idx] + csv_ext
 						is_ratio_data = False
 					ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, t_segment, ccf_hdu_name=ccf_ext_names[idx],
-							ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg, is_ratio_data=is_ratio_data)
+								ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg, is_ratio_data=is_ratio_data)
 					ratio_table = ratio_table + [ratio_ref]
-
 				if reweighting_method == 'ccf_static':
 					static_ratio_table = ratio_table
 
@@ -449,6 +448,10 @@ if do_rv or do_rv_reweighting:
 					t_segment = area_def[idx][1] - start_seg + 1
 					lev2_rv = RadialVelocityReweighting(lev2_list[i], reweighting_method, ratio_table[idx], t_segment,
 							ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
-				result = to_fits(lev2_rv, reweighted_output)
+					result = to_fits(lev2_rv, reweighted_output)
 				i = i + 1
+
+
+	if do_rv_reweighting and (reweighting_method != 'ccf_static') and not context.watch:
+		invoke_subrecipe("./recipes/kpf_rvreweighting.recipe")
 
