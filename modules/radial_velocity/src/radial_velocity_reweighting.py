@@ -134,12 +134,14 @@ class RadialVelocityReweighting(KPF2_Primitive):
         if action.args[1].lower() == 'ccf_static':
             if isinstance(action.args[2], pd.DataFrame):
                 ratio_cols = action.args[2].columns
-                col_idx = np.array([0, 1], dtype=int)
+                col_idx = None
                 for idx in range(np.shape(ratio_cols)[0]):
                     if ratio_cols[idx].lower() in self.mask_type.lower():
-                        col_idx[1] = idx
+                        col_idx = np.array([0, idx], dtype=int)
                         self.ccf_ref = self.ccf_ref[:, col_idx]
                         break
+                if col_idx is None:
+                    self.ccf_ref = None
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -191,24 +193,34 @@ class RadialVelocityReweighting(KPF2_Primitive):
         assert (ccf_dim == 2 or ccf_dim == 3)
 
         total_orderlet = 1
-
         if ccf_dim == 2:
             ccf_data = self.ccf_data
             self.ccf_data = np.zeros((1, np.shape(ccf_data)[0], np.shape(ccf_data)[1]))  # convert 2D to 3D
             self.ccf_data[0, :, :] = ccf_data
+            totalv = np.shape(ccf_data)[1]
         elif ccf_dim == 3:
             total_orderlet = np.shape(self.ccf_data)[0]
+            totalv = np.shape(self.ccf_data)[2]
 
         is_rv_ext = hasattr(self.lev2_obj, self.rv_ext) and not self.lev2_obj[self.rv_ext].empty
         rv_ext_header = self.lev2_obj.header[self.rv_ext] if is_rv_ext else self.lev2_obj.header[self.ccf_ext]
 
-        ccf_w = header['TOTALV']
+        ccf_w = header['TOTALV'] if 'TOTALV' in header else totalv
         start_v = header['STARTV']
         v_intv = header['STEPV']
         velocities = np.array([start_v + i * v_intv for i in range(ccf_w)])
         mask_type = header['MASKTYPE'] if 'MASKTYPE' in header else 'G2_espresso'
 
         final_sum_ccf = np.zeros(np.shape(velocities)[0])
+
+        # skip reweighting if CAL source is lfc or thar
+        if self.reweighting_method == 'ccf_static' and mask_type.lower() in ['lfc', 'thar']:
+            if self.logger:
+                self.logger.info("RadialVelocityReweighting: no reweighting is done for "+ mask_type + " source")
+            self.lev2_obj.receipt_add_entry('RadialVelocityReweighting',
+                                            self.__module__, f'config_path={self.config_path}',
+                                            'PASS (skip '+self.ccf_ext+')')
+            return Arguments(self.lev2_obj)
 
         for o in range(total_orderlet):
             if self.logger:
@@ -243,7 +255,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
                 self.logger.info("RadialVelocityReweighting: start updating rv for each segment")
             self.update_rv_table(total_orderlet, velocities)
 
-        self.lev2_obj.receipt_add_entry('RadialVelocityReweighting on '+ self.ccf_ext,
+        self.lev2_obj.receipt_add_entry('RadialVelocityReweighting',
                                     self.__module__, f'config_path={self.config_path}', 'PASS')
         if self.logger:
             self.logger.info("RadialVelocityReweighting: Receipt written")
