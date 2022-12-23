@@ -183,7 +183,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         skyobj = self.pheader['SKY-OBJ']
         sciobj = self.pheader['SCI-OBJ']
         calobj = self.pheader['CAL-OBJ']
-        if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
+        if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold' or calobj=='Th_daily'):
             default_mask = 'thar'
         elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
             default_mask = 'lfc'
