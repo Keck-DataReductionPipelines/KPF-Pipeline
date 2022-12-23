@@ -1,45 +1,31 @@
-if reweighting_method == 'ccf_static':
-	lev2_list = [rv_data]
-	all_lev2_files = [output_lev2_file]
-else:
-	all_lev2_files = find_files(lev2_pattern)
-	lev2_list = []
-	for lev2_file in all_lev2_files:
-		l2_data = kpf2_from_fits(lev2_file, data_type=data_type)
-		lev2_list = lev2_list + [l2_data]
+all_lev2_files = find_files(lev2_pattern)
+lev2_list = []
+for lev2_file in all_lev2_files:
+	lev2_data = kpf2_from_fits(lev2_file, data_type=data_type)
+	lev2_list = lev2_list + [lev2_data]
 
-# config ratio table for each ccd, the ratio table is updated on new L2 if not 'ccf_static'
-ratio_table = []
-if reweighting_method == 'ccf_static' and static_ratio_table:
-	ratio_table = static_ratio_table
-else:
+# recalculate ratio table based on existing lev2 files
+if all_lev2_files:
+	ratio_table = []
+	rw_csv = output_rv_rw  + 'ccf_ratio_table_'+ rect_method + '_' + extract_method + '_' + reweighting_method
 	for idx in ccd_idx:
+		ccf_ratio_file = rw_csv + '_' + ccf_ext_names[idx] + csv_ext
 		start_seg = area_def[idx][0]
 		t_segment = area_def[idx][1] - start_seg + 1
-		if reweighting_method == 'ccf_static':
-			ccf_ratio_file = ccf_ratio_files[idx]
-			is_ratio_data = True
-		else:
-			rw_csv = output_rv_rw  + 'ccf_ratio_table_'+ rect_method + '_' + extract_method + '_' + reweighting_method
-			ccf_ratio_file = rw_csv + '_' + ccf_ext_names[idx] + csv_ext
-			is_ratio_data = False
 		ratio_ref = RadialVelocityReweightingRef(lev2_list, reweighting_method, t_segment, ccf_hdu_name=ccf_ext_names[idx],
-					ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg, is_ratio_data=is_ratio_data)
+							ccf_ratio_file=ccf_ratio_file, ccf_start_index=start_seg)
 		ratio_table = ratio_table + [ratio_ref]
 
-	if reweighting_method == 'ccf_static':
-		static_ratio_table = ratio_table
-
-i = 0
-# do reweighting on lev2 collection
-for f in all_lev2_files:
-	_, short_lev2 = split(f)
-	reweighted_output = output_rv_rw + short_lev2
-	for idx in ccd_idx:
-		start_seg = area_def[idx][0]
-		t_segment = area_def[idx][1] - start_seg + 1
-		lev2_rv = RadialVelocityReweighting(lev2_list[i], reweighting_method, ratio_table[idx], t_segment,
-					ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
+	i = 0
+	for f in all_lev2_files:
+		_, short_lev2 = split(f)
+		reweighted_output = output_rv_rw + short_lev2
+		lev2_rv = lev2_list[i]
+		for idx in ccd_idx:
+			start_seg = area_def[idx][0]
+			t_segment = area_def[idx][1] - start_seg + 1
+			lev2_rv = RadialVelocityReweighting(lev2_rv, reweighting_method, ratio_table[idx], t_segment,
+							ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=start_seg)
 		result = to_fits(lev2_rv, reweighted_output)
-	i = i + 1
+		i = i + 1
 
