@@ -62,6 +62,7 @@
 
 import configparser
 import numpy as np
+from astropy.io import fits
 import os.path
 import pandas as pd
 
@@ -96,27 +97,27 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         self.ccf_ratio_file = action.args['ccf_ratio_file'] if 'ccf_ratio_file' in args_keys else ''
         # self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 1
 
-        if action.args[0] is None:
-            file_list = []
-        else:
-            file_list = action.args[0] if isinstance(action.args[0], list) else [action.args[0]]
+        file_list = action.args[0] if isinstance(action.args[0], list) else [action.args[0]]
         self.files = []
+
         f_size = -1
         for one_file in file_list:
-            f_lev2 = None
-            if isinstance(one_file, str) and os.path.exists(one_file):
+            if isinstance(one_file, str):
                 f_lev2 = KPF2.from_fits(one_file)
             elif isinstance(one_file, KPF2):
                 f_lev2 = one_file
-
+            else:
+                f_lev2 = None
             if f_lev2 is not None:
                 self.files.append(f_lev2)
                 # find the total_segment if not set yet
                 if self.total_segment is None and self.ccf_hdu_name in f_lev2.header \
                         and 'NAXIS' in f_lev2.header[self.ccf_hdu_name]:
                     nx = f_lev2.header[self.ccf_hdu_name]['NAXIS']    # 2 or 3
-                    t_seg = np.shape(f_lev2[self.ccf_hdu_name])[nx-2]
-                    f_size = min(f_size, t_seg) if f_size >= 0 else t_seg
+                    if f_size >= 0:
+                        f_size = min(f_size, np.shape(f_lev2[self.ccf_hdu_name])[nx-2])
+                    else:
+                        f_size = np.shape(f_lev2[self.ccf_hdu_name])[nx-2]
 
         if self.total_segment is None and f_size != -1:
             self.total_segment = f_size
@@ -142,8 +143,9 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         """
         # input argument must be KPF2
         success = isinstance(self.files, list) and len(self.files) > 0 and \
-                  (self.reweighting_method in RadialVelocityAlg.CCF_Methods) and \
+                  (self.reweighting_method in ['ccf_max', 'ccf_mean', 'ccf_steps']) and \
                   (self.is_ratio_data or self.total_segment is not None)
+
         return success
 
     def _post_condition(self) -> bool:
@@ -159,15 +161,13 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         Returns:
             pandas.DataFrame as a reweighting ratio table or a ccf reference from observation template
         """
+
         def get_template_observation(f, hdu_idx_name, msg, is_ratio=False):
             if is_ratio:
                 assert isinstance(f, str), msg + ':' + 'ratio file type is wrong'
                 assert os.path.exists(f) == 1, msg + ':' + f + " doesn't exist"
-                if self.reweighting_method == 'ccf_static':
-                    r_ccf = pd.read_csv(f, sep="\s+|\t+|\s+\t+|\t+\s+", engine="python")   # with columns and values
-                else:
-                    ratio_pd = pd.read_csv(f)
-                    r_ccf = ratio_pd.values
+                ratio_pd = pd.read_csv(f)
+                r_ccf = ratio_pd.values
             else:
                 r_ccf = f[hdu_idx_name]
 
@@ -180,7 +180,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
 
         if self.logger:
             self.logger.info("RadialVelocityReweightingRef: find reweighting reference by method " +
-                            self.reweighting_method)
+                                self.reweighting_method)
 
         if self.reweighting_method == 'ccf_steps':
             ccf_ref = get_template_observation(self.files[0], self.ccf_hdu_name,
@@ -227,7 +227,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
 
             ccf_df = RadialVelocityAlg.make_reweighting_ratio_table(ccf_ref, self.ccf_start_index,
                                                                     self.ccf_start_index + t_segment - 1,
-                                                                    self.reweighting_method, max_ratio=1.0,
+                                                                    self.reweighting_method, max_ratio = 1.0,
                                                                     output_csv=self.ccf_ratio_file)
             ccf_ref = ccf_df.values
 
@@ -237,4 +237,6 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
             self.logger.info("RadialVelocityReweightingRef: done")
 
         return Arguments(ccf_ref)
+
+
 
