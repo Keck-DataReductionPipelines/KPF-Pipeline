@@ -78,6 +78,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     SEGMENT_W1 = 3
     SEGMENT_W2 = 4
     SEGMENT_ORD = 5
+    CCF_Methods = ['ccf_max', 'ccf_mean', 'ccf_static', 'ccf_steps']
 
     """int: Extra rows added to the 2D result in which each row contains the cross correlation result for one order. 
     
@@ -995,7 +996,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
     @staticmethod
     def is_good_reweighting_method(method, for_ratio=False):
-        return method in ['ccf_max', 'ccf_mean'] if for_ratio else method in ['ccf_max', 'ccf_mean', 'ccf_steps']
+        return method in ['ccf_max', 'ccf_mean'] \
+            if for_ratio else method in RadialVelocityAlg.CCF_Methods
 
     @staticmethod
     def make_reweighting_ratio_table(order_val, s_idx, e_idx, reweighting_method, max_ratio=1.0, output_csv=''):
@@ -1091,7 +1093,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         total_segment = min(total_segment, ny)
 
-        if reweighting_method == 'ccf_max' or reweighting_method == 'ccf_mean':
+        if reweighting_method == 'ccf_max' or reweighting_method == 'ccf_mean' or reweighting_method == 'ccf_static':
             # if the ratio table containing a column of order index, using s_order to select the ratio with
             # order index from s_order to s_order+total_order-1
             if np.shape(reweighting_table_or_ccf)[1] >= 2:
@@ -1099,8 +1101,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                 e_seg = s_seg + total_segment - 1
                 c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_seg) &
                                  (reweighting_table_or_ccf[:, 0] <= e_seg))[0]
-                tval = reweighting_table_or_ccf[c_idx, -1]
-                sval = reweighting_table_or_ccf[c_idx, 0].astype(int)
+                tval = reweighting_table_or_ccf[c_idx, -1]              # selected weighting on selected segment
+                sval = reweighting_table_or_ccf[c_idx, 0].astype(int)   # selected original segment index
                 crt_rv = crt_rv[c_idx, :]
                 total_segment = np.size(tval)
             else:
@@ -1108,26 +1110,36 @@ class RadialVelocityAlg(RadialVelocityBase):
                 sval = np.arange(0, total_segment, dtype=int)
 
             new_crt_rv = np.zeros([ny + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx])
-            max_index = np.where(tval == np.max(tval))[0][0]       # the max from ratio table, 1.0 if ratio max is 1.0
-            oval = np.nanpercentile(crt_rv[0:total_segment], 95, axis=1) if reweighting_method == 'ccf_max' \
-                else np.nanmean(crt_rv[0:total_segment], axis=1)  # max or mean from each order
 
-            oval_at_index = oval[max_index]                     # value from oder of max_index
-            if oval_at_index == 0.0:      # order of max_index has value 0.0, skip reweighting, returns all zeros
-                return new_crt_rv
-            oval = oval/oval_at_index     # ratio of orders before reweighting, value at order of max_index is 1.0
+            if reweighting_method == 'ccf_static':
+                ccf_sums = np.nansum(crt_rv, axis=1)     # summation along each order
 
-            for order in range(total_segment):
-                if oval[order] != 0.0:
-                    new_crt_rv[sval[order], :] = crt_rv[order, :] * tval[order]/oval[order]
+                for idx in range(total_segment):
+                    if ccf_sums[idx] > 0. and tval[idx] != 0.0:
+                        new_crt_rv[sval[idx], :] = (crt_rv[idx, :] / ccf_sums[idx]) * tval[idx]
+            else:
+                max_index = np.where(tval == np.max(tval))[0][0]       # the max from ratio table, 1.0 if ratio max is 1.0
+                oval = np.nanpercentile(crt_rv[0:total_segment], 95, axis=1) if reweighting_method == 'ccf_max' \
+                    else np.nanmean(crt_rv[0:total_segment], axis=1)  # max or mean from each order
+
+                oval_at_index = oval[max_index]                     # value from oder of max_index
+                if oval_at_index == 0.0:      # order of max_index has value 0.0, skip reweighting, returns all zeros
+                    return new_crt_rv
+                oval = oval/oval_at_index     # ratio of orders before reweighting, value at order of max_index is 1.0
+
+                for order in range(total_segment):
+                    if oval[order] != 0.0:
+                        new_crt_rv[sval[order], :] = crt_rv[order, :] * tval[order]/oval[order]
+
         elif reweighting_method == 'ccf_steps':             # assume crt_rv and reweighting ccf cover the same orders
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
                 new_crt_rv = np.zeros((total_segment + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx))
                 for order in range(total_segment):
                     if np.size(np.where(crt_rv[order, :] != 0.0)[0]) > 0:
                         new_crt_rv[order, :] = crt_rv[order, :] * \
-                                           np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
+                                               np.nanmean(reweighting_table_or_ccf[order, :]/crt_rv[order, :])
 
         if do_analysis:
             row_for_analysis = np.arange(0, ny, dtype=int)
