@@ -670,7 +670,7 @@ class QuicklookAlg:
                 plt.close()
         else: print('L2 file does not exist')
         #output the results to html
-        f = open(output_dir+exposure_name+'_summary.html','w')
+        f = open(output_dir+exposure_name+'_2D_summary.html','w')
 
         message = """<html><head><title>""" +exposure_name+ """</title>
         <script type='text/javascript'>
