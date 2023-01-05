@@ -48,9 +48,9 @@ class QuicklookAlg:
         # try:
         #     exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         # except:
-        exposure_name = kpf0_file.filename.replace('_L1.fits', '.fits')[:-5]
+        exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
         date = exposure_name[3:11]
-        # print(exposure_name, date)
+        print('test',exposure_name, date)
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
@@ -111,7 +111,7 @@ class QuicklookAlg:
 
 
         #read ccd directly
-        L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'.fits'
+        L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
         hdulist = fits.open(L0_data)
         print(hdulist.info())
 
