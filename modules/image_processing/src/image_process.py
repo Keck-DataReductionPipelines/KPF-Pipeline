@@ -142,14 +142,22 @@ class ImageProcessing(KPF0_Primitive):
             Arguments object(np.ndarray): Level 0 observation data
         """
 
+        #until master file part of data model is fixed
+
         DEFINED_ACTIONS = ['remove_cosmics']
 
         if self.correcting_file_or_action not in DEFINED_ACTIONS:
             #until master file part of data model is fixed
-            correcting_file_or_action = KPF0.from_fits(
-                self.correcting_file_or_action
-            )
-            action_type = correcting_file_or_action.header['PRIMARY']['IMTYPE']
+            if isinstance(self.correcting_file_or_action, KPF0):
+                correcting_file_or_action = self.correcting_file_or_action
+            else:
+                correcting_file_or_action = KPF0.from_fits(
+                    self.correcting_file_or_action
+                )
+            if correcting_file_or_action.header['PRIMARY']['IMTYPE'].lower() == 'ordermask':
+                action_type = 'Background_Subtraction'
+            else:
+                action_type = correcting_file_or_action.header['PRIMARY']['IMTYPE']
             print(action_type)
 
         else:
@@ -178,5 +186,11 @@ class ImageProcessing(KPF0_Primitive):
                 )
             cosmicray_subbed = self.alg.cosmic_ray_masking()
 
+        if action_type == 'Background_Subtraction':
+            if self.logger:
+                self.logger.info(
+                    f'Background Subtraction: subtracting background from raw FFI(s) {self.ffi_exts}'
+                )
+            self.alg.background_subtraction(correcting_file_or_action)
 
         return Arguments(self.alg.get())
