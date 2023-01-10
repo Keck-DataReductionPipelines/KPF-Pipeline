@@ -20,13 +20,12 @@
                       trace result.
                     - `action.args[2] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing spectral
                       extraction results. If not existing, it is None.
+                    - `action.args['ccd_index'] (int, optional)`: index of the ccd. Defaults to None.
                     - `action.args['orderlet_names'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
-                    - `action.args['orderlets_on_image'] (str|list, optional)`: Name or list of names of the order on
-                      the image. Defaults to None.
+                    - `action.args['max_result_order']: (int, optional)`: Total orders to be processed, Defaults to -1.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
-                    - `action.args['max_result_order']: (int, optional)`: Total orders to be processed, Defaults to -1.
                     - `action.args['rectification_method']: (str, optional)`: Rectification method, '`norect`',
                       '`vertial`', or '`normal`', to rectify the curved order trace. Defaults to '`norect`',
                       meaning no rectification.
@@ -36,13 +35,24 @@
                       for each order trace based on the spectrum
                       data and its variance and the weighting based on the flat data instead of doing summation on
                       the spectrum data directly.
-                    - `action.args['clip_file'] (str, optional)`:  Prefix of clip file path. Defaults to None.
-                      Clip file is used to store the polygon clip data for the rectification method
-                      which is not NoRECT.
                     - `action.args['wavecal_fits']: (str|KPF1 optional)`: Path of the fits file or `KPF1` instance
                       containing wavelength calibration data. Defaults to None.
                     - `action.args['to_set_wavelength_cal']: (boolean, optional)`: if setting the wavelength calibration
                       values from ``action.args['wavecal_fits']``. Defaults to False.
+                    - `action.args['clip_file'] (str, optional)`:  Prefix of clip file path. Defaults to None.
+                      Clip file is used to store the polygon clip data for the rectification method
+                      which is not NoRECT.
+                    - `action.args['total_order_per_ccd']: (int, optional)`: total order per ccd. Defaults to False.
+                    - `action.args['data_extension']: (str, optional)`: the name of the extension containing data.
+                    - `action.args['trace_extension']: (str, optional)`: the name of the extension containing order
+                      trace results.
+                    - `action.args['trace_file']: (str, optional)`: the name file containing order trace results.
+                    - `action.args['orderlets_on_image'] (str|list, optional)`: Name or list of names of the order
+                      appearing on the image. Defaults to None.
+                    - `action.args['poly_degree']: (str, optional)`: Polynomial degree for order trace curve fitting.
+                      Defaults to 3.
+                    - `action.args['origin']: (list, optional)`: Origin of the image where the order trace is related
+                      to. Defaults to [0, 0]
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of spectral extraction in the master
@@ -53,6 +63,7 @@
                 - `input_spectrum (kpfpipe.models.level0.KPF0)`: Instance of `KPF0`, assigned by `actions.args[0]`.
                 - `input_flat (kpfpipe.models.level0.KPF0)`:  Instance of `KPF0`, assigned by `actions.args[1]`.
                 - `output_level1 (kpfpipe.models.level1.KPF1)`: Instance of `KPF1`, assigned by `actions.args[2]`.
+                - `ccd_index (int)`: ccd index.
                 - `orderlet_names (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `max_result_order (int)`: Total orders to be processed.
@@ -62,6 +73,11 @@
                 - `to_set_wavelength_cal`: Flag indicates if setting wavelength calibration data to wavelength
                   calibration extension from ``wavecal_fits``.
                 - `clip_file (str)`: Prefix of clip file path. Defaults to None.
+                - `total_order_per_ccd (list)`: Total order per ccd.
+                - `order_trace_data (Union[numpy.ndarray, pandas.DataFrame])`: Order trace data including
+                  polynomial coefficients, top/bottom edges and horizontal coverage of the order trace.
+                - `spec_flux (numpy.ndarray)`: 2D spectrum data, raw data or rectified data.
+                - `spec_header (fits.header.Header)`: fits header of spectrum data.
                 - `config_path (str)`: Path of config file for spectral extraction.
                 - `config (configparser.ConfigParser)`: Config context per the file defined by `config_path`.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
