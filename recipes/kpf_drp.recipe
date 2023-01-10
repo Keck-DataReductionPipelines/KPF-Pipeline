@@ -415,11 +415,12 @@ if do_spectral_extraction or do_hk:
 				# do background subtraction
 				if do_bk_subtraction:
 					order_mask = None
+					# create order mask for background subtraction
 					for idx in ccd_idx:
 						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
 								start_order=start_order[idx], trace_file=trace_list[idx],
 								data_extension=ccd_list[idx])
-					# modify L0 from background subtraction
+					# update L0 by background subtraction
 					lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
@@ -547,5 +548,3 @@ if do_rv or do_rv_reweighting:
 	# do reweighting on all L2 for non-watch mode
 	if not context.watch and do_rv_reweighting:
 		invoke_subrecipe("./recipes/kpf_rvreweighting.recipe")
-
-
