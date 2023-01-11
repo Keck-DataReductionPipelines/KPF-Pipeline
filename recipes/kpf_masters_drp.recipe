@@ -1,0 +1,209 @@
+###################################################################################################
+# Pipeline to generate all calibration files.
+# Inputs are from /data/kpf/L0/*.fits or /data/kpf/L0/date_dir/*.fits if context.date_dir is true.
+###################################################################################################
+
+from modules.Utils.string_proc import str_replace
+from modules.Utils.pick_inputs_masters_drp import PickInputsMastersDRP
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.master_bias.src.master_bias_framework import MasterBiasFramework
+from modules.master_dark.src.master_dark_framework import MasterDarkFramework
+from modules.master_flat.src.master_flat_framework import MasterFlatFramework
+from modules.master_arclamp.src.master_arclamp_framework import MasterArclampFramework
+
+data_type = config.ARGUMENT.data_type
+overwrite = config.ARGUMENT.overwrite
+date_dir = context.date_dir
+
+if date_dir is None:
+    search_string = config.PICK_INPUTS_MASTERS_DRP.input_dir + "/" + '*.fits'
+else:
+    search_string = config.PICK_INPUTS_MASTERS_DRP.input_dir + "/" + date_dir + "/" + '*.fits'
+
+exptime_minimum = config.DARK.exptime_minimum
+
+all_bias_files_list, all_dark_files_list, all_flat_files_list, all_arclamp_files_list = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
+
+channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
+channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
+channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
+channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
+channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + "/" + config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + "/" + config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
+pl_overscan_reg_red = config.OVERSCAN_SUBTRACTION.pl_overscan_reg_red
+srl_overscan_reg_red = config.OVERSCAN_SUBTRACTION.srl_overscan_reg_red
+pl_overscan_reg_green = config.OVERSCAN_SUBTRACTION.pl_overscan_reg_green
+srl_overscan_reg_green = config.OVERSCAN_SUBTRACTION.srl_overscan_reg_green
+overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
+order = config.OVERSCAN_SUBTRACTION.overscan_order
+oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
+lev0_ffi_ext_red = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_green
+prescan_reg = config.OVERSCAN_SUBTRACTION.prescan_reg
+gain_key = config.OVERSCAN_SUBTRACTION.gain_keyword
+n_sigma = config.OVERSCAN_SUBTRACTION.n_sigma
+
+if date_dir is None:
+    overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir
+else:
+    overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir + "/" + date_dir
+
+file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list + all_arclamp_files_list
+
+nlen_file_list = len(file_list)
+
+for raw_file_path in file_list:
+
+    _,file_name_ext = split(raw_file_path)
+    file_name,ext = splitext(file_name_ext)
+    output_file_name = overscan_output_dir + "/" + file_name + "_2D" + ext
+    output_file_exists = exists(output_file_name)
+
+    if output_file_exists:
+        file_exists = True
+    else:
+        file_exists = False
+
+    if overwrite or not output_file_exists:
+        ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
+
+        # compute red-chip ffi
+        l0 = kpf0_from_fits(raw_file_path, data_type)
+        red_ffi = OverscanSubtraction(l0,
+                                      pl_overscan_reg_red,
+                                      srl_overscan_reg_red,
+                                      overscan_method,
+                                      order,
+                                      oscan_clip,
+                                      ref_output_red,
+                                      lev0_ffi_ext_red,
+                                      data_type,
+                                      prescan_reg,
+                                      gain_key,
+                                      channel_datasec_ncols_red,
+                                      channel_datasec_nrows_red,
+                                      n_sigma)
+
+        ref_output_green = OrientationReference(channel_orientation_ref_path_green, data_type)
+
+        # add green-chip ffi to data containing red-chip ffi
+        L0_with_ffi = OverscanSubtraction(red_ffi,
+                                          pl_overscan_reg_green,
+                                          srl_overscan_reg_green,
+                                          overscan_method,
+                                          order,
+                                          oscan_clip,
+                                          ref_output_green,
+                                          lev0_ffi_ext_green,
+                                          data_type,
+                                          prescan_reg,
+                                          gain_key,
+                                          channel_datasec_ncols_green,
+                                          channel_datasec_nrows_green,
+                                          n_sigma)
+
+        oscan_complete = to_fits(L0_with_ffi, output_file_name)
+
+########################
+# Generate master bias.
+########################
+
+if all_bias_files_list:
+    bias_n_sigma = config.BIAS.n_sigma
+    bias_lev0_ffi_exts = config.BIAS.lev0_ffi_exts
+    masterbias_path = config.BIAS.masterbias_path
+    bias_input_files = overscan_output_dir + "/" + "*_2D.fits"
+
+    if date_dir:
+        new_masterbias_path = str_replace(masterbias_path, '_master_bias.fits', '_' + date_dir + '_master_bias.fits')
+    else:
+        new_masterbias_path = masterbias_path
+
+    exit_list_bias = MasterBiasFramework(data_type,
+                                         bias_n_sigma,
+                                         bias_input_files,
+                                         bias_lev0_ffi_exts,
+                                         new_masterbias_path)
+
+
+
+########################
+# Generate master dark.
+########################
+
+    if all_dark_files_list:
+        dark_n_sigma = config.DARK.n_sigma
+        dark_lev0_ffi_exts = config.DARK.lev0_ffi_exts
+        masterdark_path = config.DARK.masterdark_path
+        dark_input_files = overscan_output_dir + "/" + "*_2D.fits"
+
+        if date_dir:
+            new_masterdark_path = str_replace(masterdark_path, '_master_dark.fits', '_' + date_dir + '_master_dark.fits')
+        else:
+            new_masterdark_path = masterdark_path
+
+        exit_list_dark = MasterDarkFramework(data_type,
+                                             dark_n_sigma,
+                                             dark_input_files,
+                                             dark_lev0_ffi_exts,
+                                             new_masterbias_path,
+                                             new_masterdark_path)
+
+
+########################
+# Generate master flat.
+########################
+
+        if all_flat_files_list:
+            flat_n_sigma = config.FLAT.n_sigma
+            flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
+            masterflat_path = config.FLAT.masterflat_path
+            flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
+
+            if date_dir:
+                new_masterflat_path = str_replace(masterflat_path, '_master_flat.fits', '_' + date_dir + '_master_flat.fits')
+            else:
+                new_masterflat_path = masterflat_path
+
+            exit_list_flat = MasterFlatFramework(data_type,
+                                                 flat_n_sigma,
+                                                 flat_input_files,
+                                                 flat_lev0_ffi_exts,
+                                                 new_masterbias_path,
+                                                 new_masterdark_path,
+                                                 new_masterflat_path)
+
+####################################
+# Generate master-arclamp products.
+####################################
+
+        skip_flattening = config.ARCLAMP.skip_flattening
+
+        if all_arclamp_files_list:
+            arclamp_n_sigma = config.ARCLAMP.n_sigma
+            arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
+            arclamp_objects = config.ARCLAMP.arclamp_objects
+            masterarclamp_path = config.ARCLAMP.masterarclamp_path
+            arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
+
+            for arclamp_object in arclamp_objects:
+
+                if date_dir:
+                    new_masterarclamp_path = str_replace(masterarclamp_path,\
+                                             '_master_arclamp.fits',\
+                                             '_' + date_dir + '_master_arclamp_' + arclamp_object + '.fits')
+                else:
+                    new_masterarclamp_path = str_replace(masterarclamp_path,\
+                                             '_master_arclamp.fits',\
+                                             '_master_arclamp_' + arclamp_object + '.fits')
+
+                exit_list_arclamp = MasterArclampFramework(data_type,
+                                                           arclamp_n_sigma,
+                                                           arclamp_input_files,
+                                                           arclamp_lev0_ffi_exts,
+                                                           arclamp_object,
+                                                           new_masterbias_path,
+                                                           new_masterdark_path,
+                                                           new_masterflat_path,
+                                                           new_masterarclamp_path)

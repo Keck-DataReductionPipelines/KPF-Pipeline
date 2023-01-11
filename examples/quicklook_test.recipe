@@ -1,0 +1,11 @@
+from modules.quicklook.src.quick_prim import Quicklook
+
+path_to_twod = config.ARGUMENT.path_to_twod
+#lev0_files= path_to_twod + '*' + '.fits'
+lev0_files= path_to_twod + 'KP.20221231.79491.17_2D.fits'
+
+output_dir = config.ARGUMENT.output_dir
+end_of_night_summary = False
+for input_lev0_file in find_files(lev0_files):
+    open_file = kpf0_from_fits(input_lev0_file,data_type='KPF')
+    Quicklook(open_file,output_dir,end_of_night_summary)

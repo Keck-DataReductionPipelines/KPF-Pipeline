@@ -1,5 +1,5 @@
-Getting Started
-===============
+Getting Started with the KPF DRP
+================================
 
 This section contains topics about getting started with using 
 the ``KPF-Pipeline`` module.

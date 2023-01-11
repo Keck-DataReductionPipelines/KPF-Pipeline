@@ -23,6 +23,17 @@ for a in [1, 2, 3]:
     test_primitive_validate_args(sum, 5, dif, 3, prod, 6, div, 2., snr_thresh, 3.5, snr_thresh_subscript, 3.5)
     test_primitive_validate_args(sum > dif, dif < sum, sum >= dif, dif <= sum, sum != dif, not sum == dif)
 
+    bin1 = True and True
+    bin2 = True and False
+    bin3 = False and True
+    bin4 = False and False
+    test_primitive_validate_args(bin1, True, bin2, False, bin3, False, bin4, False)
+    bin5 = True or True
+    bin6 = True or False
+    bin7 = False or True
+    bin8 = False or False
+    test_primitive_validate_args(bin5, True, bin6, True, bin7, True, bin8, False)
+
     uadd = +3
     usub = -3
     test_primitive_validate_args(uadd, 3, uadd + usub, 0)
@@ -36,7 +47,7 @@ for a in [1, 2, 3]:
         bool2 = True
     else:
         bool2 = False
-    
+
     bool3 = (div == 42)
 
     s = 'panama'

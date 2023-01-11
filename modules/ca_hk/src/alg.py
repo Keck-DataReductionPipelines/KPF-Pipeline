@@ -14,6 +14,8 @@ class CaHKAlg(ModuleAlgBase):
     Args:
         data (numpy.ndarray): Ca H&K 2D image data.
         fibers (list): List containing the interested fibers to be extracted.
+        output_exts (list): List with the name of the extension to contain extraction data
+        output_wl_exts (list): List with the name of the extension to contain wavelength data
         config (configparser.ConfigParser): config context.
         logger (logging.Logger): Instance of logging.Logger from external application.
 
@@ -40,7 +42,7 @@ class CaHKAlg(ModuleAlgBase):
     LOC_y2 = 'yf'
     name = 'CaHK'
 
-    def __init__(self, data, fibers, config=None, logger=None):
+    def __init__(self, data, fibers, output_exts=None, output_wl_exts=None, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from CaHKAlg')
         if not isinstance(config, ConfigParser):
@@ -59,12 +61,19 @@ class CaHKAlg(ModuleAlgBase):
             raise TypeError('fiber content error, cannot construct object from CaHKAlg')
 
         self.instrument = ins
-        self.hk_data = data
-        ny, nx = np.shape(data)
+        self.hk_data = data.astype('float64')
+        if data.size == 0:
+            ny = 0
+            nx = 0
+        else:
+            ny, nx = np.shape(data)
         self.data_range = [0, ny - 1, 0, nx - 1]
         self.fibers = fibers if isinstance(fibers, list) else [str(fibers)]
         self.trace_location = {fiber: None for fiber in self.fibers}
         self.order_buffer = np.zeros((1, nx), dtype=float)
+        self.output_exts = output_exts
+        self.output_wl_exts = output_wl_exts
+        self.ca_hk_gain = None
 
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
@@ -107,6 +116,30 @@ class CaHKAlg(ModuleAlgBase):
         """
 
         return self.fibers
+
+    def get_output_exts(self):
+        if not self.output_exts:
+            self.output_exts = self.get_config_value('hk_extract_exts', self.fibers)
+        if len(self.output_exts) < len(self.fibers):
+            for idx in range(len(self.output_exts), len(self.fibers)):
+                self.output_exts.append(self.fibers[idx])
+        return self.output_exts
+
+    def get_wavelength_exts(self):
+        if not self.output_wl_exts:
+            self.output_wl_exts = self.get_config_value('hk_wave_exts', [f+'_wave' for f in self.fibers])
+
+        if len(self.output_wl_exts) < len(self.fibers):
+            for idx in range(len(self.output_wl_exts), len(self.fibers)):
+                self.output_wl_exts.append(self.fibers[idx]+'_wave')
+
+        return self.output_wl_exts
+
+    def get_gain(self):
+        if self.ca_hk_gain is None:
+            self.ca_hk_gain = self.get_config_value('ca_hk_gain', 1.0)
+
+        return self.ca_hk_gain
 
     def get_trace_location(self, fiber=None):
         """Get the trace location on specified fibers
@@ -168,7 +201,8 @@ class CaHKAlg(ModuleAlgBase):
             loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
             self.trace_location[fiber] = dict()
             for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
-                self.trace_location[fiber][loc[order_idx]] = {'x1': loc[loc_idx[self.LOC_X1]],
+                if loc[order_idx] >= 0:
+                    self.trace_location[fiber][loc[order_idx]] = {'x1': loc[loc_idx[self.LOC_X1]],
                                                               'x2': loc[loc_idx[self.LOC_x2]],
                                                               'y1': loc[loc_idx[self.LOC_y1]],
                                                               'y2': loc[loc_idx[self.LOC_y2]]}
@@ -240,7 +274,6 @@ class CaHKAlg(ModuleAlgBase):
             selected_orders = list(trace_location.keys())
 
         out_data = np.zeros((len(selected_orders), nx))
-
         for idx, ord_no in enumerate(selected_orders):
             sum_result = self.summation_extraction_one_order(trace_location[ord_no])
             out_data[idx] = 1.0 * sum_result['extraction']
@@ -267,7 +300,7 @@ class CaHKAlg(ModuleAlgBase):
         df_result = pd.DataFrame(out_data)
         df_result.attrs['FIBER'] = fiber_name
 
-        if isinstance(extraction_dim, dict) and bool(dict):
+        if isinstance(extraction_dim, dict) and bool(extraction_dim):
             for order_no in sorted(extraction_dim.keys()):
                 order_coord = extraction_dim[order_no]
                 order_dim = ','.join([str(coord) for coord in [order_coord['x1'], order_coord['y1'],
@@ -276,6 +309,61 @@ class CaHKAlg(ModuleAlgBase):
                 df_result.attrs['ORDER'+str(order_no)] = (order_dim, "x1,y1,x2,y2")
 
         return df_result
+
+    def img_subtraction(self, dark_img, bias_img):
+        """ Hk image processing by subtracting the dark image and the bias image if existing.
+
+        Args:
+            dark_img (numpy.array): dark image
+            bias_img (numpy.array): biase image
+
+        Returns:
+            bool: False in case the image size doesn't match, or True.
+
+        """
+        if dark_img is not None:
+            if np.shape(self.hk_data) == np.shape(dark_img):
+                self.hk_data -= dark_img.astype('float64')
+            else:
+                return False, "image dimension between the raw image and dark image doesn't match"
+        if bias_img is not None:
+            if np.shape(self.hk_data) == np.shape(bias_img):
+                self.hk_data -= bias_img.astype('float64')
+            else:
+                return False, "image dimension between the raw image and bias image doesn't match"
+        return True, ""
+
+    def img_scaling(self):
+        """ Scale the hk data based on the defined gain that converts the image from the count to electron charge """
+
+        self.get_gain()
+        self.hk_data = self.hk_data * self.ca_hk_gain
+
+    def load_wavelength_table(self, wave_table_file: str, fiber: str):
+        """ load the csv file with wavelength solution table. The table size is also checked.
+
+        Args:
+            wave_table_file (str): path to the csv table file with hk wavelength solution data
+            fiber (str): the associated fiber name
+
+        Returns:
+            numpy.array: Array containing the wavelength solution with the size <total_order>*<image width>
+
+        """
+        if not exists(wave_table_file):
+            return None
+
+        wave_result = pd.read_csv(wave_table_file, sep=' ')
+        wave_vals = np.array(wave_result.values)
+        if fiber in self.trace_location and self.trace_location[fiber] is not None:
+            total_order = len(self.trace_location[fiber].keys())
+            _, pixel_width, _ = self.get_spectral_data()
+            r, c = np.shape(wave_vals)
+            if total_order != c or pixel_width != r:
+                return None
+
+        new_wave_vals = np.transpose(wave_vals)
+        return new_wave_vals
 
     def extract_spectrum(self,
                          fiber_name,
@@ -315,7 +403,8 @@ class CaHKAlg(ModuleAlgBase):
             return {'spectral_extraction_result': None, 'message:': 'no trace location for '+fiber_name}
 
         if order_set is None:
-            order_set = list(trace_loc.keys()).sort()
+            order_set = [k for k in trace_loc]
+            order_set.sort()
 
         out_data = self.summation_extraction(trace_loc, order_set)
 

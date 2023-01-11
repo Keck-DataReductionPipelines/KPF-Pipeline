@@ -285,7 +285,9 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             float: Barycentric velocity correction number from get_BC_vel.
 
         """
-        if obs_config[BarycentricCorrectionAlg.STARNAME].lower() == 'sun':
+        star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
+        # print('target: ', star)
+        if star == 'sun':
             # epoch, SolSystemTarget, predictive
             bc_obj = get_BC_vel(JDUTC=jd,
                                 ra=None,

@@ -32,17 +32,17 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      
                      'RED_AMP1': fits.ImageHDU,
                      'RED_AMP2': fits.ImageHDU,
-                     'RED_AMP3': fits.ImageHDU,
-                     'RED_AMP4': fits.ImageHDU,
                      'RED_CCD': fits.ImageHDU,
                      'RED_VAR': fits.ImageHDU,
                      
                      'CA_HK': fits.ImageHDU,
-                     'EXPMETER': fits.ImageHDU,
+                     'EXPMETER_SCI': fits.BinTableHDU,
+                     'EXPMETER_SKY': fits.BinTableHDU,
                      'GUIDECAM': fits.ImageHDU,
 
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
+                     'TELEMETRY': fits.BinTableHDU,
                      
                      'SOLAR_IRRADIANCE': fits.BinTableHDU}
 
@@ -52,6 +52,7 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
+                     'TELEMETRY': fits.BinTableHDU,
 
                      'GREEN_SCI_FLUX1': fits.ImageHDU,
                      'GREEN_SCI_FLUX2': fits.ImageHDU,
@@ -91,7 +92,10 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 
                      'CA_HK_SCI': fits.ImageHDU,
                      'CA_HK_SKY': fits.ImageHDU,
-                     'CA_HK_WAVE': fits.ImageHDU,
+                     'CA_HK_SCI_WAVE': fits.ImageHDU,
+                     'CA_HK_SKY_WAVE': fits.ImageHDU,
+
+                     'BARY_CORR': fits.BinTableHDU
                     }
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
@@ -99,6 +103,7 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
+                     'TELEMETRY': fits.BinTableHDU,
                     
                      'GREEN_CCF': fits.ImageHDU,                     
                      'RED_CCF': fits.ImageHDU,
