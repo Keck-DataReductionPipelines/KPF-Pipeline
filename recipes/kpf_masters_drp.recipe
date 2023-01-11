@@ -1,7 +1,7 @@
-#
+###################################################################################################
 # Pipeline to generate all calibration files.
 # Inputs are from /data/kpf/L0/*.fits or /data/kpf/L0/date_dir/*.fits if context.date_dir is true.
-#
+###################################################################################################
 
 from modules.Utils.string_proc import str_replace
 from modules.Utils.pick_inputs_masters_drp import PickInputsMastersDRP
@@ -49,8 +49,7 @@ if date_dir is None:
 else:
     overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir + "/" + date_dir
 
-# Omit all_arclamp_files_list for now.
-file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list
+file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list + all_arclamp_files_list
 
 nlen_file_list = len(file_list)
 
@@ -60,6 +59,11 @@ for raw_file_path in file_list:
     file_name,ext = splitext(file_name_ext)
     output_file_name = overscan_output_dir + "/" + file_name + "_2D" + ext
     output_file_exists = exists(output_file_name)
+
+    if output_file_exists:
+        file_exists = True
+    else:
+        file_exists = False
 
     if overwrite or not output_file_exists:
         ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
@@ -99,7 +103,11 @@ for raw_file_path in file_list:
                                           channel_datasec_nrows_green,
                                           n_sigma)
 
-        recipe_complete = to_fits(L0_with_ffi, output_file_name)
+        oscan_complete = to_fits(L0_with_ffi, output_file_name)
+
+########################
+# Generate master bias.
+########################
 
 if all_bias_files_list:
     bias_n_sigma = config.BIAS.n_sigma
@@ -118,6 +126,12 @@ if all_bias_files_list:
                                          bias_lev0_ffi_exts,
                                          new_masterbias_path)
 
+
+
+########################
+# Generate master dark.
+########################
+
     if all_dark_files_list:
         dark_n_sigma = config.DARK.n_sigma
         dark_lev0_ffi_exts = config.DARK.lev0_ffi_exts
@@ -135,6 +149,11 @@ if all_bias_files_list:
                                              dark_lev0_ffi_exts,
                                              new_masterbias_path,
                                              new_masterdark_path)
+
+
+########################
+# Generate master flat.
+########################
 
         if all_flat_files_list:
             flat_n_sigma = config.FLAT.n_sigma
@@ -155,33 +174,36 @@ if all_bias_files_list:
                                                  new_masterdark_path,
                                                  new_masterflat_path)
 
+####################################
+# Generate master-arclamp products.
+####################################
 
-#
-# Omit this section on stacking Arclamp images for now.
-#
+        skip_flattening = config.ARCLAMP.skip_flattening
 
-#       skip_flattening = config.ARCLAMP.skip_flattening
-#       
-#       if all_arclamp_files_list and (skip_flattening == 0 or all_flat_files_list):
-#           arclamp_n_sigma = config.ARCLAMP.n_sigma
-#           arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
-#           arclamp_object = config.ARCLAMP.arclamp_object
-#           masterarclamp_path = config.ARCLAMP.masterarclamp_path
-#           arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
+        if all_arclamp_files_list:
+            arclamp_n_sigma = config.ARCLAMP.n_sigma
+            arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
+            arclamp_objects = config.ARCLAMP.arclamp_objects
+            masterarclamp_path = config.ARCLAMP.masterarclamp_path
+            arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
-#           if date_dir:
-#               new_masterarclamp_path = str_replace(masterarclamp_path,\
-#                                        '_master_arclamp.fits',\
-#                                        '_' + date_dir + '_master_arclamp.fits')
-#           else:
-#               new_masterarclamp_path = masterarclamp_path
+            for arclamp_object in arclamp_objects:
 
-#           exit_list_arclamp = MasterArclampFramework(data_type,
-#                                                      arclamp_n_sigma,
-#                                                      arclamp_input_files,
-#                                                      arclamp_lev0_ffi_exts,
-#                                                      arclamp_object,
-#                                                      new_masterbias_path,
-#                                                      new_masterdark_path,
-#                                                      new_masterflat_path,
-#                                                      new_masterarclamp_path)
+                if date_dir:
+                    new_masterarclamp_path = str_replace(masterarclamp_path,\
+                                             '_master_arclamp.fits',\
+                                             '_' + date_dir + '_master_arclamp_' + arclamp_object + '.fits')
+                else:
+                    new_masterarclamp_path = str_replace(masterarclamp_path,\
+                                             '_master_arclamp.fits',\
+                                             '_master_arclamp_' + arclamp_object + '.fits')
+
+                exit_list_arclamp = MasterArclampFramework(data_type,
+                                                           arclamp_n_sigma,
+                                                           arclamp_input_files,
+                                                           arclamp_lev0_ffi_exts,
+                                                           arclamp_object,
+                                                           new_masterbias_path,
+                                                           new_masterdark_path,
+                                                           new_masterflat_path,
+                                                           new_masterarclamp_path)
