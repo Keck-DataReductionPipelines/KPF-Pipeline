@@ -22,17 +22,15 @@ class MasterArclampFramework(KPF0_Primitive):
     """
     Description:
         This class works within the Keck pipeline framework to compute the master arclamp,
-        for a specific type of illumination given by GROBJECT and RDOBJECT in the primary
-        FITS header, by stacking input images for exposures with IMTYPE.lower() == 'arclamp'
-        and specified input arclamp_object.  The input FITS files are selected from the 
+        for a specific type of illumination given by OBJECT in the primary FITS header,
+        by stacking input images for exposures with IMTYPE.lower() == 'arclamp'
+        and specified input arclamp_object.  The input FITS files are selected from the
         given path that can include many kinds of FITS files, not just arclamp files.
-        Subtract master bias and master dark from each input flat 2D raw image.
-        Separately normalize debiased images by EXPTIME.
-        Optionally divide by the master flat.
-        Stack all normalized debiased, flattened images.
-        Set appropriate infobit if number of pixels with less than 10 samples
+        Subtract master bias from each input flat 2D raw image.  Separately normalize 
+        debiased images by EXPTIME, and then subtract master dark.  Optionally divide by
+        the master flat.  Stack all normalized debiased, flattened images.
+        Set appropriate infobit if number of pixels with less than 5 samples
         is greater than 1% of total number of image pixels.
-
         Currently makes master arclamps for GREEN_CCD and RED_CCD only.
 
     Arguments:
@@ -59,6 +57,7 @@ class MasterArclampFramework(KPF0_Primitive):
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
         skip_flattening (int): Set to 1 to skip flattening of the inputs; otherwise zero.
+        max_num_frames_to_stack(int): Maximum number of frames allowed in the stack.
 
     Outputs:
         Full-frame-image FITS extensions in output master arclamp:
@@ -115,6 +114,7 @@ class MasterArclampFramework(KPF0_Primitive):
         module_param_cfg = module_config_obj['PARAM']
 
         self.skip_flattening = int(module_param_cfg.get('skip_flattening', 0))
+        self.max_num_frames_to_stack = int(module_param_cfg.get('max_num_frames_to_stack', 50))
 
         self.logger.info('self.skip_flattening = {}'.format(self.skip_flattening))
 
@@ -153,9 +153,9 @@ class MasterArclampFramework(KPF0_Primitive):
         master_arclamp_exit_code = 0
         master_arclamp_infobits = 0
 
-        # Filter arclamp files with IMTYPE=‘arclamp’ for now.  Later in this class, exclude  
-        # those FITS-image extensions that don't match the input object specification 
-        # with GROBJECT or RDOBJECT.
+        # Filter arclamp files with IMTYPE=‘arclamp’ for now.  Later in this class, exclude
+        # those FITS-image extensions that don't match the input object specification
+        # with OBJECT.
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
         all_arclamp_files = fh.match_headers_string_lower()
@@ -169,11 +169,9 @@ class MasterArclampFramework(KPF0_Primitive):
             mjd_obs_list.append(mjd_obs)
             exp_time = arclamp_file.header['PRIMARY']['EXPTIME']
             exp_time_list.append(exp_time)
-            green_object = arclamp_file.header['PRIMARY']['GROBJECT']
-            red_object = arclamp_file.header['PRIMARY']['RDOBJECT']
-            object_dict = {'GREEN': green_object,'RED': red_object}
-            arclamp_object_list.append(object_dict)
-            self.logger.debug('arclamp_file_path,exp_time,arclamp_object_list = {},{},{}'.format(arclamp_file_path,exp_time,arclamp_object_list))
+            header_object = arclamp_file.header['PRIMARY']['OBJECT']
+            arclamp_object_list.append(header_object)
+            #self.logger.debug('arclamp_file_path,exp_time,header_object = {},{},{}'.format(arclamp_file_path,exp_time,header_object))
 
         tester = KPF0.from_fits(all_arclamp_files[0])
         del_ext_list = []
@@ -195,24 +193,19 @@ class MasterArclampFramework(KPF0_Primitive):
             frames_data_mjdobs = []
             frames_data_path = []
             n_all_arclamp_files = len(all_arclamp_files)
+            n = 0
             for i in range(0, n_all_arclamp_files):
-
                 exp_time = exp_time_list[i]
                 mjd_obs = mjd_obs_list[i]
-                object_dict = arclamp_object_list[i]
-                green_object = object_dict['GREEN']
-                red_object = object_dict['RED']
-                
-                self.logger.debug('i,fitsfile,ffi,exp_time,object_dict = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,exp_time,object_dict))
+                header_object = arclamp_object_list[i]
+
+                #self.logger.debug('i,fitsfile,ffi,exp_time,arclamp_object_list[i] = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,exp_time,arclamp_object_list[i]))
 
                 if not (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
                     raise NameError('FITS extension {} not supported; check recipe config file.'.format(ffi))
 
-                if ffi == 'GREEN_CCD' and green_object != self.arclamp_object:
-                    self.logger.debug('---->ffi,green_object,self.arclamp_object = {},{},{}'.format(ffi,green_object,self.arclamp_object))
-                    continue
-                if ffi == 'RED_CCD' and red_object != self.arclamp_object:
-                    self.logger.debug('---->ffi,red_object,self.arclamp_object = {},{},{}'.format(ffi,red_object,self.arclamp_object))
+                if header_object != self.arclamp_object:
+                    #self.logger.debug('---->ffi,header_object,self.arclamp_object = {},{},{}'.format(ffi,header_object,self.arclamp_object))
                     continue
 
                 path = all_arclamp_files[i]
@@ -220,28 +213,42 @@ class MasterArclampFramework(KPF0_Primitive):
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
                 n_dims = len(np_obj_ffi_shape)
-                self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
+                #self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
                 if n_dims == 2:       # Check if valid data extension
-                     keep_ffi = 1
-                     frames_data.append(obj[ffi])
-                     frames_data_exptimes.append(exp_time)
-                     frames_data_mjdobs.append(mjd_obs)
-                     frames_data_path.append(path)
-                     self.logger.debug('Keeping arclamp image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,mjd_obs,exp_time))
+                    keep_ffi = 1
+                    frames_data.append(obj[ffi])
+                    frames_data_exptimes.append(exp_time)
+                    frames_data_mjdobs.append(mjd_obs)
+                    frames_data_path.append(path)
+                    #self.logger.debug('Keeping arclamp image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,mjd_obs,exp_time))
+                    if n >= self.max_num_frames_to_stack:
+                        break
+                    n += 1
+
+            n_frames = (np.shape(frames_data))[0]
+            self.logger.debug('Number of frames in stack = {}'.format(n_frames))
+
+            # Exit without making product if headers of FITS files in input list do not contain specified OBJECT,
+            # or the number of frames to stack is less than 2.  In either case, exit_code=7 is returned.
+
+            if n_frames < 2:
+                master_arclamp_exit_code = 7
+                exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                return Arguments(exit_list)
 
             if keep_ffi == 0:
-                self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
+                #self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
                 del_ext_list.append(ffi)
                 break
 
-            frames_data = np.array(frames_data) - np.array(master_bias_data[ffi])      # Subtract master bias.
+            # Subtract master bias.
+
+            frames_data = np.array(frames_data) - np.array(master_bias_data[ffi])
 
             self.logger.debug('Subtracting master bias from arclamp data...')
 
-            normalized_frames_data=[]
-            n_frames = (np.shape(frames_data))[0]
-            self.logger.debug('Number of frames in stack = {}'.format(n_frames))
-            
+            normalized_frames_data = []
+
             n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
@@ -250,14 +257,14 @@ class MasterArclampFramework(KPF0_Primitive):
                 single_frame_data = frames_data[i]
                 exp_time = frames_data_exptimes[i]
 
-                self.logger.debug('Normalizing arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
+                #self.logger.debug('Normalizing arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
 
                 single_normalized_frame_data = single_frame_data / exp_time       # Separately normalize by EXPTIME.
 
                 single_normalized_frame_data -= np.array(master_dark_data[ffi])   # Subtract master-dark-current rate.
 
                 if self.skip_flattening == 0:
-                    self.logger.debug('Flattening arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
+                    #self.logger.debug('Flattening arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
                     single_normalized_frame_data /= np.array(master_flat_data[ffi])   # Optionally divide master-flat.
 
                 normalized_frames_data.append(single_normalized_frame_data)
@@ -312,15 +319,15 @@ class MasterArclampFramework(KPF0_Primitive):
             if ffi in del_ext_list: continue
             master_holder.header[ffi]['BUNIT'] = ('DN/sec','Units of master arclamp')
             master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
-            master_holder.header[ffi]['SKIPFLAT'] = (self.skip_flattening,'Flag to skip flat-field calibration')            
+            master_holder.header[ffi]['SKIPFLAT'] = (self.skip_flattening,'Flag to skip flat-field calibration')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of arclamp observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of arclamp observations')
-            master_holder.header[ffi]['TARGOBJ'] = (self.arclamp_object,'Target object of stacking')            
-            master_holder.header[ffi]['INPBIAS'] = self.masterbias_path            
-            master_holder.header[ffi]['INPDARK'] = self.masterdark_path          
+            master_holder.header[ffi]['TARGOBJ'] = (self.arclamp_object,'Target object of stacking')
+            master_holder.header[ffi]['INPBIAS'] = self.masterbias_path
+            master_holder.header[ffi]['INPDARK'] = self.masterdark_path
             if self.skip_flattening == 0:
-                master_holder.header[ffi]['INPFLAT'] = self.masterflat_path          
+                master_holder.header[ffi]['INPFLAT'] = self.masterflat_path
             datetimenow = datetime.now(timezone.utc)
             createdutc = datetimenow.strftime("%Y-%m-%dT%H:%M:%SZ")
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-arclamp creation')
