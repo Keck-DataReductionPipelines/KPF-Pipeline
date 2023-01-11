@@ -113,7 +113,6 @@ class RadialVelocityInit(KPF_Primitive):
         # barycentric correction default period: 380 day, start date: apr-18-2019
         self.bc_data = action.args['bc_corr_path'] if 'bc_corr_path' in args_keys else None
         self.bc_output_data = None
-        self.l1_data = action.args['l1_data'] if 'l1_data' in args_keys else None
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -129,11 +128,8 @@ class RadialVelocityInit(KPF_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config form: {}'.format(self.config_path))
         # Order trace algorithm setup
-
-        self.alg_rv_init = RadialVelocityAlgInit(self.config, self.logger,
-                                                 l1_data = self.l1_data,
-                                                 bc_time=self.bc_start_jd, bc_period=self.bc_period,
-                                                 bc_corr_path = self.bc_data,
+        self.alg_rv_init = RadialVelocityAlgInit(self.config, self.logger, bc_time=self.bc_start_jd,
+                                                 bc_period=self.bc_period, bc_corr_path = self.bc_data,
                                                  test_data=self.test_data)
 
     def _pre_condition(self) -> bool:

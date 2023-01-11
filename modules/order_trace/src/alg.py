@@ -2307,10 +2307,7 @@ class OrderTraceAlg(ModuleAlgBase):
 
         g_init = models.Gaussian1D(mean=center_y)
 
-        if np.amax((y_set-np.amin(y_set))) > 2**16:
-            gaussian_fit = FIT_G(g_init, x_set, (y_set-np.amin(y_set))/2**16)
-        else:
-            gaussian_fit = FIT_G(g_init, x_set, y_set - np.amin(y_set))
+        gaussian_fit = FIT_G(g_init, x_set, y_set-np.amin(y_set))
         max_w = abs(x_set[0] - x_set[-1])//2
         v_at_std = gaussian_fit.stddev.value*sigma
         if abs(gaussian_fit.mean.value - center_y) <= 1.0:

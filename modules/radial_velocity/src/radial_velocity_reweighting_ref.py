@@ -174,10 +174,6 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
             assert r_ccf is not None, msg
             return r_ccf
 
-        def valid_total_segment(ccf_v):
-            return (np.shape(ccf_v)[0] - self.ccf_start_index) \
-                if self.ccf_start_index + self.total_segment > np.shape(ccf_v)[0] else self.total_segment
-
         if self.logger:
             self.logger.info("RadialVelocityReweightingRef: find reweighting reference by method " +
                                 self.reweighting_method)
@@ -209,22 +205,19 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
                         m_ccf_ref.append(ccf_ref[o, :, :])
                     else:
                         m_ccf_ref.append(ccf_ref)
+
                     one_ccf = m_ccf_ref[-1]
-                    t_segment = valid_total_segment(one_ccf)
-                    # t_segment = min(np.shape(one_ccf)[0], self.total_segment)
-                    seg_range = range(self.ccf_start_index, self.ccf_start_index + t_segment)
+                    t_segment = min(np.shape(one_ccf)[0], self.total_segment)
                     # pick the max among all segments for each file
                     if self.reweighting_method == 'ccf_max':
-                        m_file.append(np.max([np.nanpercentile(one_ccf[od, :], 95) for od in seg_range]))
+                        m_file.append(np.max([np.nanpercentile(one_ccf[od, :], 95) for od in range(t_segment)]))
                     elif self.reweighting_method == 'ccf_mean':
-                        m_file.append(np.max([np.nanmean(one_ccf[od, :]) for od in seg_range]))
+                        m_file.append(np.max([np.nanmean(one_ccf[od, :]) for od in range(t_segment)]))
 
             # find the maximum among all sci orderlets and get the ccf data of the file with the maximum ccf
             tmp_idx = np.where(m_file == np.nanmax(m_file))[0]
             ccf_ref = m_ccf_ref[tmp_idx[0]]
-            t_segment = valid_total_segment(ccf_ref)
-            # t_segment = min(np.shape(ccf_ref)[0], self.total_segment)      # total segment for processing
-
+            t_segment = min(np.shape(ccf_ref)[0], self.total_segment)
             ccf_df = RadialVelocityAlg.make_reweighting_ratio_table(ccf_ref, self.ccf_start_index,
                                                                     self.ccf_start_index + t_segment - 1,
                                                                     self.reweighting_method, max_ratio = 1.0,

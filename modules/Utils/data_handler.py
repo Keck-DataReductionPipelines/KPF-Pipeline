@@ -32,7 +32,7 @@ class ExtCopy(KPF_Primitive):
             - `action.args[0] (kpfpipe.models.KPFDataModel)`: Instance of `KPFDataModel` containing data model object
                    with the extension data to be copied from.
             - `action.args[1] (string)`: name of the extension to copy the data from.
-            - `action.args[2] (string|list)`: name of the extension to copy the data to.
+            - `action.args[2] (string)`: name of the extension to copy the data to.
             - `action.args['to_data_model'] (string)`: the data model destination object, optional.
             - `action.args['output_file'] (string)`: path of the file to write out the data model object, optional.
             - `action.args['size_as'] (string)`: does the extension copy based on the size of given extension, optional.
@@ -48,12 +48,7 @@ class ExtCopy(KPF_Primitive):
 
         self.from_data_model = action.args[0]
         self.ext_from = action.args[1]
-        if isinstance(action.args[2], list):
-            self.ext_to = action.args[2]
-        elif isinstance(action.args[2], str):
-            self.ext_to = [action.args[2]]
-        else:
-            self.ext_to = []
+        self.ext_to = action.args[2]
         self.size_as = (action.args['size_as']).upper() if 'size_as' in args_keys else None
         self.to_data_model = action.args['to_data_model'] if 'to_data_model' in args_keys else self.from_data_model
         self.output_file = action.args['output_file'] if 'output_file' in args_keys else None
@@ -67,7 +62,7 @@ class ExtCopy(KPF_Primitive):
         """
 
         success = self.ext_from and self.ext_from in self.from_data_model.__dict__ and \
-                  ((len(self.ext_to) == 0) or all([e in self.to_data_model.__dict__ for e in self.ext_to]))
+                  self.ext_to and self.ext_to in self.to_data_model.__dict__
 
         return success
 
@@ -77,24 +72,23 @@ class ExtCopy(KPF_Primitive):
     def _perform(self):
         if self.size_as is not None and hasattr(self.from_data_model, self.size_as):
             s_y, s_x = np.shape(self.from_data_model[self.size_as])
-            for ext in self.ext_to:
-                self.to_data_model[ext] = self.from_data_model[self.ext_from][0:s_y, 0:s_x]
+            self.to_data_model[self.ext_to] = self.from_data_model[self.ext_from][0:s_y, 0:s_x]
         else:
-            for ext in self.ext_to:
-                self.to_data_model[ext] = self.from_data_model[self.ext_from]
+            self.to_data_model[self.ext_to] = self.from_data_model[self.ext_from]
 
         from_file = ''
         to_file = ''
-
         if isinstance(self.from_data_model, KPFDataModel) and isinstance(self.to_data_model, KPFDataModel):
-            from_file = self.from_data_model.filename + ':' if self.from_data_model.filename else 'from source:'
-            to_file = self.to_data_model.filename + ':' if self.to_data_model.filename else 'to target:'
+            from_file = self.from_data_model.filename + ':'
+            to_file = self.to_data_model.filename + ':'
+
+
         self.to_data_model.receipt_add_entry('ExtCopy', self.__module__,
                             f'extension copy from {from_file}{self.ext_from}  to {to_file}{self.ext_to}', 'PASS')
 
+
         if self.logger:
-            self.logger.warning("ExtCopy: copy from " + from_file + self.ext_from + ' to ' +
-                                to_file + ' ' + ','.join(self.ext_to))
+            self.logger.info("ExtCopy: copy from " + from_file + self.ext_from + ' to ' + to_file + self.ext_to)
 
         if self.output_file is not None:
             self.to_data_model.to_fits(self.output_file)

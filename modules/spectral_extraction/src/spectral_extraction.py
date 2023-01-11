@@ -20,12 +20,13 @@
                       trace result.
                     - `action.args[2] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing spectral
                       extraction results. If not existing, it is None.
-                    - `action.args['ccd_index'] (int, optional)`: index of the ccd. Defaults to None.
                     - `action.args['orderlet_names'] (str|list, optional)`: Name or list of names of the order to be
                       processed. Defaults to 'SCI1'.
-                    - `action.args['max_result_order']: (int, optional)`: Total orders to be processed, Defaults to -1.
+                    - `action.args['orderlets_on_image'] (str|list, optional)`: Name or list of names of the order on
+                      the image. Defaults to None.
                     - `action.args['start_order'] (int, optional)`: Index of the first order to be processed.
                       Defaults to 0.
+                    - `action.args['max_result_order']: (int, optional)`: Total orders to be processed, Defaults to -1.
                     - `action.args['rectification_method']: (str, optional)`: Rectification method, '`norect`',
                       '`vertial`', or '`normal`', to rectify the curved order trace. Defaults to '`norect`',
                       meaning no rectification.
@@ -35,24 +36,13 @@
                       for each order trace based on the spectrum
                       data and its variance and the weighting based on the flat data instead of doing summation on
                       the spectrum data directly.
+                    - `action.args['clip_file'] (str, optional)`:  Prefix of clip file path. Defaults to None.
+                      Clip file is used to store the polygon clip data for the rectification method
+                      which is not NoRECT.
                     - `action.args['wavecal_fits']: (str|KPF1 optional)`: Path of the fits file or `KPF1` instance
                       containing wavelength calibration data. Defaults to None.
                     - `action.args['to_set_wavelength_cal']: (boolean, optional)`: if setting the wavelength calibration
                       values from ``action.args['wavecal_fits']``. Defaults to False.
-                    - `action.args['clip_file'] (str, optional)`:  Prefix of clip file path. Defaults to None.
-                      Clip file is used to store the polygon clip data for the rectification method
-                      which is not NoRECT.
-                    - `action.args['total_order_per_ccd']: (int, optional)`: total order per ccd. Defaults to False.
-                    - `action.args['data_extension']: (str, optional)`: the name of the extension containing data.
-                    - `action.args['trace_extension']: (str, optional)`: the name of the extension containing order
-                      trace results.
-                    - `action.args['trace_file']: (str, optional)`: the name file containing order trace results.
-                    - `action.args['orderlets_on_image'] (str|list, optional)`: Name or list of names of the order
-                      appearing on the image. Defaults to None.
-                    - `action.args['poly_degree']: (str, optional)`: Polynomial degree for order trace curve fitting.
-                      Defaults to 3.
-                    - `action.args['origin']: (list, optional)`: Origin of the image where the order trace is related
-                      to. Defaults to [0, 0]
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of spectral extraction in the master
@@ -63,7 +53,6 @@
                 - `input_spectrum (kpfpipe.models.level0.KPF0)`: Instance of `KPF0`, assigned by `actions.args[0]`.
                 - `input_flat (kpfpipe.models.level0.KPF0)`:  Instance of `KPF0`, assigned by `actions.args[1]`.
                 - `output_level1 (kpfpipe.models.level1.KPF1)`: Instance of `KPF1`, assigned by `actions.args[2]`.
-                - `ccd_index (int)`: ccd index.
                 - `orderlet_names (str)`: Name of the order to be processed.
                 - `start_order (int)`: Index of the first order to be processed.
                 - `max_result_order (int)`: Total orders to be processed.
@@ -73,11 +62,6 @@
                 - `to_set_wavelength_cal`: Flag indicates if setting wavelength calibration data to wavelength
                   calibration extension from ``wavecal_fits``.
                 - `clip_file (str)`: Prefix of clip file path. Defaults to None.
-                - `total_order_per_ccd (list)`: Total order per ccd.
-                - `order_trace_data (Union[numpy.ndarray, pandas.DataFrame])`: Order trace data including
-                  polynomial coefficients, top/bottom edges and horizontal coverage of the order trace.
-                - `spec_flux (numpy.ndarray)`: 2D spectrum data, raw data or rectified data.
-                - `spec_header (fits.header.Header)`: fits header of spectrum data.
                 - `config_path (str)`: Path of config file for spectral extraction.
                 - `config (configparser.ConfigParser)`: Config context per the file defined by `config_path`.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
@@ -279,12 +263,8 @@ class SpectralExtraction(KPF0_Primitive):
             all_o_sets.append(o_set)
             first_trace_at.append(f_idx)
 
-        good_result = True
         # order_to_process = min([len(a_set) for a_set in all_o_sets])
-
         for idx, order_name in enumerate(all_order_names):
-            if not good_result:       # process stops once an empty result is made
-                continue
             o_set = all_o_sets[idx]
             # orderlet_index = self.alg.get_orderlet_index(order_name)
             first_index = first_trace_at[idx]
@@ -315,23 +295,20 @@ class SpectralExtraction(KPF0_Primitive):
 
                 data_df = opt_ext_result['spectral_extraction_result']
 
-            good_result = good_result and data_df is not None
-            if good_result:
-                self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
+            self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
                                                             order_name, self.output_level1)
-                self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
+            self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
 
-        if good_result and self.output_level1 is not None:
+        if self.output_level1 is not None:
             self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,
                                                  f'orderlets={" ".join(all_order_names)}', 'PASS')
-
-        if not good_result and self.logger:
-            self.logger.info("SpectralExtraction: no spectrum extracted")
-        elif good_result and self.logger:
+        if self.logger:
             self.logger.info("SpectralExtraction: Receipt written")
+
+        if self.logger:
             self.logger.info("SpectralExtraction: Done for orders " + " ".join(all_order_names) + "!")
 
-        return Arguments(self.output_level1) if good_result else Arguments(None)
+        return Arguments(self.output_level1)
 
     def get_order_set(self, order_name, s_order, orderlet_index):
         o_set = self.alg.get_order_set(order_name)
@@ -348,10 +325,6 @@ class SpectralExtraction(KPF0_Primitive):
             return o_set
 
     def construct_level1_data(self, op_result, ins, level1_sample: KPF1, order_name: str, output_level1:KPF1):
-        FLUX_EXT = 0
-        VAR_EXT = 1
-        WAVE_EXT = 2
-
         update_primary_header = False if level1_sample is None or ins != 'NEID' else True
         if output_level1 is not None:
             kpf1_obj = output_level1
@@ -372,37 +345,32 @@ class SpectralExtraction(KPF0_Primitive):
                             order_name.replace('FLUX', 'WAVE')] if 'FLUX' in order_name else [order_name]
             return ext_name
 
-        if total_order <= 0:
-            return kpf1_obj
         # if no data in op_result, not build data extension and the associated header
 
-        ext_names = get_data_extensions_on(order_name, ins)
-        data_ext_name = ext_names[FLUX_EXT]
+        if total_order > 0:
+            ext_names = get_data_extensions_on(order_name, ins)
+            data_ext_name = ext_names[0]
 
-        # data = op_result.values
-        kpf1_obj[data_ext_name] = op_result.values
+            # data = op_result.values
+            kpf1_obj[data_ext_name] = op_result.values
 
-        for att in op_result.attrs:
-            kpf1_obj.header[data_ext_name][att] = op_result.attrs[att]
+            for att in op_result.attrs:
+                kpf1_obj.header[data_ext_name][att] = op_result.attrs[att]
 
-        if len(ext_names) > VAR_EXT:   # init var and wave extension if there is
-            # get data for variance extension
-            var_ext_data = self.alg.compute_variance(op_result.values)
-            kpf1_obj[ext_names[VAR_EXT]] = var_ext_data
+            if len(ext_names) > 1:   # init var and wave extension if there is
+                for ext_idx in range(1, 3):
+                    if not hasattr(kpf1_obj, ext_names[ext_idx]) or \
+                            np.size(getattr(kpf1_obj, ext_names[ext_idx])) == 0:  # no ext name yet or zero size
+                        zero_data = np.zeros((total_order, width))
+                        kpf1_obj[ext_names[ext_idx]] = zero_data
 
-        if len(ext_names) > WAVE_EXT:
-            # no wave ext yet or zero size
-            if not hasattr(kpf1_obj, ext_names[WAVE_EXT]) or np.size(getattr(kpf1_obj, ext_names[WAVE_EXT])) == 0:
-                kpf1_obj[ext_names[WAVE_EXT]] = np.zeros((total_order, width))
-
-        # for neid data with level 1 sample:
-        if ins == "NEID":
+            # for neid data with level 1 sample:
             if update_primary_header and level1_sample is not None and hasattr(kpf1_obj, data_ext_name):
                 sample_primary_header = level1_sample.header['PRIMARY']
             else:
                 sample_primary_header = self.spec_header
 
-            if sample_primary_header is not None:
+            if sample_primary_header is not None and ins == 'NEID':
                 # for h_key in sample_primary_header:
                 for h_key in ['SSBZ100', 'SSBJD100', 'CAL-OBJ']:
                     if h_key in sample_primary_header:

@@ -22,7 +22,7 @@ RUN mkdir /code && \
     mkdir /outputs && \
     apt-get --yes update && \
     apt install build-essential -y --no-install-recommends && \
-    apt-get install --yes git vim emacs nano && \
+    apt-get install --yes git vim emacs && \
     /usr/local/bin/python -m pip install --upgrade pip && \
     cd /code/KPF-Pipeline && \
     mkdir -p logs && \

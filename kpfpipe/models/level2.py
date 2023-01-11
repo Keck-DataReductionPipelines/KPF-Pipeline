@@ -62,7 +62,7 @@ class KPF2(KPF0):
         python_types = copy.copy(KPF_definitions.FITS_TYPE_MAP)
 
         for key, value in self.extensions.items():
-            if key not in ['PRIMARY', 'RECEIPT', 'CONFIG', 'TELEMETRY']:
+            if key not in ['PRIMARY', 'RECEIPT', 'CONFIG']:
                 atr = python_types[value]([])
                 self.header[key] = fits.Header()
             else:

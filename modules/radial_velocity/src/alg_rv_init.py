@@ -15,12 +15,10 @@ from astropy.time import Time
 # from kpfpipe.primitives.level0 import KPF0_Primitive
 # from kpfpipe.models.level0 import KPF0
 
-mask_file_map = {'G2_espresso': ('G2.espresso.mas', 'air'),
-                 'G2_harps': ('G2.harps.mas', 'air'),
-                 'G2_neid_v1': ('G2.neid.v1.mas', 'air'),
-                 'G2_neid_v2': ('G2.neid.v2.mas', 'air'),
-                 'thar': ('Thorium_mask_031921.mas', 'vac'),
-                 'lfc': ('kpf_lfc_mask_1025.mas', 'vac')}
+mask_file_map = {'G2_espresso': 'G2.espresso.mas',
+                 'G2_harps': 'G2.harps.mas',
+                 'G2_neid_v1': 'G2.neid.v1.mas',
+                 'G2_neid_v2': 'G2.neid.v2.mas'}
 
 
 class RadialVelocityAlgInit(RadialVelocityBase):
@@ -40,7 +38,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             in the source):
 
                 `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `EPOCH`, `PARALLAX`, `STAR_RV`,
-                `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`, `STEP_RANGE`.
+                `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`, `AIR_TO_VACUUM`, `STEP_RANGE`.
 
         mask_path (str): Mask file path.
         velocity_loop (numpy.ndarray): Evenly spaced velocity steps.
@@ -76,14 +74,13 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     OBSLON = 'obslon'           # degree
     OBSLAT = 'obslat'           # degree
     OBSALT = 'obsalt'           # meters
-
     STEP = 'step'               # km/s
     STEP_RANGE = 'step_range'   # in format of list
     MASK_WID = 'mask_width'     # km/s
+    AIR_TO_VACUUM = 'air_to_vacuum'    # True or False
     REWEIGHTING_CCF = 'reweighting_ccf_method'         # ratio, ccf, or None
     CCF_CODE = 'ccf_engine'     # ccf code language
-    START_VEL = 'start_vel'     # start velocity
-    STELLAR_DIR = 'stellarmask_dir' # stellarmask directory
+    START_VEL = 'start_vel'       # start velocity
 
     # defined in configuration file or star config for NEID
     RA = 'ra'                   # hours, like "01:44:04.0915236842"
@@ -100,9 +97,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     VELOCITY_STEPS = 'velocity_steps'
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
-    MASK_TYPE = 'mask_type'
 
-    def __init__(self, config=None, logger=None, l1_data=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
+    def __init__(self, config=None, logger=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
                 test_data=None):
         RadialVelocityBase.__init__(self, config, logger)
         if self.config_ins is None or self.config_ins.get_section() is None:
@@ -114,11 +110,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             raise Exception('no test data directory found')
 
         # instrument, starname, ra, dec, pm_ra, pm_dec, parallax, obslon, obslan, obsalt, star_rv, step,
-        # step_range, mask_width
+        # step_range, air_to_vacuum, mask_width
         # star_config_file, default_mask
         self.rv_config = dict()
         self.mask_path = None       # from init_star_config()
-        self.mask_type = None
         self.velocity_loop = None   # loop of velocities for rv finding, from get_velocity_loop(), get_step_range()
         self.velocity_steps = None  # total steps in velocity_loop, from get_velocity_steps(), get_velocity_loop()
         self.zb_range = None        # redshift min and max, from get_redshift_range()
@@ -129,8 +124,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.bc_corr_output = bc_corr_output
         self.bc_period = bc_period
         self.ccf_engine = None
-        self.pheader = l1_data.header['PRIMARY'] if l1_data is not None else None
-        self.star_config_file = None
 
     @staticmethod
     def ret_status(msg='ok'):
@@ -139,79 +132,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         ret['msg'] = msg if msg != 'ok' else ''
 
         return ret
-
-    def init_star_from_header(self):
-        if self.pheader is None:
-            return self.ret_status('fits header is None')
-
-        not_defined = " not defined in config"
-        not_key_defined = " not defined in header"
-
-        star_name_key = self.get_value_from_config(self.STARNAME, default=None)
-        if star_name_key is None:
-            return self.ret_status(star_name_key + not_defined)
-        elif not star_name_key in self.pheader:
-            return self.ret_status(star_name_key + not_key_defined)
-        else:
-            self.rv_config[self.STARNAME] = self.pheader[star_name_key]
-
-        self.d_print("RadialVelocityAlgInit: get star info from header")
-        self.rv_config[self.SPEC] = self.instrument or 'neid'
-        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)
-
-        for s_key in star_info:
-            h_key = self.get_value_from_config(s_key, None)
-            if h_key is None:
-                return self.ret_status(s_key + not_defined)
-            elif h_key not in self.pheader:
-                return self.ret_status(h_key + not_key_defined)
-            else:
-                h_val = self.pheader[h_key]
-                if s_key == self.RA:
-                    val = Angle(h_val + "hours").deg
-                elif s_key == self.DEC:
-                    val = Angle(h_val + "degrees").deg
-                elif s_key == self.EPOCH:
-                    year_days = 365.25
-                    val = (float(h_val) - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
-                else:
-                    val = float(h_val)
-                self.rv_config[s_key] = val
-
-        #s_key = 'mask'
-        #default_mask = self.get_rv_config_value(s_key, None)
-        skyobj = self.pheader['SKY-OBJ']
-        sciobj = self.pheader['SCI-OBJ']
-        calobj = self.pheader['CAL-OBJ']
-        if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
-            default_mask = 'thar'
-        elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
-            default_mask = 'lfc'
-        else:
-            default_mask = 'G2_espresso'
-
-        if default_mask is None:
-            return self.ret_status(s_key + not_defined)
-        quote = ['"', '\'']
-        for q in quote:
-            if default_mask.startswith(q) and default_mask.endswith(q):
-                default_mask = default_mask.strip(q)
-                break
-        if default_mask not in mask_file_map:
-            return self.ret_status('default mask of ' + default_mask + ' is not defined')
-
-        stellar_dir = self.get_value_from_config(self.STELLAR_DIR, default=None)
-        if stellar_dir is None:
-            return self.ret_status(self.STELLAR_DIR + not_defined)
-
-        self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
-        self.mask_type = default_mask
-        self.mask_wavelengths = mask_file_map[default_mask][1]
-
-        self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
-
-        return self.ret_status('ok')
-
 
     def init_star_config(self):
         """ Data initialization from star related configuration, including ra, dec, pmra, pmdec, parallax and
@@ -229,10 +149,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `EPOCH`, and `PARALLAX`, are updated.
 
         """
-        self.star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
-
-        if self.star_config_file is not None and self.star_config_file.lower() == 'fits_header':
-            return self.init_star_from_header()
 
         not_defined = ' not defined in config'
         star_name = self.get_value_from_config(self.STARNAME, default=None)
@@ -241,17 +157,17 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         self.rv_config[self.STARNAME] = star_name                       # in rv_config
         self.rv_config[self.SPEC] = self.instrument or 'neid'           # in rv_config
+        star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
 
         config_star = None
-        if self.star_config_file is not None:
+        if star_config_file is not None:
             f_config = configparser.ConfigParser()
-            self.d_print("RadialVelocityAlgInit: star config file: ", self.test_data_dir + self.star_config_file)
-            if len(f_config.read(self.test_data_dir + self.star_config_file)) == 1:
+            self.d_print("RadialVelocityAlgInit: star config file: ", self.test_data_dir + star_config_file)
+            if len(f_config.read(self.test_data_dir + star_config_file)) == 1:
                 config_star = ConfigHandler(f_config, star_name)
 
         star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)  # in rv_config
 
-        stellar_dir = self.get_value_from_config(self.STELLAR_DIR, default='rv_test/stellarmasks/')
         for star_key in star_info:
             k_val = self.get_rv_config_value(star_key, config_star)
             if k_val is None:
@@ -281,9 +197,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if default_mask not in mask_file_map:
                 return self.ret_status('default mask of '+default_mask + ' is not defined')
 
-            self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
-            self.mask_type = default_mask
-            self.mask_wavelengths = mask_file_map[default_mask][1]
+            self.mask_path = self.test_data_dir + 'rv_test/stellarmasks/'+mask_file_map[default_mask]
             self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
         return self.ret_status('ok')
 
@@ -302,7 +216,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             The following attributes and values are updated,
 
                 * `rv_config`: values of `SPEC`, `STARNAME`, `RA`, `DEC`, `PMRA`, `PMDEC`, `PARALLAX`, `EPOCH`,
-                  `STAR_RV`, `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`, `STEP_RANGE`.
+                  `STAR_RV`, `OBSLON`, `OBSLAT`, `OBSALT`, `STEP`, `MASK_WID`,  `AIR_TO_VACUUM`, `STEP_RANGE`.
                 * `velocity_steps`
                 * `velocity_loop`
                 * `zb_range`
@@ -316,10 +230,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             return self.ret_status(ret['msg'])
 
         # in rv_config
-        if self.star_config_file.lower() == 'fits_header':
-            rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT,  self.STEP, self.MASK_WID, self.START_VEL)
-        else:
-            rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
+        rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
 
         for rv_k in rv_keys:
             val = self.get_rv_config_value(rv_k)
@@ -331,6 +242,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             else:
                 self.rv_config[rv_k] = float(val)
 
+        self.rv_config[self.AIR_TO_VACUUM] = self.get_rv_config_value(self.AIR_TO_VACUUM, default=False)  # in rv_config
         self.get_reweighting_ccf_method()
         self.get_step_range()
         self.get_velocity_loop()   # based on step_range and step, star_rv in rv_config
@@ -499,7 +411,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             jd_time = jd_time or self.bc_jd
             period = period or self.bc_period
             self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
-
         return self.zb_range
 
     def get_mask_line(self):
@@ -524,13 +435,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if self.mask_line is None:
             zb_range = self.get_redshift_range()
             rv_mask_line = RadialVelocityMaskLine()
-            if self.mask_wavelengths == 'air':
-                air2vac = True
-            elif self.mask_wavelengths == 'vac':
-                air2vac = False
             self.mask_line = rv_mask_line.get_mask_line(self.mask_path, self.get_velocity_loop(),
                                                         zb_range, self.rv_config[self.MASK_WID],
-                                                        air2vac)
+                                                        self.rv_config[self.AIR_TO_VACUUM])
 
         return self.mask_line
 
@@ -549,7 +456,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         # star_rv in rv_config, mask_width, step, step_range
         collection = [self.RV_CONFIG, self.MASK_LINE, self.VELOCITY_STEPS,
                       self.VELOCITY_LOOP, self.REWEIGHTING_CCF,
-                      self.ZB_RANGE, self.CCF_CODE, self.MASK_TYPE]
+                      self.ZB_RANGE, self.CCF_CODE]
 
         attrs = self.__dict__.keys()
         for c in collection:

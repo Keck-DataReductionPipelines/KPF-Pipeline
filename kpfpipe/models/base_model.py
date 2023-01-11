@@ -310,15 +310,6 @@ class KPFDataModel(object):
             git_commit_hash = ''
             git_branch = ''
             git_tag = ''
-        except ValueError:  # 12/22/22 new behavior under Docker
-            git_commit_hash = ''
-            git_branch = ''
-            git_tag = ''
-        except BrokenPipeError:  # 1/10/23 behavior under Docker uncovered by hour-long testing
-            git_commit_hash = ''
-            git_branch = ''
-            git_tag = ''
-
         # add the row to the bottom of the table
         row = {'Time': time,
                'Code_Release': git_tag,

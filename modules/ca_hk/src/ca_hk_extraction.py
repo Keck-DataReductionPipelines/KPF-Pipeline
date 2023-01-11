@@ -13,6 +13,7 @@
 
                 - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
                   keyword arguments passed by the `OrderTrace` event issued in the recipe:
+
                     - `action.args[0] (kpfpipe.models.level0.KPF0|str)`: Instance of `KPF0` or the path of a fits file
                       containing image data for H&K extraction.
                     - `action.args[1] (str)`: Path to a file defining the fiber and order location
@@ -20,13 +21,7 @@
                     - `action.args[3] (kpfpipe.models.level1.KPF1)`:  Instance of `KPF1` containing spectral
                       extraction results. If not existing, it is None.
                     - `action.args['output_exts'] (str)`: Extension names of the extensions to contain
-                      the extraction result for each fiber, optional, Defaults to fiber list.
-                    - `action.args['output_wave_exts'] (str)`: Extension names of the extensions to contain
-                      the wavelength solution for each fiber, optional, Defaults to fiber list prefixed with '_wave'.
-                    - `action.args['dark'] (KPF0, optional)`: dark master file for dark subtraction. Defaults to None.
-                    - `action.args['bias'] (KPF0, optional)`: bias master file for bias subtraction. Defaults to None.
-                    - `action.args['wave_files'] (list, optional)`: Wavelength solution files per fiber list.
-                      Defaults to None.
+                      the extraction result for each fiber, optional, Defaults to the fiber list.
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of hk_spectral_extraction  in the master
                   config file associated with the recipe.
@@ -76,7 +71,6 @@ from astropy.io import fits
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/ca_hk/configs/default_hk.cfg'
-CAHK_EXT = 'CA_HK'
 
 
 class CaHKExtraction(KPF0_Primitive):
@@ -88,56 +82,30 @@ class CaHKExtraction(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
 
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
-        # CA_HK data from level 0 data
-        if isinstance(action.args[0], str):
-            img = KPF0.from_fits(action.args[0])
-        elif isinstance(action.args[0], KPF0):
-            img = action.args[0]
-        else:
-            img = None
-        self.input_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
 
-        # trace path
+        # input argument
+        if isinstance(action.args[0], KPF0):
+            self.input_img = action.args[0]['CA_HK']
+        else:
+            hdus = fits.open(action.args[0])
+            self.input_img = hdus[0].data
+
         self.trace_path = action.args[1]
-        # fiber list
         if action.args[2] is not None and isinstance(action.args[2], list):
             self.fibers = action.args[2]
         elif action.args[2] is not None and isinstance(action.args[2], str):
             self.fibers = [action.args[2]]
         else:
             self.fibers = []
+        self.output_level1 = action.args[3]  # kpf1 instance already exist or None
 
-        # level 1 data instance for output, existing or not
-        self.output_level1 = action.args[3]
-
-        if "dark" in args_keys:
-            if isinstance(action.args['dark'], str):
-                img = KPF0.from_fits(action.args['dark'])
-            elif isinstance(action.args['dark'], KPF0):
-                img = action.args['dark']
-            else:
-                img = None
+        self.output_exts = []
+        if 'output_exts' not in args_keys:
+            self.output_exts.extend(self.fibers)
+        elif isinstance(action.args['output_exts'], list):
+            self.output_exts.extend(action.args['output_exts'])
         else:
-            img = None
-        self.dark_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
-
-        if "bias" in args_keys:
-            if isinstance(action.args['bias'], str):
-                img = KPF0.from_fits(action.args['bias'])
-            elif isinstance(action.args['bias'], KPF0):
-                img = action.args['gias']
-            else:
-                img = None
-        else:
-            img = None
-        self.bias_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
-
-        self.wave_table_files = []
-        if 'wave_files' in args_keys:
-            if isinstance(action.args['wave_files'], list):
-                self.wave_table_files.extend(action.args['wave_files'])
-            else:
-                self.wave_table_files.append(action.args['wave_files'])
+            self.output_exts.append(action.args['output_exts'])
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -147,20 +115,6 @@ class CaHKExtraction(KPF0_Primitive):
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
 
-        self.output_exts = []
-        if 'output_exts' in args_keys:
-            if isinstance(action.args['output_exts'], list):
-                self.output_exts.extend(action.args['output_exts'])
-            elif isinstance(action.args['output_exts'], str):
-                self.output_exts.append(action.args['output_exts'])
-
-        self.output_wave_exts = []
-        if 'output_wave_exts' in args_keys:
-            if isinstance(action.args['output_wave_exts'], list):
-                self.output_wave_exts.extend(action.args['output_wave_exts'])
-            elif isinstance(action.args['output_wave_exts'], str):
-                self.output_wave_exts.append(action.args['output_wave_exts'])
-
         # start a logger
         self.logger = None
         # self.logger = start_logger(self.__class__.__name__, self.config_path)
@@ -169,24 +123,14 @@ class CaHKExtraction(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = CaHKAlg(self.input_img, self.fibers,
-                           output_exts =  self.output_exts,
-                           output_wl_exts = self.output_wave_exts,
-                           config=self.config, logger=self.logger)
+        self.alg = CaHKAlg(self.input_img,  self.fibers, config=self.config, logger=self.logger)
 
     def _pre_condition(self) -> bool:
         """
         Check for some necessary pre conditions
         """
         # input argument must be KPF0
-
-        if self.input_img is None or self.input_img.size == 0:
-            return True
-
-        success =  isinstance(self.input_img, np.ndarray) and \
-                   (self.trace_path is not None) and exists(self.trace_path) and \
-                   ((self.dark_img is None) or (np.shape(self.dark_img) == np.shape(self.input_img))) and \
-                   ((self.bias_img is None) or (np.shape(self.bias_img) == np.shape(self.input_img)))
+        success = isinstance(self.input_img, np.ndarray) and self.trace_path is not None and exists(self.trace_path)
 
         return success
 
@@ -204,24 +148,18 @@ class CaHKExtraction(KPF0_Primitive):
         Returns:
             KPF1 instance
         """
-        if self.input_img is None or self.input_img.size == 0:
-            self.logger.warning("CaHKExtraction: no CA_HK data")
-            return Arguments(None)
+
+        if self.logger:
+            self.logger.info("CaHkExtraction: define the trace location")
 
         # load trace location data
         self.alg.load_trace_location(self.trace_path)
 
         fibers = self.alg.get_fibers()
 
-        self.output_exts = self.alg.get_output_exts()
-        self.output_wave_exts = self.alg.get_wavelength_exts()
-
-        result, msg = self.alg.img_subtraction(self.dark_img, self.bias_img)
-        if not result and self.logger:
-            self.logger.warning("CaHKExtraction: dark/bias subtraction error: "+msg)
-            return Arguments(None)
-
-        self.alg.img_scaling()
+        if len(self.output_exts) < len(fibers):
+            for idx in range(len(self.output_exts), len(fibers)):
+                self.output_exts.append(self.fibers[idx])
 
         for idx, fiber in enumerate(fibers):
             df_ext_result = self.alg.extract_spectrum(fiber)
@@ -231,18 +169,13 @@ class CaHKExtraction(KPF0_Primitive):
 
             self.output_level1 = self.construct_level1_data(data_df, self.output_exts[idx], self.output_level1)
 
-            if len(self.wave_table_files) > idx:
-                self.build_wavelength_ext(self.wave_table_files[idx], fiber,
-                                          self.output_wave_exts[idx], self.output_level1)
-
         self.output_level1.receipt_add_entry('CaHkExtraction', self.__module__,
-                                             f'CA_HK extraction to extensions {" ".join(self.output_exts)}', 'PASS')
+                                             f'config_path={self.config_path}', 'PASS')
+        if self.logger:
+            self.logger.info("CaHkExtraction: Receipt written")
 
         if self.logger:
-            self.logger.warning("CaHkExtraction: Receipt written")
-
-        if self.logger:
-            self.logger.warning("CaHkExtraction: Done!")
+            self.logger.info("CaHkExtraction: Done!")
 
         return Arguments(self.output_level1)
 
@@ -269,8 +202,3 @@ class CaHKExtraction(KPF0_Primitive):
                 kpf1_obj.header[data_ext_name][att] = ext_result.attrs[att]
 
         return kpf1_obj
-
-    def build_wavelength_ext(self, wave_file, fiber, wave_ext, out_lev1):
-        wave_table = self.alg.load_wavelength_table(wave_file, fiber)
-        if wave_table is not None:
-            out_lev1[wave_ext] = wave_table

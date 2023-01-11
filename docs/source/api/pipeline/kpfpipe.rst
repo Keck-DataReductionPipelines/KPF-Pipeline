@@ -31,15 +31,15 @@ Overview:
     Here is an example recipe to illustrate how the pipeline and recipe mechanism works::
 
         from modules.order_trace.src.order_trace import OrderTrace
-
-        test_data_dir = KPFPIPE_TEST_DATA + '/KPFdata'
+    
+        test_data_dir = KPFPIPE_TEST_DATA + '/KPFdata' 
         data_type = config.ARGUMENT.data_type
         output_dir = config.ARGUMENT.output_dir
         input_flat_pattern = config.ARGUMENT.input_flat_file_pattern
         flat_stem_suffix = config.ARGUMENT.output_flat_suffix
 
         order_trace_flat_pattern = test_data_dir + input_flat_pattern
-
+        
         for input_flat_file in find_files(order_trace_flat_pattern):
             _, short_flat_file = split(input_flat_file)
             flat_stem, flat_ext = splitext(short_flat_file)
@@ -48,7 +48,7 @@ Overview:
                 flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
                 ot_data = OrderTrace(flat_data)
                 result = to_fits(ot_data, output_lev0_file)
-
+    
     In the above recipe, notice that there are three primitives that need to be run by the Framework,
     kpf0_from_fits (which reads a FITS file), OrderTrace and to_fits (which writes a FITS file).  Only
     OrderTrace needs to appear on a from ... import line, since the other two are provided by the
@@ -63,7 +63,7 @@ Overview:
     the variable "ot_data", which is then written into a FITS file with a filename derived from the
     input name.  In a more complete recipe, ot_data would be used as an input argument to another
     data reduction processing step.
-
+    
     The following diagram shows the flow of the code between the Framework proper, the KPFPipeline recipe
     support mechanisms and the data reduction primitives for the above recipe.  Calls to the built-in
     functions such as find_files(), int() and str() are handled directly within start_recipe and
@@ -113,7 +113,7 @@ Supported Recipe Syntax Elements::
         | List(expr* elts, expr_context ctx)
         | Tuple(expr* elts, expr_context ctx)
 
-    operator = Add | Sub | Mult | Div | And | Or
+    operator = Add | Sub | Mult | Div
 
     unaryop = Not | UAdd | USub
 
