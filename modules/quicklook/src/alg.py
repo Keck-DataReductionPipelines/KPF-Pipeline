@@ -465,6 +465,56 @@ class QuicklookAlg:
             plt.close()
             plt.style.use('default')
             #input("Press Enter to continue...")
+        #Ca HK data
+        if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
+            print('working on Ca HK data')
+            def plot_trace_boxes(data,trace_location,trace_location_sky):
+
+                fig, ax = plt.subplots(figsize = (12,6),tight_layout=True)
+                im = ax.imshow(data,vmin = np.percentile(data.ravel(),1),vmax = np.percentile(data.ravel(),99), interpolation = 'None',origin = 'lower',aspect='auto')
+                for i in trace_location.keys():
+                    height = trace_location[i]['x2'] - trace_location[i]['x1']
+                    width = trace_location[i]['y2'] - trace_location[i]['y1']
+                    ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none'))
+                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci'))
+        
+                for i in trace_location_sky.keys():
+                    height = trace_location_sky[i]['x2'] - trace_location_sky[i]['x1']
+                    width = trace_location_sky[i]['y2'] - trace_location_sky[i]['y1']
+                    ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none'))
+                    if i == 0: ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none',label = 'Sky'))
+                fig.colorbar(im, orientation='vertical')
+                plt.xlabel('y (pixel number)')
+                plt.ylabel('x (pixel number)')
+                plt.title('Ca H&K 2D ')#+exposure_name
+                plt.legend()
+                plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_2D.png', dpi=1000)
+                
+    
+            def load_trace_location(fiber='sky',trace_path,offset=0):
+                loc_result = pd.read_csv(trace_path,header =0, sep = ' ')
+                print(loc_result)
+                loc_vals = np.array(loc_result.values)
+                loc_cols = np.array(loc_result.columns)
+                print(loc_cols)
+                order_col_name = 'order'
+                fiber_col_name = 'fiber'
+                loc_col_names = ['x0', 'y0', 'xf','yf']
+
+                loc_idx = {c: np.where(loc_cols == c)[0][0] for c in loc_col_names}
+                order_idx = np.where(loc_cols == order_col_name)[0][0]
+                fiber_idx = np.where(loc_cols == fiber_col_name)[0][0]
+                loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
+                trace_location = dict()
+                for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
+                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['x0']]-offset,'x2': loc[loc_idx['xf']]-offset,'y1': loc[loc_idx['y0']],'y2': loc[loc_idx['yf']]}
+
+                return trace_location
+            trace_file = self.config['CaHK']['trace_file']
+            trace_location = load_trace_location(fiber='sky',trace_path=trace_file,offset=0)
+            trace_location_sky = load_trace_location(fiber='sci',trace_path=trace_file,offset=0)
+            plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+                
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
@@ -910,9 +960,9 @@ class QuicklookAlg:
         </a>
         <br>
 
-        <a target="_blank" href="fig/""" +exposure_name+ """_CaHK.png"  >
+        <a target="_blank" href="fig/""" +exposure_name+ """_CaHK_2D.png"  >
         <figure>
-        <img src="fig/""" +exposure_name+ """_CaHK.png" style="width:100%" alt="" title="">
+        <img src="fig/""" +exposure_name+ """_CaHK_2D.png" style="width:100%" alt="" title="">
         </figure>
         </a>
 
