@@ -466,9 +466,10 @@ class QuicklookAlg:
             plt.style.use('default')
             #input("Press Enter to continue...")
         #Ca HK data
-        '''
+
         if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
             print('working on Ca HK data')
+            '''
             def plot_trace_boxes(data,trace_location,trace_location_sky):
 
                 fig, ax = plt.subplots(figsize = (12,6),tight_layout=True)
