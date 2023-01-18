@@ -489,7 +489,7 @@ class QuicklookAlg:
                 fig.colorbar(im, orientation='vertical')
                 plt.xlabel('y (pixel number)')
                 plt.ylabel('x (pixel number)')
-                plt.title('Ca H&K 2D ')#+exposure_name
+                plt.title('Ca H&K 2D '+exposure_name)#
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_2D.png', dpi=1000)
 
@@ -519,7 +519,57 @@ class QuicklookAlg:
             trace_location = load_trace_location('sky',trace_file,offset=0)
             trace_location_sky = load_trace_location('sci',trace_file,offset=0)
             plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+            def extract_HK_spectrum(data,trace_location,wavesoln ):
 
+                wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
+                print(trace_location)
+                orders = np.array(wave_lib.columns)
+                padding = 200
+
+                plt.figure(figsize=(12,6),tight_layout=True)
+                color_grid = ['purple','blue','green','yellow','orange','red']
+                chk_bandpass  =  [384, 401.7]
+                caK = [393.2,393.5]
+                caH = [396.7,397.0]
+                Vcont = [389.9,391.9]
+                Rcont = [397.4,399.4]
+
+                fig, ax = plt.subplots(1, 1, figsize=(9,4))
+                ax.fill_between(chk_bandpass,y1=0,y2=1,facecolor='gray',alpha=0.3,zorder=-100)
+                ax.fill_between(caH,y1=0,y2=1,facecolor='m',alpha=0.3)
+                ax.fill_between(caK,y1=0,y2=1,facecolor='m',alpha=0.3)
+                ax.fill_between(Vcont,y1=0,y2=1,facecolor='c',alpha=0.3)
+                ax.fill_between(Rcont,y1=0,y2=1,facecolor='c',alpha=0.3)
+
+                ax.text(np.mean(Vcont)-0.6,0.08,'V cont.')
+                ax.text(np.mean(Rcont)-0.6,0.08,'R cont.')
+                ax.text(np.mean(caK)-0.15,0.08,'K')
+                ax.text(np.mean(caH)-0.15,0.08,'H')
+
+                #ax.plot([chk_bandpass[0]-1, chk_bandpass[1]+1], [0.04,0.04],'k--',lw=0.7)
+                #ax.text(385.1,0.041,'Requirement',fontsize=9)
+
+                #ax.plot(x,t_all,label=label) instead iterate over spectral orders plottign
+                ax.set_xlim(388,400)
+                #ax.set_ylim(0,0.09)
+
+                ax.set_xlabel('Wavelength (nm)',fontsize=12)
+                ax.set_ylabel('Flux',fontsize=12)
+
+                ax.plot([396.847,396.847],[0,1],':',color ='black')
+                ax.plot([393.366,393.366],[0,1],':',color ='black')
+
+
+                for i in range(len(orders)):
+                    wav = wave_lib[i]
+                    print(i,trace_location[i]['x1'],trace_location[i]['x2'])
+                    flux = np.sum(hdulist['ca_hk'].data[trace_location[i]['x1']:trace_location[i]['x2'],:],axis=0)
+                    ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
+                plt.title('Ca H&K Spectrum '+exposure_name)#
+                plt.legend()
+                plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
+            #print(np.shape(hdulist['ca_hk'].data))
+            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,wavesoln = self.config['CaHK']['cahk_wav'])
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
@@ -968,6 +1018,12 @@ class QuicklookAlg:
         <a target="_blank" href="fig/""" +exposure_name+ """_CaHK_2D.png"  >
         <figure>
         <img src="fig/""" +exposure_name+ """_CaHK_2D.png" style="width:100%" alt="" title="">
+        </figure>
+        </a>
+
+        <a target="_blank" href="fig/""" +exposure_name+ """_CaHK_Spectrum.png"  >
+        <figure>
+        <img src="fig/""" +exposure_name+ """_CaHK_Spectrum.png" style="width:100%" alt="" title="">
         </figure>
         </a>
 
