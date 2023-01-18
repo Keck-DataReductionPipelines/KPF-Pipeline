@@ -553,8 +553,8 @@ class QuicklookAlg:
                 ax.set_xlim(388,400)
                 #ax.set_ylim(0,0.09)
 
-                ax.set_xlabel('Wavelength (nm)',fontsize=12)
-                ax.set_ylabel('Flux',fontsize=12)
+                ax.set_xlabel('Wavelength (nm)',fontsize=10)
+                ax.set_ylabel('Flux',fontsize=10)
 
                 ax.plot([396.847,396.847],[0,1],':',color ='black')
                 ax.plot([393.366,393.366],[0,1],':',color ='black')
