@@ -1,6 +1,7 @@
 import numpy as np
 import astropy.io.fits as fits
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
@@ -518,7 +519,7 @@ class QuicklookAlg:
             trace_location = load_trace_location('sky',trace_file,offset=0)
             trace_location_sky = load_trace_location('sci',trace_file,offset=0)
             plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
-            
+
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
