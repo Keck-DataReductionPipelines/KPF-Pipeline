@@ -512,9 +512,9 @@ class QuicklookAlg:
                     trace_location[loc[order_idx]] = {'x1': loc[loc_idx['x0']]-offset,'x2': loc[loc_idx['xf']]-offset,'y1': loc[loc_idx['y0']],'y2': loc[loc_idx['yf']]}
 
                 return trace_location
-            trace_file = self.config['CaHK']['trace_file']
-            trace_location = load_trace_location(fiber='sky',trace_file,offset=0)
-            trace_location_sky = load_trace_location(fiber='sci',trace_file,offset=0)
+            #trace_file = self.config['CaHK']['trace_file']
+            #trace_location = load_trace_location(fiber='sky',trace_file,offset=0)
+            #trace_location_sky = load_trace_location(fiber='sci',trace_file,offset=0)
             #plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
 
         #moving on the 1D data
