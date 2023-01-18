@@ -469,7 +469,7 @@ class QuicklookAlg:
 
         if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
             print('working on Ca HK data')
-            '''
+
             def plot_trace_boxes(data,trace_location,trace_location_sky):
 
                 fig, ax = plt.subplots(figsize = (12,6),tight_layout=True)
@@ -513,10 +513,10 @@ class QuicklookAlg:
 
                 return trace_location
             trace_file = self.config['CaHK']['trace_file']
-            trace_location = load_trace_location(fiber='sky',trace_path=trace_file,offset=0)
-            trace_location_sky = load_trace_location(fiber='sci',trace_path=trace_file,offset=0)
-            plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
-        '''
+            trace_location = load_trace_location(fiber='sky',trace_file,offset=0)
+            trace_location_sky = load_trace_location(fiber='sci',trace_file,offset=0)
+            #plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
