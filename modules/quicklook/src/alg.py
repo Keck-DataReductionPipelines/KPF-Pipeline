@@ -492,7 +492,7 @@ class QuicklookAlg:
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_2D.png', dpi=1000)
 
-
+            '''
             def load_trace_location(fiber='sky',trace_path,offset=0):
                 loc_result = pd.read_csv(trace_path,header =0, sep = ' ')
                 #print(loc_result)
@@ -512,11 +512,11 @@ class QuicklookAlg:
                     trace_location[loc[order_idx]] = {'x1': loc[loc_idx['x0']]-offset,'x2': loc[loc_idx['xf']]-offset,'y1': loc[loc_idx['y0']],'y2': loc[loc_idx['yf']]}
 
                 return trace_location
-            #trace_file = self.config['CaHK']['trace_file']
-            #trace_location = load_trace_location(fiber='sky',trace_file,offset=0)
-            #trace_location_sky = load_trace_location(fiber='sci',trace_file,offset=0)
-            #plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
-
+            trace_file = self.config['CaHK']['trace_file']
+            trace_location = load_trace_location(fiber='sky',trace_file,offset=0)
+            trace_location_sky = load_trace_location(fiber='sci',trace_file,offset=0)
+            plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+            '''
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
