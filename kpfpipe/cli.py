@@ -226,7 +226,16 @@ def main():
             arg.date_dir = datestr
             arg.file_path = datestr
 
-        framework.pipeline.start(pipe_config)
-        framework.append_event('start_recipe', arg)
-        framework.append_event('exit', arg)
-        framework.start()
+        if args.reprocess:
+            framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
+
+            for fname in infiles:
+                arg = arg
+                arg.date_dir = datestr
+                arg.file_path = fname
+                framework.append_event('next_file', arg)
+        else:
+            framework.pipeline.start(pipe_config)
+            framework.append_event('start_recipe', arg)
+            framework.append_event('exit', arg)
+            framework.start()
