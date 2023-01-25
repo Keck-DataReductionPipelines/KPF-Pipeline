@@ -213,7 +213,11 @@ def main():
                 arg.file_path = fname
                 arg.watch = True
                 framework.append_event('next_file', arg)
-            
+                            
+            while len(framework.get_pending_events()[0]) > 0:
+                framework.pipeline.logger.debug("Waiting for event queue to clear {}".format(framework.get_pending_events()[0]))
+                time.sleep(3)
+
             framework.append_event('exit', arg)
 
     else:
@@ -226,16 +230,7 @@ def main():
             arg.date_dir = datestr
             arg.file_path = datestr
 
-        if args.reprocess:
-            framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
-
-            for fname in infiles:
-                arg = arg
-                arg.date_dir = datestr
-                arg.file_path = fname
-                framework.append_event('next_file', arg)
-        else:
-            framework.pipeline.start(pipe_config)
-            framework.append_event('start_recipe', arg)
-            framework.append_event('exit', arg)
-            framework.start()
+        framework.pipeline.start(pipe_config)
+        framework.append_event('start_recipe', arg)
+        framework.append_event('exit', arg)
+        framework.start()
