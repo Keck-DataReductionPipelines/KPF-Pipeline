@@ -119,7 +119,10 @@ date_dir = sel_obsid + '/'
 flat_file_pattern = config.ARGUMENT.flat_file
 # date dir for flat file
 date_dir_flat = date_from_kpffile(flat_file_pattern)
-date_dir_flat = date_dir_flat + '/'
+if date_dir_flat == None or date_dir_flat == '':
+	date_dir_flat = date_dir
+else:
+	date_dir_flat = date_dir_flat + '/'
 
 output_dir = config.ARGUMENT.output_dir
 input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
@@ -258,7 +261,7 @@ end_of_night_summary = False
 #    OrderTrace: order trace
 #    OrderRectification: order trace rectification
 
-input_flat_file = lev0_flat_pattern
+input_flat_file = find_files(lev0_flat_pattern)[0]
 _, short_flat_file = split(input_flat_file)
 flat_stem, flat_ext = splitext(short_flat_file)
 
@@ -280,7 +283,7 @@ if do_order_trace:
 			output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if not exists(output_lev0_trace_csv):
-				order_result_data = OrderTrace(flat_data, data_extension=ccd,
+				order_result_data = OrderTrace(flat_data, data_extension=ccd + '_STACK',
 					result_path=output_lev0_trace_csv, is_output_file=True,
 					data_col_range=data_col_range, data_row_range=data_row_range,
 					fitting_poly_degree=poly_degree)
