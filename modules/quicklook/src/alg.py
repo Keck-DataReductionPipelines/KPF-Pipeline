@@ -327,11 +327,11 @@ class QuicklookAlg:
             #print('which_column',np.where(column_sum==np.nanmax(column_sum))[0][0])
             which_column = np.where(column_sum==np.nanmax(column_sum))[0][0] #int(np.shape(master_counts)[1]/2)
 
-            plt.plot(np.ones_like(counts[:,which_column])*saturation_limit,':',alpha = 0.5,linewidth =  1., label = 'Saturation Limit', color = 'gray')
+            plt.plot(np.ones_like(counts[:,which_column])*saturation_limit,':',alpha = 0.5,linewidth =  1., label = 'Saturation Limit: '+str(saturation_limit), color = 'gray')
             plt.plot(counts[:,which_column],alpha = 0.5,linewidth =  0.5, label = ccd_color[i_color]+' '+version, color = 'Blue')
             if master_file != 'None' and len(master_flatten_counts)>1: plt.plot(master_counts[:,which_column],alpha = 0.5,linewidth =  0.5, label = 'Master', color = 'Orange')
             plt.yscale('log')
-            plt.ylabel('log(Counts)')
+            plt.ylabel('log(Counts/e-)')
             plt.xlabel('Row Number')
             plt.title(ccd_color[i_color]+' '+version+' Column Cut Through Column '+str(which_column) + ' '+exposure_name)#(Middle of CCD)
             plt.ylim(1,1.2*np.nanmax(counts[:,which_column]))
@@ -479,14 +479,14 @@ class QuicklookAlg:
                     height = trace_location[i]['x2'] - trace_location[i]['x1']
                     width = trace_location[i]['y2'] - trace_location[i]['y1']
                     ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none'))
-                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci'))
+                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci (Saturation at '+str(64232)+')'))
 
                 for i in trace_location_sky.keys():
                     height = trace_location_sky[i]['x2'] - trace_location_sky[i]['x1']
                     width = trace_location_sky[i]['y2'] - trace_location_sky[i]['y1']
                     ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none'))
                     if i == 0: ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none',label = 'Sky'))
-                fig.colorbar(im, orientation='vertical')
+                fig.colorbar(im, orientation='vertical',label = 'Counts (ADU)')
                 plt.xlabel('y (pixel number)')
                 plt.ylabel('x (pixel number)')
                 plt.title('Ca H&K 2D '+exposure_name)#
@@ -516,8 +516,8 @@ class QuicklookAlg:
 
 
             trace_file = self.config['CaHK']['trace_file']
-            trace_location = load_trace_location('sky',trace_file,offset=0)
-            trace_location_sky = load_trace_location('sci',trace_file,offset=0)
+            trace_location = load_trace_location('sky',trace_file,offset=-1)
+            trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
             plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
             def extract_HK_spectrum(data,trace_location,wavesoln ):
 
