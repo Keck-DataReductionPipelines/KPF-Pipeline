@@ -205,7 +205,7 @@ class QuicklookAlg:
                 plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
                 plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
                 plt.legend()
-                plt.xlabel('Counts')
+                plt.xlabel('Counts (e-)')
                 plt.ylabel('Number of Pixels')
                 plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
@@ -222,7 +222,7 @@ class QuicklookAlg:
             plt.xlabel('x (pixel number)')
             plt.ylabel('y (pixel number)')
             plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
-            plt.colorbar(label = 'Counts')
+            plt.colorbar(label = 'Counts (e-)')
 
 
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
@@ -266,7 +266,7 @@ class QuicklookAlg:
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' High Variance '+exposure_name)
-                plt.colorbar(label = 'Counts')
+                plt.colorbar(label = 'Counts (e-)')
 
                 plt.text(2200,3600, 'Nominal STD: %5.1f' % np.nanstd(np.ravel(low_var_counts)))
                 plt.text(2200,3300, 'Fixed Pattern STD: %5.1f' % np.nanstd(np.ravel(high_var_counts)))
@@ -281,7 +281,7 @@ class QuicklookAlg:
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' Low Variance')
-                plt.colorbar(label = 'Counts')
+                plt.colorbar(label = 'Counts (e-)')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.png')
                 '''
             print('master file',version,i_color,master_file,len(master_flatten_counts))
@@ -310,7 +310,7 @@ class QuicklookAlg:
             plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
             if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
-            plt.xlabel('Counts')
+            plt.xlabel('Counts (e-)')
             plt.ylabel('Number of Pixels')
             plt.yscale('log')
             plt.title(ccd_color[i_color]+' '+version+' Histogram '+exposure_name)
@@ -628,7 +628,7 @@ class QuicklookAlg:
 
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-)',fontsize = 20)
             ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
@@ -643,7 +643,7 @@ class QuicklookAlg:
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in GREEN '+exposure_name)
-            plt.ylabel('Counts',fontsize = 15)
+            plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
             plt.close()
@@ -656,7 +656,7 @@ class QuicklookAlg:
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in RED '+exposure_name)
-            plt.ylabel('Counts',fontsize = 15)
+            plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
             plt.close()
