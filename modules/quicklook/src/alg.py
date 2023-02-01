@@ -519,9 +519,10 @@ class QuicklookAlg:
             trace_location = load_trace_location('sky',trace_file,offset=-1)
             trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
             plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
-            def extract_HK_spectrum(data,trace_location,wavesoln ):
+            def extract_HK_spectrum(data,trace_location,rv_shift,wavesoln ):
 
                 wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
+                wave_lib*=1-rv_shift/3e5
                 print(trace_location)
                 orders = np.array(wave_lib.columns)
                 padding = 200
@@ -569,7 +570,8 @@ class QuicklookAlg:
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
             #print(np.shape(hdulist['ca_hk'].data))
-            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,wavesoln = self.config['CaHK']['cahk_wav'])
+            rv_shift = hdulist[0].header['TARGRADV']
+            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
