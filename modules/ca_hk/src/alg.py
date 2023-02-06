@@ -252,8 +252,10 @@ class CaHKAlg(ModuleAlgBase):
 
         x1, x2, y1, y2 = order_loc['x1'], order_loc['x2'], order_loc['y1'], order_loc['y2']
         p_result = self.get_order_buffer()
-        extracted_img = self.hk_data[y1:y2+1, x1:x2+1]
-        p_result[0, x1:x2+1] = np.sum(extracted_img, axis=0)
+        # extracted_img = self.hk_data[y1:y2+1, x1:x2+1]
+        extracted_img = self.hk_data[y1:y2, x1:x2]           # pixels of [x1 ~ x2-1, y1 ~ y2-1] are extracted
+        # p_result[0, x1:x2+1] = np.sum(extracted_img, axis=0)
+        p_result[0, x1:x2] = np.sum(extracted_img, axis=0)
         return {'extraction': p_result}
 
     def summation_extraction(self, trace_location, selected_orders=None):
