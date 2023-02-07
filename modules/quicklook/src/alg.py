@@ -510,7 +510,7 @@ class QuicklookAlg:
                 loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
                 trace_location = dict()
                 for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
-                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['x0']]-offset,'x2': loc[loc_idx['xf']]-offset,'y1': loc[loc_idx['y0']],'y2': loc[loc_idx['yf']]}
+                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['y0']]-offset,'x2': loc[loc_idx['yf']]-offset,'y1': loc[loc_idx['x0']],'y2': loc[loc_idx['xf']]}
 
                 return trace_location
 
