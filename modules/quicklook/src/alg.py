@@ -502,7 +502,7 @@ class QuicklookAlg:
                 #print(loc_cols)
                 order_col_name = 'order'
                 fiber_col_name = 'fiber'
-                loc_col_names = ['x0', 'y0', 'xf','yf']
+                loc_col_names = ['y0', 'x0', 'yf','xf']#['x0', 'y0', 'xf','yf']
 
                 loc_idx = {c: np.where(loc_cols == c)[0][0] for c in loc_col_names}
                 order_idx = np.where(loc_cols == order_col_name)[0][0]
