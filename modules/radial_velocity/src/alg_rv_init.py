@@ -157,7 +157,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         self.d_print("RadialVelocityAlgInit: get star info from header")
         self.rv_config[self.SPEC] = self.instrument or 'neid'
-        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX)
+        star_info = (self.RA, self.DEC, self.PMRA, self.PMDEC, self.EPOCH,  self.PARALLAX, self.STAR_RV)
 
         for s_key in star_info:
             h_key = self.get_value_from_config(s_key, None)
@@ -317,7 +317,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         # in rv_config
         if self.star_config_file.lower() == 'fits_header':
-            rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT,  self.STEP, self.MASK_WID, self.START_VEL)
+            rv_keys = (self.OBSLON, self.OBSLAT, self.OBSALT,  self.STEP, self.MASK_WID, self.START_VEL)
         else:
             rv_keys = (self.STAR_RV, self.OBSLON, self.OBSLAT, self.OBSALT, self.STEP, self.MASK_WID, self.START_VEL)
 
