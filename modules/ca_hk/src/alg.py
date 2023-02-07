@@ -355,7 +355,7 @@ class CaHKAlg(ModuleAlgBase):
         if not exists(wave_table_file):
             return None
 
-        wave_result = pd.read_csv(wave_table_file, header=None, sep=' ', comment='#')
+        wave_result = pd.read_csv(wave_table_file, header=None, sep=' ', comment='#', engine='python')
         wave_vals = np.array(wave_result.values)
         if fiber in self.trace_location and self.trace_location[fiber] is not None:
             total_order = len(self.trace_location[fiber].keys())
