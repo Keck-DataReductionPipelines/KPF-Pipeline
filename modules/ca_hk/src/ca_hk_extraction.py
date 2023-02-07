@@ -274,3 +274,5 @@ class CaHKExtraction(KPF0_Primitive):
         wave_table = self.alg.load_wavelength_table(wave_file, fiber)
         if wave_table is not None:
             out_lev1[wave_ext] = wave_table
+            if self.logger:
+                self.logger.warning("CaHkExtraction: write wls to "+wave_ext)
