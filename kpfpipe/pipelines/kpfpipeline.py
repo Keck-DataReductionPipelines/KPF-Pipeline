@@ -141,8 +141,9 @@ class KPFPipeline(BasePipeline):
         # Technically the pipeline's configuration is stored in self.context as 
         # a ConfigClass() defined by keckDRP. But we will be using configParser
 
+        self.configfile = configfile
         self.logger = start_logger(self.name, configfile)
-        self.logger.info('Logger started')
+        self.logger.info('Pipeline logger started')
 
         ## Setup argument
         try: 
@@ -185,6 +186,28 @@ class KPFPipeline(BasePipeline):
             fstr = ''
         self._recipe_ast = ast.parse(fstr)
         context.args = action.args
+
+        if 'file_path' in context.args.iter_kw() and '.fits' in context.args['file_path']:
+            log_path = context.args['file_path'].replace('.fits', '.log')
+        elif 'date_dir' in context.args.iter_kw():
+            log_path = 'pipeline_' + context.args['date_dir'] + '.log'
+        else:
+            log_path = os.path.basename(recipe_file).split('.')[0] + '.log'
+        
+        logname = os.path.basename(log_path)
+
+        if 'log_directory' in self.config['LOGGER']:
+            log_path = os.path.join(self.config.get('LOGGER', 'log_directory'),
+                                    self.context.args['date_dir'], logname)
+
+        self.logger.info("Starting new log with path: {}".format(log_path))
+        dirpath = os.path.dirname(log_path)
+        if not os.path.exists(dirpath) and len(dirpath) > 0:
+            os.makedirs(dirpath, exist_ok=True)
+        self.logger = start_logger(logname, self.configfile, log_path=log_path)
+        self.context.logger = self.logger
+        self.logger.info("*************** Executing recipe {} ***************".format(recipe_file))
+
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
         self.register_recipe_builtins()
         ## set up environment
@@ -209,26 +232,6 @@ class KPFPipeline(BasePipeline):
         os._exit(1)
 
     # reentry after call
-
-    def resume_recipe(self, action: Action, context: ProcessingContext):
-        """
-        Continues evaluating the recipe started in start_recipe().  resume_recipe() will run immediately
-        after each data processing primitive, and makes return values from the previous primitive, stored in an
-        Arguments class instance in action.args, available back to the recipe.
-
-        Args:
-            action (keckdrpframework.models.action.Action): Keck DRPF Action object
-            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
-        """
-        # pick up the recipe processing where we left off
-        self.logger.debug("resume_recipe")
-        self._recipe_visitor.returning_from_call = True
-        self._recipe_visitor.awaiting_call_return = False
-        self._recipe_visitor.call_output = action.args # framework put previous output here
-        self._recipe_visitor.visit(self._recipe_ast)
-
-        return Arguments(name="resume_recipe_return")  # nothing to actually return, but meet the Framework requirement
-
     def resume_recipe(self, action: Action, context: ProcessingContext):
         """
         Continues evaluating the recipe started in start_recipe().  resume_recipe() will run immediately

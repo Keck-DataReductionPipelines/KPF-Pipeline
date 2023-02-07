@@ -32,8 +32,6 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      
                      'RED_AMP1': fits.ImageHDU,
                      'RED_AMP2': fits.ImageHDU,
-                     'RED_AMP3': fits.ImageHDU,
-                     'RED_AMP4': fits.ImageHDU,
                      'RED_CCD': fits.ImageHDU,
                      'RED_VAR': fits.ImageHDU,
                      
@@ -96,6 +94,8 @@ LEVEL1_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'CA_HK_SKY': fits.ImageHDU,
                      'CA_HK_SCI_WAVE': fits.ImageHDU,
                      'CA_HK_SKY_WAVE': fits.ImageHDU,
+
+                     'BARY_CORR': fits.BinTableHDU
                     }
 # KPF level 2 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
