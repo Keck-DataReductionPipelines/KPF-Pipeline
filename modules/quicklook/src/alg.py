@@ -205,7 +205,7 @@ class QuicklookAlg:
                 plt.plot((bin_edges[1:]+bin_edges[:-1])/2,pdf, label = 'All')
                 plt.scatter(np.array((bin_edges[1:]+bin_edges[:-1])/2,'d')[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)],pdf[(count_fit<gamma-1*std) | (count_fit>gamma+1*std)], label = 'Larger Var Component')
                 plt.legend()
-                plt.xlabel('Counts')
+                plt.xlabel('Counts (e-)')
                 plt.ylabel('Number of Pixels')
                 plt.yscale('log')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
@@ -222,7 +222,7 @@ class QuicklookAlg:
             plt.xlabel('x (pixel number)')
             plt.ylabel('y (pixel number)')
             plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
-            plt.colorbar(label = 'Counts')
+            plt.colorbar(label = 'Counts (e-)')
 
 
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
@@ -266,7 +266,7 @@ class QuicklookAlg:
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' High Variance '+exposure_name)
-                plt.colorbar(label = 'Counts')
+                plt.colorbar(label = 'Counts (e-)')
 
                 plt.text(2200,3600, 'Nominal STD: %5.1f' % np.nanstd(np.ravel(low_var_counts)))
                 plt.text(2200,3300, 'Fixed Pattern STD: %5.1f' % np.nanstd(np.ravel(high_var_counts)))
@@ -281,7 +281,7 @@ class QuicklookAlg:
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' Low Variance')
-                plt.colorbar(label = 'Counts')
+                plt.colorbar(label = 'Counts (e-)')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.png')
                 '''
             print('master file',version,i_color,master_file,len(master_flatten_counts))
@@ -310,7 +310,7 @@ class QuicklookAlg:
             plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
             if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
-            plt.xlabel('Counts')
+            plt.xlabel('Counts (e-)')
             plt.ylabel('Number of Pixels')
             plt.yscale('log')
             plt.title(ccd_color[i_color]+' '+version+' Histogram '+exposure_name)
@@ -327,11 +327,11 @@ class QuicklookAlg:
             #print('which_column',np.where(column_sum==np.nanmax(column_sum))[0][0])
             which_column = np.where(column_sum==np.nanmax(column_sum))[0][0] #int(np.shape(master_counts)[1]/2)
 
-            plt.plot(np.ones_like(counts[:,which_column])*saturation_limit,':',alpha = 0.5,linewidth =  1., label = 'Saturation Limit', color = 'gray')
+            plt.plot(np.ones_like(counts[:,which_column])*saturation_limit,':',alpha = 0.5,linewidth =  1., label = 'Saturation Limit: '+str(saturation_limit), color = 'gray')
             plt.plot(counts[:,which_column],alpha = 0.5,linewidth =  0.5, label = ccd_color[i_color]+' '+version, color = 'Blue')
             if master_file != 'None' and len(master_flatten_counts)>1: plt.plot(master_counts[:,which_column],alpha = 0.5,linewidth =  0.5, label = 'Master', color = 'Orange')
             plt.yscale('log')
-            plt.ylabel('log(Counts)')
+            plt.ylabel('log(Counts/e-)')
             plt.xlabel('Row Number')
             plt.title(ccd_color[i_color]+' '+version+' Column Cut Through Column '+str(which_column) + ' '+exposure_name)#(Middle of CCD)
             plt.ylim(1,1.2*np.nanmax(counts[:,which_column]))
@@ -479,14 +479,14 @@ class QuicklookAlg:
                     height = trace_location[i]['x2'] - trace_location[i]['x1']
                     width = trace_location[i]['y2'] - trace_location[i]['y1']
                     ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none'))
-                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci'))
+                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci (Saturation at '+str(64232)+')'))
 
                 for i in trace_location_sky.keys():
                     height = trace_location_sky[i]['x2'] - trace_location_sky[i]['x1']
                     width = trace_location_sky[i]['y2'] - trace_location_sky[i]['y1']
                     ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none'))
                     if i == 0: ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none',label = 'Sky'))
-                fig.colorbar(im, orientation='vertical')
+                fig.colorbar(im, orientation='vertical',label = 'Counts (ADU)')
                 plt.xlabel('y (pixel number)')
                 plt.ylabel('x (pixel number)')
                 plt.title('Ca H&K 2D '+exposure_name)#
@@ -502,7 +502,7 @@ class QuicklookAlg:
                 #print(loc_cols)
                 order_col_name = 'order'
                 fiber_col_name = 'fiber'
-                loc_col_names = ['x0', 'y0', 'xf','yf']
+                loc_col_names = ['y0', 'x0', 'yf','xf']#['x0', 'y0', 'xf','yf']
 
                 loc_idx = {c: np.where(loc_cols == c)[0][0] for c in loc_col_names}
                 order_idx = np.where(loc_cols == order_col_name)[0][0]
@@ -510,18 +510,19 @@ class QuicklookAlg:
                 loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
                 trace_location = dict()
                 for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
-                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['x0']]-offset,'x2': loc[loc_idx['xf']]-offset,'y1': loc[loc_idx['y0']],'y2': loc[loc_idx['yf']]}
+                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['y0']]-offset,'x2': loc[loc_idx['yf']]-offset,'y1': loc[loc_idx['x0']],'y2': loc[loc_idx['xf']]}
 
                 return trace_location
 
 
             trace_file = self.config['CaHK']['trace_file']
-            trace_location = load_trace_location('sky',trace_file,offset=0)
-            trace_location_sky = load_trace_location('sci',trace_file,offset=0)
+            trace_location = load_trace_location('sky',trace_file,offset=-1)
+            trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
             plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
-            def extract_HK_spectrum(data,trace_location,wavesoln ):
+            def extract_HK_spectrum(data,trace_location,rv_shift,wavesoln ):
 
                 wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
+                wave_lib*=1-rv_shift/3e5
                 print(trace_location)
                 orders = np.array(wave_lib.columns)
                 padding = 200
@@ -569,7 +570,8 @@ class QuicklookAlg:
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
             #print(np.shape(hdulist['ca_hk'].data))
-            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,wavesoln = self.config['CaHK']['cahk_wav'])
+            rv_shift = hdulist[0].header['TARGRADV']
+            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
@@ -628,7 +630,7 @@ class QuicklookAlg:
 
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts',fontsize = 20)
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-)',fontsize = 20)
             ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
@@ -643,7 +645,7 @@ class QuicklookAlg:
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in GREEN '+exposure_name)
-            plt.ylabel('Counts',fontsize = 15)
+            plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
             plt.close()
@@ -656,7 +658,7 @@ class QuicklookAlg:
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in RED '+exposure_name)
-            plt.ylabel('Counts',fontsize = 15)
+            plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
             plt.close()
