@@ -691,8 +691,8 @@ class QuicklookAlg:
             #plot the ratio between orderlets all relative to the first order, plot as a function of wav, label by order number, red and green in the same plot
             plt.close()
             plt.figure(figsize=(10,4))
-            plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
-
+            plt.subplots_adjust(left=0.05, bottom=0.15, right=0.95, top=0.95)
+            print('test orderlets', np.shape(flux2),np.shape(flux),np.median(flux2/flux,axis = 1),np.median(wav,axis = 1))
             plt.plot(np.median(wav,axis = 1),np.median(flux2/flux,axis = 1), label = 'Sci2/Sci1')
             plt.plot(np.median(wav,axis = 1),np.median(flux3/flux,axis = 1), label = 'Sci3/Sci1')
             plt.plot(np.median(wav,axis = 1),np.median(flux_sky/flux,axis = 1), label = 'Cal/Sci1')
