@@ -15,10 +15,17 @@ from astropy.time import Time
 # from kpfpipe.primitives.level0 import KPF0_Primitive
 # from kpfpipe.models.level0 import KPF0
 
-mask_file_map = {'G2_espresso': ('G2.espresso.mas', 'air'),
+mask_file_map = {
+                 'F9_espresso': ('F9_espresso.txt', 'air'),
+                 'G2_espresso': ('G2.espresso.mas', 'air'),
                  'G2_harps': ('G2.harps.mas', 'air'),
                  'G2_neid_v1': ('G2.neid.v1.mas', 'air'),
                  'G2_neid_v2': ('G2.neid.v2.mas', 'air'),
+                 'G8_espresso': ('G8_espresso.txt', 'air'),
+                 'G9_espresso': ('G9_espresso.txt', 'air'),
+                 'K2_espresso': ('K2_espresso.txt', 'air'),
+                 'K6_espresso': ('K6_espresso.txt', 'air'),
+                 'M2_espresso': ('M2_espresso.txt', 'air'),
                  'thar': ('Thorium_mask_031921.mas', 'vac'),
                  'lfc': ('kpf_lfc_mask_1025.mas', 'vac')}
 
@@ -183,10 +190,25 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         skyobj = self.pheader['SKY-OBJ']
         sciobj = self.pheader['SCI-OBJ']
         calobj = self.pheader['CAL-OBJ']
+        teff = float(self.pheader['TARGTEFF'])
         if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
             default_mask = 'thar'
         elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
             default_mask = 'lfc'
+        elif teff > 5800:
+            default_mask = 'F9_espresso'
+        elif 5800 > teff > 5650:
+             default_mask = 'G2_espresso'
+        elif 5650 > teff > 5400:
+            default_mask = 'G8_espresso'
+        elif 5400 > teff > 5200:
+            default_mask = 'G9_espresso'
+        elif 5200 > teff > 4600:
+            default_mask = 'K2_espresso'
+        elif 4600 > teff > 3700:
+            default_mask = 'K6_espresso'
+        elif 3700 > teff > 0:
+            default_mask = 'M2_espresso'
         else:
             default_mask = 'G2_espresso'
 
