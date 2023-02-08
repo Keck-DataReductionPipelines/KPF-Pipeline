@@ -592,15 +592,39 @@ class QuicklookAlg:
 
             flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
             flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
+
+            flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
+            flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
+
+            flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
+            flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
+
+            flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
+            flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
+
+            flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
+            flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
+
             print(np.shape(flux_green),np.shape(flux_red))
             if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
             if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green1)==(0,):flux_green1 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red1)==(0,): flux_red1 = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red2)==(0,): flux_red = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green_cal)==(0,):flux_green_cal = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
             print(hdulist1.info())
             flux = np.concatenate((flux_green,flux_red),axis = 0)
-
+            flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
+            flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
+            flux_cal = np.concatenate((flux_green_cal,flux_red_cal),axis = 0)
+            flux_sky = np.concatenate((flux_green_sky,flux_red_sky),axis = 0)
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
             cm = plt.cm.get_cmap('rainbow')
@@ -661,6 +685,23 @@ class QuicklookAlg:
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
+            plt.close()
+
+
+            #plot the ratio between orderlets all relative to the first order, plot as a function of wav, label by order number, red and green in the same plot
+            plt.close()
+            plt.figure(figsize=(10,4))
+            plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
+
+            plt.plot(np.median(wav,axis = 1),np.median(flux2/flux,axis = 1), label = 'Sci2/Sci1')
+            plt.plot(np.median(wav,axis = 1),np.median(flux3/flux,axis = 1), label = 'Sci3/Sci1')
+            plt.plot(np.median(wav,axis = 1),np.median(flux_sky/flux,axis = 1), label = 'Cal/Sci1')
+            plt.plot(np.median(wav,axis = 1),np.median(flux_cal/flux,axis = 1), label = 'Sky/Sci1')
+            plt.legend()
+            plt.title('Orderlets Flux Ratios '+exposure_name)
+            #plt.ylabel('Counts (e-)',fontsize = 15)
+            plt.xlabel('Wavelength (Ang)',fontsize = 15)
+            plt.savefig(output_dir+'fig/'+exposure_name+'_orderlets_flux_ratio.png',dpi = 200)
             plt.close()
         else: print('L1 file does not exist')
 
@@ -1013,6 +1054,14 @@ class QuicklookAlg:
         <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.png"  >
         <figure>
         <span><img src="fig/""" +exposure_name+ """_1D_spectrum.png" style="width:100%" alt="" title=""></span>
+        </figure>
+        </a>
+        <br>
+    
+        <br>
+        <a target="_blank" href="fig/""" +exposure_name+ """_orderlets_flux_ratio.png"  >
+        <figure>
+        <span><img src="fig/""" +exposure_name+ """_orderlets_flux_ratio.png" style="width:100%" alt="" title=""></span>
         </figure>
         </a>
         <br>
