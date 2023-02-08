@@ -608,10 +608,10 @@ class QuicklookAlg:
             print(np.shape(flux_green),np.shape(flux_red))
             if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
             if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
-            if np.shape(flux_green1)==(0,):flux_green1 = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red1)==(0,): flux_red1 = wav_red*0.#place holder when there is no data
             if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red2)==(0,): flux_red = wav_red*0.#place holder when there is no data
+            if np.shape(flux_red2)==(0,): flux_red2 = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green3)==(0,):flux_green3 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red3)==(0,): flux_red3 = wav_red*0.#place holder when there is no data
             if np.shape(flux_green_cal)==(0,):flux_green_cal = wav_green*0.#place holder when there is no data
             if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
             if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
@@ -1057,7 +1057,7 @@ class QuicklookAlg:
         </figure>
         </a>
         <br>
-    
+
         <br>
         <a target="_blank" href="fig/""" +exposure_name+ """_orderlets_flux_ratio.png"  >
         <figure>
