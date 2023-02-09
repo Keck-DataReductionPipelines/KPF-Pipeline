@@ -227,6 +227,7 @@ class QuicklookAlg:
 
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
+            plt.close()
             #2D difference image
 
 
@@ -352,6 +353,7 @@ class QuicklookAlg:
             '''
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
+            plt.close()
 
         #exposure meter plots
         if 'EXPMETER_SCI' in hdulist and len(hdulist['EXPMETER_SCI'].data)>=1:
@@ -492,6 +494,7 @@ class QuicklookAlg:
                 plt.title('Ca H&K 2D '+exposure_name)#
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_2D.png', dpi=1000)
+                plt.close()
 
 
             def load_trace_location(fiber,trace_path,offset=0):
@@ -569,6 +572,7 @@ class QuicklookAlg:
                 plt.title('Ca H&K Spectrum '+exposure_name)#
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
+                plt.close()
             #print(np.shape(hdulist['ca_hk'].data))
             rv_shift = hdulist[0].header['TARGRADV']
             extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
@@ -823,6 +827,10 @@ class QuicklookAlg:
                 plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png',dpi =200)
                 plt.close()
         else: print('L2 file does not exist')
+
+        hdulist.close()
+        hdulist1.close()
+        plt.close('all')
         #output the results to html
         f = open(output_dir+exposure_name+'_summary.html','w')
 
