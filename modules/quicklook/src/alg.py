@@ -172,6 +172,7 @@ class QuicklookAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
 
+
             #looking at the fixed noise patterns
             '''
             if version =='Bias':
@@ -624,6 +625,7 @@ class QuicklookAlg:
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
             print(hdulist1.info())
+            hdulist1.close()
             flux = np.concatenate((flux_green,flux_red),axis = 0)
             flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
             flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
@@ -829,7 +831,7 @@ class QuicklookAlg:
         else: print('L2 file does not exist')
 
         hdulist.close()
-        hdulist1.close()
+
         plt.close('all')
         #output the results to html
         f = open(output_dir+exposure_name+'_summary.html','w')
