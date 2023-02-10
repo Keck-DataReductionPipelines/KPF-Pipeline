@@ -172,6 +172,7 @@ class QuicklookAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
 
+
             #looking at the fixed noise patterns
             '''
             if version =='Bias':
@@ -227,6 +228,7 @@ class QuicklookAlg:
 
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
+            plt.close()
             #2D difference image
 
 
@@ -352,6 +354,7 @@ class QuicklookAlg:
             '''
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
+            plt.close()
 
         #exposure meter plots
         if 'EXPMETER_SCI' in hdulist and len(hdulist['EXPMETER_SCI'].data)>=1:
@@ -492,6 +495,7 @@ class QuicklookAlg:
                 plt.title('Ca H&K 2D '+exposure_name)#
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_2D.png', dpi=1000)
+                plt.close()
 
 
             def load_trace_location(fiber,trace_path,offset=0):
@@ -569,6 +573,7 @@ class QuicklookAlg:
                 plt.title('Ca H&K Spectrum '+exposure_name)#
                 plt.legend()
                 plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
+                plt.close()
             #print(np.shape(hdulist['ca_hk'].data))
             rv_shift = hdulist[0].header['TARGRADV']
             extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
@@ -592,15 +597,40 @@ class QuicklookAlg:
 
             flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
             flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
+
+            flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
+            flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
+
+            flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
+            flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
+
+            flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
+            flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
+
+            flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
+            flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
+
             print(np.shape(flux_green),np.shape(flux_red))
             if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
             if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red2)==(0,): flux_red2 = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green3)==(0,):flux_green3 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red3)==(0,): flux_red3 = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green_cal)==(0,):flux_green_cal = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
             print(hdulist1.info())
+            hdulist1.close()
             flux = np.concatenate((flux_green,flux_red),axis = 0)
-
+            flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
+            flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
+            flux_cal = np.concatenate((flux_green_cal,flux_red_cal),axis = 0)
+            flux_sky = np.concatenate((flux_green_sky,flux_red_sky),axis = 0)
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
             cm = plt.cm.get_cmap('rainbow')
@@ -661,6 +691,29 @@ class QuicklookAlg:
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
             plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
+            plt.close()
+
+
+            #plot the ratio between orderlets all relative to the first order, plot as a function of wav, label by order number, red and green in the same plot
+            plt.close()
+            plt.figure(figsize=(10,4))
+            plt.subplots_adjust(left=0.1, bottom=0.15, right=0.95, top=0.9)
+            is_fiber_on =[np.nanmedian(flux_green2/flux_green)>0.2,np.nanmedian(flux_green3/flux_green)>0.2,np.nanmedian(flux_green_cal/flux_green)>0.05,np.nanmedian(flux_green_cal/flux_green)>0.05]
+            print('test orderlets', np.nanmedian(flux_green2/flux_green),np.nanmedian(flux_green3/flux_green),np.nanmedian(flux_green_cal/flux_green),np.nanmedian(flux_green_sky/flux_green))
+            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green2/flux_green,axis = 1),marker = 'o', color = 'green', label = 'Sci2/Sci1; On: ' +str(is_fiber_on[0]))
+            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green3/flux_green,axis = 1),marker = 'o', color = 'red', label = 'Sci3/Sci1; On: ' +str(is_fiber_on[1]))
+            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green_cal/flux_green,axis = 1),marker = 'o', color = 'blue', label = 'Cal/Sci1; On: ' +str(is_fiber_on[2]))
+            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green_sky/flux_green,axis = 1),marker = 'o', color = 'magenta', label = 'Sky/Sci1; On: ' +str(is_fiber_on[3]))
+
+            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red2/flux_red,axis = 1),marker = 'D', color = 'green')
+            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red3/flux_red,axis = 1),marker = 'D', color = 'red')
+            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red_cal/flux_red,axis = 1),marker = 'D', color = 'blue')
+            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red_sky/flux_red,axis = 1),marker = 'D', color = 'magenta')
+            plt.legend()
+            plt.title('Orderlets Flux Ratios '+exposure_name)
+            #plt.ylabel('Counts (e-)',fontsize = 15)
+            plt.xlabel('Wavelength (Ang)',fontsize = 15)
+            plt.savefig(output_dir+'fig/'+exposure_name+'_orderlets_flux_ratio.png',dpi = 200)
             plt.close()
         else: print('L1 file does not exist')
 
@@ -776,6 +829,10 @@ class QuicklookAlg:
                 plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png',dpi =200)
                 plt.close()
         else: print('L2 file does not exist')
+
+        hdulist.close()
+
+        plt.close('all')
         #output the results to html
         f = open(output_dir+exposure_name+'_summary.html','w')
 
@@ -1013,6 +1070,14 @@ class QuicklookAlg:
         <a target="_blank" href="fig/""" +exposure_name+ """_1D_spectrum.png"  >
         <figure>
         <span><img src="fig/""" +exposure_name+ """_1D_spectrum.png" style="width:100%" alt="" title=""></span>
+        </figure>
+        </a>
+        <br>
+
+        <br>
+        <a target="_blank" href="fig/""" +exposure_name+ """_orderlets_flux_ratio.png"  >
+        <figure>
+        <span><img src="fig/""" +exposure_name+ """_orderlets_flux_ratio.png" style="width:100%" alt="" title=""></span>
         </figure>
         </a>
         <br>
