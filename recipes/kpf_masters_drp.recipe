@@ -23,7 +23,7 @@ else:
 
 exptime_minimum = config.DARK.exptime_minimum
 
-all_bias_files_list, all_dark_files_list, all_flat_files_list, all_arclamp_files_list = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
+all_bias_files_list, all_dark_files_list, all_flat_files_list, all_arclamp_files_list, arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
 
 channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
@@ -183,7 +183,13 @@ if all_bias_files_list:
         if all_arclamp_files_list:
             arclamp_n_sigma = config.ARCLAMP.n_sigma
             arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
-            arclamp_objects = config.ARCLAMP.arclamp_objects
+            arclamp_objects_config = config.ARCLAMP.arclamp_objects
+
+            if len(arclamp_objects_config) == 0:
+                arclamp_objects = arclamp_objects_auto
+            else:
+                arclamp_objects = arclamp_objects_config
+
             masterarclamp_path = config.ARCLAMP.masterarclamp_path
             arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
