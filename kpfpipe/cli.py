@@ -213,7 +213,11 @@ def main():
                 arg.file_path = fname
                 arg.watch = True
                 framework.append_event('next_file', arg)
-            
+                            
+            while len(framework.get_pending_events()[0]) > 0:
+                framework.pipeline.logger.debug("Waiting for event queue to clear {}".format(framework.get_pending_events()[0]))
+                time.sleep(3)
+
             framework.append_event('exit', arg)
 
     else:
