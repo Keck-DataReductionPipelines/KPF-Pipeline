@@ -169,14 +169,7 @@ class WaveCalibrate(KPF1_Primitive):
                             comb_fr = self.frep_key
                     else:
                         raise ValueError('f_rep value not found')
-                    
-                    if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(
-                            self.linelist_path, allow_pickle=True
-                        ).tolist()
-                    else:
-                        peak_wavelengths_ang = None
-                    
+             
                     peak_wavelengths_ang = None
 
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
