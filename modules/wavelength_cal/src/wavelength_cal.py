@@ -177,6 +177,8 @@ class WaveCalibrate(KPF1_Primitive):
                     else:
                         peak_wavelengths_ang = None
                     
+                    peak_wavelengths_ang = None
+
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
                                         
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(

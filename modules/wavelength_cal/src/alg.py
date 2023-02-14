@@ -678,6 +678,7 @@ class WaveCalibration:
         good_peak_idx = np.intersect1d(notnearmask_peaks, good_peak_idx)
 
         if print_update:
+            print('{} peaks fit'.format(len(detected_peak_pixels)))
             print('{} peaks clipped'.format(len(detected_peak_pixels) - len(good_peak_idx)))
 
         if plot_path is not None:
