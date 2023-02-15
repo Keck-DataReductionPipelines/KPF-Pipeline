@@ -191,8 +191,9 @@ class WaveCalibration:
             n_orders = len(order_list)
             
             masked_calflux = self.mask_array_neid(calflux,n_orders)
+            masked_calflux = calflux
             
-            poly_soln, _, wls_and_pixels = self.fit_many_orders(
+            poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
                 comb_lines_angstrom=lfc_allowed_wls, 
                 expected_peak_locs=peak_wavelengths_ang, 
@@ -678,6 +679,7 @@ class WaveCalibration:
         good_peak_idx = np.intersect1d(notnearmask_peaks, good_peak_idx)
 
         if print_update:
+            print('{} peaks fit'.format(len(detected_peak_pixels)))
             print('{} peaks clipped'.format(len(detected_peak_pixels) - len(good_peak_idx)))
 
         if plot_path is not None:
@@ -846,7 +848,7 @@ class WaveCalibration:
                 # )
 
                 # overplot the Gaussian fits
-                for j in np.arange(num_input_lines):
+                for j in np.arange(num_input_lines-missed_lines):
 
                     # if peak in range:
                     if (

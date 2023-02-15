@@ -862,11 +862,11 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         """
 
-        if rv_guess == 0.0:
-            rv_guess, ccf_guess, ccf_dir = RadialVelocityAlg.rv_estimation_from_ccf_order(result_ccf, velocities,
-                                                                                          mask_method)
-        else:
-            ccf_dir = -1
+        # if rv_guess == 0.0:
+        rv_guess, ccf_guess, ccf_dir = RadialVelocityAlg.rv_estimation_from_ccf_order(result_ccf, velocities,
+                                                                                    mask_method)
+        # else:
+        #    ccf_dir = -1
         if ccf_dir == 0 and rv_guess == 0.0:
             return None, rv_guess, None, None
 
