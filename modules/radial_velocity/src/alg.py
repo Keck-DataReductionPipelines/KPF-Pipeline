@@ -375,14 +375,9 @@ class RadialVelocityAlg(RadialVelocityBase):
                             RadialVelocityAlgInit.STAR_RV,
                             RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
-            if self.spectro == 'kpf':
-                if rv_config_bc[RadialVelocityAlgInit.STARNAME].lower() != 'sun' and \
-                        (rv_config_bc[RadialVelocityAlgInit.EPOCH] is None or
-                         rv_config_bc[RadialVelocityAlgInit.STARNAME].lower() == 'unknown'):
-                    #if rv_config_bc[RadialVelocityAlgInit.EPOCH] is not None:
-                    #    import pdb;pdb.set_trace()
-                    return 0.0
-
+            if RadialVelocityAlgInit.is_unknown_target(self.spectro, rv_config_bc[RadialVelocityAlgInit.STARNAME],
+                                                       rv_config_bc[RadialVelocityAlgInit.EPOCH]):
+                return 0.0
             bc = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time)[0]
 
             return bc
