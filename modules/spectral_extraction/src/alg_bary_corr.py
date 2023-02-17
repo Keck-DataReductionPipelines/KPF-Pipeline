@@ -229,9 +229,9 @@ class BaryCorrTableAlg(ModuleAlgBase):
                         bc_config[RadialVelocityAlgInit.STARNAME].lower() != 'sun' and \
                         (bc_config[RadialVelocityAlgInit.EPOCH] is None or
                          bc_config[RadialVelocityAlgInit.STARNAME].lower() == 'unknown'):
-                        # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
-                        #    import pdb;pdb.set_trace()
-                        self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] = 0.0
+                    # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
+                    #    import pdb;pdb.set_trace()
+                    self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] = 0.0
                 else:
                     bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(bc_config,
                                                                 self.bary_corr_table[BaryCorrTableAlg.BC_col3][od])[0]
