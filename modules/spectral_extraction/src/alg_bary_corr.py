@@ -225,10 +225,8 @@ class BaryCorrTableAlg(ModuleAlgBase):
                 self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] \
                     = self.bary_corr_table[BaryCorrTableAlg.BC_col4][self.start_bary_index]
             else:
-                if self.instrument == 'kpf' and \
-                        bc_config[RadialVelocityAlgInit.STARNAME].lower() != 'sun' and \
-                        (bc_config[RadialVelocityAlgInit.EPOCH] is None or
-                         bc_config[RadialVelocityAlgInit.STARNAME].lower() == 'unknown'):
+                if RadialVelocityAlgInit.is_unknown_target(self.instrument, bc_config[RadialVelocityAlgInit.STARNAME],
+                                                           bc_config[RadialVelocityAlgInit.EPOCH]):
                     # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
                     #    import pdb;pdb.set_trace()
                     self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] = 0.0

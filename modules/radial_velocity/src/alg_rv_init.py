@@ -177,7 +177,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             val = (epoch_data - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
         else:
             val = None
-        print("from check_epoch", val)
+        # print("from check_epoch", val)
         return val
 
     def init_star_from_header(self):
@@ -547,15 +547,17 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.EPOCH, self.OBSLAT,
                             self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC, self.STARNAME]
-
         if self.zb_range is None:
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
-            rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
-            bc_path = bc_path or self.bc_corr_path
-            bc_output = bc_output or self.bc_corr_output
-            jd_time = jd_time or self.bc_jd
-            period = period or self.bc_period
-            self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
+            if self.is_unknown_target(rv_config_bc[self.SPEC], rv_config_bc[self.STARNAME], rv_config_bc[self.EPOCH]):
+                self.zb_range = np.array([0.0, 0.0])
+            else:
+                rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
+                bc_path = bc_path or self.bc_corr_path
+                bc_output = bc_output or self.bc_corr_output
+                jd_time = jd_time or self.bc_jd
+                period = period or self.bc_period
+                self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
 
         return self.zb_range
 
@@ -644,3 +646,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.d_print('RadialVelocityAlgInit: result data is ', init_status['data'])
 
         return init_status
+
+    @staticmethod
+    def is_unknown_target(ins, target, epoch):
+        isunknown = ins.lower() == 'kpf' and target.lower() != 'sun' and \
+                    (target.lower() == 'unknown' or epoch is None)
+
+        return isunknown
