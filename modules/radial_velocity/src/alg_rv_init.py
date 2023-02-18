@@ -147,6 +147,39 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         return ret
 
+    @staticmethod
+    def check_epoch(epoch_data, p_header):
+        """check epoch value from the primary header for kpf case
+
+        Args:
+            epoch_data (float): Epoch value.
+            p_header (fits.header.Header): header
+
+        Returns:
+            float: epoch value or None. 
+        """
+
+        targfram_key = 'TARGFRAM'
+        if epoch_data == 0.0:
+            try:
+                targfram = p_header[targfram_key]
+                if targfram.lower() == 'fk4':
+                    epoch_data = 1950.0
+                elif targfram.lower() in ['fk5', 'apparent']:
+                    epoch_data = 2000.0
+                else:
+                    epoch_data = None
+            except KeyError:
+                epoch_data = None
+
+        if epoch_data is not None:
+            year_days = 365.25
+            val = (epoch_data - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+        else:
+            val = None
+        # print("from check_epoch", val)
+        return val
+
     def init_star_from_header(self):
         if self.pheader is None:
             return self.ret_status('fits header is None')
@@ -179,8 +212,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 elif s_key == self.DEC:
                     val = Angle(h_val + "degrees").deg
                 elif s_key == self.EPOCH:
-                    year_days = 365.25
-                    val = (float(h_val) - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+                    val = self.check_epoch(float(h_val), self.pheader)
                 else:
                     val = float(h_val)
                 self.rv_config[s_key] = val
@@ -195,6 +227,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         except KeyError:
             teff = 0
         if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
+            default_mask = 'thar'
+        elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_daily'):
             default_mask = 'thar'
         elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
             default_mask = 'lfc'
@@ -515,15 +549,17 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.EPOCH, self.OBSLAT,
                             self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC, self.STARNAME]
-
         if self.zb_range is None:
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
-            rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
-            bc_path = bc_path or self.bc_corr_path
-            bc_output = bc_output or self.bc_corr_output
-            jd_time = jd_time or self.bc_jd
-            period = period or self.bc_period
-            self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
+            if self.is_unknown_target(rv_config_bc[self.SPEC], rv_config_bc[self.STARNAME], rv_config_bc[self.EPOCH]):
+                self.zb_range = np.array([0.0, 0.0])
+            else:
+                rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
+                bc_path = bc_path or self.bc_corr_path
+                bc_output = bc_output or self.bc_corr_output
+                jd_time = jd_time or self.bc_jd
+                period = period or self.bc_period
+                self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
 
         return self.zb_range
 
@@ -612,3 +648,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.d_print('RadialVelocityAlgInit: result data is ', init_status['data'])
 
         return init_status
+
+    @staticmethod
+    def is_unknown_target(ins, target, epoch):
+        isunknown = ins.lower() == 'kpf' and target.lower() != 'sun' and \
+                    (target.lower() == 'unknown' or epoch is None)
+
+        return isunknown
