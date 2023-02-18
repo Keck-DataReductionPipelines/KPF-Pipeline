@@ -228,6 +228,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             teff = 0
         if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
             default_mask = 'thar'
+        elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_daily'):
+            default_mask = 'thar'
         elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
             default_mask = 'lfc'
         elif teff > 5800:
