@@ -3,9 +3,6 @@
     This module defines class SpectralExtraction which inherits from `KPF0_Primitive` and provides methods to perform
     the event on spectral extraction in the recipe.
 
-    Attributes:
-        SpectralExtraction
-
     Description:
         * Method `__init__`:
 
