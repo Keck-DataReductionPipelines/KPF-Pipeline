@@ -1,10 +1,7 @@
 # Standard dependencies 
 """
-    This module defines class `OrderTrace` which inherits from `KPF0_Primitive` and provides methods to perform the
-    event on order trace calculation in the recipe.
-
-    Attributes:
-        CaHKExtraction
+    This module defines class `CaHKExtraction` which inherits from `KPF0_Primitive` and provides methods to perform the
+    event on CA H&K extraction in the recipe.
 
     Description:
         * Method `__init__`:

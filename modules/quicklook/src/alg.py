@@ -379,10 +379,12 @@ class QuicklookAlg:
 
             disp_SCI = wav_SCI*0+np.gradient(wav_SCI,1)*-1
             disp_SKY = wav_SKY*0+np.gradient(wav_SKY,1)*-1
-            df_SCI_EM_norm        = df_SCI_EM[wav_SCI_str] * EM_gain /disp_SCI
+            disp_SCI_smooth = np.polyval(np.polyfit(wav_SCI,disp_SCI, deg=6),wav_SCI)
+            disp_SKY_smooth = np.polyval(np.polyfit(wav_SKY,disp_SKY, deg=6),wav_SKY)
+            df_SCI_EM_norm        = df_SCI_EM[wav_SCI_str] * EM_gain /disp_SCI_smooth
             df_SCI_EM_norm_smooth = df_SCI_EM_norm
             df_SCI_EM_norm_smooth.apply(gaussian_1d_apply, axis=1)
-            df_SKY_EM_norm        = df_SKY_EM[wav_SCI_str] * EM_gain /disp_SKY
+            df_SKY_EM_norm        = df_SKY_EM[wav_SCI_str] * EM_gain /disp_SKY_smooth
             df_SKY_EM_norm_smooth = df_SKY_EM_norm
             df_SKY_EM_norm_smooth.apply(gaussian_1d_apply, axis=1)
 
