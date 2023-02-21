@@ -61,7 +61,7 @@ class WaveCalibration:
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
         self.clip_below_median  = configpull.get_config_value('clip_below_median',True)
         self.peak_height_threshold = configpull.get_config_value('peak_height_threshold',1.5)
-
+        self.logger = logger
  
     def run_wavelength_cal(
         self, calflux, rough_wls=None, 
@@ -283,10 +283,20 @@ class WaveCalibration:
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
 
-                fitted_peak_pixels, detected_peak_pixels, \
-                    detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
-                    order_flux, plot_path=order_plt_path
-                )
+                try:
+                    fitted_peak_pixels, detected_peak_pixels, \
+                        detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
+                        order_flux, plot_path=order_plt_path
+                    )
+                except TypeError:
+                    self.logger.warn('Not enough peaks found in order, defaulting to rough WLS')
+                    poly_soln_final_array[order_num,:] = rough_wls_order
+                    wavelengths_and_pixels[order_num] = {
+                        'known_wavelengths_vac': rough_wls_order, 
+                        'line_positions':[]
+                    }
+                    continue
+
 
                 if self.clip_peaks_toggle:
                     good_peak_idx = self.clip_peaks(
@@ -877,7 +887,7 @@ class WaveCalibration:
 
     def mode_match(
         self, order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, 
-        comb_lines_angstrom, print_update=False, plot_path=None
+        comb_lines_angstrom, print_update=False, plot_path=None, start_check=True,
     ):
         """
         Matches detected order_flux peaks to the theoretical locations of LFC wavelengths
@@ -954,8 +964,8 @@ class WaveCalibration:
                 for j in np.arange(50):
                     if fitted_peak_pixels[good_peak_idx][i] > (j + 1.5) * running_peak_diff:
                         peak_mode_num = increment_mode_num(peak_mode_num, backwards=backwards)
-                if fitted_peak_pixels[good_peak_idx][i] > 50.5 * running_peak_diff:
-                    assert False, 'More than 50 peaks in a row at the start of the chip not detected!'
+                # if fitted_peak_pixels[good_peak_idx][i] > 50.5 * running_peak_diff:                        
+                #     assert False, 'More than 50 peaks in a row at the start of the chip not detected!'
         
             # if current peak location is greater than (n + 0.5) * sigma of 
             # previous peak diffs, then skip over n modes

@@ -173,7 +173,7 @@ class WaveCalibrate(KPF1_Primitive):
                     peak_wavelengths_ang = None
 
                     lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
-                                        
+
                     wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux, peak_wavelengths_ang=peak_wavelengths_ang,
                         rough_wls=self.rough_wls, 
