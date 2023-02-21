@@ -18,6 +18,7 @@ from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
+from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -31,6 +32,7 @@ do_rv_reweighting = config.ARGUMENT.do_rv_reweighting
 do_hk = config.ARGUMENT.do_hk
 do_qlp = config.ARGUMENT.do_qlp
 do_bk_subtraction = config.ARGUMENT.do_bk_subtraction
+do_bc = config.ARGUMENT.do_bc
 
 # data type of data model, 'KPF' for kpf data.
 data_type = config.ARGUMENT.data_type
@@ -185,13 +187,14 @@ wave_to_ext = config.ARGUMENT.wave_to_ext
 #    output_clip: only needed when rect_method != norect: directory containing files with polygon clipping information
 #                  for faster vertical or normal rectification => /data/L1/clip_np/vertical(or normal)/
 #    orders_per_ccd: total order for each ccd.
+#    s_bary_idx: start index in bary corr table for each ccd
 
 if rect_method != 'norect':
 	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
 else:
 	output_clip = None
 orders_per_ccd = config.ARGUMENT.orders_per_ccd
-
+s_bary_idx = [0, orders_per_ccd[0]]
 
 ## for radial velocity and rv reweighting input and output
 #    input_lev1_pattern: if watch mode => a single L1 file, /data/L1.<a single watched L1 fits>
@@ -345,7 +348,6 @@ if do_order_trace:
 #    for ca_hk:
 #      hk_dark_data: KPF0 for dark data
 #      hk_bias_data: KPF0 for bias data
-#      b_level1_hk: a boolean to indicate if ca_hk extraction for each L0 is successful.
 #  primitives:
 #    SpectralExtraction: spectral extraction
 #    ExtCopy: extension copy from the extension of one data model instance to the extension of another
@@ -355,7 +357,7 @@ if do_order_trace:
 
 lev1_list = []
 
-if do_spectral_extraction or do_hk:
+if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
 
 	# prepare trace files and rectified L0 flat data for spectral extraction
@@ -407,10 +409,8 @@ if do_spectral_extraction or do_hk:
 			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
 				b_level1_sp = True
 
-			# do ca_hk extraction if do_hk
-			b_level1_hk = do_hk
 
-			if (b_level1_sp or b_level1_hk) and do_qlp:
+			if do_qlp and (b_level1_sp or do_hk or do_bc):
 				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 			# loop through ccd to do spectral extraction
@@ -456,8 +456,17 @@ if do_spectral_extraction or do_hk:
 				if b_level1_sp and op_data != None:
 					result = to_fits(op_data, output_lev1_file)
 
+			if do_bc and exists(output_lev1_file):
+				# add bary correction result to existing L1 file
+				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				t_order = orders_per_ccd[0] + orders_per_ccd[1]
+				for idx in ccd_idx:
+					output_data = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx],
+								start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
+				result = to_fits(output_data, output_lev1_file)
+
 			# do ca_hk extraction
-			if b_level1_hk:
+			if do_hk:
 				# add ca_hk extraction result to existing L1 file or create a new L1 file if L1 file doesn't exist
 				if not exists(output_lev1_file):
 					output_data = None
@@ -467,12 +476,11 @@ if do_spectral_extraction or do_hk:
 				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
 						output_wave_exts=hk_wave_exts,
 						dark=hk_dark_data, wave_files=hk_wavelength_tables)
-				b_level1_hk = b_level1_hk and output_data != None
 
-				if b_level1_hk and output_data != None:
+				if output_data != None:
 					result = to_fits(output_data, output_lev1_file)
 
-			if b_level1_sp or b_level1_hk:
+			if exists(output_lev1_file):
 				lev1_list = lev1_list + [output_lev1_file]
 				if do_qlp:
 					Quicklook(lev0_data, output_qlp, end_of_night_summary)
@@ -496,11 +504,11 @@ if do_spectral_extraction or do_hk:
 #    RadialVelocityInit: do rv init on each L1 input.
 #    RadialVelocity: do radial velocity per ccd per L1 data.
 #
-
+rv_test = do_rv or do_rv_reweighting
 if do_rv or do_rv_reweighting:
 	rv_star_dir = test_data_dir
 
-    # L1 area to be processed
+	# L1 area to be processed
 	area_def = [[0, orders_per_ccd[0]-1, 500, -500], [0, orders_per_ccd[1]-1, 500, -500]]
 
 	if not lev1_list:
@@ -530,7 +538,7 @@ if do_rv or do_rv_reweighting:
 				rv_data = RadialVelocity(lev1_data, rv_init, rv_data,
 						data_ext_rv[idx], ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,
 						area_def=area_def[idx], start_seg=area_def[idx][0], end_seg=area_def[idx][1],
-						rv_set=idx, ccf_engine='c')
+						rv_set=idx, ccf_engine='c', start_bary_index=s_bary_idx[idx])
 			result = to_fits(rv_data, output_lev2_file)
 
 		if do_qlp:
