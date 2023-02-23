@@ -1,0 +1,59 @@
+from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
+
+
+masters_dir = config.ARGUMENT.masters_dir
+output_dir = config.ARGUMENT.output_dir + '/'
+master_wls_file = config.ARGUMENT.master_wls_file
+quicklook = config.ARGUMENT.quicklook
+f0 = config.ARGUMENT.f0_key
+fr = config.ARGUMENT.frep_key
+
+date_dir = context.date_dir
+
+
+for cal_type in ['ThAr', 'LFC']:
+    if cal_type == 'ThAr':
+        search_string = config.ARGUMENT.thar_search_string
+        full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
+    elif cal_type == 'LFC':
+        search_string = config.ARGUMENT.lfc_search_string
+        if exists(output_filename):
+            full_master_wls = kpf1_from_fits(output_filename, data_type='KPF')
+        else:
+            full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
+    
+    file_list = find_files(masters_dir + date_dir + '/*' + search_string + '*')
+
+    for L1_file in file_list:
+
+        l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
+        
+        for ext in ['RED_CAL_WAVE', 'GREEN_CAL_WAVE']:
+
+            master_wls = full_master_wls[ext]
+
+            if ext == 'RED_CAL_WAVE':
+                linelist = config.ARGUMENT.red_linelist
+                output_exts = config.ARGUMENT.red_output_ext
+                orderlet_names = config.ARGUMENT.red_cal_orderlet_name
+                min_order = config.ARGUMENT.red_min_order
+                max_order = config.ARGUMENT.red_max_order
+                
+            if ext == 'GREEN_CAL_WAVE':
+                linelist = config.ARGUMENT.green_linelist
+                output_exts = config.ARGUMENT.green_output_ext
+                orderlet_names = config.ARGUMENT.green_cal_orderlet_name
+                min_order = config.ARGUMENT.green_min_order
+                max_order = config.ARGUMENT.green_max_order
+            
+            wave_soln = WaveCalibrate(
+                l1_obj, cal_type, orderlet_names, True, quicklook, min_order, max_order,
+                'KPF', output_exts,
+                rough_wls = master_wls, 
+                f0_key=f0, frep_key=fr,
+                output_dir = output_dir,
+                linelist_path=linelist,
+            )
+
+        output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + search_string + '.fits'
+        result = to_fits(wave_soln, output_filename)
