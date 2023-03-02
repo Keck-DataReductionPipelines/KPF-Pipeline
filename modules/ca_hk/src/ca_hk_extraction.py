@@ -1,10 +1,7 @@
 # Standard dependencies 
 """
-    This module defines class `OrderTrace` which inherits from `KPF0_Primitive` and provides methods to perform the
-    event on order trace calculation in the recipe.
-
-    Attributes:
-        CaHKExtraction
+    This module defines class `CaHKExtraction` which inherits from `KPF0_Primitive` and provides methods to perform the
+    event on CA H&K extraction in the recipe.
 
     Description:
         * Method `__init__`:
@@ -274,3 +271,5 @@ class CaHKExtraction(KPF0_Primitive):
         wave_table = self.alg.load_wavelength_table(wave_file, fiber)
         if wave_table is not None:
             out_lev1[wave_ext] = wave_table
+            if self.logger:
+                self.logger.warning("CaHkExtraction: write wls to "+wave_ext)
