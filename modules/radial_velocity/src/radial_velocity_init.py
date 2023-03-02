@@ -3,6 +3,10 @@
     This module defines class `RadialVelocityInit` which inherits from `KPF_Primitive` and provides methods
     to perform the event on radial velocity initial setting in the recipe.
 
+    Attributes:
+        RadialVelocityInit
+
+
     Description:
         * Method `__init__`:
 
@@ -51,7 +55,7 @@
             rv_data = RadialVelocity(lev1_data, rv_init, order_name=order_name)
             :
 
-"""
+    """
 
 import configparser
 

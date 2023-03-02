@@ -80,6 +80,6 @@ class PickInputsMastersDRP(KPF0_Primitive):
         # Filter arclamp files with IMTYPE=‘arclamp’. 
 
         fh4 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.arclamp_imtype_values_str,self.logger)
-        all_arclamp_files,all_arclamp_objects = fh4.get_good_arclamps()
+        all_arclamp_files = fh4.match_headers_string_lower()
 
-        return Arguments(all_bias_files,all_dark_files,all_flat_files,all_arclamp_files,all_arclamp_objects)
+        return Arguments(all_bias_files,all_dark_files,all_flat_files,all_arclamp_files)
