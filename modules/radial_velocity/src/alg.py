@@ -6,6 +6,7 @@ import warnings
 import datetime
 import pandas as pd
 import os
+from astropy.time import Time
 
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
@@ -16,6 +17,8 @@ LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
 SEC_TO_JD = 1.0 / 86400.0
 FIT_G = fitting.LevMarLSQFitter()
+
+from barycorrpy import get_BC_vel, utc_tdb
 
 class RadialVelocityAlg(RadialVelocityBase):
     """Radial velocity calculation using cross correlation method.
@@ -37,8 +40,6 @@ class RadialVelocityAlg(RadialVelocityBase):
             and end wavelength. Defaults to None.
         order_limits_mask (pandas.DataFrame): Table containing order index and the left and right limits of the
             order. Defaults to None.
-        bary_corr_table (pd.ndarray): table from L1 BARY_CORR table. Defaults to None.
-        start_bary_index (int): starting index in BARY_CORR table.
 
     Attributes:
         spectrum_data (numpy.ndarray): From parameter `spectrum_data`.
@@ -61,8 +62,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         reweighting_ccf_method (str): Method of reweighting ccf orders. Method of `ratio` or `ccf` is to scale ccf
             of an order based on a number from a ratio table or the mean of the ratio of a template ccf and current
             ccf of the same order.
-        bary_corr_table (pd.ndarray): table from L1 BARY_CORR table.
-        start_bary_index (int): starting index in BARY_CORR table.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -88,8 +87,7 @@ class RadialVelocityAlg(RadialVelocityBase):
     """
 
     def __init__(self, spectrum_data, header, init_rv, wave_cal=None, config=None, logger=None, ccf_engine=None,
-                 reweighting_method=None, segment_limits=None, order_limits=None, area_limits=None,
-                 bary_corr_table=None, start_bary_index=0):
+                 reweighting_method=None, segment_limits=None, order_limits=None, area_limits=None):
 
         if spectrum_data is not None and not isinstance(spectrum_data, np.ndarray):
             raise TypeError('results of optimal extraction type error')
@@ -122,6 +120,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.ccf_code = ccf_engine if (ccf_engine and ccf_engine in ['c', 'python']) else \
             init_data[RadialVelocityAlgInit.CCF_CODE]
 
+        self.obs_jd = None
+
         if self.spectrum_data is not None and self.spectrum_data.size != 0:
             ny, nx = np.shape(self.spectrum_data)
         else:
@@ -140,10 +140,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.segment_limits_table = None
         self.total_segments = None
         self.total_rv_segment = None
-        self.zb = None
-        self.obs_jd = None
-        self.bary_corr_table = bary_corr_table
-        self.start_bary_index = start_bary_index
+        self.zb = 0.0
 
     def reset_spectrum(self, spec_data, header, wave_cal):
         if spec_data is not None and not isinstance(spec_data, np.ndarray):
@@ -238,11 +235,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         idx = np.where(self.segment_limits_table[:, self.SEGMENT_IDX] == seg_idx)[0][0]
         return self.segment_limits_table[idx]
 
-    def get_total_segments(self):
-        if self.total_segments is None:
-            self.get_segment_limits()
-        return self.total_segments
-
     def set_order_range(self, lower_order=None, upper_order=None):
         """Set the order range for radial velocity calculation.
 
@@ -284,36 +276,24 @@ class RadialVelocityAlg(RadialVelocityBase):
         if self.end_x_pos < self.start_x_pos:
             self.end_x_pos, self.start_x_pos = self.start_x_pos, self.end_x_pos
 
-    def get_obs_time(self, default=None, seg=0):
+    def get_obs_time(self, default=None):
         """Get Observation time in Julian Date format.
 
         Args:
             default (float, optional): Default observation time. Defaults to None.
-            seg (int): segment index. Defaults to 0. Get exposure time from header if seg is -1.
 
         Returns:
             float: Observation time in Julian Date format.
 
         """
-        if self.obs_jd is None:
-
-            self.obs_jd = np.zeros(self.get_total_segments(), dtype=float)
-
-            if self.spectro == 'neid':
-                self.obs_jd[:] = self.get_obs_time_neid(default=default)
-            elif self.spectro == 'harps':
-                self.obs_jd[:]= self.get_obs_time_harps(default=default)
-            elif self.spectro == 'kpf':
-                for s in range(self.get_total_segments()):
-                    self.obs_jd[s] = self.get_obs_time_kpf(default=default, seg=s)
-
-        if seg < 0:
-            if self.spectro == 'kpf':
-                return self.get_obs_time_kpf(seg=-1)
-            else:
-                seg = 0
-
-        return self.obs_jd[seg]
+        if self.spectro == 'neid':
+            return self.get_obs_time_neid(default=default)
+        elif self.spectro == 'harps':
+            return self.get_obs_time_harps(default=default)
+        elif self.spectro == 'kpf':
+            return self.get_obs_time_kpf(default=default)
+        else:
+            return None
 
     def get_obs_time_neid(self, default=None):
         if 'SSBJD100' in self.header:  # jd format
@@ -331,85 +311,62 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         return obs_time
 
-    # get obs time for kpf on specific segment.
-    def get_obs_time_kpf(self, default=None, seg=0):
-        if seg >= 0:
-            seg_limits = self.get_segment_limits(seg_idx=seg)
-            ord_idx = int(seg_limits[self.SEGMENT_ORD])
-        else:
-            ord_idx = 0
-
-        if seg >= 0 and self.bary_corr_table is not None and not self.bary_corr_table.empty and \
-                np.shape(self.bary_corr_table.values)[0] > ord_idx:
-            obs_time = np.array(self.bary_corr_table['PHOTON_BJD'])[ord_idx+self.start_bary_index]
-        elif 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
-            obs_time = self.header['MJD-OBS'] + 2400000.5
+    def get_obs_time_kpf(self, default=2459351.0):
+        if 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
+            obs_time = self.header['MJD-OBS'] + 2400000.5# + self.header['EXPTIME'] * SEC_TO_JD / 2
         else:
             obs_time = default
 
         return obs_time
 
-    # get redshift for kpf on specific segment
-    def get_redshift_kpf(self, seg=0, default=None):
-        seg_limits = self.get_segment_limits(seg_idx=seg)
-        ord_idx = int(seg_limits[self.SEGMENT_ORD])
-        if self.init_data['mask_type'] in ['lfc', 'thar'] or \
-                ('IMTYPE' in self.header and self.header['IMTYPE'].lower() != 'object'):
-            bc = 0.0
-        elif self.bary_corr_table is not None and np.shape(self.bary_corr_table.values)[0] > ord_idx:
-            bc = self.bary_corr_table['BARYVEL'][ord_idx + self.start_bary_index]
-        else:
-            bc = self.get_redshift_gen(default=default, seg=seg)
-        return bc
-
-    def get_redshift_gen(self, default=None, seg=0):
-
-        obs_time = self.get_obs_time(default=default, seg=seg)
-        if obs_time is None:
-            return default
-        else:
-            rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
-                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC, RadialVelocityAlgInit.EPOCH,
-                            RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
-                            RadialVelocityAlgInit.OBSLON, RadialVelocityAlgInit.OBSALT,
-                            RadialVelocityAlgInit.STAR_RV,
-                            RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
-            rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
-            if RadialVelocityAlgInit.is_unknown_target(self.spectro, rv_config_bc[RadialVelocityAlgInit.STARNAME],
-                                                       rv_config_bc[RadialVelocityAlgInit.EPOCH]):
-                return 0.0
-            bc = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time)[0]
-
-            return bc
-
-    def get_redshift(self, default=None, seg=0):
+    def get_redshift(self, default=None):
         """Get redshift value.
 
         Args:
             default (float, optional): Default redshift value. Defaults to None.
-            seg (int, optional): redshift value for specific segment in case the redshift varies per segment.
 
         Returns:
             float: redshift at observation time.
 
         """
+        if self.spectro == 'neid' and 'SSBZ100' in self.header:
+            """
+            # recompute zb and compare the value in header
+            rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
+                                RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                                RadialVelocityAlgInit.EPOCH,
+                                RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT,
+                                RadialVelocityAlgInit.OBSLON,
+                                RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV, 
+                                RadialVelocityAlgInit.SPEC]
+            rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
+            obs_time_jd = self.get_obs_time()
+            bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
+            tmp_zb_from_corr = bc_corr[0]
 
-        # zb is computed for each segment for kpf
+            print("from barycorrpy: ", tmp_zb_from_corr, " from header:", self.header['SSBZ100'])
+            """
+            return float(self.header['SSBZ100'])
 
-        if self.zb is None:
-            self.zb = np.zeros(self.get_total_segments(), dtype=float)
+        obs_time_jd = self.get_obs_time()
+        if obs_time_jd is None:
+            return default
+        # if self.spectro == 'kpf':
+        #    return 0.0
 
-            if self.spectro == 'neid' and 'SSBZ100' in self.header:
-                bc = float(self.header['SSBZ100'])
-                self.zb[:] = bc
-            elif self.spectro == 'kpf':
-                for s in range(self.get_total_segments()):
-                    self.zb[s] = self.get_redshift_kpf(seg=s, default=default)
-            else:
-                bc = self.get_redshift_gen(default, seg=seg)
-                self.zb[:] = bc
+        rv_config_bc_key = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
+                            RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC, RadialVelocityAlgInit.EPOCH,
+                            RadialVelocityAlgInit.PARALLAX, RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON,
+                            RadialVelocityAlgInit.OBSALT, RadialVelocityAlgInit.STAR_RV,
+                            RadialVelocityAlgInit.SPEC, RadialVelocityAlgInit.STARNAME]
+        rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
 
-        return self.zb[seg]
+        if self.init_data['mask_type'] in ['lfc', 'thar']:
+            return 0.0
+
+        bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(rv_config_bc, obs_time_jd)
+
+        return bc_corr[0]
 
     def wavelength_calibration(self, spectrum_x):
         """Wavelength calibration extraction.
@@ -469,7 +426,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         there is. 
 
         Args:
-            start_seg (int, optional): First segment of the data to be processed. Defaults to None.
+            start_seg (int, optional): First segment of the data to be processed. Defaults to Noe.
                                 The number means the order relative to the first segment if it is greater than or equal
                                 to 0, otherwise it means the order relative to the last one.
             end_seg (int, optional): Last segment of the data to be processed. Defaults to None.
@@ -490,13 +447,16 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         """
 
-        obs_jd = self.get_obs_time()
-        if obs_jd is None or not obs_jd:
+        self.obs_jd = self.get_obs_time()
+        if not self.obs_jd:
             return None, 'observation jd time error'
 
         zb = self.get_redshift()
+
         if zb is None:
             return None, 'redshift value error'
+        else:
+            self.zb = zb     # barycentric correction in unit of
 
         self.set_x_range()
         self.set_order_range()
@@ -510,7 +470,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         spectrum_x = np.arange(nx)[s_x:e_x]
 
         new_spectrum = spectrum[s_order:e_order, s_x:e_x]
-        total_seg = self.get_total_segments()
+        total_seg = self.total_segments
 
         if start_seg is not None:
             s_seg_idx = start_seg if start_seg >= 0 else (total_seg-1+start_seg)
@@ -534,6 +494,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                           seg_limits[self.SEGMENT_W1], seg_limits[self.SEGMENT_W2], int(seg_limits[self.SEGMENT_ORD])],
                          ' ')
             wavecal = wavecal_all_orders[ord_idx]
+
             left_x = int(seg_limits[self.SEGMENT_X1])
             right_x = int(seg_limits[self.SEGMENT_X2])
 
@@ -544,9 +505,8 @@ class RadialVelocityAlg(RadialVelocityBase):
                 else:
                     ordered_spec = self.fix_nan_spectrum(new_spectrum[ord_idx][left_x:right_x])
                     ordered_wavecal = wavecal[left_x:right_x]
-                zb = self.get_redshift(seg=seg_idx)
                 result_ccf[seg_idx, :] = \
-                        self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
+                    self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
             else:
                 self.d_print("RadialVelocityAlg: all wavelength zero")
         result_ccf[~np.isfinite(result_ccf)] = 0.
@@ -616,7 +576,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         Args:
             wave_cal (numpy.ndarray): Wavelength calibration associated with `spectrum`.
             spectrum (numpy.ndarray): Reduced 1D spectrum data of one order from optimal extraction computation.
-            zb (float): BC velocity (m/sec) at the observation time.
+            zb (float): Redshift at the observation time.
 
         Returns:
             numpy.ndarray: Cross correlation result of one order at all velocity steps. Please refer to `Returns` of
@@ -844,7 +804,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         return ccf
 
     def get_rv_guess(self):
-        # rv guess from the peak or valley
         return self.get_rv_estimation(self.header, self.init_data)
 
     @staticmethod
@@ -878,7 +837,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         return vel_order, ccf_order, ccf_dir
 
     @staticmethod
-    def fit_ccf(result_ccf, rv_guess, velocities, mask_method=None, velocity_cut=1000.0, rv_guess_on_ccf=False):
+    def fit_ccf(result_ccf, rv_guess, velocities, mask_method=None, velocity_cut=1000.0):
         """Gaussian fitting to the values of cross correlation vs. velocity steps.
 
         Find the radial velocity from the summation of cross correlation values over orders by the use of
@@ -902,12 +861,12 @@ class RadialVelocityAlg(RadialVelocityBase):
                   cross correlation summation values along *g_x*.
 
         """
-        if rv_guess_on_ccf:  # kpf get rv_guess from the ccf values
+
+        if rv_guess == 0.0:
             rv_guess, ccf_guess, ccf_dir = RadialVelocityAlg.rv_estimation_from_ccf_order(result_ccf, velocities,
-                        mask_method)
+                                                                                          mask_method)
         else:
             ccf_dir = -1
-
         if ccf_dir == 0 and rv_guess == 0.0:
             return None, rv_guess, None, None
 
@@ -942,7 +901,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         _, rv_result, _, _ = self.fit_ccf(
             ccf[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
-            self.init_data[RadialVelocityAlgInit.MASK_TYPE], rv_guess_on_ccf=(self.spectro == 'kpf'))
+            self.init_data[RadialVelocityAlgInit.MASK_TYPE])
 
         def f_decimal(num):
             return float("{:.10f}".format(num))
@@ -961,8 +920,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                         else:
                             results.attrs[key] = ref_head[key]
         else:
-            results.attrs['CCFJDSUM'] = self.get_obs_time(seg=-1)   # exposure time from the header
-            results.attrs['CCFJDSEG'] = self.obs_jd    # an array for all segments
+            results.attrs['CCFJDSUM'] = self.get_obs_time()
             results.attrs['CCF-RVC'] = (f_decimal(rv_result), 'BaryC RV (km/s)')
             results.attrs['CCFSTART'] = self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP][0]
             results.attrs['CCFSTEP'] = self.rv_config[RadialVelocityAlgInit.STEP]
@@ -970,7 +928,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['STARTORD'] = self.start_order
             results.attrs['ENDORDER'] = self.end_order
             results.attrs['TOTALORD'] = self.end_order - self.start_order+1
-            results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec, an array for all segments
+            results.attrs['ZB'] = self.zb    # remove later
+            results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec
             results.attrs['MASKTYPE'] = self.init_data[RadialVelocityAlgInit.MASK_TYPE]
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
 
