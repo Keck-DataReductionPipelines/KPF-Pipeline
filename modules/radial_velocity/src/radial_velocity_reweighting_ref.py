@@ -3,6 +3,9 @@
     This module defines class `RadialVelocityReweightingRef` which inherits from `KPF_Primitive` and provides
     methods to perform the event on radial velocity reweighting ratio table creation in the recipe.
 
+    Attributes:
+        RadialVelocityReweightingRef
+
     Description:
         * Method `__init__`:
 

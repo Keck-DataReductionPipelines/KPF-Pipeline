@@ -1065,7 +1065,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.slice)
             sliceName = self._load.pop()
             self._load.append(value[sliceName])
-        elif isinstance(node.ctx, _ast.Store):
+        elif isinstance(node.ctx, _astStore):
             self.pipeline.logger.error(
                 f"Assigning to subscript {node.sliceName} on recipe line {node.lineno} not supported")
             raise RecipeError(

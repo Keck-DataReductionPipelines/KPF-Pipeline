@@ -3,6 +3,9 @@
     This module defines class BarycentricCorrection which inherits from `KPF_Primitive` and provides methods to perform
     the event on barycentric correction in the recipe.
 
+    Attributes:
+        BarycentricCorrection
+
     Description:
         * Method `__init__`:
 
