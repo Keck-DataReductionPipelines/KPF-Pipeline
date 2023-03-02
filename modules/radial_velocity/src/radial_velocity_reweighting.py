@@ -3,6 +3,9 @@
     This module defines class `RadialVelocityReweighting` which inherits from `KPF1_Primitive` and provides
     methods to perform the event on radial velocity CCF orderes reweighting in the recipe.
 
+    Attributes:
+        RadialVelocityReweighting
+
     Description:
         * Method `__init__`:
 
@@ -118,7 +121,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
             lev2_obj = action.args[0]
 
         self.lev2_obj = lev2_obj
-        self.instrument = lev2_obj.header['PRIMARY']['INSTRUME'].lower() if 'INSTRUME' in lev2_obj.header['PRIMARY'] else None
         self.ccf_data = None
         if self.ccf_ext and hasattr(lev2_obj, self.ccf_ext):
             self.ccf_data = lev2_obj[self.ccf_ext]
@@ -213,7 +215,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
             final_sum_ccf += rw_ccf[-1]
             _, ccd_rv, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[-1],
                                                         RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                                        velocities, mask_type, rv_guess_on_ccf=(self.instrument=='kpf'))
+                                                        velocities, mask_type)
 
             # update rv on each orderlet in rv extension
             if is_rv_ext:
@@ -222,7 +224,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         # update final rv on all orderlets
         _, ccd, _, _ = RadialVelocityAlg.fit_ccf(final_sum_ccf,
                                     RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                    velocities, mask_type, rv_guess_on_ccf=(self.instrument=='kpf'))
+                                    velocities, mask_type)
         rv_ext_header['ccd'+ str(self.rv_ext_idx+1) + 'rv'] = ccd        # header: ccdnrv
 
         if is_rv_ext:
@@ -275,15 +277,14 @@ class RadialVelocityReweighting(KPF2_Primitive):
 
                 _, orderlet_rv, _, _ = RadialVelocityAlg.fit_ccf(ccf_orderlet,
                                                                 RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                                                velocities, mask_type,
-                                                                 rv_guess_on_ccf=(self.instrument=='kpf'))
+                                                                velocities, mask_type)
                 c_idx = col_idx_rv_table(rv_orderlet_colnames[o], o)
                 rv_ext_values[s+rv_start_idx, c_idx] = orderlet_rv
 
             # update orderletn column at segment s
             _, seg_rv, _, _ = RadialVelocityAlg.fit_ccf(sum_segment,
                                             RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                            velocities, mask_type, rv_guess_on_ccf=(self.instrument=='kpf'))
+                                            velocities, mask_type)
             rv_ext_values[s+rv_start_idx, col_idx_rv_table(self.RV_COL_RV)] = seg_rv     # update rv column\
 
         new_rv_table = {}
