@@ -29,4 +29,4 @@ grant EXECUTE on FUNCTION getCalFile (
     level_          smallint,
     caltype_        character varying(32),
     object_         character varying(32)
-) to kpfporole;
+) to kpfporole, kpfreadrole;
