@@ -1,0 +1,7 @@
+from database.modules.query_db_nearest_master_files.src. query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
+
+data_type = config.ARGUMENT.data_type
+date_dir = context.date_dir
+
+nearest_master_files_list = QueryDBNearestMasterFilesFramework(data_type,
+                                                               date_dir)
