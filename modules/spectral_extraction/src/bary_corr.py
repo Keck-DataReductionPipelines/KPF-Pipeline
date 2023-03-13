@@ -102,8 +102,8 @@ class BaryCorrTable(KPF0_Primitive):
 
         args_keys = [item for item in action.args.iter_kw() if item != "name"]
         # input argument
-        self.lev0_obj = action.args[0]
-        self.lev1_obj = action.args[1]
+        self.lev0_obj = action.args[0]      # no process if lev0_obj is None (need primary header)
+        self.lev1_obj = action.args[1]      # no process if lev1_obj is None
         self.total_orders = action.args[2]
         self.ccd_orders = action.args[3]
         self.ext_bary = self.get_args_value('ext_bary_table', action.args, args_keys)
@@ -111,7 +111,8 @@ class BaryCorrTable(KPF0_Primitive):
         self.start_index = self.get_args_value('start_bary_index', action.args, args_keys)
         self.is_overwrite = self.get_args_value('overwrite', action.args, args_keys)
 
-        df_em = self.lev0_obj[ext_expmeter_sci] if self.lev0_obj is not None else None    # expmeter_sci from lel 0
+        df_em = self.lev0_obj[ext_expmeter_sci] \
+            if self.lev0_obj is not None and hasattr(self.lev0_obj, ext_expmeter_sci) else None  # expmeter_sci from lev0
         self.df_bc = self.lev1_obj[self.ext_bary] \
             if self.lev1_obj is not None and hasattr(self.lev1_obj, self.ext_bary) else None   # bary_corr from lev 1
 
@@ -130,7 +131,7 @@ class BaryCorrTable(KPF0_Primitive):
         try:
             config_path = context.config_path['spectral_extraction']
 
-        except:
+        except Exception as e:
             config_path = DEFAULT_CFG_PATH
 
         self.config.read(config_path)
@@ -140,19 +141,24 @@ class BaryCorrTable(KPF0_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        self.alg_table = BaryCorrTableAlg(df_em, self.df_bc, p_header, self.wls_data,
+        try:
+            if self.lev1_obj is None:
+                self.alg_table = None
+            else:
+                self.alg_table = BaryCorrTableAlg(df_em, self.df_bc, p_header, self.wls_data,
                                           self.total_orders, self.ccd_orders,
                                           start_bary_index=self.start_index,
                                           config=self.config,
                                           logger=self.logger)
+        except Exception as e:
+            self.alg_table = None
 
     def _pre_condition(self) -> bool:
         """
         Check for some necessary pre conditions
         """
         # input argument must be KPF0
-        success = isinstance(self.lev0_obj, KPF0) and isinstance(self.lev1_obj, KPF1) and \
-                  self.total_orders > 0 and (self.ccd_orders > 0 or self.wls_data is not None)
+        success = isinstance(self.lev0_obj, KPF0) and isinstance(self.lev1_obj, KPF1)
 
         return success
 
@@ -175,6 +181,11 @@ class BaryCorrTable(KPF0_Primitive):
 
         if self.logger:
             self.logger.info("BaryCorrTable: starting bary correction table computation...")
+
+        if self.alg_table is None:
+            if self.logger:
+                self.logger.info("BaryCorrTable: table is not built due to insufficient data about table size and from primary header")
+            return Arguments(self.lev1_obj)
 
         bc_table = self.alg_table.build_bary_corr_table()
 
