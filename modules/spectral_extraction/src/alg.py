@@ -155,11 +155,11 @@ class SpectralExtractionAlg(ModuleAlgBase):
             raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
         if spectrum_data is not None and not isinstance(spectrum_data, np.ndarray):
             raise TypeError('flux data type error, cannot construct object from SpectralExtractionAlg')
-        if spectrum_data is None and extraction_method in [self.SUM, self.OPTIMAL]:
+        if (spectrum_data is None or not spectrum_data.any()) and extraction_method in [self.SUM, self.OPTIMAL]:
             raise TypeError("no flux data for spectral extraction, cannot construct object from SpectralExtractAlg")
         if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
             raise TypeError('flux data type error, cannot construct object from SpectralExtractionAlg')
-        if spectrum_header is not None and not isinstance(spectrum_header, fits.header.Header):
+        if not isinstance(spectrum_header, fits.header.Header) and extraction_method in [self.SUM, self.OPTIMAL] :
             raise TypeError('flux header type error, cannot construct object from SpectralExtractionAlg')
         if not isinstance(flat_header, fits.header.Header):
             raise TypeError('flat header type error, cannot construct object from SpectralExtractionAlg')
@@ -1908,6 +1908,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         out_data = np.zeros((out_data_height, out_data_width))
         order_rectification_result = list()
         # produce output data
+
         for idx_out in range(order_set.size):
             c_order = order_set[idx_out]
             to_pos = idx_out+start_row_at if self.extraction_method != self.NOEXTRACT else \
@@ -1917,6 +1918,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
             if self.extraction_method == self.NOEXTRACT:
                 order_rectification_result.append({"order": c_order, "rectification": order_result[c_order]})
             t_start = self.time_check(t_start, '**** time ['+str(c_order)+']: ')
+
         if self.extraction_method == self.NOEXTRACT:
             data_df = self.write_rectified_data_to_dataframe(out_data, order_rectification_result)
         else:
