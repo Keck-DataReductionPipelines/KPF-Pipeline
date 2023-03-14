@@ -163,6 +163,11 @@ class ImageProcessingAlg():
             KPF0: KPF0 instance of raw image with background subtraction.
         """
         for ffi in self.ffi_exts:
+            # no rawimage of order_mask for ffi extension
+            if not hasattr(self.rawimage, ffi) or not self.rawimage[ffi].any() \
+                    or not hasattr(order_masks, ffi) or not order_masks[ffi].any():
+                continue
+
             raw = self.rawimage[ffi]
             clip = SigmaClip(sigma=3.)
             est = MedianBackground()
