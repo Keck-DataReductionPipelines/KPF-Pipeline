@@ -63,15 +63,17 @@ class BaryCorrTableAlg(ModuleAlgBase):
 
     def __init__(self, df_em, df_bc, pheader, wls_data, total_order, ccd_order,
                  start_bary_index=0, config=None, logger=None):
-        if wls_data is None:
-            raise TypeError('wls extension error, cannot construct object from BaryCorrTableAlg')
+        if wls_data is not None and not isinstance(wls_data, np.ndarray):
+            raise TypeError('wls data type error, cannot construct object from BaryCorrTableAlg')
         if pheader is None:
             raise TypeError('primary header error, cannot construct object from BaryCorrTableAlg')
+        if total_order <= 0:
+            raise TypeError('total order should be greater than 0')
 
-        if ccd_order is not None:
+        if ccd_order is not None and ccd_order > 0:
             total_ccd_orders = ccd_order
-        elif self.wls_data is not None:
-            total_ccd_orders = np.shape(self.wls_data)[0]
+        elif wls_data is not None:
+            total_ccd_orders = np.shape(wls_data)[0]
         else:
             raise TypeError('ccd orders error, cannot construct object from BaryCorrTableAlg')
 
