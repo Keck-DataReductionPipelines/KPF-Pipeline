@@ -41,7 +41,7 @@ CREATE SEQUENCE calfiles_cid_seq
     NO MINVALUE
     CACHE 1;
 
-ALTER TABLE public.calfiles_cid_seq OWNER TO kpfadminrole;
+ALTER SEQUENCE calfiles_cid_seq OWNER TO kpfadminrole;
 
 ALTER TABLE calfiles ALTER COLUMN cid SET DEFAULT nextval('calfiles_cid_seq'::regclass);
 

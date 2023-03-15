@@ -27,7 +27,7 @@ GRANT ALL ON SEQUENCE calfiles_cid_seq TO GROUP kpfadminrole;
 -- kpfporole
 
 REVOKE ALL ON TABLE calfiles FROM kpfporole;
-GRANT INSERT,SELECT,UPDATE,DELETE,REFERENCES,TRIGGER ON TABLE calfiles TO kpfporole;
+GRANT INSERT,UPDATE,SELECT,REFERENCES ON TABLE calfiles TO kpfporole;
 
 REVOKE ALL ON SEQUENCE calfiles_cid_seq FROM kpfporole;
-GRANT SELECT,UPDATE ON SEQUENCE calfiles_cid_seq TO kpfporole;
+GRANT USAGE ON SEQUENCE calfiles_cid_seq TO kpfporole;
