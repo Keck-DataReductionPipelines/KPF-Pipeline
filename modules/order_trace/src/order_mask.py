@@ -69,6 +69,7 @@
 import configparser
 import pandas as pd
 import numpy as np
+import os
 
 # Pipeline dependencies
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -145,18 +146,21 @@ class OrderMask(KPF0_Primitive):
 
         self.order_trace_data = None
         order_trace_header = None
-        if order_trace_file:
+        if order_trace_file and os.path.isfile(order_trace_file):
             self.order_trace_data = pd.read_csv(order_trace_file, header=0, index_col=0)
             poly_degree = self.get_args_value('poly_degree', action.args, args_keys)
             origin = self.get_args_value('origin', action.args, args_keys)
             order_trace_header = {'STARTCOL': origin[0], 'STARTROW': origin[1], 'POLY_DEG': poly_degree}
 
-        self.alg = OrderMaskAlg(self.img_data,
+        try:
+            self.alg = OrderMaskAlg(self.img_data,
                                 self.order_trace_data,
                                 order_trace_header,
                                 orderlet_names=self.orderlet_names,
                                 start_order=start_order,
                                 config=self.config, logger=self.logger)
+        except Exception as e:
+            self.alg = None
 
     def _pre_condition(self) -> bool:
         """
@@ -164,8 +168,7 @@ class OrderMask(KPF0_Primitive):
         """
         # input argument must be KPF0
 
-        success = (self.img_data is not None) and (self.order_trace_data is not None) and \
-                  (self.orderlet_names is not None) and (self.orderlets_on_image is not None)
+        success = (self.orderlet_names is not None) and (self.orderlets_on_image is not None)
 
         return success
 
@@ -188,6 +191,10 @@ class OrderMask(KPF0_Primitive):
 
         if self.logger:
             self.logger.info("OrderMask: creating order mask...")
+        if self.alg is None:
+            if self.logger:
+                self.logger.info("OrderMask: no flux data or order trace data for "+self.data_ext)
+            return Arguments(None)
 
         order_mask_result = None
         for order_name in self.orderlet_names:

@@ -68,7 +68,14 @@ class ImageProcessingAlg():
         for ffi in self.ffi_exts:
             # sub_init = FrameSubtract(self.rawimage,masterbias,self.ffi_exts,'bias')
             # subbed_raw_file = sub_init.subtraction()
-            self.rawimage[ffi] = self.rawimage[ffi] - masterbias[ffi]
+            try:
+                self.rawimage[ffi] = self.rawimage[ffi] - masterbias[ffi]
+            except Exception as e:
+                if self.logger:
+                    self.logger.info('*** Exception raised: {}'.format(e))
+                else:
+                    print("*** Exception raised:",e)
+
             #self.rawimage[ffi] = subbed_raw_file[ffi]
 
         # if self.quicklook == False:
@@ -98,7 +105,13 @@ class ImageProcessingAlg():
             #minus_dark = self.rawimage[ffi]-dark_frame[ffi]
             # sub_init = FrameSubtract(self.raw_image,dark_frame,self.ffi_exts,'dark')
             # subbed_raw_file = sub_init.subtraction()
-            self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]
+            try:
+                self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]               
+            except Exception as e:
+                if self.logger:
+                    self.logger.info('*** Exception raised: {}'.format(e))
+                else:
+                    print("*** Exception raised:",e)
 
     def cosmic_ray_masking(self, verbose=True):
         """Masks cosmic rays from input rawimage.
@@ -163,6 +176,11 @@ class ImageProcessingAlg():
             KPF0: KPF0 instance of raw image with background subtraction.
         """
         for ffi in self.ffi_exts:
+            # no rawimage of order_mask for ffi extension
+            if not hasattr(self.rawimage, ffi) or not self.rawimage[ffi].any() \
+                    or not hasattr(order_masks, ffi) or not order_masks[ffi].any():
+                continue
+
             raw = self.rawimage[ffi]
             clip = SigmaClip(sigma=3.)
             est = MedianBackground()
