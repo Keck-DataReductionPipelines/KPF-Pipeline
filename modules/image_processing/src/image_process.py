@@ -179,6 +179,13 @@ class ImageProcessing(KPF0_Primitive):
                 )
             dark_subbed = self.alg.dark_subtraction(correcting_file_or_action)
 
+        if action_type == 'Flat':
+            if self.logger:
+                self.logger.info(
+                    f'Flat Division: dividing out flat frame from raw FFI(s)'
+                )
+            flat_corrected = self.alg.flat_division(correcting_file_or_action)
+
         if action_type == 'Remove_Cosmics':
             if self.logger:
                 self.logger.info(
