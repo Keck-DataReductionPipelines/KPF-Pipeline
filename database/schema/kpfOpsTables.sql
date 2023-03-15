@@ -1,4 +1,4 @@
-sql.--------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------
 -- kpfOpsTables
 --
 -- Russ Laher (laher@ipac.caltech.edu)
@@ -18,6 +18,7 @@ CREATE TABLE calfiles (
     level smallint NOT NULL,                         -- Product level (L0, L1, or L2)
     caltype character varying(32) NOT NULL,          -- FITS-header keyword: IMTYPE in extension 4-6 (lowercase)
     "object" character varying(32) NOT NULL,         -- FITS-header keyword: TARGOBJ or OBJECT (lowercase)
+    contentbits integer NOT NULL,                    -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK 
     nframes smallint,                                -- FITS-header keyword: NFRAMES (GREEN CCD)
     minmjd double precision,                         -- FITS-header keyword: MINMJD (GREEN CCD)
     maxmjd double precision,                         -- FITS-header keyword: MAXMJD (GREEN CCD)

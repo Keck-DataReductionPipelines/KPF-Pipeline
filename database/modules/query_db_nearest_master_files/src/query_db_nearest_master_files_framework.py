@@ -150,7 +150,8 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
             "cast(OBSDATE as date)," +\
             "cast(LEVEL as smallint)," +\
             "cast('CALTYPE' as character varying(32))," +\
-            "cast('OBJECT' as character varying(32))) as " +\
+            "cast('OBJECT' as character varying(32))," +\
+            "cast(CONTENTBITMASK as integer)) as " +\
             "(cId integer," +\
             " level smallint," +\
             " caltype varchar(32)," +\
@@ -165,69 +166,79 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
 
         # Query database for all cal_types.
 
+        contentbitmask_list = [1, 2, 4]        # Mask values for GREEN, RED, and CA_HK.
+        
         nearest_master_files_list = []
 
         self.logger.info('----> self.cal_file_levels = {}'.format(self.cal_file_levels))
         self.logger.info('----> self.cal_types = {}'.format(self.cal_types))
-        
-        for level,cal_type_pair in zip(self.cal_file_levels,self.cal_types):
-            self.logger.info('level = {}'.format(level))
-            levelstr = str(level)
-            self.logger.info('cal_type_pair = {}'.format(cal_type_pair))
-            cal_type = cal_type_pair[0]
-            object = cal_type_pair[1]
 
-            rep = {"OBSDATE": obsdate,
-                   "LEVEL": levelstr,
-                   "CALTYPE": cal_type,
-                   "OBJECT": object}
+        for contentbitmask in contentbitmask_list:
+            for level,cal_type_pair in zip(self.cal_file_levels,self.cal_types):
+                self.logger.info('level = {}'.format(level))
+                levelstr = str(level)
+                self.logger.info('cal_type_pair = {}'.format(cal_type_pair))
+                cal_type = cal_type_pair[0]
+                object = cal_type_pair[1]
 
-            rep = dict((re.escape(k), v) for k, v in rep.items()) 
-            pattern = re.compile("|".join(rep.keys()))
-            query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
+                rep = {"OBSDATE": obsdate,
+                       "LEVEL": levelstr,
+                       "CALTYPE": cal_type,
+                       "OBJECT": object}
 
-            self.logger.info('query = {}'.format(query))
+                rep["CONTENTBITMASK"] = str(contentbitmask)
 
-            cur.execute(query)
-            record = cur.fetchone()
+                rep = dict((re.escape(k), v) for k, v in rep.items()) 
+                pattern = re.compile("|".join(rep.keys()))
+                query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-            if record is not None:
-                cId = record[0]
-                filename = '/' + record[4]        # docker run has -v /data/kpf/masters:/masters
-                checksum = record[5]
-                
-                self.logger.info('cId = {}'.format(cId))
-                self.logger.info('filename = {}'.format(filename))
-                self.logger.info('checksum = {}'.format(checksum))
+                self.logger.info('query = {}'.format(query))
 
+                cur.execute(query)
+                record = cur.fetchone()
 
-                # See if file exists.
-
-                isExist = os.path.exists(filename)
-                self.logger.info('File existence = {}'.format(isExist))
+                if record is not None:
+                    cId = record[0]
+                    filename = '/' + record[4]        # docker run has -v /data/kpf/masters:/masters
+                    checksum = record[5]
+                    infobits = record[6]
+                    
+                    self.logger.info('cId = {}'.format(cId))
+                    self.logger.info('filename = {}'.format(filename))
+                    self.logger.info('checksum = {}'.format(checksum))
 
 
-                # Compute checksum and compare with database value.
+                    # See if file exists.
 
-                cksum = md5(filename)
-                self.logger.info('cksum = {}'.format(cksum))
+                    isExist = os.path.exists(filename)
+                    self.logger.info('File existence = {}'.format(isExist))
 
-                if cksum == checksum:
-                    print("File checksum is correct...")
+
+                    # Compute checksum and compare with database value.
+
+                    cksum = md5(filename)
+                    self.logger.info('cksum = {}'.format(cksum))
+
+                    if cksum == checksum:
+                        print("File checksum is correct...")
+                    else:
+                        print("*** Error: File checksum is incorrect; quitting...")
+                        exitcode = 64
+
+                    cal_file_record = [cId, cal_type, object, contentbitmask, infobits, filename]
+                    nearest_master_files_list.append(cal_file_record)
+
                 else:
-                    print("*** Error: File checksum is incorrect; quitting...")
-                    exitcode = 64
+                    query_db_nearest_master_files_exit_code = 2
 
-                cal_file_record = [cId, cal_type, object, filename]
-                nearest_master_files_list.append(cal_file_record)
-
-
+                
         # Close database cursor and then connection.
 
         try:
             cur.close()
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
+            query_db_nearest_master_files_exit_code = 1
         finally:
             if conn is not None:
                 conn.close()

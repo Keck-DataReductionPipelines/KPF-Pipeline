@@ -12,6 +12,7 @@ grant EXECUTE on FUNCTION registerCalFile (
     level_               smallint,
     caltype_             character varying(32),
     object_              character varying(32),
+    contentbits_         integer,
     nframes_             smallint,
     minmjd_              double precision,
     maxmjd_              double precision,
@@ -25,8 +26,9 @@ grant EXECUTE on FUNCTION registerCalFile (
 ) to kpfporole;
 
 grant EXECUTE on FUNCTION getCalFile (
-    obsDate_        date,
-    level_          smallint,
-    caltype_        character varying(32),
-    object_         character varying(32)
+    obsDate_         date,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer
 ) to kpfporole, kpfreadrole;

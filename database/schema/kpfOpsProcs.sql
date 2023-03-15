@@ -15,6 +15,7 @@ create function registerCalFile (
     level_               smallint,
     caltype_             character varying(32),
     object_              character varying(32),
+    contentbits_         integer,
     nframes_             smallint,
     minmjd_              double precision,
     maxmjd_              double precision,
@@ -75,6 +76,7 @@ create function registerCalFile (
                  level,
                  caltype,
                  object,
+                 contentbits,
                  nframes,
                  minmjd,
                  maxmjd,
@@ -92,6 +94,7 @@ create function registerCalFile (
                  level_,
                  caltype__,
                  object__,
+                 contentbits_,
                  nframes_,
                  minmjd_,
                  maxmjd_,
@@ -121,6 +124,7 @@ create function registerCalFile (
                 level = level_,
                 caltype = caltype__,
                 object = object__,
+                contentbits = contentbits_,
                 nframes = nframes_,
                 minmjd = minmjd_,
                 maxmjd = maxmjd_,
@@ -147,10 +151,11 @@ $$ language plpgsql;
 -- The status of the calibration file must be greater than zero.
 --
 create function getCalFile (
-    obsDate_        date,
-    level_          smallint,
-    caltype_        character varying(32),
-    object_         character varying(32)
+    obsDate_         date,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer
 )
     returns setof record as $$
 
@@ -178,6 +183,7 @@ create function getCalFile (
         and level = level_
         and caltype = caltype__
         and object = object__
+        and cast((contentbits & contentbitmask_) as boolean) = TRUE
         order by startDate desc                  -- Descending order for backward-looking.
         limit 1;
 
