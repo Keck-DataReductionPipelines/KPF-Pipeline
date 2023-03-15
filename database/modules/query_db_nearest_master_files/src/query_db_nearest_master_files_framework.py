@@ -78,11 +78,12 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
 
         module_param_cfg = module_config_obj['PARAM']
 
-        self.cal_file_level = module_param_cfg.get('cal_file_level')
+        cal_file_levels_str = module_param_cfg.get('cal_file_levels')
+        self.cal_file_levels = ast.literal_eval(cal_file_levels_str)
         cal_types_str = module_param_cfg.get('cal_types')
         self.cal_types = ast.literal_eval(cal_types_str)
 
-        self.logger.info('self.cal_file_level = {}'.format(self.cal_file_level))
+        self.logger.info('self.cal_file_levels = {}'.format(self.cal_file_levels))
         self.logger.info('self.cal_types = {}'.format(self.cal_types))
 
     def _perform(self):
@@ -160,17 +161,18 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
             " startDate date);"
 
         obsdate = "'" + self.date_dir[0:4] + "-" + self.date_dir[4:6] + "-" + self.date_dir[6:8] + "'"
-        level = self.cal_file_level
-        levelstr = str(level)
 
 
         # Query database for all cal_types.
 
         nearest_master_files_list = []
 
+        self.logger.info('----> self.cal_file_levels = {}'.format(self.cal_file_levels))
         self.logger.info('----> self.cal_types = {}'.format(self.cal_types))
-
-        for cal_type_pair in self.cal_types:
+        
+        for level,cal_type_pair in zip(self.cal_file_levels,self.cal_types):
+            self.logger.info('level = {}'.format(level))
+            levelstr = str(level)
             self.logger.info('cal_type_pair = {}'.format(cal_type_pair))
             cal_type = cal_type_pair[0]
             object = cal_type_pair[1]
