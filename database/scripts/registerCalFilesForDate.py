@@ -90,6 +90,7 @@ query_template =\
     "cast(LEVEL as smallint)," +\
     "cast('IMTYPE' as character varying(32))," +\
     "cast('TARGOBJ' as character varying(32))," +\
+    "cast(CONTENTBITS as integer)," +\
     "cast(NFRAMES as smallint)," +\
     "cast(MINMJD as double precision)," +\
     "cast(MAXMJD as double precision)," +\
@@ -113,7 +114,7 @@ for fits_file in master_files:
 
     # In the case of *L1.fits and *L2.fits files, certain keywords are not in the FITS header,
     # so we either parse them from the filename or infer them.
-    
+
     filename_match = re.match(r".+_master_(.+)_L[1:2]\.fits", fits_file)
 
     try:
@@ -138,8 +139,7 @@ for fits_file in master_files:
                 filename_object = "autocal-dark"
             elif filename_caltype == 'flat':
                 filename_object = "autocal-flat-all"
-            
-        
+
     except:
         #print("-----1-----> No filename match found")
 
@@ -164,7 +164,7 @@ for fits_file in master_files:
             filename_object = "autocal-flat-all"
     except:
         pass
-    
+
     try:
         print("---------------------------------> fn_caltype =",filename_caltype)
     except:
@@ -186,21 +186,65 @@ for fits_file in master_files:
            "FILESTATUS": filestatusstr}
 
     rep["FILENAME"] = fits_file[1:]      # Remove leading slash to make it a relative path.
-    
+
     cksum = md5(fits_file)
     rep["CHECKSUM"] = cksum
-    
+
     hdul = fits.open(fits_file)
+
+
+    # Determine from FITS headers which CCDs are included in the master file.
+
+    hasGREEN = 0
+    hasRED = 0
+    hasCAHK = 0
+
+    for i in range(len(hdul)):
+        hdunum = i + 1;
+
+        try:
+            extname = hdul[i].header["EXTNAME"]
+            naxis = hdul[i].header["NAXIS"]
+            print("hdunum,naxis,extname =",hdunum,naxis,extname)
+
+            if level == 0 and naxis == 2 and 'GREEN' in extname: hasGREEN = 1
+            elif level == 0 and naxis == 2 and 'RED' in extname: hasRED = 1
+            elif level == 0 and naxis == 2 and 'CA_HK' in extname: hasCAHK = 1
+            elif level == 1 and naxis == 2 and 'GREEN_SCI' in extname: hasGREEN = 1
+            elif level == 1 and naxis == 2 and 'RED_SCI' in extname: hasRED = 1
+            elif level == 1 and naxis == 2 and 'CA_HK_SCI' in extname: hasCAHK = 1
+            elif level == 2 and naxis == 3 and 'GREEN_CCF' in extname: hasGREEN = 1
+            elif level == 2 and naxis == 3 and 'RED_CCF' in extname: hasRED = 1
+            elif level == 2 and naxis == 3 and 'CA_HK_CCF' in extname: hasCAHK = 1
+
+        except:
+            print("*** Error: No EXTNAME or NAXIS for hdunum =",hdunum)
+
+    print("hasGREEN,hasRED,hasCAHK =",hasGREEN,hasRED,hasCAHK)
+
+    # Bit-wise flags for database record.
+    contentbits = hasCAHK * 2**2 + hasRED * 2**1 + hasGREEN * 2**0               
+
+    print("contentbits =",contentbits)
+    
+    rep["CONTENTBITS"] = str(contentbits)
+
+
+    # Get values from FITS header for database record.
 
     ext_list = [0,3,3,3,3,[3,4,5],3]
     kwd_list = ["IMTYPE","TARGOBJ","NFRAMES","MINMJD","MAXMJD","INFOBITS","CREATED"]
     for kwd,ext in zip(kwd_list,ext_list):
-        
+
         print("kwd =",kwd)
         print("ext =",ext)
-        
+
         try:
-            if kwd == "INFOBITS":
+            if kwd == "IMTYPE" and level > 0:
+                val = filename_caltype
+            elif kwd == "TARGOBJ" and level > 0:
+                val = filename_object
+            elif kwd == "INFOBITS":
                 try:
                     val1 = hdul[ext[0]].header[kwd]
                 except:
@@ -222,7 +266,7 @@ for fits_file in master_files:
                 if val < 0: val = "null"
             else:
                 val = hdul[ext].header[kwd]
-            
+
             if kwd == "CREATED":
                 val = val.replace("T"," ")
                 val = val.replace("Z","")
@@ -258,7 +302,7 @@ for fits_file in master_files:
 
     hdul.close()
 
-    rep = dict((re.escape(k), v) for k, v in rep.items()) 
+    rep = dict((re.escape(k), v) for k, v in rep.items())
     pattern = re.compile("|".join(rep.keys()))
     query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
@@ -285,7 +329,7 @@ finally:
         conn.close()
         print('Database connection closed.')
 
-        
+
 # Termination.
 
 print("Terminating with exitcode =",exitcode)
