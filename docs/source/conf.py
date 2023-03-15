@@ -59,7 +59,7 @@ master_doc = 'index'
 # General information about the project.
 project = u'KPFPipeline'
 copyright = u'2020-2023, Arpita Roy, BJ Fulton, Cindy Wang, Andrew Howard, and others on the KPF Team'
-author = u'Arpita Roy, BJ Fulton, Cindy Wang, Andrew Howard, Qifan Wang, David Rumph, and others on the KPF Team'
+author = u'Arpita Roy, BJ Fulton, Cindy Wang, Russ Laher, Andrew Howard, Qifan Wang, David Rumph, and others on the KPF Team'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
