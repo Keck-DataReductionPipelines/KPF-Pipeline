@@ -200,7 +200,11 @@ for fits_file in master_files:
         print("ext =",ext)
         
         try:
-            if kwd == "INFOBITS":
+            if kwd == "IMTYPE" and level > 0:
+                val = filename_caltype
+            elif kwd == "TARGOBJ" and level > 0:
+                val = filename_object
+            elif kwd == "INFOBITS":
                 try:
                     val1 = hdul[ext[0]].header[kwd]
                 except:
