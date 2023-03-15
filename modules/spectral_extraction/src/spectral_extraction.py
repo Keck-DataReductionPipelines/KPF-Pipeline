@@ -210,7 +210,9 @@ class SpectralExtraction(KPF0_Primitive):
         self.spec_header = self.input_spectrum.header[data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
         self.spec_flux = self.input_spectrum[data_ext] if hasattr(self.input_spectrum, data_ext) else None
-        self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
+
+        try:
+            self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.spec_flux,
                                         self.spec_header,
@@ -223,14 +225,15 @@ class SpectralExtraction(KPF0_Primitive):
                                         orderlet_names=orderlets_on_image,
                                         total_order_per_ccd=self.total_order_per_ccd,
                                         clip_file=self.clip_file)
+        except Exception as e:
+            self.alg = None
 
     def _pre_condition(self) -> bool:
         """
         Check for some necessary pre conditions
         """
-        # input argument must be KPF0
-        success = isinstance(self.input_flat, KPF0) and isinstance(self.input_spectrum, KPF0) and \
-                  (self.order_trace_data is not None)
+        # flat data for extraction and order trace data
+        success = isinstance(self.input_flat, KPF0)
 
         return success
 
@@ -255,6 +258,11 @@ class SpectralExtraction(KPF0_Primitive):
 
         if self.logger:
             self.logger.info("SpectralExtraction: rectifying and extracting order...")
+
+        if self.alg is None:
+            if self.logger:
+                self.logger.info("SpectralExtraction: no extension data, order trace data or improper header.")
+            return Arguments(None)
 
         ins = self.alg.get_instrument().upper()
 

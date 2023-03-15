@@ -186,20 +186,26 @@ class RadialVelocity(KPF1_Primitive):
         obstime_v = action.args['obstime'] if 'obstime' in args_keys else self.default_args_val['obstime']
 
         for sci in self.sci_names:
-            self.spectrum_data_set.append(getattr(self.input, sci) if hasattr(self.input, sci) else None)
+            input_data = getattr(self.input, sci) if self.input is not None and hasattr(self.input, sci) else None
+            input_header = self.input.header[sci] if input_data is not None and hasattr(self.input, 'header') else None
+            self.spectrum_data_set.append(input_data)
+            self.header_set.append(input_header)
 
             wave = sci.replace('FLUX', 'WAVE') if 'FLUX' in sci else None
-            self.wave_cal_set.append(getattr(self.input, wave) if (wave is not None and hasattr(self.input, wave))
-                                     else None)
+            self.wave_cal_set.append(getattr(self.input, wave)
+                            if (self.input is not None and wave is not None and hasattr(self.input, wave)) else None)
             neid_ssb = 'SSBJD100'   # neid case
+            if input_data is None or input_header is None:
+                continue
 
             if neid_ssb in self.input.header['PRIMARY'] and neid_ssb not in self.input.header[sci]:
-                self.input.header[sci][neid_ssb] = self.input.header['PRIMARY'][neid_ssb]
+                self.input.header[sci][neid_ssb] = self.input.header['PRIMARY'][neid_ssb]   # neid case
             elif neid_ssb not in self.input.header[sci]:     # kpf case
-                if obstime_v != None:
+                if obstime_v != None:                        # obs and exptime passed externally
                     m_obs = Time(obstime_v).jd - 2400000.5
                     if exptime_v is None:
                         exptime_v = 1.0
+<<<<<<< HEAD
                 if ('DATE-MID' in self.input.header['PRIMARY']): # kpf case
                     d_obs = 'DATE-MID'
                     exptime = 'EXPTIME' if 'EXPTIME' in self.input.header['PRIMARY'] else None
@@ -211,20 +217,39 @@ class RadialVelocity(KPF1_Primitive):
                     self.input.header[sci]['MJD-OBS'] = m_obs
                     self.input.header[sci]['EXPTIME'] = exptime_v
     
+=======
+                d_obs = 'DATE-MID'
+                if d_obs in self.input.header['PRIMARY']: # get from primary header if the key exists
+                    exptime_k = 'EXPTIME' if 'EXPTIME' in self.input.header['PRIMARY'] else None
+                    exptime_v = self.input.header['PRIMARY'][exptime_k] if exptime_k else 1.0
+                    m_obs = Time(self.input.header['PRIMARY'][d_obs]).jd - 2400000.5
+
+                self.input.header[sci]['MJD-OBS'] = m_obs
+                self.input.header[sci]['EXPTIME'] = exptime_v
+
+                if 'IMTYPE' in self.input.header['PRIMARY']:
+                    self.input.header[sci]['IMTYPE'] = self.input.header['PRIMARY']['IMTYPE']
+>>>>>>> c168aaa00bf3bd17e87697727f29d671023dee2b
             self.input.header[sci]['MASK'] = self.rv_init['data']['mask_type']
-            self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
-                                   else None)
 
         self.total_orderlet = len(self.spectrum_data_set)
 
         # Order trace algorithm setup
-        self.alg = RadialVelocityAlg(self.spectrum_data_set[0], self.header_set[0], self.rv_init,
+        try:
+            self.alg = RadialVelocityAlg(self.spectrum_data_set[0], self.header_set[0], self.rv_init,
                                      wave_cal=self.wave_cal_set[0],
                                      segment_limits=self.segment_limits,
                                      order_limits=self.order_limits,
                                      area_limits=self.area_def,
                                      config=self.config, logger=self.logger, ccf_engine=self.ccf_engine,
+<<<<<<< HEAD
                                      reweighting_method=self.reweighting_method)
+=======
+                                     reweighting_method=self.reweighting_method,
+                                     bary_corr_table=bc_table, start_bary_index=start_bary_index)
+        except Exception as e:
+            self.alg = None
+>>>>>>> c168aaa00bf3bd17e87697727f29d671023dee2b
 
     def _pre_condition(self) -> bool:
         """
@@ -256,6 +281,10 @@ class RadialVelocity(KPF1_Primitive):
         if self.logger:
             self.logger.info("RadialVelocity: Start crorss correlation to find radial velocity... ")
 
+        if self.alg is None:
+            self.logger.info("RadialVelocity: no enough data to start the instance to do cross correlation... ")
+            return Arguments(self.output_level2)
+
         output_df = []
 
         if all( [s is not None and s.size != 0 for s in self.spectrum_data_set]):
@@ -267,15 +296,14 @@ class RadialVelocity(KPF1_Primitive):
 
                 rv_results = self.alg.compute_rv_by_cc(start_seg=self.start_seg, end_seg=self.end_seg, ref_ccf=self.ref_ccf)
                 one_df = rv_results['ccf_df']
-                if one_df is None:
+                if one_df is None or one_df.empty or not one_df.values.any():
                     if self.logger:
                         self.logger.info('RadialVelocity: orderlet ' + self.sci_names[i] + 'error => ' +
                                 rv_results['msg'])
                     output_df = []
                     break
                 else:
-                    assert (not one_df.empty and one_df.values.any())
-                    output_df.append(rv_results['ccf_df'])
+                    output_df.append(one_df)
 
         self.construct_level2_data(output_df)
         self.output_level2.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')

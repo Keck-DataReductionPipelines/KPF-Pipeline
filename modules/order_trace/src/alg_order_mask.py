@@ -66,6 +66,8 @@ class OrderMaskAlg(ModuleAlgBase):
             raise TypeError("no flux data for order_mask, cannot construct object from OrderMaskAlg")
         elif not isinstance(spectrum_data, np.ndarray):
             raise TypeError('flux data type error, cannot construct object from OrderMaskAlg')
+        elif not spectrum_data.any():
+            raise TypeError('empty flux data, cannot construct object from OrderMaskAlg')
 
         if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
             raise TypeError('order trace data error, cannot construct object from OrderMaskAlg')
