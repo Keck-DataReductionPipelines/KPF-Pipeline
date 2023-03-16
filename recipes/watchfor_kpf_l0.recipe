@@ -17,11 +17,51 @@ lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
 lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
 prescan_reg = config.WATCHFOR_L0.prescan_reg
 gain_key = config.WATCHFOR_L0.gain_keyword
+do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
 masterbias_path = config.WATCHFOR_L0.masterbias_path
+masterdark_path = config.WATCHFOR_L0.masterdark_path
+masterflat_path = config.WATCHFOR_L0.masterflat_path
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
 
-search_string = config.WATCHFOR_L0.input_dir + "/" + context.date_dir + '/*.fits'
+date_dir = context.date_dir
+
+if do_db_query_for_master_files:
+
+    query_nearest_master_files_list = QueryDBNearestMasterFilesFramework(data_type,
+                                                                         date_dir)
+
+    db_exit_code = query_nearest_master_files_list[0]
+
+    flag_masterbias = 0
+    flag_masterdark = 0
+    flag_masterflat = 0
+
+    for db_rec in query_nearest_master_files_list[1]:
+        db_level = db_rec[1]
+        db_cal_type = db_rec[2]
+        db_master_file = db_rec[6]
+
+        if flag_masterbias == 0:
+            if db_level == 0:
+                if db_cal_type == 'bias':
+                    masterbias_path = db_master_file
+                    flag_masterbias = 1
+
+        if flag_masterdark == 0:
+            if db_level == 0:
+                if db_cal_type == 'dark':
+                    masterdark_path = db_master_file
+                    flag_masterdark = 1
+
+        if flag_masterflat == 0:
+            if db_level == 0:
+                if db_cal_type == 'flat':
+                    masterflat_path = db_master_file
+                    flag_masterflat = 1
+
+
+search_string = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
 
 if context.watch:
     file_list = find_files(context.file_path)
@@ -29,7 +69,6 @@ else:
     file_list = find_files(search_string)
 
 file_path = context.file_path
-date_dir = context.date_dir
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
 for raw_file_path in file_list:
@@ -80,5 +119,7 @@ for raw_file_path in file_list:
                                           n_sigma)
 
         bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts, data_type, quicklook)
+        dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts, data_type, quicklook)
+        flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
 
-        recipe_complete = to_fits(bias_subbed, output_file_name)
+        recipe_complete = to_fits(flat_applied, output_file_name)
