@@ -166,7 +166,7 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
 
         # Query database for all cal_types.
 
-        contentbitmask_list = [1, 2, 4]        # Mask values for GREEN, RED, and CA_HK.
+        contentbitmask_list = [7, 3]        # Mask values for GREEN, RED, and CA_HK together, and then for just GREEN and RED.
         
         nearest_master_files_list = []
 
@@ -199,6 +199,9 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
 
                 if record is not None:
                     cId = record[0]
+                    db_level = record[1]
+                    db_cal_type = record[2]
+                    db_object = record[3]
                     filename = '/' + record[4]        # docker run has -v /data/kpf/masters:/masters
                     checksum = record[5]
                     infobits = record[6]
@@ -225,11 +228,10 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
                         print("*** Error: File checksum is incorrect; quitting...")
                         exitcode = 64
 
-                    cal_file_record = [cId, cal_type, object, contentbitmask, infobits, filename]
+                    cal_file_record = [cId, db_level, db_cal_type, db_object, contentbitmask, infobits, filename]
                     nearest_master_files_list.append(cal_file_record)
 
-                else:
-                    query_db_nearest_master_files_exit_code = 2
+                    query_db_nearest_master_files_exit_code = 0
 
                 
         # Close database cursor and then connection.

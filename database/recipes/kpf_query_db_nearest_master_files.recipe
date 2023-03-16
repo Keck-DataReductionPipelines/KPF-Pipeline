@@ -1,7 +1,40 @@
-from database.modules.query_db_nearest_master_files.src. query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
+from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
 
 data_type = config.ARGUMENT.data_type
 date_dir = context.date_dir
 
-nearest_master_files_list = QueryDBNearestMasterFilesFramework(data_type,
-                                                               date_dir)
+do_db_query_for_master_files = True
+
+if do_db_query_for_master_files:
+
+    query_nearest_master_files_list = QueryDBNearestMasterFilesFramework(data_type,
+                                                                         date_dir)
+
+    db_exit_code = query_nearest_master_files_list[0]
+
+    flag_masterbias = 0
+    flag_masterdark = 0
+    flag_masterflat = 0
+
+    for db_rec in query_nearest_master_files_list[1]:
+        db_level = db_rec[1]
+        db_cal_type = db_rec[2]
+        db_master_file = db_rec[6]
+
+        if flag_masterbias == 0:
+            if db_level == 0:
+                if db_cal_type == 'bias':
+                    masterbias_path = db_master_file
+                    flag_masterbias = 1
+
+        if flag_masterdark == 0:
+            if db_level == 0:
+                if db_cal_type == 'dark':
+                    masterdark_path = db_master_file
+                    flag_masterdark = 1
+
+        if flag_masterflat == 0:
+            if db_level == 0:
+                if db_cal_type == 'flat':
+                    masterflat_path = db_master_file
+                    flag_masterflat = 1

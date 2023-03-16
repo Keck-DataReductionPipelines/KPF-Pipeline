@@ -19,6 +19,7 @@ from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
+from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
