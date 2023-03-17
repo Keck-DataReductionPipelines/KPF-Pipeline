@@ -194,7 +194,6 @@ class RadialVelocity(KPF1_Primitive):
 
         exptime_v = action.args['exptime'] if 'exptime' in args_keys else self.default_args_val['exptime']
         obstime_v = action.args['obstime'] if 'obstime' in args_keys else self.default_args_val['obstime']
-
         for sci in self.sci_names:
             input_data = getattr(self.input, sci) if self.input is not None and hasattr(self.input, sci) else None
             input_header = self.input.header[sci] if input_data is not None and hasattr(self.input, 'header') else None
@@ -224,16 +223,14 @@ class RadialVelocity(KPF1_Primitive):
                 self.input.header[sci]['MJD-OBS'] = m_obs
                 self.input.header[sci]['EXPTIME'] = exptime_v
 
-            for hkey in ['IMTYPE', 'SCI-OBJ', 'SKY-OBJ', 'CAL-OBJ']:
+            for hkey in ['IMTYPE', 'SCI-OBJ', 'SKY-OBJ', 'CAL-OBJ', 'STAR_RV', 'QRV', 'TARGRADV']:
                 if hkey in self.input.header['PRIMARY']:
                     self.input.header[sci][hkey] = self.input.header['PRIMARY'][hkey]
 
             mod, mtype = RadialVelocityAlgInit.MASK_ORDERLET, RadialVelocityAlgInit.MASK_TYPE
-            self.input.header[sci]['MASK'] = self.rv_init['data'][mtype] if self.rv_init['data'][mod] is None \
+            self.input.header[sci]['MASK'] = self.rv_init['data'][mtype] if not self.rv_init['data'][mod]  \
                 else self.rv_init['data'][mod][RadialVelocityAlg.get_fiber_object_in_header('kpf', sci)][mtype]
 
-            self.header_set.append(self.input.header[sci] if hasattr(self.input, 'header') and hasattr(self.input, sci)
-                                   else None)
 
         self.total_orderlet = len(self.spectrum_data_set)
         do_rv_corr = False
@@ -241,7 +238,7 @@ class RadialVelocity(KPF1_Primitive):
             key_sci = RadialVelocityAlgInit.KEY_SCI_OBJ
             key_cal = RadialVelocityAlgInit.KEY_CAL_OBJ
             sci_obj_v = self.input.header['PRIMARY'][key_sci] if key_sci in self.input.header['PRIMARY'] else None
-            if self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET] is not None:
+            if self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET]:
                 cal_mask = self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET][key_cal][RadialVelocityAlgInit.MASK_TYPE]
                 do_rv_corr = cal_mask in ['lfc', 'thar'] and sci_obj_v.lower() == 'target'
         self.is_cal_cor = self.is_cal_cor and do_rv_corr
@@ -303,7 +300,6 @@ class RadialVelocity(KPF1_Primitive):
         if self.alg is None:
             self.logger.info("RadialVelocity: no enough data to start the instance to do cross correlation... ")
             return Arguments(self.output_level2)
-
         output_df = []
 
         if all( [s is not None and s.size != 0 for s in self.spectrum_data_set]):
@@ -412,28 +408,25 @@ class RadialVelocity(KPF1_Primitive):
         self.output_level2.header[self.ccf_ext]['stepv'] = \
             (self.rv_init['data']['rv_config'][RadialVelocityAlgInit.STEP], 'km/sec')
         self.output_level2.header[self.ccf_ext]['totalv'] = self.rv_init['data']['velocity_steps']
+        self.output_level2.header[self.ccf_ext]['totalsci'] = sum([1 if self.is_sci(s) else 0 for s in self.sci_names])
 
         mtype = RadialVelocityAlgInit.MASK_TYPE
 
         for i in range(total_orderlet):
+            ccf_key = None
             if self.is_sci(self.sci_names[i]):
-                if self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET] is not None:
-                    fiber_key = self.alg.get_fiber_object_in_header(self.alg.get_instrument().lower(), self.sci_names[i])
-                    self.output_level2.header[self.ccf_ext]['sci_mask'] = \
-                        self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET][fiber_key][mtype]
-                else:
-                    self.output_level2.header[self.ccf_ext]['sci_mask'] = self.rv_init['data'][mtype]
-                break
+                ccf_key = 'sci_mask'
+            elif self.is_cal(self.sci_names[i]):
+                ccf_key = 'cal_mask'
 
-        for i in range(total_orderlet):
-            if self.is_cal(self.sci_names[i]):
-                if self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET] is not None:
+            if ccf_key and ccf_key not in self.output_level2.header[self.ccf_ext]:
+                if self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET]:
                     fiber_key = self.alg.get_fiber_object_in_header(self.alg.get_instrument().lower(), self.sci_names[i])
-                    self.output_level2.header[self.ccf_ext]['cal_mask'] = \
+                    self.output_level2.header[self.ccf_ext][ccf_key] = \
                         self.rv_init['data'][RadialVelocityAlgInit.MASK_ORDERLET][fiber_key][mtype]
                 else:
-                    self.output_level2.header[self.ccf_ext]['cal_mask'] = self.rv_init['data'][mtype]
-                break
+                    self.output_level2.header[self.ccf_ext][ccf_key] = self.rv_init['data'][mtype]
+
 
         for i in range(total_orderlet):
             self.output_level2.header[self.ccf_ext]['ccf'+str(i+1)] = self.sci_names[i]

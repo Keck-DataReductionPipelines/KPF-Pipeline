@@ -663,7 +663,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
     @staticmethod
     def get_orderlet_masktype(ins, orderletname, rv_init_data):
-        if rv_init_data[RadialVelocityAlgInit.MASK_ORDERLET] is None:
+        if not rv_init_data[RadialVelocityAlgInit.MASK_ORDERLET]:
             return rv_init_data[RadialVelocityAlgInit.MASK_TYPE]
         else:
             fiber_key = RadialVelocityAlg.get_fiber_object_in_header(ins, orderletname)
