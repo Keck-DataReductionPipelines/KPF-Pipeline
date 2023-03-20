@@ -19,6 +19,8 @@ from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
+from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
+from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -153,6 +155,35 @@ wls_list = config.ARGUMENT.wls_fits
 wave_fits = []
 for wls in wls_list:
 	wave_fits = wave_fits + [output_dir + wls]
+
+
+# Override wave_fits list with optional database query for nearest WLS master file.
+
+do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
+date_dir_db_query = context.date_dir
+cal_file_level = config.ARGUMENT.cal_file_level
+contentbitmask = config.ARGUMENT.contentbitmask
+cal_type_pair = config.ARGUMENT.cal_type_pair
+
+do_db_query_for_one_nearest_wls_master_file = True
+
+if do_db_query_for_one_nearest_master_file:
+
+    query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+                                                                              date_dir_db_query,
+                                                                              cal_file_level,
+                                                                              contentbitmask,
+                                                                              cal_type_pair)
+
+    db_wls_exit_code = query_one_nearest_master_file_list[0]
+
+    db_wls_rec = query_one_nearest_master_file_list[1]
+    db_wls_master_file = db_wls_rec[6]
+
+    wave_fits = []
+    for wls in wls_list:
+	wave_fits = wave_fits + [output_dir + db_wls_master_file]
+
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
 
