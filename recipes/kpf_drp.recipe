@@ -299,15 +299,16 @@ end_of_night_summary = False
 #    OrderTrace: order trace
 #    OrderRectification: order trace rectification
 
-input_flat_file = find_files(lev0_flat_pattern)[0]
-_, short_flat_file = split(input_flat_file)
-flat_stem, flat_ext = splitext(short_flat_file)
-
-trace_list = []
-b_all_traces = False
-lev0_flat_rect = None
 
 if do_order_trace:
+	input_flat_file = find_files(lev0_flat_pattern)[0]
+	_, short_flat_file = split(input_flat_file)
+	flat_stem, flat_ext = splitext(short_flat_file)
+
+	trace_list = []
+	b_all_traces = False
+	lev0_flat_rect = None
+
 	flat_data = None
 
 	if exists(input_flat_file):
