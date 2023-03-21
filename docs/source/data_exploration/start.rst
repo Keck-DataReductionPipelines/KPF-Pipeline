@@ -9,4 +9,5 @@ The bullet points below are readthedocs representations of Jupyter Notebooks sho
 
     tutorial_L0.rst
     tutorial_L1.rst
+    tutorial_L2.rst
     tutorial_2D_ion_pump.rst
