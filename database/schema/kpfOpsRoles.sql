@@ -19,3 +19,6 @@ GRANT kpfporole to kpfporuss;
 GRANT kpfreadrole to bfulton;
 
 GRANT kpfreadrole to cwang;
+
+-- Verified bfulton inherits the following:
+ALTER ROLE kpfreadrole CONNECTION LIMIT -1;
