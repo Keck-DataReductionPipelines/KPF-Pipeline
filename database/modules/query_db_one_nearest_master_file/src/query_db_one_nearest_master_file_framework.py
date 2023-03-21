@@ -106,8 +106,8 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
 
         """
 
-        query_db_one_nearest_master_file_exit_code = 0
-
+        query_db_one_nearest_master_file_exit_code = 1
+        one_nearest_master_file_list = []
 
         # Define absolute path to master file.
 
@@ -251,7 +251,7 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
             cur.close()
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
-            query_db_one_nearest_master_file_exit_code = 1
+            query_db_one_nearest_master_file_exit_code = 2
         finally:
             if conn is not None:
                 conn.close()
