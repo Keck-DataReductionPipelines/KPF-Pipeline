@@ -76,17 +76,24 @@ class ImageProcessingAlg():
                 else:
                     print("*** Exception raised:",e)
 
-            #self.rawimage[ffi] = subbed_raw_file[ffi]
+    def flat_division(self, flat_frame):
+        """Performs flat frame division.
+        In pipeline terms: inputs two L0 files, produces one L0 file.
 
-        # if self.quicklook == False:
-        #     if self.data_type == 'KPF':
-        #         for ffi in self.ffi_exts:
-        #             print(self.rawimage.info)
-        #             print(masterbias.info())
-        #             assert self.rawimage[ffi].shape==masterbias[ffi].shape, "Bias .fits Dimensions NOT Equal! Check failed"
-        #             #self.rawimage[ffi].data=self.rawimage[ffi].data-masterbias[ffi].data
-        #             minus_bias = self.rawimage[ffi]-masterbias[ffi]
-        #             self.rawimage[ffi] = minus_bias
+        Args:
+            flat_frame (FITS File): L0 FITS file object
+
+        """
+
+        for ffi in self.ffi_exts:
+            try:
+                self.rawimage[ffi] = self.rawimage[ffi] / flat_frame[ffi]
+            except Exception as e:
+                if self.logger:
+                    self.logger.info('*** Exception raised: {}'.format(e))
+                else:
+                    print("*** Exception raised:", e)
+
 
     def dark_subtraction(self, dark_frame):
         """Performs dark frame subtraction.
@@ -98,20 +105,15 @@ class ImageProcessingAlg():
         """
 
         for ffi in self.ffi_exts:
-            # assert self.rawimage[ffi].data.shape==dark_frame[ffi].data.shape, "Dark frame dimensions don't match raw image. Check failed."
-            assert self.rawimage.header['PRIMARY']['EXPTIME'] == \
-                   dark_frame.header['PRIMARY']['EXPTIME'], \
-                   "Dark frame and raw image don't match in exposure time. Check failed."
-            #minus_dark = self.rawimage[ffi]-dark_frame[ffi]
-            # sub_init = FrameSubtract(self.raw_image,dark_frame,self.ffi_exts,'dark')
-            # subbed_raw_file = sub_init.subtraction()
+            image_exptime = self.rawimage.header['PRIMARY']['EXPTIME']
+            dark_exptime = 1.0   # master darks are already normalized
             try:
-                self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]               
+                self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]*(image_exptime/dark_exptime)
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
                 else:
-                    print("*** Exception raised:",e)
+                    print("*** Exception raised:", e)
 
     def cosmic_ray_masking(self, verbose=True):
         """Masks cosmic rays from input rawimage.

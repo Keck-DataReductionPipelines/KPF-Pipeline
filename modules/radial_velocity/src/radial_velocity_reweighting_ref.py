@@ -3,9 +3,6 @@
     This module defines class `RadialVelocityReweightingRef` which inherits from `KPF_Primitive` and provides
     methods to perform the event on radial velocity reweighting ratio table creation in the recipe.
 
-    Attributes:
-        RadialVelocityReweightingRef
-
     Description:
         * Method `__init__`:
 
@@ -141,10 +138,10 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
         """
         Check for some necessary pre conditions
         """
-        # input argument must be KPF2
-        success = isinstance(self.files, list) and len(self.files) > 0 and \
-                  (self.reweighting_method in ['ccf_max', 'ccf_mean', 'ccf_steps']) and \
-                  (self.is_ratio_data or self.total_segment is not None)
+        # check reweighting method, and using ratio file or a collection of kpf2 files
+        success = (self.reweighting_method in RadialVelocityAlg.CCF_Methods) and \
+                  ((self.is_ratio_data and self.ccf_ratio_file) or
+                   (isinstance(self.files, list) and (len(self.files) > 0)))
 
         return success
 
@@ -166,8 +163,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
             if is_ratio:
                 assert isinstance(f, str), msg + ':' + 'ratio file type is wrong'
                 assert os.path.exists(f) == 1, msg + ':' + f + " doesn't exist"
-                ratio_pd = pd.read_csv(f)
-                r_ccf = ratio_pd.values
+                r_ccf = pd.read_csv(f, sep='\s+')
             else:
                 r_ccf = f[hdu_idx_name]
 

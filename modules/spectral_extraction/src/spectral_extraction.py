@@ -3,9 +3,6 @@
     This module defines class SpectralExtraction which inherits from `KPF0_Primitive` and provides methods to perform
     the event on spectral extraction in the recipe.
 
-    Attributes:
-        SpectralExtraction
-
     Description:
         * Method `__init__`:
 
@@ -209,8 +206,8 @@ class SpectralExtraction(KPF0_Primitive):
         # Order trace algorithm setup
         self.spec_header = self.input_spectrum.header[data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
-        self.spec_flux = self.input_spectrum[data_ext] if hasattr(self.input_spectrum, data_ext) else None
-
+        self.spec_flux = self.input_spectrum[data_ext] \
+            if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
         try:
             self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
                                         self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,

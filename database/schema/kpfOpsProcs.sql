@@ -183,7 +183,7 @@ create function getCalFile (
         and level = level_
         and caltype = caltype__
         and object = object__
-        and cast((contentbits & contentbitmask_) as boolean) = TRUE
+        and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
         order by startDate desc                  -- Descending order for backward-looking.
         limit 1;
 
