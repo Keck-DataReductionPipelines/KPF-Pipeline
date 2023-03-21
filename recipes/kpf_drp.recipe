@@ -184,7 +184,7 @@ if do_db_query_for_one_nearest_wls_master_file:
 
         wave_fits = []
         for wls in wls_list:
-	    wave_fits = wave_fits + [output_dir + db_wls_master_file]
+            wave_fits = wave_fits + [output_dir + db_wls_master_file]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
