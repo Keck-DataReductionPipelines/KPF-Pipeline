@@ -401,6 +401,7 @@ class OverscanSubtraction(KPF0_Primitive):
 
             new_img_w_prescan = self.orientation_adjust(img,key)
             srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays(new_img_w_prescan)
+            # chop off prescan
             new_img = new_img_w_prescan[:,self.prescan_reg[1]:-1]
 
             # overscan subtraction for chosen method
@@ -413,7 +414,7 @@ class OverscanSubtraction(KPF0_Primitive):
             else:
                 raise TypeError('Input overscan subtraction mode set to value outside options.')
 
-            # chop off overscan and prescan - put into overscan subtraction utility
+            # chop off overscan  - put into overscan subtraction utility
             new_img = self.overscan_cut(raw_sub_os,self.channel_datasec_nrows,self.channel_datasec_ncols)
 
             # put img back into original orientation
