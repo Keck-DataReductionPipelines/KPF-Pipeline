@@ -13,6 +13,7 @@ from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.data_handler import ExtCopy
 from modules.Utils.data_handler import FromCSV
 from modules.Utils.data_handler import GetHeaderValue
+from modules.Utils.data_handler import SetHeaderValue
 from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
@@ -496,6 +497,8 @@ if do_spectral_extraction or do_hk or do_bc:
 						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
 						for ext in wave_to_ext[idx]:
 							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
+
+				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
 				result = to_fits(output_data, output_lev1_file)
 
 			if do_bc and exists(output_lev1_file):
