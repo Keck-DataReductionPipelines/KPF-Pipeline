@@ -11,6 +11,8 @@ import glob
 import math
 from astropy import modeling
 from astropy.time import Time
+from datetime import datetime
+from astropy.table import Table
 
 class QuicklookAlg:
     """
@@ -131,7 +133,7 @@ class QuicklookAlg:
         #version = hdr['PRIMARY']['IMTYPE']
         hdr = hdulist[0].header
         version = hdr['IMTYPE']
-        print('2d header',hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
+        #print('2d header',hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
 
 
@@ -229,9 +231,10 @@ class QuicklookAlg:
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
             plt.close()
+
+
+
             #2D difference image
-
-
 
             #if the frame is a flat, let's plot the order trace
             if version != '':#if version == 'Flat_All':
@@ -256,6 +259,11 @@ class QuicklookAlg:
 
             #diagnostic for fixed noise patterns
             if version =='Bias' or version == 'Dark':
+                #a plot that looks at the ion pump, overwrites existing 2-D frames
+
+                exptime = hdr['EXPTIME']
+                print('exptime',exptime)
+
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
                 threshold = 2
