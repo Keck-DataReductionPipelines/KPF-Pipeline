@@ -181,6 +181,9 @@ if do_db_query_for_one_nearest_wls_master_file:
 
         db_wls_rec = query_one_nearest_master_file_list[1]
         db_wls_master_file = db_wls_rec[6]
+        wave_fits = []
+        for wls in wls_list:
+            wave_fits = wave_fits + [output_dir + db_wls_master_file]
 
         wave_fits = []
         for wls in wls_list:
