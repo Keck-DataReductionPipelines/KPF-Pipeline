@@ -70,6 +70,7 @@ class ImageProcessingAlg():
             # subbed_raw_file = sub_init.subtraction()
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - masterbias[ffi]
+                self.rawimage.header['PRIMARY']['BIASFILE'] = masterbias.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
@@ -88,6 +89,7 @@ class ImageProcessingAlg():
         for ffi in self.ffi_exts:
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] / flat_frame[ffi]
+                self.rawimage.header['PRIMARY']['FLATFILE'] = flat_frame.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
@@ -109,6 +111,7 @@ class ImageProcessingAlg():
             dark_exptime = 1.0   # master darks are already normalized
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]*(image_exptime/dark_exptime)
+                self.rawimage.header['PRIMARY']['DARKFILE'] = dark_frame.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
