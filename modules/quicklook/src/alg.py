@@ -278,7 +278,7 @@ class QuicklookAlg:
                 df_telemetry.set_index("keyword", inplace=True)
 
                 with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-                    display(df_telemetry)
+                    print(df_telemetry)
 
 
                 plt.figure(figsize=(5,4))
