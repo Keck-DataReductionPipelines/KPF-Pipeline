@@ -3,9 +3,6 @@
     This module defines class `OrderTrace` which inherits from `KPF0_Primitive` and provides methods to perform the
     event on order trace calculation in the recipe.
 
-    Attributes:
-        OrderTrace
-
     Description:
         * Method `__init__`:
 

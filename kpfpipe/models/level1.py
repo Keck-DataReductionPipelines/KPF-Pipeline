@@ -44,6 +44,9 @@ class KPF1(KPF0):
         """Create a level1 object from a level0 object in order to inherit headers."""
         l1 = KPF1()
         l1.header['PRIMARY'] = l0.header['PRIMARY']
+        if 'TELEMETRY' in l0.header:
+            l1.header['TELEMETRY'] = l0.header['TELEMETRY']
+            l1['TELEMETRY'] = l0['TELEMETRY']
         l1.add_default_headers()
 
         return l1
