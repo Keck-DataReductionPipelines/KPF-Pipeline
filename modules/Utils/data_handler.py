@@ -191,6 +191,55 @@ class FromCSV(KPF_Primitive):
         return Arguments(data_sels)
 
 
+class SetHeaderValue(KPF_Primitive):
+    """
+    This module read the data from csv file and return the data of specified columns.
+
+    Description:
+         - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
+                  keyword arguments passed by the `GetHeaderValue` event issued in the recipe:
+
+            - `action.args[0] (kpfpipe.models.level0.KPF0): instance of `KPF0`
+            - `action.args(1) (str|list)`: key
+            - `action.args(1) (str|list)`: value
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+
+        # Initialize parent class
+        KPF_Primitive.__init__(self, action, context)
+
+        self.kpfobj = action.args[0]
+        self.key = action.args[1]
+        self.value = action.args[2]
+
+        self.logger = None
+        if not self.logger:
+            self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        """
+        check if the extensions exist in the data model object
+        """
+        success = isinstance(self.key, str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        val = None
+        primary_header = self.kpfobj.header['PRIMARY']
+        primary_header[self.key] = self.value
+
+        if self.logger:
+            self.logger.info("SetHeaderValue: {}-->{} done".format(self.key, self.value))
+
+        return Arguments(val)
+
+
 class GetHeaderValue(KPF_Primitive):
     """
     This module read the data from csv file and return the data of specified columns.
