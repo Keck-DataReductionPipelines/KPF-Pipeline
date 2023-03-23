@@ -264,6 +264,22 @@ class QuicklookAlg:
                 exptime = hdr['EXPTIME']
                 print('exptime',exptime)
 
+                # Read telemetry
+                df_telemetry = Table.read(L0_data, format='fits', hdu=11).to_pandas() # need to refer to HDU by name
+                num_columns = ['average', 'stddev', 'min', 'max']
+                for column in df_telemetry:
+                    df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
+                    df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
+                    if column in num_columns:
+                        df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
+                    else:
+                        df_telemetry[column] = df_telemetry[column].astype(str)
+                df_telemetry.set_index("keyword", inplace=True)
+
+                with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
+                    display(df_telemetry)
+
+
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
                 threshold = 2
