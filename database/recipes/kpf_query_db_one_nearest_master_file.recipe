@@ -19,8 +19,6 @@ if do_db_query_for_one_nearest_master_file:
     db_exit_code = query_one_nearest_master_file_list[0]
 
     db_rec = query_one_nearest_master_file_list[1]
-
-    if db_exit_code == 0:
-        db_level = db_rec[1]
-        db_cal_type = db_rec[2]
-        db_master_file = db_rec[6]
+    db_level = db_rec[1]
+    db_cal_type = db_rec[2]
+    db_master_file = db_rec[6]
