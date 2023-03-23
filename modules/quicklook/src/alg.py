@@ -12,7 +12,7 @@ import math
 from astropy import modeling
 from astropy.time import Time
 from datetime import datetime
-from astropy.table import Table
+
 
 class QuicklookAlg:
     """
@@ -265,6 +265,7 @@ class QuicklookAlg:
                 print('exptime',exptime)
 
                 # Read telemetry
+                from astropy.table import Table
                 df_telemetry = Table.read(L0_data, format='fits', hdu=11).to_pandas() # need to refer to HDU by name
                 num_columns = ['average', 'stddev', 'min', 'max']
                 for column in df_telemetry:
