@@ -373,7 +373,7 @@ class QuicklookAlg:
                 cbar.set_label(timelabel, fontsize=18)
                 cbar.ax.tick_params(labelsize=18)
                 cbar.ax.tick_params(size=18)
-                plt.title(ObsID + ' (' + (c == 'green')*('Green CCD') + (c == 'red')*('Red CCD') + ', ' + str(round(exptime)) + ' sec)', fontsize=18)
+                plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
                 plt.xlabel('Column (pixel number)', fontsize=18)
                 plt.ylabel('Row (pixel number)', fontsize=18)
                 plt.xticks(fontsize=14)
