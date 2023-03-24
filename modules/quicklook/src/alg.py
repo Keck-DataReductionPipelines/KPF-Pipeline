@@ -343,7 +343,6 @@ class QuicklookAlg:
                              (((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*(reg[r]['y1']-30)+
                               ((reg[r]['y1'] > 2080) or  (reg[r]['y1'] < 100))*(reg[r]['y2']+30)),
                              str(np.round(reg[r]['med_elec'],1)) + timelabel,
-                             size=16,
                              weight='bold',
                              color='r',
                              ha=(((reg[r]['short'] == 'ref3') or
@@ -362,7 +361,7 @@ class QuicklookAlg:
                 now = datetime.now()
                 coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
                 ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
-                plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), size=9, ha='right', color='gray')
+                plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
                 plt.text(4220,  500, coll_text,  rotation=90, ha='center')
                 plt.text(4220, 3000, ech_text, rotation=90, ha='center')
                 plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white')
