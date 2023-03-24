@@ -40,6 +40,10 @@ class QuicklookAlg:
 
         #check if output location exist, if not create it
 
+        exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
+        date = exposure_name[3:11]
+        print('test',exposure_name, date)
+        
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         #if not os.path.exists(output_dir+'/fig'):
@@ -67,9 +71,7 @@ class QuicklookAlg:
         # try:
         #     exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         # except:
-        exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
-        date = exposure_name[3:11]
-        print('test',exposure_name, date)
+
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
