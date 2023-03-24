@@ -43,7 +43,7 @@ class QuicklookAlg:
         exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
         date = exposure_name[3:11]
         print('test',exposure_name, date)
-        
+
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         #if not os.path.exists(output_dir+'/fig'):
@@ -248,7 +248,7 @@ class QuicklookAlg:
 
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
-            plt.close()
+            #plt.close()
 
 
 
