@@ -31,10 +31,6 @@ channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_re
 channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
 channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + "/" + config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
 channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + "/" + config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
-pl_overscan_reg_red = config.OVERSCAN_SUBTRACTION.pl_overscan_reg_red
-srl_overscan_reg_red = config.OVERSCAN_SUBTRACTION.srl_overscan_reg_red
-pl_overscan_reg_green = config.OVERSCAN_SUBTRACTION.pl_overscan_reg_green
-srl_overscan_reg_green = config.OVERSCAN_SUBTRACTION.srl_overscan_reg_green
 overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
 order = config.OVERSCAN_SUBTRACTION.overscan_order
 oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
@@ -71,8 +67,6 @@ for raw_file_path in file_list:
         # compute red-chip ffi
         l0 = kpf0_from_fits(raw_file_path, data_type)
         red_ffi = OverscanSubtraction(l0,
-                                      pl_overscan_reg_red,
-                                      srl_overscan_reg_red,
                                       overscan_method,
                                       order,
                                       oscan_clip,
@@ -89,8 +83,6 @@ for raw_file_path in file_list:
 
         # add green-chip ffi to data containing red-chip ffi
         L0_with_ffi = OverscanSubtraction(red_ffi,
-                                          pl_overscan_reg_green,
-                                          srl_overscan_reg_green,
                                           overscan_method,
                                           order,
                                           oscan_clip,
