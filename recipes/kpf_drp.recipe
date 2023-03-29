@@ -164,31 +164,35 @@ do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_on
 date_dir_db_query = context.date_dir
 cal_file_level = config.ARGUMENT.cal_file_level
 contentbitmask = config.ARGUMENT.contentbitmask
-cal_type_pair = config.ARGUMENT.cal_type_pair
+cal_type_pairs = config.ARGUMENT.cal_type_pairs
 
 do_db_query_for_one_nearest_wls_master_file = True
 
 if do_db_query_for_one_nearest_wls_master_file:
+	db_wls_exit_code = 1
+	for cal_type_pair in cal_type_pairs:
+		if db_wls_exit_code != 0:
+			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+																					date_dir_db_query,
+																					cal_file_level,
+																					contentbitmask,
+																					cal_type_pair)
 
-    query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-                                                                              date_dir_db_query,
-                                                                              cal_file_level,
-                                                                              contentbitmask,
-                                                                              cal_type_pair)
+			db_wls_exit_code = query_one_nearest_master_file_list[0]
 
-    db_wls_exit_code = query_one_nearest_master_file_list[0]
+			if db_wls_exit_code == 0:
 
-    if db_wls_exit_code == 0:
+				db_wls_rec = query_one_nearest_master_file_list[1]
+				db_wls_master_file = db_wls_rec[6]
+				wave_fits = []
+				for wls in wls_list:
+					wave_fits = wave_fits + [output_dir + db_wls_master_file]
 
-        db_wls_rec = query_one_nearest_master_file_list[1]
-        db_wls_master_file = db_wls_rec[6]
-        wave_fits = []
-        for wls in wls_list:
-            wave_fits = wave_fits + [output_dir + db_wls_master_file]
+				wave_fits = []
+				for wls in wls_list:
+					wave_fits = wave_fits + [output_dir + db_wls_master_file]
 
-        wave_fits = []
-        for wls in wls_list:
-	          wave_fits = wave_fits + [output_dir + db_wls_master_file]
+				
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
 
