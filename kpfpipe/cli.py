@@ -199,11 +199,6 @@ def main():
         observer.schedule(al, path=args.watch, recursive=True)
         observer.start()
 
-        if args.ncpus > 1:
-            framework.start(qm_only=True)
-        else:
-            framework.start(wait_for_event=True, continuous=True)
-
         if args.reprocess:
             framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
 
@@ -219,6 +214,11 @@ def main():
                 time.sleep(3)
 
             framework.append_event('exit', arg)
+
+        if args.ncpus > 1:
+            framework.start(qm_only=True)
+        else:
+            framework.start(wait_for_event=True, continuous=True)
 
     else:
         arg.watch = False
