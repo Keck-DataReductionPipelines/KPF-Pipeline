@@ -88,6 +88,8 @@ if context.watch:
 		lev0_file_path = str_replace(file_path, 'L1', '2D')
 		do_order_trace = False
 		do_spectral_extraction = False
+		do_bc = False
+		do_hk = False
 		do_rv = True
 		# do_rv_reweighting = True
 
@@ -107,6 +109,8 @@ else:
 	if 'L1' in file_path:
 		do_order_trace = False
 		do_spectral_extraction = False
+		do_bc = False
+		do_hk = False
 		do_rv = True
 		# do_rv_reweighting = True
 
@@ -115,6 +119,8 @@ else:
 		do_order_trace = False
 		do_spectral_extraction = False
 		do_rv = False
+		do_bc = False
+		do_hk = False
 		# do_rv_reweighting = True
 
 ## set path to output and input (for 2D, flat and masters) data
