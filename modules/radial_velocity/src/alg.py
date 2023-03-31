@@ -1015,14 +1015,17 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         amp = -1e7 if ccf_dir < 0 else 1e7
 
-        def gaussian_rv(v_cut, rv_mean):
-            g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=5.0)
+        def gaussian_rv(v_cut, rv_mean, sd):
+            if sd is None:
+                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean)
+            else:
+                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=sd)
             ccf = result_ccf
             i_cut = (velocities >= rv_mean - v_cut) & (velocities <= rv_mean + v_cut)
             if not i_cut.any():
                 return None, None, None
             g_x = velocities[i_cut]
-            g_y = ccf[i_cut] - np.nanmedian(ccf)
+            g_y = ccf[i_cut] - np.nanmedian(ccf[i_cut])
             gaussian_fit = FIT_G(g_init, g_x, g_y)
             return gaussian_fit, g_x, g_y
 
@@ -1031,16 +1034,18 @@ class RadialVelocityAlg(RadialVelocityBase):
         #first gaussian fitting
         if mask_method in RadialVelocityAlg.vel_range_per_mask.keys():
             velocity_cut = RadialVelocityAlg.vel_range_per_mask[mask_method]
+            sd = 0.5            # for narrower velocity range
             two_fitting = False
-
-        g_fit, g_x, g_y = gaussian_rv(velocity_cut, rv_guess)
+        else:
+            sd = 5.0
+        g_fit, g_x, g_y = gaussian_rv(velocity_cut, rv_guess, sd)
         if g_fit is not None \
                 and g_x[0] <= g_fit.mean.value <= g_x[-1] \
                 and two_fitting:
             v_cut = 25.0
             # print('mean before 2nd fitting: ', g_fit.mean.value)
 
-            g_fit2, g_x2, g_y2 = gaussian_rv(v_cut, g_fit.mean.value)
+            g_fit2, g_x2, g_y2 = gaussian_rv(v_cut, g_fit.mean.value, sd)
             if g_fit2 is not None and not (g_x2[0] <= g_fit2.mean.value <= g_x2[-1]):
                 # print('mean after 2nd fitting (out of range): ', g_fit2.mean.value)
                 g_fit2 = None
@@ -1078,6 +1083,10 @@ class RadialVelocityAlg(RadialVelocityBase):
         for i in range(self.velocity_steps):
             ccf_table['vel-'+str(i)] = ccf[:, i]
         results = pd.DataFrame(ccf_table)
+
+        total_segments = np.shape(ccf)[0] - RadialVelocityAlg.ROWS_FOR_ANALYSIS
+        rv_segments = np.zeros(total_segments)
+
         # results = pd.DataFrame(ccf)
 
         # calculate rv on ccfs summation
@@ -1086,6 +1095,12 @@ class RadialVelocityAlg(RadialVelocityBase):
             self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
             rv_guess_on_ccf=(self.spectro == 'kpf'),
             vel_span_pixel=self.get_vel_span_pixel())
+
+        for i in range(total_segments):
+            _, rv_segments[i], _, _, _ = self.fit_ccf(
+                ccf[i, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
+                self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
+                rv_guess_on_ccf=(self.spectro == 'kpf'))
 
         def f_decimal(num):
             return float("{:.10f}".format(num))
@@ -1116,6 +1131,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec, an array for all segments
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
             results.attrs['CCF-ERV'] = f_decimal(rv_error)
+            results.attrs['RV_SEGMS'] = rv_segments
+            results.attrs['RV_MEAN'] = np.sum(rv_segments)/total_segments
 
         return results
 
@@ -1298,6 +1315,28 @@ class RadialVelocityAlg(RadialVelocityBase):
             df.to_csv(output_csv, index=False)
 
         return df
+
+    @staticmethod
+    def weighted_rv(rv_arr, total_segment, reweighting_table_or_ccf, s_seg=0):
+        if np.shape(reweighting_table_or_ccf)[1] >= 2:
+            s_seg = 0 if s_seg is None else s_seg
+            e_seg = s_seg + total_segment - 1
+            c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_seg) &
+                             (reweighting_table_or_ccf[:, 0] <= e_seg))[0]
+            tval = reweighting_table_or_ccf[c_idx, -1]  # selected weighting on selected segment
+            sval = reweighting_table_or_ccf[c_idx, 0].astype(int)  # selected original segment index
+        else:
+            tval = reweighting_table_or_ccf[0:total_segment, -1]
+            sval = np.arange(0, total_segment, dtype=int)
+
+        w_rv = 0.0
+        for idx in range(total_segment):
+            w_rv += rv_arr[sval[idx]] * tval[idx]
+
+        if np.sum(tval) != 0:
+            w_rv /= np.sum(tval)
+
+        return w_rv
 
     @staticmethod
     def reweight_ccf(crt_rv, total_segment, reweighting_table_or_ccf, reweighting_method, s_seg=0,
