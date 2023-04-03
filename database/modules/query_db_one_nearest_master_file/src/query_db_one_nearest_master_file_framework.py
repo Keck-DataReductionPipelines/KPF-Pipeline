@@ -38,9 +38,16 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
     Arguments:
         data_type (str): Type of data (e.g., KPF).
         obs_date (str): Date of observations to be processed (e.g., 20230224).
+        cal_file_level (int): Level of master file to be queried from the database (0, 1, or 2).
+                              Set to -1 to fall back on settings in default.cfg file.
+        contentbitmask (int): Content bit mask to be ANDed with contentbits column of CalFiles database record;
+                              contentbitmask = 3 means require at least GREEN and RED CCDs master file.
+        cal_type_pair (list of caltype and object): Database-query qualifiers for CalFiles database record; e.g., ['WLS','cal-lfc-morn']
+        max_cal_file_age (str): Maximum startdate age of master file relative to self.date_dir at 00:00:00 UT; 
+                                expressed as a database interval, such as '2 days'.
 
     Outputs:
-        List of metadata for one master file made from data earlier than the observation date.
+        List of metadata for one master file made earlier than the observation date.
 
     """
 
@@ -53,6 +60,7 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
         self.cal_file_level = self.action.args[2]
         self.contentbitmask = self.action.args[3]
         self.cal_type_pair = self.action.args[4]
+        self.max_cal_file_age = self.action.args[5]
 
         try:
             self.module_config_path = context.config_path['query_db_one_nearest_master_file']
@@ -86,18 +94,29 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
         self.contentbitmask_cfg = ast.literal_eval(contentbitmask_cfg_str)
         cal_type_pair_cfg_str = module_param_cfg.get('cal_type_pair')
         self.cal_type_pair_cfg = ast.literal_eval(cal_type_pair_cfg_str)
+        self.max_cal_file_age_cfg = module_param_cfg.get('max_cal_file_age')
 
         self.logger.info('self.cal_file_level = {}'.format(self.cal_file_level))
         self.logger.info('self.contentbitmask = {}'.format(self.contentbitmask))
         self.logger.info('self.cal_type_pair = {}'.format(self.cal_type_pair))
+        self.logger.info('self.max_cal_file_age = {}'.format(self.max_cal_file_age))
 
         self.logger.info('self.cal_file_level_cfg = {}'.format(self.cal_file_level_cfg))
         self.logger.info('self.contentbitmask_cfg = {}'.format(self.contentbitmask_cfg))
         self.logger.info('self.cal_type_pair_cfg = {}'.format(self.cal_type_pair_cfg))
+        self.logger.info('self.max_cal_file_age_cfg = {}'.format(self.max_cal_file_age_cfg))
 
         self.logger.info('Type of self.cal_file_level_cfg = {}'.format(type(self.cal_file_level_cfg)))
         self.logger.info('Type of self.contentbitmask_cfg = {}'.format(type(self.contentbitmask_cfg)))
         self.logger.info('Type of self.cal_type_pair_cfg = {}'.format(type(self.cal_type_pair_cfg)))
+        self.logger.info('Type of self.max_cal_file_age_cfg = {}'.format(type(self.max_cal_file_age_cfg)))
+
+        if self.cal_file_level == -1:
+            self.cal_file_level = self.cal_file_level_cfg
+            self.contentbitmask = self.contentbitmask_cfg
+            self.cal_type_pair = self.cal_type_pair_cfg
+            self.max_cal_file_age = self.max_cal_file_age_cfg
+
 
     def _perform(self):
 
@@ -164,7 +183,8 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
             "cast(LEVEL as smallint)," +\
             "cast('CALTYPE' as character varying(32))," +\
             "cast('OBJECT' as character varying(32))," +\
-            "cast(CONTENTBITMASK as integer)) as " +\
+            "cast(CONTENTBITMASK as integer), " +\
+            "cast('MAXFILEAGE' as interval)) as " +\
             "(cId integer," +\
             " level smallint," +\
             " caltype varchar(32)," +\
@@ -196,7 +216,8 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
         rep = {"OBSDATE": obsdate,
                "LEVEL": levelstr,
                "CALTYPE": cal_type,
-               "OBJECT": object}
+               "OBJECT": object,
+               "MAXFILEAGE": self.max_cal_file_age}
 
         rep["CONTENTBITMASK"] = str(contentbitmask)
 
