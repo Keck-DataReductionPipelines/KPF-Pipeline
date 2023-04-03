@@ -32,3 +32,13 @@ grant EXECUTE on FUNCTION getCalFile (
     object_          character varying(32),
     contentbitmask_  integer
 ) to kpfporole, kpfreadrole;
+
+-- Overloaded getCalFile function with additional maximum file-age parameter.
+grant EXECUTE on FUNCTION getCalFile (
+    obsDate_         date,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+) to kpfporole, kpfreadrole;
