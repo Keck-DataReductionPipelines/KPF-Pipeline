@@ -287,7 +287,7 @@ for hk_w in hk_wavelength_csvs:
 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
 
 ## for qlp
-output_qlp =  output_dir + config.ARGUMENT.output_qlp + date_dir
+output_qlp =  output_dir + config.ARGUMENT.output_qlp + date_dir + "/"
 end_of_night_summary = False
 
 ####  process for order trace, spectral extraction and CA-HK, radial velocity, and qlp
