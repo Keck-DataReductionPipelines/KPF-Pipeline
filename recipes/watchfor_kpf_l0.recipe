@@ -20,7 +20,7 @@ masterflat_path = config.WATCHFOR_L0.masterflat_path
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
 
-date_dir = context.date_dir
+date_dir = context.date_dir + '/'
 
 if do_db_query_for_master_files:
 
