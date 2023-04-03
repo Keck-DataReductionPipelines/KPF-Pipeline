@@ -49,10 +49,6 @@ do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
 lev0_file_path = ""
 lev1_file_path = ""
 
-## do L0->2D conversion for watch mode
-if context.watch and do_l0_to_2d:
-    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
-
 ##  reset process flags for the process of 2D to L1, L1 to L2, L2 to L2 reweighting for watch mode or non-watch mode ##
 #   watch mode: command is with "--watch /data/L0|2D|L1/yyyymmdd".
 #      => context.watch == True,  context.date_dir: yyyymmdd, context.file_path: /data/2D/yyyymmdd
@@ -69,18 +65,13 @@ if context.watch:
 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
 		do_order_trace = False
-		do_spectral_extraction = True
-		do_rv = True
-		# do_rv_reweighting = True
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
 	if '2D' in file_path:
 		lev0_file_path = file_path
 		lev1_file_path = str_replace(file_path, '2D', 'L1')
+		do_l0_to_2d = False
 		do_order_trace = False
-		do_spectral_extraction = True
-		do_rv = True
-		# do_rv_reweighting = True
 
 	# do rv if L1 data is watched, do l1->l2
 	if 'L1' in file_path:
@@ -88,8 +79,9 @@ if context.watch:
 		lev0_file_path = str_replace(file_path, 'L1', '2D')
 		do_order_trace = False
 		do_spectral_extraction = False
-		do_rv = True
-		# do_rv_reweighting = True
+		do_l0_to_2d = False
+		do_bc = False
+		do_hk = False
 
 else:
 	sel_obsid = context.date_dir
@@ -107,6 +99,8 @@ else:
 	if 'L1' in file_path:
 		do_order_trace = False
 		do_spectral_extraction = False
+		do_bc = False
+		do_hk = False
 		do_rv = True
 		# do_rv_reweighting = True
 
@@ -115,11 +109,14 @@ else:
 		do_order_trace = False
 		do_spectral_extraction = False
 		do_rv = False
+		do_bc = False
+		do_hk = False
 		# do_rv_reweighting = True
 
 ## set path to output and input (for 2D, flat and masters) data
 # date dir for 2D, masters input and L1 and L2 output.
 date_dir = sel_obsid + '/'
+
 
 flat_file_pattern = config.ARGUMENT.flat_file
 # date dir for flat file
@@ -158,6 +155,10 @@ for wls in wls_list:
 	wave_fits = wave_fits + [output_dir + wls]
 
 
+## do L0->2D conversion for watch mode
+if context.watch and do_l0_to_2d:
+    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
+
 # Override wave_fits list with optional database query for nearest WLS master file.
 
 do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
@@ -165,31 +166,34 @@ date_dir_db_query = context.date_dir
 cal_file_level = config.ARGUMENT.cal_file_level
 contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
-max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
 do_db_query_for_one_nearest_wls_master_file = True
 
-if do_db_query_for_one_nearest_wls_master_file:
-    db_wls_exit_code = 1
-    for cal_type_pair in cal_type_pairs:
-        if db_wls_exit_code != 0:
-            query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-                                                                                      date_dir_db_query,
-                                                                                      cal_file_level,
-                                                                                      contentbitmask,
-                                                                                      cal_type_pair,
-                                                                                      max_cal_file_age)
+if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+	db_wls_exit_code = 1
+	for cal_type_pair in cal_type_pairs:
+		if db_wls_exit_code != 0:
+			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+																					date_dir_db_query,
+																					cal_file_level,
+																					contentbitmask,
+																					cal_type_pair)
 
-            db_wls_exit_code = query_one_nearest_master_file_list[0]
+			db_wls_exit_code = query_one_nearest_master_file_list[0]
 
-            if db_wls_exit_code == 0:
+			if db_wls_exit_code == 0:
 
-                db_wls_rec = query_one_nearest_master_file_list[1]
-                db_wls_master_file = db_wls_rec[6]
-                wave_fits = []
-                for wls in wls_list:
-                    wave_fits = wave_fits + [output_dir + db_wls_master_file]
+				db_wls_rec = query_one_nearest_master_file_list[1]
+				db_wls_master_file = db_wls_rec[6]
+				wave_fits = []
+				for wls in wls_list:
+					wave_fits = wave_fits + [output_dir + db_wls_master_file]
 
+				wave_fits = []
+				for wls in wls_list:
+					wave_fits = wave_fits + [output_dir + db_wls_master_file]
+
+				
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
 
