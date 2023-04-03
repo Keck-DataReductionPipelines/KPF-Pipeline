@@ -166,6 +166,7 @@ date_dir_db_query = context.date_dir
 cal_file_level = config.ARGUMENT.cal_file_level
 contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
+max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
 do_db_query_for_one_nearest_wls_master_file = True
 
@@ -177,7 +178,8 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 																					date_dir_db_query,
 																					cal_file_level,
 																					contentbitmask,
-																					cal_type_pair)
+																					cal_type_pair,
+																					max_cal_file_age)
 
 			db_wls_exit_code = query_one_nearest_master_file_list[0]
 
