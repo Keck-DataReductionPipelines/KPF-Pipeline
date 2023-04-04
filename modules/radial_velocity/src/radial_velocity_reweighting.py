@@ -236,7 +236,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
         last_sci_idx = self.last_sci_idx
         sci_ccf_ref = None
 
-
         # do cal rv col first
         ccf_ref_list = list()
         for o in range(total_orderlet-1, -1, -1):
@@ -272,7 +271,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
                                                                    self.reweighting_method, s_seg=self.ccf_start_index,
                                                                    do_analysis=True, velocities=velocities)
             self.ccf_data[o, 0:new_total_seg, :] = rw_ccf[0:new_total_seg, :]     # update ccf value for each orderlet
-
 
             # if existing ccf table with summary row
             if np.shape(self.ccf_data)[1] >= new_total_seg + RadialVelocityAlg.ROWS_FOR_ANALYSIS and not is_rv_ext:
@@ -317,10 +315,11 @@ class RadialVelocityReweighting(KPF2_Primitive):
         #                            velocities, self.s_mask_type,
         #                            rv_guess_on_ccf=(self.instrument == 'kpf'),
         #                            vel_span_pixel=self.vel_span_pixel)
+
         ccd_rv = self.reweight_rv(self.RV_COL_RV, sci_ccf_ref)
         if is_rv_ext:
             rv_ext_header['ccd' + str(self.rv_ext_idx+1) + 'rv'] = ccd_rv - cal_rv if do_corr else ccd_rv  # ccdnrv
-        rv_ext_header['rwccfrv'] = 'T';
+        rv_ext_header['rwccfrv'] = 'T'
 
         self.lev2_obj.receipt_add_entry('RadialVelocityReweighting on '+ self.ccf_ext,
                                     self.__module__, f'config_path={self.config_path}', 'PASS')
@@ -383,7 +382,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
                                                                 rv_guess_on_ccf=(self.instrument=='kpf'))
                 rv_ext_values[s+rv_start_idx, sci_idx[o]] = orderlet_rv
                 sum_rv.append(orderlet_rv)
-
             # update orderletn column at segment s
             # _, seg_rv, _, _, _ = RadialVelocityAlg.fit_ccf(sum_segment,
             #                                RadialVelocityAlg.get_rv_estimation(rv_ext_header),

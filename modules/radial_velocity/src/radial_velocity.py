@@ -563,12 +563,13 @@ class RadialVelocity(KPF1_Primitive):
                                              sci_mask,
                                              rv_guess_on_ccf=(ins == 'kpf'),
                                              vel_span_pixel=self.alg.get_vel_span_pixel())
-            final_rv = sum(rv_table[self.RV_COL_RV])/len(rv_table[self.RV_COL_RV])   # mean of rv column
+            t_avg = np.sum(rv_table[self.RV_COL_RV] != 0.0)
+            final_rv = sum(rv_table[self.RV_COL_RV])/t_avg if t_avg != 0.0 else 0.0     # mean
 
         # ccd1rv, ccd2rv, ccd1erv ccd2erv, cal rv
 
         results.attrs['rv'] = (f_decimal(final_rv - cal_rv), 'BaryC RV (km/s)') \
-            if do_corr else (f_decimal(final_rv), 'BaryC RV (km/s)')
+            if do_corr and final_rv != 0.0 else (f_decimal(final_rv), 'BaryC RV (km/s)')
         results.attrs['rverr'] = f_decimal(final_rv_err)
         results.attrs['ccd_jd'] = ccfjd
         results.attrs['star_rv'] = starrv

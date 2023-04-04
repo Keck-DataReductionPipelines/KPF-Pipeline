@@ -161,11 +161,16 @@ class RadialVelocityInit(KPF_Primitive):
 
         init_result = self.alg_rv_init.start()
 
-        assert(init_result['status'] and 'data' in init_result)
+        if init_result['status'] and 'data' in init_result:
+            if self.logger:
+                self.logger.info("RadialVelocityInit: Init for radial velocity is done")
 
-        if self.logger:
-            self.logger.info("RadialVelocityInit: Init for radial velocity is done")
+            return Arguments(init_result)
+        else:
+            if self.logger:
+                self.logger.info("RadialVelocityInit: Init for radial velocity fails - " + init_result['msg'])
 
-        return Arguments(init_result)
+            return Arguments(None)
+
 
 
