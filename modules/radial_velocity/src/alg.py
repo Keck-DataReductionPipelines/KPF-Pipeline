@@ -6,6 +6,7 @@ import warnings
 import datetime
 import pandas as pd
 import os
+import math
 
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
@@ -1013,19 +1014,22 @@ class RadialVelocityAlg(RadialVelocityBase):
         if ccf_dir == 0 and rv_guess == 0.0:
             return None, rv_guess, None, None, rv_error
 
-        amp = -1e7 if ccf_dir < 0 else 1e7
-
         def gaussian_rv(v_cut, rv_mean, sd):
-            if sd is None:
-                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean)
-            else:
-                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=sd)
+            # amp = -1e7 if ccf_dir < 0 else 1e7
             ccf = result_ccf
             i_cut = (velocities >= rv_mean - v_cut) & (velocities <= rv_mean + v_cut)
             if not i_cut.any():
                 return None, None, None
             g_x = velocities[i_cut]
             g_y = ccf[i_cut] - np.nanmedian(ccf[i_cut])
+            y_dist = abs(np.nanmax(g_y) - np.nanmin(g_y)) * 100
+            amp = max(-1e7, np.nanmin(g_y) - y_dist) if ccf_dir < 0 else min(1e7, np.nanmax(g_y) + y_dist)
+
+            if sd is None:
+                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean)
+            else:
+                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=sd)
+
             gaussian_fit = FIT_G(g_init, g_x, g_y)
             return gaussian_fit, g_x, g_y
 
@@ -1046,23 +1050,27 @@ class RadialVelocityAlg(RadialVelocityBase):
             # print('mean before 2nd fitting: ', g_fit.mean.value)
 
             g_fit2, g_x2, g_y2 = gaussian_rv(v_cut, g_fit.mean.value, sd)
-            if g_fit2 is not None and not (g_x2[0] <= g_fit2.mean.value <= g_x2[-1]):
+            if g_fit2 is not None and \
+                    not (g_x2[0] <= g_fit2.mean.value <= g_x2[-1]):
                 # print('mean after 2nd fitting (out of range): ', g_fit2.mean.value)
                 g_fit2 = None
         else:
             g_fit2 = None
 
-        # rv_error = 0.0
         if vel_span_pixel is not None and g_fit is not None:
-            g_mean = rv_guess if g_fit2 is None else g_fit.mean.value   # use the 1st guess if the 2nd fitting fails
-            f_wid = velocity_cut if g_fit2 is None else v_cut           # use the 1st vel range if the 2nd fitting fails
+            if g_fit2 is None or math.isnan(g_fit.mean.value):
+                g_mean = rv_guess               # use the 1st guess if the 2nd fitting fails
+                f_wid = velocity_cut            # use the 1st vel range if the 2nd fitting fails
+            else:
+                g_mean = g_fit.mean.value
+                f_wid = v_cut
 
             rv_error = RadialVelocityAlg.ccf_error_calc(velocities, result_ccf, f_wid*2, vel_span_pixel, g_mean)
 
-        if g_fit2 is not None:
+        if g_fit2 is not None and not math.isnan(g_fit2.mean.value):
             return g_fit2, g_fit2.mean.value, g_x2, g_y2, rv_error
         elif g_fit is not None:
-            return g_fit, g_fit.mean.value, g_x, g_y, rv_error
+            return g_fit, (0.0 if math.isnan(g_fit.mean.value) else g_fit.mean.value), g_x, g_y, rv_error
         else:
             return None, 0.0, None, None, 0.0
 
@@ -1132,7 +1140,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
             results.attrs['CCF-ERV'] = f_decimal(rv_error)
             results.attrs['RV_SEGMS'] = rv_segments
-            results.attrs['RV_MEAN'] = np.sum(rv_segments)/total_segments
+            total_to_avg = np.sum(rv_segments != 0.0)
+            results.attrs['RV_MEAN'] = np.sum(rv_segments)/total_to_avg if total_to_avg != 0 else 0.0
 
         return results
 
@@ -1329,12 +1338,10 @@ class RadialVelocityAlg(RadialVelocityBase):
             tval = reweighting_table_or_ccf[0:total_segment, -1]
             sval = np.arange(0, total_segment, dtype=int)
 
-        w_rv = 0.0
-        for idx in range(total_segment):
-            w_rv += rv_arr[sval[idx]] * tval[idx]
-
-        if np.sum(tval) != 0:
-            w_rv /= np.sum(tval)
+        new_rv_arr = rv_arr[sval]
+        total_to_avg = np.sum(tval[(new_rv_arr != 0.0) & (tval != 0.0)])
+        w_rv = np.sum(new_rv_arr * tval) / total_to_avg if total_to_avg != 0 else 0.0
+        # print("total_to_avg: ", total_to_avg, " w_rv:", w_rv)
 
         return w_rv
 
