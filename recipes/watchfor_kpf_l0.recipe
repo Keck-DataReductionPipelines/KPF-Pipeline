@@ -68,7 +68,6 @@ file_path = context.file_path
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
 for raw_file_path in file_list:
-    date_dir = context.date_dir
     td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
 
     _,file_name_ext = split(raw_file_path)
