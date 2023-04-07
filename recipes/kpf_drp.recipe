@@ -117,7 +117,6 @@ else:
 # date dir for 2D, masters input and L1 and L2 output.
 date_dir = sel_obsid + '/'
 
-
 flat_file_pattern = config.ARGUMENT.flat_file
 # date dir for flat file
 date_dir_flat = date_from_kpffile(flat_file_pattern)
@@ -159,8 +158,8 @@ for wls in wls_list:
 if context.watch and do_l0_to_2d:
     invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
-# Override wave_fits list with optional database query for nearest WLS master file.
 
+# Override wave_fits list with optional database query for nearest WLS master file.
 do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
 date_dir_db_query = context.date_dir
 cal_file_level = config.ARGUMENT.cal_file_level
@@ -212,7 +211,6 @@ origin = [data_col_range[0], data_row_range[0]]
 #    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
 lev0_flat_pattern = input_2d_dir_flat + flat_file_pattern + fits_ext
 output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
-
 
 ## for spectral extraction: input and output
 #    lev0_science_pattern: if watch mode => a single 2D file, /data/2D/<date_dir>/<a single watched 2D fits>
