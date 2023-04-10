@@ -40,20 +40,38 @@ class QuicklookAlg:
 
         #check if output location exist, if not create it
 
+        exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
+        date = exposure_name[3:11]
+        print('test',exposure_name, date)
+
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        if not os.path.exists(output_dir+'/fig'):
-            os.makedirs(output_dir+'/fig')
+        #if not os.path.exists(output_dir+'/fig'):
+        #    os.makedirs(output_dir+'/fig')
 
+        if not os.path.exists(output_dir+'/'+exposure_name+'/2D'):
+            os.makedirs(output_dir+'/'+exposure_name+'/2D')
 
+        if not os.path.exists(output_dir+'/'+exposure_name+'/2D_analysis'):
+            os.makedirs(output_dir+'/'+exposure_name+'/2D_analysis')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/1D'):
+            os.makedirs(output_dir+'/'+exposure_name+'/1D')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/ExpMeter'):
+            os.makedirs(output_dir+'/'+exposure_name+'/ExpMeter')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
+            os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/CCF'):
+            os.makedirs(output_dir+'/'+exposure_name+'/CCF')
         #print('working on',file_name)
 
         # try:
         #     exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         # except:
-        exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
-        date = exposure_name[3:11]
-        print('test',exposure_name, date)
+
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
@@ -229,8 +247,8 @@ class QuicklookAlg:
 
 
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
-            plt.close()
+            plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+            #plt.close()
 
 
 
@@ -254,7 +272,7 @@ class QuicklookAlg:
                 plt.ylim(3200,4000)
                 plt.title(ccd_color[i_color]+' '+version+' Order Trace ' +exposure_name)
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png', dpi=300)
+                plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'_zoomable.png', dpi=300)
             plt.close()
 
             #diagnostic for fixed noise patterns
@@ -362,12 +380,12 @@ class QuicklookAlg:
                 coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
                 ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
                 #plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
-                plt.text(4220,  500, coll_text,  rotation=90, ha='center')
-                plt.text(4220, 3000, ech_text, rotation=90, ha='center')
-                plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white')
-                plt.text( 150, 1500, 'Top Side\n (red side of orders)',    rotation=90, ha='center', color='white')
-                plt.text(2040,   70, 'Collimator Side',                     rotation= 0, ha='center', color='white')
-                plt.text(2040, 3970, 'Echelle Side',                        rotation= 0, ha='center', color='white')
+                plt.text(4220,  500, coll_text,  rotation=90, ha='center',fontsize = 6)
+                plt.text(4220, 3000, ech_text, rotation=90, ha='center',fontsize = 6)
+                plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white',fontsize = 6)
+                plt.text( 150, 1500, 'Top Side\n (red side of orders)',    rotation=90, ha='center', color='white',fontsize = 6)
+                plt.text(2040,   70, 'Collimator Side',                     rotation= 0, ha='center', color='white',fontsize = 6)
+                plt.text(2040, 3970, 'Echelle Side',                        rotation= 0, ha='center', color='white',fontsize = 6)
                 cbar = plt.colorbar()
                 cbar.set_label(timelabel)#, fontsize=18
                 cbar.ax.tick_params()#labelsize=18
@@ -378,7 +396,7 @@ class QuicklookAlg:
                 plt.xticks()#KP.20230317.07770.97
                 plt.yticks()
                 plt.grid(False)
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png', dpi=1000)
+                plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 plt.close()
                 #end of ion pump plot
 
@@ -399,8 +417,8 @@ class QuicklookAlg:
 
                 plt.text(2200,3600, 'Nominal STD: %5.1f' % np.nanstd(np.ravel(low_var_counts)))
                 plt.text(2200,3300, 'Fixed Pattern STD: %5.1f' % np.nanstd(np.ravel(high_var_counts)))
-                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'.png', dpi=1000)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'_zoomable.png')
+                plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_2D_Frame_high_var_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 plt.close()
                 '''
                 plt.figure(figsize=(5,4))
@@ -411,7 +429,7 @@ class QuicklookAlg:
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+' Low Variance')
                 plt.colorbar(label = 'Counts (e-)')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'_zoomable.png')
                 '''
             print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
@@ -428,8 +446,8 @@ class QuicklookAlg:
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name)
                 plt.colorbar(label = 'Fractional Difference')
-                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'.png', dpi=1000)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'_zoomable.png')
+                plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_2D_Difference_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
              #Hisogram
             plt.close()
             plt.figure(figsize=(5,4))
@@ -445,7 +463,7 @@ class QuicklookAlg:
             plt.title(ccd_color[i_color]+' '+version+' Histogram '+exposure_name)
             plt.legend(loc='lower right')
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
+            plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png', dpi=200)
 
             #Column cut
             plt.close()
@@ -480,7 +498,7 @@ class QuicklookAlg:
                      #plt.plot(x_grid[which_column],y_grid[which_column]+order_trace.iloc[i]['TopEdge'],color ='black',linewidth = 0.2,alpha = 1)
             '''
             #plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'.png', dpi=200)
+            plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_Column_cut_'+ccd_color[i_color]+'_zoomable.png', dpi=200)
             plt.close()
 
         #exposure meter plots
@@ -567,7 +585,7 @@ class QuicklookAlg:
             plt.xticks(fontsize=12)
             plt.yticks(fontsize=12)
             plt.legend(fontsize=12, loc='best')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Time_Series.png', dpi=200)
+            plt.savefig(output_dir+'/'+exposure_name+'/ExpMeter/'+exposure_name+'_Exposure_Meter_Time_Series.png', dpi=200)
             plt.close()
 
             #plt.style.use('seaborn-whitegrid')
@@ -594,7 +612,7 @@ class QuicklookAlg:
             labs = [l.get_label() for l in lns]
             ax1.legend(lns, labs, loc=0,fontsize=12)
             #plt.show()
-            plt.savefig(output_dir+'fig/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
+            plt.savefig(output_dir+'/'+exposure_name+'/ExpMeter/'+exposure_name+'_Exposure_Meter_Spectrum.png', dpi=200)
             plt.close()
             plt.style.use('default')
             #input("Press Enter to continue...")
@@ -623,7 +641,7 @@ class QuicklookAlg:
                 plt.ylabel('x (pixel number)')
                 plt.title('Ca H&K 2D '+exposure_name)#
                 plt.legend()
-                plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_2D.png', dpi=1000)
+                plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_2D_zoomable.png', dpi=1000)
                 plt.close()
 
 
@@ -701,7 +719,7 @@ class QuicklookAlg:
                     ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
                 plt.title('Ca H&K Spectrum '+exposure_name)#
                 plt.legend()
-                plt.savefig(output_dir+'fig/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
+                plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
                 plt.close()
             #print(np.shape(hdulist['ca_hk'].data))
             rv_shift = hdulist[0].header['TARGRADV']
@@ -793,7 +811,7 @@ class QuicklookAlg:
             ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_zoomable.png',dpi = 200)
 
             #make a comparison plot of the three science fibres
             plt.close()
@@ -806,7 +824,7 @@ class QuicklookAlg:
             plt.title('Science Orderlets in GREEN '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
-            plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
             plt.close()
 
             plt.close()
@@ -819,7 +837,7 @@ class QuicklookAlg:
             plt.title('Science Orderlets in RED '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
-            plt.savefig(output_dir+'fig/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
             plt.close()
 
 
@@ -842,7 +860,7 @@ class QuicklookAlg:
             plt.title('Orderlets Flux Ratios '+exposure_name)
             #plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
-            plt.savefig(output_dir+'fig/'+exposure_name+'_orderlets_flux_ratio.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_orderlets_flux_ratio.png',dpi = 200)
             plt.close()
         else: print('L1 file does not exist')
 
@@ -934,7 +952,7 @@ class QuicklookAlg:
             plt.xlim(np.min(vel_grid),np.max(vel_grid))
             plt.legend()
             #plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
-            plt.savefig(output_dir+'fig/'+exposure_name+'_simple_ccf.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/CCF/'+exposure_name+'_simple_ccf_zoomable.png')
             plt.close()
 
             #plot ccf in individual orders
@@ -955,7 +973,7 @@ class QuicklookAlg:
                 plt.xlabel('RV (km/s)')
                 plt.ylabel('CCF')
                 plt.title(ccf_color[i_color]+' by Order '+exposure_name)
-                plt.savefig(output_dir+'fig/'+exposure_name+'_ccf_'+ccf_color[i_color]+'.png',dpi =200)
+                plt.savefig(output_dir+'/'+exposure_name+'/CCF/'+exposure_name+'_ccf_'+ccf_color[i_color]+'_zoomable.png',dpi =200)
                 plt.close()
         else: print('L2 file does not exist')
 
@@ -963,6 +981,7 @@ class QuicklookAlg:
 
         plt.close('all')
         #output the results to html
+        '''
         f = open(output_dir+exposure_name+'_summary.html','w')
 
         message = """<html><head><title>""" +exposure_name+ """</title>
@@ -1601,3 +1620,4 @@ class QuicklookAlg:
 
         f.write(message)
         f.close()
+        '''
