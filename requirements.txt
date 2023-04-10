@@ -1,6 +1,6 @@
 astropy==4.0.4
 pandas==1.0.4
-numpy==1.24.2
+numpy==1.19.5
 lmfit==1.0.1
 xlsxwriter
 matplotlib
