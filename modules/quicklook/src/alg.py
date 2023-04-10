@@ -380,12 +380,12 @@ class QuicklookAlg:
                 coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
                 ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
                 #plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
-                plt.text(4220,  500, coll_text,  rotation=90, ha='center')
-                plt.text(4220, 3000, ech_text, rotation=90, ha='center')
-                plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white')
-                plt.text( 150, 1500, 'Top Side\n (red side of orders)',    rotation=90, ha='center', color='white')
-                plt.text(2040,   70, 'Collimator Side',                     rotation= 0, ha='center', color='white')
-                plt.text(2040, 3970, 'Echelle Side',                        rotation= 0, ha='center', color='white')
+                plt.text(4220,  500, coll_text,  rotation=90, ha='center',fontsize = 12)
+                plt.text(4220, 3000, ech_text, rotation=90, ha='center',fontsize = 12)
+                plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white',fontsize = 12)
+                plt.text( 150, 1500, 'Top Side\n (red side of orders)',    rotation=90, ha='center', color='white',fontsize = 12)
+                plt.text(2040,   70, 'Collimator Side',                     rotation= 0, ha='center', color='white',fontsize = 12)
+                plt.text(2040, 3970, 'Echelle Side',                        rotation= 0, ha='center', color='white',fontsize = 12)
                 cbar = plt.colorbar()
                 cbar.set_label(timelabel)#, fontsize=18
                 cbar.ax.tick_params()#labelsize=18
