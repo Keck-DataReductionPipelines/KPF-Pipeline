@@ -377,10 +377,6 @@ class WaveCalibration:
                     sigma_clip=self.sigma_clip
                 )
 
-                with open('linelist.txt', 'a') as f:
-                    for i in range(len(wls)):
-                        print(order_num, wls[i], fitted_peak_pixels[i], file=f)
-
                 poly_soln_final_array[order_num,:] = polynomial_wls
 
                 if plt_path is not None:
