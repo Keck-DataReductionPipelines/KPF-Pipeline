@@ -954,7 +954,7 @@ class WaveCalibration:
         for i in range(n_clipped_peaks):
 
             # calculate difference in peak locs of last several peaks
-            num_peaks_kernel = 100
+            num_peaks_kernel = 50
             if (i < num_peaks_kernel):
                 running_peak_diff = np.median(
                     np.diff(fitted_peak_pixels[good_peak_idx][0:num_peaks_kernel])
