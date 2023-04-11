@@ -167,8 +167,6 @@ contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
-do_db_query_for_one_nearest_wls_master_file = True
-
 if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 	db_wls_exit_code = 1
 	for cal_type_pair in cal_type_pairs:
