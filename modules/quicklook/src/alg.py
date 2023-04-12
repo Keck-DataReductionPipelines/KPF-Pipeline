@@ -964,6 +964,12 @@ class QuicklookAlg:
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
+                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
+
+
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
                 ax = plt.subplot()
                 plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
