@@ -29,6 +29,8 @@
                       Defaults to 3.
                     - `action.args['origin']: (list, optional)`: Origin of the image where the order trace is related
                       to. Defaults to [0, 0]
+                    - `action.args['orderlet_widths']: (dict, optional)`: Orderlet widths to replace the edge widths
+                      from the order trace file. Defaults to {} or None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace in the master
@@ -70,6 +72,7 @@ import configparser
 import pandas as pd
 import numpy as np
 import os
+import numbers
 
 # Pipeline dependencies
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -93,7 +96,8 @@ class OrderMask(KPF0_Primitive):
                     'trace_file': None,
                     'poly_degree': 3,
                     'origin': [0, 0],
-                    'orderlets_on_image': None
+                    'orderlets_on_image': None,
+                    'orderlet_widths': None
             }
 
     NORMAL = 0
@@ -115,7 +119,7 @@ class OrderMask(KPF0_Primitive):
         input_flux = action.args[0]         # kpf0 instance for L0 data
         self.output_level0 = action.args[1] # kpf0 output containing order mask
         o_names = self.get_args_value('orderlet_names', action.args, args_keys)
-        if o_names is not None:
+        if o_names is not None and o_names:
             self.orderlet_names = o_names if type(o_names) is list else [o_names]
         else:
             self.orderlet_names = None
@@ -125,6 +129,12 @@ class OrderMask(KPF0_Primitive):
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
         self.orderlets_on_image = action.args["orderlets_on_image"] if "orderlets_on_image" in args_keys \
             else self.orderlet_names
+
+        od_widths = action.args['orderlet_widths'] if 'orderlet_widths' in args_keys else None
+        if od_widths is not None and isinstance(od_widths, list) and od_widths:
+            self.orderlet_widths = od_widths
+        else:
+            self.orderlet_widths = None
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -153,7 +163,10 @@ class OrderMask(KPF0_Primitive):
             order_trace_header = {'STARTCOL': origin[0], 'STARTROW': origin[1], 'POLY_DEG': poly_degree}
 
         try:
-            self.alg = OrderMaskAlg(self.img_data,
+            if self.orderlets_on_image is None:
+                self.alg = None
+            else:
+                self.alg = OrderMaskAlg(self.img_data,
                                 self.order_trace_data,
                                 order_trace_header,
                                 orderlet_names=self.orderlet_names,
@@ -166,11 +179,7 @@ class OrderMask(KPF0_Primitive):
         """
         Check for some necessary pre conditions
         """
-        # input argument must be KPF0
-
-        success = (self.orderlet_names is not None) and (self.orderlets_on_image is not None)
-
-        return success
+        return True
 
     def _post_condition(self) -> bool:
         """
@@ -193,13 +202,40 @@ class OrderMask(KPF0_Primitive):
             self.logger.info("OrderMask: creating order mask...")
         if self.alg is None:
             if self.logger:
-                self.logger.info("OrderMask: no flux data or order trace data for "+self.data_ext)
+                self.logger.info("OrderMask: no flux data or order trace data or no orderlet on image for "+self.data_ext)
             return Arguments(None)
 
         order_mask_result = None
-        for order_name in self.orderlet_names:
+        total_orderlet = len(self.orderlet_names)
+
+        def is_eligible_width_number(w_num):
+            return (isinstance(w_num, numbers.Number) or w_num.isnumeric()) and float(w_num) >= 0.0
+
+        if self.orderlet_widths is not None and len(self.orderlet_names) != len(self.orderlet_widths):
+            if self.logger:
+                self.logger.info("OrderMask: size of orderlet width not match the size of orderlet names")
+            self.orderlet_widths = None
+
+        for idx in range(total_orderlet):
+            order_name = self.orderlet_names[idx]
+            o_width = self.orderlet_widths[idx] if self.orderlet_widths is not None else None
+            if o_width is not None:
+                if not isinstance(o_width, list):           # list
+                    o_width = [o_width, o_width]
+
+                if len(o_width) < 1:                # empty list
+                    o_width = None
+                elif len(o_width) == 1:
+                    o_width = [o_width[0], o_width[0]]
+                else:
+                    o_width = [o_width[0], o_width[1]]
+
+                if o_width is not None:
+                   o_width = [float(o_width[0]), float(o_width[1])] \
+                       if all([is_eligible_width_number(o_width[i]) for i in range(2)]) else None
+
             o_name = order_name if order_name in self.orderlets_on_image else None
-            order_mask_result = self.alg.get_order_mask(o_name)
+            order_mask_result = self.alg.get_order_mask(o_name, s_width=o_width)
 
             assert ('order_mask_result' in order_mask_result and
                     isinstance(order_mask_result['order_mask_result'], np.ndarray))
