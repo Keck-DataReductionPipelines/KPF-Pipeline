@@ -567,7 +567,7 @@ class RadialVelocity(KPF1_Primitive):
             good_idx = np.where(rv_table[self.RV_COL_RV] != 0.0)[0]
             final_rv = sigma_clipped_stats(rv_table[self.RV_COL_RV][good_idx])[0]          # sigma-clipped mean
             cal_rv = sigma_clipped_stats(rv_table[self.RV_COL_CAL][good_idx])[0]           # sigma-clip for the CAL RV also
-            final_rv_err /= len(good_idx)**0.5                                         # RV error divided by sqrt of number of measurements (3 orderlets, good_idx orders)
+            final_rv_err /= len(good_idx)**0.5                                         # RV error divided by sqrt of number of measurements (good_idx number of orders)
 
         # ccd1rv, ccd2rv, ccd1erv ccd2erv, cal rv
 
