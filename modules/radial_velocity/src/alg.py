@@ -1142,8 +1142,10 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
             results.attrs['CCF-ERV'] = f_decimal(rv_error)
             results.attrs['RV_SEGMS'] = rv_segments
-            total_to_avg = np.sum(rv_segments != 0.0)
-            results.attrs['RV_MEAN'] = np.sum(rv_segments)/total_to_avg if total_to_avg != 0 else 0.0
+            # total_to_avg = np.sum(rv_segments != 0.0)
+            # results.attrs['RV_MEAN'] = np.sum(rv_segments)/total_to_avg if total_to_avg != 0 else 0.0
+            self.weighted_rv(rv_segments, rv_segments.size,
+                             np.where(rv_segments != 0.0, 1, 0).reshape(rv_segments.size, 1))
 
         return results
 
