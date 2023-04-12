@@ -968,7 +968,7 @@ class QuicklookAlg:
                 if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
                 ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
-
+                ccf_weights[12] = 0
 
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
                 ax = plt.subplot()
