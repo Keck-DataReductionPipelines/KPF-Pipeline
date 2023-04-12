@@ -135,6 +135,13 @@ foreach my $op (@op) {
     }
 }
 
+my $dbenvfile="$codedir/db.env";
+`touch $dbenvfile`;
+`chmod 600 $dbenvfile`;
+open(OUT,">$dbenvfile");
+print OUT "export DBPASS=\"$dbpass\"\n";
+close(OUT);
+
 
 # Print environment.
 
@@ -161,7 +168,7 @@ print "dbport=$dbport\n";
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
-my $script = "#! /bin/bash\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
+my $script = "#! /bin/bash\nsource $dbenvfile\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
@@ -176,7 +183,7 @@ print "Output from dockerrmcmd: $opdockerrmcmd\n";
 
 my $dockerruncmd = "docker run -d --name $containername -p 6207:6207 -e KPFPIPE_PORT=$kpfpipeport " .
                    "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
-                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBPASS=\"$dbpass\" -e DBSERVER=127.0.0.1 " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
 #print "Executing $dockerruncmd\n";                                # COMMENT OUT THIS LINE: DO NOT PRINT DATABASE PASSWORD TO LOGFILE!
 my $opdockerruncmd = `$dockerruncmd`;
