@@ -2,6 +2,7 @@ from astropy.io import fits
 import numpy as np
 from astropy.modeling import models, fitting
 from astropy import constants as const
+from astropy.stats import sigma_clipped_stats
 import warnings
 import datetime
 import pandas as pd
@@ -951,6 +952,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             rv_guess = hdu_header['TARGRADV']
         elif init_data != None:
             rv_guess = init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
+
         return rv_guess
 
     @staticmethod
@@ -1339,8 +1341,9 @@ class RadialVelocityAlg(RadialVelocityBase):
             sval = np.arange(0, total_segment, dtype=int)
 
         new_rv_arr = rv_arr[sval]
-        total_to_avg = np.sum(tval[(new_rv_arr != 0.0) & (tval != 0.0)])
-        w_rv = np.sum(new_rv_arr * tval) / total_to_avg if total_to_avg != 0 else 0.0
+        good_idx = np.where((new_rv_arr != 0.0) & (tval != 0.0))[0]
+        total_to_avg = np.sum(tval[good_idx])
+        w_rv = sigma_clipped_stats(new_rv_arr[good_idx]*tval[good_idx])[0] if total_to_avg != 0 else 0.0
         # print("total_to_avg: ", total_to_avg, " w_rv:", w_rv)
 
         return w_rv
