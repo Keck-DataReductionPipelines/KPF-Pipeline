@@ -109,7 +109,7 @@ if (! (defined $dbuser)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.1';
+my $version = '1.3';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -135,12 +135,15 @@ foreach my $op (@op) {
     }
 }
 
-my $dbenvfile="$codedir/db.env";
+my $dbenvfilename = "db.env";
+my $dbenvfile = "$codedir/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/" . $dbenvfilename;
+
 `touch $dbenvfile`;
 `chmod 600 $dbenvfile`;
-open(OUT,">$dbenvfile");
+open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
 print OUT "export DBPASS=\"$dbpass\"\n";
-close(OUT);
+close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
 
 
 # Print environment.
@@ -162,13 +165,15 @@ print "KPFCRONJOB_DOCKER_NAME_L1=$containername\n";
 print "dbuser=$dbuser\n";
 print "dbname=$dbname\n";
 print "dbport=$dbport\n";
+print "dbenvfile=$dbenvfile\n";
+print "dbenvfileinside=$dbenvfileinside\n";
 
 
 # Change directory to where the Dockerfile is located.
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
-my $script = "#! /bin/bash\nsource $dbenvfile\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
+my $script = "#! /bin/bash\nsource $dbenvfileinside\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
@@ -185,7 +190,7 @@ my $dockerruncmd = "docker run -d --name $containername -p 6207:6207 -e KPFPIPE_
                    "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
-#print "Executing $dockerruncmd\n";                                # COMMENT OUT THIS LINE: DO NOT PRINT DATABASE PASSWORD TO LOGFILE!
+print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
 print "Output from dockerruncmd: $opdockerruncmd\n";
 
