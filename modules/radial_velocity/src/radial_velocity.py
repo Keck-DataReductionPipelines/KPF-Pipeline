@@ -97,6 +97,7 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.radial_velocity.src.alg import RadialVelocityAlg
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from astropy.time import Time
+from astropy.stats import sigma_clipped_stats
 
 DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
@@ -563,17 +564,19 @@ class RadialVelocity(KPF1_Primitive):
                                              sci_mask,
                                              rv_guess_on_ccf=(ins == 'kpf'),
                                              vel_span_pixel=self.alg.get_vel_span_pixel())
-            t_avg = np.sum(rv_table[self.RV_COL_RV] != 0.0)
-            final_rv = sum(rv_table[self.RV_COL_RV])/t_avg if t_avg != 0.0 else 0.0     # mean
+            good_idx = np.where(rv_table[self.RV_COL_RV] != 0.0)[0]
+            final_rv = sigma_clipped_stats(rv_table[self.RV_COL_RV][good_idx])[0]          # sigma-clipped mean
+            cal_rv = sigma_clipped_stats(rv_table[self.RV_COL_CAL][good_idx])[0]           # sigma-clip for the CAL RV also
+            # final_rv_err /= len(good_idx)**0.5                                         # RV error divided by sqrt of number of measurements (good_idx number of orders)
 
         # ccd1rv, ccd2rv, ccd1erv ccd2erv, cal rv
 
-        results.attrs['rv'] = (f_decimal(final_rv - cal_rv), 'BaryC RV (km/s)') \
-            if do_corr and final_rv != 0.0 else (f_decimal(final_rv), 'BaryC RV (km/s)')
+        results.attrs['rv'] = (f_decimal(final_rv - cal_rv), 'Bary-corrected RV (km/s)') \
+            if do_corr and final_rv != 0.0 else (f_decimal(final_rv), 'Bary-corrected RV (km/s)')
         results.attrs['rverr'] = f_decimal(final_rv_err)
         results.attrs['ccd_jd'] = ccfjd
         results.attrs['star_rv'] = starrv
-        results.attrs['rv_cal'] = (f_decimal(cal_rv), 'BaryC RV (km/s)')      # ccd1crv
+        results.attrs['rv_cal'] = (f_decimal(cal_rv), 'Cal fiber RV (km/s)')      # ccd1crv
         results.attrs['do_rv_corr'] = do_corr
         return results
 
