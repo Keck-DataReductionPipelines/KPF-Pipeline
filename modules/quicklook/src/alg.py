@@ -807,7 +807,7 @@ class QuicklookAlg:
 
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-)',fontsize = 20)
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
             ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
@@ -919,9 +919,13 @@ class QuicklookAlg:
 
 
                 #print('step',step,len(vel_grid))
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
+                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
+                if i_color == 0: ccf_weights[12] = 0
 
-
-                mean_ccf = np.nanmean(ccf,axis = 0)/np.percentile(np.nanmean(ccf,axis = 0),[99.9])
+                mean_ccf = np.average(ccf,axis = 0,weights = ccf_weights)/np.percentile(np.average(ccf,axis = 0,weights = ccf_weights),[99.9])
                 #print('test',np.shape(np.nanmean(ccf,axis = 0)))
 
                 #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
@@ -963,11 +967,18 @@ class QuicklookAlg:
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
+                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
+                if i_color == 0: ccf_weights[12] = 0
+
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
                 ax = plt.subplot()
                 plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
                 for kk in range(np.shape(ccf)[1]):
-                    plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3)
+                    if ccf_weights[kk] == 1: plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3)
+                    if ccf_weights[kk] == 0: plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3,':')
                     plt.plot([gamma,gamma],[0,1+kk*0.3],':',color = 'gray')
                     plt.text(vel_grid[-1]+2,1+kk*0.3,str(kk),verticalalignment = 'center')
                 plt.xlabel('RV (km/s)')
