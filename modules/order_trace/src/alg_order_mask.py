@@ -75,6 +75,9 @@ class OrderMaskAlg(ModuleAlgBase):
             raise TypeError('type: ' + str(type(order_trace_header)) +
                             ' flux header type error, cannot construct object from OrderMaskAlg')
 
+        if orderlet_names is None:
+            raise  TypeError('no orderlet names specified, cannot construct object from OrderMaskAlg')
+
         ModuleAlgBase.__init__(self, logger_name, config, logger)
 
         self.spectrum_flux = spectrum_data
@@ -171,7 +174,7 @@ class OrderMaskAlg(ModuleAlgBase):
             idx = 0
         return self.order_xrange[idx, :]
 
-    def set_order_mask(self, order_idx):
+    def set_order_mask(self, order_idx, s_width=None):
         if order_idx < 0 or order_idx >= self.total_order:
             raise Exception("wrong order index number")
 
@@ -181,14 +184,20 @@ class OrderMaskAlg(ModuleAlgBase):
         x_step = np.arange(xrange[0], xrange[1]+1).astype(int)
         coeffs = self.order_coeffs[order_idx]
         y_mid = np.polyval(coeffs, x_step) + self.origin[self.Y]
-
-        # top and bottom widths
         y_widths = self.get_order_edges(order_idx)
-
+        # top and bottom widths
+        if s_width is not None:  # use width created by order trace process
+            y_widths = [max((y_widths[0] - s_width[0]), 0), max((y_widths[1] - s_width[1]), 1)]
+            # print('adjustment from external: ', s_width, y_widths, self.get_order_edges(order_idx))
+        # else:
+        #    print('from trace file: ', y_widths)
         y_lower = np.ceil(y_mid - y_widths[0]).astype(int)
-        y_lower = np.where(y_lower <= 0, 0, y_lower)
-
         y_upper = np.floor(y_mid + y_widths[1]).astype(int)
+
+        # y_lower = np.floor(y_mid - y_widths[0]).astype(int)
+        # y_upper = np.ceil(y_mid + y_widths[1]).astype(int)
+
+        y_lower = np.where(y_lower <= 0, 0, y_lower)
         y_upper = np.where(y_upper >= self.dim_h, self.dim_h-1, y_upper)
 
         x_img_step = x_step + x_o
@@ -260,11 +269,12 @@ class OrderMaskAlg(ModuleAlgBase):
 
         return o_set
 
-    def get_order_mask(self, order_name, show_time=False, print_debug=None):
+    def get_order_mask(self, order_name, s_width=None, show_time=False, print_debug=None):
         """ From 2D flux to 2D with order masked.
 
         Args:
             order_name (str): orderlet name
+            s_width (list): trace widths to replace those from order trace file.
             show_time (bool, optional):  Show running time of the steps. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
                 a file with path `print_debug` if it is non empty string, or no print if it is None.
@@ -295,7 +305,8 @@ class OrderMaskAlg(ModuleAlgBase):
             self.d_print('OrderMaskAlg: ', c_order, ' edges: ', self.get_order_edges(c_order),
                          ' xrange: ', self.get_order_xrange(c_order))
 
-            self.set_order_mask(c_order)
+
+            self.set_order_mask(c_order, s_width=s_width)
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
         return {'order_mask_result': self.order_mask_data}
