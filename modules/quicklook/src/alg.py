@@ -805,7 +805,7 @@ class QuicklookAlg:
 
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-)',fontsize = 20)
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
             ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
