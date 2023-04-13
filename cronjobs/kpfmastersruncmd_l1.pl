@@ -109,7 +109,7 @@ if (! (defined $dbuser)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.2';
+my $version = '1.3';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -135,7 +135,10 @@ foreach my $op (@op) {
     }
 }
 
-my $dbenvfile="/code/KPF-Pipeline/db.env";
+my $dbenvfilename = "db.env";
+my $dbenvfile = "$codedir/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/" . $dbenvfilename;
+
 `touch $dbenvfile`;
 `chmod 600 $dbenvfile`;
 open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
@@ -162,13 +165,15 @@ print "KPFCRONJOB_DOCKER_NAME_L1=$containername\n";
 print "dbuser=$dbuser\n";
 print "dbname=$dbname\n";
 print "dbport=$dbport\n";
+print "dbenvfile=$dbenvfile\n";
+print "dbenvfileinside=$dbenvfileinside\n";
 
 
 # Change directory to where the Dockerfile is located.
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
-my $script = "#! /bin/bash\nsource $dbenvfile\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
+my $script = "#! /bin/bash\nsource $dbenvfileinside\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
