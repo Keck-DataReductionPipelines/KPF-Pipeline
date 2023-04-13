@@ -215,6 +215,7 @@ output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
 #                          if non-watch mode => a path pattern of 2D files => /data/2D/<date_dir>/*.fits
 #    output_extraction: output path => /data/L1/<date_dir>/
 #    wave_to_ext: extensions in L1 containing wavelength solution data for each fiber.
+#    orderlet_widths_ccds: trace widths per orderlet per ccd to replace the trace widths from the order trace process
 
 if lev0_file_path:
     lev0_science_pattern = lev0_file_path
@@ -222,6 +223,7 @@ else:
     lev0_science_pattern = input_2d_dir + '*' + fits_ext
 output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
 wave_to_ext = config.ARGUMENT.wave_to_ext
+orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
 
 #    output_clip: only needed when rect_method != norect: directory containing files with polygon clipping information
 #                  for faster vertical or normal rectification => /data/L1/clip_np/vertical(or normal)/
@@ -464,9 +466,14 @@ if do_spectral_extraction or do_hk or do_bc:
 					order_mask = None
 					# create order mask for background subtraction
 					for idx in ccd_idx:
+						if orderlet_widths_ccds:
+							orderlet_widths = orderlet_widths_ccds[idx]
+						else:
+							orderlet_widths = []
 						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
 								start_order=start_order[idx], trace_file=trace_list[idx],
-								data_extension=ccd_list[idx])
+								data_extension=ccd_list[idx],
+								orderlet_widths=orderlet_widths)
 					# update L0 by background subtraction
 					if order_mask != None:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
