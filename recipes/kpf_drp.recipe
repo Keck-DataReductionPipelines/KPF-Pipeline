@@ -119,15 +119,15 @@ date_dir = sel_obsid + '/'
 
 flat_file_pattern = config.ARGUMENT.flat_file
 # date dir for flat file
-date_dir_flat = date_from_kpffile(flat_file_pattern)
-if date_dir_flat == None or date_dir_flat == '':
+date_dir_flat = date_from_kpffile(flat_file_pattern, startswith='kpf_')
+if date_dir_flat == None:
 	date_dir_flat = date_dir
 else:
 	date_dir_flat = date_dir_flat + '/'
 
 output_dir = config.ARGUMENT.output_dir
 input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
-input_2d_dir_flat = config.ARGUMENT.input_dir_root + date_dir_flat
+input_2d_dir_flat = config.ARGUMENT.masters_dir + date_dir_flat
 test_data_dir = output_dir + "masters/"
 
 ## general purpose variables
