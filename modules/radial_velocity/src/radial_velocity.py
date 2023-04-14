@@ -367,8 +367,9 @@ class RadialVelocity(KPF1_Primitive):
                             new_list = crt_rv_ext[c_name_orderlet].tolist() + new_rv_table[c_name_orderlet].tolist()
                             new_table_list[c_name_orderlet] = new_list
                 else:
-                    new_list = crt_rv_ext[c_name].tolist() + new_rv_table[c_name].tolist()
-                    new_table_list[c_name] = new_list
+                    if c_name in crt_rv_ext and c_name in new_rv_table:
+                        new_list = crt_rv_ext[c_name].tolist() + new_rv_table[c_name].tolist()
+                        new_table_list[c_name] = new_list
             self.output_level2[self.rv_ext] = pd.DataFrame(new_table_list)
             self.output_level2.header[self.rv_ext]['ccd' + str(self.rv_set_idx + 1) + 'row'] = first_row
 
@@ -566,7 +567,8 @@ class RadialVelocity(KPF1_Primitive):
                                              vel_span_pixel=self.alg.get_vel_span_pixel())
             good_idx = np.where(rv_table[self.RV_COL_RV] != 0.0)[0]
             final_rv = sigma_clipped_stats(rv_table[self.RV_COL_RV][good_idx])[0]          # sigma-clipped mean
-            cal_rv = sigma_clipped_stats(rv_table[self.RV_COL_CAL][good_idx])[0]           # sigma-clip for the CAL RV also
+            if self.RV_COL_CAL in rv_table:
+                cal_rv = sigma_clipped_stats(rv_table[self.RV_COL_CAL][good_idx])[0]     # sigma-clip for the CAL RV also
             # final_rv_err /= len(good_idx)**0.5                                         # RV error divided by sqrt of number of measurements (good_idx number of orders)
 
         # ccd1rv, ccd2rv, ccd1erv ccd2erv, cal rv
