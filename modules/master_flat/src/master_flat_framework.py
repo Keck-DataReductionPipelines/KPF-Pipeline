@@ -50,9 +50,10 @@ class MasterFlatFramework(KPF0_Primitive):
         Perform image-stacking with data-clipping at 2.1 sigma (aggressive to
         eliminate rad hits and possible saturation).
         Divide clipped mean of stack by the smoothed Flatlamp pattern.
-        Reset unnormalized-flat values to unity if corresponding stacked-image value
-        is less than 500 DN/sec (insufficient illumination).
         Normalize flat by the image average.
+        Reset flat values to unity if corresponding stacked-image value
+        is less than 500 DN/sec (insufficient illumination) or are
+        outside of the order mask (if available for the current FITS extension).
         Set appropriate infobit if number of pixels with less than 10 samples
         is greater than 1% of total number of image pixels.
 
@@ -64,6 +65,7 @@ class MasterFlatFramework(KPF0_Primitive):
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_master_bias.fits).
         masterdark_path (str): Pathname of input master dark (e.g., /testdata/kpf_master_dark.fits).
         masterflat_path (str): Pathname of output master flat (e.g., /testdata/kpf_master_flat.fits).
+        ordermask_path (str): Pathname of input order mask (e.g., /testdata/order_mask_3_2_20230414.fits).
 
     Attributes:
         data_type (str): Type of data (e.g., KPF).
@@ -72,6 +74,7 @@ class MasterFlatFramework(KPF0_Primitive):
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_green_red_bias.fits).
         masterflat_path (str): Pathname of output master flat (e.g., /testdata/kpf_green_red_flat.fits).
+        ordermask_path (str): Pathname of input order mask (e.g., /testdata/order_mask_3_2_20230414.fits).
         imtype_keywords (str): FITS keyword for filtering input flat files (fixed as 'IMTYPE').
         imtype_values_str (str): Value of FITS keyword (fixed as 'Flatlamp'), to be converted to lowercase for test.
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
@@ -105,6 +108,7 @@ class MasterFlatFramework(KPF0_Primitive):
         self.masterbias_path = self.action.args[4]
         self.masterdark_path = self.action.args[5]
         self.masterflat_path = self.action.args[6]
+        self.ordermask_path = self.action.args[7]
 
         self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
         self.imtype_values_str = 'Flatlamp'
@@ -153,6 +157,9 @@ class MasterFlatFramework(KPF0_Primitive):
         Returns [exitcode, infobits] after computing and writing master-flat FITS file.
 
         """
+
+        order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
+        self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
 
         masterbias_path_exists = exists(self.masterbias_path)
         if not masterbias_path_exists:
@@ -285,9 +292,6 @@ class MasterFlatFramework(KPF0_Primitive):
             unnormalized_flat = stack_avg / smooth_lamp_pattern
             unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
-            # Less than 500 DN/sec pixels cannot be reliably adjusted.  Reset below-threshold flat values to unity.
-            unnormalized_flat = np.where(stack_avg < self.low_light_limit, 1.0, unnormalized_flat)
-
             unnormalized_flat_mean = np.mean(unnormalized_flat)
 
             self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
@@ -296,6 +300,20 @@ class MasterFlatFramework(KPF0_Primitive):
             flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat.
             flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
 
+            # Less than 500 DN/sec pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
+            flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
+
+            # Apply order mask, if available for the current FITS extension.
+            
+            np_om_ffi = np.array(order_mask_data[ffi])
+            np_om_ffi_shape = np.shape(np_om_ffi)
+            order_mask_n_dims = len(np_om_ffi_shape)
+            self.logger.debug('ffi,order_mask_n_dims = {},{}'.format(ffi,order_mask_n_dims))
+            if order_mask_n_dims == 2:      # Check if valid data extension
+                np_om_ffi_bool = np.array(np_om_ffi,dtype=bool)
+                temp_array_of_ones =np.ones(np.shape(flat))
+                flat = np.multiply(flat,temp_array_of_ones,out=temp_array_of_ones,where=np_om_ffi_bool)
+                
             ### kpf master file creation ###
             master_holder[ffi] = flat
 
@@ -336,9 +354,16 @@ class MasterFlatFramework(KPF0_Primitive):
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 
-        # Add informational keywords to FITS header.
+        # Add informational keywords to FITS header.  Remove non-relevant keywords too.
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
+
+        del master_holder.header['GREEN_CCD']['OSCANV1']
+        del master_holder.header['GREEN_CCD']['OSCANV2']
+        del master_holder.header['GREEN_CCD']['OSCANV3']
+        del master_holder.header['GREEN_CCD']['OSCANV4']
+        del master_holder.header['RED_CCD']['OSCANV1']
+        del master_holder.header['RED_CCD']['OSCANV2']
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
