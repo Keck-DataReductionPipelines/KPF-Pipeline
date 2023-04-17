@@ -649,7 +649,7 @@ class WaveCalibration:
         if clip_below_median:
             good_peak_idx = np.where(
                 (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) &
-                (detected_peak_heights > np.median(order_flux))
+                (detected_peak_heights > np.median(order_flux[np.nonzero(order_flux)]))
             ) [0]
         else:
             good_peak_idx = np.where(
