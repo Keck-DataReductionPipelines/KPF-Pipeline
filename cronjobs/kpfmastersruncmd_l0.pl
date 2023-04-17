@@ -101,7 +101,7 @@ if (! (defined $containername)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '1.1';
+my $version = '1.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -138,7 +138,7 @@ print "KPFCRONJOB_DOCKER_NAME_L0=$containername\n";
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
-my $script = "#! /bin/bash\nmake init\nexport PYTHONUNBUFFERED=1\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
+my $script = "#! /bin/bash\nmake init\nexport PYTHONUNBUFFERED=1\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
