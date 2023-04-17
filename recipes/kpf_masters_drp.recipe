@@ -151,6 +151,7 @@ if all_bias_files_list:
             flat_n_sigma = config.FLAT.n_sigma
             flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
             masterflat_path = config.FLAT.masterflat_path
+            ordermask_path = config.FLAT.ordermask_path
             flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
             if date_dir:
@@ -164,15 +165,17 @@ if all_bias_files_list:
                                                  flat_lev0_ffi_exts,
                                                  new_masterbias_path,
                                                  new_masterdark_path,
-                                                 new_masterflat_path)
+                                                 new_masterflat_path,
+                                                 ordermask_path)
 
 ####################################
 # Generate master-arclamp products.
 ####################################
 
         skip_flattening = config.ARCLAMP.skip_flattening
+        make_arclamp_stacks = config.ARCLAMP.make_arclamp_stacks
 
-        if all_arclamp_files_list:
+        if all_arclamp_files_list and make_arclamp_stacks:
             arclamp_n_sigma = config.ARCLAMP.n_sigma
             arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
             arclamp_objects_config = config.ARCLAMP.arclamp_objects
