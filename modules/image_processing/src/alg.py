@@ -64,13 +64,14 @@ class ImageProcessingAlg():
         Args:
             masterbias (FITS File): The master bias data.
         """
-        # if self.quicklook == False:
+        header = self.rawimage.header['PRIMARY']
+        if header['IMTYPE'].lower() == 'bias':
+            self.logger.info("Image is bias, skipping bias correction.")
+            return
         for ffi in self.ffi_exts:
-            # sub_init = FrameSubtract(self.rawimage,masterbias,self.ffi_exts,'bias')
-            # subbed_raw_file = sub_init.subtraction()
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - masterbias[ffi]
-                self.rawimage.header['PRIMARY']['BIASFILE'] = masterbias.filename
+                header['BIASFILE'] = masterbias.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
@@ -85,11 +86,17 @@ class ImageProcessingAlg():
             flat_frame (FITS File): L0 FITS file object
 
         """
+        header = self.rawimage.header['PRIMARY']
+        if header['IMTYPE'].lower() == 'bias' or \
+            header['IMTYPE'].lower() == 'dark' or \
+            header['IMTYPE'].lower() == 'flat':
+            self.logger.info("Image is {}, skipping flat correction.".format(header['IMTYPE']))
+            return
 
         for ffi in self.ffi_exts:
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] / flat_frame[ffi]
-                self.rawimage.header['PRIMARY']['FLATFILE'] = flat_frame.filename
+                header['FLATFILE'] = flat_frame.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
@@ -105,6 +112,11 @@ class ImageProcessingAlg():
             dark_frame (FITS File): L0 FITS file object
 
         """
+        header = self.rawimage.header['PRIMARY']
+        if header['IMTYPE'].lower() == 'bias' or \
+            header['IMTYPE'].lower() == 'dark':
+            self.logger.info("Image is {}, skipping dark correction.".format(header['IMTYPE']))
+            return
 
         for ffi in self.ffi_exts:
             image_exptime = self.rawimage.header['PRIMARY']['EXPTIME']
