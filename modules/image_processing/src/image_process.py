@@ -170,7 +170,6 @@ class ImageProcessing(KPF0_Primitive):
                     f'Bias Subtraction: subtracting master bias from raw FFI(s)'
                 )
             bias_subbed = self.alg.bias_subtraction(correcting_file_or_action)
-            print(bias_subbed)
 
         if action_type == 'Dark':
             if self.logger:
