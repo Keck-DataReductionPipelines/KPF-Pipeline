@@ -92,11 +92,19 @@ if (! (defined $dbuser)) {
     die "*** Env. var. KPFDBUSER not set; quitting...\n";
 }
 
+# Database name of KPF operations database containing the CalFiles table.
+# E.g., kpfopsdb
+my $dbname = $ENV{KPFDBNAME};
+
+if (! (defined $dbname)) {
+    die "*** Env. var. KPFDBNAME not set; quitting...\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_register_in_db.pl';
-my $version = '1.1';
+my $version = '1.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -113,7 +121,6 @@ my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';
 
 my $destdir  = "${mastersdir}/$procdate";
 
-my $dbname = 'kpfopsdb';
 my ($dbport, $dbpass);
 my @op = `cat ~/.pgpass`;
 foreach my $op (@op) {
