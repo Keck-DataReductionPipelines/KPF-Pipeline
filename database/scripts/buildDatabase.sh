@@ -16,9 +16,9 @@
 #####################################################
 
 KPF_PIPELINE_GIT_REPO=/data/user/rlaher/git/KPF-Pipeline
-PGPORT=6135
+PGPORT=6125
 DB_BUILD_DATABASE_PATH=/data/user/rlaher/test/mydb
-DB_BUILD_DBNAME=myopsdb
+DB_BUILD_DBNAME=kpfopsdb
 DB_BUILD_PGPASSWORD=testpassword
 DB_USER_APOLLO=apollo
 DB_USER_APOLLO_PW=Arrow
