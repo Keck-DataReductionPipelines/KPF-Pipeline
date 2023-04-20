@@ -1,5 +1,6 @@
 from os.path import exists
 import numpy as np
+import numpy.ma as ma
 import configparser as cp
 from datetime import datetime, timezone
 from scipy.ndimage import gaussian_filter
@@ -39,8 +40,8 @@ class MasterFlatFramework(KPF0_Primitive):
            2-D Gaussian blurring (sigma=2 pixel) the stacked-image mean.
         3. Further modifications to this recipe are needed in order to use
            a master flat-lamp pattern from a prior night.
-        4. Less than 500-DN/sec pixels cannot be reliably used to
-           compute the flat-field correction.
+        4. Low-light pixels cannot be reliably used to
+           compute the flat-field correction (e.g., less than 500 DN/sec).
         5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
 
         Algorithm:
@@ -52,7 +53,7 @@ class MasterFlatFramework(KPF0_Primitive):
         Divide clipped mean of stack by the smoothed Flatlamp pattern.
         Normalize flat by the image average.
         Reset flat values to unity if corresponding stacked-image value
-        is less than 500 DN/sec (insufficient illumination) or are
+        is less than low-light limit (insufficient illumination) or are
         outside of the order mask (if available for the current FITS extension).
         Set appropriate infobit if number of pixels with less than 10 samples
         is greater than 1% of total number of image pixels.
@@ -260,7 +261,7 @@ class MasterFlatFramework(KPF0_Primitive):
             normalized_frames_data=[]
             n_frames = (np.shape(frames_data))[0]
             self.logger.debug('Number of frames in stack = {}'.format(n_frames))
-            
+
             n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
@@ -292,28 +293,49 @@ class MasterFlatFramework(KPF0_Primitive):
             unnormalized_flat = stack_avg / smooth_lamp_pattern
             unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
-            unnormalized_flat_mean = np.mean(unnormalized_flat)
 
-            self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
+            # Apply order mask, if available for the current FITS extension.  Otherwise, use the low-light pixels as a mask.
 
-            # Normalize flat by the image average.
-            flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat.
-            flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
-
-            # Less than 500 DN/sec pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
-            flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
-
-            # Apply order mask, if available for the current FITS extension.
-            
             np_om_ffi = np.array(order_mask_data[ffi])
             np_om_ffi_shape = np.shape(np_om_ffi)
             order_mask_n_dims = len(np_om_ffi_shape)
             self.logger.debug('ffi,order_mask_n_dims = {},{}'.format(ffi,order_mask_n_dims))
             if order_mask_n_dims == 2:      # Check if valid data extension
-                np_om_ffi_bool = np.array(np_om_ffi,dtype=bool)
-                temp_array_of_ones =np.ones(np.shape(flat))
-                flat = np.multiply(flat,temp_array_of_ones,out=temp_array_of_ones,where=np_om_ffi_bool)
-                
+                np_om_ffi_bool = np.where(np_om_ffi > 0.5, True, False)
+
+                # Compute mean of unmasked pixels in unnormalized flat.
+                unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)    # Invert the mask for mask_array operation.
+                unnormalized_flat_mean = ma.getdata(unmx.mean()).item()
+                self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
+
+                # Normalize flat.
+                flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat by the mean.
+                flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
+
+                # Apply the order mask.
+                flat = np.where(np_om_ffi_bool == False, 1.0, flat)
+
+                # Less than low-light pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
+                flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
+
+            else:
+                np_om_ffi_bool = np.where(stack_avg > self.low_light_limit, True, False)
+                np_om_ffi_shape = np.shape(np_om_ffi_bool)
+                self.logger.debug('np_om_ffi_shape = {}'.format(np_om_ffi_shape))
+
+                # Compute mean of unmasked pixels in unnormalized flat.
+                unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)    # Invert the mask for mask_array operation.
+                unnormalized_flat_mean = ma.getdata(unmx.mean()).item()
+                self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
+
+                # Normalize flat.
+                flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat by the mean.
+                flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
+
+                # Less than low-light pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
+                flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
+
+
             ### kpf master file creation ###
             master_holder[ffi] = flat
 
