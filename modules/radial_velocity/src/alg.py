@@ -6,6 +6,7 @@ import warnings
 import datetime
 import pandas as pd
 import os
+import math
 
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
@@ -950,6 +951,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             rv_guess = hdu_header['TARGRADV']
         elif init_data != None:
             rv_guess = init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
+
         return rv_guess
 
     @staticmethod
@@ -1013,16 +1015,22 @@ class RadialVelocityAlg(RadialVelocityBase):
         if ccf_dir == 0 and rv_guess == 0.0:
             return None, rv_guess, None, None, rv_error
 
-        amp = -1e7 if ccf_dir < 0 else 1e7
-
-        def gaussian_rv(v_cut, rv_mean):
-            g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=5.0)
+        def gaussian_rv(v_cut, rv_mean, sd):
+            # amp = -1e7 if ccf_dir < 0 else 1e7
             ccf = result_ccf
             i_cut = (velocities >= rv_mean - v_cut) & (velocities <= rv_mean + v_cut)
             if not i_cut.any():
                 return None, None, None
             g_x = velocities[i_cut]
-            g_y = ccf[i_cut] - np.nanmedian(ccf)
+            g_y = ccf[i_cut] - np.nanmedian(ccf[i_cut])
+            y_dist = abs(np.nanmax(g_y) - np.nanmin(g_y)) * 100
+            amp = max(-1e7, np.nanmin(g_y) - y_dist) if ccf_dir < 0 else min(1e7, np.nanmax(g_y) + y_dist)
+
+            if sd is None:
+                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean)
+            else:
+                g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=sd)
+
             gaussian_fit = FIT_G(g_init, g_x, g_y)
             return gaussian_fit, g_x, g_y
 
@@ -1031,33 +1039,39 @@ class RadialVelocityAlg(RadialVelocityBase):
         #first gaussian fitting
         if mask_method in RadialVelocityAlg.vel_range_per_mask.keys():
             velocity_cut = RadialVelocityAlg.vel_range_per_mask[mask_method]
+            sd = 0.5            # for narrower velocity range
             two_fitting = False
-
-        g_fit, g_x, g_y = gaussian_rv(velocity_cut, rv_guess)
+        else:
+            sd = 5.0
+        g_fit, g_x, g_y = gaussian_rv(velocity_cut, rv_guess, sd)
         if g_fit is not None \
                 and g_x[0] <= g_fit.mean.value <= g_x[-1] \
                 and two_fitting:
             v_cut = 25.0
             # print('mean before 2nd fitting: ', g_fit.mean.value)
 
-            g_fit2, g_x2, g_y2 = gaussian_rv(v_cut, g_fit.mean.value)
-            if g_fit2 is not None and not (g_x2[0] <= g_fit2.mean.value <= g_x2[-1]):
+            g_fit2, g_x2, g_y2 = gaussian_rv(v_cut, g_fit.mean.value, sd)
+            if g_fit2 is not None and \
+                    not (g_x2[0] <= g_fit2.mean.value <= g_x2[-1]):
                 # print('mean after 2nd fitting (out of range): ', g_fit2.mean.value)
                 g_fit2 = None
         else:
             g_fit2 = None
 
-        # rv_error = 0.0
         if vel_span_pixel is not None and g_fit is not None:
-            g_mean = rv_guess if g_fit2 is None else g_fit.mean.value   # use the 1st guess if the 2nd fitting fails
-            f_wid = velocity_cut if g_fit2 is None else v_cut           # use the 1st vel range if the 2nd fitting fails
+            if g_fit2 is None or math.isnan(g_fit.mean.value):
+                g_mean = rv_guess               # use the 1st guess if the 2nd fitting fails
+                f_wid = velocity_cut            # use the 1st vel range if the 2nd fitting fails
+            else:
+                g_mean = g_fit.mean.value
+                f_wid = v_cut
 
             rv_error = RadialVelocityAlg.ccf_error_calc(velocities, result_ccf, f_wid*2, vel_span_pixel, g_mean)
 
-        if g_fit2 is not None:
+        if g_fit2 is not None and not math.isnan(g_fit2.mean.value):
             return g_fit2, g_fit2.mean.value, g_x2, g_y2, rv_error
         elif g_fit is not None:
-            return g_fit, g_fit.mean.value, g_x, g_y, rv_error
+            return g_fit, (0.0 if math.isnan(g_fit.mean.value) else g_fit.mean.value), g_x, g_y, rv_error
         else:
             return None, 0.0, None, None, 0.0
 
@@ -1078,6 +1092,10 @@ class RadialVelocityAlg(RadialVelocityBase):
         for i in range(self.velocity_steps):
             ccf_table['vel-'+str(i)] = ccf[:, i]
         results = pd.DataFrame(ccf_table)
+
+        total_segments = np.shape(ccf)[0] - RadialVelocityAlg.ROWS_FOR_ANALYSIS
+        rv_segments = np.zeros(total_segments)
+
         # results = pd.DataFrame(ccf)
 
         # calculate rv on ccfs summation
@@ -1086,6 +1104,12 @@ class RadialVelocityAlg(RadialVelocityBase):
             self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
             rv_guess_on_ccf=(self.spectro == 'kpf'),
             vel_span_pixel=self.get_vel_span_pixel())
+
+        for i in range(total_segments):
+            _, rv_segments[i], _, _, _ = self.fit_ccf(
+                ccf[i, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
+                self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
+                rv_guess_on_ccf=(self.spectro == 'kpf'))
 
         def f_decimal(num):
             return float("{:.10f}".format(num))
@@ -1116,6 +1140,8 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec, an array for all segments
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
             results.attrs['CCF-ERV'] = f_decimal(rv_error)
+            results.attrs['RV_SEGMS'] = rv_segments
+            results.attrs['RV_MEAN'] = self.weighted_rv(rv_segments, rv_segments.size, None)
 
         return results
 
@@ -1298,6 +1324,78 @@ class RadialVelocityAlg(RadialVelocityBase):
             df.to_csv(output_csv, index=False)
 
         return df
+
+    @staticmethod
+    def weighted_avg_and_std(values, weights):
+        """
+        Return the weighted average and standard deviation.
+
+        Args:
+            values (array): values to average
+            weights (array): weights with same shape as values
+
+        Returns:
+            (average, standard deviation)
+
+        """
+        average = np.average(values, weights=weights)
+
+        variance = np.average((values - average) ** 2, weights=weights)
+        return (average, variance ** 0.5)
+
+    @staticmethod
+    def weighted_sigma_clipped_mean(values, weights, max_iters=7, sigma=3):
+        """
+        Return a weighted sigma-clipped mean
+
+        Args:
+            values (array): array of values to average
+            weigths (array): weights for each value
+            max_iters (int): (default=7) maximum number of iterations, will halt when no more outliers are clipped
+            sigma (float): (default=3.0) clip outlier greater than sigma away from the mean
+
+        Returns:
+            float
+        """
+        good_idx = np.where(values != 0.0)[0]
+        if good_idx.size == 0:
+            return 0.0
+        values = values[good_idx]
+        weights = weights[good_idx]
+
+        mean, std = RadialVelocityAlg.weighted_avg_and_std(values, weights)
+
+        for i in range(max_iters):
+            good_idx = np.where(np.abs(values - mean) <= sigma * std)[0]
+            # bad_idx = np.where(np.abs(values - mean) > sigma * std)[0]
+
+            if len(good_idx) == len(values):
+                break
+            else:
+                values = values[good_idx]
+                weights = weights[good_idx]
+                mean, std = RadialVelocityAlg.weighted_avg_and_std(values, weights)
+
+        return mean
+
+    @staticmethod
+    def weighted_rv(rv_arr, total_segment, reweighting_table_or_ccf, s_seg=0):
+        if reweighting_table_or_ccf is None:
+            reweighting_table_or_ccf = np.ones((total_segment, 1))
+        if np.shape(reweighting_table_or_ccf)[1] >= 2:
+            s_seg = 0 if s_seg is None else s_seg
+            e_seg = s_seg + total_segment - 1
+            c_idx = np.where((reweighting_table_or_ccf[:, 0] >= s_seg) &
+                             (reweighting_table_or_ccf[:, 0] <= e_seg))[0]
+            tval = reweighting_table_or_ccf[c_idx, -1]  # selected weighting on selected segment
+            sval = reweighting_table_or_ccf[c_idx, 0].astype(int)  # selected original segment index
+        else:
+            tval = reweighting_table_or_ccf[0:total_segment, -1]
+            sval = np.arange(0, total_segment, dtype=int)
+
+        new_rv_arr = rv_arr[sval]
+        w_rv = RadialVelocityAlg.weighted_sigma_clipped_mean(new_rv_arr, tval)
+        return w_rv
 
     @staticmethod
     def reweight_ccf(crt_rv, total_segment, reweighting_table_or_ccf, reweighting_method, s_seg=0,

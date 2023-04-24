@@ -226,6 +226,9 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                     val = float(h_val)
                 self.rv_config[s_key] = val
 
+        if self.pheader[self.KEY_SCI_OBJ] != 'Target':
+            self.rv_config[self.STAR_RV] = 0.0
+
         #s_key = 'mask'
         #default_mask = self.get_rv_config_value(s_key, None)
 

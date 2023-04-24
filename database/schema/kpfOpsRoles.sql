@@ -22,3 +22,7 @@ GRANT kpfreadrole to cwang;
 
 -- Verified bfulton inherits the following:
 ALTER ROLE kpfreadrole CONNECTION LIMIT -1;
+
+-- Make it so bfulton can run the master-files pipeline.
+ALTER ROLE kpfporole CONNECTION LIMIT -1;
+GRANT kpfporole to bfulton;

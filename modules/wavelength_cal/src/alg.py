@@ -61,7 +61,9 @@ class WaveCalibration:
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
         self.clip_below_median  = configpull.get_config_value('clip_below_median',True)
         self.peak_height_threshold = configpull.get_config_value('peak_height_threshold',1.5)
-
+        self.sigma_clip = configpull.get_config_value('sigma_clip',2.1)
+        self.fit_iterations = configpull.get_config_value('fit_iterations',5)
+        self.logger = logger
  
     def run_wavelength_cal(
         self, calflux, rough_wls=None, 
@@ -191,8 +193,9 @@ class WaveCalibration:
             n_orders = len(order_list)
             
             masked_calflux = self.mask_array_neid(calflux,n_orders)
+            masked_calflux = calflux
             
-            poly_soln, _, wls_and_pixels = self.fit_many_orders(
+            poly_soln, wls_and_pixels = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
                 comb_lines_angstrom=lfc_allowed_wls, 
                 expected_peak_locs=peak_wavelengths_ang, 
@@ -282,10 +285,20 @@ class WaveCalibration:
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
 
-                fitted_peak_pixels, detected_peak_pixels, \
-                    detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
-                    order_flux, plot_path=order_plt_path
-                )
+                try:
+                    fitted_peak_pixels, detected_peak_pixels, \
+                        detected_peak_heights, gauss_coeffs = self.find_peaks_in_order(
+                        order_flux, plot_path=order_plt_path
+                    )
+                except TypeError:
+                    self.logger.warn('Not enough peaks found in order, defaulting to rough WLS')
+                    poly_soln_final_array[order_num,:] = rough_wls_order
+                    wavelengths_and_pixels[order_num] = {
+                        'known_wavelengths_vac': rough_wls_order, 
+                        'line_positions':[]
+                    }
+                    continue
+
 
                 if self.clip_peaks_toggle:
                     good_peak_idx = self.clip_peaks(
@@ -360,8 +373,10 @@ class WaveCalibration:
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
                     wls, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
-                    plot_path=order_plt_path
+                    plot_path=order_plt_path, fit_iterations=self.fit_iterations,
+                    sigma_clip=self.sigma_clip
                 )
+
                 poly_soln_final_array[order_num,:] = polynomial_wls
 
                 if plt_path is not None:
@@ -634,7 +649,7 @@ class WaveCalibration:
         if clip_below_median:
             good_peak_idx = np.where(
                 (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1) &
-                (detected_peak_heights > np.median(order_flux))
+                (detected_peak_heights > np.median(order_flux[np.nonzero(order_flux)]))
             ) [0]
         else:
             good_peak_idx = np.where(
@@ -678,6 +693,7 @@ class WaveCalibration:
         good_peak_idx = np.intersect1d(notnearmask_peaks, good_peak_idx)
 
         if print_update:
+            print('{} peaks fit'.format(len(detected_peak_pixels)))
             print('{} peaks clipped'.format(len(detected_peak_pixels) - len(good_peak_idx)))
 
         if plot_path is not None:
@@ -846,7 +862,7 @@ class WaveCalibration:
                 # )
 
                 # overplot the Gaussian fits
-                for j in np.arange(num_input_lines):
+                for j in np.arange(num_input_lines-missed_lines):
 
                     # if peak in range:
                     if (
@@ -875,7 +891,7 @@ class WaveCalibration:
 
     def mode_match(
         self, order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, 
-        comb_lines_angstrom, print_update=False, plot_path=None
+        comb_lines_angstrom, print_update=False, plot_path=None, start_check=True,
     ):
         """
         Matches detected order_flux peaks to the theoretical locations of LFC wavelengths
@@ -938,7 +954,7 @@ class WaveCalibration:
         for i in range(n_clipped_peaks):
 
             # calculate difference in peak locs of last several peaks
-            num_peaks_kernel = 100
+            num_peaks_kernel = 50
             if (i < num_peaks_kernel):
                 running_peak_diff = np.median(
                     np.diff(fitted_peak_pixels[good_peak_idx][0:num_peaks_kernel])
@@ -952,8 +968,8 @@ class WaveCalibration:
                 for j in np.arange(50):
                     if fitted_peak_pixels[good_peak_idx][i] > (j + 1.5) * running_peak_diff:
                         peak_mode_num = increment_mode_num(peak_mode_num, backwards=backwards)
-                if fitted_peak_pixels[good_peak_idx][i] > 50.5 * running_peak_diff:
-                    assert False, 'More than 50 peaks in a row at the start of the chip not detected!'
+                # if fitted_peak_pixels[good_peak_idx][i] > 50.5 * running_peak_diff:                        
+                #     assert False, 'More than 50 peaks in a row at the start of the chip not detected!'
         
             # if current peak location is greater than (n + 0.5) * sigma of 
             # previous peak diffs, then skip over n modes
@@ -1089,7 +1105,7 @@ class WaveCalibration:
 
         return popt  
           
-    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, peak_heights=None, plot_path=None):
+    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, fit_iterations=5, sigma_clip=2.1, peak_heights=None, plot_path=None):
         """
         Given precise wavelengths of detected LFC order_flux lines, fits a 
         polynomial wavelength solution.
@@ -1100,6 +1116,8 @@ class WaveCalibration:
             n_pixels (int): number of pixels in the order
             fitted_peak_pixels (np.array): array of true detected peak locations as 
                 determined by Gaussian fitting.
+            fit_iterations (int): number of sigma-clipping iterations in the polynomial fit
+            sigma_clip (float): clip outliers in fit with residuals greater than sigma_clip away from fit
             peak_heights (np.array): heights of peaks (either detected heights or 
                 fitted heights). We use this to weight the peaks in the polynomial 
                 fit, assuming Poisson errors. 
@@ -1123,8 +1141,17 @@ class WaveCalibration:
             )[0]
             unclipped_idx = np.intersect1d(unclipped_idx, unique_idx[count < 2])
             
-            leg_out = Legendre.fit(fitted_peak_pixels[unclipped_idx], wls[unclipped_idx], self.fit_order, w=weights[unclipped_idx])
-            our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+            x, y, w = fitted_peak_pixels[unclipped_idx], wls[unclipped_idx], weights[unclipped_idx]
+            for i in range(fit_iterations):
+                leg_out = Legendre.fit(x, y, self.fit_order, w=w)
+                our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+
+                res = y - leg_out(x)
+                good = np.where(np.abs(res) <= sigma_clip*np.std(res))
+                x = x[good]
+                y = y[good]
+                w = w[good]
+                res = res[good]
 
             if plot_path is not None:
 
