@@ -128,8 +128,9 @@ class RadialVelocity(KPF1_Primitive):
     RV_COL_SOURCE = 'source'
     RV_COL_CAL = 'CAL RV'
     RV_COL_CAL_SOURCE ='source CAL'
+    RV_WEIGHTS = 'CCF Weights'
     rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_ORD_NO,
-                    RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL, RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE]
+                    RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL, RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE, RV_WEIGHTS]
     rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
 
     def __init__(self,
@@ -151,8 +152,8 @@ class RadialVelocity(KPF1_Primitive):
             elif isinstance(action.args['input_ref'], pd.DataFrame):
                 self.ref_ccf = action.args['input_ref'].values
             elif isinstance(action.args['input_ref'], str) and os.path.exists(action.args['input_ref']):
-                ratio_df = pd.read_csv(action.args['input_ref'])
-                self.ref_ccf = ratio_df.values
+                ratio_df = pd.read_csv(action.args['input_ref'], sep='\s+')
+                self.ref_ccf = ratio_df
 
         self.ccf_engine = action.args['ccf_engine'].lower() \
             if 'ccf_engine' in args_keys and action.args['ccf_engine'] is not None \
@@ -366,8 +367,9 @@ class RadialVelocity(KPF1_Primitive):
                             new_list = crt_rv_ext[c_name_orderlet].tolist() + new_rv_table[c_name_orderlet].tolist()
                             new_table_list[c_name_orderlet] = new_list
                 else:
-                    new_list = crt_rv_ext[c_name].tolist() + new_rv_table[c_name].tolist()
-                    new_table_list[c_name] = new_list
+                    if c_name in crt_rv_ext and c_name in new_rv_table:
+                        new_list = crt_rv_ext[c_name].tolist() + new_rv_table[c_name].tolist()
+                        new_table_list[c_name] = new_list
             self.output_level2[self.rv_ext] = pd.DataFrame(new_table_list)
             self.output_level2.header[self.rv_ext]['ccd' + str(self.rv_set_idx + 1) + 'row'] = first_row
 
@@ -384,7 +386,7 @@ class RadialVelocity(KPF1_Primitive):
         self.output_level2.header[self.rv_ext]['ccd'+str(self.rv_set_idx+1)+'jd'] = new_rv_table.attrs['ccd_jd']
         self.output_level2.header[self.rv_ext]['rv'+str(self.rv_set_idx+1)+'corr'] = 'T' \
             if new_rv_table.attrs['do_rv_corr'] else 'F'
-
+        self.output_level2.header[self.rv_ext]['rwccfrv']='F'
         # self.output_level2.header[self.rv_ext]['zb'] = new_rv_table.attrs['zb']    # removed
         return True
 
@@ -463,8 +465,10 @@ class RadialVelocity(KPF1_Primitive):
                 cal_mask = RadialVelocityAlg.get_orderlet_masktype(ins, self.sci_names[o], self.rv_init['data'])
 
         do_corr = self.is_cal_cor
+
         for s in range(total_segment):
             sum_segment = np.zeros(np.shape(velocities)[0])
+            sum_rv = list()
 
             for o in range(total_orderlet):
                 if output_df[o] is None:
@@ -476,21 +480,29 @@ class RadialVelocity(KPF1_Primitive):
                 if self.is_sci(self.sci_names[o]):
                     sum_segment += ccf_orderlet            # summation per segment of all orderlets
 
-                mtype = sci_mask if self.is_sci(self.sci_names[o]) else cal_mask
+
+                # mtype = sci_mask if self.is_sci(self.sci_names[o]) else cal_mask
                 if self.start_seg <= s <= self.end_seg:
-                    _,  orderlet_rv, _, _, _ = self.alg.fit_ccf(ccf_orderlet, self.alg.get_rv_guess(), velocities,
-                                                        mtype, rv_guess_on_ccf=(ins == 'kpf'))
+                    orderlet_rv = output_df[o].attrs['RV_SEGMS'][s]
+                    # _,  orderlet_rv, _, _, _ = self.alg.fit_ccf(ccf_orderlet, self.alg.get_rv_guess(), velocities,
+                    #                                    mtype, rv_guess_on_ccf=(ins == 'kpf'))
                 else:
                     orderlet_rv = 0.0
+
                 if self.is_sci(self.sci_names[o]):
                     col_orderlets[s, o] = orderlet_rv
                 elif self.is_cal(self.sci_names[o]):
                     col_rv_cal[s] = orderlet_rv
+
+                if self.is_sci(self.sci_names[o]):
+                    sum_rv.append(orderlet_rv)            # summation of rv of all orderlets
+
             if sci_mask is not None:
                 _, col_rv[s], _, _, col_rv_err[s] = self.alg.fit_ccf(sum_segment, self.alg.get_rv_guess(), velocities,
                                                     sci_mask,
                                                     rv_guess_on_ccf=(ins == 'kpf'),
                                                     vel_span_pixel=self.alg.get_vel_span_pixel())
+                col_rv[s] = sum(sum_rv)/len(sum_rv)
 
 
         col_sources = np.empty((total_segment, total_orderlet), dtype=object)
@@ -505,7 +517,7 @@ class RadialVelocity(KPF1_Primitive):
                 rv_table[self.RV_COL_CAL_SOURCE] = col_cal_sources[:]
                 rv_table[self.RV_COL_CAL] = col_rv_cal[:]
                 if output_df[o] is not None:
-                    cal_rv = output_df[o].attrs['CCF-RVC'][0]
+                    cal_rv = output_df[o].attrs['RV_MEAN']   # output_df[o].attrs['CCF-RVC'][0]
             elif self.is_sci(self.sci_names[o]):
                 col_sources[:, o] = self.sci_names[o]
                 rv_table[self.RV_COL_SOURCE + str(o + 1)] = col_sources[:, o]
@@ -527,19 +539,23 @@ class RadialVelocity(KPF1_Primitive):
         rv_table[self.RV_COL_RV_ERR] = col_rv_err                                      # col of rv error
         rv_table[self.RV_COL_CCFJD] = np.ones(total_segment) * jd
         rv_table[self.RV_COL_BARY] = np.ones(total_segment) * bary
+        rv_table[self.RV_WEIGHTS] = np.ones(total_segment)
 
         results = pd.DataFrame(rv_table)
 
-        # ccd1rvx, ccd1ervx,  ccd2rvx, ccd2ervx (for rv ext header)
+        # ccd1rv[1-3], ccd1erv[1-3],  ccd2rv[1-3], ccd2erv[1-3] (for rv ext header)
         for o in range(total_orderlet):
             if self.is_sci(self.sci_names[o]):
                 if output_df[o] is None:
                     results.attrs['ccd_rv' + str(o + 1)] = (0, 'BaryC RV (km/s)')
                     results.attrs['ccd_erv' + str(o + 1)] = 0
                 else:
-                    results.attrs['ccd_rv'+str(o+1)] = (f_decimal(output_df[o].attrs['CCF-RVC'][0] - cal_rv), 'BaryC RV (km/s)') \
-                        if do_corr else output_df[o].attrs['CCF-RVC']
-                    results.attrs['ccd_erv'+str(o + 1)] = output_df[o].attrs['CCF-ERV']
+                    # take mean of rv
+                    orderlet_rv = output_df[o].attrs['RV_MEAN'] # orderlet_rv = output_df[o].attrs['CCF-RVC'][0]
+                    if do_corr:
+                        orderlet_rv -= cal_rv
+                    results.attrs['ccd_rv' + str(o + 1)] = (f_decimal(orderlet_rv), 'BaryC RV (km/s)')
+                    results.attrs['ccd_erv'+ str(o + 1)] = output_df[o].attrs['CCF-ERV']
             if output_df[o] is not None:
                 ccfjd =  output_df[o].attrs['CCFJDSUM']
                 starrv = output_df[o].attrs['STARRV']
@@ -550,15 +566,23 @@ class RadialVelocity(KPF1_Primitive):
                                              sci_mask,
                                              rv_guess_on_ccf=(ins == 'kpf'),
                                              vel_span_pixel=self.alg.get_vel_span_pixel())
+            final_rv = RadialVelocityAlg.weighted_rv(rv_table[self.RV_COL_RV], total_segment, None)
+
+        if self.RV_COL_CAL in rv_table:
+            cal_rv = RadialVelocityAlg.weighted_rv(rv_table[self.RV_COL_CAL], total_segment, None)
+
+            # final_rv_err /= len(good_idx)**0.5                                         # RV error divided by sqrt of number of measurements (good_idx number of orders)
 
         # ccd1rv, ccd2rv, ccd1erv ccd2erv, cal rv
-        results.attrs['rv'] = (f_decimal(final_rv - cal_rv), 'BaryC RV (km/s)') \
-            if do_corr else (f_decimal(final_rv), 'BaryC RV (km/s)')
+
+        results.attrs['rv'] = (f_decimal(final_rv - cal_rv), 'Bary-corrected RV (km/s)') \
+            if do_corr and final_rv != 0.0 else (f_decimal(final_rv), 'Bary-corrected RV (km/s)')
         results.attrs['rverr'] = f_decimal(final_rv_err)
         results.attrs['ccd_jd'] = ccfjd
         results.attrs['star_rv'] = starrv
-        results.attrs['rv_cal'] = (f_decimal(cal_rv), 'BaryC RV (km/s)')      # ccd1crv
+        results.attrs['rv_cal'] = (f_decimal(cal_rv), 'Cal fiber RV (km/s)')      # ccd1crv
         results.attrs['do_rv_corr'] = do_corr
+
         return results
 
     @staticmethod

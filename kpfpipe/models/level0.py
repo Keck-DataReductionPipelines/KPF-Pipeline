@@ -234,7 +234,17 @@ class KPF0(KPFDataModel):
                     for d in range(ndim):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
                 head = self.header[key]
-                hdu = fits.ImageHDU(data=data, header=head)
+                try:
+                    hdu = fits.ImageHDU(data=data, header=head)
+                except KeyError as ke:
+                    print("KeyError exception raised: -->ke=" + str(ke))
+                    print("Attempting to handle it...")
+                    if str(ke) == '\'bool\'':
+                        data = data.astype(float)
+                        print("------>SHAPE=" + str(data.shape))
+                        hdu = fits.ImageHDU(data=data, header=head)
+                    else:
+                        raise KeyError("A different error...")
             elif value == fits.BinTableHDU:
                 table = Table.from_pandas(getattr(self, key))
                 self.header[key]['NAXIS1'] = len(table)

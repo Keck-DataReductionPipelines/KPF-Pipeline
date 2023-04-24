@@ -1,9 +1,22 @@
 #! /usr/local/bin/perl
 
 ##########################################################################
-# Pipeline Perl script to registerCalFilesForDate.py from within a
-# docker container where python3 and the required packages are installed.
-# Database credentials are read from the ~/.pgpass file.
+# Pipeline Perl script to do detached docker run.  Can run this script
+# in the background so that open terminal is not required.
+#
+# Generate all KPF L0 master calibration files for YYYYMMDD date, given as
+# command-line input parameter.  Input KPF L0 FITS files are copied to
+# sandbox directory KPFCRONJOB_SBX=/data/user/rlaher/sbx, and outputs
+# are written to KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData, and then at
+# the end copied to /data/kpf/masters/YYYYMMDD. The following two files
+# must exist in directory KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData:
+# channel_orientation_ref_path_red = kpfsim_ccd_orient_red_2amp.txt
+# channel_orientation_ref_path_green = kpfsim_ccd_orient_green.txt
+# KPF 2D FITS files with no master bias subtraction are made as
+# intermediate products in the sandbox.  The master-bias subtraction,
+# master-dark subtraction, and master-flattening, as appropriate, are
+# done by the individidual Frameworks for generation of the master bias,
+# master dark, master flat, and various master arclamps.
 ##########################################################################
 
 use strict;
@@ -78,32 +91,16 @@ if (! (defined $logdir)) {
 
 # Docker container name for this Perl script, a known name so it can be monitored by docker ps command.
 # E.g., russkpfmastersdrpl0
-my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_DBSCRIPT};
+my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_L0};
 
 if (! (defined $containername)) {
-    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_DBSCRIPT not set; quitting...\n";
-}
-
-# Database user for connecting to the database to run this script and insert records into the CalFiles table.
-# E.g., kpfporuss
-my $dbuser = $ENV{KPFDBUSER};
-
-if (! (defined $dbuser)) {
-    die "*** Env. var. KPFDBUSER not set; quitting...\n";
-}
-
-# Database name of KPF operations database containing the CalFiles table.
-# E.g., kpfopsdb
-my $dbname = $ENV{KPFDBNAME};
-
-if (! (defined $dbname)) {
-    die "*** Env. var. KPFDBNAME not set; quitting...\n";
+    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_L0 not set; quitting...\n";
 }
 
 
 # Initialize fixed parameters and read command-line parameter.
 
-my $iam = 'kpfmasters_register_in_db.pl';
+my $iam = 'kpfmastersruncmd_l0.pl';
 my $version = '1.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
@@ -112,26 +109,11 @@ if (! (defined $procdate)) {
     die "*** Error: Missing command-line parameter YYYYMMDD; quitting...\n";
 }
 
-my $pythonscript = 'database/scripts/registerCalFilesForDate.py';
-my $dockercmdscript = 'kpfmasters_register_in_db.sh';    # Auto-generates this shell script with multiple commands.
+# These parameters are fixed for this Perl script.
+my $dockercmdscript = 'kpfmasterscmd_l0.sh';    # Auto-generates this shell script with multiple commands.
 my $containerimage = 'kpf-drp:latest';
-
-my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
-my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';
-
-my $destdir  = "${mastersdir}/$procdate";
-
-my ($dbport, $dbpass);
-my @op = `cat ~/.pgpass`;
-foreach my $op (@op) {
-    chomp $op;
-    $op =~ s/^\s+|\s+$//g;  # strip blanks.
-    if (($op =~ /$dbuser/) and ($op =~ /$dbname/)) {
-        my (@f) = split(/\:/, $op);
-        $dbport = $f[1];
-        $dbpass = $f[4];
-    }
-}
+my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
+my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
 
 # Print environment.
@@ -141,26 +123,22 @@ print "version=$version\n";
 print "procdate=$procdate\n";
 print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
-print "destdir=$destdir\n";
-print "pythonscript=$pythonscript\n";
-print "pylogfile=$pylogfile\n";
-print "dbuser=$dbuser\n";
-print "dbname=$dbname\n";
-print "dbport=$dbport\n";
+print "recipe=$recipe\n";
+print "config=$config\n";
 print "KPFPIPE_PORT=$kpfpipeport\n";
 print "KPFPIPE_TEST_DATA=$testdatadir\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
 print "KPFCRONJOB_CODE=$codedir\n";
-print "KPFCRONJOB_DOCKER_NAME_DBSCRIPT=$containername\n";
+print "KPFCRONJOB_DOCKER_NAME_L0=$containername\n";
 
 
 # Change directory to where the Dockerfile is located.
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
-my $script = "#! /bin/bash\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\npython $pythonscript $procdate >& ${pylogfile}\nexit\n";
+my $script = "#! /bin/bash\nmake init\nexport PYTHONUNBUFFERED=1\ngit config --global --add safe.directory /code/KPF-Pipeline\nkpf -r $recipe  -c $config --date ${procdate}\nexit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
@@ -170,11 +148,14 @@ print "Executing $dockerrmcmd\n";
 my $opdockerrmcmd = `$dockerrmcmd`;
 print "Output from dockerrmcmd: $opdockerrmcmd\n";
 
+`mkdir -p $sandbox/L0/$procdate`;
+`mkdir -p $sandbox/2D/$procdate`;
+`cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
+
 my $dockerruncmd = "docker run -d --name $containername -p 6207:6207 -e KPFPIPE_PORT=$kpfpipeport " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v ${mastersdir}:/masters " .
-                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBPASS=\"$dbpass\" -e DBSERVER=127.0.0.1 " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data " .
                    "$containerimage bash ./$dockercmdscript";
-#print "Executing $dockerruncmd\n";                                # COMMENT OUT THIS LINE: DO NOT PRINT DATABASE PASSWORD TO LOGFILE!
+print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
 print "Output from dockerruncmd: $opdockerruncmd\n";
 
@@ -192,8 +173,8 @@ while (1) {
         print "i=$i: $op\n";
     }
     my $timestamp = localtime;
-    print "[$timestamp] Sleeping 30 seconds...\n";
-    sleep(30);
+    print "[$timestamp] Sleeping 300 seconds...\n";
+    sleep(300);
 }
 
 
@@ -203,6 +184,34 @@ $checkpoint[$icheckpoint] = time();
 printf "Elapsed time to run recipe (sec.) = %d\n",
        $checkpoint[$icheckpoint] - $checkpoint[$icheckpoint-1];
 $icheckpoint++;
+
+
+# Make directory to store products.
+
+my $destdir  = "${mastersdir}/$procdate";
+
+if (! (-e $destdir)) {
+    if (! make_path($destdir)) {
+        die "*** Error: Could not make directory ($destdir): $!\n";
+    } else {
+        print "Made new directory $destdir\n";
+    }
+}
+
+sleep(30);
+
+my $globfiles = "${testdatadir}/kpf_${procdate}*";
+
+my @files  = glob("$globfiles");
+
+foreach my $file (@files) {
+    if (! (copy($file, $destdir))) {
+        die "*** Warning: couldn't copy $file to $destdir ($!); " .
+            "quitting...\n";
+    } else {
+        print "Copied $file to $destdir\n";
+    }
+}
 
 
 # Log end time.
@@ -215,21 +224,9 @@ print "Elapsed total time (sec.) = ", $endscript - $startscript, "\n";
 print "Terminating normally...\n";
 
 
-# Move the Python-script log file from runtime directory to product directory.
-
-if (-e $pylogfile) {
-
-    if (! (move($pylogfile, $destdir))) {
-        die "*** Warning: couldn't move $pylogfile to $destdir ($!); " .
-            "quitting...\n";
-    } else {
-        print "Moved $pylogfile to $destdir\n";
-    }
-}
-
-
-# Move the log file generated by this Perl script to product directory, assuming
+# Move log file from runtime directory to product directory, assuming
 # that the following convention for log-file naming is followed.
+
 
 my ($logfileBase) = $iam =~ /(.+)\.pl/;
 

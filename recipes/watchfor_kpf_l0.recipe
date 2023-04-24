@@ -4,12 +4,8 @@ channel_datasec_ncols_green = config.WATCHFOR_L0.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
 channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
 channel_datasec_nrows_red = config.WATCHFOR_L0.channel_datasec_nrows_red
-channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + "/" + config.WATCHFOR_L0.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + "/" + config.WATCHFOR_L0.channel_orientation_ref_path_green
-pl_overscan_reg_red = config.WATCHFOR_L0.pl_overscan_reg_red
-srl_overscan_reg_red = config.WATCHFOR_L0.srl_overscan_reg_red
-pl_overscan_reg_green = config.WATCHFOR_L0.pl_overscan_reg_green
-srl_overscan_reg_green = config.WATCHFOR_L0.srl_overscan_reg_green
+channel_orientation_ref_path_red = config.WATCHFOR_L0.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.WATCHFOR_L0.channel_orientation_ref_path_green
 overscan_method = config.WATCHFOR_L0.overscan_method
 order = config.WATCHFOR_L0.overscan_order
 oscan_clip = config.WATCHFOR_L0.overscan_clip
@@ -24,7 +20,7 @@ masterflat_path = config.WATCHFOR_L0.masterflat_path
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
 
-date_dir = context.date_dir
+date_dir = context.date_dir + '/'
 
 if do_db_query_for_master_files:
 
@@ -72,12 +68,11 @@ file_path = context.file_path
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
 for raw_file_path in file_list:
-    date_dir = context.date_dir
-    output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
+    td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
 
     _,file_name_ext = split(raw_file_path)
     file_name,ext = splitext(file_name_ext)
-    output_file_name = output_dir + file_name + "_2D" + ext
+    output_file_name = td_output_dir + file_name + "_2D" + ext
     output_file_exists = exists(output_file_name)
 
     if overwrite or not output_file_exists:
@@ -86,8 +81,6 @@ for raw_file_path in file_list:
         # compute red-chip ffi
         l0 = kpf0_from_fits(raw_file_path, data_type)
         red_ffi = OverscanSubtraction(l0,
-                                      pl_overscan_reg_red,
-                                      srl_overscan_reg_red,
                                       overscan_method,
                                       order,
                                       oscan_clip,
@@ -104,8 +97,6 @@ for raw_file_path in file_list:
 
         # add green-chip ffi to data containing red-chip ffi
         L0_with_ffi = OverscanSubtraction(red_ffi,
-                                          pl_overscan_reg_green,
-                                          srl_overscan_reg_green,
                                           overscan_method,
                                           order,
                                           oscan_clip,

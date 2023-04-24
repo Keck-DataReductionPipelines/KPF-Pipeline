@@ -31,6 +31,7 @@ RUN mkdir /code && \
 
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
+RUN git config --global --add safe.directory /code/KPF-Pipeline
 
 ADD requirements.txt /code/KPF-Pipeline/
 RUN pip3 install -r requirements.txt
