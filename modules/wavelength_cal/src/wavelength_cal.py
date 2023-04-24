@@ -119,7 +119,20 @@ class WaveCalibrate(KPF1_Primitive):
             Level 1 Data Object
         """
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
-            file_name_split = self.l1_obj.filename.split('_')[0]
+            self.file_name_split = self.l1_obj.filename.split('_')[0]
+
+            print("\nFirst calibrating by order.")
+
+            calflux = []
+            for pre in self.cal_orderlet_names:
+                if len(calflux) == 0:
+                    calflux = self.l1_obj[pre].copy()
+                else:
+                    calflux += self.l1_obj[pre]
+            calflux = np.nan_to_num(calflux)
+
+            if self.cal_type == 'LFC':
+                line_list, wl_soln = self.calibrate_lfc(calflux, output_ext='{}_WAVE'.format(pre.split('_')[0]))
 
             for i, prefix in enumerate(self.cal_orderlet_names):
                 print('\nCalibrating orderlet {}.'.format(prefix))
@@ -133,62 +146,7 @@ class WaveCalibrate(KPF1_Primitive):
                         
                 #### lfc ####
                 if self.cal_type == 'LFC':
-                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
-                        'LFC'
-                    ):
-                        pass # TODO: fix
-                        # raise ValueError(
-                        #     'Not an LFC file! CAL-OBJ is {}.'.format(
-                        #         self.l1_obj.header['PRIMARY']['CAL-OBJ']
-                        #     )
-                        # )
-                    
-                    if self.logger:
-                        self.logger.info(
-                            "Wavelength Calibration: Getting comb frequency \
-                                values."
-                        )
-
-                    if self.f0_key is not None:
-                        if type(self.f0_key) == str:
-                            comb_f0 = float(
-                                self.l1_obj.header['PRIMARY'][self.f0_key]
-                            )
-                        if type(self.f0_key) == float:
-                            comb_f0 = self.f0_key
-
-                    else:
-                        raise ValueError('f_0 value not found.')
-                    
-                    if self.frep_key is not None:
-                        if type(self.frep_key) == str:
-                            comb_fr = float(
-                                self.l1_obj.header['PRIMARY'][self.frep_key]
-                            )
-                        if type(self.frep_key) == float:
-                            comb_fr = self.frep_key
-                    else:
-                        raise ValueError('f_rep value not found')
-             
-                    peak_wavelengths_ang = None
-
-                    lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
-
-                    wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux, peak_wavelengths_ang=peak_wavelengths_ang,
-                        rough_wls=self.rough_wls, 
-                        lfc_allowed_wls=lfc_allowed_wls
-                    )
-                    
-                    if self.save_wl_pixel_toggle == True:
-                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
-                        if not os.path.exists(wlpixelwavedir):
-                            os.mkdir(wlpixelwavedir)
-                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
-                            file_name_split + '{}.npy'.format(prefix)
-                        self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
-                        
-                    self.l1_obj[output_ext] = wl_soln
+                    self.drift_correction(prefix, line_list, wl_soln)
                 
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
@@ -286,3 +244,87 @@ class WaveCalibrate(KPF1_Primitive):
             
                 
         
+    def calibrate_lfc(self, calflux, output_ext=None):
+        if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
+            'LFC'
+        ):
+            pass # TODO: fix
+            # raise ValueError(
+            #     'Not an LFC file! CAL-OBJ is {}.'.format(
+            #         self.l1_obj.header['PRIMARY']['CAL-OBJ']
+            #     )
+            # )
+        
+        if self.logger:
+            self.logger.info(
+                "Wavelength Calibration: Getting comb frequency \
+                    values."
+            )
+
+        if self.f0_key is not None:
+            if type(self.f0_key) == str:
+                comb_f0 = float(
+                    self.l1_obj.header['PRIMARY'][self.f0_key]
+                )
+            if type(self.f0_key) == float or type(self.f0_key) == int:
+                comb_f0 = self.f0_key
+
+        else:
+            raise ValueError('f_0 value not found.')
+        
+        if self.frep_key is not None:
+            if type(self.frep_key) == str:
+                comb_fr = float(
+                    self.l1_obj.header['PRIMARY'][self.frep_key]
+                )
+            if type(self.frep_key) == float or type(self.frep_key) == int:
+                comb_fr = self.frep_key
+        else:
+            raise ValueError('f_rep value not found')
+    
+        peak_wavelengths_ang = None
+
+        lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
+
+        wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+            calflux, peak_wavelengths_ang=peak_wavelengths_ang,
+            rough_wls=self.rough_wls, 
+            lfc_allowed_wls=lfc_allowed_wls
+        )
+        
+        if self.save_wl_pixel_toggle == True:
+            wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+            if not os.path.exists(wlpixelwavedir):
+                os.mkdir(wlpixelwavedir)
+            file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
+                self.file_name_split + '_{}.npy'.format(output_ext)
+            self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
+            
+        if output_ext != None:
+            self.l1_obj[output_ext] = wl_soln
+
+        return (file_name, wl_soln)
+    
+    def drift_correction(self, orderlet, line_list, wl_soln):
+
+        calflux = self.l1_obj[orderlet]
+        output_ext = orderlet.replace('FLUX', 'WAVE')
+        file_name, _ = self.calibrate_lfc(calflux)
+
+        drift_all_orders = calcdrift_polysolution(
+            line_list, file_name
+        )
+        avg_drift = np.nanmedian(drift_all_orders[:,1])
+        print("Average drift for {} = {:.2f} cm/s".format(orderlet, avg_drift))
+
+        # convert drift to angstroms
+        beta = avg_drift / cst.c.to(u.cm/u.s).value
+        delta_lambda_over_lambda = -1 + np.sqrt(
+            (1 + beta)/ (1 - beta)
+        )
+        delta_lambda = delta_lambda_over_lambda * wl_soln
+
+        # update wls using calculated average drift
+        wl_soln = wl_soln - delta_lambda
+
+        self.l1_obj[output_ext] = wl_soln
