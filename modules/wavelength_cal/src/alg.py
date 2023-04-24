@@ -7,7 +7,7 @@ import pandas as pd
 import scipy
 from scipy import signal
 from scipy.special import erf
-from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline
 from scipy.optimize.minpack import curve_fit
 from modules.Utils.config_parser import ConfigHandler
 
@@ -405,7 +405,6 @@ class WaveCalibration:
                         '{}/precise_vs_rough.png'.format(order_plt_path),
                         dpi=250
                     )
-                    plt.tight_layout()
                     plt.close()
 
                 # compute various RV precision values for order
@@ -1004,7 +1003,7 @@ class WaveCalibration:
             plt.figure()
             plt.plot(rough_wls_order, order_flux, alpha=0.2)
             plt.vlines(comb_lines_angstrom, ymin=0, ymax=5000, color='r')
-            plt.xlim(np.nanmin(rough_wls_order), np.nanmin(rough_wls_order) + 3)
+            plt.xlim(np.nanmin(rough_wls_order), np.nanmin(rough_wls_order) + 6)
             plt.xlabel('wavelength [$\\rm \AA$]')
             plt.savefig('{}/rough_sol_and_lfc_lines.png'.format(plot_path), dpi=250)
             plt.close()
@@ -1141,10 +1140,14 @@ class WaveCalibration:
             )[0]
             unclipped_idx = np.intersect1d(unclipped_idx, unique_idx[count < 2])
             
-            x, y, w = fitted_peak_pixels[unclipped_idx], wls[unclipped_idx], weights[unclipped_idx]
+            sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
+            x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]
             for i in range(fit_iterations):
                 leg_out = Legendre.fit(x, y, self.fit_order, w=w)
                 our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+
+                # leg_out = UnivariateSpline(x, y, w, k=5)
+                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))
@@ -1152,6 +1155,14 @@ class WaveCalibration:
                 y = y[good]
                 w = w[good]
                 res = res[good]
+
+            plt.plot(x, res, 'k.')
+            plt.axhline(0, color='b', lw=2)
+            plt.xlabel('Pixel')
+            plt.ylabel('Fit residuals [$\AA$]')
+            plt.tight_layout()
+            plt.savefig('polyfits/polyfit_{}.png'.format(wls[0]))
+            plt.close()
 
             if plot_path is not None:
 
@@ -1222,7 +1233,7 @@ class WaveCalibration:
         if print_update:
             print('Absolute standard error (this order): {:.2f} cm/s'.format(abs_precision_cm_s))
             print('Relative standard error (this order): {:.2f} cm/s'.format(rel_precision_cm_s))
-
+        
         if plot_path is not None:
             fig, ax = plt.subplots(2,1)
             ax[0].plot(abs_residual)
@@ -1428,7 +1439,7 @@ def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
         drifts_cms = (alpha**2 + 2 * alpha) / (alpha**2 + 2 * alpha + 2) * cst.c.to(u.cm/u.s).value
 
         drift_all_orders[i,0] = order_num
-        drift_all_orders[i,1] = np.mean(drifts_cms)
+        drift_all_orders[i,1] = np.nanmedian(drifts_cms)
 
     return drift_all_orders
 
