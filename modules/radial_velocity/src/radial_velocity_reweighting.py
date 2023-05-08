@@ -95,9 +95,10 @@ class RadialVelocityReweighting(KPF2_Primitive):
     RV_COL_SOURCE = 'source'
     RV_COL_CAL = 'CAL RV'
     RV_COL_CAL_SOURCE = 'source CAL'
+    RV_WEIGHTS = 'CCF Weights'
     rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_ORD_NO,
                     RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL,
-                    RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE]
+                    RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE, RV_WEIGHTS]
     rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
 
     def __init__(self,
@@ -250,7 +251,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
                     ccf_ref = sci_ccf_ref
                 else:
                     for idx, r_col in enumerate(self.ccf_ref.columns):
-                        if self.mask_type[o] is not None and r_col.lower() in self.mask_type[o].lower():
+                        if self.mask_type[o] is not None and r_col.lower() == self.mask_type[o].lower():
                             col_idx = np.array([0, idx], dtype=int)
                             ccf_ref = self.ccf_ref.values[:, col_idx]
                             if o <= self.last_sci_idx and sci_ccf_ref is None:
@@ -282,7 +283,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         if is_rv_ext:
             if self.logger:
                 self.logger.info("RadialVelocityReweighting: start updating rv for each segment")
-            self.update_rv_table(total_orderlet, velocities, do_corr)
+            self.update_rv_table(total_orderlet, velocities, do_corr, sci_ccf_ref)
 
         # update rv keyword, ccd[1-2]rv[1-3], ccd[1-2]rv, ccd[1-2]rvc
         idx = 0
@@ -319,6 +320,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
         ccd_rv = self.reweight_rv(self.RV_COL_RV, sci_ccf_ref)
         if is_rv_ext:
             rv_ext_header['ccd' + str(self.rv_ext_idx+1) + 'rv'] = ccd_rv - cal_rv if do_corr else ccd_rv  # ccdnrv
+
         rv_ext_header['rwccfrv'] = 'T'
 
         self.lev2_obj.receipt_add_entry('RadialVelocityReweighting on '+ self.ccf_ext,
@@ -330,7 +332,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
 
         return Arguments(self.lev2_obj)
 
-    def update_rv_table(self, total_orderlet, velocities, do_corr):
+    def update_rv_table(self, total_orderlet, velocities, do_corr, sci_ccf_ref):
         rv_ext_values = self.lev2_obj[self.rv_ext].values
         rv_ext_columns = self.lev2_obj[self.rv_ext].columns
         rv_ext_header = self.lev2_obj.header[self.rv_ext]
@@ -392,6 +394,11 @@ class RadialVelocityReweighting(KPF2_Primitive):
             rv_ext_values[s+rv_start_idx, rv_idx] = seg_rv    # update rv column\
             # rv_ext_values[s+rv_start_idx, col_idx_rv_table(self.RV_COL_RV_ERR)] = seg_rv_error
 
+        ccf_weight = sci_ccf_ref if len(np.shape(sci_ccf_ref)) >= 2 else sci_ccf_ref.reshape(sci_ccf_ref.size, 1)
+        ccf_ref_idx = col_idx_rv_table(self.RV_WEIGHTS)
+        if ccf_ref_idx >= 0:
+            rv_ext_values[rv_start_idx:rv_start_idx+seg_size, ccf_ref_idx] = ccf_weight[0:seg_size, -1]
+
         # do correction on orderletx columns
         if do_corr:
             for s_idx in sci_idx:
@@ -414,6 +421,7 @@ class RadialVelocityReweighting(KPF2_Primitive):
                 idx = col_idx_rv_table(c_name)
                 if idx >= 0:
                     new_rv_table[c_name] = rv_ext_values[:, idx].tolist()
+
 
         self.lev2_obj[self.rv_ext] = pd.DataFrame(new_rv_table)      # update rv table
 

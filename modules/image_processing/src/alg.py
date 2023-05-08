@@ -206,11 +206,11 @@ class ImageProcessingAlg():
             t_fs = self.config_ins.get_config_value('BS_FILTER', '(5, 5)')
             box = eval(t_box)  # box size for estimating background
             fs = eval(t_fs)    # window size for 2D low resolution median filtering
-
+            mask_val = order_masks[ffi].astype(bool)
             if self.logger:
                 self.logger.info(f"Background Subtraction box_size: "+ t_box + ' filter_size: '+t_fs)
 
-            bkg[:, :] = Background2D(raw, box, mask=order_masks[ffi], filter_size=fs, sigma_clip=clip,
+            bkg[:, :] = Background2D(raw, box, mask=mask_val, filter_size=fs, sigma_clip=clip,
                                                 bkg_estimator=est).background
             self.rawimage[ffi] = self.rawimage[ffi] - bkg
 

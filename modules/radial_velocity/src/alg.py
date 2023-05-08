@@ -2,7 +2,6 @@ from astropy.io import fits
 import numpy as np
 from astropy.modeling import models, fitting
 from astropy import constants as const
-from astropy.stats import sigma_clipped_stats
 import warnings
 import datetime
 import pandas as pd
@@ -1142,10 +1141,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
             results.attrs['CCF-ERV'] = f_decimal(rv_error)
             results.attrs['RV_SEGMS'] = rv_segments
-            # total_to_avg = np.sum(rv_segments != 0.0)
-            # results.attrs['RV_MEAN'] = np.sum(rv_segments)/total_to_avg if total_to_avg != 0 else 0.0
-            results.attrs['RV_MEAN'] = self.weighted_rv(rv_segments, rv_segments.size,
-                             np.where(rv_segments != 0.0, 1, 0).reshape(rv_segments.size, 1))
+            results.attrs['RV_MEAN'] = self.weighted_rv(rv_segments, rv_segments.size, None)
 
         return results
 
@@ -1330,7 +1326,62 @@ class RadialVelocityAlg(RadialVelocityBase):
         return df
 
     @staticmethod
+    def weighted_avg_and_std(values, weights):
+        """
+        Return the weighted average and standard deviation.
+
+        Args:
+            values (array): values to average
+            weights (array): weights with same shape as values
+
+        Returns:
+            (average, standard deviation)
+
+        """
+        average = np.average(values, weights=weights)
+
+        variance = np.average((values - average) ** 2, weights=weights)
+        return (average, variance ** 0.5)
+
+    @staticmethod
+    def weighted_sigma_clipped_mean(values, weights, max_iters=7, sigma=3):
+        """
+        Return a weighted sigma-clipped mean
+
+        Args:
+            values (array): array of values to average
+            weigths (array): weights for each value
+            max_iters (int): (default=7) maximum number of iterations, will halt when no more outliers are clipped
+            sigma (float): (default=3.0) clip outlier greater than sigma away from the mean
+
+        Returns:
+            float
+        """
+        good_idx = np.where(values != 0.0)[0]
+        if good_idx.size == 0:
+            return 0.0
+        values = values[good_idx]
+        weights = weights[good_idx]
+
+        mean, std = RadialVelocityAlg.weighted_avg_and_std(values, weights)
+
+        for i in range(max_iters):
+            good_idx = np.where(np.abs(values - mean) <= sigma * std)[0]
+            # bad_idx = np.where(np.abs(values - mean) > sigma * std)[0]
+
+            if len(good_idx) == len(values):
+                break
+            else:
+                values = values[good_idx]
+                weights = weights[good_idx]
+                mean, std = RadialVelocityAlg.weighted_avg_and_std(values, weights)
+
+        return mean
+
+    @staticmethod
     def weighted_rv(rv_arr, total_segment, reweighting_table_or_ccf, s_seg=0):
+        if reweighting_table_or_ccf is None:
+            reweighting_table_or_ccf = np.ones((total_segment, 1))
         if np.shape(reweighting_table_or_ccf)[1] >= 2:
             s_seg = 0 if s_seg is None else s_seg
             e_seg = s_seg + total_segment - 1
@@ -1343,11 +1394,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             sval = np.arange(0, total_segment, dtype=int)
 
         new_rv_arr = rv_arr[sval]
-        good_idx = np.where((new_rv_arr != 0.0) & (tval != 0.0))[0]
-        total_to_avg = np.sum(tval[good_idx])
-        w_rv = sigma_clipped_stats(new_rv_arr[good_idx]*tval[good_idx])[0] if total_to_avg != 0 else 0.0
-        # print("total_to_avg: ", total_to_avg, " w_rv:", w_rv)
-
+        w_rv = RadialVelocityAlg.weighted_sigma_clipped_mean(new_rv_arr, tval)
         return w_rv
 
     @staticmethod
