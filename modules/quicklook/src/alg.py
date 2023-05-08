@@ -893,7 +893,8 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
-                print('ccf',np.shape(ccf))
+                sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
+                print('ccf',np.shape(ccf),)
                 #step = float(self.config['RV']['step'])
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
@@ -920,8 +921,8 @@ class QuicklookAlg:
                 if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
                 if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
-                if i_color == 0: ccf_weights[12] = 0
+                ccf_weights = np.array(newdata['sci_mask'],'d')#np.ones(np.shape(ccf)[0])
+                #if i_color == 0: ccf_weights[12] = 0
 
                 mean_ccf = np.average(ccf,axis = 0,weights = ccf_weights)/np.percentile(np.average(ccf,axis = 0,weights = ccf_weights),[99.9])
                 #print('test',np.shape(np.nanmean(ccf,axis = 0)))
@@ -968,7 +969,8 @@ class QuicklookAlg:
                 if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
                 if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
+                sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
+                ccf_weights = np.array(newdata['sci_mask'],'d')#np.ones(np.shape(ccf)[0])
                 if i_color == 0: ccf_weights[12] = 0
 
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
