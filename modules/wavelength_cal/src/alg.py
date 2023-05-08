@@ -1156,13 +1156,13 @@ class WaveCalibration:
                 w = w[good]
                 res = res[good]
 
-            plt.plot(x, res, 'k.')
-            plt.axhline(0, color='b', lw=2)
-            plt.xlabel('Pixel')
-            plt.ylabel('Fit residuals [$\AA$]')
-            plt.tight_layout()
-            plt.savefig('polyfits/polyfit_{}.png'.format(wls[0]))
-            plt.close()
+            # plt.plot(x, res, 'k.')
+            # plt.axhline(0, color='b', lw=2)
+            # plt.xlabel('Pixel')
+            # plt.ylabel('Fit residuals [$\AA$]')
+            # plt.tight_layout()
+            # plt.savefig('polyfits/polyfit_{}.png'.format(wls[0]))
+            # plt.close()
 
             if plot_path is not None:
 

@@ -173,7 +173,7 @@ class WaveCalibrate(KPF1_Primitive):
                         if not os.path.exists(wlpixelwavedir):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
-                            file_name_split + '{}.npy'.format(prefix)
+                            self.file_name_split + '{}.npy'.format(prefix)
                         wl_pixel_filename = self.alg.save_wl_pixel_info(
                             file_name, wls_and_pixels
                         )
