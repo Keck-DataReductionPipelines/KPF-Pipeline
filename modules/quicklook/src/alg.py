@@ -921,7 +921,7 @@ class QuicklookAlg:
                 if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
                 if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['sci_mask'],'d')#np.ones(np.shape(ccf)[0])
+                ccf_weights = np.array(newdata['SCI_MASK'],'d')#np.ones(np.shape(ccf)[0])
                 #if i_color == 0: ccf_weights[12] = 0
 
                 mean_ccf = np.average(ccf,axis = 0,weights = ccf_weights)/np.percentile(np.average(ccf,axis = 0,weights = ccf_weights),[99.9])
