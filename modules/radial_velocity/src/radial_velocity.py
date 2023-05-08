@@ -97,7 +97,6 @@ from keckdrpframework.models.processing_context import ProcessingContext
 from modules.radial_velocity.src.alg import RadialVelocityAlg
 from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from astropy.time import Time
-from astropy.stats import sigma_clipped_stats
 
 DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
@@ -129,8 +128,9 @@ class RadialVelocity(KPF1_Primitive):
     RV_COL_SOURCE = 'source'
     RV_COL_CAL = 'CAL RV'
     RV_COL_CAL_SOURCE ='source CAL'
+    RV_WEIGHTS = 'CCF Weights'
     rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_ORD_NO,
-                    RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL, RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE]
+                    RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL, RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE, RV_WEIGHTS]
     rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
 
     def __init__(self,
@@ -539,6 +539,7 @@ class RadialVelocity(KPF1_Primitive):
         rv_table[self.RV_COL_RV_ERR] = col_rv_err                                      # col of rv error
         rv_table[self.RV_COL_CCFJD] = np.ones(total_segment) * jd
         rv_table[self.RV_COL_BARY] = np.ones(total_segment) * bary
+        rv_table[self.RV_WEIGHTS] = np.ones(total_segment)
 
         results = pd.DataFrame(rv_table)
 
@@ -565,10 +566,11 @@ class RadialVelocity(KPF1_Primitive):
                                              sci_mask,
                                              rv_guess_on_ccf=(ins == 'kpf'),
                                              vel_span_pixel=self.alg.get_vel_span_pixel())
-            good_idx = np.where(rv_table[self.RV_COL_RV] != 0.0)[0]
-            final_rv = sigma_clipped_stats(rv_table[self.RV_COL_RV][good_idx])[0]          # sigma-clipped mean
-            if self.RV_COL_CAL in rv_table:
-                cal_rv = sigma_clipped_stats(rv_table[self.RV_COL_CAL][good_idx])[0]     # sigma-clip for the CAL RV also
+            final_rv = RadialVelocityAlg.weighted_rv(rv_table[self.RV_COL_RV], total_segment, None)
+
+        if self.RV_COL_CAL in rv_table:
+            cal_rv = RadialVelocityAlg.weighted_rv(rv_table[self.RV_COL_CAL], total_segment, None)
+
             # final_rv_err /= len(good_idx)**0.5                                         # RV error divided by sqrt of number of measurements (good_idx number of orders)
 
         # ccd1rv, ccd2rv, ccd1erv ccd2erv, cal rv
@@ -580,6 +582,7 @@ class RadialVelocity(KPF1_Primitive):
         results.attrs['star_rv'] = starrv
         results.attrs['rv_cal'] = (f_decimal(cal_rv), 'Cal fiber RV (km/s)')      # ccd1crv
         results.attrs['do_rv_corr'] = do_corr
+
         return results
 
     @staticmethod
