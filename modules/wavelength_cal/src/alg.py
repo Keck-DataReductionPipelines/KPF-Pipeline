@@ -1143,11 +1143,11 @@ class WaveCalibration:
             sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
             x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]
             for i in range(fit_iterations):
-                leg_out = Legendre.fit(x, y, self.fit_order, w=w)
-                our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-
-                # leg_out = UnivariateSpline(x, y, w, k=5)
+                # leg_out = Legendre.fit(x, y, self.fit_order, w=w)
                 # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+
+                leg_out = UnivariateSpline(x, y, w, k=5)
+                our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))
