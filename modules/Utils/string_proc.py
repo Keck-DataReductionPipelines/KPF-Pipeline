@@ -57,6 +57,12 @@ class date_from_kpffile(KPF_Primitive):
                  action: Action,
                  context: ProcessingContext) -> None:
         KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        if 'startswith' in args_keys and action.args['startswith']:
+            self.filenamestartwith = action.args['startswith']
+        else:
+            self.filenamestartwith = ''
+
         self.logger = self.context.logger
 
     def _pre_condition(self) -> bool:
@@ -68,10 +74,10 @@ class date_from_kpffile(KPF_Primitive):
 
     def _perform(self):
         f_name = self.action.args[0]
-        first_key = 'KP.'
+        first_key = self.filenamestartwith or 'KP.'
         date_format = 'YYYYMMDD'
         first_idx = f_name.find(first_key)
-        date_str = ""
+        date_str = None
         if first_idx >= 0:
             start_idx = first_idx + len(first_key)
             date_str = f_name[start_idx:start_idx+len(date_format)]
