@@ -733,12 +733,13 @@ class QuicklookAlg:
             wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
             wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
 
+            '''
             wave_soln = self.config['L1']['wave_soln']
             if wave_soln!='None':#use the master the wavelength solution
                 hdulist1 = fits.open(wave_soln)
                 wav_green = np.array(hdulist1['GREEN_CAL_WAVE'].data,'d')
                 wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
-
+            '''
 
             #print(hdulist1.info())
 
@@ -895,7 +896,8 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
-                print('ccf',np.shape(ccf))
+                sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
+
                 #step = float(self.config['RV']['step'])
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
@@ -914,16 +916,18 @@ class QuicklookAlg:
 
                 if np.shape(ccf)==(0,): continue
                 #print('ccf shape', np.shape(ccf))
-                ccf = np.sum(ccf,axis =0)#sum over orderlets
+                ccf = np.sum(ccf[1:2,:,:],axis =0)
+                #ccf = np.sum(ccf[:-1,:,:],axis =0)#sum over orderlets
+                #ccf = np.sum(ccf[1:,:,:],axis =0)
                 #print('ccf shape', np.shape(ccf))
 
 
                 #print('step',step,len(vel_grid))
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
-                if i_color == 0: ccf_weights[12] = 0
+                ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
+                #if i_color == 0: ccf_weights[12] = 0
 
                 mean_ccf = np.average(ccf,axis = 0,weights = ccf_weights)/np.percentile(np.average(ccf,axis = 0,weights = ccf_weights),[99.9])
                 #print('test',np.shape(np.nanmean(ccf,axis = 0)))
@@ -961,16 +965,17 @@ class QuicklookAlg:
 
             #plot ccf in individual orders
             for i_color in range(len(ccf_color)):
-                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')[1:2,:,:]
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
+                sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
+                ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
                 if i_color == 0: ccf_weights[12] = 0
 
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)
