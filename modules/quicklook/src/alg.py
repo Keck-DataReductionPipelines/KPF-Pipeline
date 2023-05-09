@@ -915,7 +915,7 @@ class QuicklookAlg:
                 if np.shape(ccf)==(0,): continue
                 #print('ccf shape', np.shape(ccf))
                 ccf = np.sum(ccf[1:,:,:],axis =0)#sum over orderlets
-                ccf = np.sum(ccf[1:,:,:],axis =0)
+                #ccf = np.sum(ccf[1:,:,:],axis =0)
                 #print('ccf shape', np.shape(ccf))
 
 
