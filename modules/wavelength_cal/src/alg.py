@@ -1154,7 +1154,6 @@ class WaveCalibration:
                 func: a Python function that, given an array of pixel locations, 
                     returns the Legendre polynomial wavelength solutions
         """
-        import pdb; pdb.set_trace()
         weights = 1 / np.sqrt(peak_heights)
         if self.fit_type == 'Legendre': 
 
