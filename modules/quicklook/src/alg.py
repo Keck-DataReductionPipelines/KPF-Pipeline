@@ -914,7 +914,8 @@ class QuicklookAlg:
 
                 if np.shape(ccf)==(0,): continue
                 #print('ccf shape', np.shape(ccf))
-                ccf = np.sum(ccf[:-1,:,:],axis =0)#sum over orderlets
+                ccf = np.sum(ccf[1:2,:,:],axis =0)
+                #ccf = np.sum(ccf[:-1,:,:],axis =0)#sum over orderlets
                 #ccf = np.sum(ccf[1:,:,:],axis =0)
                 #print('ccf shape', np.shape(ccf))
 
@@ -962,7 +963,7 @@ class QuicklookAlg:
 
             #plot ccf in individual orders
             for i_color in range(len(ccf_color)):
-                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')[:-1,:,:]
+                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')[1:2,:,:]
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
