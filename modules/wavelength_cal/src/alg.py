@@ -956,7 +956,7 @@ class WaveCalibration:
         spline_peak_diff_bool1 = spline_peak_diff_diff/spline_peak_diff_min < -0.5 # bool mask to identify half of bad peak spacings
         spline_peak_diff_bool0 = np.insert(spline_peak_diff_bool0, 0, False) # bool padding to select correct peak
         spline_peak_diff_bool1 = np.append(False, spline_peak_diff_bool1) # bool padding to select correct peak
-        index = np.where((spline_peak_diff_bool0 | spline_peak_diff_bool1) == False)[0] # combine bool arrays of bad peaks on LHS and RHS of peak spacing
+        index = np.where((spline_peak_diff_bool0 | spline_peak_diff_bool1) == False)[0] # combine bool arrays to remove bad peaks on LHS and RHS of peak spacing
         spline_peak_diff_new = spline_peak_diff[index]
         
         # Now, recurse the above process
@@ -973,7 +973,7 @@ class WaveCalibration:
             spline_peak_diff_new = spline_peak_diff[index]
 
             counter_spline += 1     
-            if counter == 15:
+            if counter_spline == 15:
                 print('Warning: Outlier Removal Iterations = 15')
                 break
 
