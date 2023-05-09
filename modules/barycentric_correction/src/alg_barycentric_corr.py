@@ -299,7 +299,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 longi=obs_config[BarycentricCorrectionAlg.LON],
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
-                                predictive=True,
+                                predictive=False,
                                 rv=obs_config[BarycentricCorrectionAlg.RV])
         else:
             bc_obj = get_BC_vel(JDUTC=jd,
