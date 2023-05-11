@@ -739,6 +739,7 @@ class QuicklookAlg:
                 hdulist1 = fits.open(wave_soln)
                 wav_green = np.array(hdulist1['GREEN_CAL_WAVE'].data,'d')
                 wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
+                hdulist1.close()
             '''
 
             #print(hdulist1.info())
@@ -772,8 +773,8 @@ class QuicklookAlg:
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
-            print(hdulist1.info())
-            hdulist1.close()
+            #print(hdulist1.info())
+
             flux = np.concatenate((flux_green,flux_red),axis = 0)
             flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
             flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
