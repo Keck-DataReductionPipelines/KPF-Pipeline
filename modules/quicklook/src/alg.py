@@ -771,8 +771,6 @@ class QuicklookAlg:
             if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
-            print('test wave',np.shape(wav))
-            print(hdulist1.info())
             hdulist1.close()
             flux = np.concatenate((flux_green,flux_red),axis = 0)
             flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
