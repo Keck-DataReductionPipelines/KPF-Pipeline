@@ -758,16 +758,16 @@ class QuicklookAlg:
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
 
-            if np.shape(flux_green)==(0,):flux_green = np.array(wav_green*0.)#place holder when there is no data
-            if np.shape(flux_red)==(0,): flux_red = np.array(wav_red*0.)#place holder when there is no data
-            if np.shape(flux_green2)==(0,):flux_green2 = np.array(wav_green*0.)#place holder when there is no data
-            if np.shape(flux_red2)==(0,): flux_red2 = np.array(wav_red*0.)#place holder when there is no data
-            if np.shape(flux_green3)==(0,):flux_green3 = np.array(wav_green*0.)#place holder when there is no data
-            if np.shape(flux_red3)==(0,): flux_red3 = np.array(wav_red*0.)#place holder when there is no data
-            if np.shape(flux_green_cal)==(0,):flux_green_cal = np.array(wav_green*0.)#place holder when there is no data
-            if np.shape(flux_red_cal)==(0,): flux_red_cal = np.array(wav_red*0.)#place holder when there is no data
-            if np.shape(flux_green_sky)==(0,):flux_green_sky = np.array(wav_green*0.)#place holder when there is no data
-            if np.shape(flux_red_sky)==(0,): flux_red_sky = np.array(wav_red*0.)#place holder when there is no data
+            if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red2)==(0,): flux_red2 = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green3)==(0,):flux_green3 = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red3)==(0,): flux_red3 = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green_cal)==(0,):flux_green_cal = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
+            if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
+            if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
 
             print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
 
@@ -821,6 +821,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
+                if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in GREEN '+exposure_name)
@@ -834,6 +835,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
+                if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in RED '+exposure_name)
