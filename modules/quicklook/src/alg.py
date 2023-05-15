@@ -757,7 +757,7 @@ class QuicklookAlg:
             flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
-            print(np.shape(flux_green),np.shape(flux_red))
+            print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red))
             if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
             if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
             if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
