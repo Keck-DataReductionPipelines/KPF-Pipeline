@@ -4,6 +4,7 @@ import numpy.ma as ma
 import configparser as cp
 from datetime import datetime, timezone
 from scipy.ndimage import gaussian_filter
+from scipy.stats import mode
 
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
@@ -296,24 +297,38 @@ class MasterFlatFramework(KPF0_Primitive):
 
             # Apply order mask, if available for the current FITS extension.  Otherwise, use the low-light pixels as a mask.
 
-            np_om_ffi = np.array(order_mask_data[ffi])
+            np_om_ffi = np.array(np.rint(order_mask_data[ffi])).astype(int)   # Ensure rounding to nearest integer.
             np_om_ffi_shape = np.shape(np_om_ffi)
             order_mask_n_dims = len(np_om_ffi_shape)
             self.logger.debug('ffi,order_mask_n_dims = {},{}'.format(ffi,order_mask_n_dims))
             if order_mask_n_dims == 2:      # Check if valid data extension
-                np_om_ffi_bool = np.where(np_om_ffi > 0.5, True, False)
 
-                # Compute mean of unmasked pixels in unnormalized flat.
-                unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)    # Invert the mask for mask_array operation.
-                unnormalized_flat_mean = ma.getdata(unmx.mean()).item()
-                self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
+                # Loop over 5 orderlets in the KPF instrument and normalize separately for each.
+                flat = unnormalized_flat
+                flat_unc = unnormalized_flat_unc
+                for orderlet_val in range(1,6):         # Order mask has them numbered from 1 to 5 (bottom to top).
+                    np_om_ffi_bool = np.where(np_om_ffi == orderlet_val,True,False)
+                    np_om_ffi_bool = np.where(stack_avg > self.low_light_limit,np_om_ffi_bool,False)
 
-                # Normalize flat.
-                flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat by the mean.
-                flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
+                    # Compute mean for comparison with mode of distribution.
+                    unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)  # Invert mask for numpy.ma operation.
+                    unnormalized_flat_mean = ma.getdata(unmx.mean()).item()
 
-                # Apply the order mask.
-                flat = np.where(np_om_ffi_bool == False, 1.0, flat)
+                    # Compute mode of distribution for normalization factor.
+                    vals_for_mode_calc = np.where(np_om_ffi == orderlet_val,np.rint(100.0 * unnormalized_flat),np.nan)
+                    vals_for_mode_calc = np.where(stack_avg > self.low_light_limit,vals_for_mode_calc,np.nan)
+                    mode_vals,mode_counts = mode(vals_for_mode_calc,axis=None,nan_policy='omit')
+
+                    normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+
+                    flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
+                    flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
+
+                    self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_count = {},{},{},{}'.format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_counts[0]))
+
+                # Set unity flat values for unmasked pixels.
+                np_om_ffi_bool_all_orderlets = np.where(np_om_ffi > 0.5, True, False)
+                flat = np.where(np_om_ffi_bool_all_orderlets == False, 1.0, flat)
 
                 # Less than low-light pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
                 flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
