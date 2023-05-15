@@ -730,7 +730,7 @@ class QuicklookAlg:
 
             wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
             wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
-
+            print('test wav_green',wav_green)
             '''
             wave_soln = self.config['L1']['wave_soln']
             if wave_soln!='None':#use the master the wavelength solution
