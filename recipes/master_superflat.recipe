@@ -1,0 +1,42 @@
+###################################################################################################
+# Pipeline to generate master superflat file.
+###################################################################################################
+
+from modules.Utils.string_proc import str_replace
+from modules.master_superflat.src.master_superflat_framework import MasterSuperFlatFramework
+
+data_type = config.ARGUMENT.data_type
+date_dir = context.date_dir
+
+if date_dir is None:
+    overscan_output_dir = config.ARGUMENT.l0_2d_dir
+else:
+    overscan_output_dir = config.ARGUMENT.l0_2d_dir + "/" + date_dir
+
+masterbias_path = config.ARGUMENT.masterbias_path
+masterdark_path = config.ARGUMENT.masterdark_path
+
+
+########################
+# Generate master superflat.
+########################
+
+superflat_n_sigma = config.SUPERFLAT.n_sigma
+superflat_lev0_ffi_exts = config.SUPERFLAT.lev0_ffi_exts
+mastersuperflat_path = config.SUPERFLAT.mastersuperflat_path
+ordermask_path = config.SUPERFLAT.ordermask_path
+superflat_input_files = overscan_output_dir + "/" + "*_2D.fits"
+
+if date_dir:
+    new_mastersuperflat_path = str_replace(mastersuperflat_path, '_master_superflat.fits', '_' + date_dir + '_master_superflat.fits')
+else:
+    new_mastersuperflat_path = mastersuperflat_path
+
+exit_list_superflat = MasterSuperFlatFramework(data_type,
+                                               superflat_n_sigma,
+                                               superflat_input_files,
+                                               superflat_lev0_ffi_exts,
+                                               masterbias_path,
+                                               masterdark_path,
+                                               new_mastersuperflat_path,
+                                               ordermask_path)
