@@ -180,7 +180,7 @@ class QuicklookAlg:
         if version == 'Flatlamp':
             master_file = self.config['2D']['master_flatlamp']
         if version == 'Dark':
-            master_file = self.config['2D']['master_dark']#'/data/masters/'+date+'/kpf_'+date+'_master_dark.fits' #
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_dark.fits' #
             if os.path.exists(master_file) == False: master_file = self.config['2D']['master_dark']
         if version == 'Bias':
             master_file = self.config['2D']['master_bias']
