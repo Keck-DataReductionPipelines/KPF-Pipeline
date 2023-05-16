@@ -174,7 +174,7 @@ class QuicklookAlg:
                 master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-lfc-all-eve.fits' #self.config['2D']['master_arclamp']
                 if os.path.exists(master_file) == False: master_file = self.config['2D']['master_LFCFiber']
         if version == 'Flatlamp':
-            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_flat.fits' #
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_superflat.fits' #
             if os.path.exists(master_file) == False: master_file = self.config['2D']['master_flatlamp']
         if version == 'Dark':
             master_file = '/data/masters/'+date+'/kpf_'+date+'_master_dark.fits' #
