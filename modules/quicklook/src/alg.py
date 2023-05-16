@@ -207,10 +207,12 @@ class QuicklookAlg:
                 hdulist1 = fits.open(master_file)
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
-
-            print(version,hdr,hdr['EXPTIME'],type(hdr['EXPTIME']),Cal_Source,master_file,os.path.exists(master_file))
-            print(master_counts)
-            input("Press Enter to continue...")
+                if version == 'Dark':#scale up dark exposures
+                    master_counts*=hdr['EXPTIME']
+                    master_flatten_counts*=hdr['EXPTIME']
+            #print(version,hdr,hdr['EXPTIME'],type(hdr['EXPTIME']),Cal_Source,master_file,os.path.exists(master_file))
+            #print(master_counts)
+            #input("Press Enter to continue...")
 
             #looking at the fixed noise patterns
             '''
