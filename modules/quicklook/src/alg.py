@@ -162,7 +162,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_solar']
         if version == 'Arclamp':
             if Cal_Source == 'Th_daily'
-                master_file = '/data/masters/kpf_'+date+'_master_arclamp_autocal-thar-all-night.fits' #self.config['2D']['master_arclamp']
+                master_file = self.config['2D']['master_arclamp'] ##'/data/masters/kpf_'+date+'_master_arclamp_autocal-thar-all-night.fits'
         input("Press Enter to continue...")
         if version == 'Etalon_All':
             master_file = self.config['2D']['master_etalon']
