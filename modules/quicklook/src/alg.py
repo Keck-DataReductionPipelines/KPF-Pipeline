@@ -195,8 +195,7 @@ class QuicklookAlg:
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
 
-        print(version,Cal_Source,master_file,os.path.exists(master_file))
-        input("Press Enter to continue...")
+
 
 
         for i_color in range(len(ccd_color)):
@@ -209,6 +208,9 @@ class QuicklookAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
 
+        print(version,Cal_Source,master_file,os.path.exists(master_file))
+        print(master_counts)
+        input("Press Enter to continue...")
 
             #looking at the fixed noise patterns
             '''
