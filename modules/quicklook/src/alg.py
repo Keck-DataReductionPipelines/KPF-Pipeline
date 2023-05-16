@@ -173,17 +173,19 @@ class QuicklookAlg:
             if Cal_Source == 'LFCFiber':
                 master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-lfc-all-eve.fits' #self.config['2D']['master_arclamp']
                 if os.path.exists(master_file) == False: master_file = self.config['2D']['master_LFCFiber']
-        if version == 'Etalon_All':
-            master_file = self.config['2D']['master_etalon']
-        if version == 'Sol_All':
-            master_file = self.config['2D']['master_socal']
         if version == 'Flatlamp':
-            master_file = self.config['2D']['master_flatlamp']
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_flat.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_flatlamp']
         if version == 'Dark':
             master_file = '/data/masters/'+date+'/kpf_'+date+'_master_dark.fits' #
             if os.path.exists(master_file) == False: master_file = self.config['2D']['master_dark']
         if version == 'Bias':
-            master_file = self.config['2D']['master_bias']
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_bias.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_bias']
+        if version == 'Sol_All':
+            master_file = self.config['2D']['master_socal']
+        if version == 'Etalon_All':
+            master_file = self.config['2D']['master_etalon']
         if version == 'Th_All':
             master_file = self.config['2D']['master_ThAr']
         if version == 'Une_All':
@@ -192,8 +194,9 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
-        print(version,Cal_Source,master_file,os.path.exists(master_file))
-        input("Press Enter to continue...")
+
+        #print(version,Cal_Source,master_file,os.path.exists(master_file))
+        #input("Press Enter to continue...")
 
 
         for i_color in range(len(ccd_color)):
