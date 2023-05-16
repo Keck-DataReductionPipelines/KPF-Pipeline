@@ -151,7 +151,7 @@ class QuicklookAlg:
         #version = hdr['PRIMARY']['IMTYPE']
         hdr = hdulist[0].header
         version = hdr['IMTYPE']
-        Cal_Source = hdr['CAL-OBJ']
+        Cal_Source = hdr['SC-OBJ']
         print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
 
