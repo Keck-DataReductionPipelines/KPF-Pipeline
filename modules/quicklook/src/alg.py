@@ -732,7 +732,7 @@ class QuicklookAlg:
 
             wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
             wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
-
+            print('test wav_green',wav_green)
             '''
             wave_soln = self.config['L1']['wave_soln']
             if wave_soln!='None':#use the master the wavelength solution
@@ -759,7 +759,7 @@ class QuicklookAlg:
             flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
-            print(np.shape(flux_green),np.shape(flux_red))
+
             if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
             if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
             if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
@@ -770,6 +770,8 @@ class QuicklookAlg:
             if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
             if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
             if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
+
+            print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
@@ -821,6 +823,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
+                if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in GREEN '+exposure_name)
@@ -834,6 +837,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
+                if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.legend()
             plt.title('Science Orderlets in RED '+exposure_name)
@@ -903,7 +907,7 @@ class QuicklookAlg:
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
 
-                print('gamma',hdulist['GREEN_CCF'].header)
+                #print('gamma',hdulist['GREEN_CCF'].header)
                 #vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
 
@@ -949,7 +953,7 @@ class QuicklookAlg:
                 '''
 
                 #read the RV from headers directly
-                print('gamma',hdulist['GREEN_CCF'].header)
+                #print('gamma',hdulist['GREEN_CCF'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
