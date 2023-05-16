@@ -167,6 +167,9 @@ class QuicklookAlg:
             if Cal_Source == 'U_daily':
                 master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-une-all-eve.fits' #self.config['2D']['master_arclamp']
                 if os.path.exists(master_file) == False: master_file = self.config['2D']['master_U_daily']
+            if Cal_Source == 'EtalonFiber':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-etalon-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_EtalonFiber']
         print(version,Cal_Source,master_file,os.path.exists(master_file))
         input("Press Enter to continue...")
         if version == 'Etalon_All':
