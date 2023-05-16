@@ -153,7 +153,7 @@ class QuicklookAlg:
         version = hdr['IMTYPE']
         Cal_Source = hdr['CAL-OBJ']
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
-        #input("Press Enter to continue...")
+
 
 
 
@@ -163,6 +163,7 @@ class QuicklookAlg:
         if version == 'Arclamp':
             if Cal_Source == 'Th_daily'
                 master_file = '/data/masters/kpf_'+date+'_master_arclamp_autocal-thar-all-night.fits' #self.config['2D']['master_arclamp']
+        input("Press Enter to continue...")
         if version == 'Etalon_All':
             master_file = self.config['2D']['master_etalon']
         if version == 'Sol_All':
