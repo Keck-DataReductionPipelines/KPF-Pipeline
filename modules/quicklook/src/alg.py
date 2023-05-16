@@ -163,7 +163,7 @@ class QuicklookAlg:
         if version == 'Arclamp':
             if Cal_Source == 'Th_daily':
                 master_file = '/data/masters/kpf_'+date+'_master_arclamp_autocal-thar-all-night.fits' #self.config['2D']['master_arclamp']
-        print(master_file,os.path.exists(master_file))
+        print(version,Cal_Source,master_file,os.path.exists(master_file))
         input("Press Enter to continue...")
         if version == 'Etalon_All':
             master_file = self.config['2D']['master_etalon']
