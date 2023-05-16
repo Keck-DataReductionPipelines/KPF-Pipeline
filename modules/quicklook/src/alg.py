@@ -195,8 +195,8 @@ class QuicklookAlg:
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
 
-        #print(version,Cal_Source,master_file,os.path.exists(master_file))
-        #input("Press Enter to continue...")
+        print(version,Cal_Source,master_file,os.path.exists(master_file))
+        input("Press Enter to continue...")
 
 
         for i_color in range(len(ccd_color)):
