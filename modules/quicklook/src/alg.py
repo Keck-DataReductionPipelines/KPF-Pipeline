@@ -151,7 +151,8 @@ class QuicklookAlg:
         #version = hdr['PRIMARY']['IMTYPE']
         hdr = hdulist[0].header
         version = hdr['IMTYPE']
-        #print('2d header',hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
+        Cal_Source = hdr['SCI-OBJ']
+        #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
 
 
@@ -160,17 +161,31 @@ class QuicklookAlg:
         if version == 'Solar':
             master_file = self.config['2D']['master_solar']
         if version == 'Arclamp':
-            master_file = self.config['2D']['master_arclamp']
-        if version == 'Etalon_All':
-            master_file = self.config['2D']['master_etalon']
+            if Cal_Source == 'Th_daily':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-thar-all-night.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_Th_daily']
+            if Cal_Source == 'U_daily':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-une-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_U_daily']
+            if Cal_Source == 'EtalonFiber':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-etalon-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_EtalonFiber']
+            if Cal_Source == 'LFCFiber':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-lfc-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_LFCFiber']
+        if version == 'Flatlamp':
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_flat.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_flatlamp']
+        if version == 'Dark':
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_dark.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_dark']
+        if version == 'Bias':
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_bias.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_bias']
         if version == 'Sol_All':
             master_file = self.config['2D']['master_socal']
-        if version == 'Flatlamp':
-            master_file = self.config['2D']['master_flatlamp']
-        if version == 'Dark':
-            master_file = self.config['2D']['master_dark']
-        if version == 'Bias':
-            master_file = self.config['2D']['master_bias']
+        if version == 'Etalon_All':
+            master_file = self.config['2D']['master_etalon']
         if version == 'Th_All':
             master_file = self.config['2D']['master_ThAr']
         if version == 'Une_All':
@@ -179,6 +194,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
+
 
 
 
@@ -192,6 +208,9 @@ class QuicklookAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
 
+            #print(version,Cal_Source,master_file,os.path.exists(master_file))
+            #print(master_counts)
+            #input("Press Enter to continue...")
 
             #looking at the fixed noise patterns
             '''
@@ -454,7 +473,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
             #print(np.percentile(flatten_counts,99.9),saturation_limit)
-            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
+            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.99)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
             if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
             plt.xlabel('Counts (e-)')
