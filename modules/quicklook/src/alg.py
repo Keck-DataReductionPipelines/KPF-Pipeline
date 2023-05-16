@@ -208,8 +208,8 @@ class QuicklookAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
                 if version == 'Dark':#scale up dark exposures
-                    master_counts*=hdr['EXPTIME']
-                    master_flatten_counts*=hdr['EXPTIME']
+                    master_counts*=1. #hdr['EXPTIME']
+                    master_flatten_counts*=1. #hdr['EXPTIME']
             print(version,hdr,hdr['EXPTIME'],type(hdr['EXPTIME']),hdulist1[0].header['EXPTIME'],Cal_Source,master_file,os.path.exists(master_file))
             #print(master_counts)
             input("Press Enter to continue...")
