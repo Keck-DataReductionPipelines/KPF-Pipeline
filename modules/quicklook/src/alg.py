@@ -210,9 +210,9 @@ class QuicklookAlg:
                 if version == 'Dark':#scale up dark exposures
                     master_counts*=hdr['EXPTIME']
                     master_flatten_counts*=hdr['EXPTIME']
-            #print(version,hdr,hdr['EXPTIME'],type(hdr['EXPTIME']),Cal_Source,master_file,os.path.exists(master_file))
+            print(version,hdr,hdr['EXPTIME'],type(hdr['EXPTIME']),hdulist1[0].header['EXPTIME'],Cal_Source,master_file,os.path.exists(master_file))
             #print(master_counts)
-            #input("Press Enter to continue...")
+            input("Press Enter to continue...")
 
             #looking at the fixed noise patterns
             '''
