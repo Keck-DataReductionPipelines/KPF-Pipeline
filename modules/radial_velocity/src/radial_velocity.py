@@ -396,7 +396,8 @@ class RadialVelocity(KPF1_Primitive):
                 output_df[self.od_names[i]] = one_df
 
         # do rv on CAL ccfs
-        if not any(output_df.values()):
+        all_none = [output_df[k] is None for k in output_df.keys()]
+        if all(all_none):
             if self.logger:
                 self.logger.info("RadialVelocity: no L2 produced")
             return Arguments(None)
