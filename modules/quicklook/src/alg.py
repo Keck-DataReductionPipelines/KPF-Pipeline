@@ -905,7 +905,7 @@ class QuicklookAlg:
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
 
-                print('gamma',hdulist['GREEN_CCF'].header)
+                #print('gamma',hdulist['GREEN_CCF'].header)
                 #vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
 
@@ -951,7 +951,7 @@ class QuicklookAlg:
                 '''
 
                 #read the RV from headers directly
-                print('gamma',hdulist['GREEN_CCF'].header)
+                #print('gamma',hdulist['GREEN_CCF'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
