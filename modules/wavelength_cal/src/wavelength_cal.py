@@ -121,19 +121,6 @@ class WaveCalibrate(KPF1_Primitive):
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
             self.file_name_split = self.l1_obj.filename.split('_')[0]
 
-            print("\nFirst calibrating by order.")
-
-            calflux = []
-            for pre in self.cal_orderlet_names:
-                if len(calflux) == 0:
-                    calflux = self.l1_obj[pre].copy()
-                else:
-                    calflux += self.l1_obj[pre]
-            calflux = np.nan_to_num(calflux)
-
-            if self.cal_type == 'LFC':
-                line_list, wl_soln = self.calibrate_lfc(calflux, output_ext='{}_WAVE'.format(pre.split('_')[0]))
-
             for i, prefix in enumerate(self.cal_orderlet_names):
                 print('\nCalibrating orderlet {}.'.format(prefix))
 
@@ -146,7 +133,8 @@ class WaveCalibrate(KPF1_Primitive):
                         
                 #### lfc ####
                 if self.cal_type == 'LFC':
-                    self.drift_correction(prefix, line_list, wl_soln)
+                    line_list, wl_soln = self.calibrate_lfc(calflux, output_ext=output_ext)
+                    # self.drift_correction(prefix, line_list, wl_soln)
                 
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
