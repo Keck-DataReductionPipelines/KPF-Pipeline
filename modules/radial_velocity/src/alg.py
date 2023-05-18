@@ -822,7 +822,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    x_pixel_wave.astype('float64'),
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
-                                                   sn_p, zb)
+                                                   sn_p, vb/LIGHT_SPEED_M)
 
         return ccf
 
