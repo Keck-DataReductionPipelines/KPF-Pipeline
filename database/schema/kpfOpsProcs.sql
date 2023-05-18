@@ -146,8 +146,9 @@ create function registerCalFile (
 $$ language plpgsql;
 
 
--- Get the nearest-in-time-before calibration file
+-- Get the nearest-in-time-before/after calibration file
 -- for a given observation date, level, caltype, and object.
+-- Before in time is given preference to after in time.
 -- The status of the calibration file must be greater than zero.
 --
 create function getCalFile (
@@ -179,12 +180,13 @@ create function getCalFile (
         into cId_, filename_, checksum_, infobits_, startDate_
         from CalFiles
         where status > 0
-        and startDate <= obsDate_
         and level = level_
         and caltype = caltype__
         and object = object__
         and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
-        order by startDate desc                  -- Descending order for backward-looking.
+        order by
+          abs(cast(extract(days from (cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone))) as numeric)) asc,
+          cast(extract(days from cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone)) as integer) desc
         limit 1;
 
         if found then
