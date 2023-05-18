@@ -300,7 +300,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 longi=obs_config[BarycentricCorrectionAlg.LON],
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
-                                predictive=False, zmeas=0,
+                                predictive=True, zmeas=0,
                                 rv=obs_config[BarycentricCorrectionAlg.RV])
             
         else:
