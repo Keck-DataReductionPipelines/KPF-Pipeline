@@ -32,5 +32,5 @@ class Nightly_summaryAlg:
 
     def nightly_procedures(self,night):
         exposures_dir = self.config['Nightly']['exposures_dir']
-        file_list = glob.glob(exposures_dir+'/'+night)
+        file_list = glob.glob(exposures_dir+'/'+night+'/*.fits')
         print(file_list)
