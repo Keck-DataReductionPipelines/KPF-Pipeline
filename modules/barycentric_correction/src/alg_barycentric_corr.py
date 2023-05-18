@@ -299,7 +299,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 longi=obs_config[BarycentricCorrectionAlg.LON],
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
-                                predictive=False,
+                                predictive=True,
                                 rv=obs_config[BarycentricCorrectionAlg.RV])
             vpred = bc_obj[0][0]
             zpred = vpred/LIGHT_SPEED_M
