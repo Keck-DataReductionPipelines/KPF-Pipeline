@@ -282,12 +282,13 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             jd (float): Day in Julian Date format.
 
         Returns:
-            float: Barycentric velocity correction number from get_BC_vel.
+            float: Barycentric velocity [m/s] correction from barycorrpy.get_BC_vel.
 
         """
         star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
         if star == 'sun':
             # epoch, SolSystemTarget, predictive
+            print('SOLAR BC VEL')
             bc_obj = get_BC_vel(JDUTC=jd,
                                 ra=None,
                                 dec=None,
@@ -299,13 +300,8 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 longi=obs_config[BarycentricCorrectionAlg.LON],
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
-                                predictive=True,
+                                predictive=False, zmeas=0,
                                 rv=obs_config[BarycentricCorrectionAlg.RV])
-            vpred = bc_obj[0][0]
-            zpred = vpred/LIGHT_SPEED_M
-            zb_SS = 1./(1.+zpred)-1.
-            vb = zb_SS*LIGHT_SPEED_M
-            return vb
             
         else:
             bc_obj = get_BC_vel(JDUTC=jd,
@@ -320,4 +316,4 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             alt=obs_config[BarycentricCorrectionAlg.ALT],
                             rv=obs_config[BarycentricCorrectionAlg.RV])
 
-            return bc_obj[0][0]
+        return bc_obj[0][0]
