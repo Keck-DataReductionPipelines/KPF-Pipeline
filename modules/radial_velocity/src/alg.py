@@ -698,13 +698,13 @@ class RadialVelocityAlg(RadialVelocityBase):
         return self.orderlet_mask_line
 
 
-    def cross_correlate_by_mask_shift(self, wave_cal, spectrum, zb):
+    def cross_correlate_by_mask_shift(self, wave_cal, spectrum, vb):
         """Cross correlation by the shifted mask line and the spectrum data of one order for each velocity step.
 
         Args:
             wave_cal (numpy.ndarray): Wavelength calibration associated with `spectrum`.
             spectrum (numpy.ndarray): Reduced 1D spectrum data of one order from optimal extraction computation.
-            zb (float): BC velocity (m/sec) at the observation time.
+            vb (float): BC velocity (m/sec) at the observation time.
 
         Returns:
             numpy.ndarray: Cross correlation result of one order at all velocity steps. Please refer to `Returns` of
@@ -761,10 +761,15 @@ class RadialVelocityAlg(RadialVelocityBase):
         if self.ccf_code == 'c':
             # ccf_pixels_c = np.zeros([v_steps, n_pixel])
 
-            # update redshift
-
-            zb = zb/LIGHT_SPEED_M              # zb in (m/s)/3*10e8 m/s
-            v_b = ((1.0/(1+zb)) - 1.0) * LIGHT_SPEED
+            # vb from barycorrpy is the barycentric velocity, i.e. the motion
+            # of the observatory along the line of sight to the star
+            # To shift the CCF mask to "cancel" out this motion, we need to use 
+            # Eq 10 of Wright & Eastman (2014) and set "vtrue=0"
+            # (1 + ztrue) = (1 + zmeas) * (1 + zb)
+            # It is confusing but "zb" in this equation is what we solve for
+            # zb coming from barycorrpy takes the place of the measured redshift
+            zb = vb/LIGHT_SPEED_M
+            v_b = ((1.0/(1+zb)) - 1.0) * LIGHT_SPEED # now in km/s
 
             for c in range(v_steps):
                 # add one pixel before and after the original array in order to uniform the calculation between c code
@@ -780,7 +785,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
-                                                 self.velocity_loop[c], -v_b)    # need check??
+                                                 self.velocity_loop[c], v_b)
                 """
                 ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
                                                             new_line_end.astype('float64'),
@@ -817,7 +822,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    x_pixel_wave.astype('float64'),
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
-                                                   sn_p, zb/LIGHT_SPEED_M)
+                                                   sn_p, zb)
 
         return ccf
 
