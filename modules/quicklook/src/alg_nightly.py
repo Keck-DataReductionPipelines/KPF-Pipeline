@@ -32,7 +32,9 @@ class Nightly_summaryAlg:
 
     def nightly_procedures(self,night):
         exposures_dir = self.config['Nightly']['exposures_dir']
+
+        #get all exposures taken on a particular night
         file_list = glob.glob(exposures_dir+night+'/*.fits')
-        for i in range
+        for i in range(len(file_list)):
             file_list[i] = file_list[i][17:-9]
         print(file_list)
