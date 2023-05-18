@@ -202,8 +202,9 @@ $$ language plpgsql;
 
 -- Overloaded getCalFile function with additional parameter
 -- for maximum startdate age relative to the observation date.
--- Get the nearest-in-time-before calibration file
+-- Get the nearest-in-time-before/after calibration file
 -- for a given observation date, level, caltype, and object.
+-- Before in time is given preference to after in time.
 -- The status of the calibration file must be greater than zero.
 --
 create function getCalFile (
@@ -226,23 +227,27 @@ create function getCalFile (
         infobits_        integer;
         startDate_       date;
         r_               record;
+        negmaxage_       interval;
 
     begin
 
         caltype__ := lower(caltype_);
         object__ := lower(object_);
+        negmaxage_ := cast((cast(maxage_ as text) || ' ago') as interval);
 
         select cId, filename, checksum, infobits, startDate
         into cId_, filename_, checksum_, infobits_, startDate_
         from CalFiles
         where status > 0
-        and startDate <= obsDate_
         and level = level_
         and caltype = caltype__
         and object = object__
         and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
         and cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone) <= maxage_
-        order by startDate desc                                   -- Descending order for backward-looking.
+        and cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone) >= negmaxage_
+        order by
+          abs(cast(extract(days from (cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone))) as numeric)) asc,
+          cast(extract(days from cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone)) as integer) desc
         limit 1;
 
         if found then
