@@ -760,16 +760,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         # shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)  # Shifting mask in redshift space
         if self.ccf_code == 'c':
             # ccf_pixels_c = np.zeros([v_steps, n_pixel])
-
-            # vb from barycorrpy is the barycentric velocity, i.e. the motion
-            # of the observatory along the line of sight to the star
-            # To shift the CCF mask to "cancel" out this motion, we need to use 
-            # Eq 10 of Wright & Eastman (2014) and set "vtrue=0"
-            # (1 + ztrue) = (1 + zmeas) * (1 + zb)
-            # It is confusing but "zb" in this equation is what we solve for
-            # zb coming from barycorrpy takes the place of the measured redshift
-            zb = vb/LIGHT_SPEED_M
-            v_b = ((1.0/(1+zb)) - 1.0) * LIGHT_SPEED # now in km/s
+            zpred = vpred/LIGHT_SPEED_M
+            z_b = ((1.0/(1+zpred)) - 1.0)
 
             for c in range(v_steps):
                 # add one pixel before and after the original array in order to uniform the calculation between c code
@@ -785,7 +777,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
-                                                 self.velocity_loop[c], v_b)
+                                                 self.velocity_loop[c], z_b)
                 """
                 ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
                                                             new_line_end.astype('float64'),
