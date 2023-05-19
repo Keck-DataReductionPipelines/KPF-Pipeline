@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import os.path
+import logging
 from barycorrpy import get_BC_vel
 from astropy.utils import iers
 import pandas as pd
@@ -288,7 +289,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
         star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
         if star == 'sun':
             # epoch, SolSystemTarget, predictive
-            print('SOLAR BC VEL')
+            logging.info('SOLAR BC VEL')
             bc_obj = get_BC_vel(JDUTC=jd,
                                 ra=None,
                                 dec=None,
