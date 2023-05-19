@@ -287,9 +287,10 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
 
         """
         star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
+        self.logging.debug('BARYCENTRIC STARNAME {}'.format(star))
         if star == 'sun':
             # epoch, SolSystemTarget, predictive
-            logging.debug('SOLAR BC VEL')
+            self.logging.debug('SOLAR BARYCENTRIC VEL')
             bc_obj = get_BC_vel(JDUTC=jd,
                                 ra=None,
                                 dec=None,
