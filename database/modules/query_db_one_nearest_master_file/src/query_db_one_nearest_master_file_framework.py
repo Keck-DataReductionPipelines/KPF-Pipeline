@@ -150,7 +150,7 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
         except:
             print("Could not connect to database...")
             self.logger.info('Could not connect to database...')
-            return Arguments(64)
+            return Arguments([64,])
 
         # Open database cursor.
 
