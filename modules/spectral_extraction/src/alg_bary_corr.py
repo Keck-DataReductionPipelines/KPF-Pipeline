@@ -271,7 +271,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
 
         """
         if BaryCorrTableAlg.IMTYPE in self.lev_header:
-            if self.lev_header[BaryCorrTableAlg.IMTYPE].lower() == 'object':
+            if self.lev_header[BaryCorrTableAlg.IMTYPE].lower() in ['object', 'solar']:
                 return True
         else:
             return False
