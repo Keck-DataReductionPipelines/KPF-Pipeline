@@ -845,6 +845,7 @@ class QuicklookAlg:
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
             plt.plot(wav_green[10,:],np.array(hdulist['GREEN_CAL_FLUX'].data,'d')[10,:], label = 'GREEN_CAL_FLUX', linewidth =  0.3)
             plt.legend()
+            plt.yscale('log')
             plt.title('Science Orderlets in GREEN '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
@@ -858,7 +859,9 @@ class QuicklookAlg:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
                 if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
+            plt.plot(wav_red[10,:],np.array(hdulist['RED_CAL_FLUX'].data,'d')[10,:], label = 'RED_CAL_FLUX', linewidth =  0.3)
             plt.legend()
+            plt.yscale('log')
             plt.title('Science Orderlets in RED '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
