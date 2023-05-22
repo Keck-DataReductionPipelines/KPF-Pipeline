@@ -873,11 +873,11 @@ class QuicklookAlg:
             plt.close()
             plt.figure(figsize=(10,4))
             plt.subplots_adjust(left=0.1, bottom=0.15, right=0.95, top=0.9)
-            is_fiber_on =[np.nanmedian(flux_green2/flux_green)>0.2,np.nanmedian(flux_green3/flux_green)>0.2,np.nanpercentile(flux_green_cal/flux_green,[95])[0]>0.05,np.nanmedian(flux_green_sky/flux_green)>0.05]
+            is_fiber_on =[np.nanmedian(flux_green2/flux_green)>0.2,np.nanmedian(flux_green3/flux_green)>0.2,np.nanpercentile(flux_green_cal/flux_green,95)>0.05,np.nanmedian(flux_green_sky/flux_green)>0.05]
             print('test orderlets', np.nanmedian(flux_green2/flux_green),np.nanmedian(flux_green3/flux_green),np.nanpercentile(flux_green_cal/flux_green,[95]),np.nanmedian(flux_green_sky/flux_green))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green2/flux_green,axis = 1),marker = 'o', color = 'green', label = 'Sci2/Sci1; On: ' +str(is_fiber_on[0]))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green3/flux_green,axis = 1),marker = 'o', color = 'red', label = 'Sci3/Sci1; On: ' +str(is_fiber_on[1]))
-            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanpercentile(flux_green_cal/flux_green,[95],axis = 1),marker = 'o', color = 'blue', label = 'Cal/Sci1; On: ' +str(is_fiber_on[2]))
+            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanpercentile(flux_green_cal/flux_green,95,axis = 1),marker = 'o', color = 'blue', label = 'Cal/Sci1; On: ' +str(is_fiber_on[2]))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green_sky/flux_green,axis = 1),marker = 'o', color = 'magenta', label = 'Sky/Sci1; On: ' +str(is_fiber_on[3]))
 
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red2/flux_red,axis = 1),marker = 'D', color = 'green')
