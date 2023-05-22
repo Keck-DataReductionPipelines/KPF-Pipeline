@@ -882,7 +882,7 @@ class QuicklookAlg:
 
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red2/flux_red,axis = 1),marker = 'D', color = 'green')
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red3/flux_red,axis = 1),marker = 'D', color = 'red')
-            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red_cal/flux_red,axis = 1),marker = 'D', color = 'blue')
+            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanpercentile(flux_red_cal/flux_red,95,axis = 1),marker = 'D', color = 'blue')
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red_sky/flux_red,axis = 1),marker = 'D', color = 'magenta')
             plt.legend()
             plt.title('Orderlets Flux Ratios '+exposure_name)
