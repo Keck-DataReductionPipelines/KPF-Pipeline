@@ -715,6 +715,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         v_steps = self.velocity_steps
         ccf = np.zeros(v_steps)
+        zb = vb/LIGHT_SPEED_M
+        z_b = ((1.0/(1+zb)) - 1.0)
 
         line = self.get_mask_line()
         if line is None:
@@ -760,8 +762,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         # shift_lines_by = (1.0 + (self.velocity_loop / LIGHT_SPEED)) / (1.0 + zb)  # Shifting mask in redshift space
         if self.ccf_code == 'c':
             # ccf_pixels_c = np.zeros([v_steps, n_pixel])
-            zpred = vpred/LIGHT_SPEED_M
-            z_b = ((1.0/(1+zpred)) - 1.0)
 
             for c in range(v_steps):
                 # add one pixel before and after the original array in order to uniform the calculation between c code
@@ -814,7 +814,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    x_pixel_wave.astype('float64'),
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
-                                                   sn_p, vb/LIGHT_SPEED_M)
+                                                   sn_p, z_b)
 
         return ccf
 
