@@ -287,7 +287,6 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
 
         """
         star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
-        print('BARYCENTRIC STARNAME {}'.format(star))
         if star == 'sun':
             # epoch, SolSystemTarget, predictive
             bc_obj = get_BC_vel(JDUTC=jd,
@@ -302,7 +301,9 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
                                 predictive=True, zmeas=0,
-                                rv=obs_config[BarycentricCorrectionAlg.RV])
+                                rv=None,
+                                #rv=obs_config[BarycentricCorrectionAlg.RV]
+                                )
             
         else:
             bc_obj = get_BC_vel(JDUTC=jd,
