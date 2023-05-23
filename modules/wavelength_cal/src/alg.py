@@ -47,6 +47,8 @@ class WaveCalibration:
         self.figsave_name = configpull.get_config_value(
             'drift_figsave_name','instrument_drift'
         )
+        self.red_skip_orders = configpull.get_config_value('red_skip_orders')
+        self.green_skip_orders = configpull.get_config_value('green_skip_orders')
         self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.quicklook_steps = configpull.get_config_value('quicklook_steps',10)
         self.min_wave = configpull.get_config_value('min_wave',3800)
@@ -267,6 +269,24 @@ class WaveCalibration:
             # find, clip, and compute precise wavelengths for peaks.
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
+                skip_orders_wls = None
+                if self.red_skip_orders and max(order_list) == 31:  # KPF max order for red chip (update if changed in KPF.cfg)
+                    skip_orders_wls = np.fromstring(self.red_skip_orders, dtype=int, sep=',')
+                elif self.green_skip_orders and max(order_list) == 34:  # KPF max order for green chip (update if changed in KPF.cfg)
+                    skip_orders_wls = np.fromstring(self.green_skip_orders, dtype=int, sep=',')
+
+                if skip_orders_wls is not None:
+                    try:
+                        if order_num in skip_orders_wls:
+                            raise Exception(f'Order {order_num} is skipped in the config, defaulting to rough WLS')
+                    except Exception as e:
+                        print(e)
+                        poly_soln_final_array[order_num, :] = rough_wls_order
+                        wavelengths_and_pixels[order_num] = {
+                            'known_wavelengths_vac': rough_wls_order,
+                            'line_positions': []
+                        }
+                        continue
 
                 try:
                     fitted_peak_pixels, detected_peak_pixels, \
@@ -1410,7 +1430,7 @@ class WaveCalibration:
         np.save(file_name,wave_pxl_data,allow_pickle=True)
         
 def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
-
+    
     peak_wavelengths_ang1 = np.load(
         wlpixelfile1, allow_pickle=True
     ).tolist()
@@ -1428,7 +1448,6 @@ def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
 
     # make a dataframe and join on wavelength
     for i, order_num in enumerate(orders):
-
         order_wls1 = pd.DataFrame(
             data = np.transpose([
                 peak_wavelengths_ang1[order_num]['known_wavelengths_vac'],
