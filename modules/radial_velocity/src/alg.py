@@ -1462,7 +1462,6 @@ class RadialVelocityAlg(RadialVelocityBase):
         """
 
         # the order index of crt_rv and reweighting_table_or_ccf are aligned
-
         if reweighting_table_or_ccf is None:
             raise Exception("no valid data from observation template")
         if not reweighting_method or not RadialVelocityAlg.is_good_reweighting_method(reweighting_method):

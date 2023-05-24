@@ -83,6 +83,16 @@ if context.watch:
 		do_bc = False
 		do_hk = False
 
+	# if doing reweighted L2
+	if 'L2' in file_path:
+		do_l0_to_2d = False
+		do_order_trace = False
+		do_spectral_extraction = False
+		do_rv = False
+		do_bc = False
+		do_hk = False
+		do_rv_reweighting = True
+
 else:
 	sel_obsid = context.date_dir
 	file_path = context.file_path
