@@ -31,8 +31,10 @@ class PickInputsMastersDRP(KPF0_Primitive):
 
         self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
         self.dark_imtype_values_str = 'Dark'
-        self.flat_imtype_values_str = 'Flatlamp'
         self.arclamp_imtype_values_str = 'Arclamp'
+
+        self.flat_imtype_keywords = ['IMTYPE','OBJECT']
+        self.flat_imtype_values_str = ['Flatlamp','autocal-flat-all']
 
         try:
             self.config_path = context.config_path[CONTEXT_CFG_PATH]
@@ -74,8 +76,8 @@ class PickInputsMastersDRP(KPF0_Primitive):
         # Filter flat files with IMTYPE=‘flatlamp’, but exclude those that either don't have
         # SCI-OBJ == CAL-OBJ and SKY-OBJ == CALOBJ or those with SCI-OBJ == "" or SCI-OBJ == "None".
 
-        fh3 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.flat_imtype_values_str,self.logger)
-        all_flat_files = fh3.get_good_flats()
+        fh3 = FitsHeaders(self.all_fits_files_path,self.flat_imtype_keywords,self.flat_imtype_values_str,self.logger)
+        all_flat_files = fh3.match_headers_string_lower()
 
         # Filter arclamp files with IMTYPE=‘arclamp’. 
 
