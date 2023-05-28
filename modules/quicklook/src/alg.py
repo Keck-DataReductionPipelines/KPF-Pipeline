@@ -830,10 +830,10 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
-            ax[0].set_title('1D Spectrum SCI1' +exposure_name,fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI1 ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_zoomable.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci1_zoomable.png',dpi = 200)
             plt.close()
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
@@ -900,7 +900,7 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux3,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI3',fontsize = 20)
-            ax[0].set_title('1D Spectrum SCI3' +exposure_name,fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI3 ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci3_zoomable.png',dpi = 200)
@@ -935,7 +935,7 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux_cal,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in CAL',fontsize = 20)
-            ax[0].set_title('1D Spectrum CAL' +exposure_name,fontsize = 20)
+            ax[0].set_title('1D Spectrum CAL ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_cal_zoomable.png',dpi = 200)
@@ -970,7 +970,7 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux_sky,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SKY',fontsize = 20)
-            ax[0].set_title('1D Spectrum SKY' +exposure_name,fontsize = 20)
+            ax[0].set_title('1D Spectrum SKY ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sky_zoomable.png',dpi = 200)
