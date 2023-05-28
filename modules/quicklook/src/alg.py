@@ -830,10 +830,151 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
-            ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI1' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
             plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux2[i,:],[0.1,99.9])
+                flux2[i,:][(flux2[i,:]>high) | (flux2[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux2)[0]/n)):
+                low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux2,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI2',fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI2 ' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci2_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux3[i,:],[0.1,99.9])
+                flux3[i,:][(flux3[i,:]>high) | (flux3[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux3)[0]/n)):
+                low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux3,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI3',fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI3' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci3_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux_cal[i,:],[0.1,99.9])
+                flux_cal[i,:][(flux_cal[i,:]>high) | (flux_cal[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux_cal)[0]/n)):
+                low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux_cal,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in CAL',fontsize = 20)
+            ax[0].set_title('1D Spectrum CAL' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_cal_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux_sky[i,:],[0.1,99.9])
+                flux_sky[i,:][(flux_sky[i,:]>high) | (flux_sky[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux_sky)[0]/n)):
+                low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux_sky,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SKY',fontsize = 20)
+            ax[0].set_title('1D Spectrum SKY' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sky_zoomable.png',dpi = 200)
+            plt.close()
 
             #make a comparison plot of the three science fibres
             plt.close()
