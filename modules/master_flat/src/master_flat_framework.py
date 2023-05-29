@@ -195,9 +195,9 @@ class MasterFlatFramework(KPF0_Primitive):
         exp_time_list = []
         for flat_file_path in (all_flat_files):
             flat_file = KPF0.from_fits(flat_file_path,self.data_type)
-            mjd_obs = flat_file.header['PRIMARY']['MJD-OBS']
+            mjd_obs = float(flat_file.header['PRIMARY']['MJD-OBS'])
             mjd_obs_list.append(mjd_obs)
-            exp_time = flat_file.header['PRIMARY']['EXPTIME']
+            exp_time = float(flat_file.header['PRIMARY']['EXPTIME'])
             exp_time_list.append(exp_time)
             self.logger.debug('flat_file_path,exp_time = {},{}'.format(flat_file_path,exp_time))
 
