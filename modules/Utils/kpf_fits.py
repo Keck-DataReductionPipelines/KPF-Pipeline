@@ -221,7 +221,7 @@ class FitsHeaders:
 
             try:
 
-                val4 = fits.getval(fits_file, 'EXPTIME')
+                val4 = float(fits.getval(fits_file, 'EXPTIME'))
 
                 if (val4 >= exptime_minimum):
                     flag = 'keep'
