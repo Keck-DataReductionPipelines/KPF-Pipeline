@@ -34,6 +34,11 @@ class MasterFlatFramework(KPF0_Primitive):
         3. SCI-OBJ <> 'None' and SCI-OBJ not blank
         4. EXPTIME <= 2.0 seconds (GREEN), 1.0 seconds (RED) to avoid saturation
 
+        Requirements for FITS-header keywords of inputs:
+        1. IMTYPE = 'Flatlamp'
+        2. OBJECT = 'autocal-flat-all'
+        3. EXPTIME < maximum allowed time (these are default.cfg parameters for GREEN, RED, and CA_HK).
+
         Assumptions and caveats:
         1. Does not include correcting for the color of the lamp, and other subtleties
            specific to spectral data.
@@ -112,8 +117,8 @@ class MasterFlatFramework(KPF0_Primitive):
         self.masterflat_path = self.action.args[6]
         self.ordermask_path = self.action.args[7]
 
-        self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
-        self.imtype_values_str = 'Flatlamp'
+        self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
+        self.imtype_values_str = ['Flatlamp','autocal-flat-all']
 
         try:
             self.module_config_path = context.config_path['master_flat']
@@ -181,20 +186,18 @@ class MasterFlatFramework(KPF0_Primitive):
         master_flat_exit_code = 0
         master_flat_infobits = 0
 
-        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those that either don't have
-        # SCI-OBJ == CAL-OBJ and SKY-OBJ == CALOBJ or those with SCI-OBJ == "" or SCI-OBJ == "None"
-        # or those with EXPTIME > 2.0 seconds (GREEN) or 1.0 seconds (RED) to avoid saturation.
+        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those with EXPTIME > maximum allowed value for detector.
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
-        all_flat_files = fh.get_good_flats()
+        all_flat_files = fh.match_headers_string_lower()
 
         mjd_obs_list = []
         exp_time_list = []
         for flat_file_path in (all_flat_files):
             flat_file = KPF0.from_fits(flat_file_path,self.data_type)
-            mjd_obs = flat_file.header['PRIMARY']['MJD-OBS']
+            mjd_obs = float(flat_file.header['PRIMARY']['MJD-OBS'])
             mjd_obs_list.append(mjd_obs)
-            exp_time = flat_file.header['PRIMARY']['EXPTIME']
+            exp_time = float(flat_file.header['PRIMARY']['EXPTIME'])
             exp_time_list.append(exp_time)
             self.logger.debug('flat_file_path,exp_time = {},{}'.format(flat_file_path,exp_time))
 
@@ -391,16 +394,22 @@ class MasterFlatFramework(KPF0_Primitive):
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 
-        # Add informational keywords to FITS header.  Remove non-relevant keywords too.
+        # Add informational keywords to FITS header.
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
 
-        del master_holder.header['GREEN_CCD']['OSCANV1']
-        del master_holder.header['GREEN_CCD']['OSCANV2']
-        del master_holder.header['GREEN_CCD']['OSCANV3']
-        del master_holder.header['GREEN_CCD']['OSCANV4']
-        del master_holder.header['RED_CCD']['OSCANV1']
-        del master_holder.header['RED_CCD']['OSCANV2']
+        # Remove confusing or non-relevant keywords, if existing.
+
+        try:
+            del master_holder.header['GREEN_CCD']['OSCANV1']
+            del master_holder.header['GREEN_CCD']['OSCANV2']
+            del master_holder.header['GREEN_CCD']['OSCANV3']
+            del master_holder.header['GREEN_CCD']['OSCANV4']
+            del master_holder.header['RED_CCD']['OSCANV1']
+            del master_holder.header['RED_CCD']['OSCANV2']
+
+        except KeyError as err:
+            pass
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
