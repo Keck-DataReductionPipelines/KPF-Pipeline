@@ -1,8 +1,10 @@
 from os.path import exists
 import numpy as np
+import numpy.ma as ma
 import configparser as cp
 from datetime import datetime, timezone
 from scipy.ndimage import gaussian_filter
+from scipy.stats import mode
 
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
@@ -32,6 +34,11 @@ class MasterFlatFramework(KPF0_Primitive):
         3. SCI-OBJ <> 'None' and SCI-OBJ not blank
         4. EXPTIME <= 2.0 seconds (GREEN), 1.0 seconds (RED) to avoid saturation
 
+        Requirements for FITS-header keywords of inputs:
+        1. IMTYPE = 'Flatlamp'
+        2. OBJECT = 'autocal-flat-all'
+        3. EXPTIME < maximum allowed time (these are default.cfg parameters for GREEN, RED, and CA_HK).
+
         Assumptions and caveats:
         1. Does not include correcting for the color of the lamp, and other subtleties
            specific to spectral data.
@@ -39,8 +46,8 @@ class MasterFlatFramework(KPF0_Primitive):
            2-D Gaussian blurring (sigma=2 pixel) the stacked-image mean.
         3. Further modifications to this recipe are needed in order to use
            a master flat-lamp pattern from a prior night.
-        4. Less than 500-DN/sec pixels cannot be reliably used to
-           compute the flat-field correction.
+        4. Low-light pixels cannot be reliably used to
+           compute the flat-field correction (e.g., less than 500 DN/sec).
         5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
 
         Algorithm:
@@ -50,9 +57,10 @@ class MasterFlatFramework(KPF0_Primitive):
         Perform image-stacking with data-clipping at 2.1 sigma (aggressive to
         eliminate rad hits and possible saturation).
         Divide clipped mean of stack by the smoothed Flatlamp pattern.
-        Reset unnormalized-flat values to unity if corresponding stacked-image value
-        is less than 500 DN/sec (insufficient illumination).
         Normalize flat by the image average.
+        Reset flat values to unity if corresponding stacked-image value
+        is less than low-light limit (insufficient illumination) or are
+        outside of the order mask (if available for the current FITS extension).
         Set appropriate infobit if number of pixels with less than 10 samples
         is greater than 1% of total number of image pixels.
 
@@ -64,6 +72,7 @@ class MasterFlatFramework(KPF0_Primitive):
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_master_bias.fits).
         masterdark_path (str): Pathname of input master dark (e.g., /testdata/kpf_master_dark.fits).
         masterflat_path (str): Pathname of output master flat (e.g., /testdata/kpf_master_flat.fits).
+        ordermask_path (str): Pathname of input order mask (e.g., /testdata/order_mask_3_2_20230414.fits).
 
     Attributes:
         data_type (str): Type of data (e.g., KPF).
@@ -72,6 +81,7 @@ class MasterFlatFramework(KPF0_Primitive):
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_green_red_bias.fits).
         masterflat_path (str): Pathname of output master flat (e.g., /testdata/kpf_green_red_flat.fits).
+        ordermask_path (str): Pathname of input order mask (e.g., /testdata/order_mask_3_2_20230414.fits).
         imtype_keywords (str): FITS keyword for filtering input flat files (fixed as 'IMTYPE').
         imtype_values_str (str): Value of FITS keyword (fixed as 'Flatlamp'), to be converted to lowercase for test.
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
@@ -105,9 +115,10 @@ class MasterFlatFramework(KPF0_Primitive):
         self.masterbias_path = self.action.args[4]
         self.masterdark_path = self.action.args[5]
         self.masterflat_path = self.action.args[6]
+        self.ordermask_path = self.action.args[7]
 
-        self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
-        self.imtype_values_str = 'Flatlamp'
+        self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
+        self.imtype_values_str = ['Flatlamp','autocal-flat-all']
 
         try:
             self.module_config_path = context.config_path['master_flat']
@@ -154,6 +165,9 @@ class MasterFlatFramework(KPF0_Primitive):
 
         """
 
+        order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
+        self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
+
         masterbias_path_exists = exists(self.masterbias_path)
         if not masterbias_path_exists:
             raise FileNotFoundError('File does not exist: {}'.format(self.masterbias_path))
@@ -172,12 +186,10 @@ class MasterFlatFramework(KPF0_Primitive):
         master_flat_exit_code = 0
         master_flat_infobits = 0
 
-        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those that either don't have
-        # SCI-OBJ == CAL-OBJ and SKY-OBJ == CALOBJ or those with SCI-OBJ == "" or SCI-OBJ == "None"
-        # or those with EXPTIME > 2.0 seconds (GREEN) or 1.0 seconds (RED) to avoid saturation.
+        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those with EXPTIME > maximum allowed value for detector.
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
-        all_flat_files = fh.get_good_flats()
+        all_flat_files = fh.match_headers_string_lower()
 
         mjd_obs_list = []
         exp_time_list = []
@@ -253,7 +265,7 @@ class MasterFlatFramework(KPF0_Primitive):
             normalized_frames_data=[]
             n_frames = (np.shape(frames_data))[0]
             self.logger.debug('Number of frames in stack = {}'.format(n_frames))
-            
+
             n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
@@ -285,16 +297,62 @@ class MasterFlatFramework(KPF0_Primitive):
             unnormalized_flat = stack_avg / smooth_lamp_pattern
             unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
-            # Less than 500 DN/sec pixels cannot be reliably adjusted.  Reset below-threshold flat values to unity.
-            unnormalized_flat = np.where(stack_avg < self.low_light_limit, 1.0, unnormalized_flat)
 
-            unnormalized_flat_mean = np.mean(unnormalized_flat)
+            # Apply order mask, if available for the current FITS extension.  Otherwise, use the low-light pixels as a mask.
 
-            self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
+            np_om_ffi = np.array(np.rint(order_mask_data[ffi])).astype(int)   # Ensure rounding to nearest integer.
+            np_om_ffi_shape = np.shape(np_om_ffi)
+            order_mask_n_dims = len(np_om_ffi_shape)
+            self.logger.debug('ffi,order_mask_n_dims = {},{}'.format(ffi,order_mask_n_dims))
+            if order_mask_n_dims == 2:      # Check if valid data extension
 
-            # Normalize flat by the image average.
-            flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat.
-            flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
+                # Loop over 5 orderlets in the KPF instrument and normalize separately for each.
+                flat = unnormalized_flat
+                flat_unc = unnormalized_flat_unc
+                for orderlet_val in range(1,6):         # Order mask has them numbered from 1 to 5 (bottom to top).
+                    np_om_ffi_bool = np.where(np_om_ffi == orderlet_val,True,False)
+                    np_om_ffi_bool = np.where(stack_avg > self.low_light_limit,np_om_ffi_bool,False)
+
+                    # Compute mean for comparison with mode of distribution.
+                    unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)  # Invert mask for numpy.ma operation.
+                    unnormalized_flat_mean = ma.getdata(unmx.mean()).item()
+
+                    # Compute mode of distribution for normalization factor.
+                    vals_for_mode_calc = np.where(np_om_ffi == orderlet_val,np.rint(100.0 * unnormalized_flat),np.nan)
+                    vals_for_mode_calc = np.where(stack_avg > self.low_light_limit,vals_for_mode_calc,np.nan)
+                    mode_vals,mode_counts = mode(vals_for_mode_calc,axis=None,nan_policy='omit')
+
+                    normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+
+                    flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
+                    flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
+
+                    self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_count = {},{},{},{}'.format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_counts[0]))
+
+                # Set unity flat values for unmasked pixels.
+                np_om_ffi_bool_all_orderlets = np.where(np_om_ffi > 0.5, True, False)
+                flat = np.where(np_om_ffi_bool_all_orderlets == False, 1.0, flat)
+
+                # Less than low-light pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
+                flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
+
+            else:
+                np_om_ffi_bool = np.where(stack_avg > self.low_light_limit, True, False)
+                np_om_ffi_shape = np.shape(np_om_ffi_bool)
+                self.logger.debug('np_om_ffi_shape = {}'.format(np_om_ffi_shape))
+
+                # Compute mean of unmasked pixels in unnormalized flat.
+                unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)    # Invert the mask for mask_array operation.
+                unnormalized_flat_mean = ma.getdata(unmx.mean()).item()
+                self.logger.debug('unnormalized_flat_mean = {}'.format(unnormalized_flat_mean))
+
+                # Normalize flat.
+                flat = unnormalized_flat / unnormalized_flat_mean                     # Normalize the master flat by the mean.
+                flat_unc = unnormalized_flat_unc / unnormalized_flat_mean             # Normalize the uncertainties.
+
+                # Less than low-light pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
+                flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
+
 
             ### kpf master file creation ###
             master_holder[ffi] = flat
@@ -339,6 +397,19 @@ class MasterFlatFramework(KPF0_Primitive):
         # Add informational keywords to FITS header.
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
+
+        # Remove confusing or non-relevant keywords, if existing.
+
+        try:
+            del master_holder.header['GREEN_CCD']['OSCANV1']
+            del master_holder.header['GREEN_CCD']['OSCANV2']
+            del master_holder.header['GREEN_CCD']['OSCANV3']
+            del master_holder.header['GREEN_CCD']['OSCANV4']
+            del master_holder.header['RED_CCD']['OSCANV1']
+            del master_holder.header['RED_CCD']['OSCANV2']
+
+        except KeyError as err:
+            pass
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue

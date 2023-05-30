@@ -13,11 +13,15 @@ from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.data_handler import ExtCopy
 from modules.Utils.data_handler import FromCSV
 from modules.Utils.data_handler import GetHeaderValue
+from modules.Utils.data_handler import SetHeaderValue
 from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
+from modules.spectral_extraction.src.bary_corr import BaryCorrTable
+from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
+from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -31,6 +35,7 @@ do_rv_reweighting = config.ARGUMENT.do_rv_reweighting
 do_hk = config.ARGUMENT.do_hk
 do_qlp = config.ARGUMENT.do_qlp
 do_bk_subtraction = config.ARGUMENT.do_bk_subtraction
+do_bc = config.ARGUMENT.do_bc
 
 # data type of data model, 'KPF' for kpf data.
 data_type = config.ARGUMENT.data_type
@@ -43,10 +48,6 @@ do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
 # file path for lev0 and lev1 data
 lev0_file_path = ""
 lev1_file_path = ""
-
-## do L0->2D conversion for watch mode
-if context.watch and do_l0_to_2d:
-    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
 ##  reset process flags for the process of 2D to L1, L1 to L2, L2 to L2 reweighting for watch mode or non-watch mode ##
 #   watch mode: command is with "--watch /data/L0|2D|L1/yyyymmdd".
@@ -64,18 +65,13 @@ if context.watch:
 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
 		do_order_trace = False
-		do_spectral_extraction = True
-		do_rv = True
-		# do_rv_reweighting = True
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
 	if '2D' in file_path:
 		lev0_file_path = file_path
 		lev1_file_path = str_replace(file_path, '2D', 'L1')
+		do_l0_to_2d = False
 		do_order_trace = False
-		do_spectral_extraction = True
-		do_rv = True
-		# do_rv_reweighting = True
 
 	# do rv if L1 data is watched, do l1->l2
 	if 'L1' in file_path:
@@ -83,8 +79,9 @@ if context.watch:
 		lev0_file_path = str_replace(file_path, 'L1', '2D')
 		do_order_trace = False
 		do_spectral_extraction = False
-		do_rv = True
-		# do_rv_reweighting = True
+		do_l0_to_2d = False
+		do_bc = False
+		do_hk = False
 
 else:
 	sel_obsid = context.date_dir
@@ -102,6 +99,8 @@ else:
 	if 'L1' in file_path:
 		do_order_trace = False
 		do_spectral_extraction = False
+		do_bc = False
+		do_hk = False
 		do_rv = True
 		# do_rv_reweighting = True
 
@@ -110,24 +109,27 @@ else:
 		do_order_trace = False
 		do_spectral_extraction = False
 		do_rv = False
+		do_bc = False
+		do_hk = False
 		# do_rv_reweighting = True
 
 ## set path to output and input (for 2D, flat and masters) data
 # date dir for 2D, masters input and L1 and L2 output.
 date_dir = sel_obsid + '/'
 
-flat_file_pattern = config.ARGUMENT.flat_file
+# flat_file_pattern = config.ARGUMENT.flat_file
 # date dir for flat file
-date_dir_flat = date_from_kpffile(flat_file_pattern)
-if date_dir_flat == None or date_dir_flat == '':
-	date_dir_flat = date_dir
-else:
-	date_dir_flat = date_dir_flat + '/'
+# use the full path of flat file defined in config instead
+# date_dir_flat = date_from_kpffile(flat_file_pattern, startswith='kpf_')
+# if date_dir_flat == None:
+#	date_dir_flat = date_dir
+# else:
+#	date_dir_flat = date_dir_flat + '/'
 
 output_dir = config.ARGUMENT.output_dir
 input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
-input_2d_dir_flat = config.ARGUMENT.input_dir_root + date_dir_flat
-test_data_dir = output_dir + "masters/"
+# input_2d_dir_flat = config.ARGUMENT.masters_dir + date_dir_flat
+masters_data_dir = output_dir + "masters/"
 
 ## general purpose variables
 ccd_list = config.ARGUMENT.ccd_list
@@ -152,6 +154,47 @@ wave_fits = []
 for wls in wls_list:
 	wave_fits = wave_fits + [output_dir + wls]
 
+
+## do L0->2D conversion for watch mode
+if context.watch and do_l0_to_2d:
+    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
+
+
+# Override wave_fits list with optional database query for nearest WLS master file.
+do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
+date_dir_db_query = context.date_dir
+cal_file_level = config.ARGUMENT.cal_file_level
+contentbitmask = config.ARGUMENT.contentbitmask
+cal_type_pairs = config.ARGUMENT.cal_type_pairs
+max_cal_file_age = config.ARGUMENT.max_cal_file_age
+
+if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+	db_wls_exit_code = 1
+	for cal_type_pair in cal_type_pairs:
+		if db_wls_exit_code != 0:
+			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+																					date_dir_db_query,
+																					cal_file_level,
+																					contentbitmask,
+																					cal_type_pair,
+																					max_cal_file_age)
+
+			db_wls_exit_code = query_one_nearest_master_file_list[0]
+
+			if db_wls_exit_code == 0:
+
+				db_wls_rec = query_one_nearest_master_file_list[1]
+				db_wls_master_file = db_wls_rec[6]
+				wave_fits = []
+				for wls in wls_list:
+					wave_fits = wave_fits + [output_dir + db_wls_master_file]
+
+				wave_fits = []
+				for wls in wls_list:
+					wave_fits = wave_fits + [output_dir + db_wls_master_file]
+
+				
+
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
 
 ## for order trace:  input, output and image area
@@ -165,15 +208,18 @@ origin = [data_col_range[0], data_row_range[0]]
 
 #    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
 #    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
-lev0_flat_pattern = input_2d_dir_flat + flat_file_pattern + fits_ext
-output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
-
+#lev0_flat_pattern = input_2d_dir_flat + flat_file_pattern + fits_ext
+lev0_flat_pattern = config.ARGUMENT.flat_file
+# output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
+# use the full path of ourder trace files defind in config
+output_order_trace = config.ARGUMENT.order_trace_files
 
 ## for spectral extraction: input and output
 #    lev0_science_pattern: if watch mode => a single 2D file, /data/2D/<date_dir>/<a single watched 2D fits>
 #                          if non-watch mode => a path pattern of 2D files => /data/2D/<date_dir>/*.fits
 #    output_extraction: output path => /data/L1/<date_dir>/
 #    wave_to_ext: extensions in L1 containing wavelength solution data for each fiber.
+#    orderlet_widths_ccds: trace widths per orderlet per ccd to replace the trace widths from the order trace process
 
 if lev0_file_path:
     lev0_science_pattern = lev0_file_path
@@ -181,17 +227,19 @@ else:
     lev0_science_pattern = input_2d_dir + '*' + fits_ext
 output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
 wave_to_ext = config.ARGUMENT.wave_to_ext
+orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
 
 #    output_clip: only needed when rect_method != norect: directory containing files with polygon clipping information
 #                  for faster vertical or normal rectification => /data/L1/clip_np/vertical(or normal)/
 #    orders_per_ccd: total order for each ccd.
+#    s_bary_idx: start index in bary corr table for each ccd
 
 if rect_method != 'norect':
 	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
 else:
 	output_clip = None
 orders_per_ccd = config.ARGUMENT.orders_per_ccd
-
+s_bary_idx = [0, orders_per_ccd[0]]
 
 ## for radial velocity and rv reweighting input and output
 #    input_lev1_pattern: if watch mode => a single L1 file, /data/L1.<a single watched L1 fits>
@@ -212,7 +260,11 @@ reweighting_method = config.ARGUMENT.reweighting_method
 data_ext_rv = config.ARGUMENT.orderlet_names_rv
 ccf_ext_names = config.ARGUMENT.ccf_ext
 rv_ext = config.ARGUMENT.rv_ext
-
+is_rv_cal = config.ARGUMENT.rv_correct_by_cal
+if 'static' in reweighting_method:
+	static_ccf_ratio = config.ARGUMENT.static_ccf_ratio
+else:
+	static_ccf_ratio = None
 
 ## for ca_hk input 2D  and output L1, ca_hk trace and wavelength solution tables
 #    input_hk_pattern: for watch mode =>  a single 2D file,
@@ -237,7 +289,7 @@ for hk_w in hk_wavelength_csvs:
 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
 
 ## for qlp
-output_qlp =  output_dir + config.ARGUMENT.output_qlp + date_dir
+output_qlp =  output_dir + config.ARGUMENT.output_qlp + date_dir + "/"
 end_of_night_summary = False
 
 ####  process for order trace, spectral extraction and CA-HK, radial velocity, and qlp
@@ -261,6 +313,7 @@ end_of_night_summary = False
 #    OrderTrace: order trace
 #    OrderRectification: order trace rectification
 
+ll0 = lev0_flat_pattern
 input_flat_file = find_files(lev0_flat_pattern)[0]
 _, short_flat_file = split(input_flat_file)
 flat_stem, flat_ext = splitext(short_flat_file)
@@ -280,7 +333,9 @@ if do_order_trace:
 		# loop to do order trace per ccd in case the order trace result file doesn't exist, and output to trace_list
 		for idx in ccd_idx:
 			ccd = ccd_list[idx]
-			output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
+			# get order trace file name defined in config file
+			# output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
+			output_lev0_trace_csv = output_order_trace[idx] 
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if not exists(output_lev0_trace_csv):
 				order_result_data = OrderTrace(flat_data, data_extension=ccd + '_STACK',
@@ -290,7 +345,8 @@ if do_order_trace:
 
 			b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
 
-	output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+	# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+	output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
 	lev0_flat_rect = flat_data
 
 	# generate rectification result to flat level0 to avoid repeating the same process in spectral extraction
@@ -345,7 +401,6 @@ if do_order_trace:
 #    for ca_hk:
 #      hk_dark_data: KPF0 for dark data
 #      hk_bias_data: KPF0 for bias data
-#      b_level1_hk: a boolean to indicate if ca_hk extraction for each L0 is successful.
 #  primitives:
 #    SpectralExtraction: spectral extraction
 #    ExtCopy: extension copy from the extension of one data model instance to the extension of another
@@ -355,20 +410,22 @@ if do_order_trace:
 
 lev1_list = []
 
-if do_spectral_extraction or do_hk:
+if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
 
 	# prepare trace files and rectified L0 flat data for spectral extraction
 	if do_spectral_extraction:
 		# existence of flat and trace files
-		output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+		# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+		output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
 		if exists(output_lev0_flat_rect):
 			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
 
 		if not trace_list:
 			b_all_traces = True
 			for idx in ccd_idx:
-				lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
+				# lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
+				lev0_trace_csv = output_order_trace[idx]
 				trace_list = trace_list + [lev0_trace_csv]
 				b_all_traces = b_all_traces and exists(lev0_trace_csv)
 
@@ -407,10 +464,8 @@ if do_spectral_extraction or do_hk:
 			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
 				b_level1_sp = True
 
-			# do ca_hk extraction if do_hk
-			b_level1_hk = do_hk
 
-			if (b_level1_sp or b_level1_hk) and do_qlp:
+			if do_qlp and (b_level1_sp or do_hk or do_bc):
 				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 			# loop through ccd to do spectral extraction
@@ -420,22 +475,27 @@ if do_spectral_extraction or do_hk:
 					order_mask = None
 					# create order mask for background subtraction
 					for idx in ccd_idx:
+						if orderlet_widths_ccds:
+							orderlet_widths = orderlet_widths_ccds[idx]
+						else:
+							orderlet_widths = []
 						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
 								start_order=start_order[idx], trace_file=trace_list[idx],
-								data_extension=ccd_list[idx])
+								data_extension=ccd_list[idx],
+								orderlet_widths=orderlet_widths)
 					# update L0 by background subtraction
-					lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
+					if order_mask != None:
+						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
 				for idx in ccd_idx:
-					if b_level1_sp:
-						ccd = ccd_list[idx]
-						order_names = orderlet_names[idx]
-						trace_file = trace_list[idx]
+					ccd = ccd_list[idx]
+					order_names = orderlet_names[idx]
+					trace_file = trace_list[idx]
 
-						clip_file = None
+					clip_file = None
 
-						op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
+					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
 								orderlet_names=order_names,
 								orderlets_on_image=order_names,
 								total_order_per_ccd=orders_per_ccd,
@@ -444,20 +504,37 @@ if do_spectral_extraction or do_hk:
 								rectification_method=rect_method, extraction_method=extract_method,
 								clip_file=clip_file, data_extension=ccd, trace_file=trace_file)
 
-						# if op_data is not produced successfully, spectral extraction stops here.
-						b_level1_sp = b_level1_sp and op_data != None
 
-						# copy wls to the proper extension of lev1 data
-						if b_level1_sp and do_sp_wavecopy and  wave_fits[idx] != None and exists(wave_fits[idx]):
-							wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
-							for ext in wave_to_ext[idx]:
-								ExtCopy(wavecal_data, ext, ext, to_data_model=op_data)
-
-				if b_level1_sp and op_data != None:
+				if op_data != None:
 					result = to_fits(op_data, output_lev1_file)
 
+			# copy wls to the proper extension of lev1 data
+			if do_sp_wavecopy and exists(output_lev1_file):
+				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				for idx in ccd_idx:
+					if wave_fits[idx] != None and exists(wave_fits[idx]):
+						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+						for ext in wave_to_ext[idx]:
+							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
+
+				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+				result = to_fits(output_data, output_lev1_file)
+
+			if do_bc and exists(output_lev1_file):
+				# add bary correction result to existing L1 file
+				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				t_order = 0
+				for idx in ccd_idx:
+					t_order = t_order + orders_per_ccd[idx]
+
+				# all extensions of same ccd in wls has the same data
+				for idx in ccd_idx:
+					output_data = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx],
+								start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
+				result = to_fits(output_data, output_lev1_file)
+
 			# do ca_hk extraction
-			if b_level1_hk:
+			if do_hk:
 				# add ca_hk extraction result to existing L1 file or create a new L1 file if L1 file doesn't exist
 				if not exists(output_lev1_file):
 					output_data = None
@@ -467,12 +544,11 @@ if do_spectral_extraction or do_hk:
 				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
 						output_wave_exts=hk_wave_exts,
 						dark=hk_dark_data, wave_files=hk_wavelength_tables)
-				b_level1_hk = b_level1_hk and output_data != None
 
-				if b_level1_hk and output_data != None:
+				if output_data != None:
 					result = to_fits(output_data, output_lev1_file)
 
-			if b_level1_sp or b_level1_hk:
+			if exists(output_lev1_file):
 				lev1_list = lev1_list + [output_lev1_file]
 				if do_qlp:
 					Quicklook(lev0_data, output_qlp, end_of_night_summary)
@@ -487,7 +563,7 @@ if do_spectral_extraction or do_hk:
 #    rv_star_dir: the directory containing star config file.
 #    area_def: list of list in which the order range and range along x-axis like [start_order, end_order, start_x, end_x],
 #              for each ccd is defined for rv process.
-#    selected_lev1_files: list of L1 files for rv process.
+#    selected_lev1_files: list of L1 files for rv process
 #    rv_data: KPF2 instance containing rv result, the rv result is added into rv_data extension by extension per specified
 #             extension list (data_ext_rv) in each ccd iteration.
 #    output_lev2_file: L2 output file for rv_data, /data/L2/<date_dir>/<basename>_L2.fits
@@ -496,11 +572,11 @@ if do_spectral_extraction or do_hk:
 #    RadialVelocityInit: do rv init on each L1 input.
 #    RadialVelocity: do radial velocity per ccd per L1 data.
 #
-
+rv_test = do_rv or do_rv_reweighting
 if do_rv or do_rv_reweighting:
-	rv_star_dir = test_data_dir
+	rv_star_dir = masters_data_dir
 
-    # L1 area to be processed
+	# L1 area to be processed
 	area_def = [[0, orders_per_ccd[0]-1, 500, -500], [0, orders_per_ccd[1]-1, 500, -500]]
 
 	if not lev1_list:
@@ -514,6 +590,17 @@ if do_rv or do_rv_reweighting:
 	else:
 		selected_lev1_files = []
 
+	ratio_refs = []
+	if 'static' in reweighting_method and do_rv_reweighting:
+		for idx in ccd_idx:
+			ccf_ratio_file = output_dir + static_ccf_ratio[idx]
+			t_segment = area_def[idx][1] -  area_def[idx][0] + 1
+			ratio_ref = RadialVelocityReweightingRef(None, reweighting_method,
+							t_segment, cf_hdu_name=ccf_ext_names[idx],
+							is_ratio_data = True,
+							ccf_ratio_file=ccf_ratio_file, ccf_start_index=area_def[idx][0])
+			ratio_refs = ratio_refs + [ratio_ref]
+
 	# iterating the loop to do rv on each L1 from the list
 	for input_lev1_file in selected_lev1_files:
 		_, short_lev1 = split(input_lev1_file)
@@ -521,17 +608,25 @@ if do_rv or do_rv_reweighting:
 		output_lev2_file = output_rv + short_lev2
 
 		# do rv if oeverwrite or L2 output doesn't exist
+		rv_data = None
 		if overwrite or not exists(output_lev2_file):
 			lev1_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
 			rv_init = RadialVelocityInit(start_time="2021-03-01", l1_data=lev1_data, bc_corr_path=bc_path, test_data_path=rv_star_dir)
 
-			rv_data = None
-			for idx in ccd_idx:
-				rv_data = RadialVelocity(lev1_data, rv_init, rv_data,
+			if rv_init != None:
+				for idx in ccd_idx:
+					ratio_ref = None
+					# rewighting if the reweighted L2 at the same directory as unweighted L2.
+					if ratio_refs and output_rv == output_rv_rw:
+						ratio_ref = ratio_refs[idx]
+
+					rv_data = RadialVelocity(lev1_data, rv_init, rv_data,
 						data_ext_rv[idx], ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,
 						area_def=area_def[idx], start_seg=area_def[idx][0], end_seg=area_def[idx][1],
-						rv_set=idx, ccf_engine='c')
-			result = to_fits(rv_data, output_lev2_file)
+						rv_set=idx, ccf_engine='c', start_bary_index=s_bary_idx[idx], rv_correction_by_cal=is_rv_cal,
+						reweighting_method=reweighting_method, input_ref=ratio_ref)
+				if rv_data != None:
+					result = to_fits(rv_data, output_lev2_file)
 
 		if do_qlp:
 			# get lev0 w/o _2D suffix
@@ -544,10 +639,22 @@ if do_rv or do_rv_reweighting:
 				lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
 				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
-		# do reweighting on each new L2 for watch mode
-		if context.watch and do_rv_reweighting:
-			invoke_subrecipe("./recipes/kpf_rvreweighting.recipe")
 
-	# do reweighting on all L2 for non-watch mode
-	if not context.watch and do_rv_reweighting:
-		invoke_subrecipe("./recipes/kpf_rvreweighting.recipe")
+		# do reweighting on each L2 in case the rewighting directory is different from the unweighted L2.
+		if 'static' in reweighting_method and do_rv_reweighting:
+			if exists(output_lev2_file) and output_rv != output_rv_rw:
+				lev2_rv = kpf2_from_fits(output_lev2_file, data_type=data_type)
+				reweighted_output = output_rv_rw + short_lev2
+				for idx in ccd_idx:
+					ratio_ref = None
+					if ratio_refs:
+						ratio_ref = ratio_refs[idx]
+
+					if ratio_ref is not None:
+						t_segment = area_def[idx][1] -  area_def[idx][0] + 1
+						lev2_rv = RadialVelocityReweighting(lev2_rv, reweighting_method, ratio_ref,
+								t_segment, ccf_ext=ccf_ext_names[idx],
+								rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=area_def[idx][0])
+				if lev2_rv is not None:
+					result = to_fits(lev2_rv, reweighted_output)
+

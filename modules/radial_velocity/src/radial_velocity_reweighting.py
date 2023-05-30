@@ -3,9 +3,6 @@
     This module defines class `RadialVelocityReweighting` which inherits from `KPF1_Primitive` and provides
     methods to perform the event on radial velocity CCF orderes reweighting in the recipe.
 
-    Attributes:
-        RadialVelocityReweighting
-
     Description:
         * Method `__init__`:
 
@@ -68,10 +65,8 @@ import pandas as pd
 import os.path
 
 # Pipeline dependencies
-from kpfpipe.logger import start_logger
 from kpfpipe.primitives.level2 import KPF2_Primitive
 from kpfpipe.models.level2 import KPF2
-
 
 # External dependencies
 from keckdrpframework.models.action import Action
@@ -79,6 +74,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 from modules.radial_velocity.src.alg import RadialVelocityAlg
+from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 
 DEFAULT_CFG_PATH = 'modules/optimal_extraction/configs/default.cfg'
 
@@ -92,13 +88,45 @@ class RadialVelocityReweighting(KPF2_Primitive):
     RV_COL_START_W = 's_wavelength'
     RV_COL_END_W = 'e_wavelength'
     RV_COL_SEG_NO = 'segment no.'
+    RV_COL_ORD_NO = 'order no.'
     RV_COL_RV = 'RV'
     RV_COL_RV_ERR = 'RV error'
+    RV_COL_CAL_ERR = 'CAL error'
+    RV_COL_SKY_ERR = 'SKY error'
     RV_COL_CCFJD = 'CCFJD'
+    RV_COL_BARY = 'Bary_RVC'
     RV_COL_SOURCE = 'source'
-    rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_RV, RV_COL_RV_ERR,
-                    RV_COL_CCFJD, RV_COL_SOURCE]
+    RV_COL_CAL = 'CAL RV'
+    RV_COL_CAL_SOURCE = 'source CAL'
+    RV_COL_SKY = 'SKY RV'
+    RV_COL_SKY_SOURCE ='source SKY'
+    RV_WEIGHTS = 'CCF Weights'
+    rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_ORD_NO,
+                    RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL, RV_COL_CAL_ERR, RV_COL_SKY, RV_COL_SKY_ERR,
+                    RV_COL_CCFJD, RV_COL_BARY, RV_COL_SOURCE, RV_COL_CAL_SOURCE, RV_COL_SKY_SOURCE, RV_WEIGHTS]
     rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
+
+    orderlet_key_map = {'kpf':{
+        'sci_flux1': {'ccf': {'mask': 'sci_mask', 'name': 'ccf1'}, 'rv': {'rv':'rv1', 'erv':'erv1'}},
+        'sci_flux2': {'ccf': {'mask': 'sci_mask', 'name': 'ccf2'}, 'rv': {'rv': 'rv2', 'erv': 'erv2'}},
+        'sci_flux3': {'ccf': {'mask': 'sci_mask', 'name': 'ccf3'}, 'rv': {'rv': 'rv3', 'erv': 'erv3'}},
+        'sky_flux': {'ccf': {'mask': 'sky_mask', 'name': 'ccf5'}, 'rv': {'rv': 'rvs', 'erv': 'ervs'}},
+        'cal_flux': {'ccf': {'mask': 'cal_mask', 'name': 'ccf4'}, 'rv': {'rv': 'rvc', 'erv': 'ervc'}}},
+        'neid':{
+            'sci': {'ccf': {'mask': 'sci_mask', 'name': 'ccf1'}, 'rv': {'rv':'rv1', 'erv':'erv1'}}
+        }
+    }
+
+    orderlet_rv_col_map = {'kpf':{
+        'sci_flux1': {'orderlet':'orderlet1', 'source':'source1', 'erv': ''},
+        'sci_flux2': {'orderlet':'orderlet2', 'source':'source2', 'erv': ''},
+        'sci_flux3': {'orderlet': 'orderlet3', 'source': 'source3', 'erv': ''},
+        'sky_flux': {'orderlet': RV_COL_SKY,  'source': RV_COL_SKY_SOURCE, 'erv': RV_COL_SKY_ERR},
+        'cal_flux': {'orderlet': RV_COL_CAL, 'source': RV_COL_CAL_SOURCE, 'erv': RV_COL_CAL_ERR}},
+        'neid':{
+            'sci': {'orderlet':'orderlet1', 'source':'source1', 'erv': ''}
+        }
+    }
 
     def __init__(self,
                  action: Action,
@@ -111,7 +139,6 @@ class RadialVelocityReweighting(KPF2_Primitive):
         self.ccf_start_index = action.args['ccf_start_index'] if 'ccf_start_index' in args_keys else 0
         self.rv_ext = action.args['rv_ext'] if 'rv_ext' in args_keys else 'RV'
         self.rv_ext_idx = action.args['rv_ext_idx'] if 'rv_ext_idx' in args_keys else 0
-        self.ccf_data = None
         lev2_obj = None
 
         if isinstance(action.args[0], str):
@@ -121,20 +148,85 @@ class RadialVelocityReweighting(KPF2_Primitive):
             lev2_obj = action.args[0]
 
         self.lev2_obj = lev2_obj
-        self.ccf_data = None
+        p_header = self.lev2_obj.header['PRIMARY'] if self.lev2_obj else None
+        if 'ins' in args_keys and action.args['ins']:
+            self.instrument = action.args['ins']
+        elif p_header is not None and 'INSTRUME' in p_header:
+            self.instrument = p_header['INSTRUME'].lower()
+        else:
+            self.instrument = None
+
+        self.is_solar_data = p_header is not None and self.instrument == 'kpf' and \
+                             'OBJECT' in p_header and p_header['OBJECT'].lower() == 'sun' and \
+                             (RadialVelocityAlgInit.KEY_SCI_OBJ in p_header and
+                              p_header[RadialVelocityAlgInit.KEY_SCI_OBJ].lower() == 'target') and \
+                             (RadialVelocityAlgInit.KEY_SKY_OBJ in p_header and
+                              p_header[RadialVelocityAlgInit.KEY_SKY_OBJ].lower() == 'target')
+
+        self.ccf_data = {}
+        self.ccf_ext_header = None
+
+        self.ccf_dim = 2
+        self.total_orderlet = 1
+        self.totals = 0    # total segment in ccf
+        self.totalv = 0    # total velocities in ccf
+        self.mask_type = {}
+        self.sci_orderlets = list()
+        self.cal_orderlets = list()
+        self.sky_orderlets = list()
+        self.od_names = list()
+
         if self.ccf_ext and hasattr(lev2_obj, self.ccf_ext):
-            self.ccf_data = lev2_obj[self.ccf_ext]
+            self.ccf_ext_header = lev2_obj.header[self.ccf_ext]
+            ccf_ext_data = lev2_obj[self.ccf_ext]
+            if ccf_ext_data.any():
+                self.ccf_dim = self.ccf_ext_header['NAXIS']
+                if self.ccf_dim == 2:
+                    self.totals, self.totalv = np.shape(ccf_ext_data)
+                    self.ccf_data[self.ccf_ext_header['CCF1']] = ccf_ext_data
+                elif self.ccf_dim == 3:
+                    self.total_orderlet, self.totals, self.totalv = np.shape(ccf_ext_data)
+                    for i in range(self.total_orderlet):
+                        od_name = self.ccf_ext_header['CCF'+str(i+1)]
+                        self.ccf_data[od_name] = ccf_ext_data[i, :, :]
+                        self.od_names.append(od_name)
+                        if self.is_sci(od_name):
+                            self.mask_type[od_name] = \
+                                self.ccf_ext_header['SCI_MASK'] if 'SCI_MASK' in self.ccf_ext_header else None
+                            self.sci_orderlets.append(od_name)
+                        elif self.is_cal(od_name):
+                            self.mask_type[od_name] = \
+                                self.ccf_ext_header['CAL_MASK'] if 'CAL_MASK' in self.ccf_ext_header else None
+                            self.cal_orderlets.append(od_name)
+                        elif self.is_sky(od_name):
+                            self.mask_type[od_name] = \
+                                self.ccf_ext_header['SKY_MASK'] if 'SKY_MASK' in self.ccf_ext_header else None
+                            self.sky_orderlets.append(od_name)
+                        else:
+                            self.mask_type[od_name] = None
 
         self.reweighting_method = action.args[1]
-        self.ccf_ref = action.args[2].values if isinstance(action.args[2], pd.DataFrame) else action.args[2]
+        self.ccf_ref = None
+        if isinstance(action.args[2], str) and os.path.exists(action.args[2]):
+            self.ccf_ref = pd.read_csv(action.args[2])
+        elif isinstance(action.args[2], pd.DataFrame) or isinstance(action.args[2], np.ndarray):
+            self.ccf_ref = action.args[2]
+
         self.total_segment = action.args[3] if action.args[3] is not None else np.shape(self.ccf_ref)[0]
+
+        # already processed (reweighted) rows
         self.processed_row = action.args['processed_row'] if 'processed_row' in args_keys else None
+
         # input configuration
         self.config = configparser.ConfigParser()
         try:
             self.config_path = context.config_path['radial_velocity']
         except:
             self.config_path = DEFAULT_CFG_PATH
+
+        self.config.read(self.config_path)
+        self.vel_span_pixel =  action.args['vel_span_pixel'] if 'vel_span_pixel' in args_keys \
+            else RadialVelocityAlg.comp_velocity_span_pixel(None, self.config, self.instrument)
 
         # start a logger
         self.logger = None
@@ -143,15 +235,12 @@ class RadialVelocityReweighting(KPF2_Primitive):
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
+
     def _pre_condition(self) -> bool:
         """
         Check for some necessary pre conditions
         """
-        # input argument must be KPF0
-        success = self.lev2_obj is not None and self.ccf_data is not None and isinstance(self.ccf_data, np.ndarray) \
-                  and isinstance(self.ccf_ref, np.ndarray) and self.total_segment is not None
-
-        return success
+        return True
 
     def _post_condition(self) -> bool:
         """
@@ -169,68 +258,114 @@ class RadialVelocityReweighting(KPF2_Primitive):
             (this part will be updated after level 2 data model is made.)
         """
 
-        if self.ccf_data.size == 0:
+        if self.lev2_obj is None or not self.ccf_data or self.ccf_ref is None or \
+                self.total_segment is None or self.instrument is None:
             if self.logger:
-                self.logger.info("RadialVelocityReweighting: No data in " + self.ccf_ext)
+                self.logger.info("RadialVelocityReweighting: No level2 data, no reweighting data or no data in " + self.ccf_ext)
             return Arguments(self.lev2_obj)
 
-        header = self.lev2_obj.header[self.ccf_ext]
-        ccf_dim = header['NAXIS']
-
-        assert (ccf_dim == 2 or ccf_dim == 3)
-
-        total_orderlet = 1
-
-        if ccf_dim == 2:
-            ccf_data = self.ccf_data
-            self.ccf_data = np.zeros((1, np.shape(ccf_data)[0], np.shape(ccf_data)[1]))  # convert 2D to 3D
-            self.ccf_data[0, :, :] = ccf_data
-        elif ccf_dim == 3:
-            total_orderlet = np.shape(self.ccf_data)[0]
+        if self.ccf_dim != 2 and self.ccf_dim != 3:
+            if self.logger:
+                self.logger.info("RadialVelocityReweighting: incorrect dimension of " + self.ccf_ext)
+            return Arguments(self.lev2_obj)
 
         is_rv_ext = hasattr(self.lev2_obj, self.rv_ext) and not self.lev2_obj[self.rv_ext].empty
-        rv_ext_header = self.lev2_obj.header[self.rv_ext] if is_rv_ext else self.lev2_obj.header[self.ccf_ext]
+        rv_ext_header = self.lev2_obj.header[self.rv_ext] if is_rv_ext else None
 
-        ccf_w = header['NAXIS1']
-        start_v = header['STARTV']
-        v_intv = header['STEPV']
+        do_corr = False
+        if is_rv_ext:
+            do_corr_key = ('rv' + str(self.rv_ext_idx + 1) + 'corr')
+            do_corr = self.lev2_obj.header[self.rv_ext][do_corr_key] == 'T' \
+                if do_corr_key in self.lev2_obj.header[self.rv_ext] else False
+
+        ccf_w = self.ccf_ext_header['TOTALV'] if 'TOTALV' in self.ccf_ext_header else self.totalv
+        start_v = self.ccf_ext_header['STARTV']
+        v_intv = self.ccf_ext_header['STEPV']
         velocities = np.array([start_v + i * v_intv for i in range(ccf_w)])
-        mask_type = header['MASKTYPE'] if 'MASKTYPE' in header else 'G2_espresso'
 
-        final_sum_ccf = np.zeros(np.shape(velocities)[0])
+        # do cal rv col first
+        ccf_ref_list = {}
 
-        for o in range(total_orderlet):
+        for o in range(self.total_orderlet-1, -1, -1):
             if self.logger:
                 self.logger.info("RadialVelocityReweighting: reweighting on ccd " + str(self.rv_ext_idx+1) +
                                  " orderlet " + str(o+1) + "...")
-            result_ccf_data = self.ccf_data[o, :, :]
+            od_name = self.od_names[o]
+            result_ccf_data = self.ccf_data[od_name]
+            ccf_ref = None
+            if self.reweighting_method.lower() == 'ccf_static':
+                for idx, r_col in enumerate(self.ccf_ref.columns):
+                    if self.mask_type[od_name] is not None and r_col.lower() == self.mask_type[od_name].lower():
+                        col_idx = np.array([0, idx], dtype=int)
+                        ccf_ref = self.ccf_ref.values[:, col_idx]
+                        break
+            else:
+                ccf_ref = self.ccf_ref.values if isinstance(self.ccf_ref, pd.DataFrame) else self.ccf_ref
 
-            rw_ccf, new_total_seg = RadialVelocityAlg.reweight_ccf(result_ccf_data, self.total_segment, self.ccf_ref,
+            if ccf_ref is None:
+                if self.logger:
+                    self.logger.info("RadialVelocityReweighting: No reweighting ratio for " + self.ccf_ext + " found")
+                return Arguments(self.lev2_obj)
+
+            ccf_ref_list[od_name] = ccf_ref
+            rw_ccf, new_total_seg = RadialVelocityAlg.reweight_ccf(result_ccf_data, self.total_segment, ccf_ref,
                                                                    self.reweighting_method, s_seg=self.ccf_start_index,
                                                                    do_analysis=True, velocities=velocities)
-            self.ccf_data[o, 0:new_total_seg, :] = rw_ccf[0:new_total_seg, :]     # update ccf value for each orderlet
+            (self.ccf_data[od_name])[0:new_total_seg, :] = rw_ccf[0:new_total_seg, :]     # update ccf value for each orderlet
+            self.lev2_obj[self.ccf_ext][o, 0:new_total_seg, :] = rw_ccf[0:new_total_seg, :]
+
             # if existing ccf table with summary row
-            if np.shape(self.ccf_data)[1] >= new_total_seg + RadialVelocityAlg.ROWS_FOR_ANALYSIS and not is_rv_ext:
-                self.ccf_data[o, -1, :] = rw_ccf[-1]
-            final_sum_ccf += rw_ccf[-1]
-            _, ccd_rv, _, _ = RadialVelocityAlg.fit_ccf(rw_ccf[-1],
-                                                        RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                                        velocities, mask_type)
+            if np.shape(self.ccf_data[od_name])[1] >= new_total_seg + RadialVelocityAlg.ROWS_FOR_ANALYSIS and not is_rv_ext:
+                self.ccf_data[od_name][-1, :] = rw_ccf[-1]
 
-            # update rv on each orderlet in rv extension
-            if is_rv_ext:
-                self.lev2_obj.header[self.rv_ext]['ccd'+str(self.rv_ext_idx+1)+'rv'+str(o+1)] = ccd_rv
-        self.lev2_obj[self.ccf_ext] = self.ccf_data                 # update ccf extension
-        # update final rv on all orderlets
-        _, ccd, _, _ = RadialVelocityAlg.fit_ccf(final_sum_ccf,
-                                    RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                    velocities, mask_type)
-        rv_ext_header['ccd'+ str(self.rv_ext_idx+1) + 'rv'] = ccd        # header: ccdnrv
-
+        # update rv table
         if is_rv_ext:
             if self.logger:
                 self.logger.info("RadialVelocityReweighting: start updating rv for each segment")
-            self.update_rv_table(total_orderlet, velocities)
+            self.update_rv_table(self.total_orderlet, velocities, do_corr, ccf_ref_list)
+
+        # update rv keyword, ccd[1-2]rv[1-3], ccd[1-2]rv, ccd[1-2]rvc
+        cal_rv = 0.0
+        ods_rv = list()
+        for o in range(self.total_orderlet):
+            map_key = self.get_map_key(self.od_names[o])
+            rv_colname = self.orderlet_rv_col_map[self.instrument][map_key]['orderlet']
+            ccd_rv = self.reweight_rv(rv_colname, ccf_ref_list[self.od_names[o]])
+            ods_rv.append(ccd_rv)
+
+            if self.od_names[o] in self.cal_orderlets:
+                cal_rv = ccd_rv
+
+        if is_rv_ext:
+            done_sci = False
+            for o in range(self.total_orderlet):
+                map_key = self.get_map_key(self.od_names[o])
+                rv_key = 'ccd' + str(self.rv_ext_idx + 1) + self.orderlet_key_map[self.instrument][map_key]['rv']['rv']
+                if self.is_sci(self.od_names[o]) and do_corr:
+                    self.lev2_obj.header[self.rv_ext][rv_key] = ods_rv[o] - cal_rv    # ccd[1-2]rv[1-3]
+                else:
+                    self.lev2_obj.header[self.rv_ext][rv_key] = ods_rv[o]             # ccd[1-2]rv[1-3], ccd[1-2][rvc, rvs]
+
+                if done_sci and self.is_sci(self.od_names[o]):
+                    continue
+
+                if self.is_sci(self.od_names[o]):
+                    rv_col = self.RV_COL_RV
+                    rv_key = 'ccd'+str(self.rv_ext_idx + 1)+'rv'
+                    ccd_rv = self.reweight_rv(rv_col, ccf_ref_list[self.od_names[o]])
+                    rv_ext_header[rv_key] = self.f_decimal(ccd_rv - cal_rv) if do_corr else self.f_decimal(ccd_rv)
+                    done_sci = True
+
+                    erv_col = self.RV_COL_RV_ERR
+                    erv_key = 'ccd' + str(self.rv_ext_idx + 1) + 'erv'
+                else:
+                    erv_col = self.orderlet_rv_col_map[self.instrument][map_key]['erv']
+                    erv_key = 'ccd' + str(self.rv_ext_idx + 1) + self.orderlet_key_map[self.instrument][map_key]['rv']['erv']
+
+                ccd_erv = self.reweight_rv(erv_col, ccf_ref_list[self.od_names[o]], is_sigma=True)
+                rv_ext_header[erv_key] = self.f_decimal(ccd_erv)
+
+        rv_ext_header['rwccfrv'] = 'T'
 
         self.lev2_obj.receipt_add_entry('RadialVelocityReweighting on '+ self.ccf_ext,
                                     self.__module__, f'config_path={self.config_path}', 'PASS')
@@ -241,64 +376,139 @@ class RadialVelocityReweighting(KPF2_Primitive):
 
         return Arguments(self.lev2_obj)
 
-    def update_rv_table(self, total_orderlet, velocities):
+    @staticmethod
+    def f_decimal(num):
+        return float("{:.10f}".format(num))
+
+    @staticmethod
+    def is_sci(sci_name):
+        return 'sci' in sci_name.lower()
+
+    @staticmethod
+    def is_cal(sci_name):
+        return 'cal' in sci_name.lower()
+
+    @staticmethod
+    def is_sky(sci_name):
+        return 'sky' in sci_name.lower()
+
+    def get_map_key(self, od_name):
+        for k in self.orderlet_key_map[self.instrument].keys():
+            if k in od_name.lower():
+                return k
+        return ''
+
+    def update_rv_table(self, total_orderlet, velocities, do_corr, ccf_ref_list):
         rv_ext_values = self.lev2_obj[self.rv_ext].values
+        rv_ext_columns = self.lev2_obj[self.rv_ext].columns
         rv_ext_header = self.lev2_obj.header[self.rv_ext]
-        rv_name_list = [name.lower() for name in self.rv_col_names]
-        # rv_start_idx = self.rv_ext_idx * self.total_segment
         ccdrow = 'ccd'+str(self.rv_ext_idx+1)+'row'
+
+        # for only one ccd or old L2 file with no such key defined
+        rv_start_idx = (ccdrow in rv_ext_header and rv_ext_header[ccdrow]) or \
+                       (self.processed_row is not None and self.processed_row) or 0
+
+        def col_idx_rv_table(colname):
+            if colname in rv_ext_columns:
+                return rv_ext_columns.tolist().index(colname)
+            else:
+                return -1
+
+        seg_size = self.totals
+        cal_idx = col_idx_rv_table(RadialVelocityReweighting.RV_COL_CAL)
+        rv_idx = col_idx_rv_table(self.RV_COL_RV)
+
+        ods_idx = {}
+        scis_idx = []
+        sci_ccf_ref = None
+        for od_name in self.od_names:
+            map_key = self.get_map_key(od_name)
+            if map_key:
+                ods_idx[od_name] = col_idx_rv_table(self.orderlet_rv_col_map[self.instrument][map_key]['orderlet'])
+                if self.is_sci(od_name):
+                    scis_idx.append(ods_idx[od_name])
+                    if sci_ccf_ref is None:
+                        sci_ccf_ref = ccf_ref_list[od_name]
+
+        for s in range(seg_size):
+            sum_rv = list()
+
+            for od_name in self.od_names:
+                ccf_orderlet = self.ccf_data[od_name][s, :]
+                _, od_rv, _, _, _ = RadialVelocityAlg.fit_ccf(ccf_orderlet,
+                                                                RadialVelocityAlg.get_rv_estimation(rv_ext_header),
+                                                                velocities, self.mask_type[od_name],
+                                                                rv_guess_on_ccf=(self.instrument == 'kpf'))
+
+                rv_ext_values[s + rv_start_idx, ods_idx[od_name]] = od_rv
+                if self.is_sci(od_name) or (self.is_sky(od_name) and self.is_solar_data):
+                    sum_rv.append(od_rv)
+            rv_ext_values[s + rv_start_idx, rv_idx] = sum(sum_rv)/len(sum_rv) if len(sum_rv) > 0 else 0.0
+
+        ccf_weight = sci_ccf_ref if len(np.shape(sci_ccf_ref)) >= 2 else sci_ccf_ref.reshape(sci_ccf_ref.size, 1)
+        ccf_ref_idx = col_idx_rv_table(self.RV_WEIGHTS)
+        if ccf_ref_idx >= 0:
+            rv_ext_values[rv_start_idx:rv_start_idx+seg_size, ccf_ref_idx] = ccf_weight[0:seg_size, -1]
+        # error columns
+        sci_done = False
+        for od_name in self.od_names:
+            if self.is_sci(od_name) and not sci_done:
+                err_col = self.RV_COL_RV_ERR
+                sci_done = True
+            elif not self.is_sci(od_name):
+                err_col = self.orderlet_rv_col_map[self.instrument][self.get_map_key(od_name)]['erv']
+            else:
+                continue
+
+            od_ref = ccf_ref_list[od_name]
+            od_weight = od_ref if len(np.shape(od_ref)) >= 2 else od_ref.reshape(od_ref.size, 1)
+            e_idx = col_idx_rv_table(err_col)
+            rv_ext_values[rv_start_idx:rv_start_idx+seg_size, e_idx] *= od_weight[0:seg_size, -1]
+
+        # do correction on orderletx columns
+        if do_corr:
+            for s_idx in scis_idx:
+                rv_ext_values[rv_start_idx:rv_start_idx+seg_size, s_idx] -= \
+                    rv_ext_values[rv_start_idx:rv_start_idx+seg_size, cal_idx]
+                rv_ext_values[rv_start_idx:rv_start_idx+seg_size, rv_idx] -= \
+                    rv_ext_values[rv_start_idx:rv_start_idx+seg_size, cal_idx]
+
+        # create a new rv table to take rv_ext_values with rv update
+        new_rv_table = {}
+        for c_name in self.rv_col_names:
+            if c_name in self.rv_col_on_orderlet:
+                for od_name in self.od_names:
+                    if not self.is_sci(od_name):
+                        continue
+                    c_name_orderlet = self.orderlet_rv_col_map[self.instrument][self.get_map_key(od_name)][c_name]
+                    idx = col_idx_rv_table(c_name_orderlet)
+
+                    new_rv_table[c_name_orderlet] = rv_ext_values[:, idx].tolist()
+            else:
+                idx = col_idx_rv_table(c_name)
+                if idx >= 0:
+                    new_rv_table[c_name] = rv_ext_values[:, idx].tolist()
+
+        self.lev2_obj[self.rv_ext] = pd.DataFrame(new_rv_table)      # update rv table
+        return True
+
+    def reweight_rv(self, rv_colname,  weighting_ratio, is_sigma=False):
+        rv_table = self.lev2_obj[self.rv_ext]
+        rv_ext_header = self.lev2_obj.header[self.rv_ext]
+        seg_size = np.shape(self.lev2_obj[self.ccf_ext])[1]
+        ccdrow = 'ccd' + str(self.rv_ext_idx + 1) + 'row'
+
         if ccdrow in rv_ext_header:
             rv_start_idx = rv_ext_header[ccdrow]
         elif self.processed_row is not None:
             rv_start_idx = self.processed_row
         else:
-            rv_start_idx = 0   # for only one ccd or old L2 file with no such key defined
+            rv_start_idx = 0
 
-        mask_type = self.lev2_obj.header[self.ccf_ext]['MASKTYPE'] if 'MASKTYPE' in self.lev2_obj.header[self.ccf_ext] \
-            else 'G2_espresso'
-        rv_orderlet_colnames = [self.RV_COL_ORDERLET + str(o + 1) for o in range(total_orderlet)]
-        def col_idx_rv_table(colname, orderlet_idx=0):
-            colname = colname.lower()
-
-            if 'orderlet' in colname:
-                return orderlet_idx
-            elif 'source' in colname:
-                return rv_name_list.index('source') + total_orderlet - 1 + orderlet_idx
-            else:
-                return rv_name_list.index(colname) + total_orderlet - 1
-
-        seg_size = np.shape(self.lev2_obj[self.ccf_ext])[1]
-
-        for s in range(seg_size):
-            sum_segment = np.zeros(np.shape(velocities)[0])
-            for o in range(total_orderlet):
-                ccf_orderlet = self.lev2_obj[self.ccf_ext][o, s, :]
-                sum_segment += ccf_orderlet
-
-                _, orderlet_rv, _, _ = RadialVelocityAlg.fit_ccf(ccf_orderlet,
-                                                                RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                                                velocities, mask_type)
-                c_idx = col_idx_rv_table(rv_orderlet_colnames[o], o)
-                rv_ext_values[s+rv_start_idx, c_idx] = orderlet_rv
-
-            # update orderletn column at segment s
-            _, seg_rv, _, _ = RadialVelocityAlg.fit_ccf(sum_segment,
-                                            RadialVelocityAlg.get_rv_estimation(rv_ext_header),
-                                            velocities, mask_type)
-            rv_ext_values[s+rv_start_idx, col_idx_rv_table(self.RV_COL_RV)] = seg_rv     # update rv column\
-
-        new_rv_table = {}
-        for c_name in self.rv_col_names:
-            if c_name in self.rv_col_on_orderlet:
-                for o in range(total_orderlet):
-                    c_name_orderlet = c_name+str(o+1)
-                    idx = col_idx_rv_table(c_name, o)
-                    new_rv_table[c_name_orderlet] = rv_ext_values[:, idx].tolist()
-            else:
-                idx = col_idx_rv_table(c_name)
-                new_rv_table[c_name] = rv_ext_values[:, idx].tolist()
-
-        self.lev2_obj[self.rv_ext] = pd.DataFrame(new_rv_table)      # update rv table
-
-        return True
+        rv_arr = (rv_table[rv_colname].to_numpy())[rv_start_idx:rv_start_idx+seg_size]
+        if is_sigma:
+            w_rv = RadialVelocityAlg.weighted_rv_error(rv_arr, seg_size, weighting_ratio)
+        else:
+            w_rv = RadialVelocityAlg.weighted_rv(rv_arr, seg_size, weighting_ratio)
+        return w_rv
 

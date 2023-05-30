@@ -3,6 +3,7 @@ import pandas as pd
 from astropy.io import fits
 from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.alg_base import ModuleAlgBase
+import numbers
 
 class OrderMaskAlg(ModuleAlgBase):
     """
@@ -66,12 +67,23 @@ class OrderMaskAlg(ModuleAlgBase):
             raise TypeError("no flux data for order_mask, cannot construct object from OrderMaskAlg")
         elif not isinstance(spectrum_data, np.ndarray):
             raise TypeError('flux data type error, cannot construct object from OrderMaskAlg')
+        elif not spectrum_data.any():
+            raise TypeError('empty flux data, cannot construct object from OrderMaskAlg')
 
         if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
             raise TypeError('order trace data error, cannot construct object from OrderMaskAlg')
         if not isinstance(order_trace_header, dict) and not isinstance(order_trace_header, fits.header.Header):
             raise TypeError('type: ' + str(type(order_trace_header)) +
                             ' flux header type error, cannot construct object from OrderMaskAlg')
+
+        if orderlet_names is None:
+            raise TypeError('no orderlet names specified, cannot construct object from OrderMaskAlg')
+        if order_mask_data is not None and \
+                not (isinstance(order_mask_data, numbers.Number) or isinstance(order_mask_data, str) or isinstance(order_mask_data, np.ndarray)):
+            raise TypeError('non trace pixel values type error')
+        if order_mask_data is not None and \
+                isinstance(order_mask_data, np.ndarray) and (np.shape(order_mask_data) != np.shape(spectrum_data)):
+            raise TypeError('size of non trace pixel values and spectrum data not the same')
 
         ModuleAlgBase.__init__(self, logger_name, config, logger)
 
@@ -108,8 +120,12 @@ class OrderMaskAlg(ModuleAlgBase):
         self.total_trace_per_order = len(orderlet_names) \
             if ((isinstance(orderlet_names, list)) and (len(orderlet_names) > 0)) else None
 
-        self.order_mask_data = np.zeros_like(self.spectrum_flux).astype(bool) if order_mask_data is None \
-            else order_mask_data
+        if order_mask_data is None or (isinstance(order_mask_data, str) and not order_mask_data.isnumeric()):
+            self.order_mask_data = np.zeros_like(self.spectrum_flux)
+        elif isinstance(order_mask_data, numbers.Number) or isinstance(order_mask_data, str):
+            self.order_mask_data = np.ones(np.shape(self.spectrum_flux), dtype=float) * float(order_mask_data)
+        else:
+            self.order_mask_data = order_mask_data
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -169,7 +185,17 @@ class OrderMaskAlg(ModuleAlgBase):
             idx = 0
         return self.order_xrange[idx, :]
 
-    def set_order_mask(self, order_idx):
+    def set_order_mask(self, order_idx, s_width=None, trace_value=1):
+        """ Set value to order mask array.
+
+        Args:
+            order_idx (int): trace order index
+            s_width (list): reduction to trace lower and upper width. Default to None meaning no reduction.
+            trace_value (float): order mask value for the trace pixels. Default to 1.
+        Returns:
+            numpy.ndarray: 2D array containing mask data on order trace pixels.
+
+        """
         if order_idx < 0 or order_idx >= self.total_order:
             raise Exception("wrong order index number")
 
@@ -179,19 +205,25 @@ class OrderMaskAlg(ModuleAlgBase):
         x_step = np.arange(xrange[0], xrange[1]+1).astype(int)
         coeffs = self.order_coeffs[order_idx]
         y_mid = np.polyval(coeffs, x_step) + self.origin[self.Y]
-
-        # top and bottom widths
         y_widths = self.get_order_edges(order_idx)
-
+        # top and bottom widths
+        if s_width is not None:  # use width created by order trace process
+            y_widths = [max((y_widths[0] - s_width[0]), 0), max((y_widths[1] - s_width[1]), 1)]
+            # print('adjustment from external: ', s_width, y_widths, self.get_order_edges(order_idx))
+        # else:
+        #    print('from trace file: ', y_widths)
         y_lower = np.ceil(y_mid - y_widths[0]).astype(int)
-        y_lower = np.where(y_lower <= 0, 0, y_lower)
-
         y_upper = np.floor(y_mid + y_widths[1]).astype(int)
+
+        # y_lower = np.floor(y_mid - y_widths[0]).astype(int)
+        # y_upper = np.ceil(y_mid + y_widths[1]).astype(int)
+
+        y_lower = np.where(y_lower <= 0, 0, y_lower)
         y_upper = np.where(y_upper >= self.dim_h, self.dim_h-1, y_upper)
 
         x_img_step = x_step + x_o
         for idx, x in enumerate(x_img_step):
-            self.order_mask_data[y_lower[idx]:y_upper[idx], x] = True
+            self.order_mask_data[y_lower[idx]:y_upper[idx], x] = trace_value
 
         return self.order_mask_data
 
@@ -258,11 +290,15 @@ class OrderMaskAlg(ModuleAlgBase):
 
         return o_set
 
-    def get_order_mask(self, order_name, show_time=False, print_debug=None):
+    def get_order_mask(self, order_name, s_width=None,
+                       trace_value=1,
+                       show_time=False, print_debug=None):
         """ From 2D flux to 2D with order masked.
 
         Args:
             order_name (str): orderlet name
+            s_width (list): trace widths to replace those from order trace file.
+            trace_value(number, optional): value set for trace pixels. Default to 1.
             show_time (bool, optional):  Show running time of the steps. Defaults to False.
             print_debug (str, optional): Print debug information to stdout if it is provided as empty string,
                 a file with path `print_debug` if it is non empty string, or no print if it is None.
@@ -293,7 +329,9 @@ class OrderMaskAlg(ModuleAlgBase):
             self.d_print('OrderMaskAlg: ', c_order, ' edges: ', self.get_order_edges(c_order),
                          ' xrange: ', self.get_order_xrange(c_order))
 
-            self.set_order_mask(c_order)
+
+            self.set_order_mask(c_order, s_width=s_width,
+                                trace_value=trace_value)
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
         return {'order_mask_result': self.order_mask_data}

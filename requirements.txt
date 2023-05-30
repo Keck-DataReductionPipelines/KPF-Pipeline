@@ -1,6 +1,6 @@
 astropy==4.0.4
 pandas==1.0.4
-numpy==1.18.1
+numpy==1.19.5
 lmfit==1.0.1
 xlsxwriter
 matplotlib
@@ -15,6 +15,7 @@ barycorrpy
 photutils
 watchdog==2.1.7
 astroscrappy==1.1.0
+psycopg2-binary
 
 # Documentation
 sphinx

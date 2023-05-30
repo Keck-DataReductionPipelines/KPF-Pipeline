@@ -9,6 +9,7 @@ ENV COVERALLS_REPO_TOKEN=YLrA2Q2Af7VGwyULXbs0KujYSjUBdn2jP
 # install this way to fix paths in coverage report
 ENV PYTHONPATH=$PYTHONPATH:/code/KPF-Pipeline
 ENV PYTHONHASHSEED=0
+ENV PYTHONUNBUFFERED=1
 
 # turn off built-in Python multithreading
 ENV MKL_NUM_THREADS=1
@@ -30,6 +31,7 @@ RUN mkdir /code && \
 
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
+RUN git config --global --add safe.directory /code/KPF-Pipeline
 
 ADD requirements.txt /code/KPF-Pipeline/
 RUN pip3 install -r requirements.txt

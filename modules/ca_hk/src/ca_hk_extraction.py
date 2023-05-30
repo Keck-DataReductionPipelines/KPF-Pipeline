@@ -1,10 +1,7 @@
 # Standard dependencies 
 """
-    This module defines class `OrderTrace` which inherits from `KPF0_Primitive` and provides methods to perform the
-    event on order trace calculation in the recipe.
-
-    Attributes:
-        CaHKExtraction
+    This module defines class `CaHKExtraction` which inherits from `KPF0_Primitive` and provides methods to perform the
+    event on CA H&K extraction in the recipe.
 
     Description:
         * Method `__init__`:
@@ -169,10 +166,24 @@ class CaHKExtraction(KPF0_Primitive):
         self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Order trace algorithm setup
-        self.alg = CaHKAlg(self.input_img, self.fibers,
+        try:
+            # no trace_path, no ca_hk data, dark image and bias image size not matches that of ca_hk data
+            if (self.trace_path is None) or not exists(self.trace_path) or \
+                (self.input_img is not None and self.input_img.size == 0) or \
+                    ((self.dark_img is not None) and
+                     (self.input_img is not None) and
+                     (np.shape(self.dark_img) != np.shape(self.input_img))) or \
+                    ((self.bias_img is not None) and
+                     (self.input_img is not None) and
+                     (np.shape(self.bias_img) != np.shape(self.input_img))):
+                self.alg = None
+            else:
+                self.alg = CaHKAlg(self.input_img, self.fibers,
                            output_exts =  self.output_exts,
                            output_wl_exts = self.output_wave_exts,
                            config=self.config, logger=self.logger)
+        except KeyError:
+            self.alg = None
 
     def _pre_condition(self) -> bool:
         """
@@ -180,15 +191,7 @@ class CaHKExtraction(KPF0_Primitive):
         """
         # input argument must be KPF0
 
-        if self.input_img is None or self.input_img.size == 0:
-            return True
-
-        success =  isinstance(self.input_img, np.ndarray) and \
-                   (self.trace_path is not None) and exists(self.trace_path) and \
-                   ((self.dark_img is None) or (np.shape(self.dark_img) == np.shape(self.input_img))) and \
-                   ((self.bias_img is None) or (np.shape(self.bias_img) == np.shape(self.input_img)))
-
-        return success
+        return True
 
     def _post_condition(self) -> bool:
         """
@@ -204,8 +207,8 @@ class CaHKExtraction(KPF0_Primitive):
         Returns:
             KPF1 instance
         """
-        if self.input_img is None or self.input_img.size == 0:
-            self.logger.warning("CaHKExtraction: no CA_HK data")
+        if self.alg is None:
+            self.logger.warning("CaHKExtraction: no CA_HK data or trace data or wrong dark/bg size")
             return Arguments(None)
 
         # load trace location data

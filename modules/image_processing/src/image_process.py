@@ -170,7 +170,6 @@ class ImageProcessing(KPF0_Primitive):
                     f'Bias Subtraction: subtracting master bias from raw FFI(s)'
                 )
             bias_subbed = self.alg.bias_subtraction(correcting_file_or_action)
-            print(bias_subbed)
 
         if action_type == 'Dark':
             if self.logger:
@@ -178,6 +177,13 @@ class ImageProcessing(KPF0_Primitive):
                     f'Dark Subtraction: subtracting dark frame from raw FFI(s)'
                 )
             dark_subbed = self.alg.dark_subtraction(correcting_file_or_action)
+
+        if action_type == 'Flat':
+            if self.logger:
+                self.logger.info(
+                    f'Flat Division: dividing out flat frame from raw FFI(s)'
+                )
+            flat_corrected = self.alg.flat_division(correcting_file_or_action)
 
         if action_type == 'Remove_Cosmics':
             if self.logger:

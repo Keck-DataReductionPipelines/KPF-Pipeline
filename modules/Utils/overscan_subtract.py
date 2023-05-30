@@ -66,24 +66,22 @@ class OverscanSubtraction(KPF0_Primitive):
 
         KPF0_Primitive.__init__(self, action, context)
         self.rawfile = self.action.args[0]
-        self.prl_overscan_reg = self.action.args[1]
-        self.srl_overscan_reg = self.action.args[2]
-        self.mode = self.action.args[3]
-        self.order = self.action.args[4]
-        self.oscan_clip_no = self.action.args[5]
-        self.ref_output = self.action.args[6]
-        self.ffi_exts = self.action.args[7]
-        self.data_type = self.action.args[8]
-        self.prescan_reg = self.action.args[9]
-        self.gain_key = self.action.args[10]
+        self.mode = self.action.args[1]
+        self.order = self.action.args[2]
+        self.oscan_clip_no = self.action.args[3]
+        self.ref_output = self.action.args[4]
+        self.ffi_exts = self.action.args[5]
+        self.data_type = self.action.args[6]
+        self.prescan_reg = self.action.args[7]
+        self.gain_key = self.action.args[8]
 
         try:
-            self.channel_datasec_ncols = self.action.args[11]
+            self.channel_datasec_ncols = self.action.args[9]
         except:
             self.channel_datasec_ncols = 2040
 
         try:
-            self.channel_datasec_nrows = self.action.args[12]
+            self.channel_datasec_nrows = self.action.args[10]
         except:
             if self.ffi_exts[0] == 'GREEN_CCD':
                 self.channel_datasec_nrows = 2040
@@ -175,12 +173,12 @@ class OverscanSubtraction(KPF0_Primitive):
         GREEN_AMP3    [5:2144,101:2140]     [1:4,1:2140]      [5:2044,1:100]         [2045:2144,1:2140]
         GREEN_AMP4    [101:2140,101:2140]   [1:100,1:2140]    [101:2140,1:100]       [2141:2144,1:2140]
         RED_AMP1      [5:2044,1:4080]       [1:4,1:4180]      [5:2044,4081:4180]     [2045:2144,1:4180]
-        RED_AMP1      [101:2140,1:4080]     [1:100,1:4180]    [101:2140,4081:4180]   [2141:2144,1:4180]
+        RED_AMP2      [101:2140,1:4080]     [1:100,1:4180]    [101:2140,4081:4180]   [2141:2144,1:4180]
 
         """
         ########################################################################################
 
-    def overscan_arrays(self):
+    def overscan_arrays(self, img):
 
         """
         Makes array of overscan pixels. For example, if raw image including overscan region
@@ -194,8 +192,9 @@ class OverscanSubtraction(KPF0_Primitive):
             prl_overscan_clipped(np.ndarray): Array of clipped parallel overscan region pixels
         """
 
-        srl_overscan_pxs = np.arange(self.srl_overscan_reg[0],self.srl_overscan_reg[1],1)
-        prl_overscan_pxs = np.arange(self.prl_overscan_reg[0],self.prl_overscan_reg[1],1)
+        srl_overscan_pxs = np.arange(self.channel_datasec_ncols+self.prescan_reg[1], img.shape[1], 1)
+        prl_overscan_pxs = np.arange(self.channel_datasec_nrows, img.shape[0], 1)
+
         srl_N_overscan = len(srl_overscan_pxs)
         prl_N_overscan = len(prl_overscan_pxs)
         srl_overscan_clipped = srl_overscan_pxs[self.oscan_clip_no:srl_N_overscan-1-self.oscan_clip_no]
@@ -383,8 +382,6 @@ class OverscanSubtraction(KPF0_Primitive):
             full_frame_img(np.ndarray): Stiched-together full frame image, with overscan subtracted and removed
         """
 
-        # clip ends of overscan region
-        srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays()
 
         # create empty list for final, overscan subtracted/cut arrays
         no_overscan_imgs = []
@@ -403,6 +400,8 @@ class OverscanSubtraction(KPF0_Primitive):
                 format(self.__class__.__name__,ext))
 
             new_img_w_prescan = self.orientation_adjust(img,key)
+            srl_oscan_pxl_array,prl_oscan_pxl_array,srl_clipped_oscan,prl_clipped_oscan = self.overscan_arrays(new_img_w_prescan)
+            # chop off prescan
             new_img = new_img_w_prescan[:,self.prescan_reg[1]:-1]
 
             # overscan subtraction for chosen method
@@ -415,7 +414,7 @@ class OverscanSubtraction(KPF0_Primitive):
             else:
                 raise TypeError('Input overscan subtraction mode set to value outside options.')
 
-            # chop off overscan and prescan - put into overscan subtraction utility
+            # chop off overscan  - put into overscan subtraction utility
             new_img = self.overscan_cut(raw_sub_os,self.channel_datasec_nrows,self.channel_datasec_ncols)
 
             # put img back into original orientation

@@ -23,18 +23,14 @@ else:
 
 exptime_minimum = config.DARK.exptime_minimum
 
-all_bias_files_list, all_dark_files_list, all_flat_files_list, all_arclamp_files_list = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
+all_bias_files_list, all_dark_files_list, all_flat_files_list, all_arclamp_files_list, arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
 
 channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
 channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
 channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
-channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + "/" + config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + "/" + config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
-pl_overscan_reg_red = config.OVERSCAN_SUBTRACTION.pl_overscan_reg_red
-srl_overscan_reg_red = config.OVERSCAN_SUBTRACTION.srl_overscan_reg_red
-pl_overscan_reg_green = config.OVERSCAN_SUBTRACTION.pl_overscan_reg_green
-srl_overscan_reg_green = config.OVERSCAN_SUBTRACTION.srl_overscan_reg_green
+channel_orientation_ref_path_red = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
 overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
 order = config.OVERSCAN_SUBTRACTION.overscan_order
 oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
@@ -71,8 +67,6 @@ for raw_file_path in file_list:
         # compute red-chip ffi
         l0 = kpf0_from_fits(raw_file_path, data_type)
         red_ffi = OverscanSubtraction(l0,
-                                      pl_overscan_reg_red,
-                                      srl_overscan_reg_red,
                                       overscan_method,
                                       order,
                                       oscan_clip,
@@ -89,8 +83,6 @@ for raw_file_path in file_list:
 
         # add green-chip ffi to data containing red-chip ffi
         L0_with_ffi = OverscanSubtraction(red_ffi,
-                                          pl_overscan_reg_green,
-                                          srl_overscan_reg_green,
                                           overscan_method,
                                           order,
                                           oscan_clip,
@@ -159,6 +151,7 @@ if all_bias_files_list:
             flat_n_sigma = config.FLAT.n_sigma
             flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
             masterflat_path = config.FLAT.masterflat_path
+            ordermask_path = config.FLAT.ordermask_path
             flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
             if date_dir:
@@ -172,18 +165,26 @@ if all_bias_files_list:
                                                  flat_lev0_ffi_exts,
                                                  new_masterbias_path,
                                                  new_masterdark_path,
-                                                 new_masterflat_path)
+                                                 new_masterflat_path,
+                                                 ordermask_path)
 
 ####################################
 # Generate master-arclamp products.
 ####################################
 
         skip_flattening = config.ARCLAMP.skip_flattening
+        make_arclamp_stacks = config.ARCLAMP.make_arclamp_stacks
 
-        if all_arclamp_files_list:
+        if all_arclamp_files_list and make_arclamp_stacks:
             arclamp_n_sigma = config.ARCLAMP.n_sigma
             arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
-            arclamp_objects = config.ARCLAMP.arclamp_objects
+            arclamp_objects_config = config.ARCLAMP.arclamp_objects
+
+            if len(arclamp_objects_config) == 0:
+                arclamp_objects = arclamp_objects_auto
+            else:
+                arclamp_objects = arclamp_objects_config
+
             masterarclamp_path = config.ARCLAMP.masterarclamp_path
             arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
