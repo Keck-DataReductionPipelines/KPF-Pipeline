@@ -717,6 +717,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         ccf = np.zeros(v_steps)
         zb = vb/LIGHT_SPEED_M
         z_b = ((1.0/(1+zb)) - 1.0)
+        v_b = z_b * LIGHT_SPEED # km/s
 
         line = self.get_mask_line()
         if line is None:
@@ -777,7 +778,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 ccf[c] = CCF_3d_cpython.calc_ccf(new_line_start.astype('float64'), new_line_end.astype('float64'),
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
-                                                 self.velocity_loop[c], -z_b)
+                                                 self.velocity_loop[c], -v_b)
                 """
                 ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
                                                             new_line_end.astype('float64'),
@@ -814,7 +815,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                    x_pixel_wave.astype('float64'),
                                                    spectrum.astype('float64'),
                                                    new_line_weight.astype('float64'),
-                                                   sn_p, z_b)
+                                                   sn_p, -z_b)
 
         return ccf
 
