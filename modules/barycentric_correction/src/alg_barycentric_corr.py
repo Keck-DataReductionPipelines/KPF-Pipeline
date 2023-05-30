@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import os.path
+import logging
 from barycorrpy import get_BC_vel
 from astropy.utils import iers
 import pandas as pd
@@ -160,8 +161,8 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
 
     @staticmethod
     def get_zb_from_bc_corr(obs_config, start_jd, days_period=None, data_path=None, save_to_path=None):
-        """ Find the redshift values for a period of days or a single day by using Barycentric velocity correction or
-        from an existing file and store the result to the specified file if there is.
+        """ Find the BC values for a period of days or a single day by calling Barycentric velocity correction function
+         or from an existing file and store the result to the specified file if there is.
 
         Args:
             obs_config (dict): A dict instance containing observation configuration.
@@ -175,7 +176,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             save_to_path (str, optional): Path of the output file. Defaults to None for no output.
 
         Returns:
-            numpy.ndarray:  An array of redshift values over the specified period or a single time point.
+            numpy.ndarray:  An array of BC values (m/sec) over the specified period or a single time point.
 
         """
 
@@ -189,7 +190,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
         # if a period of time is assigned, check if a file storing the data already exists or not
         if days_period is not None and days_period > 1:
             instrument = obs_config.get(BarycentricCorrectionAlg.SPEC, '')
-            target = obs_config.get(BarycentricCorrectionAlg.STARNAME, 'nostar')
+            target = obs_config.get(BarycentricCorrectionAlg.STARNAME, 'unknown')
             zb_bc_file = BarycentricCorrectionAlg.find_existing_zb_file(instrument.lower(),
                                                                 start_jd, days_period, target.lower(), data_path)
             if zb_bc_file is not None and os.path.isfile(zb_bc_file):
@@ -270,7 +271,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                 # zb_list.append(bc / LIGHT_SPEED_M)
                 zb_list.append(bc)
             else:
-                zb_list.append(None)
+                zb_list.append(0.0)
         return zb_list
 
     @staticmethod
@@ -282,11 +283,10 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             jd (float): Day in Julian Date format.
 
         Returns:
-            float: Barycentric velocity correction number from get_BC_vel.
+            float: Barycentric velocity [m/s] correction from barycorrpy.get_BC_vel.
 
         """
         star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
-        # print('target: ', star)
         if star == 'sun':
             # epoch, SolSystemTarget, predictive
             bc_obj = get_BC_vel(JDUTC=jd,
@@ -300,8 +300,11 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 longi=obs_config[BarycentricCorrectionAlg.LON],
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
-                                predictive=True,
-                                rv=obs_config[BarycentricCorrectionAlg.RV])
+                                predictive=True, zmeas=0,
+                                rv=None,
+                                #rv=obs_config[BarycentricCorrectionAlg.RV]
+                                )
+            
         else:
             bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],

@@ -1,0 +1,26 @@
+from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
+
+data_type = config.ARGUMENT.data_type
+date_dir = context.date_dir
+cal_file_level = config.ARGUMENT.cal_file_level
+contentbitmask = config.ARGUMENT.contentbitmask
+cal_type_pair = config.ARGUMENT.cal_type_pair
+
+do_db_query_for_one_nearest_master_file = True
+
+if do_db_query_for_one_nearest_master_file:
+
+    query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+                                                                              date_dir,
+                                                                              cal_file_level,
+                                                                              contentbitmask,
+                                                                              cal_type_pair)
+
+    db_exit_code = query_one_nearest_master_file_list[0]
+
+    db_rec = query_one_nearest_master_file_list[1]
+
+    if db_exit_code == 0:
+        db_level = db_rec[1]
+        db_cal_type = db_rec[2]
+        db_master_file = db_rec[6]

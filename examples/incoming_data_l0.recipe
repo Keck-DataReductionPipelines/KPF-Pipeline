@@ -1,8 +1,8 @@
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 
-channel_orientation_ref_path_red = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = KPFPIPE_TEST_DATA + config.ARGUMENT.channel_orientation_ref_path_green
+channel_orientation_ref_path_red = config.ARGUMENT.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.ARGUMENT.channel_orientation_ref_path_green
 data_type = config.ARGUMENT.data_type
 pl_overscan_reg_red = config.ARGUMENT.pl_overscan_reg_red
 srl_overscan_reg_red = config.ARGUMENT.srl_overscan_reg_red

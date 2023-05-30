@@ -43,7 +43,7 @@ class CaHKAlg(ModuleAlgBase):
     name = 'CaHK'
 
     def __init__(self, data, fibers, output_exts=None, output_wl_exts=None, config=None, logger=None):
-        if not isinstance(data, np.ndarray):
+        if not isinstance(data, np.ndarray) or (data.size == 0):
             raise TypeError('image data type error, cannot construct object from CaHKAlg')
         if not isinstance(config, ConfigParser):
             raise TypeError('config type error, cannot construct object from CaHKAlg')
@@ -62,11 +62,8 @@ class CaHKAlg(ModuleAlgBase):
 
         self.instrument = ins
         self.hk_data = data.astype('float64')
-        if data.size == 0:
-            ny = 0
-            nx = 0
-        else:
-            ny, nx = np.shape(data)
+
+        ny, nx = np.shape(data)
         self.data_range = [0, ny - 1, 0, nx - 1]
         self.fibers = fibers if isinstance(fibers, list) else [str(fibers)]
         self.trace_location = {fiber: None for fiber in self.fibers}
@@ -355,7 +352,7 @@ class CaHKAlg(ModuleAlgBase):
         if not exists(wave_table_file):
             return None
 
-        wave_result = pd.read_csv(wave_table_file, sep=' ')
+        wave_result = pd.read_csv(wave_table_file, header=None, sep=' ', comment='#', engine='python')
         wave_vals = np.array(wave_result.values)
         if fiber in self.trace_location and self.trace_location[fiber] is not None:
             total_order = len(self.trace_location[fiber].keys())

@@ -15,12 +15,20 @@ from astropy.time import Time
 # from kpfpipe.primitives.level0 import KPF0_Primitive
 # from kpfpipe.models.level0 import KPF0
 
-mask_file_map = {'G2_espresso': ('G2.espresso.mas', 'air'),
+mask_file_map = {
+                 'F9_espresso': ('F9_espresso.txt', 'air'),
+                 'G2_espresso': ('G2.espresso.mas', 'air'),
                  'G2_harps': ('G2.harps.mas', 'air'),
                  'G2_neid_v1': ('G2.neid.v1.mas', 'air'),
                  'G2_neid_v2': ('G2.neid.v2.mas', 'air'),
+                 'G8_espresso': ('G8_espresso.txt', 'air'),
+                 'G9_espresso': ('G9_espresso.txt', 'air'),
+                 'K2_espresso': ('K2_espresso.txt', 'air'),
+                 'K6_espresso': ('K6_espresso.txt', 'air'),
+                 'M2_espresso': ('M2_espresso.txt', 'air'),
                  'thar': ('Thorium_mask_031921.mas', 'vac'),
-                 'lfc': ('kpf_lfc_mask_1025.mas', 'vac')}
+                 'lfc': ('kpf_lfc_mask_1025.mas', 'vac'),
+                 'etalon': ('kpf_etalon_masks_11may2023.csv', 'vac')}
 
 
 class RadialVelocityAlgInit(RadialVelocityBase):
@@ -101,6 +109,13 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
     MASK_TYPE = 'mask_type'
+    VEL_SPAN_PIXEL = 'vel_span_pixel'
+    MASK_ORDERLET = 'mask_orderlet'
+
+    # primary key
+    KEY_SCI_OBJ = 'SCI-OBJ'
+    KEY_SKY_OBJ = 'SKY-OBJ'
+    KEY_CAL_OBJ = 'CAL-OBJ'
 
     def __init__(self, config=None, logger=None, l1_data=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
                 test_data=None):
@@ -131,6 +146,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.ccf_engine = None
         self.pheader = l1_data.header['PRIMARY'] if l1_data is not None else None
         self.star_config_file = None
+        self.vel_span_pixel = None
+        self.mask_orderlet = dict()
 
     @staticmethod
     def ret_status(msg='ok'):
@@ -139,6 +156,39 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         ret['msg'] = msg if msg != 'ok' else ''
 
         return ret
+
+    @staticmethod
+    def check_epoch(epoch_data, p_header):
+        """check epoch value from the primary header for kpf case
+
+        Args:
+            epoch_data (float): Epoch value.
+            p_header (fits.header.Header): header
+
+        Returns:
+            float: epoch value or None. 
+        """
+
+        targfram_key = 'TARGFRAM'
+        if epoch_data == 0.0:
+            try:
+                targfram = p_header[targfram_key]
+                if targfram.lower() == 'fk4':
+                    epoch_data = 1950.0
+                elif targfram.lower() in ['fk5', 'apparent']:
+                    epoch_data = 2000.0
+                else:
+                    epoch_data = None
+            except KeyError:
+                epoch_data = None
+
+        if epoch_data is not None:
+            year_days = 365.25
+            val = (epoch_data - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+        else:
+            val = None
+        # print("from check_epoch", val)
+        return val
 
     def init_star_from_header(self):
         if self.pheader is None:
@@ -172,43 +222,76 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 elif s_key == self.DEC:
                     val = Angle(h_val + "degrees").deg
                 elif s_key == self.EPOCH:
-                    year_days = 365.25
-                    val = (float(h_val) - 2000.0) * year_days + Time("2000-01-01T12:00:00").jd  # to julian date
+                    val = self.check_epoch(float(h_val), self.pheader)
                 else:
                     val = float(h_val)
                 self.rv_config[s_key] = val
 
+        if self.pheader[self.KEY_SCI_OBJ] != 'Target':
+            self.rv_config[self.STAR_RV] = 0.0
+
         #s_key = 'mask'
         #default_mask = self.get_rv_config_value(s_key, None)
-        skyobj = self.pheader['SKY-OBJ']
-        sciobj = self.pheader['SCI-OBJ']
-        calobj = self.pheader['CAL-OBJ']
+
+        try:
+            teff = float(self.pheader['TARGTEFF'])
+        except KeyError:
+            teff = 0
+
+        """
         if (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_gold'):
+            default_mask = 'thar'
+        elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='Th_daily'):
             default_mask = 'thar'
         elif (skyobj==sciobj) and (sciobj==calobj) and (calobj=='LFCFiber'):
             default_mask = 'lfc'
-        else:
-            default_mask = 'G2_espresso'
-
-        if default_mask is None:
-            return self.ret_status(s_key + not_defined)
-        quote = ['"', '\'']
-        for q in quote:
-            if default_mask.startswith(q) and default_mask.endswith(q):
-                default_mask = default_mask.strip(q)
-                break
-        if default_mask not in mask_file_map:
-            return self.ret_status('default mask of ' + default_mask + ' is not defined')
+        """
 
         stellar_dir = self.get_value_from_config(self.STELLAR_DIR, default=None)
         if stellar_dir is None:
             return self.ret_status(self.STELLAR_DIR + not_defined)
 
-        self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
-        self.mask_type = default_mask
-        self.mask_wavelengths = mask_file_map[default_mask][1]
+        for fobj in [RadialVelocityAlgInit.KEY_SKY_OBJ, RadialVelocityAlgInit.KEY_SCI_OBJ, RadialVelocityAlgInit.KEY_CAL_OBJ]:
+            try:
+                fiber_obj = self.pheader[fobj]
+            except KeyError:
+                fiber_obj = None
 
-        self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
+            if fiber_obj == 'Th_gold' or fiber_obj == 'Th_daily':
+                default_mask = 'thar'
+            elif fiber_obj == 'LFCFiber':
+                default_mask = 'lfc'
+            elif 'etalon' in fiber_obj.lower():
+                default_mask = 'etalon'
+            elif teff > 5800:
+                default_mask = 'F9_espresso'
+            elif 5800 > teff > 5650:
+                default_mask = 'G2_espresso'
+            elif 5650 > teff > 5400:
+                default_mask = 'G8_espresso'
+            elif 5400 > teff > 5200:
+                default_mask = 'G9_espresso'
+            elif 5200 > teff > 4600:
+                default_mask = 'K2_espresso'
+            elif 4600 > teff > 3700:
+                default_mask = 'K6_espresso'
+            elif 3700 > teff > 0:
+                default_mask = 'M2_espresso'
+            else:
+                default_mask = 'G2_espresso'
+
+            if default_mask not in mask_file_map:
+                return self.ret_status('default mask of ' + default_mask + ' is not defined')
+
+            self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
+            self.mask_type = default_mask
+            self.mask_wavelengths = mask_file_map[default_mask][1]
+            self.mask_orderlet[fobj] = {"obj": fiber_obj,
+                                        "mask_path": self.mask_path,
+                                        "mask_type": self.mask_type,
+                                        "mask_wavelengths": self.mask_wavelengths}
+
+        self.d_print("RadialVelocityAlgInit: mask orderlet: ", self.mask_orderlet)
 
         return self.ret_status('ok')
 
@@ -231,6 +314,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         self.star_config_file = self.get_value_from_config(self.STAR_CONFIG_FILE, default=None)
 
+        # for kpf
         if self.star_config_file is not None and self.star_config_file.lower() == 'fits_header':
             return self.init_star_from_header()
 
@@ -338,6 +422,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.get_redshift_range()  # get redshift from barycentric velocity correction
         self.get_mask_line()       # based on mask_path, velocity loop and mask_width/vacuum_to_air
         self.get_ccf_version()     # get ccf engine in either 'python' or 'c'
+        self.get_velocity_width_per_pixel() # get velocity span per pixel
         return self.ret_status()
 
     def get_rv_config_value(self, prop, star_config=None, default=None):
@@ -429,6 +514,20 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.reweighting_ccf_method = self.get_value_from_config(self.REWEIGHTING_CCF, default=default_method)
         return self.reweighting_ccf_method
 
+    def get_velocity_width_per_pixel(self, default=0.87):
+        """Get velocity span per ccd pixel
+        Args:
+            default (float): default velocity span per pixel.
+
+        Returns:
+            float: velocity width per pixel
+
+        """
+        if self.vel_span_pixel is None:
+            self.vel_span_pixel = self.get_value_from_config(self.VEL_SPAN_PIXEL, default=default)
+
+        return self.vel_span_pixel
+
     def get_step_range(self, default='[-80, 81]'):
         """ Get the step range for the velocity.
 
@@ -490,22 +589,24 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         rv_config_bc_key = [self.RA, self.DEC, self.PMRA, self.PMDEC, self.PARALLAX, self.EPOCH, self.OBSLAT,
                             self.OBSLON, self.OBSALT, self.STAR_RV, self.SPEC, self.STARNAME]
-
         if self.zb_range is None:
             rv_config_bc = {k: self.rv_config[k] for k in rv_config_bc_key}
-            rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
-            bc_path = bc_path or self.bc_corr_path
-            bc_output = bc_output or self.bc_corr_output
-            jd_time = jd_time or self.bc_jd
-            period = period or self.bc_period
-            self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
+            if self.is_unknown_target(rv_config_bc[self.SPEC], rv_config_bc[self.STARNAME], rv_config_bc[self.EPOCH]):
+                self.zb_range = np.array([0.0, 0.0])
+            else:
+                rv_bc_corr = BarycentricCorrectionAlg(rv_config_bc, logger=self.logger, logger_name=RadialVelocityBase.name)
+                bc_path = bc_path or self.bc_corr_path
+                bc_output = bc_output or self.bc_corr_output
+                jd_time = jd_time or self.bc_jd
+                period = period or self.bc_period
+                self.zb_range = rv_bc_corr.get_zb_long(jd_time, period, data_path=bc_path, save_to_path=bc_output)
 
         return self.zb_range
 
     def get_mask_line(self):
         """ Get mask coverage per mask width and the mask centers read from the mask file.
 
-        Returns:
+        Returns: dict containing mask line info or dict of dict containg mask line info for each fiber
             dict: Mask information, like::
 
                 {
@@ -517,21 +618,48 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                     'bc_corr_end': numpy.ndarray       # adjusted end points of masks
                 }
 
+            dict of dict:
+                { 'fiber1': {                          # mask line info. for fiber1
+                    {
+                        'start' : numpy.ndarray            # start points of masks
+                        'end' : numpy.ndarray              # end points of masks
+                        'center': numpy.ndarray            # center of masks
+                        'weight': numpy.ndarray            # weight of masks
+                        'bc_corr_start': numpy.ndarray     # adjusted start points of masks
+                        'bc_corr_end': numpy.ndarray       # adjusted end points of masks
+                    }
+                    :
+                }
+
              Attribute `mask_line` is updated.
+
+
 
         """
 
         if self.mask_line is None:
-            zb_range = self.get_redshift_range()
-            rv_mask_line = RadialVelocityMaskLine()
-            if self.mask_wavelengths == 'air':
-                air2vac = True
-            elif self.mask_wavelengths == 'vac':
-                air2vac = False
-            self.mask_line = rv_mask_line.get_mask_line(self.mask_path, self.get_velocity_loop(),
+            if not self.mask_orderlet:
+                zb_range = self.get_redshift_range()
+                rv_mask_line = RadialVelocityMaskLine()
+                if self.mask_wavelengths == 'air':
+                    air2vac = True
+                elif self.mask_wavelengths == 'vac':
+                    air2vac = False
+                self.mask_line = rv_mask_line.get_mask_line(self.mask_path, self.get_velocity_loop(),
                                                         zb_range, self.rv_config[self.MASK_WID],
                                                         air2vac)
+            else:
+                zb_range = self.get_redshift_range()
+                self.mask_line = dict()
+                for fiber in self.mask_orderlet.keys():
+                    rv_mask_line = RadialVelocityMaskLine()
+                    fiber_mask = self.mask_orderlet[fiber]
 
+                    air2vac = (fiber_mask['mask_wavelengths'] == 'air')
+                    self.mask_line[fiber] = rv_mask_line.get_mask_line(fiber_mask['mask_path'],
+                                                        self.get_velocity_loop(),
+                                                        zb_range, self.rv_config[self.MASK_WID],
+                                                        air2vac)
         return self.mask_line
 
     def collect_init_data(self):
@@ -549,7 +677,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         # star_rv in rv_config, mask_width, step, step_range
         collection = [self.RV_CONFIG, self.MASK_LINE, self.VELOCITY_STEPS,
                       self.VELOCITY_LOOP, self.REWEIGHTING_CCF,
-                      self.ZB_RANGE, self.CCF_CODE, self.MASK_TYPE]
+                      self.ZB_RANGE, self.CCF_CODE, self.MASK_TYPE, self.VEL_SPAN_PIXEL, self.MASK_ORDERLET]
 
         attrs = self.__dict__.keys()
         for c in collection:
@@ -587,3 +715,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.d_print('RadialVelocityAlgInit: result data is ', init_status['data'])
 
         return init_status
+
+    @staticmethod
+    def is_unknown_target(ins, target, epoch):
+        isunknown = ins.lower() == 'kpf' and target.lower() != 'sun' and \
+                    (target.lower() == 'unknown' or epoch is None)
+
+        return isunknown

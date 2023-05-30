@@ -1,0 +1,47 @@
+from modules.order_trace.src.order_mask import OrderMask
+
+date_dir = context.date_dir
+input_dir = config.ARGUMENT. input_dir
+input_masters_dir = config.ARGUMENT. input_masters_dir
+output_dir = config.ARGUMENT.output_dir
+
+data_type = config.ARGUMENT.data_type
+overwrite = config.ARGUMENT.overwrite
+ccd_idx = config.ARGUMENT.ccd_idx
+ccd_list = config.ARGUMENT.ccd_list
+orderlet_names = config.ARGUMENT.orderlet_names
+orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
+orderlet_values = config.ARGUMENT.orderlet_values
+start_order = config.ARGUMENT.start_order
+lev0_2d_file = config.ARGUMENT. lev0_2d_file
+
+input_order_trace = input_masters_dir + date_dir + '/kpf_' + date_dir + '_master_flat' 
+
+input_lev0_2d_file = input_dir + date_dir + '/' + lev0_2d_file
+
+csv_ext = '.csv'
+
+if overwrite and exists(input_lev0_2d_file):
+
+    lev0_2d_data = kpf0_from_fits(input_lev0_2d_file, data_type=data_type)
+    trace_list = []
+
+    order_mask = None
+
+    for idx in ccd_idx:
+
+        if orderlet_widths_ccds:
+            orderlet_widths = orderlet_widths_ccds[idx]
+        else:
+            orderlet_widths = []
+
+        ccd = ccd_list[idx]
+        input_lev0_2d_trace_csv = input_order_trace + '_' + ccd + csv_ext
+        trace_list = trace_list + [input_lev0_2d_trace_csv]
+
+        order_mask = OrderMask(lev0_2d_data, order_mask, orderlet_names=orderlet_names[idx],
+                               start_order=start_order[idx], trace_file=trace_list[idx],
+                               data_extension=ccd_list[idx], orderlet_widths=orderlet_widths, orderlet_values=orderlet_values[idx])
+
+    order_mask_file = output_dir + 'order_mask.fits'
+    result = to_fits(order_mask, order_mask_file)
