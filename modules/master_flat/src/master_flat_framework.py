@@ -293,9 +293,10 @@ class MasterFlatFramework(KPF0_Primitive):
 
             # Divide by the smoothed Flatlamp pattern.
             # Nominal 2-D Gaussian blurring at sigma=2.0 to smooth pixel-to-pixel variations.
+            # Turned off this high-pass filtering for now but still save the smoothed version
             smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
-            unnormalized_flat = stack_avg / smooth_lamp_pattern
-            unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
+            unnormalized_flat = stack_avg# / smooth_lamp_pattern
+            unnormalized_flat_unc = stack_unc# / smooth_lamp_pattern
 
 
             # Apply order mask, if available for the current FITS extension.  Otherwise, use the low-light pixels as a mask.
