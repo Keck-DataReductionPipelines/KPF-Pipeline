@@ -2,7 +2,7 @@
 
 [![Build Status](http://shrek.caltech.edu:4444/buildStatus/icon?job=KPF+CI)](http://shrek.caltech.edu:4444/job/KPF%20CI/)
 [![Documentation Status](https://readthedocs.org/projects/kpf-pipeline/badge/?version=latest)](https://kpf-pipeline.readthedocs.io/en/latest/)
-[![Coverage Status](https://coveralls.io/repos/github/California-Planet-Search/KPF-Pipeline/badge.svg?branch=HEAD&t=yrAuJs)](https://coveralls.io/github/California-Planet-Search/KPF-Pipeline?branch=HEAD)
+[![Coverage Status](https://coveralls.io/repos/github/Keck-DataReductionPipelines/KPF-Pipeline/badge.svg?branch=master)](https://coveralls.io/github/Keck-DataReductionPipelines/KPF-Pipeline?branch=master)
 
 Facility data reduction pipline for the [Keck Planet Finder](https://exoplanets.caltech.edu/kpf/) high-resolution optical spectrograph.
 
