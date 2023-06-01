@@ -6,7 +6,7 @@
 
 Facility data reduction pipline for the [Keck Planet Finder](https://exoplanets.caltech.edu/kpf/) high-resolution optical spectrograph.
 
-Install instructions and documentation is available at [ReadTheDocs](https://california-planet-search-kpf-pipeline.readthedocs-hosted.com/en/latest)
+Install instructions and documentation is available at [ReadTheDocs](https://kpf-pipeline.readthedocs.io/en/latest/)
 
 Under active development by the [NASA Exoplanet Science Institute](https://nexsci.caltech.edu) and [Caltech Institute of Technology](https://www.caltech.edu).
 
