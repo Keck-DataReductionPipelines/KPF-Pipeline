@@ -110,7 +110,11 @@ for raw_file_path in file_list:
                                           n_sigma)
 
         bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts, data_type, quicklook)
+
         dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts, data_type, quicklook)
-        flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
+
+        flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)        
+
+        # cosmics_removed = ImageProcessing(flat_applied, 'remove_cosmics', lev0_ffi_exts, data_type, quicklook)
 
         recipe_complete = to_fits(flat_applied, output_file_name)

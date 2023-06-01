@@ -151,7 +151,8 @@ class QuicklookAlg:
         #version = hdr['PRIMARY']['IMTYPE']
         hdr = hdulist[0].header
         version = hdr['IMTYPE']
-        #print('2d header',hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
+        Cal_Source = hdr['SCI-OBJ']
+        #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
 
 
@@ -160,17 +161,31 @@ class QuicklookAlg:
         if version == 'Solar':
             master_file = self.config['2D']['master_solar']
         if version == 'Arclamp':
-            master_file = self.config['2D']['master_arclamp']
-        if version == 'Etalon_All':
-            master_file = self.config['2D']['master_etalon']
+            if Cal_Source == 'Th_daily':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-thar-all-night.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_Th_daily']
+            if Cal_Source == 'U_daily':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-une-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_U_daily']
+            if Cal_Source == 'EtalonFiber':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-etalon-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_EtalonFiber']
+            if Cal_Source == 'LFCFiber':
+                master_file = '/data/masters/'+date+'/kpf_'+date+'_master_arclamp_autocal-lfc-all-eve.fits' #self.config['2D']['master_arclamp']
+                if os.path.exists(master_file) == False: master_file = self.config['2D']['master_LFCFiber']
+        if version == 'Flatlamp':
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_flat.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_flatlamp']
+        if version == 'Dark':
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_dark.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_dark']
+        if version == 'Bias':
+            master_file = '/data/masters/'+date+'/kpf_'+date+'_master_bias.fits' #
+            if os.path.exists(master_file) == False: master_file = self.config['2D']['master_bias']
         if version == 'Sol_All':
             master_file = self.config['2D']['master_socal']
-        if version == 'Flatlamp':
-            master_file = self.config['2D']['master_flatlamp']
-        if version == 'Dark':
-            master_file = self.config['2D']['master_dark']
-        if version == 'Bias':
-            master_file = self.config['2D']['master_bias']
+        if version == 'Etalon_All':
+            master_file = self.config['2D']['master_etalon']
         if version == 'Th_All':
             master_file = self.config['2D']['master_ThAr']
         if version == 'Une_All':
@@ -179,6 +194,7 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
+
 
 
 
@@ -191,7 +207,11 @@ class QuicklookAlg:
                 hdulist1 = fits.open(master_file)
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
                 master_flatten_counts = np.ravel(master_counts)
-
+                if version == 'Dark':#scale up dark exposures
+                    master_flatten_counts*=hdr['EXPTIME']
+            #print(version,hdr,hdr['EXPTIME'],type(hdr['EXPTIME']),hdulist1[0].header['EXPTIME'],Cal_Source,master_file,os.path.exists(master_file))
+            #print(master_counts)
+            #input("Press Enter to continue...")
 
             #looking at the fixed noise patterns
             '''
@@ -454,7 +474,7 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
             #print(np.percentile(flatten_counts,99.9),saturation_limit)
-            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.9)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
+            plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts)+'; Saturated? '+str(np.percentile(flatten_counts,99.99)>saturation_limit),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
             if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
             #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
             plt.xlabel('Counts (e-)')
@@ -732,13 +752,15 @@ class QuicklookAlg:
 
             wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
             wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
-
+            print('test wav_green',wav_green)
+            '''
             wave_soln = self.config['L1']['wave_soln']
             if wave_soln!='None':#use the master the wavelength solution
                 hdulist1 = fits.open(wave_soln)
                 wav_green = np.array(hdulist1['GREEN_CAL_WAVE'].data,'d')
                 wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
-
+                hdulist1.close()
+            '''
 
             #print(hdulist1.info())
 
@@ -757,7 +779,7 @@ class QuicklookAlg:
             flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
-            print(np.shape(flux_green),np.shape(flux_red))
+
             if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
             if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
             if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
@@ -769,10 +791,12 @@ class QuicklookAlg:
             if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
             if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
 
+            print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
+
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             print('test wave',np.shape(wav))
-            print(hdulist1.info())
-            hdulist1.close()
+            #print(hdulist1.info())
+
             flux = np.concatenate((flux_green,flux_red),axis = 0)
             flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
             flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
@@ -808,10 +832,151 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
-            ax[0].set_title('1D Spectrum ' +exposure_name,fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI1 ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
             #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_zoomable.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci1_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux2[i,:],[0.1,99.9])
+                flux2[i,:][(flux2[i,:]>high) | (flux2[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux2)[0]/n)):
+                low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux2,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI2',fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI2 ' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci2_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux3[i,:],[0.1,99.9])
+                flux3[i,:][(flux3[i,:]>high) | (flux3[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux3)[0]/n)):
+                low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux3,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI3',fontsize = 20)
+            ax[0].set_title('1D Spectrum SCI3 ' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci3_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux_cal[i,:],[0.1,99.9])
+                flux_cal[i,:][(flux_cal[i,:]>high) | (flux_cal[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux_cal)[0]/n)):
+                low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux_cal,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in CAL',fontsize = 20)
+            ax[0].set_title('1D Spectrum CAL ' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_cal_zoomable.png',dpi = 200)
+            plt.close()
+
+            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+            cm = plt.cm.get_cmap('rainbow')
+
+            from matplotlib import gridspec
+            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+
+            plt.rcParams.update({'font.size': 15})
+            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+
+            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+            fig.subplots_adjust(hspace=0.4)
+
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux_sky[i,:],[0.1,99.9])
+                flux_sky[i,:][(flux_sky[i,:]>high) | (flux_sky[i,:]<low)] = np.nan
+                j = int(i/n)
+                rgba = cm((i % n)/n*1.)
+                #print(j,rgba)
+                ax[j].plot(wav[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
+
+            for j in range(int(np.shape(flux_sky)[0]/n)):
+                low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
+                #print(j,high*1.5)
+                ax[j].set_ylim(-high*0.1, high*1.2)
+
+            low, high = np.nanpercentile(flux_sky,[0.1,99.9])
+
+            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SKY',fontsize = 20)
+            ax[0].set_title('1D Spectrum SKY ' +exposure_name,fontsize = 20)
+            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sky_zoomable.png',dpi = 200)
+            plt.close()
 
             #make a comparison plot of the three science fibres
             plt.close()
@@ -819,8 +984,11 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['GREEN_SCI_FLUX'+str(i_orderlet)].data,'d')
+                if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_green[10,:],flux_tmp[10,:], label = 'GREEN_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
+            plt.plot(wav_green[10,:],np.array(hdulist['GREEN_CAL_FLUX'].data,'d')[10,:], label = 'GREEN_CAL_FLUX', linewidth =  0.3)
             plt.legend()
+            plt.yscale('log')
             plt.title('Science Orderlets in GREEN '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
@@ -832,8 +1000,11 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.2, bottom=0.15, right=0.9, top=0.9)
             for i_orderlet in [1,2,3]:
                 flux_tmp = np.array(hdulist['RED_SCI_FLUX'+str(i_orderlet)].data,'d')
+                if np.shape(flux_tmp)==(0,): continue
                 plt.plot(wav_red[10,:],flux_tmp[10,:], label = 'RED_SCI_FLUX'+str(i_orderlet), linewidth =  0.3)
+            plt.plot(wav_red[10,:],np.array(hdulist['RED_CAL_FLUX'].data,'d')[10,:], label = 'RED_CAL_FLUX', linewidth =  0.3)
             plt.legend()
+            plt.yscale('log')
             plt.title('Science Orderlets in RED '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
@@ -845,16 +1016,16 @@ class QuicklookAlg:
             plt.close()
             plt.figure(figsize=(10,4))
             plt.subplots_adjust(left=0.1, bottom=0.15, right=0.95, top=0.9)
-            is_fiber_on =[np.nanmedian(flux_green2/flux_green)>0.2,np.nanmedian(flux_green3/flux_green)>0.2,np.nanmedian(flux_green_cal/flux_green)>0.05,np.nanmedian(flux_green_cal/flux_green)>0.05]
-            print('test orderlets', np.nanmedian(flux_green2/flux_green),np.nanmedian(flux_green3/flux_green),np.nanmedian(flux_green_cal/flux_green),np.nanmedian(flux_green_sky/flux_green))
+            is_fiber_on =[np.nanmedian(flux_green2/flux_green)>0.2,np.nanmedian(flux_green3/flux_green)>0.2,np.nanpercentile(flux_green_cal/flux_green,95)>0.05,np.nanmedian(flux_green_sky/flux_green)>0.05]
+            print('test orderlets', np.nanmedian(flux_green2/flux_green),np.nanmedian(flux_green3/flux_green),np.nanpercentile(flux_green_cal/flux_green,[95]),np.nanmedian(flux_green_sky/flux_green))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green2/flux_green,axis = 1),marker = 'o', color = 'green', label = 'Sci2/Sci1; On: ' +str(is_fiber_on[0]))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green3/flux_green,axis = 1),marker = 'o', color = 'red', label = 'Sci3/Sci1; On: ' +str(is_fiber_on[1]))
-            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green_cal/flux_green,axis = 1),marker = 'o', color = 'blue', label = 'Cal/Sci1; On: ' +str(is_fiber_on[2]))
+            plt.plot(np.nanmedian(wav_green,axis = 1),np.nanpercentile(flux_green_cal/flux_green,95,axis = 1),marker = 'o', color = 'blue', label = 'Cal/Sci1; On: ' +str(is_fiber_on[2]))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green_sky/flux_green,axis = 1),marker = 'o', color = 'magenta', label = 'Sky/Sci1; On: ' +str(is_fiber_on[3]))
 
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red2/flux_red,axis = 1),marker = 'D', color = 'green')
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red3/flux_red,axis = 1),marker = 'D', color = 'red')
-            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red_cal/flux_red,axis = 1),marker = 'D', color = 'blue')
+            plt.plot(np.nanmedian(wav_red,axis = 1),np.nanpercentile(flux_red_cal/flux_red,95,axis = 1),marker = 'D', color = 'blue')
             plt.plot(np.nanmedian(wav_red,axis = 1),np.nanmedian(flux_red_sky/flux_red,axis = 1),marker = 'D', color = 'magenta')
             plt.legend()
             plt.title('Orderlets Flux Ratios '+exposure_name)
@@ -895,12 +1066,13 @@ class QuicklookAlg:
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.95, top=0.9)
             for i_color in range(len(ccf_color)):
                 ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
-                print('ccf',np.shape(ccf))
+                sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
+
                 #step = float(self.config['RV']['step'])
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
 
-                print('gamma',hdulist['GREEN_CCF'].header)
+                #print('gamma',hdulist['GREEN_CCF'].header)
                 #vel_grid = np.array(range(-int(np.shape(ccf)[2]/2),int(np.shape(ccf)[2]/2),1),'d')*step
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
 
@@ -914,16 +1086,18 @@ class QuicklookAlg:
 
                 if np.shape(ccf)==(0,): continue
                 #print('ccf shape', np.shape(ccf))
-                ccf = np.sum(ccf,axis =0)#sum over orderlets
+                ccf = np.sum(ccf[1:2,:,:],axis =0)
+                #ccf = np.sum(ccf[:-1,:,:],axis =0)#sum over orderlets
+                #ccf = np.sum(ccf[1:,:,:],axis =0)
                 #print('ccf shape', np.shape(ccf))
 
 
                 #print('step',step,len(vel_grid))
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
-                if i_color == 0: ccf_weights[12] = 0
+                ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
+                #if i_color == 0: ccf_weights[12] = 0
 
                 mean_ccf = np.average(ccf,axis = 0,weights = ccf_weights)/np.percentile(np.average(ccf,axis = 0,weights = ccf_weights),[99.9])
                 #print('test',np.shape(np.nanmean(ccf,axis = 0)))
@@ -944,7 +1118,7 @@ class QuicklookAlg:
                 '''
 
                 #read the RV from headers directly
-                print('gamma',hdulist['GREEN_CCF'].header)
+                #print('gamma',hdulist['GREEN_CCF'].header)
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
                 plt.plot([gamma,gamma],[np.nanmin(mean_ccf),1.],':',color ='gray',linewidth = 0.5)
                 ax.text(0.6,0.3+i_color*0.2,ccf_rv[i_color]+' $\gamma$ (km/s): %5.2f' % gamma,transform=ax.transAxes,color = color_grid[i_color])
@@ -961,16 +1135,17 @@ class QuicklookAlg:
 
             #plot ccf in individual orders
             for i_color in range(len(ccf_color)):
-                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')
+                ccf = np.array(hdulist[ccf_color[i_color]].data,'d')[1:2,:,:]
                 step = float(hdulist[ccf_color[i_color]].header['STEPV'])
                 startv = float(hdulist[ccf_color[i_color]].header['STARTV'])
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio.csv'
+                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
-                ccf_weights = np.array(newdata['espresso'],'d')#np.ones(np.shape(ccf)[0])
+                sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
+                ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
                 if i_color == 0: ccf_weights[12] = 0
 
                 fig, ax = plt.subplots(1,1,figsize=(5,15),tight_layout = True)

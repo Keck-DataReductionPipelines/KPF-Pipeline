@@ -17,9 +17,9 @@ from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/master_flat/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/master_superflat/configs/default.cfg'
 
-class MasterFlatFramework(KPF0_Primitive):
+class MasterSuperFlatFramework(KPF0_Primitive):
 
     """
     Description:
@@ -30,14 +30,8 @@ class MasterFlatFramework(KPF0_Primitive):
 
         Requirements for FITS-header keywords of inputs:
         1. IMTYPE = 'Flatlamp'
-        2. SCI-OBJ = CAL-OBJ = SKY-OBJ
-        3. SCI-OBJ <> 'None' and SCI-OBJ not blank
-        4. EXPTIME <= 2.0 seconds (GREEN), 1.0 seconds (RED) to avoid saturation
-
-        Requirements for FITS-header keywords of inputs:
-        1. IMTYPE = 'Flatlamp'
-        2. OBJECT = 'autocal-flat-all'
-        3. EXPTIME < maximum allowed time (these are default.cfg parameters for GREEN, RED, and CA_HK).
+        2. OBJECT = 'superflat'
+        3. EXPTIME < 300 s (these are default.cfg parameters for GREEN, RED, and CA_HK).
 
         Assumptions and caveats:
         1. Does not include correcting for the color of the lamp, and other subtleties
@@ -118,10 +112,10 @@ class MasterFlatFramework(KPF0_Primitive):
         self.ordermask_path = self.action.args[7]
 
         self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
-        self.imtype_values_str = ['Flatlamp','autocal-flat-all']
+        self.imtype_values_str = ['Flatlamp','superflat']
 
         try:
-            self.module_config_path = context.config_path['master_flat']
+            self.module_config_path = context.config_path['master_superflat']
             print("--->MasterFlatFramework class: self.module_config_path =",self.module_config_path)
         except:
             self.module_config_path = DEFAULT_CFG_PATH
@@ -186,7 +180,7 @@ class MasterFlatFramework(KPF0_Primitive):
         master_flat_exit_code = 0
         master_flat_infobits = 0
 
-        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those with EXPTIME > maximum allowed value for detector.
+        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those with EXPTIME > 300.0 s.
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
         all_flat_files = fh.match_headers_string_lower()
@@ -293,10 +287,9 @@ class MasterFlatFramework(KPF0_Primitive):
 
             # Divide by the smoothed Flatlamp pattern.
             # Nominal 2-D Gaussian blurring at sigma=2.0 to smooth pixel-to-pixel variations.
-            # Turned off this high-pass filtering for now but still save the smoothed version
             smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
-            unnormalized_flat = stack_avg# / smooth_lamp_pattern
-            unnormalized_flat_unc = stack_unc# / smooth_lamp_pattern
+            unnormalized_flat = stack_avg / smooth_lamp_pattern
+            unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
 
             # Apply order mask, if available for the current FITS extension.  Otherwise, use the low-light pixels as a mask.
@@ -329,7 +322,7 @@ class MasterFlatFramework(KPF0_Primitive):
                     flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
 
                     self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_count = {},{},{},{}'.format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_counts[0]))
-
+        
                 # Set unity flat values for unmasked pixels.
                 np_om_ffi_bool_all_orderlets = np.where(np_om_ffi > 0.5, True, False)
                 flat = np.where(np_om_ffi_bool_all_orderlets == False, 1.0, flat)
@@ -395,11 +388,11 @@ class MasterFlatFramework(KPF0_Primitive):
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 
-        # Add informational keywords to FITS header.
+        # Add informational keywords to FITS header.  Remove non-relevant keywords too.
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
 
-        # Remove confusing or non-relevant keywords, if existing.
+        # Remove confusing keywords, if existing.
 
         try:
             del master_holder.header['GREEN_CCD']['OSCANV1']
