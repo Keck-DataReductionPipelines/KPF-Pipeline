@@ -166,7 +166,7 @@ class QueryDBNearestMasterFilesFramework(KPF0_Primitive):
 
         # Query database for all cal_types.
 
-        contentbitmask_list = [3]        # Mask values for GREEN, RED, and CA_HK together, and then for just GREEN and RED.
+        contentbitmask_list = [3, 7]        # Mask values for GREEN+RED, and then for just GREEN and RED and CA_HK.
         
         nearest_master_files_list = []
 
