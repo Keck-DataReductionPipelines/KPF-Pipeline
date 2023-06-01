@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import os.path
+import logging
 from barycorrpy import get_BC_vel
 from astropy.utils import iers
 import pandas as pd
@@ -282,7 +283,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
             jd (float): Day in Julian Date format.
 
         Returns:
-            float: Barycentric velocity correction number from get_BC_vel.
+            float: Barycentric velocity [m/s] correction from barycorrpy.get_BC_vel.
 
         """
         star = obs_config[BarycentricCorrectionAlg.STARNAME].lower()
@@ -299,8 +300,11 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 longi=obs_config[BarycentricCorrectionAlg.LON],
                                 alt=obs_config[BarycentricCorrectionAlg.ALT],
                                 SolSystemTarget='Sun',
-                                predictive=True,
-                                rv=obs_config[BarycentricCorrectionAlg.RV])
+                                predictive=True, zmeas=0,
+                                rv=None,
+                                #rv=obs_config[BarycentricCorrectionAlg.RV]
+                                )
+            
         else:
             bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],

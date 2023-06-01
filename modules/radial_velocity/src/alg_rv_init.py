@@ -27,7 +27,8 @@ mask_file_map = {
                  'K6_espresso': ('K6_espresso.txt', 'air'),
                  'M2_espresso': ('M2_espresso.txt', 'air'),
                  'thar': ('Thorium_mask_031921.mas', 'vac'),
-                 'lfc': ('kpf_lfc_mask_1025.mas', 'vac')}
+                 'lfc': ('kpf_lfc_mask_1025.mas', 'vac'),
+                 'etalon': ('kpf_etalon_masks_11may2023.csv', 'vac')}
 
 
 class RadialVelocityAlgInit(RadialVelocityBase):
@@ -260,6 +261,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 default_mask = 'thar'
             elif fiber_obj == 'LFCFiber':
                 default_mask = 'lfc'
+            elif 'etalon' in fiber_obj.lower():
+                default_mask = 'etalon'
             elif teff > 5800:
                 default_mask = 'F9_espresso'
             elif 5800 > teff > 5650:

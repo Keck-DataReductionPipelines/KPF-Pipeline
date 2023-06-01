@@ -454,7 +454,9 @@ class SpectralExtractionAlg(ModuleAlgBase):
             # order location and size along y axis
             y_mid = np.polyval(coeffs, x_step - x_o) + self.origin[self.Y]  # spectral trace value at mid point
 
-            if self.rectification_method != self.NoRECT and len(rectified_group) > 0 and order_key in rectified_header:
+            # check if already have data in rectified group
+            # if self.rectification_method != self.NoRECT and len(rectified_group) > 0 and order_key in rectified_header:
+            if self.extraction_method != self.NOEXTRACT and len(rectified_group) > 0 and order_key in rectified_header:
                 order_info = rectified_header.get(order_key)
                 [y_output_mid, lower_width, upper_width] = [int(s) for s in order_info.split(',')]
             else:    # NoRect need the data of y_mid

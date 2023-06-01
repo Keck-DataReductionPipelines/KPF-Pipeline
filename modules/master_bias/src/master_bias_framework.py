@@ -91,7 +91,7 @@ class MasterBiasFramework(KPF0_Primitive):
         mjd_obs_list = []
         for bias_file_path in (all_bias_files):
             bias_file = KPF0.from_fits(bias_file_path,self.data_type)
-            mjd_obs = bias_file.header['PRIMARY']['MJD-OBS']
+            mjd_obs = float(bias_file.header['PRIMARY']['MJD-OBS'])
             mjd_obs_list.append(mjd_obs)
 
         tester = KPF0.from_fits(all_bias_files[0])

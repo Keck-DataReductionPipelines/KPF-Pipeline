@@ -11,6 +11,7 @@ ccd_idx = config.ARGUMENT.ccd_idx
 ccd_list = config.ARGUMENT.ccd_list
 orderlet_names = config.ARGUMENT.orderlet_names
 orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
+orderlet_values = config.ARGUMENT.orderlet_values
 start_order = config.ARGUMENT.start_order
 lev0_2d_file = config.ARGUMENT. lev0_2d_file
 
@@ -39,8 +40,8 @@ if overwrite and exists(input_lev0_2d_file):
         trace_list = trace_list + [input_lev0_2d_trace_csv]
 
         order_mask = OrderMask(lev0_2d_data, order_mask, orderlet_names=orderlet_names[idx],
-                                                 start_order=start_order[idx], trace_file=trace_list[idx],
-                                                 data_extension=ccd_list[idx], orderlet_widths=orderlet_widths)
+                               start_order=start_order[idx], trace_file=trace_list[idx],
+                               data_extension=ccd_list[idx], orderlet_widths=orderlet_widths, orderlet_values=orderlet_values[idx])
 
     order_mask_file = output_dir + 'order_mask.fits'
     result = to_fits(order_mask, order_mask_file)

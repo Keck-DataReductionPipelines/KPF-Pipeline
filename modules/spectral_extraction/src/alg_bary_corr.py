@@ -271,7 +271,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
 
         """
         if BaryCorrTableAlg.IMTYPE in self.lev_header:
-            if self.lev_header[BaryCorrTableAlg.IMTYPE].lower() == 'object':
+            if self.lev_header[BaryCorrTableAlg.IMTYPE].lower() in ['object', 'solar']:
                 return True
         else:
             return False
@@ -310,7 +310,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
             # get begin and finish time from primary header DATE_BEG + EXPTIME or from df_em table
             if BaryCorrTableAlg.DATE_BEG in self.lev_header and BaryCorrTableAlg.EXPTIME in self.lev_header:
                 date_begin = np.datetime64(self.lev_header[BaryCorrTableAlg.DATE_BEG]).astype('<M8[ms]')
-                delta_ms = np.timedelta64(int(self.lev_header[BaryCorrTableAlg.EXPTIME]*1000.0), 'ms')
+                delta_ms = np.timedelta64(int(float(self.lev_header[BaryCorrTableAlg.EXPTIME])*1000.0), 'ms')
                 date_end = date_begin + delta_ms
             else:
                 date_begs = np.array(df_em["Date-Beg"], dtype=np.datetime64)
