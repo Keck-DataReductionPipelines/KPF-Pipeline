@@ -313,8 +313,13 @@ end_of_night_summary = False
 #    OrderTrace: order trace
 #    OrderRectification: order trace rectification
 
-ll0 = lev0_flat_pattern
-input_flat_file = find_files(lev0_flat_pattern)[0]
+if "*" in lev0_flat_pattern:
+	# for masters we need to add the date_dir part in the recipe because the config
+	# doesn't know about date_dir
+	ll0 = output_dir + date_dir + lev0_flat_pattern
+else:
+	ll0 = lev0_flat_pattern
+input_flat_file = find_files(ll0)[0]
 _, short_flat_file = split(input_flat_file)
 flat_stem, flat_ext = splitext(short_flat_file)
 
