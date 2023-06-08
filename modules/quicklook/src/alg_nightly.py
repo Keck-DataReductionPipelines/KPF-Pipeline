@@ -32,9 +32,17 @@ class Nightly_summaryAlg:
 
     def nightly_procedures(self,night):
         exposures_dir = self.config['Nightly']['exposures_dir']
+        masters_dir = self.config['Nightly']['masters_dir']
+
+
+        #plot the master files for a particular night
+        master_list = glob.glob(masters_dir+night+'/*master*.fits')
+        print(master_list)
 
         #get all exposures taken on a particular night
+        '''
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         for i in range(len(file_list)):
             file_list[i] = file_list[i][18:-8]
         print(file_list)
+        '''
