@@ -8,6 +8,6 @@ dependencies
    :maxdepth: 2
 
    kpfpipe.rst
+   masters.rst
    fits_primitive.rst
    parse_ast.rst
-   
