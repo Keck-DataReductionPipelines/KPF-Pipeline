@@ -24,7 +24,6 @@ notebook:
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
 
-	$(if $(KPFPIPE_TEST_DATA),,$(error Must set KPFPIPE_TEST_DATA))
 	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
 	$(if $(KPFPIPE_PORT),,docker run -it -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data -v ${KPFPIPE_DATA}/masters:/masters --network=host -e DBPORT=6125 -e DBNAME=kpfopsdb -e DBUSER=${KPFPIPE_DB_USER} -e DBPASS="${KPFPIPE_DB_PASS}" -e DBSERVER=127.0.0.1 kpf-drp:latest bash)
 	docker run -it -p ${KPFPIPE_PORT}:${KPFPIPE_PORT} --network=host \

@@ -593,7 +593,7 @@ if do_rv or do_rv_reweighting:
 	ratio_refs = []
 	if 'static' in reweighting_method and do_rv_reweighting:
 		for idx in ccd_idx:
-			ccf_ratio_file = output_dir + static_ccf_ratio[idx]
+			ccf_ratio_file = static_ccf_ratio[idx]
 			t_segment = area_def[idx][1] -  area_def[idx][0] + 1
 			ratio_ref = RadialVelocityReweightingRef(None, reweighting_method,
 							t_segment, cf_hdu_name=ccf_ext_names[idx],
