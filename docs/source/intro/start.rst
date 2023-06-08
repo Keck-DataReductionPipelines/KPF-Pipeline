@@ -45,6 +45,9 @@ To start a notebook server run the following and follow the on-screen instructio
 
     make notebook
 
+Finally, some of the recipes interact with a PostgresSQL database,
+which is the so-called *pipeline operations database*.  Refer to :doc:`database_setup`
+for instructions on how to initially set up the pipeline operations database.
 
 .. toctree::
     :maxdepth: 1
@@ -54,3 +57,4 @@ To start a notebook server run the following and follow the on-screen instructio
     example_trivial.rst
     logging.rst
     config.rst
+    database_setup.rst
