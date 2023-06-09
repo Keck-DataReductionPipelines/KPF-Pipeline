@@ -139,6 +139,7 @@ class Nightly_summaryAlg:
         plt.scatter(date_obs.jd,temp, marker = '.')
         plt.xlabel('Time')
         plt.ylabel('Relative Humidity')
+        print(date_obs.jd,date_obs.utc)
         plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
         plt.savefig(output_dir+'/'+night+'_Relative_Humidity_variation.png')
         plt.close()
