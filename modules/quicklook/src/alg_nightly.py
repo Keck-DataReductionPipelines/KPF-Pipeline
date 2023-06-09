@@ -114,7 +114,7 @@ class Nightly_summaryAlg:
                 plt.legend(loc='lower right')
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
-
+                plt.close()
 
 
 
@@ -135,10 +135,10 @@ class Nightly_summaryAlg:
 
         date_obs = np.array(date_obs,'str')
         date_obs = Time(date_obs, format='isot', scale='utc')
-        plt.close()
+
         plt.scatter(date_obs.jd,temp, marker = '.')
         plt.xlabel('Time')
         plt.ylabel('Relative Humidity')
-        #plt.xlim(date_obs[0].jd,date_obs[-1].jd)
+        plt.xlim(date_obs[0].jd,date_obs[-1].jd)
         plt.savefig(output_dir+'/'+night+'_Relative_Humidity_variation.png')
         plt.close()
