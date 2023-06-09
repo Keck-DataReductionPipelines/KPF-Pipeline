@@ -66,8 +66,8 @@ class Nightly_summaryAlg:
             if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
                 print('skipping empty file')
                 return
-
-
+            print(ccd_color)
+            '''
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -216,7 +216,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-        '''
+
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
