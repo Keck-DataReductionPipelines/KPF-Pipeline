@@ -55,6 +55,8 @@ class Nightly_summaryAlg:
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
             hdr = hdulist[0].header
+
+            exptime = hdr['EXPTIME']
             print(hdulist.info())
 
             #get ccd names
@@ -72,11 +74,14 @@ class Nightly_summaryAlg:
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
+
+                if master_list[i].find('dark'):#scale up dark exposures
+                    counts*=exptime
+
                 flatten_counts = np.ravel(counts)
                 if len(flatten_counts)<1: continue
                 #master_flatten_counts='None'
-                    #if master_list[i].find('dark'):#scale up dark exposures
-                        #master_flatten_counts*=hdr['EXPTIME']
+
 
                 #2D image
                 plt.figure(figsize=(5,4))
