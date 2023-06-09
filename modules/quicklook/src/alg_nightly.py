@@ -50,7 +50,7 @@ class Nightly_summaryAlg:
             print(master_list[i])
 
 
-            L0_data = masters_dir+night+master_list[i]
+            L0_data = master_list[i]
             hdulist = fits.open(L0_data)
             print(hdulist.info())
             '''
