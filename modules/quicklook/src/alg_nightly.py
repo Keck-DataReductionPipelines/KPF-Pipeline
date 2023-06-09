@@ -42,7 +42,7 @@ class Nightly_summaryAlg:
             os.makedirs(output_dir)
 
         #plot the master files for a particular night
-        master_list = glob.glob(masters_dir+night+'/*master_dark*.fits')
+        master_list = glob.glob(masters_dir+night+'/*master_flat*.fits')
         print(master_list)
 
 
@@ -119,7 +119,7 @@ class Nightly_summaryAlg:
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
                 plt.close()
-                
+
                 #histogram
                 plt.close()
                 plt.figure(figsize=(5,4))
