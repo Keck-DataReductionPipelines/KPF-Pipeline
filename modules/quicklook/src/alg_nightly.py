@@ -131,12 +131,12 @@ class Nightly_summaryAlg:
             hdr = hdulist[0].header
             print(hdr)
             date_obs.append(hdr['DATE-OBS'])
-            temp.append(hdr['TEMP'])
+            temp.append(hdr['RELH'])
 
         date_obs = np.array(date_obs,'str')
         date_obs = Time(date_obs, format='isot', scale='utc')
         plt.scatter(date_obs.jd,temp, marker = '.')
         plt.xlabel('Time')
-        plt.ylabel('Temperature')
-        plt.savefig(output_dir+night+'_temperature_variation.png')
+        plt.ylabel('Relative Humidity')
+        plt.savefig(output_dir+night+'_Relative_Humidity_variation.png')
         plt.close()
