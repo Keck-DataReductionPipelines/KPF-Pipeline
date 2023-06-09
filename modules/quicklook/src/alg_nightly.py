@@ -33,7 +33,7 @@ class Nightly_summaryAlg:
     def nightly_procedures(self,night):
         exposures_dir = self.config['Nightly']['exposures_dir']
         masters_dir = self.config['Nightly']['masters_dir']
-        output_dir = self.config['Nightly']['output_dir']+'/'+night+'/nightly_summary/'
+        output_dir = self.config['Nightly']['output_dir']+'/'+night+'/nightly_summary'
 
         if not os.path.exists(self.config['Nightly']['output_dir']+'/'+night):
             os.makedirs(self.config['Nightly']['output_dir']+'/'+night)
@@ -83,13 +83,13 @@ class Nightly_summaryAlg:
                 plt.imshow(counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+exposure_name)
+                plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 12)
                 plt.colorbar(label = 'Counts (e-)')
 
 
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
-                print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
-                plt.savefig(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+                #print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
+                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 #plt.close()
 
             '''
