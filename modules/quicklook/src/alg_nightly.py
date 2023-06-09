@@ -129,6 +129,7 @@ class Nightly_summaryAlg:
 
             hdulist = fits.open(file_list[i])
             hdr = hdulist[0].header
+            print(hdr)
             date_obs.append(hdr['DATE-OBS'])
             temp.append(hdr['TEMP'])
 
