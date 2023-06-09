@@ -92,7 +92,7 @@ class Nightly_summaryAlg:
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 #plt.close()
 
-            '''
+
             if master_list[i].find('bias') == True or master_list[i].find('dark'):
                 exptime = hdr['EXPTIME']
                 print('exptime',exptime)
@@ -211,13 +211,13 @@ class Nightly_summaryAlg:
                 plt.xticks()#KP.20230317.07770.97
                 plt.yticks()
                 plt.grid(False)
-                plt.savefig(output_dir+'/'+master_list[i][:-5]+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 plt.close()
 
 
 
         #get all exposures taken on a particular night
-
+        '''
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
