@@ -51,7 +51,7 @@ class Nightly_summaryAlg:
             exposure_name = master_list[i][23:-5]
             print(master_list[i],exposure_name)
 
-            '''
+
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
             print(hdulist.info())
@@ -87,7 +87,7 @@ class Nightly_summaryAlg:
                 plt.imshow(counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
+                plt.title(ccd_color[i_color]+' '+exposure_name)
                 plt.colorbar(label = 'Counts (e-)')
 
 
@@ -208,7 +208,7 @@ class Nightly_summaryAlg:
                 cbar.set_label(timelabel)#, fontsize=18
                 cbar.ax.tick_params()#labelsize=18
                 cbar.ax.tick_params()#size=18
-                plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
+                plt.title(ccd_color[i_color]+' '+exposure_name)
                 plt.xlabel('Column (pixel number)')
                 plt.ylabel('Row (pixel number)')#fontsize=18
                 plt.xticks()#KP.20230317.07770.97
@@ -220,7 +220,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-        
+        '''
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
