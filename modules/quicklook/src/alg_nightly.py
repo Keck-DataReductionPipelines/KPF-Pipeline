@@ -46,7 +46,7 @@ class Nightly_summaryAlg:
         master_list = glob.glob(masters_dir+night+'/*master_flat*.fits')
         master_master_list = glob.glob(masters_dir+master_master_date+'/*master_flat*.fits')
         print(master_list)
-        print(master_master_list)
+        print(masters_dir+master_master_date+'/*master_flat*.fits',master_master_list)
 
 
         for i in range(len(master_list)):
