@@ -100,25 +100,6 @@ class Nightly_summaryAlg:
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 #plt.close()
 
-                #histogram
-                plt.close()
-                plt.figure(figsize=(5,4))
-                plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
-
-                #print(np.percentile(flatten_counts,99.9),saturation_limit)
-                plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
-                #if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
-                #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
-                plt.xlabel('Counts (e-)')
-                plt.ylabel('Number of Pixels')
-                plt.yscale('log')
-                plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 8)
-                plt.legend(loc='lower right')
-                #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
-                plt.close()
-
-
                 order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
                 order_trace = pd.read_csv(order_trace_file)
                 #print(order_trace_file,order_trace)
@@ -138,6 +119,27 @@ class Nightly_summaryAlg:
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
                 plt.close()
+                
+                #histogram
+                plt.close()
+                plt.figure(figsize=(5,4))
+                plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
+
+                #print(np.percentile(flatten_counts,99.9),saturation_limit)
+                plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
+                #if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
+                #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
+                plt.xlabel('Counts (e-)')
+                plt.ylabel('Number of Pixels')
+                plt.yscale('log')
+                plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 8)
+                plt.legend(loc='lower right')
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
+                plt.close()
+
+
+
 
 
 
