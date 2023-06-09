@@ -83,7 +83,7 @@ class Nightly_summaryAlg:
                 plt.imshow(counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 12)
+                plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 8)
                 plt.colorbar(label = 'Counts (e-)')
 
 
