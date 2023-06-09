@@ -67,6 +67,8 @@ class Nightly_summaryAlg:
             for key, path in ccd_list:
                 ccd_color.append(path)
 
+            if master_list[i].find('flat'):
+                ccd_color=['GREEN_CCD_STACK','RED_CCD_STACK']
 
             if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
                 print('skipping empty file')
