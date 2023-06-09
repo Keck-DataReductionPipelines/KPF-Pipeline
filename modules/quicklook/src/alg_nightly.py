@@ -67,7 +67,7 @@ class Nightly_summaryAlg:
                 print('skipping empty file')
                 return
             print(ccd_color)
-            '''
+
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -88,10 +88,11 @@ class Nightly_summaryAlg:
 
 
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'/'+master_list[i][:-5]+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+                print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
+                plt.savefig(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png', dpi=1000)
                 #plt.close()
 
-
+            '''
             if master_list[i].find('bias') == True or master_list[i].find('dark'):
                 exptime = hdr['EXPTIME']
                 print('exptime',exptime)
