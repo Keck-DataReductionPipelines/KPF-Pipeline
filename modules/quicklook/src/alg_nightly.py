@@ -49,8 +49,8 @@ class Nightly_summaryAlg:
             if master_list[i][-7:] == 'L1.fits' or master_list[i][-7:] == 'L2.fits': continue
 
             exposure_name = master_list[i][23:-5]
-            version = master_list[i][23:-5]
-            print(master_list[i],exposure_name)
+            version = master_list[i][35:-5]
+            print(master_list[i],exposure_name,version)
 
 
             L0_data = master_list[i]
