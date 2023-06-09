@@ -44,7 +44,7 @@ class Nightly_summaryAlg:
         master_list = glob.glob(masters_dir+night+'/*master*.fits')
         print(master_list)
 
-        '''
+
         for i in range(len(master_list)):
             if master_list[i][-7:] == 'L1.fits' or master_list[i][-7:] == 'L2.fits': continue
             print(master_list[i])
@@ -53,7 +53,7 @@ class Nightly_summaryAlg:
             L0_data = masters_dir+night+master_list[i]
             hdulist = fits.open(L0_data)
             print(hdulist.info())
-
+            '''
             #get ccd names
             ccd_color=[]
             ccd_list = self.config.items( "CCD_LIST")
