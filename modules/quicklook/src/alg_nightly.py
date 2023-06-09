@@ -44,6 +44,7 @@ class Nightly_summaryAlg:
         master_list = glob.glob(masters_dir+night+'/*master*.fits')
         print(master_list)
 
+        '''
         for i in range(len(master_list)):
             if master_list[i][-7:] == 'L1.fits' or master_list[i][-7:] == 'L2.fits': continue
             print(master_list[i])
@@ -236,3 +237,4 @@ class Nightly_summaryAlg:
         plt.ylabel('Temperature')
         plt.savefig(output_dir+night+'_temperature_variation.png')
         plt.close()
+        '''
