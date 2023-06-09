@@ -49,6 +49,7 @@ class Nightly_summaryAlg:
             if master_list[i][-7:] == 'L1.fits' or master_list[i][-7:] == 'L2.fits': continue
 
             exposure_name = master_list[i][23:-5]
+            version = master_list[i][23:-5]
             print(master_list[i],exposure_name)
 
 
@@ -120,7 +121,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-
+        '''
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
@@ -145,3 +146,4 @@ class Nightly_summaryAlg:
         #plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
         plt.savefig(output_dir+'/'+night+'_Relative_Humidity_variation.png')
         plt.close()
+        '''
