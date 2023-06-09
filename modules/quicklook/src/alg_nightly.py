@@ -120,7 +120,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-        '''
+
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
@@ -139,4 +139,3 @@ class Nightly_summaryAlg:
         plt.ylabel('Temperature')
         plt.savefig(output_dir+night+'_temperature_variation.png')
         plt.close()
-        '''
