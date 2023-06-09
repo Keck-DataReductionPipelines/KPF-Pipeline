@@ -125,7 +125,7 @@ class Nightly_summaryAlg:
         date_obs = []
         temp = []
         for i in range(len(file_list)):
-            file_list[i] = file_list[i][18:-8]
+            #file_list[i] = file_list[i][18:-8]
 
             hdulist = fits.open(file_list[i])
             hdr = hdulist[0].header
