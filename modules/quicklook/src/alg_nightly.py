@@ -130,7 +130,7 @@ class Nightly_summaryAlg:
             hdulist = fits.open(file_list[i])
             hdr = hdulist[0].header
             print(hdr)
-            date_obs.append(hdr['DATE-OBS'])
+            date_obs.append(hdr['DATE'])
             temp.append(hdr['RELH'])
 
         date_obs = np.array(date_obs,'str')
@@ -140,6 +140,6 @@ class Nightly_summaryAlg:
         plt.xlabel('Time')
         plt.ylabel('Relative Humidity')
         print(date_obs.jd,date_obs.utc)
-        plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
+        #plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
         plt.savefig(output_dir+'/'+night+'_Relative_Humidity_variation.png')
         plt.close()
