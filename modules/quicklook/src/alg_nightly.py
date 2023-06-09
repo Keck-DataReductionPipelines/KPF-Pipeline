@@ -36,6 +36,7 @@ class Nightly_summaryAlg:
         output_dir = self.config['Nightly']['output_dir']+'/'+night+'/nightly_summary'
         master_master_date = self.config['Nightly']['master_master_date']
 
+
         if not os.path.exists(self.config['Nightly']['output_dir']+'/'+night):
             os.makedirs(self.config['Nightly']['output_dir']+'/'+night)
         if not os.path.exists(output_dir):
@@ -43,7 +44,9 @@ class Nightly_summaryAlg:
 
         #plot the master files for a particular night
         master_list = glob.glob(masters_dir+night+'/*master_flat*.fits')
+        master_master_list = glob.glob(masters_dir+master_master_date+'/*master_flat*.fits')
         print(master_list)
+        print(master_master_list)
 
 
         for i in range(len(master_list)):
@@ -51,7 +54,7 @@ class Nightly_summaryAlg:
 
             exposure_name = master_list[i][23:-5]
             version = master_list[i][35:-5]
-            print(master_list[i],exposure_name,version)
+            print('i',master_list[i],exposure_name,version)
 
 
             L0_data = master_list[i]
