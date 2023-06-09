@@ -41,7 +41,7 @@ class Nightly_summaryAlg:
             os.makedirs(output_dir)
 
         #plot the master files for a particular night
-        master_list = glob.glob(masters_dir+night+'/*master*.fits')
+        master_list = glob.glob(masters_dir+night+'/*master_dark*.fits')
         print(master_list)
 
 
