@@ -54,8 +54,11 @@ class Nightly_summaryAlg:
 
             exposure_name = master_list[i][23:-5]
             version = master_list[i][35:-5]
-            print('i',master_list[i],exposure_name,version)
+            print('i',master_list[i],exposure_name,version,master_master_list)
 
+            for j in range(len(master_master_list)):
+                if master_master_list[j].find(version):
+                    hdulist1=fits.open(master_master_list[j])#identify master by the same type
 
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
@@ -80,12 +83,17 @@ class Nightly_summaryAlg:
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
+                master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
+
                 if master_list[i].find('flat'):
                     counts = np.array(hdulist[ccd_color[i_color]+'_STACK'].data,'d')
+                    master_counts = np.array(hdulist1[ccd_color[i_color]+'_STACK'].data,'d')
                 if master_list[i].find('dark'):#scale up dark exposures
-                    counts*=exptime
+                    counts*=hdulist[0].header['EXPTIME']
+                    master_counts*=hdulist1[0].header['EXPTIME']
 
                 flatten_counts = np.ravel(counts)
+                master_flatten_counts = np.ravel(master_counts)
                 if len(flatten_counts)<1: continue
                 #master_flatten_counts='None'
 
@@ -132,7 +140,7 @@ class Nightly_summaryAlg:
 
                 #print(np.percentile(flatten_counts,99.9),saturation_limit)
                 plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
-                #if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
+                if len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
                 #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
                 plt.xlabel('Counts (e-)')
                 plt.ylabel('Number of Pixels')
