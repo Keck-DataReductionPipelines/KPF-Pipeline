@@ -74,11 +74,7 @@ class Nightly_summaryAlg:
                 flatten_counts = np.ravel(counts)
                 if len(flatten_counts)<1: continue
                 master_flatten_counts='None'
-                if master_file != 'None':
-                    hdulist1 = fits.open(master_file)
-                    master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
-                    master_flatten_counts = np.ravel(master_counts)
-                    if version == 'Dark':#scale up dark exposures
+                    if master_list[i].find('dark'):#scale up dark exposures
                         master_flatten_counts*=hdr['EXPTIME']
 
                 #2D image
