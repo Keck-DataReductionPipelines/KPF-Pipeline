@@ -67,8 +67,7 @@ class Nightly_summaryAlg:
             for key, path in ccd_list:
                 ccd_color.append(path)
 
-            if master_list[i].find('flat'):
-                ccd_color=['GREEN_CCD_STACK','RED_CCD_STACK']
+
 
             if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
                 print('skipping empty file')
@@ -78,7 +77,8 @@ class Nightly_summaryAlg:
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
-
+                if master_list[i].find('flat'):
+                    counts = np.array(hdulist[ccd_color[i_color]+'_STACK'].data,'d')
                 if master_list[i].find('dark'):#scale up dark exposures
                     counts*=exptime
 
