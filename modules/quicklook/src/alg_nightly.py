@@ -34,6 +34,7 @@ class Nightly_summaryAlg:
         exposures_dir = self.config['Nightly']['exposures_dir']
         masters_dir = self.config['Nightly']['masters_dir']
         output_dir = self.config['Nightly']['output_dir']+'/'+night+'/nightly_summary'
+        master_master_date = self.config['Nightly']['master_master_date']
 
         if not os.path.exists(self.config['Nightly']['output_dir']+'/'+night):
             os.makedirs(self.config['Nightly']['output_dir']+'/'+night)
@@ -115,6 +116,27 @@ class Nightly_summaryAlg:
                 plt.legend(loc='lower right')
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
+                plt.close()
+
+
+                order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
+                order_trace = pd.read_csv(order_trace_file)
+                #print(order_trace_file,order_trace)
+                for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
+                    #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
+                    x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
+                    y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
+                    plt.plot(x_grid,y_grid,color ='magenta',linewidth = 0.2)
+                    plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],':',color ='white',linewidth = 0.2,alpha = 1)
+                    plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],'--',color ='black',linewidth = 0.2,alpha = 1)
+                    #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
+                    #print(x_grid,y_grid)
+                plt.xlim(3200,4000)
+                plt.ylim(3200,4000)
+                plt.title(ccd_color[i_color]+' Order Trace '+exposure_name, fontsize = 8)
+                #plt.title(ccd_color[i_color]+' '+version+' Order Trace ' +exposure_name)
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
+                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
                 plt.close()
 
 
