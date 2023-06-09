@@ -54,6 +54,7 @@ class Nightly_summaryAlg:
 
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
+            hdr = hdulist[0].header
             print(hdulist.info())
 
             #get ccd names
