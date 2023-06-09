@@ -47,13 +47,15 @@ class Nightly_summaryAlg:
 
         for i in range(len(master_list)):
             if master_list[i][-7:] == 'L1.fits' or master_list[i][-7:] == 'L2.fits': continue
-            print(master_list[i])
 
+            exposure_name = master_list[i][23:-5]
+            print(master_list[i],exposure_name)
 
+            '''
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
             print(hdulist.info())
-            '''
+
             #get ccd names
             ccd_color=[]
             ccd_list = self.config.items( "CCD_LIST")
@@ -218,7 +220,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-
+        
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
