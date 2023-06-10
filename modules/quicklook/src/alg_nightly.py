@@ -43,10 +43,10 @@ class Nightly_summaryAlg:
             os.makedirs(output_dir)
 
         #plot the master files for a particular night
-        master_list = glob.glob(masters_dir+night+'/*master_flat*.fits')
-        master_master_list = glob.glob(masters_dir+master_master_date+'/*master_flat*.fits')
+        master_list = glob.glob(masters_dir+night+'/*master*.fits')
+        master_master_list = glob.glob(masters_dir+master_master_date+'/*master*.fits')
         print(master_list)
-        print(masters_dir+master_master_date+'/*master_flat*.fits',master_master_list)
+        print(masters_dir+master_master_date+'/*master*.fits',master_master_list)
 
 
         for i in range(len(master_list)):
@@ -146,7 +146,7 @@ class Nightly_summaryAlg:
                 plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name)
+                plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name, fontsize =8)
                 plt.colorbar(label = 'Fractional Difference')
 
 
