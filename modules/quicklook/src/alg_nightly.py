@@ -88,6 +88,7 @@ class Nightly_summaryAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
 
                 if master_list[i].find('flat'):
+                    print('test',master_list[i].find('flat'))
                     counts = np.array(hdulist[ccd_color[i_color]+'_STACK'].data,'d')
                     master_counts = np.array(hdulist1[ccd_color[i_color]+'_STACK'].data,'d')
                 if master_list[i].find('dark'):#scale up dark exposures
