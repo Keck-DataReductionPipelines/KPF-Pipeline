@@ -90,7 +90,7 @@ class Nightly_summaryAlg:
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
                 print('',master_master_file)
-                print(hdulist1.info())
+                #print(hdulist1.info())
                 if master_master_file != 'None': master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
 
                 if master_list[i].find('flat')!=-1:
