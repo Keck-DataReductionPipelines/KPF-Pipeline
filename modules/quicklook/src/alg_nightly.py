@@ -135,6 +135,26 @@ class Nightly_summaryAlg:
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
                 plt.close()
 
+                plt.figure(figsize=(5,4))
+                plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
+                #pcrint(counts,master_counts)
+                counts_norm = np.percentile(counts,99)
+                master_counts_norm = np.percentile(master_counts,99)
+                if np.shape(counts)!=np.shape(master_counts): continue
+                difference = counts/counts_norm-master_counts/master_counts_norm
+
+                plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
+                plt.xlabel('x (pixel number)')
+                plt.ylabel('y (pixel number)')
+                plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name)
+                plt.colorbar(label = 'Fractional Difference')
+
+
+
+                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
+                #print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
+                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=1000)
+
                 #histogram
                 plt.close()
                 plt.figure(figsize=(5,4))
