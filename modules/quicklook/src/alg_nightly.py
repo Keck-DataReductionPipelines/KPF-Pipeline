@@ -59,6 +59,7 @@ class Nightly_summaryAlg:
             for j in range(len(master_master_list)):
                 #print(j,master_master_list[i])
                 if master_master_list[j][-7:] == 'L1.fits' or master_master_list[j][-7:] == 'L2.fits': continue
+                print('test j',master_master_list[j].find(version))
                 if master_master_list[j].find(version)!=-1:
                     hdulist1=fits.open(master_master_list[j])#identify master by the same type
 
@@ -88,7 +89,7 @@ class Nightly_summaryAlg:
                 master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
 
                 if master_list[i].find('flat')!=-1:
-                    print('test',master_list[i].find('flat')!=-1)
+
                     counts = np.array(hdulist[ccd_color[i_color]+'_STACK'].data,'d')
                     master_counts = np.array(hdulist1[ccd_color[i_color]+'_STACK'].data,'d')
                 if master_list[i].find('dark')!=-1:#scale up dark exposures
