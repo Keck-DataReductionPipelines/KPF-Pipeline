@@ -64,7 +64,7 @@ class Nightly_summaryAlg:
                 if master_master_list[j].find(version)!=-1:
                     master_master_file = master_master_list[j]
 
-            if master_master_file != 'None': hdulist1=fits.open(master_master_list[j])#identify master by the same type
+            if master_master_file != 'None': hdulist1=fits.open(master_master_file)#identify master by the same type
 
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
@@ -89,7 +89,7 @@ class Nightly_summaryAlg:
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
-                print(master_master_file)
+                print('',master_master_file)
                 print(hdulist1.info())
                 if master_master_file != 'None': master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
 
