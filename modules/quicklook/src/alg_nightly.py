@@ -60,7 +60,7 @@ class Nightly_summaryAlg:
             for j in range(len(master_master_list)):
                 #print(j,master_master_list[i])
                 if master_master_list[j][-7:] == 'L1.fits' or master_master_list[j][-7:] == 'L2.fits': continue
-                print('test j',version,master_master_list[j],master_master_list[j].find(version))
+                #print('test j',version,master_master_list[j],master_master_list[j].find(version))
                 if master_master_list[j].find(version)!=-1:
                     master_master_file = master_master_list[j]
 
@@ -84,11 +84,12 @@ class Nightly_summaryAlg:
             if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
                 print('skipping empty file')
                 return
-            print(ccd_color)
+            #print(ccd_color)
 
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
+                print(master_master_file)
                 if master_master_file != 'None': master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
 
                 if master_list[i].find('flat')!=-1:
