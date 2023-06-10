@@ -56,12 +56,15 @@ class Nightly_summaryAlg:
             version = master_list[i][35:-5]
             print(i,master_list[i],exposure_name,version)
 
+            master_master_file = 'None'
             for j in range(len(master_master_list)):
                 #print(j,master_master_list[i])
                 if master_master_list[j][-7:] == 'L1.fits' or master_master_list[j][-7:] == 'L2.fits': continue
                 print('test j',version,master_master_list[j],master_master_list[j].find(version))
                 if master_master_list[j].find(version)!=-1:
-                    hdulist1=fits.open(master_master_list[j])#identify master by the same type
+                    master_master_file = master_master_list[j]
+
+            if master_master_file != 'None': hdulist1=fits.open(master_master_list[j])#identify master by the same type
 
             L0_data = master_list[i]
             hdulist = fits.open(L0_data)
@@ -86,18 +89,18 @@ class Nightly_summaryAlg:
             #2d plots
             for i_color in range(len(ccd_color)):
                 counts = np.array(hdulist[ccd_color[i_color]].data,'d')
-                master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
+                if master_master_file != 'None': master_counts = np.array(hdulist1[ccd_color[i_color]].data,'d')
 
                 if master_list[i].find('flat')!=-1:
 
                     counts = np.array(hdulist[ccd_color[i_color]+'_STACK'].data,'d')
-                    master_counts = np.array(hdulist1[ccd_color[i_color]+'_STACK'].data,'d')
+                    if master_master_file != 'None': master_counts = np.array(hdulist1[ccd_color[i_color]+'_STACK'].data,'d')
                 if master_list[i].find('dark')!=-1:#scale up dark exposures
                     counts*=hdulist[0].header['EXPTIME']
-                    master_counts*=hdulist1[0].header['EXPTIME']
+                    if master_master_file != 'None':master_counts*=hdulist1[0].header['EXPTIME']
 
                 flatten_counts = np.ravel(counts)
-                master_flatten_counts = np.ravel(master_counts)
+                if master_master_file != 'None': master_flatten_counts = np.ravel(master_counts)
                 if len(flatten_counts)<1: continue
                 #master_flatten_counts='None'
 
@@ -137,25 +140,21 @@ class Nightly_summaryAlg:
                 plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
                 plt.close()
 
-                plt.figure(figsize=(5,4))
-                plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
-                #pcrint(counts,master_counts)
-                counts_norm = np.percentile(counts,99)
-                master_counts_norm = np.percentile(master_counts,99)
-                if np.shape(counts)!=np.shape(master_counts): continue
-                difference = counts/counts_norm-master_counts/master_counts_norm
+                if master_master_file != 'None':
+                    plt.figure(figsize=(5,4))
+                    plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
+                    #pcrint(counts,master_counts)
+                    counts_norm = np.percentile(counts,99)
+                    master_counts_norm = np.percentile(master_counts,99)
+                    if np.shape(counts)!=np.shape(master_counts): continue
+                    difference = counts/counts_norm-master_counts/master_counts_norm
 
-                plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
-                plt.xlabel('x (pixel number)')
-                plt.ylabel('y (pixel number)')
-                plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name, fontsize =8)
-                plt.colorbar(label = 'Fractional Difference')
-
-
-
-                #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
-                #print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
-                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=1000)
+                    plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
+                    plt.xlabel('x (pixel number)')
+                    plt.ylabel('y (pixel number)')
+                    plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name, fontsize =8)
+                    plt.colorbar(label = 'Fractional Difference')
+                    plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=1000)
 
                 #histogram
                 plt.close()
@@ -164,7 +163,8 @@ class Nightly_summaryAlg:
 
                 #print(np.percentile(flatten_counts,99.9),saturation_limit)
                 plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
-                if len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
+                if master_master_file != 'None':
+                    if len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
                 #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
                 plt.xlabel('Counts (e-)')
                 plt.ylabel('Number of Pixels')
