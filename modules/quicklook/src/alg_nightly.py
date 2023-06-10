@@ -54,10 +54,10 @@ class Nightly_summaryAlg:
 
             exposure_name = master_list[i][23:-5]
             version = master_list[i][35:-5]
-            #print(i,master_list[i],exposure_name,version,master_master_list)
+            print(i,master_list[i],exposure_name,version)
 
             for j in range(len(master_master_list)):
-                print(j,master_master_list[i])
+                #print(j,master_master_list[i])
                 if master_master_list[j][-7:] == 'L1.fits' or master_master_list[j][-7:] == 'L2.fits': continue
                 if master_master_list[j].find(version):
                     hdulist1=fits.open(master_master_list[j])#identify master by the same type
