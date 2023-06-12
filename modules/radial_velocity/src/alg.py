@@ -82,7 +82,8 @@ class RadialVelocityAlg(RadialVelocityBase):
     SEGMENT_W2 = 4
     SEGMENT_ORD = 5
     CCF_Methods = ['ccf_max', 'ccf_mean', 'ccf_static', 'ccf_steps']
-    vel_range_per_mask = {'lfc': 5.0, 'thar': 5.0, 'etalon': 5.0}
+    s_range = abs(RadialVelocityAlgInit.non_espresso_vel_range[0])/2.0
+    vel_range_per_mask = {'lfc': s_range, 'thar': s_range, 'etalon': s_range}
 
     map_fibers_mask = {'kpf':
                            {'sci': RadialVelocityAlgInit.KEY_SCI_OBJ,
@@ -114,6 +115,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         init_data = init_rv['data']
 
         RadialVelocityBase.__init__(self, config, logger)
+
+        # needs update per orderlet: spectrum_data, wave_cal, header, zb, orderletname, orderlet_mask_line
         self.spectrum_data = spectrum_data
         self.wave_cal = wave_cal
         self.header = header
@@ -160,12 +163,11 @@ class RadialVelocityAlg(RadialVelocityBase):
 
     @staticmethod
     def comp_velocity_span_pixel(init_data, config, instrument):
-        vel_span_pixel = None
         if init_data is not None:
             vel_span_pixel = init_data[RadialVelocityAlgInit.VEL_SPAN_PIXEL]
         else:
             vel_span_pixel = \
-                RadialVelocityAlg.get_config_value(config, instrument, RadialVelocityAlgInit.VEL_SPAN_PIXEL, 0.87)
+                RadialVelocityAlg.get_config_value(config, instrument, RadialVelocityAlgInit.VEL_SPAN_PIXEL, None)
         return vel_span_pixel
 
     @staticmethod
@@ -179,7 +181,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         val = None
         if config is not None:
             config_param = None
-            if instrument is not None and config.has_section(instrument):
+            if instrument is not None and config.has_section(instrument.upper()):
                 config_param = config[instrument.upper()]
             elif config.has_section('PARAM'):
                 config_param = config['PARAM']
@@ -201,6 +203,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.wave_cal = wave_cal
         self.header = header
         self.orderletname = orderlet
+        self.orderlet_mask_line = None
+        self.zb = None
         return
 
     def get_spectrum(self):
@@ -402,6 +406,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 or ('IMTYPE' in self.header and self.header['IMTYPE'].lower() != 'object'):
         # if self.init_data['mask_type'] in ['lfc', 'thar'] or \
             bc = 0.0
+            # self.d_print("bc: ", bc)
         elif self.bary_corr_table is not None and np.shape(self.bary_corr_table.values)[0] > ord_idx:
             bc = self.bary_corr_table['BARYVEL'][ord_idx + self.start_bary_index]
         else:
@@ -692,6 +697,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 self.orderlet_mask_line = self.mask_line
             else:
                 fiber_in_maskline = self.get_fiber_key_in_maskline()
+                # self.d_print("get mask line from ", fiber_in_maskline)
                 if fiber_in_maskline is not None:
                     self.orderlet_mask_line = self.mask_line[fiber_in_maskline]
 
@@ -1056,7 +1062,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             g_fit2 = None
 
-        if vel_span_pixel is not None and g_fit is not None:
+        if vel_span_pixel is not None and vel_span_pixel != 0.0 and g_fit is not None:
             if g_fit2 is None or math.isnan(g_fit.mean.value):
                 g_mean = rv_guess               # use the 1st guess if the 2nd fitting fails
                 f_wid = velocity_cut            # use the 1st vel range if the 2nd fitting fails
@@ -1073,11 +1079,11 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             return None, 0.0, None, None, 0.0
 
-    def compute_segments_ccf(self, ccf):
-        total_segments = np.shape(ccf)[0] - RadialVelocityAlg.ROWS_FOR_ANALYSIS
+    def compute_segments_ccf(self, ccf, analysis_rows=False, pixel_span=None):
+        total_segments = np.shape(ccf)[0] - RadialVelocityAlg.ROWS_FOR_ANALYSIS if analysis_rows else np.shape(ccf)[0]
         rv_segments = np.zeros(total_segments)
         erv_segments = np.zeros(total_segments)
-        v_span = self.get_vel_span_pixel()
+        v_span = pixel_span
         mask_type =  self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data)
         for i in range(total_segments):
             _, rv_segments[i], _, _, erv_segments[i] = self.fit_ccf(
@@ -1088,37 +1094,57 @@ class RadialVelocityAlg(RadialVelocityBase):
             )
         return rv_segments, erv_segments
 
-    def output_ccf_to_dataframe(self, ccf, ref_head=None, ervs=None, ref_ccf=None):
+    def output_ccf_to_dataframe(self, ccf, ref_head=None, original_ccf=None, ccf_rw_nonnorm=None, ref_ccf=None):
         """Convert cross correlation data to be in the form of Pandas DataFrame.
 
         Args:
-            ccf (numpy.ndarray): Result of cross correlation computation and analysis.
+            ccf (numpy.ndarray): Result of cross correlation computation and analysis, original or reweighted,
+                  used to compute rv.
             ref_head (fits.header.Header, optional): Reference fits header. Defaults to None.
+            original_ccf (numpy.ndarray): Original cross correlation result of all segments.
+                                          original_ccf has the same ccf for each segment as that from 'ccf',
+                                          if no reweighting is involved.
+            ccf_rw_nonnorm (numpy.ndarray): Reweighted non-normalized ccf, used to compute rv error instead of using
+                                          'ccf' if 'ccf' is the reweighted ccf.
+            ref_ccf (numpy.ndarray): reweight ratio.
 
         Returns:
             Pandas.DataFrame: Result of cross correlation in form of Pandas DataFrame and the resultant
             radial velocity is stored as the value of attribute `CCF-RVC`.
-            
+
+        Notes: if ref_ccf is not None, ccf_rw_nonnorm is set with non-normalized reweighted CCF too.
+
         """
 
         ccf_table = {}
         for i in range(self.velocity_steps):
             ccf_table['vel-'+str(i)] = ccf[:, i]
         results = pd.DataFrame(ccf_table)
-
-        # calculate rv on ccfs summation
+        # calculate final rv and final rv err on ccfs summation
+        # based on original ccf or reweighted cc,
         _, rv_result, _, _, rv_error = self.fit_ccf(
-            ccf[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
-            self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
-            rv_guess_on_ccf=(self.spectro == 'kpf'),
-            vel_span_pixel=self.get_vel_span_pixel())
+                ccf[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
+                self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
+                rv_guess_on_ccf=(self.spectro == 'kpf'),
+                vel_span_pixel=self.get_vel_span_pixel() if ref_ccf is None else None)
 
-        # compute rv and erv on each segment and overwrite erv which is computed before reweighting if needed
-        rv_segments, erv_segments = self.compute_segments_ccf(ccf)
-        if ervs is not None:
-            erv_segments = ervs
 
-        ratio_ccf = ref_ccf if ref_ccf is not None else None
+        if ref_ccf is not None and ccf_rw_nonnorm is not None:     # use original ccf to get rv error
+            _, _, _, _, rv_error = self.fit_ccf(
+                ccf_rw_nonnorm[-1, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
+                self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data),
+                rv_guess_on_ccf=(self.spectro == 'kpf'),
+                vel_span_pixel=self.get_vel_span_pixel()
+            )
+
+        # compute rv and erv on each segment
+        rv_segments, erv_segments = self.compute_segments_ccf(ccf, analysis_rows=True,
+                                                pixel_span=self.get_vel_span_pixel() if ref_ccf is None else None)
+        if ref_ccf is not None and ccf_rw_nonnorm is not None:
+            _, erv_segments = self.compute_segments_ccf(ccf_rw_nonnorm, analysis_rows=True,
+                                                        pixel_span=self.get_vel_span_pixel())
+
+        ratio_ccf = ref_ccf
         def f_decimal(num):
             return float("{:.10f}".format(num))
 
@@ -1138,20 +1164,22 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             results.attrs['CCFJDSUM'] = self.get_obs_time(seg=-1)   # exposure time from the header
             results.attrs['CCFJDSEG'] = self.obs_jd                 # an array for all segments
-            results.attrs['CCF-RVC'] = (f_decimal(rv_result), 'BaryC RV (km/s)')
+            results.attrs['CCF-RVC'] = (f_decimal(rv_result), 'BaryC RV (km/s)')    # rv based on CCF summation
             results.attrs['CCFSTART'] = self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP][0]
             results.attrs['CCFSTEP'] = self.rv_config[RadialVelocityAlgInit.STEP]
             results.attrs['TOTALSTP'] = self.velocity_steps
             results.attrs['STARTORD'] = self.start_order
             results.attrs['ENDORDER'] = self.end_order
             results.attrs['TOTALORD'] = self.end_order - self.start_order+1
-            results.attrs['BARY'] = self.zb * 1.0e-3  # from m/sec to km/sec, an array for all segments
+            results.attrs['BARY'] = self.zb * 1.0e-3               # from m/sec to km/sec, an array for all segments
             results.attrs['STARRV'] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][RadialVelocityAlgInit.STAR_RV]
-            results.attrs['CCF-ERV'] = f_decimal(rv_error)   # error on ccf summation
-            results.attrs['ERV_SEGMS'] = erv_segments
-            results.attrs['RV_SEGMS'] = rv_segments
-            results.attrs['RV_MEAN'] = self.weighted_rv(rv_segments, rv_segments.size, ratio_ccf)
-            results.attrs['ERV_MEAN'] = self.weighted_rv_error(erv_segments, erv_segments.size, ratio_ccf) # error on mean erv
+            results.attrs['CCF-ERV'] = f_decimal(rv_error)         # rv error on ccf summation
+            results.attrs['ERV_SEGMS'] = erv_segments              # erv for each order (segment)
+            results.attrs['RV_SEGMS'] = rv_segments                # rv for each segment
+            results.attrs['RV_MEAN'] = self.weighted_rv(rv_segments, rv_segments.size, ratio_ccf)    # weighted rv
+            results.attrs['ERV_MEAN'] = self.weighted_rv_error(erv_segments, erv_segments.size, ratio_ccf) # weighted rv error
+            results.attrs['ORI_CCF'] = original_ccf if ref_ccf is not None else None
+            results.attrs['CCF_NONNORM'] = ccf_rw_nonnorm if ccf_rw_nonnorm is not None else original_ccf
 
         return results
 
@@ -1228,16 +1256,25 @@ class RadialVelocityAlg(RadialVelocityBase):
             return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': msg}
 
         total_seg_rv = np.shape(ccf)[0] - self.ROWS_FOR_ANALYSIS
-        erv_segments = None
-        if ref_ccf is not None:
-            rv_segs, erv_segments = self.compute_segments_ccf(ccf)
-
-            ccf, _ = self.reweight_ccf(ccf[0:total_seg_rv, :], end_seg-start_seg+1, ref_ccf, self.reweighting_ccf_method,
-                                    s_seg=start_seg)
 
         analyzed_ccf = self.analyze_ccf(ccf)
+        analyzed_rw_ccf = None
+        analyzed_rw_ccf_nonnorm = None
 
-        df = self.output_ccf_to_dataframe(analyzed_ccf, ervs=erv_segments, ref_ccf=ref_ccf )
+        if ref_ccf is not None:
+            analyzed_rw_ccf, _ = self.reweight_ccf(ccf[0:total_seg_rv, :], end_seg-start_seg+1, ref_ccf,
+                                          self.reweighting_ccf_method,
+                                          s_seg=start_seg, do_analysis=True)
+
+            # note: it is made the same as analyzed_ccf, no reweighting.
+            analyzed_rw_ccf_nonnorm, _ = self.reweight_ccf(ccf[0:total_seg_rv, :], end_seg-start_seg+1, ref_ccf,
+                                          self.reweighting_ccf_method,
+                                          s_seg=start_seg, normalized=False, do_analysis=True)
+
+        df = self.output_ccf_to_dataframe((analyzed_ccf if analyzed_rw_ccf is None else analyzed_rw_ccf),
+                                          original_ccf=analyzed_ccf,
+                                          ccf_rw_nonnorm=analyzed_rw_ccf_nonnorm,
+                                          ref_ccf=ref_ccf)
         return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd}
 
     @staticmethod
@@ -1435,8 +1472,8 @@ class RadialVelocityAlg(RadialVelocityBase):
         return res
 
     @staticmethod
-    def reweight_ccf(crt_rv, total_segment, reweighting_table_or_ccf, reweighting_method, s_seg=0,
-                     do_analysis=False, velocities=None):
+    def reweight_ccf(crt_rv, total_segment, rw_table_or_ccf, reweighting_method, s_seg=0,
+                     do_analysis=False, velocities=None, normalized=True):
         """Reweighting ccf orders.
 
         Reweight the CCF ordres based on the given CCF ratios or CCF orders from the observation template.
@@ -1444,7 +1481,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         Args:
             crt_rv (numpy.ndarray): CCF orders.
             total_segment (int): Total segments for reweighting. It is in default from the first row of `crt_rv`.
-            reweighting_table_or_ccf (numpy.ndarray): Ratios among CCF orders or CCF data from the observation template.
+            rw_table_or_ccf (numpy.ndarray): Ratios among CCF orders or CCF data from the observation template.
             reweighting_method (str): Reweighting methods, **ccf_max**, **ccf_mean**, or **ccf_steps**.
             s_seg (int, optional): The start order index for reweighting. This is used to select the row from `crt_rv`
                 in case the order index column is included in `reweighting_table_or_ccf`. Defaults to 0.
@@ -1452,6 +1489,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                 :func:`~alg.RadialVelocityAlg.analysis_ccf()` dose on CCF orders. Defaults to False.
             velocities (np.ndarray, optional): 1D array consisting of the velocity loop for cross-correlation
                 computation. Used when `do_analysis` is **True**. Defaults to None.
+            normalized (bool): Do normalization or not for 'ccf_static' method.
 
          Returns:
              numpy.ndarray: 2D array containing Reweighted CCF orders and the velocity loop and the CCF summation
@@ -1464,18 +1502,21 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         # the order index of crt_rv and reweighting_table_or_ccf are aligned
 
-        if reweighting_table_or_ccf is None:
+        if rw_table_or_ccf is None:
             raise Exception("no valid data from observation template")
         if not reweighting_method or not RadialVelocityAlg.is_good_reweighting_method(reweighting_method):
             raise Exception("invalid reweighting method")
 
         ny, nx = np.shape(crt_rv)
 
+        reweighting_table_or_ccf = rw_table_or_ccf.copy()
         total_segment = min(total_segment, ny)
 
         if reweighting_method == 'ccf_max' or reweighting_method == 'ccf_mean' or reweighting_method == 'ccf_static':
             # if the ratio table containing a column of order index, using s_order to select the ratio with
             # order index from s_order to s_order+total_order-1
+            if not normalized:
+                reweighting_table_or_ccf[:, -1] = 1.0
             if np.shape(reweighting_table_or_ccf)[1] >= 2:
                 s_seg = 0 if s_seg is None else s_seg
                 e_seg = s_seg + total_segment - 1
@@ -1492,7 +1533,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             new_crt_rv = np.zeros([ny + RadialVelocityAlg.ROWS_FOR_ANALYSIS, nx])
 
             if reweighting_method == 'ccf_static':
-                ccf_sums = np.nansum(crt_rv, axis=1)     # summation along each order
+                ccf_sums = np.nansum(crt_rv, axis=1) if normalized else np.ones(total_segment)  # summation along each order
 
                 for idx in range(total_segment):
                     if ccf_sums[idx] > 0. and tval[idx] != 0.0:
