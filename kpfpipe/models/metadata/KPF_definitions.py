@@ -108,6 +108,9 @@ LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'GREEN_CCF': fits.ImageHDU,                     
                      'RED_CCF': fits.ImageHDU,
 
+                     'GREEN_CCF_RW': fits.ImageHDU,
+                     'RED_CCF_RW': fits.ImageHDU,
+
                      'RV': fits.BinTableHDU,
                      'ACTIVITY': fits.BinTableHDU}
 
