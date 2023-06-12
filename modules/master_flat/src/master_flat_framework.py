@@ -292,7 +292,7 @@ class MasterFlatFramework(KPF0_Primitive):
             stack_avg,stack_var,cnt,stack_unc = fs.compute()
 
             # Divide by the smoothed Flatlamp pattern.
-            # Nominal 2-D Gaussian blurring at sigma=2.0 to smooth pixel-to-pixel variations.
+            # Nominal 2-D Gaussian blurring with width sigma to remove the large scale structure in the flats.
             smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
             unnormalized_flat = stack_avg / smooth_lamp_pattern
             unnormalized_flat_unc = stack_unc / smooth_lamp_pattern

@@ -4,6 +4,9 @@ from astropy.stats import SigmaClip
 from photutils.background import Background2D, MedianBackground
 from modules.Utils.config_parser import ConfigHandler
 
+# https://astroscrappy.readthedocs.io/en/latest/api/astroscrappy.detect_cosmics.html
+from astroscrappy import detect_cosmics
+
 
 class ImageProcessingAlg():
     """
@@ -119,7 +122,7 @@ class ImageProcessingAlg():
             return
 
         for ffi in self.ffi_exts:
-            image_exptime = self.rawimage.header['PRIMARY']['EXPTIME']
+            image_exptime = float(self.rawimage.header['PRIMARY']['EXPTIME'])
             dark_exptime = 1.0   # master darks are already normalized
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]*(image_exptime/dark_exptime)
@@ -133,8 +136,6 @@ class ImageProcessingAlg():
     def cosmic_ray_masking(self, verbose=True):
         """Masks cosmic rays from input rawimage.
         """
-        # https://astroscrappy.readthedocs.io/en/latest/api/astroscrappy.detect_cosmics.html
-        from astroscrappy import detect_cosmics
 
         # Andrew quotes read noise of 3.5 electrons.
         # https://github.com/California-Planet-Search/KPF-Pipeline/issues/277
