@@ -2,7 +2,7 @@ from modules.quicklook.src.quick_prim import Quicklook
 
 path_to_twod = config.ARGUMENT.path_to_twod
 #lev0_files= path_to_twod + '*' + '.fits'
-lev0_files= path_to_twod + 'KP.20230528.52481.18_2D.fits'
+lev0_files= path_to_twod + 'KP.20230525.53471.19_2D.fits'
 
 output_dir = config.ARGUMENT.output_dir
 end_of_night_summary = False

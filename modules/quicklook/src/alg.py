@@ -827,7 +827,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux)[0]/n)):
                 low, high = np.nanpercentile(flux[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(-high*0.1, high*1.2)
+                ax[j].set_ylim(np.min(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
