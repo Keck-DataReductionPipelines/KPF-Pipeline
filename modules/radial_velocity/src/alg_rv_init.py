@@ -283,7 +283,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if default_mask not in mask_file_map:
                 return self.ret_status('default mask of ' + default_mask + ' is not defined')
 
-            self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
+            self.mask_path = stellar_dir + mask_file_map[default_mask][0]
             self.mask_type = default_mask
             self.mask_wavelengths = mask_file_map[default_mask][1]
             self.mask_orderlet[fobj] = {"obj": fiber_obj,
