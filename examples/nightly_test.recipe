@@ -1,4 +1,4 @@
 from modules.quicklook.src.nightly_prim import Nightly_summary
 
-night = config.ARGUMENT.night
+night = '20230606'
 Nightly_summary(night)
