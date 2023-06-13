@@ -30,7 +30,6 @@ mask_file_map = {
                  'lfc': ('kpf_lfc_mask_1025.mas', 'vac'),
                  'etalon': ('kpf_etalon_masks_11may2023.csv', 'vac')}
 
-
 class RadialVelocityAlgInit(RadialVelocityBase):
     """ Radial velocity Init.
 
@@ -116,6 +115,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     KEY_SCI_OBJ = 'SCI-OBJ'
     KEY_SKY_OBJ = 'SKY-OBJ'
     KEY_CAL_OBJ = 'CAL-OBJ'
+
+    non_espresso_vel_range = [-10, 10]
 
     def __init__(self, config=None, logger=None, l1_data=None, bc_time=None,  bc_period=380, bc_corr_path=None, bc_corr_output=None,
                 test_data=None):
@@ -251,7 +252,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if stellar_dir is None:
             return self.ret_status(self.STELLAR_DIR + not_defined)
 
-        for fobj in [RadialVelocityAlgInit.KEY_SKY_OBJ, RadialVelocityAlgInit.KEY_SCI_OBJ, RadialVelocityAlgInit.KEY_CAL_OBJ]:
+        sci_mask = None
+        for fobj in [RadialVelocityAlgInit.KEY_SCI_OBJ, RadialVelocityAlgInit.KEY_CAL_OBJ, RadialVelocityAlgInit.KEY_SKY_OBJ]:
             try:
                 fiber_obj = self.pheader[fobj]
             except KeyError:
@@ -283,6 +285,11 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if default_mask not in mask_file_map:
                 return self.ret_status('default mask of ' + default_mask + ' is not defined')
 
+            if fobj ==  RadialVelocityAlgInit.KEY_SCI_OBJ:
+                sci_mask = default_mask
+            if fobj == RadialVelocityAlgInit.KEY_SKY_OBJ and sci_mask is not None and 'espresso' in sci_mask.lower():
+                default_mask = 'G2_espresso'
+
             self.mask_path = stellar_dir + mask_file_map[default_mask][0]
             self.mask_type = default_mask
             self.mask_wavelengths = mask_file_map[default_mask][1]
@@ -290,6 +297,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                                         "mask_path": self.mask_path,
                                         "mask_type": self.mask_type,
                                         "mask_wavelengths": self.mask_wavelengths}
+
 
         self.d_print("RadialVelocityAlgInit: mask orderlet: ", self.mask_orderlet)
 
@@ -514,7 +522,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.reweighting_ccf_method = self.get_value_from_config(self.REWEIGHTING_CCF, default=default_method)
         return self.reweighting_ccf_method
 
-    def get_velocity_width_per_pixel(self, default=0.87):
+    def get_velocity_width_per_pixel(self, default=None):
         """Get velocity span per ccd pixel
         Args:
             default (float): default velocity span per pixel.
@@ -525,6 +533,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         """
         if self.vel_span_pixel is None:
             self.vel_span_pixel = self.get_value_from_config(self.VEL_SPAN_PIXEL, default=default)
+            if self.vel_span_pixel is not None:
+                self.vel_span_pixel = float(self.vel_span_pixel)
 
         return self.vel_span_pixel
 
@@ -539,7 +549,20 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
         """
         if self.STEP_RANGE not in self.rv_config:
-            self.rv_config[self.STEP_RANGE] = self.get_rv_config_value(self.STEP_RANGE, default=default)
+            srange = self.get_rv_config_value(self.STEP_RANGE, default=default)
+            if self.rv_config[self.START_VEL] is not None:
+                srange = [0, (srange[1]-srange[0])]
+                v_loop = np.array(srange) * self.rv_config[self.STEP] + self.rv_config[self.START_VEL]
+            else:
+                v_loop = np.array(srange) * self.rv_config[self.STEP] + self.rv_config[self.STAR_RV]
+            vel_range = self.non_espresso_vel_range
+            left_dis = vel_range[0] - v_loop[0]
+            right_dis = v_loop[-1] - vel_range[-1]
+            left_inc = int((-left_dis + 0.5) / self.rv_config[self.STEP]) if left_dis < 0 else 0
+            right_inc = int((-right_dis + 0.5) / self.rv_config[self.STEP]) if right_dis < 0 else 0
+            inc = max(left_inc, right_inc)
+            self.rv_config[self.STEP_RANGE] = [srange[0]-inc, srange[1]+inc]
+
         return self.rv_config[self.STEP_RANGE]
 
     def get_velocity_loop(self):
