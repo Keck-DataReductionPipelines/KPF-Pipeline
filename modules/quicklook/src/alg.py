@@ -862,7 +862,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux2)[0]/n)):
                 low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux2[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux2,[0.1,99.9])
 
@@ -897,7 +897,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux3)[0]/n)):
                 low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux3[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux3,[0.1,99.9])
 
@@ -932,7 +932,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux_cal)[0]/n)):
                 low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux_cal[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux_cal,[0.1,99.9])
 
@@ -967,7 +967,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux_sky)[0]/n)):
                 low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux_sky[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux_sky,[0.1,99.9])
 
