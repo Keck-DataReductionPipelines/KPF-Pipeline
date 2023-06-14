@@ -1,5 +1,5 @@
 from modules.quicklook.src.nightly_prim import Nightly_summary
 
-night_list = ['20230604']
+night_list = ['20230603']
 for night in night_list:
   Nightly_summary(night)
