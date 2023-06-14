@@ -170,9 +170,11 @@ create function getCalFile (
         infobits_        integer;
         startDate_       date;
         r_               record;
+        minnframes_      smallint;
 
     begin
 
+        minnframes_ := 5;
         caltype__ := lower(caltype_);
         object__ := lower(object_);
 
@@ -183,6 +185,7 @@ create function getCalFile (
         and level = level_
         and caltype = caltype__
         and object = object__
+        and ((nframes >= minnframes_) or (nframes is null))
         and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
         order by
           abs(cast(extract(days from (cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone))) as numeric)) asc,
@@ -230,9 +233,11 @@ create function getCalFile (
         startDate_       date;
         r_               record;
         negmaxage_       interval;
+        minnframes_      smallint;
 
     begin
 
+        minnframes_ := 5;
         caltype__ := lower(caltype_);
         object__ := lower(object_);
         negmaxage_ := cast((cast(maxage_ as text) || ' ago') as interval);
@@ -244,6 +249,7 @@ create function getCalFile (
         and level = level_
         and caltype = caltype__
         and object = object__
+        and ((nframes >= minnframes_) or (nframes is null))
         and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
         and cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone) <= maxage_
         and cast(obsDate_ as timestamp without time zone) - cast(startDate as timestamp without time zone) >= negmaxage_
