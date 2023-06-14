@@ -11,7 +11,7 @@ Welcome! This is the documentation for the KPF Data Reduction Pipeline.
    :maxdepth: 2
 
    intro/start.rst
+   data_exploration/start.rst
    develop/start.rst
    api/api.rst
    primitives/primitives.rst
-   data_exploration/start.rst
