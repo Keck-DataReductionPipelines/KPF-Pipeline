@@ -208,5 +208,7 @@ class Nightly_summaryAlg:
         plt.ylabel('Relative Humidity')
         #print(date_obs.jd,date_obs.utc)
         #plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
+        if not os.path.exists(output_dir+'/diagnostics/'):
+            os.makedirs(output_dir+'/diagnostics/')
         plt.savefig(output_dir+'/diagnostics/'+night+'_Relative_Humidity_variation.png')
         plt.close()
