@@ -55,7 +55,8 @@ class Nightly_summaryAlg:
             exposure_name = master_list[i][23:-5]
             version = master_list[i][36:-5]
             print(i,master_list[i],exposure_name,version)
-
+            if not os.path.exists(output_dir+'/'+version+'/'):
+                os.makedirs(output_dir+'/'+version+'/')
             master_master_file = 'None'
             for j in range(len(master_master_list)):
                 #print(j,master_master_list[i])
