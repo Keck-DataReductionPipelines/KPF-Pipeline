@@ -184,7 +184,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-        '''
+
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
@@ -207,6 +207,5 @@ class Nightly_summaryAlg:
         plt.ylabel('Relative Humidity')
         #print(date_obs.jd,date_obs.utc)
         #plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
-        plt.savefig(output_dir+'/'+'diagnostics/'+night+'_Relative_Humidity_variation.png')
+        plt.savefig(output_dir+'/diagnostics/'+night+'_Relative_Humidity_variation.png')
         plt.close()
-        '''
