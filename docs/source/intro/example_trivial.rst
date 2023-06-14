@@ -37,28 +37,27 @@ For more detail regarding the structure of KPF Pipeline configuration file, plea
 
 To run this pair of files, execute the following command::
 
-    kpf examples/simple.recipe examples/docs_simple.cfg 
+    kpf -r examples/simple.recipe -c examples/docs_simple.cfg 
 
 If everything runs smoothly, you should see the following
 printed to terminal::
 
-    2021-02-03 18:23:17:DRPF:INFO:
-    2021-02-03 18:23:17:DRPF:INFO: Initialization Framework cwd=<KPF-Pipeline directory>
-    [KPF-Pipe][INFO]:Logger started
+    [KPF-Pipe][INFO]:Pipeline logger started
     [KPF-Pipe][INFO]:Finished initializing Pipeline
-    2021-02-03 18:23:17:DRPF:INFO: Framework main loop started
-    [KPF-Pipe][INFO]:Module: subrecipe_depth = 0
-    [KPF-Pipe][INFO]:Added KPFModExample from modules.Trivial.KPFM_Trivial to event_table
-    [KPF-Pipe][INFO]:Queued KPFModExample with args "name": KPFModExample_args; awaiting return.
-    2021-02-03 18:23:17:DRPF:INFO: Event completed: name start_recipe, action start_recipe, arg name undef, recurr False
-    [KPF-Pipe][INFO]:exiting pipeline...
-    2021-02-03 18:23:17:DRPF:INFO: Event failed: name exit, action exit_loop, arg name undef, recurr False
+    [KPF-Pipe][INFO]:Pipeline logger started
+    [KPF-Pipe][INFO]:Pipeline logger started
+    [KPF-Pipe][INFO]:Finished initializing Pipeline
+    [KPF-Pipe][INFO]:Finished initializing Pipeline
+    [KPF-Pipe][INFO]:Starting new log with path: pipeline_20230613.log
+    [KPF-Pipe][INFO]:Starting new log with path: pipeline_20230613.log
+    [pipeline_20230613.log][INFO]:*************** Executing recipe examples/simple.recipe ***************
+    [pipeline_20230613.log][INFO]:Module: subrecipe_depth = 0
+    [pipeline_20230613.log][INFO]:Added KPFModExample from modules.Trivial.KPFM_Trivial to event_table
+    [pipeline_20230613.log][INFO]:Queued KPFModExample with args "name": KPFModExample_args; awaiting return.
     [KPFModExample] missing log configuration...not starting a new logger
     [KPFModExample] Performed!
-    2021-02-03 18:23:17:DRPF:INFO: Event failed: name KPFModExample, action KPFModExample, arg name KPFModExample_args, recurr False
-    [KPF-Pipe][INFO]:Module: subrecipe_depth = 0
-    2021-02-03 18:23:17:DRPF:INFO: Event completed: name resume_recipe, action resume_recipe, arg name KPFModExample_args, recurr False
-    2021-02-03 18:23:18:DRPF:INFO: No new events - do nothing
-    2021-02-03 18:23:18:DRPF:INFO: Exiting main loop
+    [pipeline_20230613.log][INFO]:Module: subrecipe_depth = 0
+    [pipeline_20230613.log][INFO]:Assign: result <- KPFModExample done, type: str
+    [pipeline_20230613.log][INFO]:exiting pipeline...
 
 Continue to :doc:`logging` for explanations on what these messages mean.
