@@ -1093,8 +1093,8 @@ class QuicklookAlg:
 
 
                 #print('step',step,len(vel_grid))
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
+                if i_color == 0: ccf_weights_file='/code/KPF-Pipeline/static/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/code/KPF-Pipeline/static/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
                 ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
                 #if i_color == 0: ccf_weights[12] = 0
@@ -1141,8 +1141,8 @@ class QuicklookAlg:
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
+                if i_color == 0: ccf_weights_file='/code/KPF-Pipeline/static/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/code/KPF-Pipeline/static/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
                 sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
                 ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
