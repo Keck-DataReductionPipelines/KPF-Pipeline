@@ -19,7 +19,7 @@ clean: clear
 
 notebook:
 	pip3 install jupyter
-	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 ""&
+	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 ""
 
 docker:
 	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
