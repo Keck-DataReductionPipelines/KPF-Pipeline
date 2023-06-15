@@ -5,7 +5,7 @@ from modules.spectral_extraction.src.spectral_extraction import SpectralExtracti
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
-from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
+from modules.src.radial_velocity_reweighting import RadialVelocityReweighting
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
 from modules.quicklook.src.quick_prim import Quicklook
 from modules.Utils.string_proc import str_replace
@@ -64,7 +64,7 @@ if context.watch:
 		lev0_file_path = str_replace(file_path, 'L0', '2D')
 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
-		do_order_trace = False
+		# do_order_trace = False
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
 	if '2D' in file_path:
@@ -180,7 +180,6 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 																					max_cal_file_age)
 
 			db_wls_exit_code = query_one_nearest_master_file_list[0]
-
 			if db_wls_exit_code == 0:
 
 				db_wls_rec = query_one_nearest_master_file_list[1]
@@ -193,7 +192,6 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 				for wls in wls_list:
 					wave_fits = wave_fits + [output_dir + db_wls_master_file]
 
-				
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
 
@@ -257,6 +255,7 @@ bc_path = output_dir + config.ARGUMENT.output_barycorr
 lev2_pattern = output_rv + '*' + lev2_stem_suffix + fits_ext
 
 reweighting_method = config.ARGUMENT.reweighting_method
+reweighting_masks = config.ARGUMENT.reweighting_enable_masks
 data_ext_rv = config.ARGUMENT.orderlet_names_rv
 ccf_ext_names = config.ARGUMENT.ccf_ext
 rv_ext = config.ARGUMENT.rv_ext
@@ -313,8 +312,13 @@ end_of_night_summary = False
 #    OrderTrace: order trace
 #    OrderRectification: order trace rectification
 
-ll0 = lev0_flat_pattern
-input_flat_file = find_files(lev0_flat_pattern)[0]
+if "*" in lev0_flat_pattern:
+	# for masters we need to add the date_dir part in the recipe because the config
+	# doesn't know about date_dir
+	ll0 = output_dir + date_dir + lev0_flat_pattern
+else:
+	ll0 = lev0_flat_pattern
+input_flat_file = find_files(ll0)[0]
 _, short_flat_file = split(input_flat_file)
 flat_stem, flat_ext = splitext(short_flat_file)
 
@@ -572,7 +576,6 @@ if do_spectral_extraction or do_hk or do_bc:
 #    RadialVelocityInit: do rv init on each L1 input.
 #    RadialVelocity: do radial velocity per ccd per L1 data.
 #
-rv_test = do_rv or do_rv_reweighting
 if do_rv or do_rv_reweighting:
 	rv_star_dir = masters_data_dir
 
@@ -593,7 +596,7 @@ if do_rv or do_rv_reweighting:
 	ratio_refs = []
 	if 'static' in reweighting_method and do_rv_reweighting:
 		for idx in ccd_idx:
-			ccf_ratio_file = output_dir + static_ccf_ratio[idx]
+			ccf_ratio_file = static_ccf_ratio[idx]
 			t_segment = area_def[idx][1] -  area_def[idx][0] + 1
 			ratio_ref = RadialVelocityReweightingRef(None, reweighting_method,
 							t_segment, cf_hdu_name=ccf_ext_names[idx],
@@ -616,15 +619,17 @@ if do_rv or do_rv_reweighting:
 			if rv_init != None:
 				for idx in ccd_idx:
 					ratio_ref = None
+					rw_mask = None
 					# rewighting if the reweighted L2 at the same directory as unweighted L2.
-					if ratio_refs and output_rv == output_rv_rw:
+					if ratio_refs and output_rv == output_rv_rw and do_rv_reweighting:
 						ratio_ref = ratio_refs[idx]
-
+						rw_mask = reweighting_masks[idx]
 					rv_data = RadialVelocity(lev1_data, rv_init, rv_data,
 						data_ext_rv[idx], ccf_ext=ccf_ext_names[idx], rv_ext=rv_ext,
 						area_def=area_def[idx], start_seg=area_def[idx][0], end_seg=area_def[idx][1],
 						rv_set=idx, ccf_engine='c', start_bary_index=s_bary_idx[idx], rv_correction_by_cal=is_rv_cal,
-						reweighting_method=reweighting_method, input_ref=ratio_ref)
+						reweighting_method=reweighting_method,
+						input_ref=ratio_ref, reweighting_masks=rw_mask )
 				if rv_data != None:
 					result = to_fits(rv_data, output_lev2_file)
 
@@ -647,14 +652,17 @@ if do_rv or do_rv_reweighting:
 				reweighted_output = output_rv_rw + short_lev2
 				for idx in ccd_idx:
 					ratio_ref = None
+					rw_mask = None
 					if ratio_refs:
 						ratio_ref = ratio_refs[idx]
+						rw_mask = reweighting_masks[idx]
 
 					if ratio_ref is not None:
 						t_segment = area_def[idx][1] -  area_def[idx][0] + 1
 						lev2_rv = RadialVelocityReweighting(lev2_rv, reweighting_method, ratio_ref,
 								t_segment, ccf_ext=ccf_ext_names[idx],
-								rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=area_def[idx][0])
+								rv_ext=rv_ext,  rv_ext_idx=idx, ccf_start_index=area_def[idx][0],
+								reweighting_masks=rw_mask)
 				if lev2_rv is not None:
 					result = to_fits(lev2_rv, reweighted_output)
 
