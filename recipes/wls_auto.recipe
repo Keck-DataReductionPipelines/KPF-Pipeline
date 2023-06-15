@@ -63,5 +63,7 @@ for cal_type in ['ThAr', 'LFC']:
             output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
 
             result = to_fits(wave_soln, output_filename)
+            if cal_type == 'Thar':
+                master_wls_file = output_filename
 
 Nightly_summary(date_dir)
