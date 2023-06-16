@@ -120,7 +120,7 @@ class Nightly_summaryAlg:
 
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
                 #print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
-                plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+                plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=500)
                 #plt.close()
 
                 order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
@@ -157,7 +157,7 @@ class Nightly_summaryAlg:
                     plt.ylabel('y (pixel number)')
                     plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name, fontsize =8)
                     plt.colorbar(label = 'Fractional Difference')
-                    plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=1000)
+                    plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=500)
 
                 #histogram
                 plt.close()
