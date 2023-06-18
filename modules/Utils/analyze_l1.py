@@ -167,10 +167,6 @@ class AnalyzeL1:
             (e.g., in a Jupyter Notebook).
 
         """
-
-        if fig_path == None:
-            print("No output path specified in argument 'fig_path'.")
-        else:
         
         # Make 3-panel plot. First, create the figure and subplots
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,14))
