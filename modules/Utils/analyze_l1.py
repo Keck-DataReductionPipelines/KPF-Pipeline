@@ -8,7 +8,7 @@ class AnalyzeL1:
         as attributes) and functions to plot the results.
 
     Arguments:
-        L0 - an L0 object
+        L1 - an L1 object
 
     Attributes:
         GREEN_SNR (from compute_l1_snr): Two-dimensional array of 
