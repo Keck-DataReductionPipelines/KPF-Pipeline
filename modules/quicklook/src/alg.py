@@ -764,9 +764,9 @@ class QuicklookAlg:
             '''
 
             #l1 SNR
-            
+
             my_L1 = AnalyzeL1(hdulist)
-            my_L1.measure_L1_snr(snr_percentile=95)
+            #my_L1.measure_L1_snr(snr_percentile=95)
             my_L1.plot_L1_snr(fig_path=output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_snr.png')
             plt.close()
 
