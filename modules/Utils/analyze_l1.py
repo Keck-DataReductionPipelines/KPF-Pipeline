@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 class AnalyzeL1:
 
@@ -8,7 +9,7 @@ class AnalyzeL1:
         as attributes) and functions to plot the results.
 
     Arguments:
-        L1 - an L1 object
+        L0 - an L0 object
 
     Attributes:
         GREEN_SNR (from compute_l1_snr): Two-dimensional array of 
@@ -34,7 +35,7 @@ class AnalyzeL1:
             self.logger = None
             print('---->AnalyzeL0 class constructor')
 
-    def measure_L1_snr(self, percentile=95):
+    def measure_L1_snr(self, snr_percentile=95):
 
         """
         Compute the signal-to-noise ratio (SNR) for each spectral order and 
@@ -42,7 +43,7 @@ class AnalyzeL1:
         SNR is defined as signal / sqrt(abs(variance)) and can be negative.
 
         Args:
-            percentile: percentile in the SNR distribution for each combination of 
+            snr_percentile: snr_percentile in the SNR distribution for each combination of 
                 order and orderlet 
 
         Attributes:
@@ -61,6 +62,8 @@ class AnalyzeL1:
         Returns:
             None
         """
+        
+        self.snr_percentile = snr_percentile
 
         # Determine the number of orders
         norders_green = (L1['GREEN_SKY_WAVE'].data).shape[0]
@@ -129,20 +132,20 @@ class AnalyzeL1:
         # Compute SNR per order and per orderlet
         for o in range(norders_green):
             GREEN_SNR_WAV[o] = L1['GREEN_SCI_WAVE1'].data[o,2040]
-            GREEN_SNR[o,0] = np.percentile(GREEN_CAL_SNR[o], percentile)
-            GREEN_SNR[o,1] = np.percentile(GREEN_SCI_SNR1[o], percentile)
-            GREEN_SNR[o,2] = np.percentile(GREEN_SCI_SNR2[o], percentile)
-            GREEN_SNR[o,3] = np.percentile(GREEN_SCI_SNR3[o], percentile)
-            GREEN_SNR[o,4] = np.percentile(GREEN_SKY_SNR[o], percentile)
-            GREEN_SNR[o,5] = np.percentile(GREEN_SCI_SNR[o], percentile)
+            GREEN_SNR[o,0] = np.percentile(GREEN_CAL_SNR[o], snr_percentile)
+            GREEN_SNR[o,1] = np.percentile(GREEN_SCI_SNR1[o], snr_percentile)
+            GREEN_SNR[o,2] = np.percentile(GREEN_SCI_SNR2[o], snr_percentile)
+            GREEN_SNR[o,3] = np.percentile(GREEN_SCI_SNR3[o], snr_percentile)
+            GREEN_SNR[o,4] = np.percentile(GREEN_SKY_SNR[o], snr_percentile)
+            GREEN_SNR[o,5] = np.percentile(GREEN_SCI_SNR[o], snr_percentile)
         for o in range(norders_red):
             RED_SNR_WAV[o] = L1['RED_SCI_WAVE1'].data[o,2040]
-            RED_SNR[o,0] = np.percentile(RED_CAL_SNR[o], percentile)
-            RED_SNR[o,1] = np.percentile(RED_SCI_SNR1[o], percentile)
-            RED_SNR[o,2] = np.percentile(RED_SCI_SNR2[o], percentile)
-            RED_SNR[o,3] = np.percentile(RED_SCI_SNR3[o], percentile)
-            RED_SNR[o,4] = np.percentile(RED_SKY_SNR[o], percentile)
-            RED_SNR[o,5] = np.percentile(RED_SCI_SNR[o], percentile)
+            RED_SNR[o,0] = np.percentile(RED_CAL_SNR[o], snr_percentile)
+            RED_SNR[o,1] = np.percentile(RED_SCI_SNR1[o], snr_percentile)
+            RED_SNR[o,2] = np.percentile(RED_SCI_SNR2[o], snr_percentile)
+            RED_SNR[o,3] = np.percentile(RED_SCI_SNR3[o], snr_percentile)
+            RED_SNR[o,4] = np.percentile(RED_SKY_SNR[o], snr_percentile)
+            RED_SNR[o,5] = np.percentile(RED_SCI_SNR[o], snr_percentile)
 
         # Save SNR arrays to the object
         self.GREEN_SNR = GREEN_SNR
@@ -193,7 +196,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(ObsID + ' - ' + r'$\mathrm{SNR}_{'+str(percentile)+'}$ = '+str(percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
+        ax1.set_title(ObsID + ' - ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
         ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
         ax1.set_ylabel('SNR - SCI', fontsize=14)
         ax2.set_ylabel('SNR - SKY', fontsize=14)
