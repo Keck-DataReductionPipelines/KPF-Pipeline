@@ -153,7 +153,7 @@ class AnalyzeL1:
         self.GREEN_SNR_WAV = GREEN_SNR_WAV
         self.RED_SNR_WAV   = RED_SNR_WAV
 
-    def plot_L1_snr(self,L1, fig_path=None, show_plot=False):
+    def plot_L1_snr(self,L1,ObsID, fig_path=None, show_plot=False):
 
         """
 
