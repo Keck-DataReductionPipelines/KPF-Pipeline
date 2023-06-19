@@ -3,7 +3,7 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
-from modules.Utils.analyze_l1 import *
+from modules.Utils.analyze_l1 import AnalyzeL1
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 import os
