@@ -304,7 +304,7 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                                 rv=None,
                                 #rv=obs_config[BarycentricCorrectionAlg.RV]
                                 )
-            
+            return -bc_obj[0][0]
         else:
             bc_obj = get_BC_vel(JDUTC=jd,
                             ra=obs_config[BarycentricCorrectionAlg.RA],
@@ -317,5 +317,4 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             longi=obs_config[BarycentricCorrectionAlg.LON],
                             alt=obs_config[BarycentricCorrectionAlg.ALT],
                             rv=obs_config[BarycentricCorrectionAlg.RV])
-
-        return bc_obj[0][0]
+            return bc_obj[0][0]

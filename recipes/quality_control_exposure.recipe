@@ -1,0 +1,18 @@
+from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
+
+data_type = config.ARGUMENT.data_type
+lev0_fits_file_glob = config.ARGUMENT.lev0_fits_file_glob
+lev0_ffi_exts = config.ARGUMENT.lev0_ffi_exts
+actual_dir = config.ARGUMENT.actual_dir
+
+do_quality_control = True
+
+if do_quality_control:
+
+    for l0_filename in find_files(lev0_fits_file_glob):
+
+        quality_control_exit_code = QualityControlExposureFramework(data_type,
+                                                                    l0_filename,
+                                                                    lev0_ffi_exts,
+                                                                    actual_dir)
+

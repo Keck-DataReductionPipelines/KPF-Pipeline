@@ -290,7 +290,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if fobj == RadialVelocityAlgInit.KEY_SKY_OBJ and sci_mask is not None and 'espresso' in sci_mask.lower():
                 default_mask = 'G2_espresso'
 
-            self.mask_path = self.test_data_dir + stellar_dir + mask_file_map[default_mask][0]
+            self.mask_path = stellar_dir + mask_file_map[default_mask][0]
             self.mask_type = default_mask
             self.mask_wavelengths = mask_file_map[default_mask][1]
             self.mask_orderlet[fobj] = {"obj": fiber_obj,
