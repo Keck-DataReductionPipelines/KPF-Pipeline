@@ -53,9 +53,10 @@ class Nightly_summaryAlg:
             if master_list[i][-7:] == 'L1.fits' or master_list[i][-7:] == 'L2.fits': continue
 
             exposure_name = master_list[i][23:-5]
-            version = master_list[i][35:-5]
+            version = master_list[i][36:-5]
             print(i,master_list[i],exposure_name,version)
-
+            if not os.path.exists(output_dir+'/'+version+'/'):
+                os.makedirs(output_dir+'/'+version+'/')
             master_master_file = 'None'
             for j in range(len(master_master_list)):
                 #print(j,master_master_list[i])
@@ -119,7 +120,7 @@ class Nightly_summaryAlg:
 
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
                 #print(output_dir+'/'+exposure_name+ccd_color[i_color]+'_zoomable.png')
-                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+                plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_zoomable.png', dpi=500)
                 #plt.close()
 
                 order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
@@ -139,7 +140,7 @@ class Nightly_summaryAlg:
                 plt.title(ccd_color[i_color]+' Order Trace '+exposure_name, fontsize = 8)
                 #plt.title(ccd_color[i_color]+' '+version+' Order Trace ' +exposure_name)
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
+                plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_order_trace.png', dpi=300)
                 plt.close()
 
                 if master_master_file != 'None':
@@ -156,7 +157,7 @@ class Nightly_summaryAlg:
                     plt.ylabel('y (pixel number)')
                     plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name, fontsize =8)
                     plt.colorbar(label = 'Fractional Difference')
-                    plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=1000)
+                    plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_2D_Difference_zoomable.png', dpi=500)
 
                 #histogram
                 plt.close()
@@ -174,9 +175,10 @@ class Nightly_summaryAlg:
                 plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 8)
                 plt.legend(loc='lower right')
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
+                plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
                 plt.close()
-
+                hdulist.close()
+                if master_master_file != 'None':hdulist1.close()
 
 
 
@@ -184,7 +186,7 @@ class Nightly_summaryAlg:
 
 
         #get all exposures taken on a particular night
-        '''
+
         file_list = glob.glob(exposures_dir+night+'/*.fits')
         date_obs = []
         temp = []
@@ -207,6 +209,8 @@ class Nightly_summaryAlg:
         plt.ylabel('Relative Humidity')
         #print(date_obs.jd,date_obs.utc)
         #plt.xlim(np.min(date_obs.jd),np.max(date_obs.jd))
-        plt.savefig(output_dir+'/'+night+'_Relative_Humidity_variation.png')
+        if not os.path.exists(output_dir+'/diagnostics/'):
+            os.makedirs(output_dir+'/diagnostics/')
+        plt.savefig(output_dir+'/diagnostics/'+night+'_Relative_Humidity_variation.png')
         plt.close()
-        '''
+        plt.close('all')
