@@ -5,7 +5,7 @@ from modules.spectral_extraction.src.spectral_extraction import SpectralExtracti
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
-from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
+from modules.src.radial_velocity_reweighting import RadialVelocityReweighting
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
 from modules.quicklook.src.quick_prim import Quicklook
 from modules.Utils.string_proc import str_replace
@@ -64,7 +64,7 @@ if context.watch:
 		lev0_file_path = str_replace(file_path, 'L0', '2D')
 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
-		do_order_trace = False
+		# do_order_trace = False
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
 	if '2D' in file_path:
@@ -596,7 +596,7 @@ if do_rv or do_rv_reweighting:
 	ratio_refs = []
 	if 'static' in reweighting_method and do_rv_reweighting:
 		for idx in ccd_idx:
-			ccf_ratio_file = output_dir + static_ccf_ratio[idx]
+			ccf_ratio_file = static_ccf_ratio[idx]
 			t_segment = area_def[idx][1] -  area_def[idx][0] + 1
 			ratio_ref = RadialVelocityReweightingRef(None, reweighting_method,
 							t_segment, cf_hdu_name=ccf_ext_names[idx],
