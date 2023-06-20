@@ -173,11 +173,11 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 	for cal_type_pair in cal_type_pairs:
 		if db_wls_exit_code != 0:
 			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-																					date_dir_db_query,
-																					cal_file_level,
-																					contentbitmask,
-																					cal_type_pair,
-																					max_cal_file_age)
+                                                                                                  date_dir_db_query,
+                                                                                                  cal_file_level,
+                                                                                                  contentbitmask,
+                                                                                                  cal_type_pair,
+                                                                                                  max_cal_file_age)
 
 			db_wls_exit_code = query_one_nearest_master_file_list[0]
 			if db_wls_exit_code == 0:
@@ -186,11 +186,10 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 				db_wls_master_file = db_wls_rec[6]
 				wave_fits = []
 				for wls in wls_list:
-					wave_fits = wave_fits + [output_dir + db_wls_master_file]
-
-				wave_fits = []
-				for wls in wls_list:
-					wave_fits = wave_fits + [output_dir + db_wls_master_file]
+                                    # Remove /masters from path returned from QueryDBOneNearestMasterFileFramework
+                                    # since it is already included in output_dir.
+                                    modified_file_path = str_replace(db_wls_master_file, '/masters', '')
+                                    wave_fits = wave_fits + [output_dir + modified_file_path]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
