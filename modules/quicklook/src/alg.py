@@ -3,6 +3,7 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.analyze_l1 import AnalyzeL1
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 import os
@@ -761,6 +762,13 @@ class QuicklookAlg:
                 wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
                 hdulist1.close()
             '''
+
+            #l1 SNR
+
+            L1_SNR = AnalyzeL1(hdulist)
+            L1_SNR.measure_L1_snr(hdulist,snr_percentile=95)
+            L1_SNR.plot_L1_snr(hdulist,exposure_name,fig_path=output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_snr.png')
+            plt.close()
 
             #print(hdulist1.info())
 
