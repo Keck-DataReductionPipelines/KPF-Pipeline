@@ -30,6 +30,7 @@ class L1_SNR(KPF1_Primitive):
 
         #input recipe arguments
         self.l1_obj=self.action.args[0]
+        self.data_dir=self.action.args[1]
         # self.data_type=self.action.args[1]
 
         #Input configuration
@@ -52,7 +53,7 @@ class L1_SNR(KPF1_Primitive):
 
     #Perform
     def _perform(self) -> None:
-        L1_file = fits.open(self.l1_obj.filename)
+        L1_file = fits.open(self.data_dir+self.l1_obj.filename)
 
         L1_SNR = AnalyzeL1(L1_file)
         L1_SNR.measure_L1_snr(L1_file,snr_percentile=95)
