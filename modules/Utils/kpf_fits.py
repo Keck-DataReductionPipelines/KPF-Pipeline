@@ -310,3 +310,57 @@ class FitsHeaders:
                 format(matched_fits_files))
 
         return matched_fits_files,all_arclamp_objects
+
+    def get_good_biases(self):
+
+        """
+        Return list of bias files defined by IMTYPE=‘bias’ and OBJECT='autocal-bias', but include only those
+        with EXPTIME less than or equal to the specified maximum exposure time.
+        """
+
+        exptime_maximum = 0.0
+
+        matched_fits_files = self.match_headers_string_lower()
+
+        filtered_matched_fits_files = []
+        for fits_file in matched_fits_files:
+
+            flag = 'remove'
+
+            try:
+
+                val4 = float(fits.getval(fits_file, 'EXPTIME'))
+
+                if (val4 <= exptime_maximum):
+                    flag = 'keep'
+                    filtered_matched_fits_files.append(fits_file)
+
+                if self.logger:
+                    self.logger.debug('flag,val4 = {},{}'.\
+                        format(flag,val4))
+                else:
+                    print('---->flag,val4 = {},{}'.\
+                        format(flag,val4))
+
+            except KeyError as err:
+
+                if self.logger:
+                    self.logger.debug('KeyError: {}; removing {} from list...'.format(err,fits_file))
+                else:
+                    print('---->KeyError: {}; removing {} from list...'.format(err,fits_file))
+
+            except TypeError as err:
+
+                if self.logger:
+                    self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
+                else:
+                    print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
+
+        if self.logger:
+             self.logger.debug('FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
+                   format(filtered_matched_fits_files))
+        else:
+            print('---->FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
+                format(filtered_matched_fits_files))
+
+        return filtered_matched_fits_files

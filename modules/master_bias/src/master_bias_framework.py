@@ -36,8 +36,8 @@ class MasterBiasFramework(KPF0_Primitive):
         all_fits_files_path (str , which can include file glob): Location of inputs (e.g., /data/KP*.fits).
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
         masterbias_path (str): Pathname of output master bias (e.g., /testdata/kpf_green_red_bias.fits).
-        exptime_keyword (str): FITS keyword for filtering input bias files (fixed as 'EXPTIME').
-        exptime__value_str (str): Maximum value of FITS keyword (fixed as <= '0.0').
+        imtype_keywords (str): FITS keyword for filtering input bias files (fixed as ['IMTYPE','OBJECT']).
+        imtype_values_str (str): Values of FITS keyword (fixed as ['Bias','autocal-bias']).
         config_path (str): Location of default config file (modules/master_bias/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
     """
@@ -52,8 +52,8 @@ class MasterBiasFramework(KPF0_Primitive):
         self.lev0_ffi_exts = self.action.args[3]
         self.masterbias_path = self.action.args[4]
 
-        self.exptime_keyword = 'EXPTIME'   # Unlikely to be changed.
-        self.exptime_value_str = '0.0'
+        self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
+        self.imtype_values_str = ['Bias','autocal-bias']
 
         try:
             self.config_path = context.config_path['master_bias']
@@ -85,8 +85,8 @@ class MasterBiasFramework(KPF0_Primitive):
         master_bias_exit_code = 0
         master_bias_infobits = 0
 
-        fh = FitsHeaders(self.all_fits_files_path,self.exptime_keyword,self.exptime_value_str,self.logger)
-        all_bias_files = fh.match_headers_float_le()
+        fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
+        all_bias_files = fh.get_good_biases()
 
         mjd_obs_list = []
         for bias_file_path in (all_bias_files):
