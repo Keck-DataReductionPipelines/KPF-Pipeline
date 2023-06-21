@@ -29,7 +29,7 @@ class L1_SNR(KPF1_Primitive):
         KPF1_Primitive.__init__(self,action,context)
 
         #input recipe arguments
-        self.l1_obj=fits.open(self.action.args[0])
+        self.l1_obj=self.action.args[0]
         # self.data_type=self.action.args[1]
 
         #Input configuration
@@ -52,8 +52,9 @@ class L1_SNR(KPF1_Primitive):
 
     #Perform
     def _perform(self) -> None:
-        AnalyzeL1
+        L1_file = fits.open(kpf0_file.filename)
 
-        L1_SNR = AnalyzeL1(self.l1_obj)
-        L1_SNR.measure_L1_snr(self.l1_obj,snr_percentile=95)
-        return L1_SNR.GREEN_SNR,L1_SNR.RED_SNR #(orders number, orderlet number)
+        L1_SNR = AnalyzeL1(L1_file)
+        L1_SNR.measure_L1_snr(L1_file,snr_percentile=95)
+        print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
+        print(L1_SNR.RED_SNR)
