@@ -29,7 +29,7 @@ class L1_SNR(KPF1_Primitive):
         KPF1_Primitive.__init__(self,action,context)
 
         #input recipe arguments
-        self.l1_obj=self.action.args[0]
+        self.l1_obj=fits.open(self.action.args[0])
         # self.data_type=self.action.args[1]
 
         #Input configuration
