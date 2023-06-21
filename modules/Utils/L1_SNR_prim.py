@@ -56,5 +56,4 @@ class L1_SNR(KPF1_Primitive):
 
         L1_SNR = AnalyzeL1(self.l1_obj)
         L1_SNR.measure_L1_snr(self.l1_obj,snr_percentile=95)
-        print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
-        print(L1_SNR.RED_SNR)
+        return L1_SNR.GREEN_SNR,L1_SNR.RED_SNR #(orders number, orderlet number)
