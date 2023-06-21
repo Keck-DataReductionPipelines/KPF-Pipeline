@@ -52,7 +52,7 @@ class L1_SNR(KPF1_Primitive):
 
     #Perform
     def _perform(self) -> None:
-        L1_file = fits.open(kpf0_file.filename)
+        L1_file = fits.open(self.l1_obj.filename)
 
         L1_SNR = AnalyzeL1(L1_file)
         L1_SNR.measure_L1_snr(L1_file,snr_percentile=95)
