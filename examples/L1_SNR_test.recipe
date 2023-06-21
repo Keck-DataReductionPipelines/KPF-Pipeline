@@ -1,7 +1,7 @@
 from modules.Utils.L1_SNR_prim import L1_SNR
 
 
-path_to_oned = config.ARGUMENT.path_to_twod
+path_to_oned = config.ARGUMENT.path_to_oned
 
 lev1_file= path_to_oned + 'KP.20230525.53471.19_L1.fits'
 
