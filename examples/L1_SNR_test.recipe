@@ -1,0 +1,5 @@
+from modules.Utils.L1_SNR_prim import L1_SNR
+
+lev1_file= 'data/kpf/L1/20230525/KP.20230525.53471.19_L1.fits'
+open_file = kpf1_from_fits(lev1_file,data_type='KPF')
+L1_SNR(open_file)
