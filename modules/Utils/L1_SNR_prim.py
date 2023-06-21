@@ -57,5 +57,19 @@ class L1_SNR(KPF1_Primitive):
 
         L1_SNR = AnalyzeL1(L1_file)
         L1_SNR.measure_L1_snr(L1_file,snr_percentile=95)
-        print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
-        print(L1_SNR.RED_SNR)
+        #print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
+        print(L1_SNR.GREEN_SNR[1,-1]) #all science
+        print(L1_SNR.GREEN_SNR[1,-2]) #sky
+        print(L1_SNR.GREEN_SNR[1,0]) #cal
+        print(L1_SNR.GREEN_SNR[25,-1]) #all science
+        print(L1_SNR.GREEN_SNR[25,-2]) #sky
+        print(L1_SNR.GREEN_SNR[25,0]) #cal”
+
+        #print(L1_SNR.G_SNR) #(orders number, orderlet number)
+        print(L1_SNR.GREEN_SNR[20,-1]) #all science
+        print(L1_SNR.GREEN_SNR[20,-2]) #sky
+        print(L1_SNR.GREEN_SNR[20,0]) #cal
+        print(L1_SNR.GREEN_SNR[-1,-1]) #all science
+        print(L1_SNR.GREEN_SNR[-1,-2]) #sky
+        print(L1_SNR.GREEN_SNR[-1,0]) #cal”
+        #print(L1_SNR.RED_SNR)
