@@ -58,6 +58,25 @@ class L1_SNR(KPF1_Primitive):
         L1_SNR = AnalyzeL1(L1_file)
         L1_SNR.measure_L1_snr(L1_file,snr_percentile=95)
         #print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
+
+        self.l1_obj.header['PRIMARY']['SNRSC452'] = L1_SNR.GREEN_SNR[1,-1]
+        self.l1_obj.header['PRIMARY']['SNRSK452'] = L1_SNR.GREEN_SNR[1,-2]
+        self.l1_obj.header['PRIMARY']['SNRCL452'] = L1_SNR.GREEN_SNR[1,0]
+
+        self.l1_obj.header['PRIMARY']['SNRSC548'] = L1_SNR.GREEN_SNR[25,-1]
+        self.l1_obj.header['PRIMARY']['SNRSK548'] = L1_SNR.GREEN_SNR[25,-2]
+        self.l1_obj.header['PRIMARY']['SNRCL548'] = L1_SNR.GREEN_SNR[25,0]
+
+
+        self.l1_obj.header['PRIMARY']['SNRSC747'] = L1_SNR.RED_SNR[20,-1]
+        self.l1_obj.header['PRIMARY']['SNRSK747'] = L1_SNR.RED_SNR[20,-2]
+        self.l1_obj.header['PRIMARY']['SNRCL747'] = L1_SNR.RED_SNR[20,0]
+
+        self.l1_obj.header['PRIMARY']['SNRSC865'] = L1_SNR.RED_SNR[-1,-1]
+        self.l1_obj.header['PRIMARY']['SNRSK865'] = L1_SNR.RED_SNR[-1,-2]
+        self.l1_obj.header['PRIMARY']['SNRCL865'] = L1_SNR.RED_SNR[-1,0]
+
+        '''
         print('all science',L1_SNR.GREEN_SNR[1,-1]) #all science
         print('sky',L1_SNR.GREEN_SNR[1,-2]) #sky
         print('cal',L1_SNR.GREEN_SNR[1,0]) #cal
@@ -72,4 +91,11 @@ class L1_SNR(KPF1_Primitive):
         print('all science',L1_SNR.GREEN_SNR[-1,-1]) #all science
         print('sky',L1_SNR.GREEN_SNR[-1,-2]) #sky
         print('cal',L1_SNR.GREEN_SNR[-1,0]) #cal”
+        '''
+
+        self.l1_obj.to_fits(self.data_dir+self.l1_obj.filename)
+
+        print(self.l1_obj.header)
+
+
         #print(L1_SNR.RED_SNR)
