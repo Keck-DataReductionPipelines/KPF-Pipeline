@@ -1,0 +1,60 @@
+# Standard dependencies
+import configparser
+import numpy as np
+import pandas as pd
+from astropy.io import fits
+
+# Pipeline dependencies
+from kpfpipe.logger import start_logger
+from kpfpipe.primitives.level1 import KPF1_Primitive
+from kpfpipe.models.level1 import KPF1
+
+# External dependencies
+from keckdrpframework.models.action import Action
+from keckdrpframework.models.arguments import Arguments
+from keckdrpframework.models.processing_context import ProcessingContext
+
+# Local dependencies
+#from modules.continuum_normalization.src.alg import ContNormAlgg
+from modules.Utils.analyze_l1 import AnalyzeL1
+
+# Global read-only variables
+DEFAULT_CFG_PATH = 'modules/Utils/L1_SNR.cfg'
+
+class L1_SNR(KPF1_Primitive):
+
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
+
+        #Initialize parent class
+        KPF1_Primitive.__init__(self,action,context)
+
+        #input recipe arguments
+        self.l1_obj=self.action.args[0]
+        # self.data_type=self.action.args[1]
+
+        #Input configuration
+        self.config=configparser.ConfigParser()
+        try:
+            self.config_path=context.config_path['cont_norm']
+        except:
+            self.config_path = DEFAULT_CFG_PATH
+        self.config.read(self.config_path)
+
+        #Start logger
+        self.logger=None
+        #self.logger=start_logger(self.__class__.__name__,config_path)
+        if not self.logger:
+            self.logger=self.context.logger
+        self.logger.info('Loading config from: {}'.format(self.config_path))
+
+        # algorithm setup
+        #self.alg=ContNormAlgg(self.config,self.logger)
+
+    #Perform
+    def _perform(self) -> None:
+        AnalyzeL1
+
+        L1_SNR = AnalyzeL1(self.l1_obj)
+        L1_SNR.measure_L1_snr(self.l1_obj,snr_percentile=95)
+        print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
+        print(L1_SNR.RED_SNR)
