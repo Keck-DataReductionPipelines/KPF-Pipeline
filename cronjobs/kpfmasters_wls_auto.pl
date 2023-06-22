@@ -93,7 +93,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.2';
+my $version = '1.3';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -101,7 +101,8 @@ if (! (defined $procdate)) {
     die "*** Error: Missing command-line parameter YYYYMMDD; quitting...\n";
 }
 
-my $dockercmdscript = 'kpfmasters_wls_auto.sh';    # Auto-generates this shell script with multiple commands.
+my $dockercmdscript = 'jobs/kpfmasters_wls_auto';                  # Auto-generates this shell script with multiple commands.
+$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 my $containerimage = 'kpf-drp:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/wls_auto.recipe';
 my $config = '/code/KPF-Pipeline/configs/wls_auto.cfg';
