@@ -17,6 +17,9 @@
 # master-dark subtraction, and master-flattening, as appropriate, are
 # done by the individidual Frameworks for generation of the master bias,
 # master dark, master flat, and various master arclamps.
+#
+# Be sure to make a jobs subdirectory for temporary files:
+# mkdir -p $KPFCRONJOB_CODE/jobs
 ##########################################################################
 
 use strict;
@@ -96,7 +99,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '1.3';
+my $version = '1.4';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -105,7 +108,8 @@ if (! (defined $procdate)) {
 }
 
 # These parameters are fixed for this Perl script.
-my $dockercmdscript = 'kpfmasterscmd_l0.sh';    # Auto-generates this shell script with multiple commands.
+my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
+$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 my $containerimage = 'kpf-drp:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
