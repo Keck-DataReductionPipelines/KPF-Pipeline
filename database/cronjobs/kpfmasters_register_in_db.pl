@@ -100,7 +100,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_register_in_db.pl';
-my $version = '1.3';
+my $version = '1.4';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -109,7 +109,8 @@ if (! (defined $procdate)) {
 }
 
 my $pythonscript = 'database/scripts/registerCalFilesForDate.py';
-my $dockercmdscript = 'kpfmasters_register_in_db.sh';    # Auto-generates this shell script with multiple commands.
+my $dockercmdscript = 'jobs/kpfmasters_register_in_db';            # Auto-generates this shell script with multiple commands.
+$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 my $containerimage = 'kpf-drp:latest';
 
 my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
@@ -129,9 +130,10 @@ foreach my $op (@op) {
     }
 }
 
-my $dbenvfilename = "db.env";
-my $dbenvfile = "$codedir/" . $dbenvfilename;
-my $dbenvfileinside = "/code/KPF-Pipeline/" . $dbenvfilename;
+my $dbenvfilename = "db";
+$dbenvfilename .= '_' . $$ . '_' . $trunctime . '.env';                   # Augment with unique numbers (process ID and truncated seconds).
+my $dbenvfile = "$codedir/jobs/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
 
 `touch $dbenvfile`;
 `chmod 600 $dbenvfile`;
