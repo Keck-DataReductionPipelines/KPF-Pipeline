@@ -113,7 +113,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.5';
+my $version = '1.6';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -121,7 +121,8 @@ if (! (defined $procdate)) {
     die "*** Error: Missing command-line parameter YYYYMMDD; quitting...\n";
 }
 
-my $dockercmdscript = 'kpfmasterscmd_l1.sh';    # Auto-generates this shell script with multiple commands.
+my $dockercmdscript = 'jobs/kpfmasterscmd_l1';                     # Auto-generates this shell script with multiple commands.
+$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 my $containerimage = 'kpf-drp:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_l1.cfg';
@@ -138,9 +139,10 @@ foreach my $op (@op) {
     }
 }
 
-my $dbenvfilename = "db.env";
-my $dbenvfile = "$codedir/" . $dbenvfilename;
-my $dbenvfileinside = "/code/KPF-Pipeline/" . $dbenvfilename;
+my $dbenvfilename = "db";
+$dbenvfilename .= '_' . $$ . '_' . $trunctime . '.env';                   # Augment with unique numbers (process ID and truncated seconds).
+my $dbenvfile = "$codedir/jobs/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
 
 `touch $dbenvfile`;
 `chmod 600 $dbenvfile`;
