@@ -50,4 +50,8 @@ class Quicklook(KPF0_Primitive):
         self.alg=QuicklookAlg(config=self.config,logger=self.logger)
 
     def _perform(self) -> None:
-        self.alg.qlp_procedures(self.input_file,self.output_dir,self.end_of_night_summary)
+        try:
+            self.alg.qlp_procedures(self.input_file,self.output_dir,self.end_of_night_summary)
+        except:
+            # allow recipe to continue if QLP fails
+            pass
