@@ -133,14 +133,15 @@ output at the very end::
     Here is how to connect to your new database:
     /data/user/rlaher/test/pg15.2/bin/psql -h localhost -d kpfopsdb -p 6125 -U rlaher
 
-There are currently three database tables in the pipeline operations database:  CalFiles, RawFiles, and
-Infobits.  CalFiles stores a record for each master calibration file (many records
-are inserted daily).  RawFiles stores a record for each exposure.
-Infobits stores definitions of the bit-wise information flags
-corresponding to the infobits column in the RawFiles table (the
-CalFiles infobits have not been formalized into a database table,
+There are currently three database tables in the pipeline operations database:  CalFiles, L0Files, and
+L0infobits.  The CalFiles database table stores a record for each master calibration file (many records
+are inserted daily for biases, darks, flats, arclamps, etc.).  The
+L0Files database table stores a record for each exposure.
+The L0infobits database table stores definitions of the bit-wise information flags
+corresponding to the infobits column in the L0Files table (the
+CalFiles infobits have not yet been formalized into a database table,
 and are described on :doc:`../api/pipeline/masters`).
-These tables are queried by the pipeline for relevant nearest-in-time
+These database tables are queried by the pipeline for relevant nearest-in-time
 master calibration files, and generally for quality-control purposes.
 Here are the table-column definitions::
 
@@ -150,98 +151,98 @@ Here are the table-column definitions::
     -----------------------------
   
     CREATE TABLE calfiles (
-    cid integer NOT NULL,                         -- Primary key
-    level smallint NOT NULL,                      -- Product level (L0, L1, or L2)
-    caltype character varying(32) NOT NULL,       -- FITS-header keyword: IMTYPE in extension 4-6 (lowercase)
-    "object" character varying(32) NOT NULL,      -- FITS-header keyword: TARGOBJ or OBJECT (lowercase)
-    contentbits integer NOT NULL,                 -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK
-    nframes smallint,                             -- FITS-header keyword: NFRAMES (GREEN CCD)
-    minmjd double precision,                      -- FITS-header keyword: MINMJD (GREEN CCD)
-    maxmjd double precision,                      -- FITS-header keyword: MAXMJD (GREEN CCD)
-    infobits integer,                             -- FITS-header keyword: INFOBITS
-    startdate date NOT NULL,                      -- Start date for application of master (for earliest-in-time selection)
-    enddate date NOT NULL,                        -- End date for application of master (may not be used)
-    filename character varying(255) NOT NULL,     -- Path and filename of master calibration file.
-    checksum character varying(32) NOT NULL,      -- MD5 checksum
-    status smallint DEFAULT 0 NOT NULL,           -- Set to zero if bad and one if good
-    createdby character varying(30) NOT NULL,     -- Script that inserted the record
-    created timestamp without time zone NOT NULL, -- FITS-header keyword: CREATED (GREEN CCD) in Zulu time
-    "comment" character varying(255)              -- Descriptive comment
+        cid integer NOT NULL,                         -- Primary key
+        level smallint NOT NULL,                      -- Product level (L0, L1, or L2)
+        caltype character varying(32) NOT NULL,       -- FITS-header keyword: IMTYPE in extension 4-6 (lowercase)
+        "object" character varying(32) NOT NULL,      -- FITS-header keyword: TARGOBJ or OBJECT (lowercase)
+        contentbits integer NOT NULL,                 -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK
+        nframes smallint,                             -- FITS-header keyword: NFRAMES (GREEN CCD)
+        minmjd double precision,                      -- FITS-header keyword: MINMJD (GREEN CCD)
+        maxmjd double precision,                      -- FITS-header keyword: MAXMJD (GREEN CCD)
+        infobits integer,                             -- FITS-header keyword: INFOBITS
+        startdate date NOT NULL,                      -- Start date for application of master (for earliest-in-time selection)
+        enddate date NOT NULL,                        -- End date for application of master (may not be used)
+        filename character varying(255) NOT NULL,     -- Path and filename of master calibration file.
+        checksum character varying(32) NOT NULL,      -- MD5 checksum
+        status smallint DEFAULT 0 NOT NULL,           -- Set to zero if bad and one if good
+        createdby character varying(30) NOT NULL,     -- Script that inserted the record
+        created timestamp without time zone NOT NULL, -- FITS-header keyword: CREATED (GREEN CCD) in Zulu time
+        "comment" character varying(255)              -- Descriptive comment
     );
 
     
     -----------------------------
-    -- TABLE: RawFiles
+    -- TABLE: L0Files
     -----------------------------
 
-    CREATE TABLE rawfiles (
-    rid integer NOT NULL,                         -- Primary key
-    dateobs date NOT NULL,                        -- FITS-header keyword: DATE-OBS
-    ut time without time zone NOT NULL,           -- FITS-header keyword: UT
-    datebeg timestamp without time zone NOT NULL, -- FITS-header keyword: DATE-BEG
-    mjdobs double precision NOT NULL,             -- FITS-header keyword: MJD-OBS
-    exptime real NOT NULL,                        -- FITS-header keyword: EXPTIME
-    progname character varying(64) NOT NULL,      -- FITS-header keyword: PROGNAME
-    imtype character varying(64) NOT NULL,        -- FITS-header keyword: IMTYPE
-    sciobj character varying(64) NOT NULL,        -- FITS-header keyword: SCI-OBJ
-    calobj character varying(64) NOT NULL,        -- FITS-header keyword: CAL-OBJ
-    skyobj character varying(64) NOT NULL,        -- FITS-header keyword: SKY-OBJ
-    "object" character varying(64) NOT NULL,      -- FITS-header keyword: TARGOBJ or OBJECT
-    contentbits integer NOT NULL,                 -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK 
-    infobits bigint DEFAULT 0 NOT NULL,           -- Bit-wise information flags
-    filename character varying(255) NOT NULL,     -- Full path and filename
-    checksum character varying(32) NOT NULL,      -- MD5 checksum of entire file
-    status smallint DEFAULT 0 NOT NULL,           -- Set to zero if bad and one if good (verify automatically with
-                                                  -- DATASUM and CHECKSUM keywords, or set this manually later, if necessary)
-    created timestamp without time zone           -- Timestamp of database record INSERT or last UPDATE
-        DEFAULT now() NOT NULL,
-    targname character varying(64),               -- FITS-header keyword: TARGNAME
-    gaiaid character varying(64),                 -- FITS-header keyword: GAIAID
-    twomassid character varying(64),              -- FITS-header keyword: 2MASSID
-    ra double precision,                          -- FITS-header keyword: RA converted to decimal
-    dec double precision,                         -- FITS-header keyword: DEC converted to decimal
-    medgreen1 real,                               -- Median of GREEN_AMP1 image
-    p16green1 real,                               -- 16th percentile of GREEN_AMP1 image
-    p84green1 real,                               -- 84th percentile of GREEN_AMP1 image
-    medgreen2 real,                               -- Median of GREEN_AMP2 image
-    p16green2 real,                               -- 16th percentile of GREEN_AMP2 image
-    p84green2 real,                               -- 84th percentile of GREEN_AMP2 image
-    medgreen3 real,                               -- Median of GREEN_AMP3 image
-    p16green3 real,                               -- 16th percentile of GREEN_AMP3 image
-    p84green3 real,                               -- 84th percentile of GREEN_AMP3 image
-    medgreen4 real,                               -- Median of GREEN_AMP4 image
-    p16green4 real,                               -- 16th percentile of GREEN_AMP4 image
-    p84green4 real,                               -- 84th percentile of GREEN_AMP4 image
-    medred1 real,                                 -- Median of RED_AMP1 image
-    p16red1 real,                                 -- 16th percentile of RED_AMP1 image
-    p84red1 real,                                 -- 84th percentile of RED_AMP1 image
-    medred2 real,                                 -- Median of RED_AMP2 image
-    p16red2 real,                                 -- 16th percentile of RED_AMP2 image
-    p84red2 real,                                 -- 84th percentile of RED_AMP2 image
-    medcahk real,                                 -- Median of CA_HK image
-    p16cahk real,                                 -- 16th percentile of CA_HK image
-    p84cahk real,                                 -- 84th percentile of CA_HK image
-    comment character varying(255),               -- Reason for status=0, etc.
-    CONSTRAINT rawfiles_ra_check CHECK (((ra >= 0.0) AND (ra < 360.0))),
-    CONSTRAINT rawfiles_dec_check CHECK (((dec >= -90.0) AND (dec <= 90.0)))
+    CREATE TABLE l0files (
+        rid integer NOT NULL,                         -- Primary key
+        dateobs date NOT NULL,                        -- FITS-header keyword: DATE-OBS
+        ut time without time zone NOT NULL,           -- FITS-header keyword: UT
+        datebeg timestamp without time zone NOT NULL, -- FITS-header keyword: DATE-BEG
+        mjdobs double precision NOT NULL,             -- FITS-header keyword: MJD-OBS
+        exptime real NOT NULL,                        -- FITS-header keyword: EXPTIME
+        progname character varying(64) NOT NULL,      -- FITS-header keyword: PROGNAME
+        imtype character varying(64) NOT NULL,        -- FITS-header keyword: IMTYPE
+        sciobj character varying(64) NOT NULL,        -- FITS-header keyword: SCI-OBJ
+        calobj character varying(64) NOT NULL,        -- FITS-header keyword: CAL-OBJ
+        skyobj character varying(64) NOT NULL,        -- FITS-header keyword: SKY-OBJ
+        "object" character varying(64) NOT NULL,      -- FITS-header keyword: TARGOBJ or OBJECT
+        contentbits integer NOT NULL,                 -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK 
+        infobits bigint DEFAULT 0 NOT NULL,           -- Bit-wise information flags
+        filename character varying(255) NOT NULL,     -- Full path and filename
+        checksum character varying(32) NOT NULL,      -- MD5 checksum of entire file
+        status smallint DEFAULT 0 NOT NULL,           -- Set to zero if bad and one if good (verify automatically with
+                                                      -- DATASUM and CHECKSUM keywords, or set this manually later, if necessary)
+        created timestamp without time zone           -- Timestamp of database record INSERT or last UPDATE
+            DEFAULT now() NOT NULL,
+        targname character varying(64),               -- FITS-header keyword: TARGNAME
+        gaiaid character varying(64),                 -- FITS-header keyword: GAIAID
+        twomassid character varying(64),              -- FITS-header keyword: 2MASSID
+        ra double precision,                          -- FITS-header keyword: RA converted to decimal
+        dec double precision,                         -- FITS-header keyword: DEC converted to decimal
+        medgreen1 real,                               -- Median of GREEN_AMP1 image
+        p16green1 real,                               -- 16th percentile of GREEN_AMP1 image
+        p84green1 real,                               -- 84th percentile of GREEN_AMP1 image
+        medgreen2 real,                               -- Median of GREEN_AMP2 image
+        p16green2 real,                               -- 16th percentile of GREEN_AMP2 image
+        p84green2 real,                               -- 84th percentile of GREEN_AMP2 image
+        medgreen3 real,                               -- Median of GREEN_AMP3 image
+        p16green3 real,                               -- 16th percentile of GREEN_AMP3 image
+        p84green3 real,                               -- 84th percentile of GREEN_AMP3 image
+        medgreen4 real,                               -- Median of GREEN_AMP4 image
+        p16green4 real,                               -- 16th percentile of GREEN_AMP4 image
+        p84green4 real,                               -- 84th percentile of GREEN_AMP4 image
+        medred1 real,                                 -- Median of RED_AMP1 image
+        p16red1 real,                                 -- 16th percentile of RED_AMP1 image
+        p84red1 real,                                 -- 84th percentile of RED_AMP1 image
+        medred2 real,                                 -- Median of RED_AMP2 image
+        p16red2 real,                                 -- 16th percentile of RED_AMP2 image
+        p84red2 real,                                 -- 84th percentile of RED_AMP2 image
+        medcahk real,                                 -- Median of CA_HK image
+        p16cahk real,                                 -- 16th percentile of CA_HK image
+        p84cahk real,                                 -- 84th percentile of CA_HK image
+        comment character varying(255),               -- Reason for status=0, etc.
+        CONSTRAINT l0files_ra_check CHECK (((ra >= 0.0) AND (ra < 360.0))),
+        CONSTRAINT l0files_dec_check CHECK (((dec >= -90.0) AND (dec <= 90.0)))
     );
 
 
     -----------------------------
-    -- TABLE: Infobits
+    -- TABLE: L0infobits
     --
-    -- Definitions of infobits for RawFiles table only
+    -- Definitions of infobits for L0Files table only
     -- (CalFiles infobits have different definitions).
     -----------------------------
 
-    CREATE TABLE infobits (
-    bid integer NOT NULL,                        -- Primary key
-    bit smallint NOT NULL,                       -- Bit number (allowed range is 0-63, inclusive)
-    param1 real,                                 -- Parameter 1
-    param2 real,                                 -- Parameter 2
-    param3 real,                                 -- Parameter 3
-    created timestamp without time zone          -- Creation timestamp of database record
-        DEFAULT now() NOT NULL,                  -- Definition of bit and parameter(s)
-    definition character varying(256) NOT NULL,
-    CONSTRAINT infobits_bit_check CHECK (((bit >= 0) AND (bit <= 63)))
+    CREATE TABLE l0infobits (
+        bid integer NOT NULL,                        -- Primary key
+        bit smallint NOT NULL,                       -- Bit number (allowed range is 0-63, inclusive)
+        param1 real,                                 -- Parameter 1
+        param2 real,                                 -- Parameter 2
+        param3 real,                                 -- Parameter 3
+        created timestamp without time zone          -- Creation timestamp of database record
+            DEFAULT now() NOT NULL,
+        definition character varying(256) NOT NULL,  -- Definition of bit and parameter(s)
+        CONSTRAINT l0infobits_bit_check CHECK (((bit >= 0) AND (bit <= 63)))
     );
