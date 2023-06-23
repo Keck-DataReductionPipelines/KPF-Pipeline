@@ -772,18 +772,28 @@ class QuicklookAlg:
 
             #print(hdulist1.info())
 
+            wav_green = np.array(hdulist['GREEN_SCI_WAVE1'].data,'d')
+            wav_red = np.array(hdulist['RE_SCI_WAVE1'].data,'d')
             flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
             flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
 
+            wav_green2 = np.array(hdulist['GREEN_SCI_WAVE2'].data,'d')
+            wav_red2 = np.array(hdulist['RE_SCI_WAVE2'].data,'d')
             flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
             flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
 
+            wav_green3 = np.array(hdulist['GREEN_SCI_WAVE3'].data,'d')
+            wav_red3 = np.array(hdulist['RE_SCI_WAVE3'].data,'d')
             flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
             flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
 
+            wav_green_cal = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
+            wav_red_cal = np.array(hdulist['RE_CAL_WAVE'].data,'d')
             flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
             flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
 
+            wav_green_sky = np.array(hdulist['GREEN_SKY_WAVE'].data,'d')
+            wav_red_sky = np.array(hdulist['RE_SKY_WAVE'].data,'d')
             flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
@@ -802,6 +812,10 @@ class QuicklookAlg:
             print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
+            wav2 = np.concatenate((wav_green2,wav_red2),axis = 0)
+            wav3 = np.concatenate((wav_green3,wav_red3),axis = 0)
+            wav_cal = np.concatenate((wav_green_cal,wav_red_cal),axis = 0)
+            wav_sky = np.concatenate((wav_green_sky,wav_red_sky),axis = 0)
             print('test wave',np.shape(wav))
             #print(hdulist1.info())
 
@@ -865,7 +879,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav2[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux2)[0]/n)):
                 low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
@@ -900,7 +914,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav3[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux3)[0]/n)):
                 low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
@@ -935,7 +949,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav_cal[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux_cal)[0]/n)):
                 low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
@@ -970,7 +984,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav_sky[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux_sky)[0]/n)):
                 low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
