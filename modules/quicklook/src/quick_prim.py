@@ -1,6 +1,7 @@
 # Standard dependencies
 import configparser
 import numpy as np
+import traceback
 
 # Pipeline dependencies
 from kpfpipe.logger import start_logger
@@ -52,6 +53,7 @@ class Quicklook(KPF0_Primitive):
     def _perform(self) -> None:
         try:
             self.alg.qlp_procedures(self.input_file,self.output_dir,self.end_of_night_summary)
-        except:
+        except Exception as e:
+            self.logger.error(f"Failure in quicklook pipeline: {e}\n{traceback.format_exc()}")
             # allow recipe to continue if QLP fails
             pass
