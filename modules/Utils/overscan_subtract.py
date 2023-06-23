@@ -463,6 +463,7 @@ class OverscanSubtraction(KPF0_Primitive):
                 # Trim the orientation arrays accordingly.
                 # Also, change self.channel_datasec_nrows accordingly.
 
+                green2amp = False
                 if self.ffi_exts[0] == 'GREEN_CCD':
                     naxis2 = l0_obj.header['GREEN_AMP1']['NAXIS2']
                     if naxis2 >= 4000:
@@ -477,6 +478,7 @@ class OverscanSubtraction(KPF0_Primitive):
                         channel_exts.pop(3)
                         channel_exts.pop(2)
                         self.channel_datasec_nrows = 4080
+                        green2amp = True                        
 
                 frames_data = []
                 for ext in channel_exts:
@@ -509,6 +511,8 @@ class OverscanSubtraction(KPF0_Primitive):
 
                     single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
                     full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)
+                    if green2amp:
+                        full_frame_img = np.flipud(full_frame_img)
                     l0_obj[self.ffi_exts[frame]] = full_frame_img
                     l0_obj.header[self.ffi_exts[frame]]['BUNIT'] = ('electrons','Units of image data')
 
