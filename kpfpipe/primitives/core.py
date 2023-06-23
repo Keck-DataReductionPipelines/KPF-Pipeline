@@ -31,5 +31,5 @@ class KPF_Primitive(BasePrimitive):
                     return self.output
         except Exception as e:
             self.logger.error(f"Failed executing primitive {self.__class__.__name__}: {e}\n{traceback.format_exc()}")
-            raise(Exception)
+            raise(e)
         return None
