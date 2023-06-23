@@ -1,5 +1,5 @@
-Reading L1 files and examining the data products
-================================================
+Plotting KPF RV time series
+===========================
 
 .. toctree::
    :maxdepth: 0
