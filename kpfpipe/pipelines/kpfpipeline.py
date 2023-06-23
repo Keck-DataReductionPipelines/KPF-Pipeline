@@ -207,8 +207,9 @@ class KPFPipeline(BasePipeline):
         self.logger = start_logger(logname, self.configfile, log_path=log_path)
         self.context.logger = self.logger
         self.logger.info("*************** Executing recipe {} ***************".format(recipe_file))
-
+        
         self._recipe_visitor = KpfPipelineNodeVisitor(pipeline=self, context=context)
+
         self.register_recipe_builtins()
         ## set up environment
         try:
