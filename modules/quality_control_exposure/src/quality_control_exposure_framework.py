@@ -211,10 +211,14 @@ class QualityControlExposureFramework(KPF0_Primitive):
             image = np.array(l0_file[ffi])
 
             image_shape = np.shape(image)
+            len_image_shape = len(image_shape)
+            image_size = np.size(image)
+            image_type = type(image)
 
-            #self.logger.info('ffi,image_shape = {},{}'.format(ffi,image_shape))
+            #self.logger.info('ffi,image_shape,len_image_shape,image_size,image_type = {},{},{},{},{}'.\
+            #                 format(ffi,image_shape,len_image_shape,image_size,image_type))
 
-            if image_shape[0] != 0:
+            if len_image_shape >= 2:
                 median = np.nanpercentile(image, 50)
                 p16 = np.nanpercentile(image, 16)
                 p84 = np.nanpercentile(image, 84)
