@@ -361,7 +361,7 @@ class MidpointPhotonArrival:
             warnings.warn("No segments bounds were provided. The default bounds for WAVE_1 are being asserted. ")
         
         i = 0
-        for col in df_EM.columns:
+        for col in self.df_EM.columns:
             if col.lower().startswith('date'):
                 i += 1
             else:
