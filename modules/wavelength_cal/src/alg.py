@@ -676,7 +676,6 @@ class WaveCalibration:
                     new_good_peak_idx.append(peak_idx)
 
         good_peak_idx = np.array(new_good_peak_idx)
-        import pdb;pdb.set_trace()
 
         # clip peaks with heights less than a third of previous peak
         final_good_peak_idx = []
