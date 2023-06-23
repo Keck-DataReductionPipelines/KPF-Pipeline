@@ -773,27 +773,27 @@ class QuicklookAlg:
             #print(hdulist1.info())
 
             wav_green = np.array(hdulist['GREEN_SCI_WAVE1'].data,'d')
-            wav_red = np.array(hdulist['RE_SCI_WAVE1'].data,'d')
+            wav_red = np.array(hdulist['RED_SCI_WAVE1'].data,'d')
             flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
             flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
 
             wav_green2 = np.array(hdulist['GREEN_SCI_WAVE2'].data,'d')
-            wav_red2 = np.array(hdulist['RE_SCI_WAVE2'].data,'d')
+            wav_red2 = np.array(hdulist['RED_SCI_WAVE2'].data,'d')
             flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
             flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
 
             wav_green3 = np.array(hdulist['GREEN_SCI_WAVE3'].data,'d')
-            wav_red3 = np.array(hdulist['RE_SCI_WAVE3'].data,'d')
+            wav_red3 = np.array(hdulist['RED_SCI_WAVE3'].data,'d')
             flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
             flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
 
             wav_green_cal = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
-            wav_red_cal = np.array(hdulist['RE_CAL_WAVE'].data,'d')
+            wav_red_cal = np.array(hdulist['RED_CAL_WAVE'].data,'d')
             flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
             flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
 
             wav_green_sky = np.array(hdulist['GREEN_SKY_WAVE'].data,'d')
-            wav_red_sky = np.array(hdulist['RE_SKY_WAVE'].data,'d')
+            wav_red_sky = np.array(hdulist['RED_SKY_WAVE'].data,'d')
             flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
