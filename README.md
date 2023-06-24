@@ -8,5 +8,5 @@ Facility data reduction pipline for the [Keck Planet Finder](https://exoplanets.
 
 Install instructions and documentation is available at [ReadTheDocs](https://kpf-pipeline.readthedocs.io/en/latest/)
 
-Under active development by the [NASA Exoplanet Science Institute](https://nexsci.caltech.edu) and [Caltech Institute of Technology](https://www.caltech.edu).
+Under active development by the [NASA Exoplanet Science Institute](https://nexsci.caltech.edu), the [Caltech Institute of Technology](https://www.caltech.edu), and the [W. M. KEck Observatory](https://www.keckobservatory.org/).
 
