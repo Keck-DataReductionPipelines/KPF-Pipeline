@@ -1,4 +1,6 @@
 
+import traceback
+
 from keckdrpframework.primitives.base_primitive import BasePrimitive
 from keckdrpframework.models.arguments import Arguments
 
@@ -20,3 +22,14 @@ class KPF_Primitive(BasePrimitive):
         self.action = action
         self.context = context
         self.logger = self.context.logger
+
+    def apply(self):
+        try:
+            if self._pre_condition():
+                self.output = self._perform()
+                if self._post_condition():
+                    return self.output
+        except Exception as e:
+            self.logger.error(f"Failed executing primitive {self.__class__.__name__}: {e}\n{traceback.format_exc()}")
+            raise(e)
+        return None

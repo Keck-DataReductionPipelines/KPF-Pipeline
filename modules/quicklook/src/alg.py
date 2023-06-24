@@ -538,10 +538,16 @@ class QuicklookAlg:
             df_SKY_EM = dat_SKY.to_pandas()
             df_SCI_EM = dat_SCI.to_pandas()
 
-            wav_SCI_str = df_SCI_EM.columns[2:]
-            wav_SCI     = df_SCI_EM.columns[2:].astype(float)
-            wav_SKY_str = df_SKY_EM.columns[2:]
-            wav_SKY     = df_SKY_EM.columns[2:].astype(float)
+            i = 0
+            for col in df_SCI_EM.columns:
+                if col.lower().startswith('date'):
+                    i += 1
+                else:
+                    break
+            wav_SCI_str = df_SCI_EM.columns[i:]
+            wav_SCI     = df_SCI_EM.columns[i:].astype(float)
+            wav_SKY_str = df_SKY_EM.columns[i:]
+            wav_SKY     = df_SKY_EM.columns[i:].astype(float)
 
             disp_SCI = wav_SCI*0+np.gradient(wav_SCI,1)*-1
             disp_SKY = wav_SKY*0+np.gradient(wav_SKY,1)*-1
