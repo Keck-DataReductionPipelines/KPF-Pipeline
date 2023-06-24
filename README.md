@@ -14,8 +14,8 @@ Install instructions and documentation are available at [ReadTheDocs](https://kp
 
 If you use the KPF Data Reduction Pipeline in your research, please cite the following publication:
 
-* Gibson et al. (2020, SPIE): [ADS entry](https://ui.adsabs.harvard.edu/abs/2020SPIE11447E..42G/abstract); BibTeX
-
+* Gibson et al. (2020, SPIE): [ADS entry](https://ui.adsabs.harvard.edu/abs/2020SPIE11447E..42G/abstract); kpf:gibson2020 in [BibTex file](kpf_bibliography.bib)
+  
 If there is no place to include the relevant citations in the text of the publication, please include the following acknowledgment (using the provided BibTeX entry):
 
 This research made use of the KPF Data Reduction Pipeline \citep{kpf:gibson2020}.
