@@ -8,7 +8,7 @@ The KPF DRP is the facility data reduction pipeline for the [Keck Planet Finder]
 
 ## Documention
 
-Install instructions and documentation are available at [ReadTheDocs](https://kpf-pipeline.readthedocs.io/en/latest/)
+Install instructions and documentation are available on [ReadTheDocs](https://kpf-pipeline.readthedocs.io/en/latest/)
 
 ## Citation
 
@@ -16,6 +16,6 @@ If you use the KPF Data Reduction Pipeline in your research, please cite the fol
 
 * Gibson et al. (2020, SPIE): [ADS entry](https://ui.adsabs.harvard.edu/abs/2020SPIE11447E..42G/abstract); kpf:gibson2020 in [BibTex file](kpf_bibliography.bib)
   
-If there is no place to include the relevant citations in the text of the publication, please include the following acknowledgment (using the provided BibTeX entry):
+If there is no place to include the relevant citations in the text of the publication, please include the following acknowledgment (in LaTeX using the [provided BibTeX entry](kpf_bibliography.bib)):
 
 "This research made use of the KPF Data Reduction Pipeline \citep{kpf:gibson2020}."
