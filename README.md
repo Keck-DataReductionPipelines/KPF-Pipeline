@@ -18,4 +18,4 @@ If you use the KPF Data Reduction Pipeline in your research, please cite the fol
   
 If there is no place to include the relevant citations in the text of the publication, please include the following acknowledgment (using the provided BibTeX entry):
 
-This research made use of the KPF Data Reduction Pipeline \citep{kpf:gibson2020}.
+"This research made use of the KPF Data Reduction Pipeline \citep{kpf:gibson2020}."
