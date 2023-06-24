@@ -146,7 +146,6 @@ class WaveCalibration:
 
             # make a plot of all of the precise new wls minus the rough input  wls
             if self.save_diagnostics_dir is not None and rough_wls is not None:
-
                 # don't do this for etalon exposures, where we're either not 
                 # deriving a new wls or using drift to do so
                 if self.cal_type != 'Etalon':
@@ -649,14 +648,49 @@ class WaveCalibration:
                 (np.abs(fitted_peak_pixels - detected_peak_pixels) < 1)
             ) [0]
 
-        # clip peaks with heights less than half of previous peak
+        # clip peaks that are a factor of 3 greater than the 8 adjacent peaks on both sides
         new_good_peak_idx = []
+        for i in range(len(good_peak_idx)):
+            peak_idx = good_peak_idx[i]
+            if peak_idx >= 8 and peak_idx < n_pixels - 8:
+                peak_flux = detected_peak_heights[peak_idx]
+                adjacent_fluxes = np.concatenate((detected_peak_heights[peak_idx-9:peak_idx-1], detected_peak_heights[peak_idx+1:peak_idx+9]))
+                #print(peak_flux)
+                max_adjacent_flux = np.max(adjacent_fluxes)
+                #import pdb; pdb.set_trace()
+                if peak_flux <= 3 * max_adjacent_flux:
+                    new_good_peak_idx.append(peak_idx)
+            elif peak_idx < 8:
+                # Handle peaks near the beginning
+                peak_flux = detected_peak_heights[peak_idx]
+                adjacent_fluxes = detected_peak_heights[peak_idx+1:peak_idx+9]
+                max_adjacent_flux = np.max(adjacent_fluxes)
+                if peak_flux <= 3 * max_adjacent_flux:
+                    new_good_peak_idx.append(peak_idx)
+            else:
+                # Handle peaks near the end
+                peak_flux = detected_peak_heights[peak_idx]
+                adjacent_fluxes = detected_peak_heights[peak_idx-9:peak_idx-1]
+                max_adjacent_flux = np.max(adjacent_fluxes)
+                if peak_flux <= 3 * max_adjacent_flux:
+                    new_good_peak_idx.append(peak_idx)
+
+        good_peak_idx = np.array(new_good_peak_idx)
+
+        # clip peaks with heights less than a third of previous peak
+        final_good_peak_idx = []
         prev_peak_height = 0
         for i in range(len(good_peak_idx)):
-            if detected_peak_heights[good_peak_idx[i]] >= (prev_peak_height / 2):
-                new_good_peak_idx.append(good_peak_idx[i])
+            if detected_peak_heights[good_peak_idx[i]] >= (prev_peak_height / 3):
+                final_good_peak_idx.append(good_peak_idx[i])
                 prev_peak_height = detected_peak_heights[good_peak_idx[i]]
-        good_peak_idx = np.array(new_good_peak_idx) 
+                missed_peak_count = 0
+            else:
+                missed_peak_count += 1
+                if missed_peak_count == 5:
+                    print('Warning: Check for outliers. 5 peaks in a row with heights < 1/3 of previous peak.')
+
+        good_peak_idx = np.array(final_good_peak_idx)
 
         # # if we know the wavelengths of the peaks (i.e. if dealing with LFC),
         # # then we can clip peaks with derived wavelengths far from the location
@@ -759,6 +793,8 @@ class WaveCalibration:
                         order_flux[zoom_section_pixels * i : zoom_section_pixels * (i + 1)]
                     )
                 )
+                ax.set_xlabel('Pixel')
+                ax.set_ylabel('Counts')
 
             plt.tight_layout()
             plt.savefig('{}/unclipped_peaks_zoom.png'.format(plot_path), dpi=250)
