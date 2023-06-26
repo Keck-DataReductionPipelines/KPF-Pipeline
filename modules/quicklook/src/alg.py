@@ -143,6 +143,7 @@ class QuicklookAlg:
         plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
         plt.grid(False)
         #plt.show()
+        if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
         plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png',dpi=144,facecolor='white')
         plt.close()
 
