@@ -137,7 +137,7 @@ class QuicklookAlg:
         plt.imshow(green_image, cmap='viridis', origin='lower',
                    vmin=np.percentile(green_image,1),
                    vmax=np.percentile(green_image,99.5))
-        plt.title(ObsID + ' - L0 (no processing) - Green CCD')
+        plt.title(exposure_name + ' - L0 (no processing) - Green CCD')
         plt.xlabel('x')
         plt.ylabel('y')
         plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
@@ -152,7 +152,7 @@ class QuicklookAlg:
         plt.imshow(red_image, cmap='viridis', origin='lower',
                    vmin=np.percentile(red_image,1),
                    vmax=np.percentile(red_image,99.5))
-        plt.title(ObsID + ' - L0 (no processing) - Red CCD')
+        plt.title(exposure_name + ' - L0 (no processing) - Red CCD')
         plt.xlabel('x')
         plt.ylabel('y')
         plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
