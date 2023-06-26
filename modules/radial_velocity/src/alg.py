@@ -12,12 +12,12 @@ from modules.radial_velocity.src.alg_rv_init import RadialVelocityAlgInit
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
 from modules.CLib.CCF import CCF_3d_cpython
-from modules.Utils.config_parser import ConfigHandler
 
 LIGHT_SPEED = const.c.to('km/s').value  # light speed in km/s
 LIGHT_SPEED_M = const.c.value  # light speed in m/s
 SEC_TO_JD = 1.0 / 86400.0
 FIT_G = fitting.LevMarLSQFitter()
+
 
 class RadialVelocityAlg(RadialVelocityBase):
     """Radial velocity calculation using cross correlation method.
@@ -35,11 +35,11 @@ class RadialVelocityAlg(RadialVelocityBase):
         logger (logging.Logger): Instance of logging.Logger.
         ccf_engine (string): CCF engine to use, 'c' or 'python'. Defaults to None,
         reweighting_method (string): reweighting method, ccf_max or ccf_mean, of ccf_steps. Defaults to None.
-        segment_list (pandas.DataFrame): Table containing segment list containing segment index, start wavelength,
+        segment_limits (pandas.DataFrame): Table containing segment list containing segment index, start wavelength,
             and end wavelength. Defaults to None.
-        order_limits_mask (pandas.DataFrame): Table containing order index and the left and right limits of the
+        order_limits (pandas.DataFrame): Table containing order index and the left and right limits of the
             order. Defaults to None.
-        bary_corr_table (pd.ndarray): table from L1 BARY_CORR table. Defaults to None.
+        bary_corr_table (pd.ndarray): table from L1 BARY_CORR extension. Defaults to None.
         start_bary_index (int): starting index in BARY_CORR table.
 
     Attributes:
@@ -65,15 +65,16 @@ class RadialVelocityAlg(RadialVelocityBase):
             ccf of the same order.
         bary_corr_table (pd.ndarray): table from L1 BARY_CORR table.
         start_bary_index (int): starting index in BARY_CORR table.
-
+        orderlet (str): name of the orderlet associated with `spactrum_data`.
+        vel_span_pixel (float): velocity span per pixel (km/sec)
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
         TypeError: If there is type error for `spectrum_data`.
         TypeEoor: If there is type error for `header`.
         TypeError: If there is type error for `wave_cal`.
         Exception: If there is init error for radial velocity calculation.
-
     """
+
     ROWS_FOR_ANALYSIS = 3
     SEGMENT_IDX = 0
     SEGMENT_X1 = 1
@@ -703,7 +704,6 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         return self.orderlet_mask_line
 
-
     def cross_correlate_by_mask_shift(self, wave_cal, spectrum, vb):
         """Cross correlation by the shifted mask line and the spectrum data of one order for each velocity step.
 
@@ -785,35 +785,6 @@ class RadialVelocityAlg(RadialVelocityBase):
                                                  new_wave_cal.astype('float64'), new_spec.astype('float64'),
                                                  new_line_weight.astype('float64'), sn.astype('float64'),
                                                  self.velocity_loop[c], -v_b)
-                """
-                ccf_pixels = CCF_3d_cpython.calc_ccf_pixels(new_line_start.astype('float64'),
-                                                            new_line_end.astype('float64'),
-                                                            new_wave_cal.astype('float64'),
-                                                            new_spec.astype('float64'),
-                                                            new_line_weight.astype('float64'), sn.astype('float64'),
-                                                            self.velocity_loop[c], v_b)
-                ccf_pixels_c[c, :] = ccf_pixels
-                """
-            """
-            sn_p = np.ones(n_pixel)
-            ccf_python, ccf_pixels_python = self.calc_ccf(v_steps, new_line_start.astype('float64'),
-                                                       new_line_end.astype('float64'),
-                                                       x_pixel_wave.astype('float64'),
-                                                       spectrum.astype('float64'),
-                                                       new_line_weight.astype('float64'),
-                                                       sn_p, zb)
-            ccf_diff_pixel = ccf_pixels_python - ccf_pixels_c
-            max_pixel_diff = np.amax(abs(ccf_diff_pixel))
-            total_pixel_size = np.size(ccf_diff_pixel)
-            total_pixel_diff = np.size(np.where(ccf_diff_pixel != 0.0)[0])
-
-            ccf_diff = ccf_python-ccf
-            max_ccf_diff = np.amax(abs(ccf_diff))
-            total_ccf_size = np.size(ccf_diff)
-            total_ccf_diff = np.size(np.where(ccf_diff != 0.0)[0])
-            self.d_print("max diff of ccf in pixels: ", max_pixel_diff, '(', total_pixel_diff, '/', total_pixel_size, ')', info=True)
-            self.d_print("max diff of ccf in v-steps: ", max_ccf_diff, '(', total_ccf_diff, '/', total_ccf_size, ')', info=True)
-            """
         else:
             sn_p = np.ones(n_pixel)
             ccf, ccf_pixels_python = self.calc_ccf(v_steps, new_line_start.astype('float64'),
