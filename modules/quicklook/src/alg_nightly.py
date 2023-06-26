@@ -111,7 +111,7 @@ class Nightly_summaryAlg:
                 #2D image
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
-                plt.imshow(counts, vmin = np.percentile(flatten_counts,1),vmax = np.percentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
+                plt.imshow(counts, vmin = np.nanpercentile(flatten_counts,1),vmax = np.nanpercentile(flatten_counts,99),interpolation = 'None',origin = 'lower')
                 plt.xlabel('x (pixel number)')
                 plt.ylabel('y (pixel number)')
                 plt.title(ccd_color[i_color]+' '+exposure_name, fontsize = 8)
@@ -147,12 +147,12 @@ class Nightly_summaryAlg:
                     plt.figure(figsize=(5,4))
                     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
                     #pcrint(counts,master_counts)
-                    counts_norm = np.percentile(counts,99)
-                    master_counts_norm = np.percentile(master_counts,99)
+                    counts_norm = np.nanpercentile(counts,99)
+                    master_counts_norm = np.nanpercentile(master_counts,99)
                     if np.shape(counts)!=np.shape(master_counts): continue
                     difference = counts/counts_norm-master_counts/master_counts_norm
 
-                    plt.imshow(difference, vmin = np.percentile(difference,1),vmax = np.percentile(difference,99), interpolation = 'None',origin = 'lower')
+                    plt.imshow(difference, vmin = np.nanpercentile(difference,1),vmax = np.nanpercentile(difference,99), interpolation = 'None',origin = 'lower')
                     plt.xlabel('x (pixel number)')
                     plt.ylabel('y (pixel number)')
                     plt.title(ccd_color[i_color]+' '+version+'- Master '+version+' '+exposure_name, fontsize =8)
@@ -164,10 +164,10 @@ class Nightly_summaryAlg:
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
-                #print(np.percentile(flatten_counts,99.9),saturation_limit)
-                plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.percentile(flatten_counts,0.005),np.percentile(flatten_counts,99.995)))#[flatten_counts<np.percentile(flatten_counts,99.9)]
+                #print(np.nanpercentile(flatten_counts,99.9),saturation_limit)
+                plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.nanpercentile(flatten_counts,0.005),np.nanpercentile(flatten_counts,99.995)))#[flatten_counts<np.nanpercentile(flatten_counts,99.9)]
                 if master_master_file != 'None':
-                    if len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
+                    if len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.nanpercentile(master_flatten_counts,0.005),np.nanpercentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.nanpercentile(master_flatten_counts,99.9)]
                 #plt.text(0.1,0.2,np.nanmedian(flatten_counts))
                 plt.xlabel('Counts (e-)')
                 plt.ylabel('Number of Pixels')
