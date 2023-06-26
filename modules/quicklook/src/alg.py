@@ -127,8 +127,39 @@ class QuicklookAlg:
         print('working on',date,exposure_name)
 
 
+        #operate on L0 data before image assembly
+        L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'_L0.fits'
+        L0 = fits.open(L0_data)
 
+        green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
+        plt.figure(tight_layout=True)
+        plt.figure(figsize=(18, 18), tight_layout=True)
+        plt.imshow(green_image, cmap='viridis', origin='lower',
+                   vmin=np.percentile(green_image,1),
+                   vmax=np.percentile(green_image,99.5))
+        plt.title(ObsID + ' - L0 (no processing) - Green CCD')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
+        plt.grid(False)
+        #plt.show()
+        plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png',dpi=144,facecolor='white')
+        plt.close()
 
+        red_image = np.concatenate((L0['RED_AMP1'].data, L0['RED_AMP2'].data), axis=1)/2**16 # flip not needed for Red
+        plt.figure(tight_layout=True)
+        plt.figure(figsize=(18, 18), tight_layout=True)
+        plt.imshow(red_image, cmap='viridis', origin='lower',
+                   vmin=np.percentile(red_image,1),
+                   vmax=np.percentile(red_image,99.5))
+        plt.title(ObsID + ' - L0 (no processing) - Red CCD')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
+        plt.grid(False)
+        #plt.show()
+        plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png',dpi=144,facecolor='white')
+        plt.close()
 
 
 
