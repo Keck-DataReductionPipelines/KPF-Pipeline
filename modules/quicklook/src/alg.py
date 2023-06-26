@@ -127,9 +127,41 @@ class QuicklookAlg:
         print('working on',date,exposure_name)
 
 
+        #operate on L0 data before image assembly
+        L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
+        L0 = fits.open(L0_file)
 
+        green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
+        plt.figure(tight_layout=True)
+        plt.figure(figsize=(8, 8), tight_layout=True)
+        plt.imshow(green_image, cmap='viridis', origin='lower',
+                   vmin=np.percentile(green_image,1),
+                   vmax=np.percentile(green_image,99.5))
+        plt.title(exposure_name + ' - L0 (no processing) - Green CCD')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
+        plt.grid(False)
+        #plt.show()
+        if os.path.exists(output_dir+'/'+exposure_name+'/2D/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
+        plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_GREEN_L0_zoomable.png',dpi=500,facecolor='white')
+        plt.close()
 
-
+        red_image = np.concatenate((L0['RED_AMP1'].data, L0['RED_AMP2'].data), axis=1)/2**16 # flip not needed for Red
+        plt.figure(tight_layout=True)
+        plt.figure(figsize=(8, 8), tight_layout=True)
+        plt.imshow(red_image, cmap='viridis', origin='lower',
+                   vmin=np.percentile(red_image,1),
+                   vmax=np.percentile(red_image,99.5))
+        plt.title(exposure_name + ' - L0 (no processing) - Red CCD')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
+        plt.grid(False)
+        #plt.show()
+        plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
+        plt.close()
+        L0.close()
 
 
         #read ccd directly
@@ -778,18 +810,28 @@ class QuicklookAlg:
 
             #print(hdulist1.info())
 
+            wav_green = np.array(hdulist['GREEN_SCI_WAVE1'].data,'d')
+            wav_red = np.array(hdulist['RED_SCI_WAVE1'].data,'d')
             flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
             flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
 
+            wav_green2 = np.array(hdulist['GREEN_SCI_WAVE2'].data,'d')
+            wav_red2 = np.array(hdulist['RED_SCI_WAVE2'].data,'d')
             flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
             flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
 
+            wav_green3 = np.array(hdulist['GREEN_SCI_WAVE3'].data,'d')
+            wav_red3 = np.array(hdulist['RED_SCI_WAVE3'].data,'d')
             flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
             flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
 
+            wav_green_cal = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
+            wav_red_cal = np.array(hdulist['RED_CAL_WAVE'].data,'d')
             flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
             flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
 
+            wav_green_sky = np.array(hdulist['GREEN_SKY_WAVE'].data,'d')
+            wav_red_sky = np.array(hdulist['RED_SKY_WAVE'].data,'d')
             flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
             flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
 
@@ -808,6 +850,10 @@ class QuicklookAlg:
             print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
+            wav2 = np.concatenate((wav_green2,wav_red2),axis = 0)
+            wav3 = np.concatenate((wav_green3,wav_red3),axis = 0)
+            wav_cal = np.concatenate((wav_green_cal,wav_red_cal),axis = 0)
+            wav_sky = np.concatenate((wav_green_sky,wav_red_sky),axis = 0)
             print('test wave',np.shape(wav))
             #print(hdulist1.info())
 
@@ -871,7 +917,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav2[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux2)[0]/n)):
                 low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
@@ -906,7 +952,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav3[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux3)[0]/n)):
                 low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
@@ -941,7 +987,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav_cal[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux_cal)[0]/n)):
                 low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
@@ -976,7 +1022,7 @@ class QuicklookAlg:
                 j = int(i/n)
                 rgba = cm((i % n)/n*1.)
                 #print(j,rgba)
-                ax[j].plot(wav[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
+                ax[j].plot(wav_sky[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
 
             for j in range(int(np.shape(flux_sky)[0]/n)):
                 low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
