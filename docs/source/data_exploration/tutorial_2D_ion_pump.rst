@@ -1,5 +1,5 @@
-Manipulating 2D images to diagnose problem with ion pumps
-=========================================================
+Manipulating 2D images to diagnose a problem with the ion pumps
+===============================================================
 
 .. toctree::
    :maxdepth: 0

@@ -359,9 +359,15 @@ class MidpointPhotonArrival:
             self.segmentMin=orderMin
             self.segmentMax=orderMax
             warnings.warn("No segments bounds were provided. The default bounds for WAVE_1 are being asserted. ")
-            
-        wav_str = self.df_EM.columns[2:] # string (center) wavelengths of each pixel
-        wav = self.df_EM.columns[2:].astype(float) # float (center) wavelengths of each pixel
+        
+        i = 0
+        for col in self.df_EM.columns:
+            if col.lower().startswith('date'):
+                i += 1
+            else:
+                break
+        wav_str = self.df_EM.columns[i:] # string (center) wavelengths of each pixel
+        wav = self.df_EM.columns[i:].astype(float) # float (center) wavelengths of each pixel
 
         # define disperion at each wavelength (nm per pixel)
         disp = wav*0+np.gradient(wav,1)*-1

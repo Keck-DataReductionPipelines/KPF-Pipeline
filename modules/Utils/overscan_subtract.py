@@ -455,13 +455,48 @@ class OverscanSubtraction(KPF0_Primitive):
                 pass
 
             else:
+
+                # Check if GREEN_CCD will have two or four amplifiers.
+                # If two amplifiers, then the detector data size for a given amplifier will be approximately 2Kx4K pixels; otherwise,
+                # if four amplifiers, then the detector data size for a given amplifier will be approximately 2Kx2K pixels
+                # Either case will result in the same size of 2D image (4080x4080 pixels).
+                # Trim the orientation arrays accordingly.
+                # Also, change self.channel_datasec_nrows accordingly.
+
+                green2amp = False
+                if self.ffi_exts[0] == 'GREEN_CCD':
+                    naxis2 = l0_obj.header['GREEN_AMP1']['NAXIS2']
+                    if naxis2 >= 4000:
+                        channels.pop(3)
+                        channels.pop(2)
+                        channel_keys.pop(3)
+                        channel_keys.pop(2)
+                        channel_rows.pop(3)
+                        channel_rows.pop(2)
+                        channel_cols.pop(3)
+                        channel_cols.pop(2)
+                        channel_exts.pop(3)
+                        channel_exts.pop(2)
+                        self.channel_datasec_nrows = 4080
+                        green2amp = True                        
+
                 frames_data = []
                 for ext in channel_exts:
                     data = l0_obj[ext]
                     gain = l0_obj.header[ext][self.gain_key]
                     data = data / (2**16) #don't make hardcoded? only ok for now, output a warning here
                     #####
-                    data_gain_corr = data * gain
+
+                    self.logger.debug('---->rawfile,ext,np.shape(data),np.size(data),type(data),type(gain),gain = {},{},{},{},{},{},{}'.\
+                        format(self.rawfile,ext,np.shape(data),np.size(data),type(data),type(gain),gain))
+                    self.logger.debug('---->fitsfile,ext,np.size(data) = {},{},{}'.\
+                        format(l0_obj.header['PRIMARY']['OFNAME'],ext,np.size(data)))
+
+                    if np.size(data) == 0:
+                        return Arguments(l0_obj)
+                    else:
+                        data_gain_corr = data * gain
+
                     frames_data.append(data_gain_corr)
                 frames_data = np.array(frames_data)
 
@@ -476,6 +511,8 @@ class OverscanSubtraction(KPF0_Primitive):
 
                     single_frame_data = np.array_split(frames_data,len(self.ffi_exts))[frame]
                     full_frame_img = self.run_oscan_subtraction(single_frame_data,channels,channel_keys,channel_rows,channel_cols,channel_exts)
+                    if green2amp:
+                        full_frame_img = np.flipud(full_frame_img)
                     l0_obj[self.ffi_exts[frame]] = full_frame_img
                     l0_obj.header[self.ffi_exts[frame]]['BUNIT'] = ('electrons','Units of image data')
 
@@ -490,6 +527,13 @@ class OverscanSubtraction(KPF0_Primitive):
 
                 for ext in channel_exts:
                     l0_obj.del_extension(ext)
+
+                if self.ffi_exts[0] == 'GREEN_CCD':
+                    self.logger.debug('---->{}._perform(): self.ffi_exts[0],naxis2 = {},{}'.\
+                        format(self.__class__.__name__,self.ffi_exts[0],naxis2))
+                    if naxis2 >= 4000:
+                        l0_obj.del_extension('GREEN_AMP3')
+                        l0_obj.del_extension('GREEN_AMP4')
 
                 self.logger.debug('---->{}._perform(): Done with overscan_subtraction.py; returning...'.\
                     format(self.__class__.__name__))
