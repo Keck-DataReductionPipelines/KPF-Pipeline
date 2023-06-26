@@ -54,7 +54,7 @@ class OverscanSubtraction(KPF0_Primitive):
         channel_datasec_ncols (int): Number of columns in data section of channel images for a given detector
             (default is 2040).
         channel_datasec_nrows (int): Number of rows in data section of channel images for a given detector
-            (default is 2040 for GREEN_CCD or otherwise 4080 for RED_CCD).
+            (default is 2040 for GREEN_CCD and RED_CCD).
         n_sigma (float): Number of sigmas for overscan-value outlier rejection (default is 2.5).
     """
 
@@ -83,7 +83,7 @@ class OverscanSubtraction(KPF0_Primitive):
         try:
             self.channel_datasec_nrows = self.action.args[10]
         except:
-            if self.ffi_exts[0] == 'GREEN_CCD':
+            if self.ffi_exts[0] == 'GREEN_CCD' or self.ffi_exts[0] == 'RED_CCD':
                 self.channel_datasec_nrows = 2040
             else:
                 self.channel_datasec_nrows = 4080
@@ -462,6 +462,8 @@ class OverscanSubtraction(KPF0_Primitive):
                 # Either case will result in the same size of 2D image (4080x4080 pixels).
                 # Trim the orientation arrays accordingly.
                 # Also, change self.channel_datasec_nrows accordingly.
+                #
+                # Similar implementation for RED_CCD, except no flipping the output image.
 
                 green2amp = False
                 if self.ffi_exts[0] == 'GREEN_CCD':
@@ -479,6 +481,20 @@ class OverscanSubtraction(KPF0_Primitive):
                         channel_exts.pop(2)
                         self.channel_datasec_nrows = 4080
                         green2amp = True                        
+                elif self.ffi_exts[0] == 'RED_CCD':
+                    naxis2 = l0_obj.header['RED_AMP1']['NAXIS2']
+                    if naxis2 >= 4000:
+                        channels.pop(3)
+                        channels.pop(2)
+                        channel_keys.pop(3)
+                        channel_keys.pop(2)
+                        channel_rows.pop(3)
+                        channel_rows.pop(2)
+                        channel_cols.pop(3)
+                        channel_cols.pop(2)
+                        channel_exts.pop(3)
+                        channel_exts.pop(2)
+                        self.channel_datasec_nrows = 4080
 
                 frames_data = []
                 for ext in channel_exts:
@@ -534,6 +550,12 @@ class OverscanSubtraction(KPF0_Primitive):
                     if naxis2 >= 4000:
                         l0_obj.del_extension('GREEN_AMP3')
                         l0_obj.del_extension('GREEN_AMP4')
+                elif self.ffi_exts[0] == 'RED_CCD':
+                    self.logger.debug('---->{}._perform(): self.ffi_exts[0],naxis2 = {},{}'.\
+                        format(self.__class__.__name__,self.ffi_exts[0],naxis2))
+                    if naxis2 >= 4000:
+                        l0_obj.del_extension('RED_AMP3')
+                        l0_obj.del_extension('RED_AMP4')
 
                 self.logger.debug('---->{}._perform(): Done with overscan_subtraction.py; returning...'.\
                     format(self.__class__.__name__))
