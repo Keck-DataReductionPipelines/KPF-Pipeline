@@ -165,11 +165,12 @@ class Nightly_summaryAlg:
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
                 #print(np.nanpercentile(flatten_counts,99.9),saturation_limit)
+                print(flatten_counts)
                 flatten_counts[flatten_counts == -np.inf] = np.nan
                 flatten_counts[flatten_counts == np.inf] = np.nan
                 master_flatten_counts[master_flatten_counts == -np.inf] = np.nan
                 master_flatten_counts[master_flatten_counts == np.inf] = np.nan
-                print(flatten_counts)
+
                 plt.hist(flatten_counts, bins = 50,alpha =0.5, label = 'Median: ' + '%4.1f; ' % np.nanmedian(flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(flatten_counts),density = False, range = (np.nanpercentile(flatten_counts,0.01),np.nanpercentile(flatten_counts,99.99)))#
                 if master_master_file != 'None':
                     if len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.nanpercentile(master_flatten_counts,0.01),np.nanpercentile(master_flatten_counts,99.99))) #[master_flatten_counts<np.nanpercentile(master_flatten_counts,99.9)]
