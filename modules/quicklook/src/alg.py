@@ -128,7 +128,7 @@ class QuicklookAlg:
 
 
         #operate on L0 data before image assembly
-        L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'_L0.fits'
+        L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0 = fits.open(L0_file)
 
         green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
