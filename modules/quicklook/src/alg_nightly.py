@@ -177,10 +177,11 @@ class Nightly_summaryAlg:
                 #plt.savefig(output_dir+'fig/'+exposure_name+'_Histogram_'+ccd_color[i_color]+'.png')
                 plt.savefig(output_dir+'/'+version+'/'+exposure_name+'_'+ccd_color[i_color]+'_histogram.png', dpi=200)
                 plt.close()
-                hdulist.close()
-                if master_master_file != 'None':hdulist1.close()
 
 
+
+            hdulist.close()
+            if master_master_file != 'None':hdulist1.close()
 
 
 
