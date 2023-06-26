@@ -133,7 +133,7 @@ class QuicklookAlg:
 
         green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
         plt.figure(tight_layout=True)
-        plt.figure(figsize=(18, 18), tight_layout=True)
+        plt.figure(figsize=(5, 5), tight_layout=True)
         plt.imshow(green_image, cmap='viridis', origin='lower',
                    vmin=np.percentile(green_image,1),
                    vmax=np.percentile(green_image,99.5))
@@ -149,7 +149,7 @@ class QuicklookAlg:
 
         red_image = np.concatenate((L0['RED_AMP1'].data, L0['RED_AMP2'].data), axis=1)/2**16 # flip not needed for Red
         plt.figure(tight_layout=True)
-        plt.figure(figsize=(18, 18), tight_layout=True)
+        plt.figure(figsize=(5, 5), tight_layout=True)
         plt.imshow(red_image, cmap='viridis', origin='lower',
                    vmin=np.percentile(red_image,1),
                    vmax=np.percentile(red_image,99.5))
