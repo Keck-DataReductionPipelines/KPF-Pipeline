@@ -165,7 +165,7 @@ class Nightly_summaryAlg:
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
 
                 #print(np.nanpercentile(flatten_counts,99.9),saturation_limit)
-                print(flatten_counts)
+                print(master_list[i],flatten_counts)
                 flatten_counts[flatten_counts == -np.inf] = np.nan
                 flatten_counts[flatten_counts == np.inf] = np.nan
                 master_flatten_counts[master_flatten_counts == -np.inf] = np.nan
