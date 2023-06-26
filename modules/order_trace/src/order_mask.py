@@ -1,10 +1,7 @@
 # Standard dependencies
 """
     This module defines class OrderMask which inherits from `KPF0_Primitive` and provides methods to perform
-    the event on order Mask in the recipe.
-
-    Attributes:
-        OrderNask
+    the event to produce order mask data in the recipe.
 
     Description:
         * Method `__init__`:
@@ -18,22 +15,23 @@
                       making order mask based on the order trace result.
                     - `action.args[1] (kpfpipe.models.level0.KPF0)`: Instance of `KPF0` to contain order mask result.
                     - `action.args['data_extension']: (str, optional)`: the name of the extension containing data.
-                    - `action.args['trace_file']: (str, optional)`: the name file containing order trace results.
+                    - `action.args['trace_file']: (str, optional)`: the path of the file containing order trace result.
                     - `action.args['orderlet_names'] (str|list, optional)`: Name or list of names of all orderlets
                       included in the order trace result. Defaults to 'SCI1'.
                     - `action.args['orderlets_on_image'] (str|list, optional)`: Name or list of names of the orderlets
                       appear on the L0 image. Defaults to None.
                     - `action.args['start_order'] (int, optional)`: Index of the first orderlet of the first order
-                      assuming the first trace in the order trace file starts with index 0. Defaults to 0.
+                      against the first trace included in the order trace data indexed as 0. Defaults to 0.
                     - `action.args['poly_degree']: (str, optional)`: Polynomial degree for order trace curve fitting.
                       Defaults to 3.
                     - `action.args['origin']: (list, optional)`: Origin of the image where the order trace is related
                       to. Defaults to [0, 0]
                     - `action.args['orderlet_widths']: (dict, optional)`: Orderlet widths to replace the edge widths
                       from the order trace file. Defaults to {} or None.
-                    - `action.args['orderlet_values']: (dict, optional)`: Values for the pixels of each orderlet, like
-                      [1, 2, 3, 4, 5] is for each orderlet, or [3] for all orderlets. Defaults to 1 for all trace
-                      pixels.
+                    - `action.args['orderlet_values']: (dict, optional)`: The values to be assigned to the pixels of
+                      each orderlet  of the output, ex. [1, 2, 3, 4, 5] assigns 5 numbers to the pixels of 5 orderlets
+                      respectively. [3] assigns all orderlet pixels the same number, i.e. 3. Defaults to 1 for all
+                      trace pixels.
                     - `action.args['non_orderlet_value']: (number, optional)`: Value for non orderlet pixels.
                       Defaults to 0.
 
@@ -65,11 +63,15 @@
         For the recipe, the spectral extraction event is issued like::
 
             :
+            order_names=['GREEN_SKY_FLUX', 'GREEN_SCI_FLUX1', 'GREEN_SCI_FLUX2', 'GREEN_SCI_FLUX3', 'GREEN_CAL_FLUX']
             lev0_data = kpf0_from_fits(input_lev0_flat, data_type=data_type)
-            op_data = OrderMask(lev0_data, NULL, orderlet_names=order_names,
-                                        rectification_method=rect_method,
-                                        clip_file="/clip/file/folder/fileprefix")
+            op_data = OrderMask(lev0_data, NULL,
+                                orderlet_names=order_names,
+                                start_order=-1,
+                                trace_file='/data/masters/20230411/kpf_20230411_master_flat_GREEN_CCD.csv',
+                                data_extension='GREEN_CCD')
             :
+        where `op_data` is level 0 data (`KPF0`) object Wrapped in `Arguments` class object.
 """
 
 
