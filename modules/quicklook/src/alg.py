@@ -3,6 +3,7 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.analyze_l1 import AnalyzeL1
 from kpfpipe.models.level0 import KPF0
 from keckdrpframework.models.arguments import Arguments
 import os
@@ -537,10 +538,16 @@ class QuicklookAlg:
             df_SKY_EM = dat_SKY.to_pandas()
             df_SCI_EM = dat_SCI.to_pandas()
 
-            wav_SCI_str = df_SCI_EM.columns[2:]
-            wav_SCI     = df_SCI_EM.columns[2:].astype(float)
-            wav_SKY_str = df_SKY_EM.columns[2:]
-            wav_SKY     = df_SKY_EM.columns[2:].astype(float)
+            i = 0
+            for col in df_SCI_EM.columns:
+                if col.lower().startswith('date'):
+                    i += 1
+                else:
+                    break
+            wav_SCI_str = df_SCI_EM.columns[i:]
+            wav_SCI     = df_SCI_EM.columns[i:].astype(float)
+            wav_SKY_str = df_SKY_EM.columns[i:]
+            wav_SKY     = df_SKY_EM.columns[i:].astype(float)
 
             disp_SCI = wav_SCI*0+np.gradient(wav_SCI,1)*-1
             disp_SKY = wav_SKY*0+np.gradient(wav_SKY,1)*-1
@@ -762,6 +769,13 @@ class QuicklookAlg:
                 hdulist1.close()
             '''
 
+            #l1 SNR
+
+            L1_SNR = AnalyzeL1(hdulist)
+            L1_SNR.measure_L1_snr(hdulist,snr_percentile=95)
+            L1_SNR.plot_L1_snr(hdulist,exposure_name,fig_path=output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_snr.png')
+            plt.close()
+
             #print(hdulist1.info())
 
             flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
@@ -827,7 +841,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux)[0]/n)):
                 low, high = np.nanpercentile(flux[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
@@ -862,7 +876,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux2)[0]/n)):
                 low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux2[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux2,[0.1,99.9])
 
@@ -897,7 +911,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux3)[0]/n)):
                 low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux3[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux3,[0.1,99.9])
 
@@ -932,7 +946,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux_cal)[0]/n)):
                 low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux_cal[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux_cal,[0.1,99.9])
 
@@ -967,7 +981,7 @@ class QuicklookAlg:
             for j in range(int(np.shape(flux_sky)[0]/n)):
                 low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
                 #print(j,high*1.5)
-                ax[j].set_ylim(-high*0.1, high*1.2)
+                ax[j].set_ylim(np.nanmin(flux_sky[j*n:(j+1)*n,:])-high*0.1, high*1.2)
 
             low, high = np.nanpercentile(flux_sky,[0.1,99.9])
 
@@ -1093,8 +1107,8 @@ class QuicklookAlg:
 
 
                 #print('step',step,len(vel_grid))
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
+                if i_color == 0: ccf_weights_file='/code/KPF-Pipeline/static/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/code/KPF-Pipeline/static/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
                 ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
                 #if i_color == 0: ccf_weights[12] = 0
@@ -1141,8 +1155,8 @@ class QuicklookAlg:
                 vel_grid = startv+np.array(range(np.shape(ccf)[2]),'d')*step
                 gamma = hdulist['RV'].header[ccf_rv[i_color]]
 
-                if i_color == 0: ccf_weights_file='/data/masters/static_green_ccf_ratio_2.csv'
-                if i_color == 1: ccf_weights_file='/data/masters/static_red_ccf_ratio_2.csv'
+                if i_color == 0: ccf_weights_file='/code/KPF-Pipeline/static/static_green_ccf_ratio_2.csv'
+                if i_color == 1: ccf_weights_file='/code/KPF-Pipeline/static/static_red_ccf_ratio_2.csv'
                 newdata = pd.read_csv(ccf_weights_file,sep = '\s+',header = 0)
                 sci_mask = hdulist[ccf_color[i_color]].header['SCI_MASK']
                 ccf_weights = np.array(newdata[sci_mask],'d')#np.ones(np.shape(ccf)[0])
