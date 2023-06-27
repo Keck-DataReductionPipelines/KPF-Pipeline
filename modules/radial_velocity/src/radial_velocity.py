@@ -18,22 +18,41 @@
                       radial velocity computation.
                     - `action.args[2] (kpfpipe.models.level2.KPF2)`: Instance of `KPF2` containing radial velocity
                       results. If not existing, it is None.
-                    - `action.args[3] (str)`: Extension name associated with the level 1 science data.
+                    - `action.args[3] (str|list)`: Extension name(s) associated with the level 1 science data.
                     - `action.args['area_def'] (list, optional)`: pixel area, [start_y, end_y, start_x, end_x],
                       to be processed. Defaults to None.
                     - `action.args['segment_def'] (str)`: csv file defining segment wavelength information.
+                      Each row in the csv includes items of index, starting and ending wavelength, related order index.
+                      Defaults to None.
                     - `action.args['order_def'] (str)`: csv file defining order limits information.
+                      Each row in the csv includes items of order index, pixels relative to the left and right border.
+                      Defaults to None.
                     - `action.args['ccf_ext'] (str)`: Extension name containing the ccf results.
                     - `action.args['rv_ext'] (str)`: Extension name containing rv results.
-                    - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference for
+                    - `action.args['input_ref'] (np.ndarray|str|pd.DataFrame, optional)`: Reference or weighs for
                       reweighting ccf orders. Defaults to None.
                     - `action.args['reweighting_method'] (str, optional)`: reweighting method. Defaults to None.
                     - `action.args['start_seg'] (int)`: Index of first segment to be processed. Defaults to None.
                     - `action.args['end_seg'] (int)`: Index of last segment to be processed. Defaults to None.
-                    - `action.args['bary_corr'] (pd.DataFrame)`: extension name of bary correction table. Defaults to
-                      'BARY_CORR'.
-                    - `action.args['start_bary_index'] (int)`: starting index in bary correction table. Defaults to 0.
-                    - `action.args['rv_correction_by_cal'] (bool)`: if using CAL fiber CCF to correct RV
+                    - `action.args['bary_corr'] (pd.DataFrame)`: extension name of barycentric correction table.
+                      Defaults to 'BARY_CORR'.
+                    - `action.args['start_bary_index'] (int)`: starting index in barycentric correction table.
+                      Defaults to 0.
+                    - `action.args['rv_correction_by_cal'] (bool)`: if using CAL fiber CCF to correct RV of SCI fiber.
+                      Defaults to False.
+                    - `action.args['ccf_engine'] (str)`: using Python ('python') or C ('c') version CCF engine.
+                      Defaults to 'c'.
+                    - `action.args['rv_set'] (int)`: the index of ccd per ccd list that L1 data is associated with.
+                      ex. 0 for 'GREEN_CCD' and 1 for 'RED_CCD' in terms of KPF. Defaults to 0.
+                    - `action.args['ins'] (str)`: instrument name. Defaults to None or value of 'INSTRUME'
+                      in the primary header.
+                    - `action.args['reweighting_masks'] (list)`: masks allowing reweighting. Defaults to None to include
+                      all available masks.
+                    - `action.args['exptime'] (float)`: exposure time. Defaults to the value of keyword 'EXPTIME'
+                      in primary header.
+                    - `action.args['obstime'] (float)`: observation time. Defaults to the value of keyword 'DATE-MID' in
+                      primary header for KPF.
+                    - `action.args['vel_span_pixel'] (float)`: velocity span per pixel (km.sec). Defaults to None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of radial velocity in the master
@@ -44,39 +63,73 @@
                 - `input (kpfpipe.models.level1.KPF1)`: Instance of `KPF1`, assigned by `action.args[0]`.
                 - `rv_init (dict)`: Result from radial velocity init.
                 - `output_level2 (kpfpipe.models.level2.KPF2)`: Instance of `KPF2`, assigned by `action.args[2]`.
-                - `sci_names (list)`: Name of the order to be processed, assigned by `action.args[2]`.
+                - `od_names (list)`: Name of the orderlet to be processed, assigned by `action.args[2]`.
                 - `area_def (list)`: Pixel area to be processed.
-                - `segment_def (np.ndarray)`: segments to be processed.
-                - `order_def (np.ndarray)`: orders to be processed.
+                - `segment_limits (np.ndarray)`: table defining segment wavelength information.
+                - `order_limits (np.ndarray)`: table defining order pixel boundaries.
                 - `start_seg (int)`: Index of first segment to be processed.
                 - `end_seg (int)`: Index of last segment to be processed.
                 - `reweighting_method (str)`: reweighting method associated with `action.args['reweighting_method']`.
+                - `ccf_ext (str)`: ccf extension name.
+                - `rv_ext (str)`: rv extension name.
+                - `rv_set_idx (int)`: ccd index for the ccd that spectral data is associated with.
+                - `is_cal_cor (bool)`: if using CAL fiber CCF to correct RV of SCI fiber.
+                - `ins (str)`: instrument name.
+                - `reweighting_masks (list)`: the masks allowing reweighting.
+                - `spectrum_data_set (list)`: a list containing spectral data to process.
+                - `wave_cal_set (list)`: a list containing wavelength data associated with the spectral data in
+                  `spectrum_data_set`.
+                - `header_set (list)`: a list containing the header associated with the spectral data in
+                  `spectrum_data_set`.
+                - `total_orderlet (int):` total orderlet in `spectrum_data_set`.
+                - `is_solar_data (bool):` if the observation is for target solar.
+                - `ref_ccf (numpy.ndarray)`: Reference or ratio of cross correlation values for scaling the computation
+                  of cross correlation, associated with `action.args['input_ref']`.
+                - `ccf_engine (str)`: ccf engine, 'python' or 'c', associated with `action.args['ccf_engine']`.
+                - `reweighted (dict)`: containing key/value as orderlet_name/'T' or 'F' to indicate if the orderlet is
+                  CCF reweighted.
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
-                - `spectrum_data (numpy.ndarray)`: Reduced 1D data of all orders from optimal extraction, associated
-                  with `action.args[0]`.
-                - `wave_cal (numpy.ndarray)`: Wavelength calibration data, associated with `action.args[0]`.
-                - `header (fits.header.Header)`: Fits header of HDU associated with `spectrum_data`.
-                - `ref_ccf (numpy.ndarray)`: Reference or ratio of cross correlation values for scaling the computation
-                  of cross correlation, associated with `action.args['input_ref']`.
                 - `alg (RadialVelocityAlg)`: Instance of RadialVelocityAlg which has operation codes for the
                   computation of radial velocity.
 
         * Method `__perform`:
 
-            RadialVelocity returns the result in `Arguments` object which contains the original input
-            level 1 data object (`KPF1`) plus an extension with the radial velocity result.
-            (the result will be put into a level 2 data object after level 2 data model is implemented.)
+            RadialVelocity returns the L2 wrapped in `Arguments` class object. L2 has the extensions containing CCF and
+            RV values.
 
     Usage:
-        For the recipe, the optimal extraction event is issued like::
+        For the recipe, the radial velocity event is issued like::
 
-            rv_init = RadialVelocityInit()
+
             :
+            data_ext_rv = [['GREEN_SCI_FLUX1', 'GREEN_SCI_FLUX2', 'GREEN_SCI_FLUX3', 'GREEN_CAL_FLUX', 'GREEN_SKY_FLUX'],
+                           ['RED_SCI_FLUX1', 'RED_SCI_FLUX2', 'RED_SCI_FLUX3', 'RED_CAL_FLUX', 'RED_SKY_FLUX']]
             lev1_data = kpf1_from_fits(input_L1_file, data_type='KPF')
-            rv_data = RadialVelocity(lev1_data, rv_init, order_name=order_name)
+            rv_init = RadialVelocityInit(...)
+
+            rv_data = None
+            for idx in [0, 1]:
+                ratio_ref = RadialVelocityReweightingRef(...)       # load reweighting ratio table for green or red ccd
+                :
+                # idx 0 is for green_ccd, 1 is for red_ccd
+                rv_data = RadialVelocity(lev1_data, rv_init, rv_data, data_ext_rv[idx],
+                        ccf_ext="GREEN_CCD_CCF",        # "RED_CCD_CCF" for idx = 1
+                        rv_ext="RV",
+                        area_def=[0, 34, 500, -500],    # [0, 31, 500, -500] for idx = 1
+                        start_seg=0,
+                        end_seg=34,                     # 31 for idx = 1
+                        rv_set=0,                       # 1  for idx = 1
+                        ccf_engine='c',
+                        start_bary_index=0,             # 35 for idx = 1
+                        rv_correction_by_cal=False,
+                        reweighting_method='ccf_static',
+                        input_ref=ratio_ref,
+                        reweighting_masks=['espresso'])
             :
+
+        where `rv_data` is KPF2 object wrapped in `Arguments` class object.
 """
 
 import configparser
@@ -184,6 +237,7 @@ class RadialVelocity(KPF1_Primitive):
         self.ccf_engine = action.args['ccf_engine'].lower() \
             if 'ccf_engine' in args_keys and action.args['ccf_engine'] is not None \
             else self.default_args_val['ccf_engine']
+
         self.area_def = action.args['area_def'] if 'area_def' in args_keys else None
         self.segment_limits = self.load_csv(action.args['segment_def']) if 'segment_def' in args_keys else None
         self.order_limits = self.load_csv(action.args['order_def']) if 'order_def' in args_keys else None
@@ -194,11 +248,14 @@ class RadialVelocity(KPF1_Primitive):
         self.rv_ext = action.args['rv_ext'] if 'rv_ext' in args_keys else self.default_args_val['rv_ext']
         self.rv_set_idx = action.args['rv_set'] if 'rv_set' in args_keys else self.default_args_val['rv_set']
         self.is_cal_cor = action.args['rv_correction_by_cal'] if 'rv_correction_by_cal' in args_keys else False
+
         bary_corr_ext = action.args['bary_corr'] if 'bary_corr' in args_keys else self.default_args_val['bary_corr']
         bc_table = getattr(self.input, bary_corr_ext) if hasattr(self.input, bary_corr_ext) else None
         start_bary_index = action.args['start_bary_index'] \
             if 'start_bary_index' in args_keys else self.default_args_val['start_bary_index']
+
         p_header = self.input.header['PRIMARY'] if self.input is not None else None
+
         if 'ins' in args_keys and action.args['ins']:
             self.ins = action.args['ins']
         elif p_header is not None and 'INSTRUME' in p_header:
@@ -280,6 +337,7 @@ class RadialVelocity(KPF1_Primitive):
                     self.rv_init['data'][mod][RadialVelocityAlg.get_fiber_object_in_header(self.ins, sci)][mtype]
 
         self.total_orderlet = len(self.spectrum_data_set)
+
         do_rv_corr = False
         self.is_solar_data = False
         if p_header is not None:
@@ -388,8 +446,7 @@ class RadialVelocity(KPF1_Primitive):
         perform radial velocity computation by calling method 'compute_rv_by_cc' from RadialVelocityAlg.
 
         Returns:
-            Level 1 data from the input plus an extension with the cross correlation results from all orders.
-            (this part will be updated after level 2 data model is made.)
+            Level 2 data including extensions containing CCFs for all CCDs and RVs for all orderlets
         """
 
         # _, nx, ny = self.alg.get_spectrum()

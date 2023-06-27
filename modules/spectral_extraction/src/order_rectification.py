@@ -62,6 +62,8 @@
                                         rectification_method=rect_method,
                                         clip_file="/clip/file/folder/fileprefix")
             :
+
+        where `op_data` is KPF0 object wrapped in `Arguments` class object.
 """
 
 

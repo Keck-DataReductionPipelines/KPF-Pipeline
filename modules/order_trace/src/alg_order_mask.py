@@ -9,9 +9,10 @@ class OrderMaskAlg(ModuleAlgBase):
     """
     This module defines class 'OrderMaskAlg' and methods to perform order trace mask.
     A 2D array of the same size as that of the input spectrum data is returned and the pixels that are covered by the
-    order traces are set to be True, otherwise the pixels are set to be False. The coverage is determined by the order
-    trace location, the vertical edges and the horizontal range defined in the order trace data plus the origin defined
-    in the order trace header regarding where the trace position is related to.
+    order traces are set to be 1 or a specified value, otherwise the pixels are set to be 0 or a specified value.
+    The coverage is determined by the order trace location, the top and bottom edges and the horizontal range
+    defined in the order trace data plus the origin defined in the order trace header to indicate where the trace
+    position is related to.
 
     Args:
         spectrum_data (numpy.ndarray): 2D spectrum raw data.
@@ -19,8 +20,9 @@ class OrderMaskAlg(ModuleAlgBase):
             top/bottom edges and horizontal coverage of the order trace.
         order_trace_header (dict): dict instance containing order trace info including the origin and polynomial degree
             to fit the trace.
-        start_order (int): the index of the first orderlet of the first order. It is based on the assumption that
-            the index of the first trace in the order_trace_data is counted as 0.
+        start_order (int): the index of the first orderlet of the first order based on the assumption that
+            the first few traces may not be indentified by order trace process and the first trace (indexed as 0)
+            listed in the order_trace_data may not the first orderlet of the first order.
             A negative number like -n means the first n traces are not included in the order_trace_data.
         order_mask_data (numpy.ndarray): 2D array to contain the order mask data. Defaults to None.
         config (configparser.ConfigParser, optional): config context. Defaults to None.
@@ -114,7 +116,8 @@ class OrderMaskAlg(ModuleAlgBase):
         self.order_edges = None
         self.order_xrange = None
 
-        # orderlet names in flat image, the index in order trace list for the first orderlet of first order
+        # orderlet names in flat image,
+        # the index for the first orderlet of first order against the first trace in the order_trace_data
         self.orderlet_names = orderlet_names
         self.start_order = start_order
         self.total_trace_per_order = len(orderlet_names) \

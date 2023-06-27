@@ -65,7 +65,7 @@ class OrderTraceAlg(ModuleAlgBase):
     LOWER = 0
     name = 'OrderTrace'
 
-    def __init__(self, data, poly_degree=None, expected_traces=None, config=None, logger=None):
+    def __init__(self, data, poly_degree=None, expected_traces = None, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
         if not isinstance(config, ConfigParser):
@@ -86,7 +86,7 @@ class OrderTraceAlg(ModuleAlgBase):
         self.config_ins = ConfigHandler(config, ins, self.config_param)  # section of instrument or 'PARAM'
         self.poly_degree = poly_degree
         self.trace_ratio = None
-        self.expected_traces = expected_traces
+        self.expected_traces = expected_traces    # this is useful for regression test
 
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
@@ -2095,52 +2095,6 @@ class OrderTraceAlg(ModuleAlgBase):
                 pre_top_edge[x_list] = cluster_points[n, x_list] + cluster_widths[n-1]['top_edge']
                 bottom_edge.fill(0.0)
 
-        # remove the cluster which is not in the vertical peaks, need more work on this
-        """
-        if self.expected_traces is not None:
-            # self.check_expected_traces(cluster_widths, cluster_points)
-            check_x_pts = np.array([nx//2], dtype=int)
-            cluster_check = np.zeros((len(cluster_set)+1, check_x_pts.size), dtype=int)
-            for x_pt_idx, x_pt in enumerate(check_x_pts):
-                y_vals = spec[:, x_pt]
-                peaks, prop = signal.find_peaks(spec[:, x_pt], distance=self.get_trace_vertical_gap())
-                y_peaks = y_vals[peaks]
-                y_peaks_sorted_idx = np.flip(np.argsort(y_peaks))
-                y_peaks_sorted = y_peaks[y_peaks_sorted_idx]
-                last_peak = y_peaks_sorted[self.expected_traces-1]
-                bottom_mean = np.nanmean(y_peaks_sorted[self.expected_traces:])
-                peaks, prop = signal.find_peaks(spec[:, x_pt], distance=self.get_trace_vertical_gap(),
-                                                height=(last_peak+bottom_mean)/2)
-                num_peaks = peaks.size
-                if x_pt_idx == 0:
-                    peaks_check = np.zeros((1, num_peaks), dtype=int)
-                for c_idx in cluster_set:
-                    if cluster_points[c_idx, x_pt] == 0:
-                        continue
-                    top_edge = cluster_points[c_idx, x_pt] + cluster_widths[c_idx-1]['top_edge']
-                    bot_edge = cluster_points[c_idx, x_pt] - cluster_widths[c_idx-1]['bottom_edge']
-                    for p_idx in range(num_peaks):
-                        if peaks[p_idx] < bot_edge:
-                            continue
-                        if peaks[p_idx] <= top_edge:
-                            if x_pt_idx == 0:
-                                peaks_check[x_pt_idx] = c_idx
-                            cluster_check[c_idx][x_pt_idx] = p_idx+1
-                        break
-
-            rm_cluster = []
-            for c_idx in cluster_set:
-                s_x = int(coeffs[c_idx, power + 1])
-                e_x = int(coeffs[c_idx, power + 2] + 1)
-                sel_pts_idx = np.where((check_x_pts >= s_x) & (check_x_pts < e_x))[0]
-                if np.any(cluster_check[c_idx] == 0):
-                    rm_cluster.insert(0, c_idx)
-            for rm_idx in rm_cluster:
-                np.delete(coeffs, rm_idx, axis=0)
-                np.delete(cluster_points, rm_idx, axis=0)
-                np.delete(cluster_widths, rm_idx-1, axis=0)
-                max_cluster_no -= 1
-        """
         return cluster_widths, coeffs
 
     def find_cluster_width_by_gaussian(self, cluster_no: int, poly_coeffs: np.ndarray, cluster_points: np.ndarray):

@@ -1,7 +1,7 @@
 # Standard dependencies
 """
     This module defines class `RadialVelocityReweighting` which inherits from `KPF1_Primitive` and provides
-    methods to perform the event on radial velocity CCF orderes reweighting in the recipe.
+    methods to perform the event on radial velocity CCF order reweighting in the recipe.
 
     Description:
         * Method `__init__`:
@@ -13,14 +13,15 @@
 
                     - `action.args[0] (str|KPF2)`: one file or one KPF2 with ccf for reweighting.
                     - `action.args[1] (str)`: Reweighting method.
-                    - `action.args[2] (pandas.DataFrame|np.ndarray)`: The ratio table or reference ccf for reweighting.
+                    - `action.args[2] (str|pandas.DataFrame|np.ndarray)`: The ratio table file or ratio table
+                      for ccf reweighting.
                     - `action.args[3] (int)`: total segment for the ccf data.
                     - `action.args['ccf_ext'] (str)`: The HDU name  in fits file for the HDU with ccf data.
                       Defaults to 'CCF'.
                     - `action.args['rv_ext'] (str)`: The HDU name in fits file for the HDU with rv data.
                       Defaults to 'RV'.
                     - `action.args['rv_ext_idx'] (int)`: The set index in the extension containing rv data.
-                      Defaults to 0.
+                      Defaults to 0. For KPF, 0 is for green ccd, and 1 is for red ccd.
                     - 'action.args['ccf_start_index'] (int)`: The segment index that the first row of ccf_data is
                       associated with.
 
@@ -30,7 +31,7 @@
 
             and the following attributes are defined to initialize the object,
 
-                - `ccf_data (np.ndarray)`: ccf data.
+                - `ccf_data (dict)`: ccf data per orderlet.
                 - `reweighting_method (str)`: Reweighting method.
                 - `total_order (int)`: Total order for reweighting.
                 - `ccf_ref (np.ndarray)`: Ratio table or Referece ccf for reweighting.
@@ -38,11 +39,30 @@
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
                 - `logger (logging.Logger)`: Instance of logging.Logger.
-                - `ccf_ext`: name of hdu containing ccf data
+                - `ccf_ext (str)`: name of hdu containing ccf data
+                - `rv_ext (str)`: name of hdu containing rv data
+                - `rv_ext_idx (int)`: the set index per ccd.
+                - `lev2_obj (KPF2)`: L2 instance.
+                - `instrument (str)`: instrument.
+                - `reweighting_mask (list)`: list of masks allowing reweighting.
+                - `is_solar_data (bool)`: if solar is the observation target.
+                - `original_ccf_exts (list)`: extensions containing original ccf.
+                - `rw_ccf_exts (list)`: extensions containing reweighted ccf.
+                - `ccf_dim (int)`: ccf extension dimension.
+                - `ccf_ext_header`: header associated with ccf extension.
+                - `orderlet_ccf (dict)`: index in the ccf extension data per orderlet.
+                - `sci_orderlets (list)`: list of science orderlets.
+                - `cal_orderlets (list)`: list of cal orderlets.
+                - `sky_orderlets (list)`: list of sky orderlets.
+                - `mask_type (dict)`: mask type per orderlet.
+                - `totals (int)`: total segment in ccf data.
+                - `totalv (int)`: total velocity steps in ccf data.
+                - `total_orderlet (int)`: total orderlet in ccf data.
+                - `od_names (list)`: names of the orderlets included in the ccf data.
 
         * Method `__perform`:
 
-            RadialVelocityReweighting returns the result in `Arguments` object containing a level 1 data model
+            RadialVelocityReweighting returns the result in `Arguments` object containing a level 2 data model
             object with the reweighted ccf orders.
 
         * Note:
@@ -50,13 +70,27 @@
             It will be refactored into KPF2 style when level2 data model is implemented.
 
     Usage:
-        For the recipe, the optimal extraction event is issued like::
+        For the recipe, the reweighting event is issued like::
 
+            area_def = [0, 34, 500, -500]
+            total_segment = area_def[1] - area_def[0] + 1
+            ratio_ref = RadialVelocityReweightingRef(None, reweighting_method, ...)
+
+            lev2_rv = kpf2_from_fits(output_lev2_file, data_type=data_type)
+
+            rv_data = RadialVelocityReweighting(lev2_rv,
+                                         reweighting_method,
+                                         ratio_ref,
+                                         total_segment,
+                                         ccf_ext="GREEN_CCF",
+                                         rv_ext="RV",
+                                         rv_ext_idx=0,           # index for green ccd
+                                         ccf_start_idx=0,
+                                         reweighting_mask=['espresso']
+                                    )
             :
-            lev1_data = kpf1_from_fits(input_L1_file, data_type='KPF')
-            rv_data = RadialVelocityReweighting(lev1_data, <reweighting_method>, <ratio_ref>, <total_order>
-                      <rv_init>, ccf_hdu_index=12, ccf_start_idx=0)
-            :
+
+        where `rv_data` is KPF2 object wrapped in `Arguments` class object.
 """
 
 import configparser
