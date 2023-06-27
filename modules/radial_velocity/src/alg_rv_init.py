@@ -379,6 +379,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             self.d_print("RadialVelocityAlgInit: mask config file: ", self.mask_path)
         return self.ret_status('ok')
 
+
     def init_calculation(self):
         """  Initial data setup for radial velocity computation based on the setting in `PARAM` section of the
         configuration file.
@@ -398,6 +399,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 * `velocity_steps`
                 * `velocity_loop`
                 * `zb_range`
+                * `ccf_engine`
+                * `vel_span_pixel`
                 * `mask_line`
                 * `mask_path`
                 * `reweighting_ccf_method`
@@ -629,9 +632,11 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     def get_mask_line(self):
         """ Get mask coverage per mask width and the mask centers read from the mask file.
 
-        Returns: dict containing mask line info or dict of dict containg mask line info for each fiber
-            dict: Mask information, like::
+        Returns:
+            dict containing mask line info for entire observation or dict of dict containing mask line info
+            for each fiber source, like::
 
+                dict: Mask line for entire observation
                 {
                     'start' : numpy.ndarray            # start points of masks
                     'end' : numpy.ndarray              # end points of masks
@@ -641,8 +646,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                     'bc_corr_end': numpy.ndarray       # adjusted end points of masks
                 }
 
-            dict of dict:
-                { 'fiber1': {                          # mask line info. for fiber1
+                dict of dict: mask line information for different fiber source,
+                { 'fiber1': {                          # mask line info. for fiber source 1
                     {
                         'start' : numpy.ndarray            # start points of masks
                         'end' : numpy.ndarray              # end points of masks
@@ -653,11 +658,6 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                     }
                     :
                 }
-
-             Attribute `mask_line` is updated.
-
-
-
         """
 
         if self.mask_line is None:
@@ -723,7 +723,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 {
                     'status': True|False
                     'msg': <error message if status is False>
-                    'data': <init data>     # Please see Returns of function collect_init_data
+                    'data': <init data>     # Please see Returns of collect_init_data
                 }
 
         """
