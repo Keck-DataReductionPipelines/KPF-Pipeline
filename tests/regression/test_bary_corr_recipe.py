@@ -21,7 +21,7 @@ _, short_lev0_file = split(input_lev0_file)
 lev1_stem, lev1_ext = splitext(short_lev0_file)
 if lev0_stem_suffix != None and lev0_stem_suffix in lev1_stem:
     lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, '')
-output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir + 'tmp/'
+output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
 #output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + '.fits'
 output_lev1_file = output_extraction + 'KP.20230114.03263.62_L1.fits'
 
@@ -29,7 +29,7 @@ if exists(output_lev1_file):
     output_data = kpf1_from_fits(output_lev1_file, data_type=data_type)
     t_order = orders_per_ccd[0] + orders_per_ccd[1]
     for idx in ccd_idx:
-        result = BaryCorrTableTest(lev0_data, output_data, t_order, orders_per_ccd[idx], start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
+        result = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx], start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
 
 """
 
