@@ -143,8 +143,8 @@ class QuicklookAlg:
         plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
         plt.grid(False)
         #plt.show()
-        if os.path.exists(output_dir+'/'+exposure_name+'/2D/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
-        plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_GREEN_L0_zoomable.png',dpi=500,facecolor='white')
+        if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
+        plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png',dpi=500,facecolor='white')
         plt.close()
 
         red_image = np.concatenate((L0['RED_AMP1'].data, L0['RED_AMP2'].data), axis=1)/2**16 # flip not needed for Red
@@ -159,7 +159,7 @@ class QuicklookAlg:
         plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
         plt.grid(False)
         #plt.show()
-        plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
+        plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
         plt.close()
         L0.close()
 
