@@ -26,10 +26,8 @@ class PickInputsMastersDRP(KPF0_Primitive):
         self.all_fits_files_path = self.action.args[1]
         self.exptime_minimum = self.action.args[2]
 
-        self.exptime_keyword = 'EXPTIME'   # Unlikely to be changed.
-        self.exptime_value_str = '0.0'
-
         self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
+        self.bias_imtype_values_str = 'Bias'
         self.dark_imtype_values_str = 'Dark'
         self.arclamp_imtype_values_str = 'Arclamp'
 
@@ -63,15 +61,15 @@ class PickInputsMastersDRP(KPF0_Primitive):
 
         """
 
-        # Filter biasd files with EXPTIME= 0.0.
+        # Filter bias files with IMTYPE='Bias' and EXPTIME= 0.0.
         
-        fh = FitsHeaders(self.all_fits_files_path,self.exptime_keyword,self.exptime_value_str,self.logger)
-        all_bias_files = fh.match_headers_float_le()
+        fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.bias_imtype_values_str,self.logger)
+        all_bias_files,all_bias_objects = fh.get_good_biases()
 
         # Filter dark files with IMTYPE=‘Dark’ and the specified minimum exposure time.
 
         fh2 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.dark_imtype_values_str,self.logger)
-        all_dark_files = fh2.get_good_darks(self.exptime_minimum)
+        all_dark_files,all_dark_objects = fh2.get_good_darks(self.exptime_minimum)
 
         # Filter flat files with IMTYPE=‘flatlamp’, but exclude those that either don't have
         # SCI-OBJ == CAL-OBJ and SKY-OBJ == CALOBJ or those with SCI-OBJ == "" or SCI-OBJ == "None".
@@ -84,4 +82,4 @@ class PickInputsMastersDRP(KPF0_Primitive):
         fh4 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.arclamp_imtype_values_str,self.logger)
         all_arclamp_files,all_arclamp_objects = fh4.get_good_arclamps()
 
-        return Arguments(all_bias_files,all_dark_files,all_flat_files,all_arclamp_files,all_arclamp_objects)
+        return Arguments(all_bias_files,all_dark_files,all_flat_files,all_arclamp_files,all_bias_objects,all_dark_objects,all_arclamp_objects)
