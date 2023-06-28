@@ -24,8 +24,9 @@ class FitsHeaders:
 
     def __init__(self, search_path, header_keywords, header_values, logger=None):
         self.n_header_keywords = np.size(header_keywords)
-        if self.n_header_keywords == 1:
+        if not isinstance(header_keywords, list):
             header_keywords = [header_keywords]
+        if not isinstance(header_values, list):
             header_values = [header_values]
         self.header_keywords = header_keywords
         self.header_values = header_values
@@ -215,8 +216,11 @@ class FitsHeaders:
         matched_fits_files = self.match_headers_string_lower()
 
         filtered_matched_fits_files = []
+        all_dark_objects = []
         for fits_file in matched_fits_files:
 
+            hdul = fits.open(fits_file)
+            
             flag = 'remove'
 
             try:
@@ -226,6 +230,9 @@ class FitsHeaders:
                 if (val4 >= exptime_minimum):
                     flag = 'keep'
                     filtered_matched_fits_files.append(fits_file)
+                    obj = hdul[0].header['OBJECT']
+                    if obj not in all_dark_objects:
+                        all_dark_objects.append(obj)
 
                 if self.logger:
                     self.logger.debug('flag,val4 = {},{}'.\
@@ -247,6 +254,8 @@ class FitsHeaders:
                     self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
                 else:
                     print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
+                
+            hdul.close()
 
         if self.logger:
              self.logger.debug('FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
@@ -255,7 +264,7 @@ class FitsHeaders:
             print('---->FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
                 format(filtered_matched_fits_files))
 
-        return filtered_matched_fits_files
+        return filtered_matched_fits_files,all_dark_objects
 
     def get_good_arclamps(self):
 
@@ -323,7 +332,10 @@ class FitsHeaders:
         matched_fits_files = self.match_headers_string_lower()
 
         filtered_matched_fits_files = []
+        all_bias_objects = []
         for fits_file in matched_fits_files:
+
+            hdul = fits.open(fits_file)
 
             flag = 'remove'
 
@@ -334,6 +346,9 @@ class FitsHeaders:
                 if (val4 <= exptime_maximum):
                     flag = 'keep'
                     filtered_matched_fits_files.append(fits_file)
+                    obj = hdul[0].header['OBJECT']
+                    if obj not in all_bias_objects:
+                        all_bias_objects.append(obj)
 
                 if self.logger:
                     self.logger.debug('flag,val4 = {},{}'.\
@@ -355,6 +370,8 @@ class FitsHeaders:
                     self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
                 else:
                     print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
+                
+            hdul.close()
 
         if self.logger:
              self.logger.debug('FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
@@ -363,4 +380,4 @@ class FitsHeaders:
             print('---->FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
                 format(filtered_matched_fits_files))
 
-        return filtered_matched_fits_files
+        return filtered_matched_fits_files,all_bias_objects

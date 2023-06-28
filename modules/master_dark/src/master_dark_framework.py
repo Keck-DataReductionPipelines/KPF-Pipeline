@@ -54,7 +54,8 @@ class MasterDarkFramework(KPF0_Primitive):
 
     """
     Description:
-        This class works within the Keck pipeline framework to compute the master dark
+        This class works within the Keck pipeline framework to compute the master dark,
+        for a specific type of dark given by OBJECT in the primary FITS header,
         by stacking input images for exposures with IMTYPE.lower() == 'dark'
         and specified minimum EXPTIME, selected from the given path that can include
         many kinds of FITS files, not just darks.
@@ -69,6 +70,7 @@ class MasterDarkFramework(KPF0_Primitive):
         n_sigma (float): Number of sigmas for data-clipping (e.g., 2.1).
         all_fits_files_path (str , which can include file glob): Location of inputs (e.g., /data/KP*.fits).
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
+        dark_object (str): Desired kind of bias (e.g., autocal-dark).
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_master_bias.fits).
         masterdark_path (str): Pathname of output master dark (e.g., /testdata/kpf_master_dark.fits).
 
@@ -77,6 +79,7 @@ class MasterDarkFramework(KPF0_Primitive):
         n_sigma (float): Number of sigmas for data-clipping (e.g., 2.1).
         all_fits_files_path (str , which can include file glob): Location of inputs (e.g., /data/KP*.fits).
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
+        dark_object (str): Desired kind of bias (e.g., autocal-dark).
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_master_bias.fits).
         masterdark_path (str): Pathname of output master dark (e.g., /testdata/kpf_master_dark.fits).
         imtype_keywords (str): FITS keyword for filtering input dark files (fixed as 'IMTYPE').
@@ -95,8 +98,9 @@ class MasterDarkFramework(KPF0_Primitive):
         self.n_sigma = self.action.args[1]
         self.all_fits_files_path = self.action.args[2]
         self.lev0_ffi_exts = self.action.args[3]
-        self.masterbias_path = self.action.args[4]
-        self.masterdark_path = self.action.args[5]
+        self.dark_object = self.action.args[4]
+        self.masterbias_path = self.action.args[5]
+        self.masterdark_path = self.action.args[6]
 
         self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
         self.imtype_values_str = 'Dark'
@@ -149,13 +153,15 @@ class MasterDarkFramework(KPF0_Primitive):
         master_dark_exit_code = 0
         master_dark_infobits = 0
 
-        # Filter dark files with IMTYPE=‘Dark’ and the specified exposure time.
+        # Filter dark files with IMTYPE=‘Dark’ and the specified minimum exposure time. Later in this class, exclude
+        # those FITS-image extensions that don't match the input object specification with OBJECT.
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
-        all_dark_files = fh.get_good_darks(self.exptime_minimum)
+        all_dark_files,all_dark_objects = fh.get_good_darks(self.exptime_minimum)
 
         mjd_obs_list = []
         exp_time_list = []
+        dark_object_list = []
         for dark_file_path in (all_dark_files):
             dark_file = KPF0.from_fits(dark_file_path,self.data_type)
             mjd_obs = float(dark_file.header['PRIMARY']['MJD-OBS'])
@@ -163,6 +169,9 @@ class MasterDarkFramework(KPF0_Primitive):
             exp_time = float(dark_file.header['PRIMARY']['EXPTIME'])
             exp_time_list.append(exp_time)
             self.logger.debug('dark_file_path,exp_time = {},{}'.format(dark_file_path,exp_time))
+            header_object = dark_file.header['PRIMARY']['OBJECT']
+            dark_object_list.append(header_object)
+            #self.logger.debug('dark_file_path,exp_time,header_object = {},{},{}'.format(dark_file_path,exp_time,header_object))
 
         tester = KPF0.from_fits(all_dark_files[0])
         del_ext_list = []
@@ -171,21 +180,42 @@ class MasterDarkFramework(KPF0_Primitive):
                 del_ext_list.append(i)
         master_holder = tester
 
+        mjd_obs_min = {}
+        mjd_obs_max = {}
         for ffi in self.lev0_ffi_exts:
 
             self.logger.debug('Loading dark data, ffi = {}'.format(ffi))
             keep_ffi = 0
 
-            frames_data=[]
-            for path in all_dark_files:
+            frames_data = []
+            frames_data_exptimes = []
+            frames_data_mjdobs = []
+            frames_data_path = []
+            n_all_dark_files = len(all_dark_files)
+            for i in range(0, n_all_dark_files):
+
+                exp_time = exp_time_list[i]
+                mjd_obs = mjd_obs_list[i]
+                header_object = dark_object_list[i]
+
+                #self.logger.debug('i,fitsfile,ffi,exp_time,dark_object_list[i] = {},{},{},{},{}'.format(i,all_dark_files[i],ffi,exp_time,dark_object_list[i]))
+
+                if header_object != self.dark_object:
+                    #self.logger.debug('---->ffi,header_object,self.dark_object = {},{},{}'.format(ffi,header_object,self.dark_object))
+                    continue
+
+                path = all_dark_files[i]
                 obj = KPF0.from_fits(path)
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
                 n_dims = len(np_obj_ffi_shape)
                 self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
                 if n_dims == 2:       # Check if valid data extension
-                     keep_ffi = 1
-                     frames_data.append(obj[ffi])
+                    keep_ffi = 1
+                    frames_data.append(obj[ffi])
+                    frames_data_exptimes.append(exp_time)
+                    frames_data_mjdobs.append(mjd_obs)
+                    frames_data_path.append(path)
 
             if keep_ffi == 0:
                 self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
@@ -198,13 +228,15 @@ class MasterDarkFramework(KPF0_Primitive):
 
             normalized_frames_data=[]
             n_frames = (np.shape(frames_data))[0]
+            mjd_obs_min[ffi] = min(frames_data_mjdobs)
+            mjd_obs_max[ffi] = max(frames_data_mjdobs)
             self.logger.debug('Number of frames in stack = {}'.format(n_frames))
             for i in range(0, n_frames):
                 single_frame_data = frames_data[i]
 
                 # Separately normalize debiased images by EXPTIME.
 
-                exp_time = exp_time_list[i]
+                exp_time = frames_data_exptimes[i]
                 self.logger.debug('Normalizing dark image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,all_dark_files[i],ffi,exp_time))
                 single_normalized_frame_data = single_frame_data / exp_time
                 normalized_frames_data.append(single_normalized_frame_data)
@@ -258,14 +290,29 @@ class MasterDarkFramework(KPF0_Primitive):
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Dark','Master dark')
 
+        # Remove confusing or non-relevant keywords, if existing.
+
+        try:
+            del master_holder.header['GREEN_CCD']['OSCANV1']
+            del master_holder.header['GREEN_CCD']['OSCANV2']
+            del master_holder.header['GREEN_CCD']['OSCANV3']
+            del master_holder.header['GREEN_CCD']['OSCANV4']
+            del master_holder.header['RED_CCD']['OSCANV1']
+            del master_holder.header['RED_CCD']['OSCANV2']
+            del master_holder.header['RED_CCD']['OSCANV3']
+            del master_holder.header['RED_CCD']['OSCANV4']
+
+        except KeyError as err:
+            pass
+
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
             master_holder.header[ffi]['BUNIT'] = ('DN/sec','Units of master dark')
             master_holder.header[ffi]['NFRAMES'] = (len(all_dark_files),'Number of frames in input stack')
             master_holder.header[ffi]['MINEXPTM'] = (self.exptime_minimum,'Minimum exposure time of input darks (seconds)')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
-            master_holder.header[ffi]['MINMJD'] = (min(mjd_obs_list),'Minimum MJD of dark observations')
-            master_holder.header[ffi]['MAXMJD'] = (max(mjd_obs_list),'Maximum MJD of dark observations')
+            master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of dark observations')
+            master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of dark observations')
             datetimenow = datetime.now(timezone.utc)
             createdutc = datetimenow.strftime("%Y-%m-%dT%H:%M:%SZ")
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-dark creation')
