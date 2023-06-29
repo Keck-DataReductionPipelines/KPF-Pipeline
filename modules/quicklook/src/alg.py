@@ -133,7 +133,7 @@ class QuicklookAlg:
         L0 = fits.open(L0_file)
 
         L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
-        L0_kpf = KPF0.kpf0_from_fits(L0_file,data_type='KPF')
+        L0_kpf = kpf0_from_fits(L0_file,data_type='KPF')
         L0_obj = AnalyzeL0(L0_kpf)
         print(L0_obj,L0_obj.info())
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
