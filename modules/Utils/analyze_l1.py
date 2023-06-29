@@ -67,24 +67,24 @@ class AnalyzeL1:
         self.snr_percentile = snr_percentile
 
         # Determine the number of orders
-        norders_green = (L1.data['GREEN_SKY_WAVE']).shape[0]
-        norders_red   = (L1.data['RED_SKY_WAVE']).shape[0]
+        norders_green = (L1['GREEN_SKY_WAVE']).shape[0]
+        norders_red   = (L1['RED_SKY_WAVE']).shape[0]
         orderlets = {'CAL','SCI1','SCI2','SCI3','SKY'}
         norderlets = len(orderlets)
 
         # Define SNR arrays (needed for operations below where VAR = 0)
-        GREEN_SCI_SNR1 = 0 * L1.data['GREEN_SCI_VAR1']
-        GREEN_SCI_SNR2 = 0 * L1.data['GREEN_SCI_VAR2']
-        GREEN_SCI_SNR3 = 0 * L1.data['GREEN_SCI_VAR3']
-        GREEN_CAL_SNR  = 0 * L1.data['GREEN_CAL_VAR']
-        GREEN_SKY_SNR  = 0 * L1.data['GREEN_SKY_VAR']
-        GREEN_SCI_SNR  = 0 * L1.data['GREEN_SCI_VAR1']
-        RED_SCI_SNR1   = 0 * L1.data['RED_SCI_VAR1']
-        RED_SCI_SNR2   = 0 * L1.data['RED_SCI_VAR2']
-        RED_SCI_SNR3   = 0 * L1.data['RED_SCI_VAR3']
-        RED_CAL_SNR    = 0 * L1.data['RED_CAL_VAR']
-        RED_SKY_SNR    = 0 * L1.data['RED_SKY_VAR']
-        RED_SCI_SNR    = 0 * L1.data['RED_SCI_VAR1']
+        GREEN_SCI_SNR1 = 0 * L1['GREEN_SCI_VAR1']
+        GREEN_SCI_SNR2 = 0 * L1['GREEN_SCI_VAR2']
+        GREEN_SCI_SNR3 = 0 * L1['GREEN_SCI_VAR3']
+        GREEN_CAL_SNR  = 0 * L1['GREEN_CAL_VAR']
+        GREEN_SKY_SNR  = 0 * L1['GREEN_SKY_VAR']
+        GREEN_SCI_SNR  = 0 * L1['GREEN_SCI_VAR1']
+        RED_SCI_SNR1   = 0 * L1['RED_SCI_VAR1']
+        RED_SCI_SNR2   = 0 * L1['RED_SCI_VAR2']
+        RED_SCI_SNR3   = 0 * L1['RED_SCI_VAR3']
+        RED_CAL_SNR    = 0 * L1['RED_CAL_VAR']
+        RED_SKY_SNR    = 0 * L1['RED_SKY_VAR']
+        RED_SCI_SNR    = 0 * L1['RED_SCI_VAR1']
 
         # Create Arrays
         GREEN_SNR = np.zeros((norders_green, norderlets+1))
@@ -93,46 +93,46 @@ class AnalyzeL1:
         RED_SNR_WAV   = np.zeros(norders_red)
 
         # Compute SNR arrays for each of the orders, orderlets, and CCDs.
-        GREEN_SCI_SNR1 = np.divide(L1.data['GREEN_SCI_FLUX1'],
-                                   np.sqrt(abs(L1.data['GREEN_SCI_VAR1'])),
-                                   where=(L1.data['GREEN_SCI_VAR1']!=0))
-        GREEN_SCI_SNR2 = np.divide(L1.data['GREEN_SCI_FLUX2'],
-                                   np.sqrt(abs(L1.data['GREEN_SCI_VAR2'])),
-                                   where=(L1.data['GREEN_SCI_VAR2']!=0))
-        GREEN_SCI_SNR3 = np.divide(L1.data['GREEN_SCI_FLUX3'],
-                                   np.sqrt(abs(L1.data['GREEN_SCI_VAR3'])),
-                                   where=(L1.data['GREEN_SCI_VAR3']!=0))
-        GREEN_SCI_SNR  = np.divide(L1.data['GREEN_SCI_FLUX1']+L1.data['GREEN_SCI_FLUX3']+L1.data['GREEN_SCI_FLUX3'],
-                                   np.sqrt(abs(L1.data['GREEN_SCI_VAR1'])+abs(L1.data['GREEN_SCI_VAR2'])+abs(L1.data['GREEN_SCI_VAR3'])),
-                                   where=(L1.data['GREEN_SCI_VAR1']+L1.data['GREEN_SCI_VAR2']+L1.data['GREEN_SCI_VAR3']!=0))
-        GREEN_CAL_SNR  = np.divide(L1.data['GREEN_CAL_FLUX'],
-                                   np.sqrt(abs(L1.data['GREEN_CAL_VAR'])),
-                                   where=(L1.data['GREEN_CAL_VAR']!=0))
-        GREEN_SKY_SNR  = np.divide(L1.data['GREEN_SKY_FLUX'],
-                                   np.sqrt(abs(L1.data['GREEN_SKY_VAR'])),
-                                   where=(L1.data['GREEN_SKY_VAR']!=0))
-        RED_SCI_SNR1   = np.divide(L1.data['RED_SCI_FLUX1'],
-                                   np.sqrt(abs(L1.data['RED_SCI_VAR1'])),
-                                   where=(L1.data['RED_SCI_VAR1']!=0))
-        RED_SCI_SNR2   = np.divide(L1.data['RED_SCI_FLUX2'],
-                                   np.sqrt(abs(L1.data['RED_SCI_VAR2'])),
-                                   where=(L1.data['RED_SCI_VAR2']!=0))
-        RED_SCI_SNR3   = np.divide(L1.data['RED_SCI_FLUX3'],
-                                   np.sqrt(abs(L1.data['RED_SCI_VAR3'])),
-                                   where=(L1.data['RED_SCI_VAR3']!=0))
-        RED_SCI_SNR    = np.divide(L1.data['RED_SCI_FLUX1']+L1.data['RED_SCI_FLUX3']+L1.data['RED_SCI_FLUX3'],
-                                   np.sqrt(abs(L1.data['RED_SCI_VAR1'])+abs(L1.data['RED_SCI_VAR2'])+abs(L1.data['RED_SCI_VAR3'])),
-                                   where=(L1.data['RED_SCI_VAR1']+L1.data['RED_SCI_VAR2']+L1.data['RED_SCI_VAR3']!=0))
-        RED_CAL_SNR    = np.divide(L1.data['RED_CAL_FLUX'],
-                                   np.sqrt(abs(L1.data['RED_CAL_VAR'])),
-                                   where=(L1.data['RED_CAL_VAR']!=0))
-        RED_SKY_SNR    = np.divide(L1.data['RED_SKY_FLUX'],
-                                   np.sqrt(abs(L1.data['RED_SKY_VAR'])),
-                                   where=(L1.data['RED_SKY_VAR']!=0))
+        GREEN_SCI_SNR1 = np.divide(L1['GREEN_SCI_FLUX1'],
+                                   np.sqrt(abs(L1['GREEN_SCI_VAR1'])),
+                                   where=(L1['GREEN_SCI_VAR1']!=0))
+        GREEN_SCI_SNR2 = np.divide(L1['GREEN_SCI_FLUX2'],
+                                   np.sqrt(abs(L1['GREEN_SCI_VAR2'])),
+                                   where=(L1['GREEN_SCI_VAR2']!=0))
+        GREEN_SCI_SNR3 = np.divide(L1['GREEN_SCI_FLUX3'],
+                                   np.sqrt(abs(L1['GREEN_SCI_VAR3'])),
+                                   where=(L1['GREEN_SCI_VAR3']!=0))
+        GREEN_SCI_SNR  = np.divide(L1['GREEN_SCI_FLUX1']+L1['GREEN_SCI_FLUX3']+L1['GREEN_SCI_FLUX3'],
+                                   np.sqrt(abs(L1['GREEN_SCI_VAR1'])+abs(L1['GREEN_SCI_VAR2'])+abs(L1['GREEN_SCI_VAR3'])),
+                                   where=(L1['GREEN_SCI_VAR1']+L1['GREEN_SCI_VAR2']+L1['GREEN_SCI_VAR3']!=0))
+        GREEN_CAL_SNR  = np.divide(L1['GREEN_CAL_FLUX'],
+                                   np.sqrt(abs(L1['GREEN_CAL_VAR'])),
+                                   where=(L1['GREEN_CAL_VAR']!=0))
+        GREEN_SKY_SNR  = np.divide(L1['GREEN_SKY_FLUX'],
+                                   np.sqrt(abs(L1['GREEN_SKY_VAR'])),
+                                   where=(L1['GREEN_SKY_VAR']!=0))
+        RED_SCI_SNR1   = np.divide(L1['RED_SCI_FLUX1'],
+                                   np.sqrt(abs(L1['RED_SCI_VAR1'])),
+                                   where=(L1['RED_SCI_VAR1']!=0))
+        RED_SCI_SNR2   = np.divide(L1['RED_SCI_FLUX2'],
+                                   np.sqrt(abs(L1['RED_SCI_VAR2'])),
+                                   where=(L1['RED_SCI_VAR2']!=0))
+        RED_SCI_SNR3   = np.divide(L1['RED_SCI_FLUX3'],
+                                   np.sqrt(abs(L1['RED_SCI_VAR3'])),
+                                   where=(L1['RED_SCI_VAR3']!=0))
+        RED_SCI_SNR    = np.divide(L1['RED_SCI_FLUX1']+L1['RED_SCI_FLUX3']+L1['RED_SCI_FLUX3'],
+                                   np.sqrt(abs(L1['RED_SCI_VAR1'])+abs(L1['RED_SCI_VAR2'])+abs(L1['RED_SCI_VAR3'])),
+                                   where=(L1['RED_SCI_VAR1']+L1['RED_SCI_VAR2']+L1['RED_SCI_VAR3']!=0))
+        RED_CAL_SNR    = np.divide(L1['RED_CAL_FLUX'],
+                                   np.sqrt(abs(L1['RED_CAL_VAR'])),
+                                   where=(L1['RED_CAL_VAR']!=0))
+        RED_SKY_SNR    = np.divide(L1['RED_SKY_FLUX'],
+                                   np.sqrt(abs(L1['RED_SKY_VAR'])),
+                                   where=(L1['RED_SKY_VAR']!=0))
 
         # Compute SNR per order and per orderlet
         for o in range(norders_green):
-            GREEN_SNR_WAV[o] = L1.data['GREEN_SCI_WAVE1'][o,2040]
+            GREEN_SNR_WAV[o] = L1['GREEN_SCI_WAVE1'][o,2040]
             GREEN_SNR[o,0] = np.percentile(GREEN_CAL_SNR[o], snr_percentile)
             GREEN_SNR[o,1] = np.percentile(GREEN_SCI_SNR1[o], snr_percentile)
             GREEN_SNR[o,2] = np.percentile(GREEN_SCI_SNR2[o], snr_percentile)
@@ -140,7 +140,7 @@ class AnalyzeL1:
             GREEN_SNR[o,4] = np.percentile(GREEN_SKY_SNR[o], snr_percentile)
             GREEN_SNR[o,5] = np.percentile(GREEN_SCI_SNR[o], snr_percentile)
         for o in range(norders_red):
-            RED_SNR_WAV[o] = L1.data['RED_SCI_WAVE1'][o,2040]
+            RED_SNR_WAV[o] = L1['RED_SCI_WAVE1'][o,2040]
             RED_SNR[o,0] = np.percentile(RED_CAL_SNR[o], snr_percentile)
             RED_SNR[o,1] = np.percentile(RED_SCI_SNR1[o], snr_percentile)
             RED_SNR[o,2] = np.percentile(RED_SCI_SNR2[o], snr_percentile)
