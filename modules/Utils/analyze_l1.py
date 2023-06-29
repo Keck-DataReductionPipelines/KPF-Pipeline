@@ -217,3 +217,65 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close()
+
+    def plot_1D_spectrum(self, chip=None, orderlet=None, fig_path=None, show_plot=False):
+
+        """
+        
+        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+        
+        Generate a rainbow-colored plot L1 spectrum.  One must select an orderlet.    
+
+        Args:
+            chip (string) - "green" or "red"
+            orderlet (string) - "CAL", "SCI1", "SCI2", "SCI3", "SKY"
+            fig_path (string) - set to the path for the file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+
+    def plot_1D_spectrum_single_order(self, chip=None, fig_path=None, show_plot=False):
+
+        """
+        
+        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+        
+        Generate a plot of a single order of the L1 spectrum showing all orderlets.
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+
+
+    def measure_orderlet_flux_ratio(self):
+
+        """
+        TO-DO: MOVE THE ANALYSIS CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+
+        Compute the flux ratios of SCI2/SCI1, SCI3/SCI1, CAL/SCI1, SKY/SCI1.
+
+        Args:
+            None
+
+        Attributes:
+            To be defined.
+
+        Returns:
+            None
+        """
