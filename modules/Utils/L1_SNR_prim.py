@@ -95,7 +95,7 @@ class L1_SNR(KPF1_Primitive):
 
         self.l1_obj.to_fits(self.data_dir+self.l1_obj.filename)
 
-        print(self.l1_obj.header)
+        #print(self.l1_obj.header)
 
 
         #print(L1_SNR.RED_SNR)
