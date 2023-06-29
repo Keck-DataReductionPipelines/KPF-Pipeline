@@ -25,4 +25,90 @@ class Analyze2D:
             self.logger = None
             print('---->Analyze2D class constructor')
 
- 
+    def plot_2D_image(self, chip=None, fig_path=None, show_plot=False):
+
+        """
+        
+        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+        
+        Generate a plot of the stitched L0 image.  
+        The image will be divided by 2^16, if appropriate.
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+        
+    def plot_2D_order_trace_image(self, chip=None, fig_path=None, show_plot=False):
+
+        """
+        
+        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+        
+        Generate a plot of the stitched L0 image.  
+        The image will be divided by 2^16, if appropriate.
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+    
+    def plot_2D_image_histogram(self, chip=None, fig_path=None, show_plot=False):
+
+        """
+        
+        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+        
+        Generate a plot of the stitched L0 image.  
+        The image will be divided by 2^16, if appropriate.
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+    
+    def plot_2D_column_cut(self, chip=None, fig_path=None, show_plot=False):
+
+        """
+        
+        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE. 
+               THIS IS A PLACEHOLDER.
+        
+        Generate a plot of the stitched L0 image.  
+        The image will be divided by 2^16, if appropriate.
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
