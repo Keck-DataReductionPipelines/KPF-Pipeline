@@ -53,10 +53,10 @@ class L1_SNR(KPF1_Primitive):
 
     #Perform
     def _perform(self) -> None:
-        L1_file = fits.open(self.data_dir+self.l1_obj.filename)
+        #L1_file = fits.open(self.data_dir+self.l1_obj.filename)
 
-        L1_SNR = AnalyzeL1(L1_file)
-        L1_SNR.measure_L1_snr(L1_file,snr_percentile=95)
+        L1_SNR = AnalyzeL1(self.l1_obj) #L1_file
+        L1_SNR.measure_L1_snr(self.l1_obj,snr_percentile=95)#L1_file
         #print(L1_SNR.GREEN_SNR) #(orders number, orderlet number)
 
         self.l1_obj.header['PRIMARY']['SNRSC452'] = L1_SNR.GREEN_SNR[1,-1]
