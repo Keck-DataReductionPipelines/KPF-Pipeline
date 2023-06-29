@@ -14,7 +14,7 @@ from astropy import modeling
 from astropy.time import Time
 from datetime import datetime
 from modules.Utils.analyze_l0 import AnalyzeL0
-
+from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
 
 class QuicklookAlg:
     """
