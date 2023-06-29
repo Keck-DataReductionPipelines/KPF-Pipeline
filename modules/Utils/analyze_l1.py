@@ -63,6 +63,7 @@ class AnalyzeL1:
             None
         """
         L1= self.L1
+        print('KPF1',L1)
         self.snr_percentile = snr_percentile
 
         # Determine the number of orders
