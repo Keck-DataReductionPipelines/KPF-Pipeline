@@ -132,9 +132,9 @@ class QuicklookAlg:
         L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0 = fits.open(L0_file)
 
-        L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
-        L0_kpf = fits_primitives.kpf0_from_fits(L0_file)
-        L0_obj = AnalyzeL0(L0_kpf)
+        #L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
+        #L0_kpf = fits_primitives.kpf0_from_fits(L0_file)
+        L0_obj = AnalyzeL0(L0)
         print(L0_obj,L0_obj.info())
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
         L0_obj.plot_L0_stitched_image(chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
