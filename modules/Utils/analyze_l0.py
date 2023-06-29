@@ -26,7 +26,7 @@ class AnalyzeL0:
 
 
     def plot_L0_stitched_image(self, chip=None, fig_path=None, show_plot=False):
-
+        L0 = self.L0
         """
 
         Generate a plot of the stitched L0 image.
@@ -55,7 +55,7 @@ class AnalyzeL0:
             amp2_present = False
             amp3_present = False
             amp4_present = False
-            for hdu in self.L0:
+            for hdu in L0:
                 if hdu.name == CHIP + '_AMP1':
                     amp1_present = True
                 if hdu.name == CHIP + '_AMP2':
