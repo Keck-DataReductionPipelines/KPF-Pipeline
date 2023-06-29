@@ -5,7 +5,7 @@ from modules.spectral_extraction.src.spectral_extraction import SpectralExtracti
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
-from modules.src.radial_velocity_reweighting import RadialVelocityReweighting
+from modules.radial_velocoty.src.radial_velocity_reweighting import RadialVelocityReweighting
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
 from modules.quicklook.src.quick_prim import Quicklook
 from modules.Utils.string_proc import str_replace
@@ -128,8 +128,8 @@ date_dir = sel_obsid + '/'
 
 output_dir = config.ARGUMENT.output_dir
 input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
-# input_2d_dir_flat = config.ARGUMENT.masters_dir + date_dir_flat
-masters_data_dir = output_dir + "masters/"
+masters_data_dir = config.ARGUMENT.masters_dir
+#masters_data_dir = output_dir + "masters/"
 
 ## general purpose variables
 ccd_list = config.ARGUMENT.ccd_list
@@ -209,6 +209,7 @@ origin = [data_col_range[0], data_row_range[0]]
 lev0_flat_pattern = config.ARGUMENT.flat_file
 # output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
 # use the full path of ourder trace files defind in config
+order_trace_flat = config.ARGUMENT.order_trace_flat
 output_order_trace = config.ARGUMENT.order_trace_files
 
 ## for spectral extraction: input and output
@@ -326,6 +327,7 @@ b_all_traces = False
 lev0_flat_rect = None
 
 if do_order_trace:
+	trace_list = []
 	flat_data = None
 
 	if exists(input_flat_file):
@@ -338,7 +340,8 @@ if do_order_trace:
 			ccd = ccd_list[idx]
 			# get order trace file name defined in config file
 			# output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
-			output_lev0_trace_csv = output_order_trace[idx] 
+			# output_lev0_trace_csv = output_order_trace[idx] 
+			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext);
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if not exists(output_lev0_trace_csv):
 				order_result_data = OrderTrace(flat_data, data_extension=ccd + '_STACK',
@@ -348,7 +351,6 @@ if do_order_trace:
 
 			b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
 
-	# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
 	output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
 	lev0_flat_rect = flat_data
 
@@ -380,7 +382,7 @@ if do_order_trace:
 			if b_lev0_rect:
 				result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
 
-## do spectral extraction including CA-HK extraction
+## do spectral extraction including background subtracton and build BARY_CORR and do CA-HK extraction after spectral extraction.
 #  description: do spectrum extraction based on extraction method (summ or optimal) per fiber per ccd and
 #               spectral extraction from CA-HK spectrometer fibers.
 #               copy wavelength solution data from wls sample files to produced L1 data.
@@ -391,6 +393,8 @@ if do_order_trace:
 #    output_lev1_file: path of produced L1 file,  /data/L1/<date_dir>/<lev1_stem>_L1.fits
 #    lev1_list: a list containing the path of L1 files produced by either spectral extraction or ca_hk extraction.
 #
+#    for background extraction:
+#      order_mask: KPF0 instance, same size as input L0 data, the image distinguishes the orderlet pixels from the non-orderlet pixels.
 #    for spectral extraction:
 #      output_lev0_flat_rect: fits file with rectified L0 flat data
 #      lev0_flat_rect: KPF0 instance for 'output_lev0_flat_rect'
@@ -398,13 +402,15 @@ if do_order_trace:
 #      trace_list: list containing order trace result file for each ccd.
 #                  [/data/order_trace/<date_dir_flat>/<flat_stem>_GREEN_CCD.csv (or <flat_stem>_RED_CCD.csv)]
 #      b_level1_sp: a boolean to indicate if spectral extraction for each L0 is successful.
-#      op_data: KPF1 instance containing spectral extraction result which is added into op_data extension by extension
+#      op_data: KPF1 instance containing spectral extractis_bary_idxon result which is added into op_data extension by extension
 #               per specified extension list (order_names) in each ccd iteration.
 #      wavecal_data: KPF1 instance per wls sample file.
 #    for ca_hk:
 #      hk_dark_data: KPF0 for dark data
 #      hk_bias_data: KPF0 for bias data
 #  primitives:
+#    OrderMask: os_bary_idxrder mask
+#    ImageProcessing: perform background subtraction
 #    SpectralExtraction: spectral extraction
 #    ExtCopy: extension copy from the extension of one data model instance to the extension of another
 #             (or the same) data model instance.
@@ -415,12 +421,13 @@ lev1_list = []
 
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
+	trace_list = []
 
 	# prepare trace files and rectified L0 flat data for spectral extraction
 	if do_spectral_extraction:
 		# existence of flat and trace files
 		# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-		output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
+		output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
 		if exists(output_lev0_flat_rect):
 			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
 
@@ -447,7 +454,8 @@ if do_spectral_extraction or do_hk or do_bc:
 			hk_bias_data = None
 
 	# loop through ccd and L0 to do spectral extraction
-	for input_lev0_file in find_files(lev0_science_pattern):
+	lev0_files = find_files(lev0_science_pattern)
+	for input_lev0_file in lev0_files:
 		# lev0_data is KPF0 instance for input_lev0_file
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
 		_, short_lev0_file = split(input_lev0_file)
@@ -573,7 +581,10 @@ if do_spectral_extraction or do_hk or do_bc:
 #
 #  primitives:
 #    RadialVelocityInit: do rv init on each L1 input.
-#    RadialVelocity: do radial velocity per ccd per L1 data.
+#    RadialVelocity: do radial velocity per ccd per L1 data, CCF reweighting is optional based on if a ratio table is provided and
+#                                                            if producing L2 with reweighted CCF without keeping the unweighted CCF.
+#    RadialVelocityReweightingRef: build or load CCF reweighting ratio table.
+#    RadialVelocityReweightin: perform CCF reweighitng
 #
 if do_rv or do_rv_reweighting:
 	rv_star_dir = masters_data_dir
