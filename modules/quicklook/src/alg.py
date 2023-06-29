@@ -137,9 +137,9 @@ class QuicklookAlg:
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
         L0_obj.plot_L0_stitched_image(chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
         L0_obj.plot_L0_stitched_image(chip='red', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
+        '''
 
-
-
+        L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0 = fits.open(L0_file)
 
         green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
@@ -173,7 +173,7 @@ class QuicklookAlg:
         plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
         plt.close()
         L0.close()
-        '''
+
 
 
         #read ccd directly
