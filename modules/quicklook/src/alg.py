@@ -129,6 +129,7 @@ class QuicklookAlg:
 
 
         #operate on L0 data before image assembly
+        '''
         L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0_kpf = kpf0_from_fits(L0_file,data_type='KPF')
         L0_obj = AnalyzeL0(L0_kpf)
@@ -137,7 +138,7 @@ class QuicklookAlg:
         L0_obj.plot_L0_stitched_image(chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
         L0_obj.plot_L0_stitched_image(chip='red', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
 
-        '''
+
 
         L0 = fits.open(L0_file)
 
