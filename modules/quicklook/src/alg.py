@@ -13,6 +13,7 @@ import math
 from astropy import modeling
 from astropy.time import Time
 from datetime import datetime
+from modules.Utils.analyze_l1 import AnalyzeL0
 
 
 class QuicklookAlg:
@@ -128,6 +129,12 @@ class QuicklookAlg:
 
 
         #operate on L0 data before image assembly
+        L0_obj = AnalyzeL0(kpf0_file)
+        if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
+        L0_obj.plot_L0_stitched_image(chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
+        L0_obj.plot_L0_stitched_image(chip='red', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
+
+        '''
         L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0 = fits.open(L0_file)
 
@@ -162,6 +169,7 @@ class QuicklookAlg:
         plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
         plt.close()
         L0.close()
+        '''
 
 
         #read ccd directly
