@@ -180,6 +180,7 @@ class MasterDarkFramework(KPF0_Primitive):
                 del_ext_list.append(i)
         master_holder = tester
 
+        n_frames_kept = {}
         mjd_obs_min = {}
         mjd_obs_max = {}
         for ffi in self.lev0_ffi_exts:
@@ -228,9 +229,20 @@ class MasterDarkFramework(KPF0_Primitive):
 
             normalized_frames_data=[]
             n_frames = (np.shape(frames_data))[0]
+            self.logger.debug('Number of frames in stack = {}'.format(n_frames))
+
+            # Exit without making product if headers of FITS files in input list do not contain specified OBJECT,
+            # or the number of frames to stack is less than 2.  In either case, exit_code=7 is returned.
+
+            if n_frames < 2:
+                master_dark_exit_code = 7
+                exit_list = [master_dark_exit_code,master_dark_infobits]
+                return Arguments(exit_list)
+
+            n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
-            self.logger.debug('Number of frames in stack = {}'.format(n_frames))
+
             for i in range(0, n_frames):
                 single_frame_data = frames_data[i]
 
@@ -308,7 +320,7 @@ class MasterDarkFramework(KPF0_Primitive):
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
             master_holder.header[ffi]['BUNIT'] = ('DN/sec','Units of master dark')
-            master_holder.header[ffi]['NFRAMES'] = (len(all_dark_files),'Number of frames in input stack')
+            master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['MINEXPTM'] = (self.exptime_minimum,'Minimum exposure time of input darks (seconds)')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of dark observations')
