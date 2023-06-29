@@ -23,7 +23,13 @@ else:
 
 exptime_minimum = config.DARK.exptime_minimum
 
-all_bias_files_list, all_dark_files_list, all_flat_files_list, all_arclamp_files_list, arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
+all_bias_files_list,\
+    all_dark_files_list,\
+    all_flat_files_list,\
+    all_arclamp_files_list,\
+    bias_objects_auto,\
+    dark_objects_auto,\
+    arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
 
 channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
@@ -104,19 +110,35 @@ for raw_file_path in file_list:
 if all_bias_files_list:
     bias_n_sigma = config.BIAS.n_sigma
     bias_lev0_ffi_exts = config.BIAS.lev0_ffi_exts
+
+
+    bias_objects_config = config.BIAS.bias_objects
+
+    if len(bias_objects_config) == 0:
+        bias_objects = bias_objects_auto
+    else:
+        bias_objects = bias_objects_config
+
     masterbias_path = config.BIAS.masterbias_path
     bias_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
-    if date_dir:
-        new_masterbias_path = str_replace(masterbias_path, '_master_bias.fits', '_' + date_dir + '_master_bias.fits')
-    else:
-        new_masterbias_path = masterbias_path
+    for bias_object in bias_objects:
 
-    exit_list_bias = MasterBiasFramework(data_type,
-                                         bias_n_sigma,
-                                         bias_input_files,
-                                         bias_lev0_ffi_exts,
-                                         new_masterbias_path)
+        if date_dir:
+            new_masterbias_path = str_replace(masterbias_path,\
+                                     '_master_bias.fits',\
+                                     '_' + date_dir + '_master_bias_' + bias_object + '.fits')
+        else:
+            new_masterbias_path = str_replace(masterbias_path,\
+                                     '_master_bias.fits',\
+                                     '_master_bias_' + bias_object + '.fits')
+
+        exit_list_bias = MasterBiasFramework(data_type,
+                                             bias_n_sigma,
+                                             bias_input_files,
+                                             bias_lev0_ffi_exts,
+                                             bias_object,
+                                             new_masterbias_path)
 
 
 
@@ -127,20 +149,38 @@ if all_bias_files_list:
     if all_dark_files_list:
         dark_n_sigma = config.DARK.n_sigma
         dark_lev0_ffi_exts = config.DARK.lev0_ffi_exts
+
+
+
+
+        dark_objects_config = config.DARK.dark_objects
+
+        if len(dark_objects_config) == 0:
+            dark_objects = dark_objects_auto
+        else:
+            dark_objects = dark_objects_config
+
         masterdark_path = config.DARK.masterdark_path
         dark_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
-        if date_dir:
-            new_masterdark_path = str_replace(masterdark_path, '_master_dark.fits', '_' + date_dir + '_master_dark.fits')
-        else:
-            new_masterdark_path = masterdark_path
+        for dark_object in dark_objects:
 
-        exit_list_dark = MasterDarkFramework(data_type,
-                                             dark_n_sigma,
-                                             dark_input_files,
-                                             dark_lev0_ffi_exts,
-                                             new_masterbias_path,
-                                             new_masterdark_path)
+            if date_dir:
+                new_masterdark_path = str_replace(masterdark_path,\
+                                         '_master_dark.fits',\
+                                         '_' + date_dir + '_master_dark_' + dark_object + '.fits')
+            else:
+                new_masterdark_path = str_replace(masterdark_path,\
+                                         '_master_dark.fits',\
+                                         '_master_dark_' + dark_object + '.fits')
+
+            exit_list_dark = MasterDarkFramework(data_type,
+                                                 dark_n_sigma,
+                                                 dark_input_files,
+                                                 dark_lev0_ffi_exts,
+                                                 dark_object,
+                                                 new_masterbias_path,
+                                                 new_masterdark_path)
 
 
 ########################
