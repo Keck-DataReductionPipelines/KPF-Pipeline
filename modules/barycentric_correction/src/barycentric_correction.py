@@ -63,6 +63,8 @@
             :
             op_data = BarycentricCorrection(start_time='2458591.5', period=380, bc_corr_path=KPF_TEST_DATA)
             :
+
+        where `op_data` is dict object wrapped in `Arguments` class object.
 """
 
 import configparser
