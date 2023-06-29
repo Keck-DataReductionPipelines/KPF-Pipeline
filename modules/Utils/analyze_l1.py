@@ -62,7 +62,7 @@ class AnalyzeL1:
         Returns:
             None
         """
-
+        L1= self.L1
         self.snr_percentile = snr_percentile
 
         # Determine the number of orders
@@ -154,7 +154,7 @@ class AnalyzeL1:
         self.RED_SNR_WAV   = RED_SNR_WAV
 
     def plot_L1_snr(self,ObsID, fig_path=None, show_plot=False):
-
+        L1= self.L1
         """
 
         Generate a plot of SNR per order as compuated using the compute_l1_snr
