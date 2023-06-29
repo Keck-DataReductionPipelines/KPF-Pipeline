@@ -12,7 +12,7 @@ class AnalyzeL0:
         L0 - an L0 object
 
     Attributes:
-        TBD
+        None so far
     """
 
     def __init__(self, L0, logger=None):
