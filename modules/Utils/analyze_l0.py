@@ -25,7 +25,7 @@ class AnalyzeL0:
             print('---->AnalyzeL0 class constructor')
 
 
-    def plot_L0_stitched_image(self, chip=None, fig_path=None, show_plot=False):
+    def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
         L0 = self.L0
         """
 
