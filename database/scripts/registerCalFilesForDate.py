@@ -119,7 +119,7 @@ for fits_file in master_files:
 
     try:
         filename_caltype = filename_match.group(1)
-        #print("-----1-----> fn_caltype =",filename_caltype)
+        print("-----1-----> fn_caltype =",filename_caltype)
 
         filename_match = re.match(r"(.+?)_(.+)", filename_caltype)
 
@@ -127,11 +127,11 @@ for fits_file in master_files:
             filename_caltype = filename_match.group(1)
             filename_object = filename_match.group(2)
 
-            #print("-------2--------> fn_caltype =",filename_caltype)
-            #print("-------2--------> fn_object =",filename_object)
+            print("-------2--------> fn_caltype =",filename_caltype)
+            print("-------2--------> fn_object =",filename_object)
 
         except:
-            #print("-------2--------> No filename match found")
+            print("-------2--------> No filename match found")
 
             if filename_caltype == 'bias':
                 filename_object = "autocal-bias"
@@ -141,27 +141,22 @@ for fits_file in master_files:
                 filename_object = "autocal-flat-all"
 
     except:
-        #print("-----1-----> No filename match found")
+        print("-----1-----> No filename match found")
 
         pass
 
     try:
-        if re.match(r".+_master_bias", fits_file):
-            filename_caltype = 'bias'
-        elif re.match(r".+_master_dark", fits_file):
-            filename_caltype = 'dark'
-        elif re.match(r".+_master_flat", fits_file):
+        if re.match(r".+_master_flat", fits_file):
             filename_caltype = 'flat'
-    except:
-        pass
-
-    try:
-        if filename_caltype == 'bias':
-            filename_object = "autocal-bias"
-        elif filename_caltype == 'dark':
-            filename_object = "autocal-dark"
-        elif filename_caltype == 'flat':
             filename_object = "autocal-flat-all"
+        else:
+            filename_match = re.match(r".+_master_(.+)_(.+)\.fits", fits_file)
+            filename_caltype = filename_match.group(1)
+            filename_object = filename_match.group(2)
+
+            print("-------3--------> fn_caltype =",filename_caltype)
+            print("-------3--------> fn_object =",filename_object)
+
     except:
         pass
 
