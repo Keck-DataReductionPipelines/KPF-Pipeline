@@ -35,7 +35,7 @@ class AnalyzeL1:
             self.logger = None
             print('---->AnalyzeL0 class constructor')
 
-    def measure_L1_snr(self,L1, snr_percentile=95):
+    def measure_L1_snr(self, snr_percentile=95):
 
         """
         Compute the signal-to-noise ratio (SNR) for each spectral order and
@@ -153,7 +153,7 @@ class AnalyzeL1:
         self.GREEN_SNR_WAV = GREEN_SNR_WAV
         self.RED_SNR_WAV   = RED_SNR_WAV
 
-    def plot_L1_snr(self,L1,ObsID, fig_path=None, show_plot=False):
+    def plot_L1_snr(self,ObsID, fig_path=None, show_plot=False):
 
         """
 
