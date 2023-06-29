@@ -55,11 +55,16 @@
 
             :
             lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-            lev1_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
-            new_lev1 = BaryCorrTable(lev0_data, lev1_data, 67, 32,
-                                        wls_ext='GREEN_SCI_WAVE1',
+            output_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
+
+            # for red CCD
+            output_data = BaryCorrTable(lev0_data, output_data, 67, 32,
+                                        start_bary_index=35,
+                                        wls_ext='RED_SCI_WAVE1',
                                         start_bary_index=35)
             :
+
+        where `output_data` is KPF1 object wrapped in `Arguments` class object.
 """
 
 
