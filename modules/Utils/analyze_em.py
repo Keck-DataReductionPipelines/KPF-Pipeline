@@ -6,7 +6,7 @@ class AnalyzeEM:
 
     """
     Description:
-        This class contains functions to analyze EM data 
+        This class contains functions to analyze Exposure Meter data 
         (storing them as attributes) and functions to plot the results.
         Some of the functions need to be filled in.
 
