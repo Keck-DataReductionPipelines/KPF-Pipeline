@@ -101,9 +101,9 @@ class AnalyzeL0:
                    vmin=np.percentile(image,1),
                    vmax=np.percentile(image,99.5))
         if chip == 'green':
-            plt.title(ObsID + ' - L0 (no processing) - Green CCD', fontsize=14)
+            plt.title('L0 (no processing) - Green CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
         if chip == 'red':
-            plt.title(ObsID + ' - L0 (no processing) - Red CCD', fontsize=14)
+            plt.title('L0 (no processing) - Red CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
         plt.xlabel('x (pixel number)', fontsize=14)
         plt.ylabel('y (pixel number)', fontsize=14)
         cbar_label = 'ADU'
