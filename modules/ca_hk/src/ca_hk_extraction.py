@@ -42,15 +42,20 @@
         For the recipe, the order trace event is issued like::
 
             :
-            hk_data = kpf0_from_fits(hk_file)
-            output_lev1_hk = CaHKExtraction(hk_data, input_trace_file, fiber_list, None, output_exts=output_exts)
+            lev0_data = kpf0_from_fits(input_lev0_file)
+            output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+            :
+            output_data = CaHKExtraction(lev0_data,
+                    hk_trace_table,                     # ex. /data/masters/kpfMaster_HKOrderBounds20220909.csv
+                    hk_fiber_list,                      # ex. ['sci', 'sky']
+                    output_data,                        # lev1 containing Ca H&K extraction
+                    output_exts=hk_spec_ext,            # ex. ['CA_HK_SCI', 'CA_HK_SKY']
+                    dark=hk_dark_data,                  # lev0 containing dark image
+                    wave_files=hk_wavelength_tables)    # ex. ['/data/masters/kpfMaster_HKwave20220909_sci.csv',
+                                                        #      '/data/masters/kpfMaster_HKwave20220909_sky.csv']
             :
 
-            where 'hk_data' is level 0 data (`KPF0`) object containing 'CA_HK' extension,
-            'input_trace_file' is the path of the csv file containing the location defintion of the order trace,
-            'fiber_list' is a list containing the fibers to be processed, and
-            'output_exts' is a list containing the names of the extensions to contain the output.
-
+        where `output_data` is KPF1 object wrapped in `Arguments` class object.
 """
 
 import configparser

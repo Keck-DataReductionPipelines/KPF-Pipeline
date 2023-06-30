@@ -18,16 +18,18 @@ class MasterBiasFramework(KPF0_Primitive):
 
     """
     Description:
-        This class works within the Keck pipeline framework to compute
-        the master bias by stacking input images for exposures with
-        EXPTIME <= 0.0 selected from the given path, which can include
-        many kinds of FITS files, not just biases.
+        This class works within the Keck pipeline framework to compute the master bias,
+        for a specific type of bias given by OBJECT in the primary FITS header,
+        by stacking input images for exposures with IMTYPE.lower() == 'bias' and
+        EXPTIME <= 0.0 and specified input bias_object.  The input FITS files are selected
+        from the given path, which can include many kinds of FITS files, not just biases.
 
     Arguments:
         data_type (str): Type of data (e.g., KPF).
         n_sigma (float): Number of sigmas for data-clipping (e.g., 2.1).
         all_fits_files_path (str , which can include file glob): Location of inputs (e.g., /data/KP*.fits).
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
+        bias_object (str): Desired kind of bias (e.g., autocal-bias).
         masterbias_path (str): Pathname of output master bias (e.g., /testdata/kpf_green_red_bias.fits).
 
     Attributes:
@@ -35,9 +37,10 @@ class MasterBiasFramework(KPF0_Primitive):
         n_sigma (float): Number of sigmas for data-clipping (e.g., 2.1).
         all_fits_files_path (str , which can include file glob): Location of inputs (e.g., /data/KP*.fits).
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
+        bias_object (str): Desired kind of bias (e.g., autocal-bias).
         masterbias_path (str): Pathname of output master bias (e.g., /testdata/kpf_green_red_bias.fits).
-        exptime_keyword (str): FITS keyword for filtering input bias files (fixed as 'EXPTIME').
-        exptime__value_str (str): Maximum value of FITS keyword (fixed as <= '0.0').
+        imtype_keywords (str): FITS keyword for filtering input bias files (fixed as ['IMTYPE','OBJECT']).
+        imtype_values_str (str): Values of FITS keyword (fixed as ['Bias','autocal-bias']).
         config_path (str): Location of default config file (modules/master_bias/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
     """
@@ -50,10 +53,11 @@ class MasterBiasFramework(KPF0_Primitive):
         self.n_sigma = self.action.args[1]
         self.all_fits_files_path = self.action.args[2]
         self.lev0_ffi_exts = self.action.args[3]
-        self.masterbias_path = self.action.args[4]
+        self.bias_object = self.action.args[4]
+        self.masterbias_path = self.action.args[5]
 
-        self.exptime_keyword = 'EXPTIME'   # Unlikely to be changed.
-        self.exptime_value_str = '0.0'
+        self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
+        self.imtype_values_str = 'Bias'
 
         try:
             self.config_path = context.config_path['master_bias']
@@ -85,14 +89,21 @@ class MasterBiasFramework(KPF0_Primitive):
         master_bias_exit_code = 0
         master_bias_infobits = 0
 
-        fh = FitsHeaders(self.all_fits_files_path,self.exptime_keyword,self.exptime_value_str,self.logger)
-        all_bias_files = fh.match_headers_float_le()
+        # Filter bias files with IMTYPE=‘Bias’ and EXPTIME = 0.0 for now.  Later in this class, exclude
+        # those FITS-image extensions that don't match the input object specification with OBJECT.
+
+        fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
+        all_bias_files,all_bias_objects = fh.get_good_biases()
 
         mjd_obs_list = []
+        bias_object_list = []
         for bias_file_path in (all_bias_files):
             bias_file = KPF0.from_fits(bias_file_path,self.data_type)
             mjd_obs = float(bias_file.header['PRIMARY']['MJD-OBS'])
             mjd_obs_list.append(mjd_obs)
+            header_object = bias_file.header['PRIMARY']['OBJECT']
+            bias_object_list.append(header_object)
+            #self.logger.debug('bias_file_path,exp_time,header_object = {},{},{}'.format(bias_file_path,exp_time,header_object))
 
         tester = KPF0.from_fits(all_bias_files[0])
         del_ext_list = []
@@ -100,23 +111,61 @@ class MasterBiasFramework(KPF0_Primitive):
             if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'CA_HK' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
                 del_ext_list.append(i)
         master_holder = tester
+
+        n_frames_kept = {}
+        mjd_obs_min = {}
+        mjd_obs_max = {}
         for ffi in self.lev0_ffi_exts:
             keep_ffi = 0
-            frames_data=[]
-            for path in all_bias_files:
+
+            frames_data = []
+            frames_data_mjdobs = []
+            frames_data_path = []
+            n_all_bias_files = len(all_bias_files)
+            for i in range(0, n_all_bias_files):
+
+                mjd_obs = mjd_obs_list[i]
+                header_object = bias_object_list[i]
+
+                if header_object != self.bias_object:
+                    #self.logger.debug('---->ffi,header_object,self.bias_object = {},{},{}'.format(ffi,header_object,self.bias_object))
+                    continue
+
+                path = all_bias_files[i]
                 obj = KPF0.from_fits(path)
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
                 n_dims = len(np_obj_ffi_shape)
                 self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
                 if n_dims == 2:       # Check if valid data extension
-                     keep_ffi = 1
-                     frames_data.append(obj[ffi])
+                    keep_ffi = 1
+                    frames_data.append(obj[ffi])
+                    frames_data_mjdobs.append(mjd_obs)
+                    frames_data_path.append(path)
 
             if keep_ffi == 0:
                 self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
                 del_ext_list.append(ffi)
                 break
+
+            n_frames = (np.shape(frames_data))[0]
+            self.logger.debug('Number of frames in stack = {}'.format(n_frames))
+
+            # Exit without making product if headers of FITS files in input list do not contain specified OBJECT,
+            # or the number of frames to stack is less than 2.  In either case, exit_code=7 is returned.
+
+            if n_frames < 2:
+                master_bias_exit_code = 7
+                exit_list = [master_bias_exit_code,master_bias_infobits]
+                return Arguments(exit_list)
+
+            n_frames_kept[ffi] = n_frames
+            mjd_obs_min[ffi] = min(frames_data_mjdobs)
+            mjd_obs_max[ffi] = max(frames_data_mjdobs)
+
+            #
+            # Stack the frames.
+            #
 
             frames_data = np.array(frames_data)
             fs = FrameStacker(frames_data,self.n_sigma)
@@ -158,13 +207,28 @@ class MasterBiasFramework(KPF0_Primitive):
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Bias','Master bias')
 
+        # Remove confusing or non-relevant keywords, if existing.
+
+        try:
+            del master_holder.header['GREEN_CCD']['OSCANV1']
+            del master_holder.header['GREEN_CCD']['OSCANV2']
+            del master_holder.header['GREEN_CCD']['OSCANV3']
+            del master_holder.header['GREEN_CCD']['OSCANV4']
+            del master_holder.header['RED_CCD']['OSCANV1']
+            del master_holder.header['RED_CCD']['OSCANV2']
+            del master_holder.header['RED_CCD']['OSCANV3']
+            del master_holder.header['RED_CCD']['OSCANV4']
+
+        except KeyError as err:
+            pass
+
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
             master_holder.header[ffi]['BUNIT'] = ('DN','Units of master bias')
-            master_holder.header[ffi]['NFRAMES'] = (len(all_bias_files),'Number of frames in stack')
+            master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
-            master_holder.header[ffi]['MINMJD'] = (min(mjd_obs_list),'Minimum MJD of bias observations')
-            master_holder.header[ffi]['MAXMJD'] = (max(mjd_obs_list),'Maximum MJD of bias observations')
+            master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of bias observations')
+            master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of bias observations')
             datetimenow = datetime.now(timezone.utc)
             createdutc = datetimenow.strftime("%Y-%m-%dT%H:%M:%SZ")
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-bias creation')

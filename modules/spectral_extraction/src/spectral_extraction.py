@@ -99,6 +99,7 @@
                                         trace_file=trace_file,
                                         wavecal_fits=input_lev1_file)
             :
+        where `op_data` is KPF1 object wrapped in `Arguments` class object.
 """
 
 

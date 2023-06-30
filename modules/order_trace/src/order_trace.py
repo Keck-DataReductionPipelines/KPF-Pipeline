@@ -19,15 +19,15 @@
                     - `action.args['data_col_range'] (list, optional)`: Column coverage of the level 0 data to be
                       processed. If the number is less than 0, it stands for the position relative to the last column
                       of the image.
-                    - `action.args['data_extension'] (string, optional)`: name of the extension with the image. `data`
-                      is the default.
+                    - `action.args['data_extension'] (string, optional)`: name of the extension with the image. Defaults
+                      to "data".
                     - `action.args['result_path'] (string, optional)`: name of the file path or data model extension
                       containing the order trace result. Defaults to None.
                     - `action.args['fitting_poly_degree'] (int, optional)`: Order of polynomial used to fit the trace.
-                      Defaults to None. The value overrides the number defined in the configuration file for the module
+                      Defaults to None. This value overrides the number defined in the configuration file for the module
                       if it is defined.
                     - `action.args['is_output_file'] (boolean, optional)`: if the result is output to a file or data
-                      model extension. Defaults to None.
+                      model extension. Defaults to True meaning output to a file.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace  in the master
@@ -49,7 +49,7 @@
                 - `result_path (str)`: File or extension containing the output.
                 - `alg (modules.order_trace.src.alg.OrderTraceAlg)`: Instance of `OrderTraceAlg` which has operation
                   codes for the computation of order trace.
-                - `poly_degree (int)`: Order of polynimial for order trace fitting.
+                - `poly_degree (int)`: Order of polynomial for order trace fitting.
 
 
         * Method `__perform`:
@@ -62,10 +62,13 @@
 
             :
             flat_data = kpf0_from_fits(input_flat_file, data_type=data_type)
-            ot_data = OrderTrace(flat_data, data_row_range=[0, 2000])
+            order_result_data = OrderTrace(flat_data, data_extension='GREEN_CCD_STACK',
+                                data_col_range=[0, -1], data_row_range=[0, -1],
+                                result_path="/data/masters/20230411/kpf_20230411_master_flat_GREEN_CCD.csv",
+                                fitting_poly_degree=3)
             :
 
-        where `flat_data` is level 0 data (`KPF0`) object stored in `Arguments` object.
+        where `order_result_data` is Panda.Dataframe object wrapped in `Arguments` class object.
 
 """
 

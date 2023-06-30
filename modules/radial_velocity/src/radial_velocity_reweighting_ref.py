@@ -1,7 +1,7 @@
 # Standard dependencies
 """
     This module defines class `RadialVelocityReweightingRef` which inherits from `KPF_Primitive` and provides
-    methods to perform the event on radial velocity reweighting ratio table creation in the recipe.
+    methods to perform the event on radial velocity reweighting ratio table creation or loading in the recipe.
 
     Description:
         * Method `__init__`:
@@ -11,7 +11,8 @@
                 - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
                   keyword arguments passed by the `RadialVelocityReweightingRef` event issued in the recipe:
 
-                    - `action.args[0] (list|str)`: List of KPF2 or one single KPF2 for reweighting.
+                    - `action.args[0] (list|str)`: List of KPF2 or one single KPF2 for reweighting. None means to load
+                      a predefined ratio table file.
                     - `action.args[1] (str)`: Reweighting method.
                     - `action.args[2] (int)`: Total order from the ccf data to build the reweighting template.
                     - `action.args['ccf_hdu_name'] (str)`: The HDU name in fits file for the HDU with ccf data.
@@ -30,9 +31,10 @@
 
                 - `files (List)`: list of KPF2 objects to find the reference template for reweighting.
                 - `reweighting_method (str)`: Reweighting method.
-                - `total_order (int)`: Total order to build the reweighting reference.
+                - `total_segment (int)`: Total segments to build the reweighting reference.
                 - `ccf_hdu_name (str)`: name of hdu containing ccf.
                 - `ccf_start_index (int)`: The order index that the first row of ccf_data is associated with.
+                - `is_ratio_data (bool)`: If the file is a csv file containing the ratio for reweighting.
                 - `ccf_ratio_file (str)`: output file containing ccf ratio.
                 - `config_path (str)`: Path of config file for radial velocity.
                 - `config (configparser.ConfigParser)`: Config context.
@@ -41,25 +43,28 @@
         * Method `__perform`:
 
             RadialVelocityReweightingRef returns the result in `Arguments` object containing an instance of
-            numpy.ndarray as for the reweighting reference and the ratio result is written into a file in csv
-            format if `ccf_ratio_file` is set in the action arguments.
-
-         * Note:
-            The event input tentatively uses ccf data in the format of KPF1 object. It will be refactored into KPF2
-            style when level2 data model is implemented.
+            numpy.ndarray to represent the ratio for the reweighting and the ratio result is written into a file in csv
+            format if `ccf_ratio_file` is set and `is_ratio_data` is False.
 
     Usage:
         For the recipe, the make reweighting ratio table is issued like::
 
             :
-            reweighting_ref =  RadialVelocityReweightingRef(list_files, 'ccf_max', 116, ccf_hdu_nane='ccf',
-                                ccf_start_index=0, ccf_ratio_file=<file path>)
+            # load the table file with the weighs
+            reweighting_ref =  RadialVelocityReweightingRef(None,  'ccf_max',
+                                35,                             # total segment
+                                ccf_hdu_nane='GREEN_CCF',
+                                is_ratio_data=Tue,
+                                ccf_ratio_file=<ratio data file path>
+                                ccf_start_index=0
+                            )
             :
+
+        where `reweighting_ref` is Pandas DataFrame object wrapped in `Arguments` class object.
 """
 
 import configparser
 import numpy as np
-from astropy.io import fits
 import os.path
 import pandas as pd
 
