@@ -218,14 +218,23 @@ class MasterDarkFramework(KPF0_Primitive):
                     frames_data_mjdobs.append(mjd_obs)
                     frames_data_path.append(path)
 
+            np_frames_data = np.array(frames_data)
+            np_bias_data = np.array(master_bias_data[ffi])
+
+            self.logger.debug('ffi,np.shape(np_frames_data),np.shape(np_bias_data) = {},{},{}'.format(ffi,np.shape(np_frames_data),np.shape(np_bias_data)))
+
+            if len(np.shape(np_bias_data)) != 2:
+                self.logger.debug('Master bias missing for ffi = {}'.format(ffi))
+                keep_ffi = 0
+
             if keep_ffi == 0:
                 self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
                 del_ext_list.append(ffi)
                 break
 
-            frames_data = np.array(frames_data) - np.array(master_bias_data[ffi])      # Subtract master bias.
+            frames_data = np_frames_data - np_bias_data      # Subtract master bias.
 
-            self.logger.debug('Subtracting master bias from dark data...')
+            self.logger.debug('Subtracted master bias from dark data...')
 
             normalized_frames_data=[]
             n_frames = (np.shape(frames_data))[0]
