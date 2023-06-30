@@ -60,8 +60,8 @@ class Analyze2D:
                           interpolation = 'None', 
                           origin = 'lower')
         plt.title('2D - ' + chip_title + ' CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
-        plt.xlabel('x (pixel number)', fontsize=14)
-        plt.ylabel('y (pixel number)', fontsize=14)
+        plt.xlabel('Column (pixel number)', fontsize=14)
+        plt.ylabel('Row (pixel number)', fontsize=14)
         cbar = plt.colorbar(label = 'Counts (e-)')
         cbar.ax.yaxis.label.set_size(14)
         cbar.ax.tick_params(labelsize=12)
