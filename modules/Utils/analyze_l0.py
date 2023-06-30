@@ -28,7 +28,6 @@ class AnalyzeL0:
     def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
         L0 = self.L0
         """
-
         Generate a plot of the stitched L0 image.
         The image will be divided by 2^16, if appropriate.
 
@@ -41,9 +40,11 @@ class AnalyzeL0:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
-
         """
 
+        starname = L0['PRIMARY'].header['TARGNAME']
+        ObsID = L0['PRIMARY'].header['OFNAME']  # better to use header keywords than pass in ObsID
+        
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN'
@@ -96,7 +97,7 @@ class AnalyzeL0:
             return
 
         plt.figure(tight_layout=True)
-        plt.figure(figsize=(12, 12), tight_layout=True)
+        plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(image, cmap='viridis', origin='lower',
                    vmin=np.percentile(image,1),
                    vmax=np.percentile(image,99.5))
@@ -104,8 +105,8 @@ class AnalyzeL0:
             plt.title('L0 (no processing) - Green CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
         if chip == 'red':
             plt.title('L0 (no processing) - Red CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
-        plt.xlabel('x (pixel number)', fontsize=14)
-        plt.ylabel('y (pixel number)', fontsize=14)
+        plt.xlabel('Column (pixel number)', fontsize=14)
+        plt.ylabel('Row (pixel number)', fontsize=14)
         cbar_label = 'ADU'
         if twotosixteen:
             cbar_label = cbar_label + r' / $2^{16}$'
@@ -116,7 +117,7 @@ class AnalyzeL0:
 
         # Display the plot
         if fig_path != None:
-            plt.savefig(fig_path, dpi=144, facecolor='w')
+            plt.savefig(fig_path, dpi=1200, facecolor='w')
         if show_plot == True:
             plt.show()
         plt.close()
