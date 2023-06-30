@@ -13,7 +13,8 @@ import math
 from astropy import modeling
 from astropy.time import Time
 from datetime import datetime
-
+from modules.Utils.analyze_l0 import AnalyzeL0
+import kpfpipe.pipelines.fits_primitives as fits_primitives
 
 class QuicklookAlg:
     """
@@ -131,6 +132,15 @@ class QuicklookAlg:
         L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0 = fits.open(L0_file)
 
+        #L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
+        #L0_kpf = fits_primitives.kpf0_from_fits(L0_file)
+        L0_obj = AnalyzeL0(L0)
+        #print(L0_obj,L0_obj.info())
+        if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
+        L0_obj.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
+        L0_obj.plot_L0_stitched_image(exposure_name,chip='red', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
+
+        '''
         green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
         plt.figure(tight_layout=True)
         plt.figure(figsize=(8, 8), tight_layout=True)
@@ -162,7 +172,7 @@ class QuicklookAlg:
         plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
         plt.close()
         L0.close()
-
+        '''
 
         #read ccd directly
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
