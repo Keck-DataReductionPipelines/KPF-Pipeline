@@ -253,14 +253,23 @@ class MasterFlatFramework(KPF0_Primitive):
                      frames_data_path.append(path)
                      self.logger.debug('Keeping flat image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_flat_files[i],ffi,mjd_obs,exp_time))
 
+            np_frames_data = np.array(frames_data)
+            np_bias_data = np.array(master_bias_data[ffi])
+
+            self.logger.debug('ffi,np.shape(np_frames_data),np.shape(np_bias_data) = {},{},{}'.format(ffi,np.shape(np_frames_data),np.shape(np_bias_data)))
+
+            if len(np.shape(np_bias_data)) != 2:
+                self.logger.debug('Master bias missing for ffi = {}'.format(ffi))
+                keep_ffi = 0
+
             if keep_ffi == 0:
                 self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
                 del_ext_list.append(ffi)
                 break
 
-            frames_data = np.array(frames_data) - np.array(master_bias_data[ffi])      # Subtract master bias.
+            frames_data = np_frames_data - np_bias_data      # Subtract master bias.
 
-            self.logger.debug('Subtracting master bias from flat data...')
+            self.logger.debug('Subtracted master bias from flat data...')
 
             normalized_frames_data=[]
             n_frames = (np.shape(frames_data))[0]
@@ -292,11 +301,10 @@ class MasterFlatFramework(KPF0_Primitive):
             stack_avg,stack_var,cnt,stack_unc = fs.compute()
 
             # Divide by the smoothed Flatlamp pattern.
-            # Nominal 2-D Gaussian blurring at sigma=2.0 to smooth pixel-to-pixel variations.
-            # Turned off this high-pass filtering for now but still save the smoothed version
+            # Nominal 2-D Gaussian blurring with width sigma to remove the large scale structure in the flats.
             smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
-            unnormalized_flat = stack_avg# / smooth_lamp_pattern
-            unnormalized_flat_unc = stack_unc# / smooth_lamp_pattern
+            unnormalized_flat = stack_avg / smooth_lamp_pattern
+            unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
 
             # Apply order mask, if available for the current FITS extension.  Otherwise, use the low-light pixels as a mask.

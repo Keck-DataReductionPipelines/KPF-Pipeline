@@ -1,3 +1,6 @@
+Plotting KPF RV time series
+===========================
+
 .. toctree::
    :maxdepth: 0
 

@@ -7,7 +7,6 @@ from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.alg_base import ModuleAlgBase
 import os
 import json
-from astropy.time import Time
 
 # Pipeline dependencies
 # from kpfpipe.logger import start_logger

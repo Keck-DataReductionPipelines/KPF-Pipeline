@@ -27,15 +27,7 @@ $checkpoint[$icheckpoint++] = $startscript;
 
 # Read KPF-related environment variables.
 
-# Legacy KPF port for Jupyter notebook.
-# E.g., 6107
-my $kpfpipeport = $ENV{KPFPIPE_PORT};
-
-if (! (defined $kpfpipeport)) {
-    die "*** Env. var. KPFPIPE_PORT not set; quitting...\n";
-}
-
-# Legacy KPF directory for outputs of testing (and Jupyter notebook).
+# Legacy KPF directory for outputs of testing.
 # E.g., /KPF-Pipeline-TestData
 my $testdatadir = $ENV{KPFPIPE_TEST_DATA};
 
@@ -84,6 +76,10 @@ if (! (defined $containername)) {
     die "*** Env. var. KPFCRONJOB_DOCKER_NAME_DBSCRIPT not set; quitting...\n";
 }
 
+my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
+$containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
+
+
 # Database user for connecting to the database to run this script and insert records into the CalFiles table.
 # E.g., kpfporuss
 my $dbuser = $ENV{KPFDBUSER};
@@ -104,7 +100,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_register_in_db.pl';
-my $version = '1.2';
+my $version = '1.4';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -113,7 +109,8 @@ if (! (defined $procdate)) {
 }
 
 my $pythonscript = 'database/scripts/registerCalFilesForDate.py';
-my $dockercmdscript = 'kpfmasters_register_in_db.sh';    # Auto-generates this shell script with multiple commands.
+my $dockercmdscript = 'jobs/kpfmasters_register_in_db';            # Auto-generates this shell script with multiple commands.
+$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 my $containerimage = 'kpf-drp:latest';
 
 my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
@@ -133,6 +130,17 @@ foreach my $op (@op) {
     }
 }
 
+my $dbenvfilename = "db";
+$dbenvfilename .= '_' . $$ . '_' . $trunctime . '.env';                   # Augment with unique numbers (process ID and truncated seconds).
+my $dbenvfile = "$codedir/jobs/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
+
+`touch $dbenvfile`;
+`chmod 600 $dbenvfile`;
+open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
+print OUT "export DBPASS=\"$dbpass\"\n";
+close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
+
 
 # Print environment.
 
@@ -147,34 +155,37 @@ print "pylogfile=$pylogfile\n";
 print "dbuser=$dbuser\n";
 print "dbname=$dbname\n";
 print "dbport=$dbport\n";
-print "KPFPIPE_PORT=$kpfpipeport\n";
 print "KPFPIPE_TEST_DATA=$testdatadir\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
 print "KPFCRONJOB_CODE=$codedir\n";
-print "KPFCRONJOB_DOCKER_NAME_DBSCRIPT=$containername\n";
+print "dbenvfile=$dbenvfile\n";
+print "dbenvfileinside=$dbenvfileinside\n";
+print "Docker container name = $containername\n";
 
 
 # Change directory to where the Dockerfile is located.
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
-my $script = "#! /bin/bash\nmake init\nexport PYTHONUNBUFFERED=1\npip install psycopg2-binary\npython $pythonscript $procdate >& ${pylogfile}\nexit\n";
+my $script = "#! /bin/bash\n" .
+             "source $dbenvfileinside\n" .
+             "make init\n" .
+             "export PYTHONUNBUFFERED=1\n" .
+             "pip install psycopg2-binary\n" .
+             "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "python $pythonscript $procdate >& ${pylogfile}\n" .
+             "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
-my $dockerrmcmd = "docker rm $containername";
-print "Executing $dockerrmcmd\n";
-my $opdockerrmcmd = `$dockerrmcmd`;
-print "Output from dockerrmcmd: $opdockerrmcmd\n";
-
-my $dockerruncmd = "docker run -d --name $containername -p 6207:6207 -e KPFPIPE_PORT=$kpfpipeport " .
+my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v ${mastersdir}:/masters " .
-                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBPASS=\"$dbpass\" -e DBSERVER=127.0.0.1 " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
-#print "Executing $dockerruncmd\n";                                # COMMENT OUT THIS LINE: DO NOT PRINT DATABASE PASSWORD TO LOGFILE!
+print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
 print "Output from dockerruncmd: $opdockerruncmd\n";
 
@@ -195,6 +206,11 @@ while (1) {
     print "[$timestamp] Sleeping 30 seconds...\n";
     sleep(30);
 }
+
+my $dockerrmcmd = "docker rm $containername";
+print "Executing $dockerrmcmd\n";
+my $opdockerrmcmd = `$dockerrmcmd`;
+print "Output from dockerrmcmd: $opdockerrmcmd\n";
 
 
 # Checkpoint

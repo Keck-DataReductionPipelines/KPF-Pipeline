@@ -1,5 +1,5 @@
 Radial Velocity Init
-============================
+====================
 
 .. module:: modules
     :noindex:
