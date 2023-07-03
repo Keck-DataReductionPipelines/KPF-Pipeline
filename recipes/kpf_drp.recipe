@@ -188,7 +188,7 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 				for wls in wls_list:
                                     # Remove /masters from path returned from QueryDBOneNearestMasterFileFramework
                                     # since it is already included in output_dir.
-                                    modified_file_path = str_replace(db_wls_master_file, '/masters', '')
+                                    modified_file_path = str_replace(db_wls_master_file, '/masters/masters', '/masters')
                                     wave_fits = wave_fits + [output_dir + modified_file_path]
 
 
