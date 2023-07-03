@@ -466,9 +466,16 @@ if do_spectral_extraction or do_hk or do_bc:
 			if lev0_stem_suffix in lev1_stem:
 				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
+		is_raw = 1
+		if rect_method in input_lev0_file:
+			is_raw = 0
+		if lev1_stem_suffix in input_lev0_file:
+			is_raw = 0
+		if lev2_stem_suffix in input_lev0_file:
+			is_raw = 0
 
 		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
-		if overwrite or not exists(output_lev1_file):
+		if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
 			b_level1_sp = False
 
 			# do spectral extraction if do_spectral_extraction, rectified flat data existing and all trace results exist.
