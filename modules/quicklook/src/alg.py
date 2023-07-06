@@ -5,6 +5,7 @@ import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.analyze_l1 import AnalyzeL1
 from kpfpipe.models.level0 import KPF0
+from kpfpipe.models.level1 import KPF1
 from keckdrpframework.models.arguments import Arguments
 import os
 import pandas as pd
@@ -812,11 +813,12 @@ class QuicklookAlg:
             '''
 
             #l1 SNR
-
-            #L1_SNR = AnalyzeL1(hdulist)
-            #L1_SNR.measure_L1_snr(hdulist)
-            #L1_SNR.plot_L1_snr(hdulist,exposure_name,fig_path=output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_snr.png')
-            #plt.close()
+            L1_KPF = KPF1
+            L1_KPF = L1_KPF.from_fits(L1_data)
+            L1_SNR = AnalyzeL1(L1_KPF)
+            L1_SNR.measure_L1_snr()
+            L1_SNR.plot_L1_snr(exposure_name,fig_path=output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_snr.png')
+            plt.close()
 
             #print(hdulist1.info())
 
