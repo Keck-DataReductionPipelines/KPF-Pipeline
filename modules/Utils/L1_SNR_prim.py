@@ -77,7 +77,7 @@ class L1_SNR(KPF1_Primitive):
         self.l1_obj.header['PRIMARY']['SNRSK865'] = L1_SNR.RED_SNR[-1,-2]
         self.l1_obj.header['PRIMARY']['SNRCL865'] = L1_SNR.RED_SNR[-1,0]
 
-        '''
+
         print('all science',L1_SNR.GREEN_SNR[1,-1]) #all science
         print('sky',L1_SNR.GREEN_SNR[1,-2]) #sky
         print('cal',L1_SNR.GREEN_SNR[1,0]) #cal
@@ -92,7 +92,7 @@ class L1_SNR(KPF1_Primitive):
         print('all science',L1_SNR.GREEN_SNR[-1,-1]) #all science
         print('sky',L1_SNR.GREEN_SNR[-1,-2]) #sky
         print('cal',L1_SNR.GREEN_SNR[-1,0]) #cal”
-        '''
+        
 
         self.l1_obj.to_fits(self.data_dir+self.l1_obj.filename)
 
