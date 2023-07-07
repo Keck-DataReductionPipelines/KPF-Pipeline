@@ -113,7 +113,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.6';
+my $version = '1.7';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -252,8 +252,8 @@ foreach my $file (@files) {
     my $destfile = "$destdir/$file";
     if (! (-e $destfile)) {
         if (! (copy($file, $destdir))) {
-            die "*** Warning: couldn't copy $file to $destdir ($!); " .
-                "quitting...\n";
+            print "*** Warning: couldn't copy $file to $destdir ($!); " .
+                "skipping...\n";
         } else {
             print "Copied $file to $destdir\n";
         }
@@ -271,7 +271,7 @@ print "Elapsed total time (sec.) = ", $endscript - $startscript, "\n";
 print "Terminating normally...\n";
 
 
-# Move log file from runtime directory to product directory, assuming
+# Copy log file from runtime directory to product directory, assuming
 # that the following convention for log-file naming is followed.
 
 my ($logfileBase) = $iam =~ /(.+)\.pl/;
@@ -280,11 +280,11 @@ my $logfile = $logdir . '/' . $logfileBase . '_' . $procdate . '.out';
 
 if (-e $logfile) {
 
-    if (! (move($logfile, $destdir))) {
-        die "*** Warning: couldn't move $logfile to $destdir ($!); " .
+    if (! (copy($logfile, $destdir))) {
+        die "*** Warning: couldn't copy $logfile to $destdir ($!); " .
             "quitting...\n";
     } else {
-        print "Moved $logfile to $destdir\n";
+        print "Copied $logfile to $destdir\n";
     }
 }
 
