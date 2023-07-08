@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from modules.Utils.header_parse import HeaderParse
 
 class AnalyzeL1:
 
@@ -202,7 +203,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
+        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
         ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
         ax1.set_ylabel('SNR - SCI', fontsize=14)
         ax2.set_ylabel('SNR - SKY', fontsize=14)

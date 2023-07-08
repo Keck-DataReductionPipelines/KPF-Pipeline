@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import emcee
 import corner
+from modules.Utils.header_parse import HeaderParse
 
 class Analyze2D:
 

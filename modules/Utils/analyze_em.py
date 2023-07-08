@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import Table
+from modules.Utils.header_parse import HeaderParse
 
 class AnalyzeEM:
 
