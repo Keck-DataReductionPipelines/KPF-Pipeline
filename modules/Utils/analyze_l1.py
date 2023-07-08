@@ -28,15 +28,11 @@ class AnalyzeL1:
 
     def __init__(self, L1, logger=None):
         self.L1 = L1
-
-        try:
-            self.starname = self.L1['PRIMARY'].header['TARGNAME']
-        except:
-            self.starname = ''
-        try:
-            self.ObsID = self.L1['PRIMARY'].header['OFNAME']
-        except:
-            self.ObsID = ''
+        header = L1['PRIMARY'].header
+        self.name = HeaderParse(header).get_name()
+        self.ObsID = ''
+        if 'OFNAME' in header:
+            self.ObsID == header['OFNAME']  # better to use header keywords than pass in ObsID
                     
         if logger:
             self.logger = logger
@@ -206,7 +202,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
+        ax1.set_title(self.ObsID + ' - ' self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
         ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
         ax1.set_ylabel('SNR - SCI', fontsize=14)
         ax2.set_ylabel('SNR - SKY', fontsize=14)
