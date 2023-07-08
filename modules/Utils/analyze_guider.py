@@ -137,6 +137,7 @@ class AnalyzeGuider:
         axs[0].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[0].get_xticks()
         yticks = axs[0].get_yticks()
+        # The following line (and others) produces this warning: UserWarning: FixedFormatter should only be used together with FixedLocator
         axs[0].set_xticklabels([f'{int(x * self.pixel_scale)}' for x in xticks])
         axs[0].set_yticklabels([f'{int(y * self.pixel_scale)}' for y in yticks])
         axs[0].set_xlabel('Arcseconds', fontsize=12)
