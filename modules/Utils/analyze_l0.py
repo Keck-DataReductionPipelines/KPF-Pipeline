@@ -41,6 +41,44 @@ class AnalyzeL0:
         Returns:
             the source/image type
         """
+        
+        # Note: the logic below is set so that as soon as the name is determined, it is
+        #       returned.  This is so that partially complete headers don't cause this 
+        #       to crash.
+ 	    if ('IMTYPE' in header) and ('EXPTIME' in header):
+	        if ((header['IMTYPE'] == 'Bias') or (header['EXPTIME'] == 0)):
+	            return 'Bias'
+	    if 'IMTYPE' in header:
+	        if header['IMTYPE'] == 'Dark':
+	            return 'Dark' 
+	    if 'TARGNAME' in header:
+	        if ((header['TARGNAME'].lower() == 'sun') or (header['TARGNAME'].lower() == 'socal')):
+	            return 'Sun' # SoCal
+	    if ('OBJECT' in header) and ('FIUMODE' in header):
+	        if (header['FIUMODE'] == 'Observing'):
+	            name = header['OBJECT']
+	            return name # Stellar
+	    if 'FFFB' in header:
+	        if header['FFFB'].strip().lower() == 'yes':
+	            return 'Wide Flat' # Flatfield Fiber (wide flats)
+	    if 'IMTYPE' in header:
+	        if header['IMTYPE'].lower() == 'flatlamp':
+	            if 'brdband' in header['OCTAGON'].lower():
+	                return 'Flat' # Flat through regular fibers
+	    if 'IMTYPE' in header: # Emission Lamps
+	        if header['IMTYPE'].lower() == 'arclamp':
+	            if 'lfc' in header['OCTAGON'].lower():
+	                return 'LFC'
+	            # Etalon
+	            if 'etalon' in header['OCTAGON'].lower():
+	                return 'Etalon'
+	            # Thorium-Argon
+	            if 'th_' in header['OCTAGON'].lower():
+	                return 'ThAr'
+	            # Uranium-Neon
+	            if 'u_' in header['OCTAGON'].lower():
+	                return 'UNe'
+        return ''
 
 
     def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
@@ -58,11 +96,6 @@ class AnalyzeL0:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
         """
-        
-        #TO-DO : write the algorithm!
-        
-        return
-
         L0 = self.L0
         
         if chip == 'green' or chip == 'red':
