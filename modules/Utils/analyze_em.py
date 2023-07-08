@@ -20,11 +20,9 @@ class AnalyzeEM:
 
     def __init__(self, L0, logger=None):
         self.L0 = L0 
-        header = self.L0['GUIDER_AVG'].header
-        self.name = HeaderParse(header).get_name()
-        self.ObsID = ''
-        if 'OFNAME' in header:
-            self.ObsID = header['OFNAME']  # better to use header keywords than pass in ObsID
+        self.header = self.L0['PRIMARY'].header
+        self.name = HeaderParse(self.header).get_name()
+        self.ObsID = HeaderParse(self.header).get_obsid()
 
         self.EM_gain = 1.48424 #np.float(self.config['EM']['gain'])
 

@@ -25,9 +25,6 @@ class AnalyzeGuider:
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
         self.guider_header = self.L0['GUIDER_AVG'].header
         self.name = HeaderParse(self.guider_header).get_name()
-        self.ObsID = ''
-        if 'OFNAME' in self.guider_header:
-            self.ObsID = self.guider_header['OFNAME']  # better to use header keywords than pass in ObsID
         if 'TTGAIN' in self.guider_header:
             self.tiptilt_gain = self.guider_header['TTGAIN']
         else:

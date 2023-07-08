@@ -18,11 +18,9 @@ class AnalyzeL0:
 
     def __init__(self, L0, logger=None):
         self.L0 = L0
-        header = L0['PRIMARY'].header
-        self.name = HeaderParse(header).get_name()
-        self.ObsID = ''
-        if 'OFNAME' in header:
-            self.ObsID = header['OFNAME']  # better to use header keywords than pass in ObsID
+        self.header = L0['PRIMARY'].header
+        self.name = HeaderParse(self.header).get_name()
+        self.ObsID = HeaderParse(self.header).get_obsid()
         
         if logger:
             self.logger = logger

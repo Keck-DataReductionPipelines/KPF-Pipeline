@@ -24,9 +24,7 @@ class Analyze2D:
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
         self.header = D2['PRIMARY'].header
         self.name = HeaderParse(self.header).get_name()
-        self.ObsID = ''
-        if 'OFNAME' in self.header:
-            self.ObsID = self.header['OFNAME']  # better to use header keywords than pass in ObsID
+        self.ObsID = HeaderParse(self.header).get_obsid()
 
         if logger:
             self.logger = logger
@@ -81,10 +79,6 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close()
-        
-        print("self.ObsID = " + self.ObsID)
-        print("self.header['OFNAME'] = " + self.header['OFNAME'])
-        print('OFNAME' in self.header)
 
 
     def plot_bias_histogram(self, chip=None, fig_path=None, show_plot=False):
