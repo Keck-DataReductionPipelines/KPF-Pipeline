@@ -56,8 +56,8 @@ class QuicklookAlg:
         if not os.path.exists(output_dir+'/'+exposure_name+'/2D_analysis'):
             os.makedirs(output_dir+'/'+exposure_name+'/2D_analysis')
 
-        if not os.path.exists(output_dir+'/'+exposure_name+'/1D'):
-            os.makedirs(output_dir+'/'+exposure_name+'/1D')
+        if not os.path.exists(output_dir+'/'+exposure_name+'/L1'):
+            os.makedirs(output_dir+'/'+exposure_name+'/L1')
 
         if not os.path.exists(output_dir+'/'+exposure_name+'/CCF'):
             os.makedirs(output_dir+'/'+exposure_name+'/CCF')
@@ -118,8 +118,24 @@ class QuicklookAlg:
             plt.savefig(output_dir+'fig/order_trace_evolution.png')
             '''
             return
-        print('working on',date,exposure_name)
+        print('Working on',date,exposure_name)
 
+
+#        #operate on L0 data before image assembly
+#        L0_filename = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
+#        L0 = fits.open(L0_filename)
+#        
+#        # Get list of HDUs
+#        hdulist = fits.open(L0_filename)
+#
+#        #L0 = fits_primitives.kpf0_from_fits(L0_filename)
+#        #L0 = KPF0.from_fits(L0_filename)
+#        my_AnalyzeL0 = AnalyzeL0(L0)
+#        if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: 
+#            os.makedirs(output_dir+'/'+exposure_name+'/L0/')
+#        # temporarily comment out (for speed)
+#        my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
+#        my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='red',   fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
 
         #operate on L0 data before image assembly
         L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
@@ -127,17 +143,18 @@ class QuicklookAlg:
 
         #L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         #L0_kpf = fits_primitives.kpf0_from_fits(L0_file)
-        my_AnalyzeL0 = AnalyzeL0(L0)
+        L0_obj = AnalyzeL0(L0)
+        #print(L0_obj,L0_obj.info())
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
-        # temporarily comment out (for speed)
-        #my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
-        #my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='red',   fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
+        L0_obj.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
+        L0_obj.plot_L0_stitched_image(exposure_name,chip='red', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
 
-        # Get list of HDUs
+        #read ccd directly
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
         hdulist = fits.open(L0_data)
+        #print(hdulist.info())
 
-        # Get ccd names
+        # Get CCD names
         ccd_color=[]
         ccd_list = self.config.items( "CCD_LIST")
         for key, path in ccd_list:
@@ -158,18 +175,18 @@ class QuicklookAlg:
         #### Exposure Meter ####
         if 'EXPMETER_SCI' in hdulist and len(hdulist['EXPMETER_SCI'].data)>=1:
             try: 
-                print('Working on Exposure Meter data')
+                print('Working QLP for on Exposure Meter data')
                 if not os.path.exists(output_dir+'/'+exposure_name+'/EM'):
                     os.makedirs(output_dir+'/'+exposure_name+'/EM')
                 my_EM = AnalyzeEM(L0)
                 my_EM.plot_EM_time_series(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_time_series_zoomable.png')
                 my_EM.plot_EM_spectrum(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_spectrum_zoomable.png')
             except:
-                print("Processing Exposure Meter failed")
+                print("Processing QLP for Exposure Meter failed")
 
         #### Guider ####
         if (('GUIDER_AVG' in hdulist) and len(hdulist['GUIDER_AVG'].data)>=1) or (('guider_avg' in hdulist) and len(hdulist['guider_avg'].data)>=1):
-            print('Working on Guider data')
+            print('Working QLP for Guider data')
             try: 
                 if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
                     os.makedirs(output_dir+'/'+exposure_name+'/Guider')
@@ -180,7 +197,7 @@ class QuicklookAlg:
                 my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_errors_time_series_zoomable.png')
                 my_Guider.plot_guider_flux_time_series( fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
             except:
-                print("Processing Guider image failed")
+                print("Processing QLP for Guider image failed")
 
         master_file = 'None'
         if version == 'Solar':
@@ -285,12 +302,9 @@ class QuicklookAlg:
             plt.ylabel('y (pixel number)')
             plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
             plt.colorbar(label = 'Counts (e-)')
-
-
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
             #plt.close()
-
 
 
             #2D difference image
@@ -325,7 +339,7 @@ class QuicklookAlg:
 
                 # Read telemetry
                 from astropy.table import Table
-                df_telemetry = Table.read(L0_data, format='fits', hdu=11).to_pandas() # need to refer to HDU by name
+                df_telemetry = Table.read(L0_filename, format='fits', hdu=11).to_pandas() # need to refer to HDU by name
                 num_columns = ['average', 'stddev', 'min', 'max']
                 for column in df_telemetry:
                     df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
@@ -544,9 +558,8 @@ class QuicklookAlg:
 
         #Ca HK data
 
-
         if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
-            print('Working on Ca HK data')
+            print('Working QLP for on Ca HK data')
             if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
                 os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
 
@@ -654,11 +667,23 @@ class QuicklookAlg:
             #print(np.shape(hdulist['ca_hk'].data))
             rv_shift = hdulist[0].header['TARGRADV']
             extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
-        #moving on the 1D data
-        L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
-        if os.path.exists(L1_data):
-            print('Working on', L1_data)
-            hdulist = fits.open(L1_data)
+
+        
+        #### L1 ####
+        L1_filename = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
+        if os.path.exists(L1_filename):
+            print('Working on', L1_filename)
+            hdulist = fits.open(L1_filename)
+            try: 
+                if not os.path.exists(output_dir+'/'+exposure_name+'/L1'):
+                    os.makedirs(output_dir+'/'+exposure_name+'/L1')
+                L1 = KPF1.from_fits(L1_filename)
+                my_L1 = AnalyzeL1(L1)
+                my_L1.measure_L1_snr()
+                my_L1.plot_L1_snr(exposure_name,fig_path=output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_snr.png')
+            except:
+                print("Processing QLP for L1 failed")
+
 
             wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
             wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
@@ -673,12 +698,12 @@ class QuicklookAlg:
             '''
 
             #l1 SNR
-            L1_KPF = KPF1
-            L1_KPF = L1_KPF.from_fits(L1_data)
-            L1_SNR = AnalyzeL1(L1_KPF)
-            L1_SNR.measure_L1_snr()
-            L1_SNR.plot_L1_snr(exposure_name,fig_path=output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_snr.png')
-            plt.close()
+            #L1_KPF = KPF1
+            #L1_KPF = L1_KPF.from_fits(L1_filename)
+            #L1_SNR = AnalyzeL1(L1_KPF)
+            #L1_SNR.measure_L1_snr()
+            #L1_SNR.plot_L1_snr(exposure_name,fig_path=output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_snr.png')
+            #plt.close()
 
             #print(hdulist1.info())
 
@@ -764,10 +789,10 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
-            ax[0].set_title('1D Spectrum SCI1 ' +exposure_name,fontsize = 20)
+            ax[0].set_title('L1 Spectrum SCI1 ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci1_zoomable.png',dpi = 200)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci1_zoomable.png',dpi = 200)
             plt.close()
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
@@ -799,10 +824,10 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux2,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI2',fontsize = 20)
-            ax[0].set_title('1D Spectrum SCI2 ' +exposure_name,fontsize = 20)
+            ax[0].set_title('L1 Spectrum SCI2 ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci2_zoomable.png',dpi = 200)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci2_zoomable.png',dpi = 200)
             plt.close()
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
@@ -834,10 +859,10 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux3,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI3',fontsize = 20)
-            ax[0].set_title('1D Spectrum SCI3 ' +exposure_name,fontsize = 20)
+            ax[0].set_title('L1 Spectrum SCI3 ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sci3_zoomable.png',dpi = 200)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci3_zoomable.png',dpi = 200)
             plt.close()
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
@@ -869,10 +894,10 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux_cal,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in CAL',fontsize = 20)
-            ax[0].set_title('1D Spectrum CAL ' +exposure_name,fontsize = 20)
+            ax[0].set_title('L1 Spectrum CAL ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_cal_zoomable.png',dpi = 200)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_cal_zoomable.png',dpi = 200)
             plt.close()
 
             n = int(self.config['L1']['n_per_row']) #number of orders per panel
@@ -904,10 +929,10 @@ class QuicklookAlg:
             low, high = np.nanpercentile(flux_sky,[0.1,99.9])
 
             ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SKY',fontsize = 20)
-            ax[0].set_title('1D Spectrum SKY ' +exposure_name,fontsize = 20)
+            ax[0].set_title('L1 Spectrum SKY ' +exposure_name,fontsize = 20)
             plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_1D_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_1D_spectrum_sky_zoomable.png',dpi = 200)
+            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sky_zoomable.png',dpi = 200)
             plt.close()
 
             #make a comparison plot of the three science fibres
@@ -924,7 +949,7 @@ class QuicklookAlg:
             plt.title('Science Orderlets in GREEN '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_3_science_fibres_GREEN_CCD.png',dpi = 200)
             plt.close()
 
             plt.close()
@@ -940,7 +965,7 @@ class QuicklookAlg:
             plt.title('Science Orderlets in RED '+exposure_name)
             plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_3_science_fibres_RED_CCD.png',dpi = 200)
             plt.close()
 
 
@@ -963,7 +988,7 @@ class QuicklookAlg:
             plt.title('Orderlets Flux Ratios '+exposure_name)
             #plt.ylabel('Counts (e-)',fontsize = 15)
             plt.xlabel('Wavelength (Ang)',fontsize = 15)
-            plt.savefig(output_dir+'/'+exposure_name+'/1D/'+exposure_name+'_orderlets_flux_ratio.png',dpi = 200)
+            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_orderlets_flux_ratio.png',dpi = 200)
             plt.close()
         else: print('L1 file does not exist')
 
@@ -1084,8 +1109,8 @@ class QuicklookAlg:
                 ax = plt.subplot()
                 plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
                 for kk in range(np.shape(ccf)[1]):
-                    if ccf_weights[kk] == 1: plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3)
-                    if ccf_weights[kk] == 0: plt.plot(vel_grid,np.nanmean(ccf[:,kk,:],axis=0)/np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3,':')
+                    if ccf_weights[kk] == 1: plt.plot(vel_grid, np.nanmean(ccf[:,kk,:],axis=0)/ np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3)
+                    if ccf_weights[kk] == 0: plt.plot(vel_grid, np.nanmean(ccf[:,kk,:],axis=0)/ np.percentile(np.nanmean(ccf[:,kk,:],axis=0),[99.9])+kk*0.3,':')
                     plt.plot([gamma,gamma],[0,1+kk*0.3],':',color = 'gray')
                     plt.text(vel_grid[-1]+2,1+kk*0.3,str(kk),verticalalignment = 'center')
                 plt.xlabel('RV (km/s)')
