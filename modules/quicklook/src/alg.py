@@ -33,6 +33,8 @@ class QuicklookAlg:
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
+
+
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
         plt.rcParams['legend.fontsize'] = plt.rcParams['font.size']
@@ -45,6 +47,17 @@ class QuicklookAlg:
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+        #if not os.path.exists(output_dir+'/fig'):
+        #    os.makedirs(output_dir+'/fig')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
+            os.makedirs(output_dir+'/'+exposure_name+'/Guider')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/ExpMeter'):
+            os.makedirs(output_dir+'/'+exposure_name+'/ExpMeter')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
+            os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
 
         if not os.path.exists(output_dir+'/'+exposure_name+'/2D'):
             os.makedirs(output_dir+'/'+exposure_name+'/2D')
@@ -55,22 +68,14 @@ class QuicklookAlg:
         if not os.path.exists(output_dir+'/'+exposure_name+'/1D'):
             os.makedirs(output_dir+'/'+exposure_name+'/1D')
 
-        if not os.path.exists(output_dir+'/'+exposure_name+'/ExpMeter'):
-            os.makedirs(output_dir+'/'+exposure_name+'/ExpMeter')
-
-        if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
-            os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
-
         if not os.path.exists(output_dir+'/'+exposure_name+'/CCF'):
             os.makedirs(output_dir+'/'+exposure_name+'/CCF')
-
-        if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
-            os.makedirs(output_dir+'/'+exposure_name+'/Guider')
         #print('working on',file_name)
 
         # try:
         #     exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         # except:
+
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
@@ -174,13 +179,14 @@ class QuicklookAlg:
         #read ccd directly
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
         hdulist = fits.open(L0_data)
-        print(hdulist.info())
+        #print(hdulist.info())
 
         #get ccd names
         ccd_color=[]
         ccd_list = self.config.items( "CCD_LIST")
         for key, path in ccd_list:
             ccd_color.append(path)
+
 
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
@@ -192,6 +198,9 @@ class QuicklookAlg:
         version = hdr['IMTYPE']
         Cal_Source = hdr['SCI-OBJ']
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
+
+
+
 
         master_file = 'None'
         if version == 'Solar':
@@ -230,6 +239,9 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
+
+
+
 
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -286,6 +298,9 @@ class QuicklookAlg:
                 plt.close('all')
             '''
 
+
+
+
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
@@ -295,9 +310,12 @@ class QuicklookAlg:
             plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
             plt.colorbar(label = 'Counts (e-)')
 
+
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
             #plt.close()
+
+
 
             #2D difference image
 
@@ -305,7 +323,7 @@ class QuicklookAlg:
             if version != '':#if version == 'Flat_All':
                 order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
                 order_trace = pd.read_csv(order_trace_file)
-                print(order_trace_file,order_trace)
+                #print(order_trace_file,order_trace)
                 for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
                     #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
                     x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
@@ -327,7 +345,7 @@ class QuicklookAlg:
                 #a plot that looks at the ion pump, overwrites existing 2-D frames
 
                 exptime = hdr['EXPTIME']
-                print('exptime',exptime)
+                #print('exptime',exptime)
 
                 # Read telemetry
                 from astropy.table import Table
@@ -379,11 +397,11 @@ class QuicklookAlg:
                     current_region = frame[reg[r]['y1']:reg[r]['y2'],reg[r]['x1']:reg[r]['x2']]
                     reg[r]['med_elec'] = np.median(current_region)
 
-                print(reg[r]['name'] + ': ' + str(np.round(reg[r]['med_elec'],1)) + ' e- per hour')
-                print('Ion Pump pressure (Torr) - Collimator side: ' + f'{coll_pressure_torr:.1e}')
-                print('Ion Pump pressure (Torr) - Echelle side: '    + f'{ech_pressure_torr:.1e}')
-                print('Ion Pump current (A) - Collimator side: '     + f'{coll_current_a:.1e}')
-                print('Ion Pump current (A) - Echelle side: '        + f'{ech_current_a:.1e}')
+                #print(reg[r]['name'] + ': ' + str(np.round(reg[r]['med_elec'],1)) + ' e- per hour')
+                #print('Ion Pump pressure (Torr) - Collimator side: ' + f'{coll_pressure_torr:.1e}')
+                #print('Ion Pump pressure (Torr) - Echelle side: '    + f'{ech_pressure_torr:.1e}')
+                #print('Ion Pump current (A) - Collimator side: '     + f'{coll_current_a:.1e}')
+                #print('Ion Pump current (A) - Echelle side: '        + f'{ech_current_a:.1e}')
 
                 from matplotlib.patches import Rectangle
                 plt.figure(figsize=(5, 4))
@@ -478,7 +496,7 @@ class QuicklookAlg:
                 plt.colorbar(label = 'Counts (e-)')
                 plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_low_var_'+ccd_color[i_color]+'_zoomable.png')
                 '''
-            print('master file',version,i_color,master_file,len(master_flatten_counts))
+            #print('master file',version,i_color,master_file,len(master_flatten_counts))
             if master_file != 'None' and len(master_flatten_counts)>1:
                 plt.figure(figsize=(5,4))
                 plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
@@ -718,6 +736,7 @@ class QuicklookAlg:
 
                 return trace_location
 
+
             trace_file = self.config['CaHK']['trace_file']
             trace_location = load_trace_location('sky',trace_file,offset=-1)
             trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
@@ -726,7 +745,7 @@ class QuicklookAlg:
 
                 wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
                 wave_lib*=1-rv_shift/3e5
-                print(trace_location)
+                #print(trace_location)
                 orders = np.array(wave_lib.columns)
                 padding = 200
 
@@ -766,7 +785,7 @@ class QuicklookAlg:
 
                 for i in range(len(orders)):
                     wav = wave_lib[i]
-                    print(i,trace_location[i]['x1'],trace_location[i]['x2'])
+                    #print(i,trace_location[i]['x1'],trace_location[i]['x2'])
                     flux = np.sum(hdulist['ca_hk'].data[trace_location[i]['x1']:trace_location[i]['x2'],:],axis=0)
                     ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
                 plt.title('Ca H&K Spectrum '+exposure_name)#
@@ -841,14 +860,14 @@ class QuicklookAlg:
             if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
             if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
 
-            print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
+            #print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
 
             wav = np.concatenate((wav_green,wav_red),axis = 0)
             wav2 = np.concatenate((wav_green2,wav_red2),axis = 0)
             wav3 = np.concatenate((wav_green3,wav_red3),axis = 0)
             wav_cal = np.concatenate((wav_green_cal,wav_red_cal),axis = 0)
             wav_sky = np.concatenate((wav_green_sky,wav_red_sky),axis = 0)
-            print('test wave',np.shape(wav))
+            #print('test wave',np.shape(wav))
             #print(hdulist1.info())
 
             flux = np.concatenate((flux_green,flux_red),axis = 0)
@@ -1098,6 +1117,7 @@ class QuicklookAlg:
             hdulist = fits.open(ccf_file)
             print(hdulist.info())
 
+
             ccf_color=[]
             ccf_list = self.config.items( "CCF_LIST")
             for key, path in ccf_list:
@@ -1144,6 +1164,7 @@ class QuicklookAlg:
                 #ccf = np.sum(ccf[1:,:,:],axis =0)
                 #print('ccf shape', np.shape(ccf))
 
+
                 #print('step',step,len(vel_grid))
                 if i_color == 0: ccf_weights_file='/code/KPF-Pipeline/static/static_green_ccf_ratio_2.csv'
                 if i_color == 1: ccf_weights_file='/code/KPF-Pipeline/static/static_red_ccf_ratio_2.csv'
@@ -1156,6 +1177,8 @@ class QuicklookAlg:
 
                 #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
                 plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
+
+
 
                 #fit the center of the ccf
                 '''
@@ -1216,3 +1239,4 @@ class QuicklookAlg:
         hdulist.close()
 
         plt.close('all')
+
