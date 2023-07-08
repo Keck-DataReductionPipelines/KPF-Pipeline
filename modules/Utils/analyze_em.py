@@ -91,7 +91,7 @@ class AnalyzeEM:
         int_SKY_flux_750p    = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= 750))]].sum(axis=1)
 
         # Plot time series
-        plt.figure(figsize=(10, 4), tight_layout=True)
+        plt.figure(figsize=(12, 6), tight_layout=True)
         total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
         plt.plot(time_em, int_SCI_flux_750p    / (870-750) / tdur_sec, marker='o', color='r', label = '750-870 nm')
         plt.plot(time_em, int_SCI_flux_650_750 / (750-650) / tdur_sec, marker='o', color='orange', label = '650-750 nm')
@@ -107,10 +107,10 @@ class AnalyzeEM:
         plt.xlabel("Time (sec)",fontsize=14)
         plt.ylabel("Exposure Meter Flux (e-/nm/s)",fontsize=14)
         plt.yscale('log')
-        plt.xlim([-total_duration*0.03,total_duration*1.18])
+        plt.xlim([-total_duration*0.03,total_duration*1.03])
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
-        plt.legend(fontsize=12, loc='best')
+        plt.legend(fontsize=12, loc='right')
         
         # Display the plot
         if fig_path != None:
@@ -156,7 +156,7 @@ class AnalyzeEM:
         int_SKY_spec = df_SKY_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
 
         # Plot spectra
-        plt.figure(figsize=(10, 4), tight_layout=True)
+        #plt.figure(figsize=(10, 4), tight_layout=True)
         fig, ax1 = plt.subplots(figsize=(12, 6), tight_layout=True)
         plt.axvspan(445, 550, alpha=0.5, color='b')
         plt.axvspan(550, 650, alpha=0.5, color='g')
