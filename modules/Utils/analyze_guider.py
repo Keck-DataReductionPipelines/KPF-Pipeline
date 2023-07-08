@@ -147,7 +147,6 @@ class AnalyzeGuider:
         axs[0].set_title(title, fontsize=12)
         axs[0].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         #cbar1 = plt.colorbar(im1, ax=axs[0], shrink=0.5)
-        #cbar1.set_label('Intensity', fontsize=12)
 
         # Middle panel - zoomed image
         im2 = axs[1].imshow(guider_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
@@ -167,7 +166,6 @@ class AnalyzeGuider:
         axs[1].set_title('Guider Image (zoomed in)', fontsize=12)
         axs[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar2 = plt.colorbar(im2, ax=axs[1], shrink=0.7)
-        #cbar2.set_label('Intensity', fontsize=12)
 
         # Right panel - zoomed image of residuals to model
         im2 = axs[2].imshow(resid_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
@@ -190,8 +188,6 @@ class AnalyzeGuider:
         axs[2].set_title(title, fontsize=12)
         axs[2].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar3 = plt.colorbar(im2, ax=axs[2], shrink=0.7)
-        #cbar3.set_label('Intensity', fontsize=12)
-
             
         # Display the plot
         if fig_path != None:
@@ -224,7 +220,7 @@ class AnalyzeGuider:
             hist_bins = 40
         
         # Create the figure and subplots
-        fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]})
+        fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
         plt.style.use('seaborn-whitegrid')
 
         x_mas = self.df_GUIDER.command_x/self.tiptilt_gain*self.pixel_scale*1000
@@ -283,7 +279,7 @@ class AnalyzeGuider:
         plt.figure(figsize=(8, 4), tight_layout=True)
         plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
         #plt.plot(time, int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec / max(int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec), marker='o', color='k')
-        plt.title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
+        plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("Flux (fractional)", fontsize=14)
         plt.xticks(fontsize=14)
@@ -328,7 +324,7 @@ class AnalyzeGuider:
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
-        plt.legend(['Guider FWHM'], fontsize=12, loc='best') 
+        plt.legend(['Guider FWHM (!= seeing)'], fontsize=12, loc='best') 
 
         # Display the plot
         if fig_path != None:
