@@ -45,8 +45,6 @@ class QuicklookAlg:
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        #if not os.path.exists(output_dir+'/fig'):
-        #    os.makedirs(output_dir+'/fig')
 
         if not os.path.exists(output_dir+'/'+exposure_name+'/2D'):
             os.makedirs(output_dir+'/'+exposure_name+'/2D')
@@ -73,7 +71,6 @@ class QuicklookAlg:
         # try:
         #     exposure_name = kpf0_file.header['PRIMARY']['OFNAME'][:-5]#file_name[18:-5]#hdr['PRIMARY']['OFNAME'][:-5]
         # except:
-
 
         if end_of_night_summary == True:
             print('working on end of night summary of '+date)
@@ -185,7 +182,6 @@ class QuicklookAlg:
         for key, path in ccd_list:
             ccd_color.append(path)
 
-
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
             return
@@ -196,9 +192,6 @@ class QuicklookAlg:
         version = hdr['IMTYPE']
         Cal_Source = hdr['SCI-OBJ']
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
-
-
-
 
         master_file = 'None'
         if version == 'Solar':
@@ -237,9 +230,6 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
-
-
-
 
         for i_color in range(len(ccd_color)):
             counts = np.array(hdulist[ccd_color[i_color]].data,'d')
@@ -296,9 +286,6 @@ class QuicklookAlg:
                 plt.close('all')
             '''
 
-
-
-
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
@@ -308,12 +295,9 @@ class QuicklookAlg:
             plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
             plt.colorbar(label = 'Counts (e-)')
 
-
             #plt.savefig(output_dir+'fig/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'.png')
             plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
             #plt.close()
-
-
 
             #2D difference image
 
@@ -734,7 +718,6 @@ class QuicklookAlg:
 
                 return trace_location
 
-
             trace_file = self.config['CaHK']['trace_file']
             trace_location = load_trace_location('sky',trace_file,offset=-1)
             trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
@@ -1115,7 +1098,6 @@ class QuicklookAlg:
             hdulist = fits.open(ccf_file)
             print(hdulist.info())
 
-
             ccf_color=[]
             ccf_list = self.config.items( "CCF_LIST")
             for key, path in ccf_list:
@@ -1162,7 +1144,6 @@ class QuicklookAlg:
                 #ccf = np.sum(ccf[1:,:,:],axis =0)
                 #print('ccf shape', np.shape(ccf))
 
-
                 #print('step',step,len(vel_grid))
                 if i_color == 0: ccf_weights_file='/code/KPF-Pipeline/static/static_green_ccf_ratio_2.csv'
                 if i_color == 1: ccf_weights_file='/code/KPF-Pipeline/static/static_red_ccf_ratio_2.csv'
@@ -1175,8 +1156,6 @@ class QuicklookAlg:
 
                 #mean_ccf = np.nanmedian(mean_ccf,axis = 0)
                 plt.plot(vel_grid,mean_ccf,label = ccf_color[i_color],color = color_grid[i_color],linewidth = 0.5)
-
-
 
                 #fit the center of the ccf
                 '''
@@ -1237,4 +1216,3 @@ class QuicklookAlg:
         hdulist.close()
 
         plt.close('all')
-
