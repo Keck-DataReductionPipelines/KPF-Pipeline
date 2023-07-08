@@ -22,8 +22,14 @@ class AnalyzeGuider:
     def __init__(self, L0, logger=None):
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
-        self.starname = self.L0['PRIMARY'].header['TARGNAME']
-        self.ObsID = self.L0['PRIMARY'].header['OFNAME']
+        if 'TARGNAME' in self.L0['PRIMARY'].header:
+            self.starname = self.L0['PRIMARY'].header['TARGNAME']
+        else:
+            self.starname = ''       	
+        if 'OFNAME' in self.L0['PRIMARY'].header:
+            self.ObsID = self.L0['PRIMARY'].header['OFNAME']
+        else:
+            self.ObsID = ''       	
         self.guider_header = self.L0['GUIDER_AVG'].header
         self.df_GUIDER = Table.read(self.L0, format='fits',hdu='guider_cube_origins').to_pandas()
 
@@ -286,7 +292,7 @@ class AnalyzeGuider:
 
         # Construct plots
         plt.style.use('seaborn-whitegrid')
-        plt.figure(figsize=(8, 4), tight_layout=True)
+        plt.figure(figsize=(16, 4), tight_layout=True)
         plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
         #plt.plot(time, int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec / max(int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec), marker='o', color='k')
         plt.title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
@@ -326,7 +332,7 @@ class AnalyzeGuider:
 
         # Construct plots
         plt.style.use('seaborn-whitegrid')
-        plt.figure(figsize=(8, 4), tight_layout=True)
+        plt.figure(figsize=(16, 4), tight_layout=True)
         plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
         plt.title("Guider FWHM Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
