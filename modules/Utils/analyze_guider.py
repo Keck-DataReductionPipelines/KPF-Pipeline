@@ -39,6 +39,7 @@ class AnalyzeGuider:
             self.logger = None
             print('---->AnalyzeGuider class constructor')
 
+
     def measure_seeing(self):
 
         """
@@ -95,6 +96,7 @@ class AnalyzeGuider:
             self.good_fit = False
         
         #resid_im = guider_im - image_fit
+
 
     def plot_guider_image(self, fig_path=None, show_plot=False):
 
@@ -198,6 +200,7 @@ class AnalyzeGuider:
             plt.show()
         plt.close()
 
+
     def plot_guider_error_time_series(self, fig_path=None, show_plot=False):
 
         """
@@ -294,6 +297,7 @@ class AnalyzeGuider:
         if show_plot == True:
             plt.show()
         plt.close()
+
 
     def plot_guider_fwhm_time_series(self, fig_path=None, show_plot=False):
 
