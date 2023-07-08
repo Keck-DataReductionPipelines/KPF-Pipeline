@@ -37,9 +37,6 @@ class HeaderParse:
             the source/image type
         """
         
-        # Note: the logic below is set so that as soon as the name is determined, it is
-        #       returned.  This is so that partially complete headers don't cause this 
-        #       to crash.
         if ('IMTYPE' in self.header) and ('EXPTIME' in self.header):
             if ((self.header['IMTYPE'] == 'Bias') or 
                 (self.header['EXPTIME'] == 0)):
