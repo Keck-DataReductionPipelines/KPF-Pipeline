@@ -141,40 +141,6 @@ class QuicklookAlg:
         my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
         my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='red',   fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
 
-        '''
-        green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
-        plt.figure(tight_layout=True)
-        plt.figure(figsize=(8, 8), tight_layout=True)
-        plt.imshow(green_image, cmap='viridis', origin='lower',
-                   vmin=np.percentile(green_image,1),
-                   vmax=np.percentile(green_image,99.5))
-        plt.title(exposure_name + ' - L0 (no processing) - Green CCD')
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
-        plt.grid(False)
-        #plt.show()
-        if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
-        plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png',dpi=500,facecolor='white')
-        plt.close()
-
-        red_image = np.concatenate((L0['RED_AMP1'].data, L0['RED_AMP2'].data), axis=1)/2**16 # flip not needed for Red
-        plt.figure(tight_layout=True)
-        plt.figure(figsize=(8, 8), tight_layout=True)
-        plt.imshow(red_image, cmap='viridis', origin='lower',
-                   vmin=np.percentile(red_image,1),
-                   vmax=np.percentile(red_image,99.5))
-        plt.title(exposure_name + ' - L0 (no processing) - Red CCD')
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.colorbar(shrink=0.7, label=r'ADU / $2^{16}$')
-        plt.grid(False)
-        #plt.show()
-        plt.savefig(output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png',dpi=500,facecolor='white')
-        plt.close()
-        L0.close()
-        '''
-
         # Get list of HDUs
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
         hdulist = fits.open(L0_data)
@@ -197,13 +163,14 @@ class QuicklookAlg:
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
         
-        print('Working on guider data')
+        print('Working on Guider data')
         my_Guider = AnalyzeGuider(L0)
         my_Guider.measure_seeing()
-        my_Guider.plot_guider_image(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png', show_plot=False)
-		#my_Guider.plot_guider_flux_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png', show_plot=False)
-		#my_Guider.plot_guider_fwhm_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_zoomable.png', show_plot=False)
-		#my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_error_time_series_zoomable.png', show_plot=False)
+        my_Guider.plot_guider_image(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png')
+        #print('*** '+output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png'+ ' ***')
+		#my_Guider.plot_guider_flux_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
+		#my_Guider.plot_guider_fwhm_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_zoomable.png')
+		#my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_error_time_series_zoomable.png')
 
 
         master_file = 'None'
