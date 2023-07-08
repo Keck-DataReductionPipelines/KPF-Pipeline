@@ -78,7 +78,7 @@ class QuicklookAlg:
 
 
         if end_of_night_summary == True:
-            print('working on end of night summary of '+date)
+            print('Working on end of night summary of '+date)
             file_list = glob.glob(self.config['IO']['input_prefix_l0']+date+'/*.fits')
             #print(len(file_list),file_list)
 
@@ -661,7 +661,7 @@ class QuicklookAlg:
         #Ca HK data
 
         if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
-            print('working on Ca HK data')
+            print('Working on Ca HK data')
 
             def plot_trace_boxes(data,trace_location,trace_location_sky):
 
@@ -712,6 +712,7 @@ class QuicklookAlg:
             trace_location = load_trace_location('sky',trace_file,offset=-1)
             trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
             plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+            
             def extract_HK_spectrum(data,trace_location,rv_shift,wavesoln ):
 
                 wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
@@ -769,12 +770,12 @@ class QuicklookAlg:
         #moving on the 1D data
         L1_data = self.config['IO']['input_prefix_l1']+date+'/'+exposure_name+'_L1.fits'
         if os.path.exists(L1_data):
-            print('working on', L1_data)
+            print('Working on', L1_data)
             hdulist = fits.open(L1_data)
 
             wav_green = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
             wav_red = np.array(hdulist['RED_CAL_WAVE'].data,'d')
-            print('test wav_green',wav_green)
+            #print('test wav_green',wav_green)
             '''
             wave_soln = self.config['L1']['wave_soln']
             if wave_soln!='None':#use the master the wavelength solution
@@ -1061,7 +1062,7 @@ class QuicklookAlg:
             plt.figure(figsize=(10,4))
             plt.subplots_adjust(left=0.1, bottom=0.15, right=0.95, top=0.9)
             is_fiber_on =[np.nanmedian(flux_green2/flux_green)>0.2,np.nanmedian(flux_green3/flux_green)>0.2,np.nanpercentile(flux_green_cal/flux_green,95)>0.05,np.nanmedian(flux_green_sky/flux_green)>0.05]
-            print('test orderlets', np.nanmedian(flux_green2/flux_green),np.nanmedian(flux_green3/flux_green),np.nanpercentile(flux_green_cal/flux_green,[95]),np.nanmedian(flux_green_sky/flux_green))
+            #print('test orderlets', np.nanmedian(flux_green2/flux_green),np.nanmedian(flux_green3/flux_green),np.nanpercentile(flux_green_cal/flux_green,[95]),np.nanmedian(flux_green_sky/flux_green))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green2/flux_green,axis = 1),marker = 'o', color = 'green', label = 'Sci2/Sci1; On: ' +str(is_fiber_on[0]))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanmedian(flux_green3/flux_green,axis = 1),marker = 'o', color = 'red', label = 'Sci3/Sci1; On: ' +str(is_fiber_on[1]))
             plt.plot(np.nanmedian(wav_green,axis = 1),np.nanpercentile(flux_green_cal/flux_green,95,axis = 1),marker = 'o', color = 'blue', label = 'Cal/Sci1; On: ' +str(is_fiber_on[2]))
@@ -1082,11 +1083,11 @@ class QuicklookAlg:
         #now onto the plotting of CCF
         #date = exposure_name[3:11]
         ccf_file = self.config['IO']['input_prefix_l2']+date+'/'+exposure_name+'_L2.fits'
-        print(date,ccf_file)
+        #print(date,ccf_file)
         if os.path.exists(ccf_file):
             print('Working on L2 file')
             hdulist = fits.open(ccf_file)
-            print(hdulist.info())
+            #print(hdulist.info())
 
 
             ccf_color=[]
