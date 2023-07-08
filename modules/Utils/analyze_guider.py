@@ -25,6 +25,11 @@ class AnalyzeGuider:
         self.starname = self.L0['PRIMARY'].header['TARGNAME']
         self.ObsID = self.L0['PRIMARY'].header['OFNAME']
         self.guider_header = self.L0['GUIDER_AVG'].header
+        if 'TTGAIN' in self.guider_header:
+            self.tiptilt_gain = self.guider_header['TTGAIN']
+        else:
+            self.tiptilt_gain = 0.3 
+
         self.df_GUIDER = Table.read(self.L0, format='fits',hdu='guider_cube_origins').to_pandas()
 
         if logger:
@@ -59,10 +64,6 @@ class AnalyzeGuider:
         """
         
         self.guider_image = self.L0['GUIDER_AVG'].data - np.median(self.L0['GUIDER_AVG'].data)
-        if 'TTGAIN' in self.guider_header:
-            tiptilt_gain = self.L0['GUIDER_AVG'].header['TTGAIN']
-        else:
-            tiptilt_gain = 0.3 
 
         def moffat_2D(xy, amplitude, x0, y0, alpha, beta):
             x, y = xy
@@ -218,11 +219,6 @@ class AnalyzeGuider:
             (e.g., in a Jupyter Notebook).
 
         """
-
-        if 'TTGAIN' in self.L0['GUIDER_AVG'].header:
-            tiptilt_gain = self.L0['GUIDER_AVG'].header['TTGAIN']
-        else:
-            tiptilt_gain = 0.3 
         
         if np.sqrt(self.df_GUIDER.shape[0]) < 60:
             hist_bins = 25
@@ -233,8 +229,8 @@ class AnalyzeGuider:
         fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]})
         plt.style.use('seaborn-whitegrid')
 
-        x_mas = self.df_GUIDER.command_x/tiptilt_gain*self.pixel_scale*1000
-        y_mas = self.df_GUIDER.command_y/tiptilt_gain*self.pixel_scale*1000
+        x_mas = self.df_GUIDER.command_x/self.tiptilt_gain*self.pixel_scale*1000
+        y_mas = self.df_GUIDER.command_y/self.tiptilt_gain*self.pixel_scale*1000
         r_mas = (x_mas**2+y_mas**2)**0.5
 
         # Plot the data
