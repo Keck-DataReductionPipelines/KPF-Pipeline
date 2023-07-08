@@ -13,6 +13,7 @@ class HeaderParse:
 
     def __init__(self, header, logger=None):
         self.header = header
+        self.name = '' # 'Name' of object; see get_name() function below
         if logger:
             self.logger = logger
             self.logger.debug('HeaderParse class constructor')
@@ -41,34 +42,44 @@ class HeaderParse:
         if ('IMTYPE' in self.header) and ('EXPTIME' in self.header):
             if ((self.header['IMTYPE'] == 'Bias') or 
                 (self.header['EXPTIME'] == 0)):
-                return 'Bias'
+                self.name 'Bias'
+                return self.name
         if 'IMTYPE' in self.header:
             if self.header['IMTYPE'] == 'Dark':
-                return 'Dark' 
+                self.name 'Dark' 
+                return self.name
         if 'TARGNAME' in self.header:
             if ((self.header['TARGNAME'].lower() == 'sun') or 
                 (self.header['TARGNAME'].lower() == 'socal')):
-                return 'Sun' # SoCal
+                self.name 'Sun' # SoCal
+                return self.name
         if ('OBJECT' in self.header) and ('FIUMODE' in self.header):
             if (self.header['FIUMODE'] == 'Observing'):
-                name = self.header['OBJECT']
-                return name # Stellar
+                self.name = self.header['OBJECT']
+                return self.name # Stellar
         if 'FFFB' in self.header:
             if self.header['FFFB'].strip().lower() == 'yes':
-                return 'Wide Flat' # Flatfield Fiber (wide flats)
+                self.name = 'Wide Flat' # Flatfield Fiber (wide flats)
+                return self.name
         if 'IMTYPE' in self.header:
             if self.header['IMTYPE'].lower() == 'flatlamp':
                 if 'brdband' in self.header['OCTAGON'].lower():
-                    return 'Flat' # Flat through regular fibers
+                    self.name = 'Flat' # Flat through regular fibers
+                    return self.name
         if 'IMTYPE' in self.header: # Emission Lamps
             if self.header['IMTYPE'].lower() == 'arclamp':
                 if 'lfc' in self.header['OCTAGON'].lower():
-                    return 'LFC'
+                    self.name =  'LFC'
+                    return self.name
                 if 'etalon' in self.header['OCTAGON'].lower():
-                    return 'Etalon'
+                    self.name = 'Etalon'
+                    return self.name
                 if 'th_' in self.header['OCTAGON'].lower():
-                    return 'ThAr'
+                    self.name = 'ThAr'
+                    return self.name
                 if 'u_' in self.header['OCTAGON'].lower():
-                    return 'UNe'
-        return ''
+                    self.name = 'UNe'
+                    return self.name
+        self.name = ''
+        return self.name
  
