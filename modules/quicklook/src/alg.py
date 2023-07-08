@@ -50,9 +50,6 @@ class QuicklookAlg:
         #if not os.path.exists(output_dir+'/fig'):
         #    os.makedirs(output_dir+'/fig')
 
-        if not os.path.exists(output_dir+'/'+exposure_name+'/ExpMeter'):
-            os.makedirs(output_dir+'/'+exposure_name+'/ExpMeter')
-
         if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
             os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
 
@@ -159,6 +156,12 @@ class QuicklookAlg:
         version = hdr['IMTYPE']
         Cal_Source = hdr['SCI-OBJ']
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
+
+
+        print('Working on Exposure Meter data')
+        if not os.path.exists(output_dir+'/'+exposure_name+'/EM'):
+            os.makedirs(output_dir+'/'+exposure_name+'/EM')
+        my_EM = AnalyzeEM(L0)
 
         
         print('Working on Guider data')
