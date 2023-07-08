@@ -83,11 +83,6 @@ class AnalyzeGuider:
             popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0)
             amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = popt
             alpha_fit = abs(alpha_fit)
-            #print('amplitude = ' + str(amplitude_fit))
-            #print('seeing = ' + str(alpha_fit*0.056) + ' arcsec')
-            #print('beta = ' + str(beta_fit))
-            #print('x0 = ' + str(x0_fit) + ' pixels')
-            #print('y0 = ' + str(y0_fit) + ' pixels')
             self.good_fit = True
             self.image_fit = moffat_2D((X, Y), amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit)
             self.amplitude = amplitude_fit
@@ -316,7 +311,6 @@ class AnalyzeGuider:
 
         """
 
-        
         # Make FWHM time series
         fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
 
