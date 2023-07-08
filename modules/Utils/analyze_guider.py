@@ -126,7 +126,7 @@ class AnalyzeGuider:
         else:
             resid_im_zoom = 0*self.guider_image[255-38:255+38, 320-38:320+38]
 
-        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5), tight_layout=True)
 
         # Left panel - full image
         im1 = axs[0].imshow(self.guider_image, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
