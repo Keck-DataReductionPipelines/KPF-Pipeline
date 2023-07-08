@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from modules.Utils.header_parse import HeaderParse
 
 class AnalyzeL0:
 
@@ -17,8 +18,11 @@ class AnalyzeL0:
 
     def __init__(self, L0, logger=None):
         self.L0 = L0
-        self.starname = self.L0['PRIMARY'].header['TARGNAME']
-        self.ObsID = self.L0['PRIMARY'].header['OFNAME']  # better to use header keywords than pass in ObsID
+        header = L0['PRIMARY'].header
+        self.name = HeaderParse(header).get_name()
+        self.ObsID = ''
+        if 'OFNAME' in header:
+            self.ObsID == header['OFNAME']  # better to use header keywords than pass in ObsID
         
         if logger:
             self.logger = logger
@@ -102,9 +106,9 @@ class AnalyzeL0:
                    vmin=np.percentile(image,1),
                    vmax=np.percentile(image,99.5))
         if chip == 'green':
-            plt.title('L0 (no processing) - Green CCD: ' + str(self.ObsID) + ' - ' + self.starname, fontsize=14)
+            plt.title('L0 (no processing) - Green CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         if chip == 'red':
-            plt.title('L0 (no processing) - Red CCD: ' + str(self.ObsID) + ' - ' + self.starname, fontsize=14)
+            plt.title('L0 (no processing) - Red CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.xlabel('Column (pixel number)', fontsize=14)
         plt.ylabel('Row (pixel number)', fontsize=14)
         cbar_label = 'ADU'
