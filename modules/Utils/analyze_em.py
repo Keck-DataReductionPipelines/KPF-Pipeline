@@ -19,10 +19,13 @@ class AnalyzeEM:
 
     def __init__(self, L0, logger=None):
         self.L0 = L0 
+        header = self.L0['GUIDER_AVG'].header
+        self.name = HeaderParse(header).get_name()
+        self.ObsID = ''
+        if 'OFNAME' in header:
+            self.ObsID == header['OFNAME']  # better to use header keywords than pass in ObsID
 
         self.EM_gain = 1.48424 #np.float(self.config['EM']['gain'])
-        self.starname = self.L0['PRIMARY'].header['TARGNAME']
-        self.ObsID = self.L0['PRIMARY'].header['OFNAME']
 
         # Read data tables
         self.dat_SKY = Table.read(self.L0, format='fits',hdu='EXPMETER_SKY')
@@ -103,7 +106,7 @@ class AnalyzeEM:
         plt.plot(time_em, int_SKY_flux_550_650 / (650-550) / tdur_sec,':', marker='o', color='g')
         plt.plot(time_em, int_SKY_flux_550m    / (550-445) / tdur_sec,':', marker='o', color='b')
         plt.plot(time_em, int_SKY_flux         / (870-445) / tdur_sec,':', marker='o', color='k', label = 'SKY 445-870 nm')
-        plt.title('Exposure Meter Time Series: ' + str(self.ObsID) + ' - ' + self.starname, fontsize=14)
+        plt.title('Exposure Meter Time Series: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.xlabel("Time (sec)",fontsize=14)
         plt.ylabel("Exposure Meter Flux (e-/nm/s)",fontsize=14)
         plt.yscale('log')
@@ -170,7 +173,7 @@ class AnalyzeEM:
         lns2 = ax2.plot(self.wav_SKY, int_SKY_spec, marker='.', color='brown', label = 'SKY',zorder = 0, alpha = 0.5)
         ax1.set_ylim(0,np.percentile(int_SCI_spec,99.9)*1.1)
         ax2.set_ylim(0,np.percentile(int_SKY_spec,99.9)*1.1)
-        plt.title('Exposure Meter Spectrum: ' + str(self.ObsID) + ' - ' + self.starname, fontsize=14)
+        plt.title('Exposure Meter Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.yticks(fontsize=14, color='brown')
         ax1.set_xlabel("Wavelength (nm)",fontsize=14)
         ax1.set_ylabel("SCI Exposure Meter Flux (e-/nm/s)",fontsize=14)
