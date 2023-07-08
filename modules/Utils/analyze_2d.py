@@ -21,7 +21,7 @@ class Analyze2D:
 
     def __init__(self, D2, logger=None):
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
-        header = L0['PRIMARY'].header
+        header = D2['PRIMARY'].header
         self.name = HeaderParse(header).get_name()
         self.ObsID = ''
         if 'OFNAME' in header:
