@@ -175,17 +175,15 @@ class QuicklookAlg:
         L0.close()
         '''
 
-        #read ccd directly
+        # Get list of HDUs
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
         hdulist = fits.open(L0_data)
-        #print(hdulist.info())
 
-        #get ccd names
+        # Get ccd names
         ccd_color=[]
         ccd_list = self.config.items( "CCD_LIST")
         for key, path in ccd_list:
             ccd_color.append(path)
-
 
         if len(hdulist[ccd_color[0]].data)<1 and len(hdulist[ccd_color[1]].data)<1:
             print('skipping empty file')
@@ -203,6 +201,9 @@ class QuicklookAlg:
         my_Guider = AnalyzeGuider(L0)
         my_Guider.measure_seeing()
         my_Guider.plot_guider_image(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png', show_plot=False)
+		#my_Guider.plot_guider_flux_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png', show_plot=False)
+		#my_Guider.plot_guider_fwhm_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_zoomable.png', show_plot=False)
+		#my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_error_time_series_zoomable.png', show_plot=False)
 
 
         master_file = 'None'
