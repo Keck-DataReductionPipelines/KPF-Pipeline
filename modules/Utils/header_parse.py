@@ -42,16 +42,16 @@ class HeaderParse:
         if ('IMTYPE' in self.header) and ('EXPTIME' in self.header):
             if ((self.header['IMTYPE'] == 'Bias') or 
                 (self.header['EXPTIME'] == 0)):
-                self.name 'Bias'
+                self.name = 'Bias'
                 return self.name
         if 'IMTYPE' in self.header:
             if self.header['IMTYPE'] == 'Dark':
-                self.name 'Dark' 
+                self.name = 'Dark' 
                 return self.name
         if 'TARGNAME' in self.header:
             if ((self.header['TARGNAME'].lower() == 'sun') or 
                 (self.header['TARGNAME'].lower() == 'socal')):
-                self.name 'Sun' # SoCal
+                self.name = 'Sun' # SoCal
                 return self.name
         if ('OBJECT' in self.header) and ('FIUMODE' in self.header):
             if (self.header['FIUMODE'] == 'Observing'):
@@ -69,7 +69,7 @@ class HeaderParse:
         if 'IMTYPE' in self.header: # Emission Lamps
             if self.header['IMTYPE'].lower() == 'arclamp':
                 if 'lfc' in self.header['OCTAGON'].lower():
-                    self.name =  'LFC'
+                    self.name = 'LFC'
                     return self.name
                 if 'etalon' in self.header['OCTAGON'].lower():
                     self.name = 'Etalon'
