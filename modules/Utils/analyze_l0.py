@@ -17,6 +17,9 @@ class AnalyzeL0:
 
     def __init__(self, L0, logger=None):
         self.L0 = L0
+        self.starname = self.L0['PRIMARY'].header['TARGNAME']
+        self.ObsID = self.L0['PRIMARY'].header['OFNAME']  # better to use header keywords than pass in ObsID
+        
         if logger:
             self.logger = logger
             self.logger.debug('AnalyzeL0 class constructor')
@@ -26,7 +29,6 @@ class AnalyzeL0:
 
 
     def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
-        L0 = self.L0
         """
         Generate a plot of the stitched L0 image.
         The image will be divided by 2^16, if appropriate.
@@ -42,8 +44,7 @@ class AnalyzeL0:
             (e.g., in a Jupyter Notebook).
         """
 
-        starname = L0['PRIMARY'].header['TARGNAME']
-        ObsID = L0['PRIMARY'].header['OFNAME']  # better to use header keywords than pass in ObsID
+        L0 = self.L0
         
         if chip == 'green' or chip == 'red':
             if chip == 'green':
@@ -102,9 +103,9 @@ class AnalyzeL0:
                    vmin=np.percentile(image,1),
                    vmax=np.percentile(image,99.5))
         if chip == 'green':
-            plt.title('L0 (no processing) - Green CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
+            plt.title('L0 (no processing) - Green CCD: ' + str(self.ObsID) + ' - ' + self.starname, fontsize=14)
         if chip == 'red':
-            plt.title('L0 (no processing) - Red CCD: ' + str(ObsID) + ' - ' + starname, fontsize=14)
+            plt.title('L0 (no processing) - Red CCD: ' + str(self.ObsID) + ' - ' + self.starname, fontsize=14)
         plt.xlabel('Column (pixel number)', fontsize=14)
         plt.ylabel('Row (pixel number)', fontsize=14)
         cbar_label = 'ADU'
