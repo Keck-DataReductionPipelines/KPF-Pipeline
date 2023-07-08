@@ -26,60 +26,7 @@ class AnalyzeL0:
         else:
             self.logger = None
             print('---->AnalyzeL0 class constructor')
-
-
-    def get_name_from_header(self, header):
-        """
-        Returns the name of the source in a spectrum.  For stellar observations, this 
-        is the star's name (e.g. '185144' for HD 185144 = sigma Draconis).  
-        For calibration spectra, this is the lamp name (ThAr, UNe, LFC, etalon) or 
-        bias/dark.
-
-        Args:
-            header - header from a KPF L0/2D/L1/L2 file, e.g. L0['PRIMARY'].header
-
-        Returns:
-            the source/image type
-        """
-        
-        # Note: the logic below is set so that as soon as the name is determined, it is
-        #       returned.  This is so that partially complete headers don't cause this 
-        #       to crash.
- 	    if ('IMTYPE' in header) and ('EXPTIME' in header):
-	        if ((header['IMTYPE'] == 'Bias') or (header['EXPTIME'] == 0)):
-	            return 'Bias'
-	    if 'IMTYPE' in header:
-	        if header['IMTYPE'] == 'Dark':
-	            return 'Dark' 
-	    if 'TARGNAME' in header:
-	        if ((header['TARGNAME'].lower() == 'sun') or (header['TARGNAME'].lower() == 'socal')):
-	            return 'Sun' # SoCal
-	    if ('OBJECT' in header) and ('FIUMODE' in header):
-	        if (header['FIUMODE'] == 'Observing'):
-	            name = header['OBJECT']
-	            return name # Stellar
-	    if 'FFFB' in header:
-	        if header['FFFB'].strip().lower() == 'yes':
-	            return 'Wide Flat' # Flatfield Fiber (wide flats)
-	    if 'IMTYPE' in header:
-	        if header['IMTYPE'].lower() == 'flatlamp':
-	            if 'brdband' in header['OCTAGON'].lower():
-	                return 'Flat' # Flat through regular fibers
-	    if 'IMTYPE' in header: # Emission Lamps
-	        if header['IMTYPE'].lower() == 'arclamp':
-	            if 'lfc' in header['OCTAGON'].lower():
-	                return 'LFC'
-	            # Etalon
-	            if 'etalon' in header['OCTAGON'].lower():
-	                return 'Etalon'
-	            # Thorium-Argon
-	            if 'th_' in header['OCTAGON'].lower():
-	                return 'ThAr'
-	            # Uranium-Neon
-	            if 'u_' in header['OCTAGON'].lower():
-	                return 'UNe'
-        return ''
-
+            
 
     def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
         """
