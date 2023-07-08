@@ -28,12 +28,22 @@ class AnalyzeL1:
 
     def __init__(self, L1, logger=None):
         self.L1 = L1
+
+        try:
+            self.starname = self.L1['PRIMARY'].header['TARGNAME']
+        except:
+            self.starname = ''
+        try:
+            self.ObsID = self.L1['PRIMARY'].header['OFNAME']
+        except:
+            self.ObsID = ''
+                    
         if logger:
             self.logger = logger
-            self.logger.debug('AnalyzeL0 class constructor')
+            self.logger.debug('AnalyzeL1 class constructor')
         else:
             self.logger = None
-            print('---->AnalyzeL0 class constructor')
+            print('---->AnalyzeL1 class constructor')
 
     def measure_L1_snr(self, snr_percentile=95):
 
@@ -63,7 +73,6 @@ class AnalyzeL1:
             None
         """
         L1= self.L1
-        #print('KPF1',L1.info(),L1.__dir__())
         self.snr_percentile = snr_percentile
 
         # Determine the number of orders
@@ -154,8 +163,7 @@ class AnalyzeL1:
         self.GREEN_SNR_WAV = GREEN_SNR_WAV
         self.RED_SNR_WAV   = RED_SNR_WAV
 
-    def plot_L1_snr(self,ObsID, fig_path=None, show_plot=False):
-        L1= self.L1
+    def plot_L1_snr(self, ObsID, fig_path=None, show_plot=False):
         """
 
         Generate a plot of SNR per order as compuated using the compute_l1_snr
@@ -171,6 +179,7 @@ class AnalyzeL1:
             (e.g., in a Jupyter Notebook).
 
         """
+        L1= self.L1
 
         # Make 3-panel plot. First, create the figure and subplots
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,14))
@@ -197,7 +206,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(ObsID + ' - ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
+        ax1.set_title(self.ObsID + ' - ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=18)
         ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
         ax1.set_ylabel('SNR - SCI', fontsize=14)
         ax2.set_ylabel('SNR - SKY', fontsize=14)
