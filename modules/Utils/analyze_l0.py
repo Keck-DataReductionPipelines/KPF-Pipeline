@@ -28,6 +28,21 @@ class AnalyzeL0:
             print('---->AnalyzeL0 class constructor')
 
 
+    def get_name_from_header(self, header):
+        """
+        Returns the name of the source in a spectrum.  For stellar observations, this 
+        is the star's name (e.g. '185144' for HD 185144 = sigma Draconis).  
+        For calibration spectra, this is the lamp name (ThAr, UNe, LFC, etalon) or 
+        bias/dark.
+
+        Args:
+            header - header from a KPF L0/2D/L1/L2 file, e.g. L0['PRIMARY'].header
+
+        Returns:
+            the source/image type
+        """
+
+
     def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
         """
         Generate a plot of the stitched L0 image.
@@ -43,6 +58,10 @@ class AnalyzeL0:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        
+        #TO-DO : write the algorithm!
+        
+        return
 
         L0 = self.L0
         
