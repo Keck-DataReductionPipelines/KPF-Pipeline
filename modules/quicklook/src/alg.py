@@ -50,9 +50,6 @@ class QuicklookAlg:
         #if not os.path.exists(output_dir+'/fig'):
         #    os.makedirs(output_dir+'/fig')
 
-        if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
-            os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
-
         if not os.path.exists(output_dir+'/'+exposure_name+'/2D'):
             os.makedirs(output_dir+'/'+exposure_name+'/2D')
 
@@ -158,18 +155,19 @@ class QuicklookAlg:
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
 
+        #### Exposure Meter ####
         if 'EXPMETER_SCI' in hdulist and len(hdulist['EXPMETER_SCI'].data)>=1:
             try: 
                 print('Working on Exposure Meter data')
                 if not os.path.exists(output_dir+'/'+exposure_name+'/EM'):
                     os.makedirs(output_dir+'/'+exposure_name+'/EM')
-                    my_EM = AnalyzeEM(L0)
-                    my_EM.plot_EM_time_series(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_time_series_zoomable.png')
-                    my_EM.plot_EM_spectrum(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_spectrum_zoomable.png')
+                my_EM = AnalyzeEM(L0)
+                my_EM.plot_EM_time_series(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_time_series_zoomable.png')
+                my_EM.plot_EM_spectrum(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_spectrum_zoomable.png')
             except:
-                    print("Processing Exposure Meter failed")
+                print("Processing Exposure Meter failed")
 
-
+        #### Guider ####
         if (('GUIDER_AVG' in hdulist) and len(hdulist['GUIDER_AVG'].data)>=1) or (('guider_avg' in hdulist) and len(hdulist['guider_avg'].data)>=1):
             print('Working on Guider data')
             try: 
@@ -546,8 +544,11 @@ class QuicklookAlg:
 
         #Ca HK data
 
+
         if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
             print('Working on Ca HK data')
+            if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
+                os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
 
             def plot_trace_boxes(data,trace_location,trace_location_sky):
 
