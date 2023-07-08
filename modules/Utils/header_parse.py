@@ -5,7 +5,7 @@ class HeaderParse:
         This class contains functions to parse the headers of KPF fits files.
 
     Arguments:
-        KPF File (L0, 2D, L1, or L2)
+        Header for a KPF File (L0, 2D, L1, or L2), e.g. L0['PRIMARY'].header
 
     Attributes:
         None so far
@@ -14,6 +14,7 @@ class HeaderParse:
     def __init__(self, header, logger=None):
         self.header = header
         self.name = '' # 'Name' of object; see get_name() function below
+        self.ObsID = '' # e.g., 'KP.20230708.04519.63'
         if logger:
             self.logger = logger
             self.logger.debug('HeaderParse class constructor')
@@ -30,7 +31,7 @@ class HeaderParse:
         bias/dark.  Flats using KPF's regular fibers are distinguished from wide flats.
 
         Args:
-            header - header from a KPF L0/2D/L1/L2 file, e.g. L0['PRIMARY'].header
+            None
 
         Returns:
             the source/image type
@@ -82,4 +83,22 @@ class HeaderParse:
                     return self.name
         self.name = ''
         return self.name
- 
+
+    def get_obsid(self):
+        """
+        Returns the ObsID for a KPF File (L0, 2D, L1, or L2).
+
+        Args:
+            None
+
+        Returns:
+            ObsID of the form 'KP.20230708.04519.63'
+        """
+        if 'OFNAME' in self.header:
+            self.ObsID = self.header['OFNAME']
+            self.ObsID = self.ObsID.replace('.fits', '')
+            self.ObsID = self.ObsID.replace('_2D', '')
+            self.ObsID = self.ObsID.replace('_L1', '')
+            self.ObsID = self.ObsID.replace('_L2', '')
+        return self.ObsID
+
