@@ -63,26 +63,6 @@ class AnalyzeEM:
 
         """
 
-        #EM_gain = 1.48424 #np.float(self.config['EM']['gain'])
-        #starname = L0['PRIMARY'].header['TARGNAME']
-        #ObsID = L0['PRIMARY'].header['OFNAME']
-
-        ## Read data tables
-        #dat_SKY = Table.read(self.L0, format='fits',hdu='EXPMETER_SKY')
-        #dat_SCI = Table.read(self.L0, format='fits',hdu='EXPMETER_SCI')
-        #df_SKY_EM = dat_SKY.to_pandas()
-        #df_SCI_EM = dat_SCI.to_pandas()
-        #i = 0
-        #for col in df_SCI_EM.columns:
-        #    if col.lower().startswith('date'):
-        #        i += 1
-        #    else:
-        #        break
-        #wav_SCI_str = self.df_SCI_EM.columns[i:]
-        #wav_SCI     = self.df_SCI_EM.columns[i:].astype(float)
-        #wav_SKY_str = self.df_SKY_EM.columns[i:]
-        #wav_SKY     = self.df_SKY_EM.columns[i:].astype(float)
-
         # Define time arrays
         date_end = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64)
         if 'Date-Beg-Corr' in self.df_SCI_EM.columns:
@@ -153,26 +133,6 @@ class AnalyzeEM:
             (e.g., in a Jupyter Notebook).
 
         """
-
-        #EM_gain = 1.48424 #np.float(self.config['EM']['gain'])
-        #starname = L0['PRIMARY'].header['TARGNAME']
-        #ObsID = L0['PRIMARY'].header['OFNAME']
-
-        ## Read data tables
-        #dat_SKY = Table.read(L0, format='fits',hdu='EXPMETER_SKY')
-        #dat_SCI = Table.read(L0, format='fits',hdu='EXPMETER_SCI')
-        #df_SKY_EM = dat_SKY.to_pandas()
-        #df_SCI_EM = dat_SCI.to_pandas()
-        #i = 0
-        #for col in df_SCI_EM.columns:
-        #    if col.lower().startswith('date'):
-        #        i += 1
-        #    else:
-        #        break
-        #wav_SCI_str = self.df_SCI_EM.columns[i:]
-        #wav_SCI     = self.df_SCI_EM.columns[i:].astype(float)
-        #wav_SKY_str = self.df_SKY_EM.columns[i:]
-        #wav_SKY     = self.df_SKY_EM.columns[i:].astype(float)
 
         # Define dispersion
         disp_SCI = self.wav_SCI*0+np.gradient(self.wav_SCI,1)*-1
