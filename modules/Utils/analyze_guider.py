@@ -144,7 +144,7 @@ class AnalyzeGuider:
         axs[0].set_yticklabels([f'{int(y * self.pixel_scale)}' for y in yticks])
         axs[0].set_xlabel('Arcseconds', fontsize=12)
         axs[0].set_ylabel('Arcseconds', fontsize=12)
-        title = str(self.ObsID)+' - ' + self.starname 
+        title = str(self.ObsID)+' - ' + self.name 
         if self.good_fit:
             title = title + "\n seeing: " + f"{(self.seeing*self.pixel_scale):.2f}" + '" (z+J)'+ r' $\rightarrow$ ' +f"{(self.seeing_550nm*self.pixel_scale):.2f}" + '" (V, scaled)'
         axs[0].set_title(title, fontsize=12)
@@ -241,7 +241,7 @@ class AnalyzeGuider:
 
         axes[0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), x_mas, color='royalblue')
         axes[0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), y_mas, color='orange')
-        axes[0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
+        axes[0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         axes[0].set_xlabel("Time (sec)", fontsize=14)
         axes[0].set_ylabel("Guiding Error (mas)", fontsize=14)
         axes[0].legend([r'$\langle\,\left|\mathrm{x}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(x_mas))*10)/10}' + ' mas', 
@@ -282,7 +282,7 @@ class AnalyzeGuider:
         plt.figure(figsize=(8, 4), tight_layout=True)
         plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
         #plt.plot(time, int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec / max(int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec), marker='o', color='k')
-        plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
+        plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("Flux (fractional)", fontsize=14)
         plt.xticks(fontsize=14)
@@ -321,7 +321,7 @@ class AnalyzeGuider:
         plt.style.use('seaborn-whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
-        plt.title("Guider FWHM Time Series: " + str(self.ObsID)+' - ' + self.starname, fontsize=14)
+        plt.title("Guider FWHM Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("FWHM (mas)", fontsize=14)
         plt.xticks(fontsize=14)
