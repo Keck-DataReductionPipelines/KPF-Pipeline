@@ -177,10 +177,10 @@ class QuicklookAlg:
                     os.makedirs(output_dir+'/'+exposure_name+'/Guider')
                 my_Guider = AnalyzeGuider(L0)
                 my_Guider.measure_seeing()
-                my_Guider.plot_guider_image(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png')
-                my_Guider.plot_guider_flux_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
-                my_Guider.plot_guider_fwhm_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_zoomable.png')
-                my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_error_time_series_zoomable.png')
+                my_Guider.plot_guider_image(            fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png')
+                my_Guider.plot_guider_fwhm_time_series( fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_time_series_zoomable.png')
+                my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_errors_time_series_zoomable.png')
+                my_Guider.plot_guider_flux_time_series( fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
             except:
                 print("Processing Guider image failed")
 
