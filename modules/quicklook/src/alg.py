@@ -3,7 +3,6 @@ import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
-from modules.Utils.analyze_l1 import AnalyzeL1
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
 from keckdrpframework.models.arguments import Arguments
@@ -15,6 +14,10 @@ from astropy import modeling
 from astropy.time import Time
 from datetime import datetime
 from modules.Utils.analyze_l0 import AnalyzeL0
+from modules.Utils.analyze_guider import AnalyzeGuider
+from modules.Utils.analyze_em import AnalyzeEM
+from modules.Utils.analyze_2d import Analyze2D
+from modules.Utils.analyze_l1 import AnalyzeL1
 import kpfpipe.pipelines.fits_primitives as fits_primitives
 
 class QuicklookAlg:
@@ -33,14 +36,11 @@ class QuicklookAlg:
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
-
-
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
         plt.rcParams['legend.fontsize'] = plt.rcParams['font.size']
 
-        #check if output location exist, if not create it
-
+        #check if output locations exist, if not create them
         exposure_name = kpf0_file.filename.replace('_2D.fits', '.fits')[:-5]
         date = exposure_name[3:11]
         print('test',exposure_name, date)
@@ -136,11 +136,10 @@ class QuicklookAlg:
 
         #L0_file = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         #L0_kpf = fits_primitives.kpf0_from_fits(L0_file)
-        L0_obj = AnalyzeL0(L0)
-        #print(L0_obj,L0_obj.info())
+        my_AnalyzeL0 = AnalyzeL0(L0)
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
-        L0_obj.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
-        L0_obj.plot_L0_stitched_image(exposure_name,chip='red', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
+        my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
+        my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='red',   fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
 
         '''
         green_image = np.flipud(np.concatenate((L0['GREEN_AMP1'].data, L0['GREEN_AMP2'].data), axis=1))/2**16
@@ -199,7 +198,11 @@ class QuicklookAlg:
         Cal_Source = hdr['SCI-OBJ']
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
-
+        
+        print('Working on guider data')
+        my_Guider = AnalyzeGuider(L0)
+        my_Guider.measure_seeing()
+        my_Guider.plot_guider_image(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png', show_plot=False)
 
 
         master_file = 'None'
