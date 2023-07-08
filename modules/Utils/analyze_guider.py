@@ -27,7 +27,7 @@ class AnalyzeGuider:
         self.name = HeaderParse(self.guider_header).get_name()
         self.ObsID = ''
         if 'OFNAME' in self.guider_header:
-            self.ObsID == self.guider_header['OFNAME']  # better to use header keywords than pass in ObsID
+            self.ObsID = self.guider_header['OFNAME']  # better to use header keywords than pass in ObsID
         if 'TTGAIN' in self.guider_header:
             self.tiptilt_gain = self.guider_header['TTGAIN']
         else:

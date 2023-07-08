@@ -24,7 +24,7 @@ class AnalyzeEM:
         self.name = HeaderParse(header).get_name()
         self.ObsID = ''
         if 'OFNAME' in header:
-            self.ObsID == header['OFNAME']  # better to use header keywords than pass in ObsID
+            self.ObsID = header['OFNAME']  # better to use header keywords than pass in ObsID
 
         self.EM_gain = 1.48424 #np.float(self.config['EM']['gain'])
 

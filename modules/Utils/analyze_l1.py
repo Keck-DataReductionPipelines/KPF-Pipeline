@@ -33,7 +33,7 @@ class AnalyzeL1:
         self.name = HeaderParse(header).get_name()
         self.ObsID = ''
         if 'OFNAME' in header:
-            self.ObsID == header['OFNAME']  # better to use header keywords than pass in ObsID
+            self.ObsID = header['OFNAME']  # better to use header keywords than pass in ObsID
                     
         if logger:
             self.logger = logger

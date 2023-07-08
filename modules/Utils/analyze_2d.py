@@ -22,12 +22,12 @@ class Analyze2D:
 
     def __init__(self, D2, logger=None):
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
-        header = D2['PRIMARY'].header
-        self.name = HeaderParse(header).get_name()
+        self.header = D2['PRIMARY'].header
+        self.name = HeaderParse(self.header).get_name()
         self.ObsID = ''
-        if 'OFNAME' in header:
-            self.ObsID == header['OFNAME']  # better to use header keywords than pass in ObsID
-       
+        if 'OFNAME' in self.header:
+            self.ObsID = self.header['OFNAME']  # better to use header keywords than pass in ObsID
+
         if logger:
             self.logger = logger
             self.logger.debug('Analyze2D class constructor')
@@ -81,6 +81,10 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close()
+        
+        print("self.ObsID = " + self.ObsID)
+        print("self.header['OFNAME'] = " + self.header['OFNAME'])
+        print('OFNAME' in self.header)
 
 
     def plot_bias_histogram(self, chip=None, fig_path=None, show_plot=False):
