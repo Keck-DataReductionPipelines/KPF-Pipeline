@@ -31,11 +31,7 @@ class QuicklookAlg:
         self.logger=logger
 
 
-
-
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
-
-
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
         plt.rcParams.update({'font.size': 8})
@@ -69,6 +65,9 @@ class QuicklookAlg:
 
         if not os.path.exists(output_dir+'/'+exposure_name+'/CCF'):
             os.makedirs(output_dir+'/'+exposure_name+'/CCF')
+
+        if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
+            os.makedirs(output_dir+'/'+exposure_name+'/Guider')
         #print('working on',file_name)
 
         # try:
