@@ -50,9 +50,6 @@ class QuicklookAlg:
         #if not os.path.exists(output_dir+'/fig'):
         #    os.makedirs(output_dir+'/fig')
 
-        if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
-            os.makedirs(output_dir+'/'+exposure_name+'/Guider')
-
         if not os.path.exists(output_dir+'/'+exposure_name+'/ExpMeter'):
             os.makedirs(output_dir+'/'+exposure_name+'/ExpMeter')
 
@@ -138,8 +135,9 @@ class QuicklookAlg:
         #L0_kpf = fits_primitives.kpf0_from_fits(L0_file)
         my_AnalyzeL0 = AnalyzeL0(L0)
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
-        my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
-        my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='red',   fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
+        # temporarily comment out (for speed)
+        #my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
+        #my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='red',   fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_RED_L0_zoomable.png', show_plot=False)
 
         # Get list of HDUs
         L0_data = self.config['IO']['input_prefix_l0']+date+'/'+exposure_name+'_2D.fits'
@@ -164,13 +162,14 @@ class QuicklookAlg:
 
         
         print('Working on Guider data')
+        if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
+            os.makedirs(output_dir+'/'+exposure_name+'/Guider')
         my_Guider = AnalyzeGuider(L0)
         my_Guider.measure_seeing()
         my_Guider.plot_guider_image(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png')
-        #print('*** '+output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png'+ ' ***')
-		#my_Guider.plot_guider_flux_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
-		#my_Guider.plot_guider_fwhm_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_zoomable.png')
-		#my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_error_time_series_zoomable.png')
+        my_Guider.plot_guider_flux_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
+        my_Guider.plot_guider_fwhm_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_zoomable.png')
+        my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_error_time_series_zoomable.png')
 
 
         master_file = 'None'
@@ -210,8 +209,6 @@ class QuicklookAlg:
             master_file = self.config['2D']['master_Une']
         if version == 'LFC_SciCal':
             master_file = self.config['2D']['master_LFC']
-
-
 
 
         for i_color in range(len(ccd_color)):
@@ -268,8 +265,6 @@ class QuicklookAlg:
                 plt.savefig(output_dir+'fig/'+exposure_name+'_bias_'+ccd_color[i_color]+'.png')
                 plt.close('all')
             '''
-
-
 
 
             #2D image
