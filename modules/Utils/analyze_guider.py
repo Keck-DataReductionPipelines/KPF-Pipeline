@@ -22,9 +22,11 @@ class AnalyzeGuider:
     def __init__(self, L0, logger=None):
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
-        self.starname = self.L0['PRIMARY'].header['TARGNAME']
-        self.ObsID = self.L0['PRIMARY'].header['OFNAME']
         self.guider_header = self.L0['GUIDER_AVG'].header
+        self.name = HeaderParse(guider_header).get_name()
+        self.ObsID = ''
+        if 'OFNAME' in guider_header:
+            self.ObsID == guider_header['OFNAME']  # better to use header keywords than pass in ObsID
         if 'TTGAIN' in self.guider_header:
             self.tiptilt_gain = self.guider_header['TTGAIN']
         else:
