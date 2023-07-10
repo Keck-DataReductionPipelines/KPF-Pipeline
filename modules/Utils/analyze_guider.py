@@ -4,7 +4,7 @@ import matplotlib.ticker as ticker
 from scipy.optimize import curve_fit
 from astropy.table import Table
 from astropy.time import Time
-from modules.Utils.header_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeGuider:
 
