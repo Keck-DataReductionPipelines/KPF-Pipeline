@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from modules.Utils.header_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeL0:
 
