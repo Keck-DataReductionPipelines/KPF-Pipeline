@@ -92,6 +92,7 @@ class HeaderParse:
             self.name = ''
         return self.name
 
+
     def get_obsid(self):
         """
         Returns the ObsID for a KPF File (L0, 2D, L1, or L2).
@@ -127,4 +128,119 @@ def get_datecode(ObsID):
     ObsID = ObsID.replace('_L2', '')
     datecode = ObsID.split('.')[1]
     return datecode
+
+
+def get_data_products_L0(L0):
+    """
+    Returns a list of data products available in an L0 file, which are:
+    Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config
+
+    Args:
+        2D - a KPF 2D object 
+
+    Returns:
+        data_products in a 2D file
+    """
+    data_products = []
+    if 'GREEN_AMP1' in L0:
+        if L0['GREEN_AMP1'].size > 1:
+            data_products.append('Green')
+    if 'RED_AMP1' in L0:
+        if L0['RED_AMP1'].size > 1:
+            data_products.append('Red')
+    if 'CA_HK' in L0:
+        if L0['CA_HK'].size > 1:
+            data_products.append('CaHK')
+    if 'EXPMETER_SCI' in L0:
+        if L0['EXPMETER_SCI'].size > 1:
+            data_products.append('ExpMeter')
+    if ('GUIDER_AVG' in L0) or ('guider_avg' in L0):
+        if (L0['GUIDER_AVG'].size > 1) or (L0['guider_avg'].size > 1):
+            data_products.append('Guider')
+    if 'TELEMETRY' in L0:
+        if L0['TELEMETRY'].size > 1:
+            data_products.append('Telemetry')
+    if 'SOCAL PYRHELIOMETER' in L0:
+        if L0['SOCAL PYRHELIOMETER'].size > 1:
+            data_products.append('Config')
+    return data_products
+
+
+def get_data_products_2D(D2):
+    """
+    Returns a list of data products available in a D2 file, which are:
+    Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
+
+    Args:
+        2D - a KPF 2D object 
+
+    Returns:
+        data_products in a 2D file
+    """
+    data_products = []
+    if 'GREEN_CCD' in D2:
+        if D2['GREEN_CCD'].size > 1:
+            data_products.append('Green')
+    if 'Red_CCD' in D2:
+        if D2['Red_CCD'].size > 1:
+            data_products.append('Red')
+    if 'CA_HK' in D2:
+        if D2['CA_HK'].size > 1:
+            data_products.append('CaHK')
+    if 'EXPMETER_SCI' in D2:
+        if D2['EXPMETER_SCI'].size > 1:
+            data_products.append('ExpMeter')
+    if 'GUIDER_AVG' in D2:
+        if D2['GUIDER_AVG'].size > 1:
+            data_products.append('Guider')
+    if 'TELEMETRY' in D2:
+        if D2['TELEMETRY'].size > 1:
+            data_products.append('Telemetry')
+    if 'CONFIG' in D2:
+        if D2['CONFIG'].size > 1:
+            data_products.append('Config')
+    if 'RECEIPT' in D2:
+        if D2['RECEIPT'].size > 1:
+            data_products.append('Receipt')
+    if 'SOCAL PYRHELIOMETER' in D2:
+        if D2['SOCAL PYRHELIOMETER'].size > 1:
+            data_products.append('Pyrheliometer')
+    # add support for SOLAR_IRRADIANCE later
+    return data_products
+
+
+def get_data_products_L1(L1):
+    """
+    Returns a list of data products available in a L1 file, which are:
+        Green, Red, CaHK, BC, Telemetry, Config, Receipt
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        data_products in a L1 file
+    """
+    data_products = []
+    if 'GREEN_SCI_FLUX1' in L1:
+        if L1['GREEN_SCI_FLUX1'].size > 1:
+            data_products.append('Green')
+    if 'RED_SCI_FLUX1' in L1:
+        if L1['RED_SCI_FLUX1'].size > 1:
+            data_products.append('Red')
+    if 'CA_HK_SCI' in L1:
+        if L1['CA_HK_SCI'].size > 1:
+            data_products.append('CaHK')
+    if 'BARY_CORR' in L1:
+        if L1['BARY_CORR'].size > 1:
+            data_products.append('BC')
+    if 'TELEMETRY' in L1:
+        if L1['TELEMETRY'].size > 1:
+            data_products.append('Telemetry')
+    if 'CONFIG' in L1:
+        if L1['CONFIG'].size > 1:
+            data_products.append('Config')
+    if 'RECEIPT' in L1:
+        if L1['RECEIPT'].size > 1:
+            data_products.append('Receipt')
+    return data_products
 
