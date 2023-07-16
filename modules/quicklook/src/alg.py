@@ -18,7 +18,11 @@ from modules.Utils.analyze_guider import AnalyzeGuider
 from modules.Utils.analyze_em import AnalyzeEM
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
+from modules.Utils.header_parse import HeaderParse
 import kpfpipe.pipelines.fits_primitives as fits_primitives
+from modules.Utils.kpf_parse import get_data_products_L0
+from modules.Utils.kpf_parse import get_data_products_2D
+from modules.Utils.kpf_parse import get_data_products_L1
 
 class QuicklookAlg:
     """
@@ -33,6 +37,38 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
+    def qlp_L0(self, L0, output_dir=None, show_plot=True)
+    """
+    Description:
+        Generates all of the standard quicklook data products for an L0 file.
+
+    Arguments:
+        L0 - an L0 object or an L0 filename
+        output_dir - directory for output QLP files (if show_plot=False)
+        show_plot - plots are generated inline (e.g., for Jupyter Notesbooks) instead of 
+                    saving files
+
+    Attributes:
+        None so far
+    """
+    
+    # First, check if L0 is a KPF L0 object or a filename
+    L0_good = False
+    if L0 type(L0) == str:
+        if os.path.exists(L0):
+            L0_filename = L0
+            L0 = KPF0.from_fits(L0_filename)
+            L0_good = True
+    else:
+        print("Need to write code for reading L0 files as KPF objects")
+    
+    if L0_good:
+        
+        
+        # Plot the Guider image
+        myL0 = AnalyzeL0(L0)
+        myL0.plot_L0_stitched_image(ObsID, chip='green', 
+                                    output_dir=output_dir, show_plot=self.show_plot)
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
@@ -120,14 +156,12 @@ class QuicklookAlg:
             return
         print('Working on',date,exposure_name)
 
-        #operate on L0 data before image assembly
+        #### L0 ####
         L0_filename = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         L0 = fits.open(L0_filename)
 
-        #L0_filename = self.config['IO']['input_prefix_l0_pre']+date+'/'+exposure_name+'.fits'
         #L0_kpf = fits_primitives.kpf0_from_fits(L0_filename)
         my_AnalyzeL0 = AnalyzeL0(L0)
-        #print(my_AnalyzeL0,my_AnalyzeL0.info())
         if os.path.exists(output_dir+'/'+exposure_name+'/L0/') == False: os.makedirs(output_dir+'/'+exposure_name+'/L0/')
         # temporarily comment out (for speed)
         my_AnalyzeL0.plot_L0_stitched_image(exposure_name,chip='green', fig_path=output_dir+'/'+exposure_name+'/L0/'+exposure_name+'_GREEN_L0_zoomable.png', show_plot=False)
@@ -182,6 +216,21 @@ class QuicklookAlg:
                 my_Guider.plot_guider_flux_time_series( fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
             except:
                 print("Processing QLP for Guider image failed")
+
+
+        #### 2D ####
+        
+        if 2D_exists and len(hdulist['EXPMETER_SCI'].data)>=1:
+            try: 
+                print('Working QLP for on Exposure Meter data')
+                if not os.path.exists(output_dir+'/'+exposure_name+'/EM'):
+                    os.makedirs(output_dir+'/'+exposure_name+'/EM')
+                my_EM = AnalyzeEM(L0)
+                my_EM.plot_EM_time_series(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_time_series_zoomable.png')
+                my_EM.plot_EM_spectrum(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_spectrum_zoomable.png')
+            except:
+                print("Processing QLP for Exposure Meter failed")
+
 
         master_file = 'None'
         if version == 'Solar':
@@ -278,6 +327,10 @@ class QuicklookAlg:
             '''
 
 
+
+            plot_2D_image(self, chip=None, overplot_dark_current=False, 
+                            fig_path=None, show_plot=False)
+
             #2D image
             plt.figure(figsize=(5,4))
             plt.subplots_adjust(left=0.15, bottom=0.15, right=0.9, top=0.9)
@@ -291,153 +344,153 @@ class QuicklookAlg:
             #plt.close()
 
 
-            #2D difference image
 
-            #if the frame is a flat, let's plot the order trace
-            if version != '':#if version == 'Flat_All':
-                order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
-                order_trace = pd.read_csv(order_trace_file)
-                #print(order_trace_file,order_trace)
-                for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
-                    #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
-                    x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
-                    y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
-                    plt.plot(x_grid,y_grid,color ='magenta',linewidth = 0.2)
-                    plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],':',color ='white',linewidth = 0.2,alpha = 1)
-                    plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],'--',color ='black',linewidth = 0.2,alpha = 1)
-                    #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
-                    #print(x_grid,y_grid)
-                plt.xlim(3200,4000)
-                plt.ylim(3200,4000)
-                plt.title(ccd_color[i_color]+' '+version+' Order Trace ' +exposure_name)
-                #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
-                plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'_zoomable.png', dpi=300)
-            plt.close()
+### Put into analyze_2d.py:
+#            #if the frame is a flat, let's plot the order trace
+#            if version != '':#if version == 'Flat_All':
+#                order_trace_file = self.config['L1']['order_trace']+ccd_color[i_color]+'.csv'
+#                order_trace = pd.read_csv(order_trace_file)
+#                #print(order_trace_file,order_trace)
+#                for i in range(np.shape(order_trace)[0]):#[50]:#range(np.shape(order_trace)[0])
+#                    #print(order_trace.iloc[i]['X1'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
+#                    x_grid = np.linspace(order_trace.iloc[i]['X1'],order_trace.iloc[i]['X2'],int(order_trace.iloc[i]['X2']-order_trace.iloc[i]['X1']))
+#                    y_grid = order_trace.iloc[i]['Coeff0']+x_grid*order_trace.iloc[i]['Coeff1']+x_grid**2*order_trace.iloc[i]['Coeff2']+x_grid**3*order_trace.iloc[i]['Coeff3']
+#                    plt.plot(x_grid,y_grid,color ='magenta',linewidth = 0.2)
+#                    plt.plot(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],':',color ='white',linewidth = 0.2,alpha = 1)
+#                    plt.plot(x_grid,y_grid+order_trace.iloc[i]['TopEdge'],'--',color ='black',linewidth = 0.2,alpha = 1)
+#                    #plt.fill_between(x_grid,y_grid-order_trace.iloc[i]['BottomEdge'],y_grid+order_trace.iloc[i]['TopEdge'],color ='pink',alpha = 0.2)
+#                    #print(x_grid,y_grid)
+#                plt.xlim(3200,4000)
+#                plt.ylim(3200,4000)
+#                plt.title(ccd_color[i_color]+' '+version+' Order Trace ' +exposure_name)
+#                #plt.savefig(output_dir+'fig/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'.png')
+#                plt.savefig(output_dir+'/'+exposure_name+'/2D_analysis/'+exposure_name+'_order_trace_'+ccd_color[i_color]+'_zoomable.png', dpi=300)
+#            plt.close()
 
-            #diagnostic for fixed noise patterns
-            if version =='Bias' or version == 'Dark':
-                #a plot that looks at the ion pump, overwrites existing 2-D frames
-
-                exptime = hdr['EXPTIME']
-                #print('exptime',exptime)
-
-                # Read telemetry
-                from astropy.table import Table
-                df_telemetry = Table.read(L0_filename, format='fits', hdu=11).to_pandas() # need to refer to HDU by name
-                num_columns = ['average', 'stddev', 'min', 'max']
-                for column in df_telemetry:
-                    df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-                    df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
-                    if column in num_columns:
-                        df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
-                    else:
-                        df_telemetry[column] = df_telemetry[column].astype(str)
-                df_telemetry.set_index("keyword", inplace=True)
-
-                with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-                    print(df_telemetry)
-                if ccd_color[i_color] == 'GREEN_CCD':
-                    coll_pressure_torr = df_telemetry.at['kpfgreen.COL_PRESS', 'average']
-                    ech_pressure_torr  = df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
-                    coll_current_a     = df_telemetry.at['kpfgreen.COL_CURR',  'average']
-                    ech_current_a      = df_telemetry.at['kpfgreen.ECH_CURR',  'average']
-                if ccd_color[i_color] == 'RED_CCD':
-                    coll_pressure_torr = df_telemetry.at['kpfred.COL_PRESS', 'average']
-                    ech_pressure_torr  = df_telemetry.at['kpfred.ECH_PRESS', 'average']
-                    coll_current_a     = df_telemetry.at['kpfred.COL_CURR',  'average']
-                    ech_current_a      = df_telemetry.at['kpfred.ECH_CURR',  'average']
-
-                frame = counts
-                if exptime > 0:
-                    exptype = 'dark'
-                    timelabel = ' e$^-$ hr$^{-1}$'
-                    frame *= (3600./exptime)  # convert to e- per hour
-                # Bias frame
-                else:
-                    exptype = 'bias'
-                    timelabel = ' e$^-$'
-                reg = {'ref1': {'name': 'Reference Region 1',         'x1': 1690, 'x2': 1990, 'y1': 1690, 'y2': 1990, 'short':'ref1', 'med_elec':0, 'label':''},
-                           'ref2': {'name': 'Reference Region 2',         'x1': 1690, 'x2': 1990, 'y1': 2090, 'y2': 2390, 'short':'ref2', 'med_elec':0, 'label':''},
-                           'ref3': {'name': 'Reference Region 3',         'x1': 2090, 'x2': 2390, 'y1': 1690, 'y2': 1990, 'short':'ref3', 'med_elec':0, 'label':''},
-                           'ref4': {'name': 'Reference Region 4',         'x1': 2090, 'x2': 2390, 'y1': 2090, 'y2': 2390, 'short':'ref4', 'med_elec':0, 'label':''},
-                           'ref5': {'name': 'Reference Region 5',         'x1':   80, 'x2':  380, 'y1':  700, 'y2': 1000, 'short':'ref5', 'med_elec':0, 'label':''},
-                           'ref6': {'name': 'Reference Region 6',         'x1':   80, 'x2':  380, 'y1': 3080, 'y2': 3380, 'short':'ref6', 'med_elec':0, 'label':''},
-                           'amp1': {'name': 'Amplifier Region 1',         'x1':  300, 'x2':  500, 'y1':    5, 'y2':   20, 'short':'amp1', 'med_elec':0, 'label':''},
-                           'amp2': {'name': 'Amplifier Region 2',         'x1': 3700, 'x2': 3900, 'y1':    5, 'y2':   20, 'short':'amp2', 'med_elec':0, 'label':''},
-                           'coll': {'name': 'Ion Pump (Collimator side)', 'x1': 3700, 'x2': 4000, 'y1':  700, 'y2': 1000, 'short':'coll', 'med_elec':0, 'label':''},
-                           'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
-                          }
-                for r in reg.keys():
-                    current_region = frame[reg[r]['y1']:reg[r]['y2'],reg[r]['x1']:reg[r]['x2']]
-                    reg[r]['med_elec'] = np.median(current_region)
-
-                #print(reg[r]['name'] + ': ' + str(np.round(reg[r]['med_elec'],1)) + ' e- per hour')
-                #print('Ion Pump pressure (Torr) - Collimator side: ' + f'{coll_pressure_torr:.1e}')
-                #print('Ion Pump pressure (Torr) - Echelle side: '    + f'{ech_pressure_torr:.1e}')
-                #print('Ion Pump current (A) - Collimator side: '     + f'{coll_current_a:.1e}')
-                #print('Ion Pump current (A) - Echelle side: '        + f'{ech_current_a:.1e}')
-
-                from matplotlib.patches import Rectangle
-                plt.figure(figsize=(5, 4))
-                plt.imshow(frame,
-                           cmap='viridis',
-                           origin='lower',
-                           vmin=np.percentile(frame[300:3780,0:4080],5),
-                           vmax=np.percentile(frame[300:3780,0:4080],95)
-                          )
-                for r in reg.keys():
-                    plt.gca().add_patch(Rectangle((reg[r]['x1'],reg[r]['y1']),reg[r]['x2']-reg[r]['x1'],reg[r]['y2']-reg[r]['y1'],linewidth=1,edgecolor='r',facecolor='none'))
-                    plt.text(((reg[r]['short'] == 'ref3') or
-                              (reg[r]['short'] == 'ref4') or
-                              (reg[r]['short'] == 'ref5') or
-                              (reg[r]['short'] == 'ref6') or
-                              (reg[r]['short'] == 'amp1'))*(reg[r]['x1'])+
-                             ((reg[r]['short'] == 'ref1') or
-                              (reg[r]['short'] == 'ref2') or
-                              (reg[r]['short'] == 'ech')  or
-                              (reg[r]['short'] == 'coll') or
-                              (reg[r]['short'] == 'amp2'))*(reg[r]['x2']),
-                             (((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*(reg[r]['y1']-30)+
-                              ((reg[r]['y1'] > 2080) or  (reg[r]['y1'] < 100))*(reg[r]['y2']+30)),
-                             str(np.round(reg[r]['med_elec'],1)) + timelabel,
-                             weight='bold',
-                             color='r',
-                             ha=(((reg[r]['short'] == 'ref3') or
-                                  (reg[r]['short'] == 'ref4') or
-                                  (reg[r]['short'] == 'ref5') or
-                                  (reg[r]['short'] == 'ref6') or
-                                  (reg[r]['short'] == 'amp1'))*('left')+
-                                 ((reg[r]['short'] == 'ref1') or
-                                  (reg[r]['short'] == 'ref2') or
-                                  (reg[r]['short'] == 'ech')  or
-                                  (reg[r]['short'] == 'coll') or
-                                  (reg[r]['short'] == 'amp2'))*('right')),
-                             va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
-                                 ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
-                            )
-                now = datetime.now()
-                coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
-                ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
-                #plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
-                plt.text(4220,  500, coll_text,  rotation=90, ha='center',fontsize = 6)
-                plt.text(4220, 3000, ech_text, rotation=90, ha='center',fontsize = 6)
-                plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white',fontsize = 6)
-                plt.text( 150, 1500, 'Top Side\n (red side of orders)',    rotation=90, ha='center', color='white',fontsize = 6)
-                plt.text(2040,   70, 'Collimator Side',                     rotation= 0, ha='center', color='white',fontsize = 6)
-                plt.text(2040, 3970, 'Echelle Side',                        rotation= 0, ha='center', color='white',fontsize = 6)
-                cbar = plt.colorbar()
-                cbar.set_label(timelabel)#, fontsize=18
-                cbar.ax.tick_params()#labelsize=18
-                cbar.ax.tick_params()#size=18
-                plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
-                plt.xlabel('Column (pixel number)')
-                plt.ylabel('Row (pixel number)')#fontsize=18
-                plt.xticks()#KP.20230317.07770.97
-                plt.yticks()
-                plt.grid(False)
-                plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
-                plt.close()
-                #end of ion pump plot
+#            #diagnostic for fixed noise patterns
+#            if version =='Bias' or version == 'Dark':
+#                #a plot that looks at the ion pump, overwrites existing 2-D frames
+#
+#                exptime = hdr['EXPTIME']
+#                #print('exptime',exptime)
+#
+#                # Read telemetry
+#                from astropy.table import Table
+#                df_telemetry = Table.read(L0_filename, format='fits', hdu=11).to_pandas() # need to refer to HDU by name
+#                num_columns = ['average', 'stddev', 'min', 'max']
+#                for column in df_telemetry:
+#                    df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
+#                    df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
+#                    if column in num_columns:
+#                        df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
+#                    else:
+#                        df_telemetry[column] = df_telemetry[column].astype(str)
+#                df_telemetry.set_index("keyword", inplace=True)
+#
+#                with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
+#                    print(df_telemetry)
+#                if ccd_color[i_color] == 'GREEN_CCD':
+#                    coll_pressure_torr = df_telemetry.at['kpfgreen.COL_PRESS', 'average']
+#                    ech_pressure_torr  = df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
+#                    coll_current_a     = df_telemetry.at['kpfgreen.COL_CURR',  'average']
+#                    ech_current_a      = df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+#                if ccd_color[i_color] == 'RED_CCD':
+#                    coll_pressure_torr = df_telemetry.at['kpfred.COL_PRESS', 'average']
+#                    ech_pressure_torr  = df_telemetry.at['kpfred.ECH_PRESS', 'average']
+#                    coll_current_a     = df_telemetry.at['kpfred.COL_CURR',  'average']
+#                    ech_current_a      = df_telemetry.at['kpfred.ECH_CURR',  'average']
+#
+#                frame = counts
+#                if exptime > 0:
+#                    exptype = 'dark'
+#                    timelabel = ' e$^-$ hr$^{-1}$'
+#                    frame *= (3600./exptime)  # convert to e- per hour
+#                # Bias frame
+#                else:
+#                    exptype = 'bias'
+#                    timelabel = ' e$^-$'
+#                reg = {'ref1': {'name': 'Reference Region 1',         'x1': 1690, 'x2': 1990, 'y1': 1690, 'y2': 1990, 'short':'ref1', 'med_elec':0, 'label':''},
+#                           'ref2': {'name': 'Reference Region 2',         'x1': 1690, 'x2': 1990, 'y1': 2090, 'y2': 2390, 'short':'ref2', 'med_elec':0, 'label':''},
+#                           'ref3': {'name': 'Reference Region 3',         'x1': 2090, 'x2': 2390, 'y1': 1690, 'y2': 1990, 'short':'ref3', 'med_elec':0, 'label':''},
+#                           'ref4': {'name': 'Reference Region 4',         'x1': 2090, 'x2': 2390, 'y1': 2090, 'y2': 2390, 'short':'ref4', 'med_elec':0, 'label':''},
+#                           'ref5': {'name': 'Reference Region 5',         'x1':   80, 'x2':  380, 'y1':  700, 'y2': 1000, 'short':'ref5', 'med_elec':0, 'label':''},
+#                           'ref6': {'name': 'Reference Region 6',         'x1':   80, 'x2':  380, 'y1': 3080, 'y2': 3380, 'short':'ref6', 'med_elec':0, 'label':''},
+#                           'amp1': {'name': 'Amplifier Region 1',         'x1':  300, 'x2':  500, 'y1':    5, 'y2':   20, 'short':'amp1', 'med_elec':0, 'label':''},
+#                           'amp2': {'name': 'Amplifier Region 2',         'x1': 3700, 'x2': 3900, 'y1':    5, 'y2':   20, 'short':'amp2', 'med_elec':0, 'label':''},
+#                           'coll': {'name': 'Ion Pump (Collimator side)', 'x1': 3700, 'x2': 4000, 'y1':  700, 'y2': 1000, 'short':'coll', 'med_elec':0, 'label':''},
+#                           'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
+#                          }
+#                for r in reg.keys():
+#                    current_region = frame[reg[r]['y1']:reg[r]['y2'],reg[r]['x1']:reg[r]['x2']]
+#                    reg[r]['med_elec'] = np.median(current_region)
+#
+#                #print(reg[r]['name'] + ': ' + str(np.round(reg[r]['med_elec'],1)) + ' e- per hour')
+#                #print('Ion Pump pressure (Torr) - Collimator side: ' + f'{coll_pressure_torr:.1e}')
+#                #print('Ion Pump pressure (Torr) - Echelle side: '    + f'{ech_pressure_torr:.1e}')
+#                #print('Ion Pump current (A) - Collimator side: '     + f'{coll_current_a:.1e}')
+#                #print('Ion Pump current (A) - Echelle side: '        + f'{ech_current_a:.1e}')
+#
+#                from matplotlib.patches import Rectangle
+#                plt.figure(figsize=(5, 4))
+#                plt.imshow(frame,
+#                           cmap='viridis',
+#                           origin='lower',
+#                           vmin=np.percentile(frame[300:3780,0:4080],5),
+#                           vmax=np.percentile(frame[300:3780,0:4080],95)
+#                          )
+#                for r in reg.keys():
+#                    plt.gca().add_patch(Rectangle((reg[r]['x1'],reg[r]['y1']),reg[r]['x2']-reg[r]['x1'],reg[r]['y2']-reg[r]['y1'],linewidth=1,edgecolor='r',facecolor='none'))
+#                    plt.text(((reg[r]['short'] == 'ref3') or
+#                              (reg[r]['short'] == 'ref4') or
+#                              (reg[r]['short'] == 'ref5') or
+#                              (reg[r]['short'] == 'ref6') or
+#                              (reg[r]['short'] == 'amp1'))*(reg[r]['x1'])+
+#                             ((reg[r]['short'] == 'ref1') or
+#                              (reg[r]['short'] == 'ref2') or
+#                              (reg[r]['short'] == 'ech')  or
+#                              (reg[r]['short'] == 'coll') or
+#                              (reg[r]['short'] == 'amp2'))*(reg[r]['x2']),
+#                             (((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*(reg[r]['y1']-30)+
+#                              ((reg[r]['y1'] > 2080) or  (reg[r]['y1'] < 100))*(reg[r]['y2']+30)),
+#                             str(np.round(reg[r]['med_elec'],1)) + timelabel,
+#                             weight='bold',
+#                             color='r',
+#                             ha=(((reg[r]['short'] == 'ref3') or
+#                                  (reg[r]['short'] == 'ref4') or
+#                                  (reg[r]['short'] == 'ref5') or
+#                                  (reg[r]['short'] == 'ref6') or
+#                                  (reg[r]['short'] == 'amp1'))*('left')+
+#                                 ((reg[r]['short'] == 'ref1') or
+#                                  (reg[r]['short'] == 'ref2') or
+#                                  (reg[r]['short'] == 'ech')  or
+#                                  (reg[r]['short'] == 'coll') or
+#                                  (reg[r]['short'] == 'amp2'))*('right')),
+#                             va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
+#                                 ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
+#                            )
+#                now = datetime.now()
+#                coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
+#                ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
+#                #plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
+#                plt.text(4220,  500, coll_text,  rotation=90, ha='center',fontsize = 6)
+#                plt.text(4220, 3000, ech_text, rotation=90, ha='center',fontsize = 6)
+#                plt.text(3950, 1500, 'Bench Side\n (blue side of orders)',  rotation=90, ha='center', color='white',fontsize = 6)
+#                plt.text( 150, 1500, 'Top Side\n (red side of orders)',    rotation=90, ha='center', color='white',fontsize = 6)
+#                plt.text(2040,   70, 'Collimator Side',                     rotation= 0, ha='center', color='white',fontsize = 6)
+#                plt.text(2040, 3970, 'Echelle Side',                        rotation= 0, ha='center', color='white',fontsize = 6)
+#                cbar = plt.colorbar()
+#                cbar.set_label(timelabel)#, fontsize=18
+#                cbar.ax.tick_params()#labelsize=18
+#                cbar.ax.tick_params()#size=18
+#                plt.title(ccd_color[i_color]+' '+version +' '+exposure_name)
+#                plt.xlabel('Column (pixel number)')
+#                plt.ylabel('Row (pixel number)')#fontsize=18
+#                plt.xticks()#KP.20230317.07770.97
+#                plt.yticks()
+#                plt.grid(False)
+#                plt.savefig(output_dir+'/'+exposure_name+'/2D/'+exposure_name+'_2D_Frame_'+ccd_color[i_color]+'_zoomable.png', dpi=1000)
+#                plt.close()
+#                #end of ion pump plot
 
 
                 plt.figure(figsize=(5,4))
