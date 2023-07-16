@@ -374,7 +374,7 @@ class Analyze2D:
 
         # Display the plot
         if fig_path != None:
-            plt.savefig(fig_path, dpi=1200, facecolor='w')
+            plt.savefig(fig_path, dpi=300, facecolor='w')
         if show_plot == True:
             plt.show()
         plt.close()
