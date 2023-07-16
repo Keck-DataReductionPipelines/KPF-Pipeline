@@ -23,10 +23,17 @@ class AnalyzeGuider:
     def __init__(self, L0, logger=None):
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
-        self.guider_header = self.L0['GUIDER_AVG'].header
-        self.header = self.L0['PRIMARY'].header
-        self.name = HeaderParse(self.L0['PRIMARY'].header).get_name()
-        self.ObsID = HeaderParse(self.L0['PRIMARY'].header).get_obsid()
+
+#        self.guider_header = self.L0['GUIDER_AVG'].header
+#        self.header = self.L0['PRIMARY'].header
+        
+        header_primary_obj = HeaderParse(L0, 'PRIMARY')
+        header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
+        self.guider_header = header_guider_obj.header
+        self.header = header_primary_obj.header
+        
+        self.name = header_primary_obj.get_name()
+        self.ObsID = header_primary_obj.get_obsid()
         if 'TTGAIN' in self.guider_header:
             self.tiptilt_gain = self.guider_header['TTGAIN']
         else:
@@ -329,7 +336,7 @@ class AnalyzeGuider:
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
-        plt.legend(['Guider FWHM (!= seeing)'], fontsize=12, loc='best') 
+        plt.legend([r'Guider FWHM ($\neq$ seeing)'], fontsize=12, loc='best') 
 
         # Display the plot
         if fig_path != None:
