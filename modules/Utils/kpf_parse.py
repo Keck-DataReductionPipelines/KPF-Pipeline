@@ -1,8 +1,11 @@
+from astropy.io import fits
+
 class KPFParse:
 
     """
     Description:
         This class contains functions to parse the headers of KPF fits files.
+        To-do: add methods
 
     Arguments:
         None
@@ -22,20 +25,30 @@ class KPFParse:
             #print('---->KPFParse class constructor')
 
 class HeaderParse:
-
     """
     Description:
         This class contains functions to parse the headers of KPF fits files.
+        This method works for both KPF DRP objects and if a fits was read using 
+        astropy.io.fits.open().
 
     Arguments:
-        header - Header for a KPF File (L0, 2D, L1, or L2), e.g. L0['PRIMARY'].header
+        KPF - an L0/2D/L1/L2 file
+        extension_name = name of extension whose header is returned, e.g. 'PRIMARY'
 
     Attributes:
-        None so far
+        (to-do: add list based on attributes below)
     """
 
-    def __init__(self, header, logger=None):
-        self.header = header
+    def __init__(self, KPF, extension_name, logger=None):
+        try: 
+            if isinstance(KPF, fits.hdu.hdulist.HDUList):  # it was read from astropy
+                self.header = KPF[extension_name].header
+            else:   # assume it's an L0/2D/L1/L2 
+                self.header = KPF.header[extension_name]
+        except:
+            self.header = None
+            self.logger.error('Failed to read header.')
+            print('Failed to read header.')
         self.name = '' # 'Name' of object; see get_name() function below
         self.ObsID = '' # e.g., 'KP.20230708.04519.63'
         if logger:
