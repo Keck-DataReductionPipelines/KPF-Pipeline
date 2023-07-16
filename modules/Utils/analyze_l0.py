@@ -30,7 +30,7 @@ class AnalyzeL0:
             print('---->AnalyzeL0 class constructor')
             
 
-    def plot_L0_stitched_image(self, ObsID, chip=None, fig_path=None, show_plot=False):
+    def plot_L0_stitched_image(self, chip=None, fig_path=None, show_plot=False):
         """
         Generate a plot of the stitched L0 image.
         The image will be divided by 2^16, if appropriate.
