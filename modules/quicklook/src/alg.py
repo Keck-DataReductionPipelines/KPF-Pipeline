@@ -63,12 +63,26 @@ class QuicklookAlg:
         print("Need to write code for reading L0 files as KPF objects")
     
     if L0_good:
-        
-        
-        # Plot the Guider image
         myL0 = AnalyzeL0(L0)
-        myL0.plot_L0_stitched_image(ObsID, chip='green', 
-                                    output_dir=output_dir, show_plot=self.show_plot)
+        if output_dir != None:
+            L0_QLP_file_base = output_dir + '/Guider/' + myL0.ObsID + '_'
+        else:
+            L0_QLP_file_base = ''
+        # Plot the L0 images
+
+        my_Guider = AnalyzeGuider(L0)
+        my_Guider.measure_seeing()
+        my_Guider.plot_guider_image(fig_path = L0_QLP_file_base 
+                                             + '_guider_image_zoomable.png'',
+                                    show_plot=show_plot)
+
+
+#        myL0.plot_L0_stitched_image(chip='green', 
+#                                    output_dir=output_dir, 
+#                                    show_plot=self.show_plot)
+#        myL0.plot_L0_stitched_image(chip='red', 
+#                                    output_dir=output_dir, 
+#                                    show_plot=self.show_plot)
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
