@@ -24,13 +24,15 @@ class AnalyzeGuider:
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
         self.guider_header = self.L0['GUIDER_AVG'].header
-        self.name = HeaderParse(self.guider_header).get_name()
+        self.header = self.L0['PRIMARY'].header
+        self.name = HeaderParse(self.L0['PRIMARY'].header).get_name()
+        self.ObsID = HeaderParse(self.L0['PRIMARY'].header).get_obsid()
         if 'TTGAIN' in self.guider_header:
             self.tiptilt_gain = self.guider_header['TTGAIN']
         else:
             self.tiptilt_gain = 0.3 
-
         self.df_GUIDER = Table.read(self.L0, format='fits',hdu='guider_cube_origins').to_pandas()
+        self.good_fit = None
 
         if logger:
             self.logger = logger
@@ -79,7 +81,6 @@ class AnalyzeGuider:
         p0 = [1, self.guider_header['CRPIX1'], self.guider_header['CRPIX2'], 5/0.056, 2.5]  # Initial guess for the parameters
         #p0 = [1, self.guider_image.shape[1] / 2, self.guider_image.shape[0] / 2, 2/0.056, 2]  # Initial guess for the parameters
         
-        #self.guider_image = guider_im
         try:
             popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0)
             amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = popt
@@ -95,8 +96,6 @@ class AnalyzeGuider:
         except:
             self.good_fit = False
         
-        #resid_im = guider_im - image_fit
-
 
     def plot_guider_image(self, fig_path=None, show_plot=False):
 
@@ -117,7 +116,8 @@ class AnalyzeGuider:
         """
 
         # Plot the original image and residuals
-        guider_im_zoom = self.guider_image[255-38:255+38, 320-38:320+38]
+        #guider_im_zoom = self.guider_image[255-38:255+38, 320-38:320+38] # 4 arcsec x 4 arcsec
+        guider_im_zoom = self.guider_image[255-50:255+50, 320-50:320+50]
         if self.good_fit:
             resid_im = self.guider_image - self.image_fit
             resid_im_zoom = resid_im[255-38:255+38, 320-38:320+38]
@@ -230,9 +230,9 @@ class AnalyzeGuider:
 
         # Plot the data
         im1 = axes[1].hist2d(x_mas, y_mas, bins=hist_bins, cmap='viridis')
-        axes[1].set_title(r'Guiding Errors - $\langle\,\left|\mathrm{r}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(r_mas))*10)/10}'+' mas', fontsize=14)
-        axes[1].set_xlabel('x (mas)', fontsize=14)
-        axes[1].set_ylabel('y (mas)', fontsize=14)
+        axes[1].set_title('r: ' + f'{int(np.sqrt(np.average(r_mas**2))*10)/10}' + ' mas (RMS)', fontsize=14)
+        axes[1].set_xlabel('Guiding Error - x (mas)', fontsize=14)
+        axes[1].set_ylabel('Guiding Error - y (mas)', fontsize=14)
         axes[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar = plt.colorbar(im1[3])
         cbar.set_label('Samples', fontsize=12)
@@ -242,8 +242,12 @@ class AnalyzeGuider:
         axes[0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         axes[0].set_xlabel("Time (sec)", fontsize=14)
         axes[0].set_ylabel("Guiding Error (mas)", fontsize=14)
-        axes[0].legend([r'$\langle\,\left|\mathrm{x}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(x_mas))*10)/10}' + ' mas', 
-                        r'$\langle\,\left|\mathrm{y}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(y_mas))*10)/10}' + ' mas'], fontsize=12, loc='best') 
+        #axes[0].legend([r'$\langle\,\left|\mathrm{x}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(x_mas))*10)/10}' + ' mas', 
+        #                r'$\langle\,\left|\mathrm{y}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(y_mas))*10)/10}' + ' mas'], fontsize=12, loc='best') 
+        axes[0].legend(['Guiding error - x: ' + f'{int(np.sqrt(np.average(x_mas**2))*10)/10}' + ' mas (RMS)', 
+                        'Guiding error - y: ' + f'{int(np.sqrt(np.average(y_mas**2))*10)/10}' + ' mas (RMS)'], 
+                       fontsize=12, 
+                       loc='best') 
 
         # Set the font size of tick mark labels
         axes[0].tick_params(axis='both', which='major', labelsize=14)
