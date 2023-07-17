@@ -43,7 +43,7 @@ class QuicklookAlg:
             Generates the standard quicklook data products for an L0 file.
     
         Arguments:
-            kpf0_file - an L0 filename
+            kpf0 - an L0 filename
             output_dir - directory for output QLP files (if show_plot=False)
             show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
                         instead of saving files
@@ -75,42 +75,71 @@ class QuicklookAlg:
         except:
             self.logger.error('Failed producing QLP Exposure Meter image for ' + self.ObsID)
 
-        # Make Guider images
-        # to-do: check if guider data products are in kpf0
+        # Make stitched L0 images
 #        try:
-        savedir = L0_QLP_file_base +'Guider/'
-        os.makedirs(savedir, exist_ok=True) # make directories if needed
-        myGuider = AnalyzeGuider(kpf0, logger=self.logger)
- 
-        filename = savedir + self.ObsID + '_guider_image_zoomable.png'
-        self.logger.info('Generating QLP image ' + filename)
-        my_Guider.measure_seeing()
-        my_Guider.plot_guider_image(fig_path=filename, show_plot=False)
-
-
-#my_Guider = AnalyzeGuider(L0)
-#my_Guider.measure_seeing()
-#my_Guider.plot_guider_image(show_plot=True)
-#my_Guider.plot_guider_error_time_series(show_plot=True)
-#my_Guider.plot_guider_flux_time_series(show_plot=True)
-#my_Guider.plot_guider_flux_time_series('/data/QLP/20230704/'+'KP.20230704.43684.35'+'/Guider/'+'KP.20230704.43684.35'+'_guider_flux_time_series_zoomable.png')
-#my_Guider.plot_guider_fwhm_time_series(show_plot=True)
-
+#            myL0 = AnalyzeL0(kpf0, logger=self.logger)
+#            # to-do: check if green and red are in kpf0
+#            for chip in ['green', 'red']:
+#                savedir = L0_QLP_file_base +'L0/'
+#                os.makedirs(savedir, exist_ok=True) # make directories if needed
+#                filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
+#                self.logger.info('Generating QLP image ' + filename)
+#                myL0.plot_L0_stitched_image(fig_path=filename, 
+#                                            chip=chip, show_plot=False)
 #        except:
-#            self.logger.error('Failed producing QLP Guider image for ' + self.ObsID)
+#            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
 
-        # Make L0 images
+
+    def qlp_2D(self, kpf2d, output_dir):
+        """
+        Description:
+            Generates the standard quicklook data products for a 2D file.
+    
+        Arguments:
+            kpf2d - a 2d filename
+            output_dir - directory for output QLP files (if show_plot=False)
+            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
+                        instead of saving files
+    
+        Attributes:
+            None
+        """
+        
+        primary_header = HeaderParse(kpf2d, 'PRIMARY')
+        self.header = primary_header.header
+        self.name = primary_header.get_name()
+        self.ObsID = primary_header.get_obsid()        
+        
+        D2_QLP_file_base = output_dir + self.ObsID + '/'
+        self.logger.info('Working on QLP for 2D file ' + str(kpf2d) + '.')
+
+        # Make Guider images
+        # to-do: check if guider data products are in kpf2d
         try:
-            myL0 = AnalyzeL0(kpf0, logger=self.logger)
-            for chip in ['green', 'red']:
-                savedir = L0_QLP_file_base +'L0/'
-                os.makedirs(savedir, exist_ok=True) # make directories if needed
-                filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myL0.plot_L0_stitched_image(fig_path=filename, 
-                                            chip=chip, show_plot=False)
+            savedir = D2_QLP_file_base +'Guider/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            myGuider = AnalyzeGuider(kpf2d, logger=self.logger)
+            myGuider.measure_seeing()
+            # Guider image plot
+            filename = savedir + self.ObsID + '_guider_image_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            myGuider.plot_guider_image(fig_path=filename, show_plot=False)
+            # Guider error time series
+            filename = savedir + self.ObsID + '_error_time_series_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
+            # Guider flux time series
+            filename = savedir + self.ObsID + '_flux_time_series_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            myGuider.plot_guider_flux_time_series(fig_path=filename, show_plot=False)
+            # Guider FWHM time series
+            filename = savedir + self.ObsID + '_fwhm_time_series_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            myGuider.plot_guider_fwhm_time_series(fig_path=filename, show_plot=False)
+
         except:
-            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
+            self.logger.error('Failed producing QLP Guider image for ' + self.ObsID)
+
 
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):

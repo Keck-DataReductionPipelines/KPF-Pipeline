@@ -26,12 +26,13 @@ class Quicklook(KPF0_Primitive):
                     context:ProcessingContext) -> None:
 
         KPF0_Primitive.__init__(self,action,context)
+
         #Input arguments
-        self.input_file=self.action.args[0]
-        #self.file_name=self.action.args[1]
-        self.output_dir=self.action.args[1]
-#        self.end_of_night_summary=self.action.args[2]
-        # input configuration
+        self.input_file = self.action.args[0]
+        self.output_dir = self.action.args[1]
+        self.qlp_level  = self.action.args[2]
+
+        #Input configuration
         self.config = configparser.ConfigParser()
         try:
             self.config_path = context.config_path['quicklook']
@@ -51,9 +52,11 @@ class Quicklook(KPF0_Primitive):
 
     def _perform(self) -> None:
         try:
-#            self.alg.qlp_procedures(self.input_file, self.output_dir, self.end_of_night_summary)
-            self.alg.qlp_L0(self.input_file, self.output_dir)
+            if self.qlp_level == 'L0':
+                self.alg.qlp_L0(self.input_file, self.output_dir)
+            elif self.qlp_level == '2D':
+                self.alg.qlp_2D(self.input_file, self.output_dir)
         except Exception as e:
+            # Allow recipe to continue if QLP fails
             self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
-            # allow recipe to continue if QLP fails
             pass
