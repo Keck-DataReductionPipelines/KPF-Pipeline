@@ -29,13 +29,10 @@ class AnalyzeGuider:
         self.logger.info('Initiating AnanalyzeGuider object.')
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
-
-#        self.guider_header = self.L0['GUIDER_AVG'].header
-#        self.header = self.L0['PRIMARY'].header
         
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
-        #header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
-        header_guider_obj  = HeaderParse(L0, 'guider_avg')
+        header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
+        #header_guider_obj  = HeaderParse(L0, 'guider_avg')
         self.guider_header = header_guider_obj.header
         self.header = header_primary_obj.header
         self.name = header_primary_obj.get_name()
