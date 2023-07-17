@@ -39,6 +39,11 @@ class Analyze2D:
     """
 
     def __init__(self, D2, logger=None):
+        if logger:
+            self.logger = logger
+            self.logger.debug('Initializing Analyze2D object')
+        else:
+            self.logger = None
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
         self.header = self.D2['PRIMARY'].header
         self.name  = HeaderParse(self.header).get_name()
@@ -54,13 +59,6 @@ class Analyze2D:
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
-
-        if logger:
-            self.logger = logger
-            self.logger.debug('Analyze2D class constructor')
-        else:
-            self.logger = None
-            print('---->Analyze2D class constructor')
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -130,7 +128,6 @@ class Analyze2D:
         Generate a plot of the a 2D image.  Overlay measurements of 
         dark current or bias measurements in preset regions, if commanded.
         
-
         Args:
             overlay_dark_current - if True, dark current measurements are over-plotted
             chip (string) - "green" or "red"
