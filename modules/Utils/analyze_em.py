@@ -40,7 +40,7 @@ class AnalyzeEM:
         self.df_SKY_EM = self.dat_SKY
         #self.dat_SCI = Table.read(self.L0, format='fits',hdu='EXPMETER_SCI')
         #self.dat_SKY = Table.read(self.L0, format='fits',hdu='EXPMETER_SKY')
-        #self.df_SKY_EM = self.dat_SKY.to_pandas()
+        #self.df_SKY_EM = self.dat_SKY.to_pandas() 
         #self.df_SCI_EM = self.dat_SCI.to_pandas()
         i = 0
         for col in self.df_SCI_EM.columns:

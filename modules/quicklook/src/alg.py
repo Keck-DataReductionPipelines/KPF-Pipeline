@@ -81,7 +81,7 @@ class QuicklookAlg:
         savedir = L0_QLP_file_base +'Guider/'
         os.makedirs(savedir, exist_ok=True) # make directories if needed
         myGuider = AnalyzeGuider(kpf0, logger=self.logger)
-
+ 
         filename = savedir + self.ObsID + '_guider_image_zoomable.png'
         self.logger.info('Generating QLP image ' + filename)
         my_Guider.measure_seeing()
