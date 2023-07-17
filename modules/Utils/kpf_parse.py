@@ -40,6 +40,11 @@ class HeaderParse:
     """
 
     def __init__(self, KPF, extension_name, logger=None):
+        if logger:
+            self.logger = logger
+            self.logger.debug('Initializing HeaderParse object')
+        else:
+            self.logger = None
         try: 
             if isinstance(KPF, fits.hdu.hdulist.HDUList):  # it was read from astropy
                 self.header = KPF[extension_name].header
@@ -51,11 +56,6 @@ class HeaderParse:
             print('Failed to read header.')
         self.name = '' # 'Name' of object; see get_name() function below
         self.ObsID = '' # e.g., 'KP.20230708.04519.63'
-        if logger:
-            self.logger = logger
-            self.logger.debug('Initializing HeaderParse object')
-        else:
-            self.logger = None
 
 
     def get_name(self):
