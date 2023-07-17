@@ -19,18 +19,29 @@ class AnalyzeEM:
     """
 
     def __init__(self, L0, logger=None):
+
+        if logger:
+            self.logger = logger
+            self.logger.debug('Initializing AnalyzeEM object.')
+        else:
+            self.logger = None
         self.L0 = L0 
-        self.header = self.L0['PRIMARY'].header
-        self.name = HeaderParse(self.header).get_name()
-        self.ObsID = HeaderParse(self.header).get_obsid()
+        primary_header = HeaderParse(L0, 'PRIMARY')
+        self.header = primary_header.header
+        self.name = primary_header.get_name()
+        self.ObsID = primary_header.get_obsid()
 
         self.EM_gain = 1.48424 #np.float(self.config['EM']['gain'])
 
         # Read data tables
-        self.dat_SKY = Table.read(self.L0, format='fits',hdu='EXPMETER_SKY')
-        self.dat_SCI = Table.read(self.L0, format='fits',hdu='EXPMETER_SCI')
-        self.df_SKY_EM = self.dat_SKY.to_pandas()
-        self.df_SCI_EM = self.dat_SCI.to_pandas()
+        self.dat_SCI = L0['EXPMETER_SCI']
+        self.dat_SKY = L0['EXPMETER_SKY']
+        self.df_SCI_EM = self.dat_SCI
+        self.df_SKY_EM = self.dat_SKY
+        #self.dat_SCI = Table.read(self.L0, format='fits',hdu='EXPMETER_SCI')
+        #self.dat_SKY = Table.read(self.L0, format='fits',hdu='EXPMETER_SKY')
+        #self.df_SKY_EM = self.dat_SKY.to_pandas()
+        #self.df_SCI_EM = self.dat_SCI.to_pandas()
         i = 0
         for col in self.df_SCI_EM.columns:
             if col.lower().startswith('date'):
@@ -41,14 +52,6 @@ class AnalyzeEM:
         self.wav_SCI     = self.df_SCI_EM.columns[i:].astype(float)
         self.wav_SKY_str = self.df_SKY_EM.columns[i:]
         self.wav_SKY     = self.df_SKY_EM.columns[i:].astype(float)
-
-        if logger:
-            self.logger = logger
-            self.logger.debug('AnalyzeEM class constructor')
-        else:
-            self.logger = None
-            print('---->AnalyzeEM class constructor')
-
 
     def plot_EM_time_series(self, fig_path=None, show_plot=False):
 
