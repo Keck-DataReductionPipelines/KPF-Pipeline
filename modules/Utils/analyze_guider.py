@@ -21,6 +21,12 @@ class AnalyzeGuider:
     """
 
     def __init__(self, L0, logger=None):
+        if logger:
+            self.logger = logger
+            self.logger.debug('AnalyzeGuider class constructor')
+        else:
+            self.logger = None
+        self.logger.info('Initiating AnanalyzeGuider object.')
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
 
@@ -28,25 +34,22 @@ class AnalyzeGuider:
 #        self.header = self.L0['PRIMARY'].header
         
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
-        header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
+        #header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
+        header_guider_obj  = HeaderParse(L0, 'guider_avg')
         self.guider_header = header_guider_obj.header
         self.header = header_primary_obj.header
-        
         self.name = header_primary_obj.get_name()
         self.ObsID = header_primary_obj.get_obsid()
         if 'TTGAIN' in self.guider_header:
             self.tiptilt_gain = self.guider_header['TTGAIN']
         else:
             self.tiptilt_gain = 0.3 
-        self.df_GUIDER = Table.read(self.L0, format='fits',hdu='guider_cube_origins').to_pandas()
+        # to-do: set up logic to determine if L0 is a KPF object or a .fits file
+        #self.df_GUIDER = Table.read(self.L0, format='fits',hdu='guider_cube_origins').to_pandas()
+        #self.df_GUIDER = Table.read(self.L0, hdu='guider_cube_origins').to_pandas()
+        #self.df_GUIDER = self.L0['guider_cube_origins']
+        self.df_GUIDER = self.L0['GUIDER_CUBE_ORIGINS']
         self.good_fit = None
-
-        if logger:
-            self.logger = logger
-            self.logger.debug('AnalyzeGuider class constructor')
-        else:
-            self.logger = None
-            print('---->AnalyzeGuider class constructor')
 
 
     def measure_seeing(self):
