@@ -61,39 +61,57 @@ class QuicklookAlg:
         self.logger.info('Working on QLP for L0 file ' + str(kpf0) + '.')
 
         # Make Exposure Meter images
+        # to-do: check if exposure meter data products are in kpf0
         try:
             savedir = L0_QLP_file_base +'EM/'
             os.makedirs(savedir, exist_ok=True) # make directories if needed
             myEM = AnalyzeEM(kpf0, logger=self.logger)
-
-            filename = savedir + self.ObsID + '_EM_spectrum.png'
+            filename = savedir + self.ObsID + '_EM_spectrum_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myEM.plot_EM_spectrum(fig_path=filename, show_plot=False)
-
-            filename = savedir + self.ObsID + '_EM_time_series.png'
+            filename = savedir + self.ObsID + '_EM_time_series_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myEM.plot_EM_time_series(fig_path=filename, show_plot=False)
         except:
             self.logger.error('Failed producing QLP Exposure Meter image for ' + self.ObsID)
 
-        # Make L0 images
+        # Make Guider images
+        # to-do: check if guider data products are in kpf0
 #        try:
-#            myL0 = AnalyzeL0(kpf0, logger=self.logger)
-#            for chip in ['green', 'red']:
-#                savedir = L0_QLP_file_base +'L0/'
-#                os.makedirs(savedir, exist_ok=True) # make directories if needed
-#                filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
-#                self.logger.info('Generating QLP image ' + filename)
-#                myL0.plot_L0_stitched_image(fig_path=filename, 
-#                                            chip=chip, show_plot=False)
-#        except:
-#            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
+        savedir = L0_QLP_file_base +'Guider/'
+        os.makedirs(savedir, exist_ok=True) # make directories if needed
+        myGuider = AnalyzeGuider(kpf0, logger=self.logger)
 
-#        myGuider = AnalyzeGuider(kpf0, logger=self.logger)
-#        myGuider.measure_seeing()
-#        myGuider.plot_guider_image(fig_path=L0_QLP_file_base 
-#                                           +'_guider_image_zoomable.png',
-#                                   show_plot=show_plot)
+        filename = savedir + self.ObsID + '_guider_image_zoomable.png'
+        self.logger.info('Generating QLP image ' + filename)
+        my_Guider.measure_seeing()
+        my_Guider.plot_guider_image(fig_path=filename, show_plot=False)
+
+
+#my_Guider = AnalyzeGuider(L0)
+#my_Guider.measure_seeing()
+#my_Guider.plot_guider_image(show_plot=True)
+#my_Guider.plot_guider_error_time_series(show_plot=True)
+#my_Guider.plot_guider_flux_time_series(show_plot=True)
+#my_Guider.plot_guider_flux_time_series('/data/QLP/20230704/'+'KP.20230704.43684.35'+'/Guider/'+'KP.20230704.43684.35'+'_guider_flux_time_series_zoomable.png')
+#my_Guider.plot_guider_fwhm_time_series(show_plot=True)
+
+#        except:
+#            self.logger.error('Failed producing QLP Guider image for ' + self.ObsID)
+
+        # Make L0 images
+        try:
+            myL0 = AnalyzeL0(kpf0, logger=self.logger)
+            for chip in ['green', 'red']:
+                savedir = L0_QLP_file_base +'L0/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+                filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myL0.plot_L0_stitched_image(fig_path=filename, 
+                                            chip=chip, show_plot=False)
+        except:
+            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
+
 
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
