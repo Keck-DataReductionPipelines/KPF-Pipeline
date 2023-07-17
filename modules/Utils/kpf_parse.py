@@ -53,10 +53,9 @@ class HeaderParse:
         self.ObsID = '' # e.g., 'KP.20230708.04519.63'
         if logger:
             self.logger = logger
-            self.logger.debug('HeaderParse class constructor')
+            self.logger.debug('Initializing HeaderParse object')
         else:
             self.logger = None
-            print('---->HeaderParse class constructor')
 
 
     def get_name(self):
