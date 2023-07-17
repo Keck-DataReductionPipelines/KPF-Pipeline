@@ -17,18 +17,18 @@ class AnalyzeL0:
     """
 
     def __init__(self, L0, logger=None):
-        self.L0 = L0
-        self.header = L0['PRIMARY'].header
-        self.name = HeaderParse(self.header).get_name()
-        self.ObsID = HeaderParse(self.header).get_obsid()
-        
         if logger:
             self.logger = logger
-            self.logger.debug('AnalyzeL0 class constructor')
+            self.logger.debug('Initializing AnalyzeL0 object.')
         else:
             self.logger = None
-            print('---->AnalyzeL0 class constructor')
-            
+        self.L0 = L0
+#        self.header = L0['PRIMARY'].header
+        primary_header = HeaderParse(L0, 'PRIMARY')
+        self.header = primary_header.header
+        self.name = primary_header.get_name()
+        self.ObsID = primary_header.get_obsid()
+                    
 
     def plot_L0_stitched_image(self, chip=None, fig_path=None, show_plot=False):
         """
@@ -58,14 +58,27 @@ class AnalyzeL0:
             amp2_present = False
             amp3_present = False
             amp4_present = False
-            for hdu in L0:
-                if hdu.name == CHIP + '_AMP1':
+# this method worked for .fits files, but not for L0 objects
+#            for hdu in L0:
+#                if hdu.name == CHIP + '_AMP1':
+#                    amp1_present = True
+#                if hdu.name == CHIP + '_AMP2':
+#                    amp2_present = True
+#                if hdu.name == CHIP + '_AMP3':
+#                    amp3_present = True
+#                if hdu.name == CHIP + '_AMP4':
+#                    amp4_present = True
+            if L0[CHIP + '_AMP1'] is not None:
+                if L0[CHIP + '_AMP1'].shape[0] > 0:
                     amp1_present = True
-                if hdu.name == CHIP + '_AMP2':
+            if L0[CHIP + '_AMP2'] is not None:
+                if L0[CHIP + '_AMP2'].shape[0] > 0:
                     amp2_present = True
-                if hdu.name == CHIP + '_AMP3':
+            if L0[CHIP + '_AMP3'] is not None:
+                if L0[CHIP + '_AMP3'].shape[0] > 0:
                     amp3_present = True
-                if hdu.name == CHIP + '_AMP4':
+            if L0[CHIP + '_AMP4'] is not None:
+                if L0[CHIP + '_AMP4'].shape[0] > 0:
                     amp4_present = True
             if amp1_present:
                 regions = 1
