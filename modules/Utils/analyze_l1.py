@@ -28,17 +28,16 @@ class AnalyzeL1:
     """
 
     def __init__(self, L1, logger=None):
+        if logger:
+            self.logger = logger
+            self.logger.debug('Initializing AnalyzeL1 object')
+        else:
+            self.logger = None
         self.L1 = L1
         self.header = L1['PRIMARY'].header
         self.name = HeaderParse(self.header).get_name()
         self.ObsID = HeaderParse(self.header).get_obsid()
                     
-        if logger:
-            self.logger = logger
-            self.logger.debug('AnalyzeL1 class constructor')
-        else:
-            self.logger = None
-            print('---->AnalyzeL1 class constructor')
 
     def measure_L1_snr(self, snr_percentile=95):
 
