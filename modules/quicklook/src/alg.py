@@ -6,6 +6,7 @@ from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
 from keckdrpframework.models.arguments import Arguments
+import traceback
 import os
 import pandas as pd
 import glob
@@ -72,22 +73,22 @@ class QuicklookAlg:
             filename = savedir + self.ObsID + '_EM_time_series_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myEM.plot_EM_time_series(fig_path=filename, show_plot=False)
-        except:
-            self.logger.error('Failed producing QLP Exposure Meter image for ' + self.ObsID)
+        except Exception as e:
+            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make stitched L0 images
-#        try:
-#            myL0 = AnalyzeL0(kpf0, logger=self.logger)
-#            # to-do: check if green and red are in kpf0
-#            for chip in ['green', 'red']:
-#                savedir = L0_QLP_file_base +'L0/'
-#                os.makedirs(savedir, exist_ok=True) # make directories if needed
-#                filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
-#                self.logger.info('Generating QLP image ' + filename)
-#                myL0.plot_L0_stitched_image(fig_path=filename, 
-#                                            chip=chip, show_plot=False)
-#        except:
-#            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
+        try:
+            myL0 = AnalyzeL0(kpf0, logger=self.logger)
+            # to-do: check if green and red are in kpf0
+            for chip in ['green', 'red']:
+                savedir = L0_QLP_file_base +'L0/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+                filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myL0.plot_L0_stitched_image(fig_path=filename, 
+                                            chip=chip, show_plot=False)
+        except:
+            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
 
 
     def qlp_2D(self, kpf2d, output_dir):
@@ -108,7 +109,8 @@ class QuicklookAlg:
         primary_header = HeaderParse(kpf2d, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
-        self.ObsID = primary_header.get_obsid()        
+        self.ObsID = primary_header.get_obsid()
+        self.D2 = kpf2d
         
         D2_QLP_file_base = output_dir + self.ObsID + '/'
         self.logger.info('Working on QLP for 2D file ' + str(kpf2d) + '.')
@@ -137,11 +139,97 @@ class QuicklookAlg:
             self.logger.info('Generating QLP image ' + filename)
             myGuider.plot_guider_fwhm_time_series(fig_path=filename, show_plot=False)
 
-        except:
-            self.logger.error('Failed producing QLP Guider image for ' + self.ObsID)
+        except Exception as e:
+            self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make 2D images
+        # to-do: process bias and dark differently
+        # to-do: check if 2D data products are in kpf2d
+        try:
+            savedir = D2_QLP_file_base +'2D/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            my_2D = Analyze2D(kpf2d, logger=self.logger)
+            
+            # 2D image plot - Green
+            # not working yet
+            #Analyze2D.measure_2D_dark_current(self, chip='green')
+            filename = savedir + self.ObsID + '_2D_green_image_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_image(self, chip='green', fig_path=filename, 
+                                          show_plot=False)
+
+            # 2D image plot - Red
+            #Analyze2D.measure_2D_dark_current(chip='red')
+            filename = savedir + self.ObsID + '_2D_red_image_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_image(self, chip='red', fig_path=filename, 
+                                          show_plot=False)
+
+        except Exception as e:
+            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
+        # Make 2D images - 3x3 arrays
+        try:
+            savedir = D2_QLP_file_base +'2D_Analysis/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            my_2D = Analyze2D(kpf2d, logger=self.logger)
 
+            # 2D 3x3 image plot - Green
+            filename = savedir + self.ObsID + '_2D_green_image_3x3zoom_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_image_zoom_3x3(self, chip='green', fig_path=filename, 
+                                                   show_plot=False)
+
+            # 2D 3x3 image plot - Red
+            filename = savedir + self.ObsID + '_2D_red_image_3x3zoom_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_image_zoom_3x3(self, chip='red', fig_path=filename, 
+                                                    show_plot=False)
+
+        except Exception as e:
+            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+        # TO-DO Add bias histogram
+
+
+        # Make 2D image histograms
+        try:
+            # 2D image histogram - Green
+            filename = savedir + self.ObsID + '_2D_green_histogram_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_image_histogram(self, chip='green', fig_path=filename, 
+                                                    show_plot=False)
+
+            # 2D image histogram - Red
+            filename = savedir + self.ObsID + '_2D_red_histogram_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_image_histogram(self, chip='red', fig_path=filename, 
+                                                    show_plot=False)
+
+        except Exception as e:
+            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+        # Make 2D column cuts
+        try:
+            # 2D image column cut - Green
+            filename = savedir + self.ObsID + '_2D_green_column_cut_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_column_cut(self, chip='green', fig_path=filename, 
+                                               show_plot=False)
+
+            # 2D image column cut - Red
+            filename = savedir + self.ObsID + '_2D_red_column_cut_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            Analyze2D.plot_2D_column_cut(self, chip='red', fig_path=filename, 
+                                               show_plot=False)
+
+        except Exception as e:
+            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+        
+        
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.

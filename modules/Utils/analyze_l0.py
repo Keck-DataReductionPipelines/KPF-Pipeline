@@ -111,6 +111,7 @@ class AnalyzeL0:
             self.logger.debug('plot_L0_stitched_image: need to set chip="green" or "red"')
             return
 
+        plt.grid(False)
         plt.figure(tight_layout=True)
         plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(image, cmap='viridis', origin='lower',

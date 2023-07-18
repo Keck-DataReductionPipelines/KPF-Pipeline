@@ -45,9 +45,11 @@ class Analyze2D:
         else:
             self.logger = None
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
-        self.header = self.D2['PRIMARY'].header
-        self.name  = HeaderParse(self.header).get_name()
-        self.ObsID = HeaderParse(self.header).get_obsid()
+        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        primary_header = HeaderParse(D2, 'PRIMARY')
+        self.header = primary_header.header
+        self.name = primary_header.get_name()
+        self.ObsID = primary_header.get_obsid()
         self.exptime = self.header['EXPTIME']
         self.green_dark_current_regions = None # Green CCD regions where dark current is measured, defined below
         self.red_dark_current_regions   = None # Red CCD regions where dark current is measured, defined below
@@ -72,18 +74,19 @@ class Analyze2D:
             None
         """
         D2 = self.D2
+        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
 
         # Read telemetry
-        df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
+        #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
         num_columns = ['average', 'stddev', 'min', 'max']
-        for column in df_telemetry:
+        for column in self.df_telemetry:
             #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-            df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
+            self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
             if column in num_columns:
-                df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
+                self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
             else:
-                df_telemetry[column] = df_telemetry[column].astype(str)
-        df_telemetry.set_index("keyword", inplace=True)
+                self.df_telemetry[column] = self.df_telemetry[column].astype(str)
+        self.df_telemetry.set_index("keyword", inplace=True)
 
         #with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
         #    print(df_telemetry)
@@ -99,27 +102,28 @@ class Analyze2D:
                'coll': {'name': 'Ion Pump (Collimator side)', 'x1': 3700, 'x2': 4000, 'y1':  700, 'y2': 1000, 'short':'coll', 'med_elec':0, 'label':''},
                'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
               }
-
-        if (chip == 'green') and ('GREEN_CCD' in D2):
+#       to-do: fix commented-out code below
+        if (chip == 'green'): #and ('GREEN_CCD' in D2):
             frame = D2['GREEN_CCD'].data
-            self.green_coll_pressure_torr = df_telemetry.at['kpfgreen.COL_PRESS', 'average']
-            self.green_ech_pressure_torr  = df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
-            self.green_coll_current_a     = df_telemetry.at['kpfgreen.COL_CURR',  'average']
-            self.green_ech_current_a      = df_telemetry.at['kpfgreen.ECH_CURR',  'average']
-        if (chip == 'red') and ('RED_CCD' in D2):
+            self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
+            self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
+            self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
+            self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+        if (chip == 'red'): #and ('RED_CCD' in D2):
             frame = D2['RED_CCD'].data
-            self.red_coll_pressure_torr = df_telemetry.at['kpfred.COL_PRESS', 'average']
-            self.red_ech_pressure_torr  = df_telemetry.at['kpfred.ECH_PRESS', 'average']
-            self.red_coll_current_a     = df_telemetry.at['kpfred.COL_CURR',  'average']
-            self.red_ech_current_a      = df_telemetry.at['kpfred.ECH_CURR',  'average']
+            self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
+            self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
+            self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
+            self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
 
         for r in reg.keys():
-            current_region = frame[reg[r]['y1']:reg[r]['y2'],reg[r]['x1']:reg[r]['x2']]
+            current_region = frame[reg[r]['y1']:reg[r]['y2'], reg[r]['x1']:reg[r]['x2']]
             reg[r]['med_elec'] = np.median(current_region)
         if chip == 'green':
             self.green_dark_current_regions = reg
         if chip == 'red':
             self.red_dark_current_regions = reg
+        self.logger.info('GOT HERE')
 
 
     def plot_2D_image(self, chip=None, overplot_dark_current=False, 
@@ -139,25 +143,28 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN'
                 chip_title = 'Green'
-                reg = self.green_dark_current_regions
-                coll_pressure_torr = self.green_coll_pressure_torr
-                ech_pressure_torr = self.green_ech_pressure_torr
-                coll_current_a = self.green_coll_current_a
-                ech_current_a = self.green_ech_current_a
+                if overplot_dark_current:
+                    reg = self.green_dark_current_regions
+                    coll_pressure_torr = self.green_coll_pressure_torr
+                    ech_pressure_torr = self.green_ech_pressure_torr
+                    coll_current_a = self.green_coll_current_a
+                    ech_current_a = self.green_ech_current_a
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-                reg = self.red_dark_current_regions
-                coll_pressure_torr = self.red_coll_pressure_torr
-                ech_pressure_torr = self.red_ech_pressure_torr
-                coll_current_a = self.red_coll_current_a
-                ech_current_a = self.red_ech_current_a
+                if overplot_dark_current:
+                    reg = self.red_dark_current_regions
+                    coll_pressure_torr = self.red_coll_pressure_torr
+                    ech_pressure_torr = self.red_ech_pressure_torr
+                    coll_current_a = self.red_coll_current_a
+                    ech_current_a = self.red_ech_current_a
             image = self.D2[CHIP + '_CCD'].data
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
@@ -169,7 +176,9 @@ class Analyze2D:
         plt.imshow(image, vmin = np.percentile(image,0.1), 
                           vmax = np.percentile(image,99.9), 
                           interpolation = 'None', 
-                          origin = 'lower')
+                          origin = 'lower', 
+                          cmap='viridis')
+        plt.grid(False)
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.xlabel('Column (pixel number)', fontsize=18)
         plt.ylabel('Row (pixel number)', fontsize=18)
@@ -254,6 +263,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -311,18 +321,20 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN'
                 chip_title = 'Green'
-                reg = self.green_dark_current_regions
+                #reg = self.green_dark_current_regions
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-                reg = self.red_dark_current_regions
-            image = self.D2[CHIP + '_CCD'].data
+                #reg = self.red_dark_current_regions
+            #image = self.D2[CHIP + '_CCD'].data
+            image = np.array(self.D2[CHIP + '_CCD'].data)
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
             print('chip not supplied.  Exiting plot_2D_image')
@@ -350,10 +362,12 @@ class Analyze2D:
                 # Slice out and display the sub-image
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
                 im = axs[2-i, j].imshow(sub_img, origin='lower', 
-                                 extent=[start_y, start_y+size, start_x, start_x+size], # these indices appear backwards, but the work
+                                 extent=[start_y, start_y+size, start_x, start_x+size], # these indices appear backwards, but work
                                  vmin = np.percentile(sub_img,0.1), 
                                  vmax = np.percentile(sub_img,99.9),
-                                 interpolation = 'None')
+                                 interpolation = 'None',
+                                 cmap='viridis')
+                axs[2-i, j].grid(False)
                 axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
                 if i != 2:
                     axs[i, j].tick_params(labelbottom=False) # turn off x tick labels
@@ -361,6 +375,7 @@ class Analyze2D:
                     axs[i, j].tick_params(labelleft=False) # turn off y tick labels
                 fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
                 #axs[2-i, j].set_xlabel('i,j = ' + str(i) + ','+str(j) + ' -- ' + str(start_x) + ', ' + str(start_y), fontsize=10)
+        plt.grid(False)
         plt.tight_layout()
         plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
@@ -391,6 +406,7 @@ class Analyze2D:
 
         """
 
+        image = np.array(self.D2[CHIP + '_CCD'].data)
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN_CCD'
@@ -504,6 +520,7 @@ class Analyze2D:
 
         """
 
+        image = np.array(self.D2[CHIP + '_CCD'].data)
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN_CCD'
@@ -593,7 +610,8 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-            image = self.D2[CHIP + '_CCD'].data
+            #image = self.D2[CHIP + '_CCD'].data
+            image = np.array(self.D2[CHIP + '_CCD'].data)
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
         else:
@@ -661,7 +679,8 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-            image = self.D2[CHIP + '_CCD'].data
+            #image = self.D2[CHIP + '_CCD'].data
+            image = np.array(self.D2[CHIP + '_CCD'].data)
             column_sum = np.nansum(image, axis = 0)
             p_10 = np.percentile(column_sum, 10) # 10th percentile
             p_50 = np.percentile(column_sum, 50) # 50th percentile
