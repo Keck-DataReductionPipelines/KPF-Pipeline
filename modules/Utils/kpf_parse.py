@@ -193,34 +193,33 @@ def get_data_products_2D(D2):
         data_products in a 2D file
     """
     data_products = []
-    if 'GREEN_CCD' in D2:
-        if D2['GREEN_CCD'].size > 1:
+    if hasattr(D2, 'GREEN_AMP1'):
+        if D2['GREEN_AMP1'].size > 1:
             data_products.append('Green')
-    if 'Red_CCD' in D2:
-        if D2['Red_CCD'].size > 1:
+    if hasattr(D2, 'RED_AMP1'):
+        if D2['RED_AMP1'].size > 1:
             data_products.append('Red')
-    if 'CA_HK' in D2:
+    if hasattr(D2, 'CA_HK'):
         if D2['CA_HK'].size > 1:
-            data_products.append('CaHK')
-    if 'EXPMETER_SCI' in D2:
+            data_products.append('HK')
+    if hasattr(D2, 'EXPMETER_SCI'):
         if D2['EXPMETER_SCI'].size > 1:
             data_products.append('ExpMeter')
-    if 'GUIDER_AVG' in D2:
-        if D2['GUIDER_AVG'].size > 1:
+    if hasattr(D2, 'GUIDER_AVG'):
+        if (D2['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
-    if 'TELEMETRY' in D2:
+#    if hasattr(D2, 'guider_avg'):
+#        if (D2['guider_avg'].size > 1):
+#            data_products.append('Guider')
+    if hasattr(D2, 'TELEMETRY'):
         if D2['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
-    if 'CONFIG' in D2:
-        if D2['CONFIG'].size > 1:
-            data_products.append('Config')
-    if 'RECEIPT' in D2:
+    if hasattr(D2, 'RECEIPT'):
         if D2['RECEIPT'].size > 1:
             data_products.append('Receipt')
-    if 'SOCAL PYRHELIOMETER' in D2:
+    if hasattrD2, 'SOCAL PYRHELIOMETER'):
         if D2['SOCAL PYRHELIOMETER'].size > 1:
             data_products.append('Pyrheliometer')
-    # add support for SOLAR_IRRADIANCE later
     return data_products
 
 
@@ -236,25 +235,25 @@ def get_data_products_L1(L1):
         data_products in a L1 file
     """
     data_products = []
-    if 'GREEN_SCI_FLUX1' in L1:
+    if hasattr(L1, 'GREEN_SCI_FLUX1'):
         if L1['GREEN_SCI_FLUX1'].size > 1:
             data_products.append('Green')
-    if 'RED_SCI_FLUX1' in L1:
+    if hasattr(L1, 'RED_SCI_FLUX1'):
         if L1['RED_SCI_FLUX1'].size > 1:
             data_products.append('Red')
-    if 'CA_HK_SCI' in L1:
+    if hasattr(L1, 'CA_HK_SCI'):
         if L1['CA_HK_SCI'].size > 1:
             data_products.append('CaHK')
-    if 'BARY_CORR' in L1:
+    if hasattr(L1, 'BARY_CORR'):
         if L1['BARY_CORR'].size > 1:
             data_products.append('BC')
-    if 'TELEMETRY' in L1:
+    if hasattr(L1, 'TELEMETRY'):
         if L1['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
-    if 'CONFIG' in L1:
+    if hasattr(L1, 'CONFIG'):
         if L1['CONFIG'].size > 1:
             data_products.append('Config')
-    if 'RECEIPT' in L1:
+    if hasattr(L1, 'RECEIPT'):
         if L1['RECEIPT'].size > 1:
             data_products.append('Receipt')
     return data_products
