@@ -193,11 +193,11 @@ def get_data_products_2D(D2):
         data_products in a 2D file
     """
     data_products = []
-    if hasattr(D2, 'GREEN_AMP1'):
-        if D2['GREEN_AMP1'].size > 1:
+    if hasattr(D2, 'GREEN_CCD'):
+        if D2['GREEN_CCD'].size > 1:
             data_products.append('Green')
-    if hasattr(D2, 'RED_AMP1'):
-        if D2['RED_AMP1'].size > 1:
+    if hasattr(D2, 'RED_CCD'):
+        if D2['RED_CCD'].size > 1:
             data_products.append('Red')
     if hasattr(D2, 'CA_HK'):
         if D2['CA_HK'].size > 1:

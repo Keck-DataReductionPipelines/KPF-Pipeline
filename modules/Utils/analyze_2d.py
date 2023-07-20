@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
+
+import matplotlib
+matplotlib.use('Agg')  # for plotting .png files faster
 import matplotlib.pyplot as plt
+
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
