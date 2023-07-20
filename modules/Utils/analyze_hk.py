@@ -32,7 +32,7 @@ class AnalyzeHK:
         self.trace_file = trace_file
         self.wavesoln_file = wavesoln_file
         self.offset = offset
-        self.image = L0['CA_HK'].data
+        self.image = np.array(L0['CA_HK'].data)
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -79,8 +79,8 @@ class AnalyzeHK:
         """
         fig, ax = plt.subplots(figsize = (12,5),tight_layout=True)
         im = ax.imshow(self.image, 
-                       vmin = np.percentile(self.image.ravel(),1),
-                       vmax = np.percentile(self.image.ravel(),99.5), 
+                       vmin = np.percentile(self.image,1),
+                       vmax = np.percentile(self.image,99.5), 
                        interpolation = 'None',
                        origin = 'lower',
                        aspect='auto')

@@ -17,6 +17,7 @@ from datetime import datetime
 from modules.Utils.analyze_l0 import AnalyzeL0
 from modules.Utils.analyze_guider import AnalyzeGuider
 from modules.Utils.analyze_em import AnalyzeEM
+from modules.Utils.analyze_hk import AnalyzeHK
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.kpf_parse import HeaderParse
@@ -56,39 +57,70 @@ class QuicklookAlg:
         primary_header = HeaderParse(kpf0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
-        self.ObsID = primary_header.get_obsid()        
-        
+        self.ObsID = primary_header.get_obsid()
+        self.data_products = get_data_products_L0(kpf0)
+#        self.logger.info("data products = " + str(self.data_products))
         L0_QLP_file_base = output_dir + self.ObsID + '/'
         self.logger.info('Working on QLP for L0 file ' + str(kpf0) + '.')
 
         # Make Exposure Meter images
-        # to-do: check if exposure meter data products are in kpf0
-        try:
-            savedir = L0_QLP_file_base +'EM/'
-            os.makedirs(savedir, exist_ok=True) # make directories if needed
-            myEM = AnalyzeEM(kpf0, logger=self.logger)
-            filename = savedir + self.ObsID + '_EM_spectrum_zoomable.png'
-            self.logger.info('Generating QLP image ' + filename)
-            myEM.plot_EM_spectrum(fig_path=filename, show_plot=False)
-            filename = savedir + self.ObsID + '_EM_time_series_zoomable.png'
-            self.logger.info('Generating QLP image ' + filename)
-            myEM.plot_EM_time_series(fig_path=filename, show_plot=False)
-        except Exception as e:
-            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+        if 'ExpMeter' in self.data_products:
+            try:
+                savedir = L0_QLP_file_base +'EM/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+    
+                # Exposure Meter spectrum plot
+                myEM = AnalyzeEM(kpf0, logger=self.logger)
+                filename = savedir + self.ObsID + '_EM_spectrum_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myEM.plot_EM_spectrum(fig_path=filename, show_plot=False)
+    
+                # Exposure Meter time series plot
+                filename = savedir + self.ObsID + '_EM_time_series_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myEM.plot_EM_time_series(fig_path=filename, show_plot=False)
+            except Exception as e:
+                self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make CaHK plots
+        if 'HK' in self.data_products:
+            try:
+                savedir = L0_QLP_file_base +'HK/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+    
+                # Exposure Meter spectrum plot
+                trace_file = self.config['CaHK']['trace_file']
+                wavesoln_file = self.config['CaHK']['cahk_wav']
+                myHK = AnalyzeHK(kpf0, trace_file = trace_file, 
+                                       wavesoln_file = wavesoln_file, 
+                                       logger=self.logger)
+                filename = savedir + self.ObsID + '_HK_image_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)
+    
+                # Exposure Meter time series plot
+                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)
+            except Exception as e:
+                self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make stitched L0 images
         try:
+            chips = []
+            if 'Green' in self.data_products: chips.append('green')
+            if 'Red' in self.data_products: chips.append('red')
             myL0 = AnalyzeL0(kpf0, logger=self.logger)
             # to-do: check if green and red are in kpf0
-            for chip in ['green', 'red']:
+            for chip in chips:
                 savedir = L0_QLP_file_base +'L0/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 filename = savedir + self.ObsID + '_' + chip + '_L0_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
                 myL0.plot_L0_stitched_image(fig_path=filename, 
                                             chip=chip, show_plot=False)
-        except:
-            self.logger.error('Failed producing QLP L0 image for ' + self.ObsID)
+        except Exception as e:
+            self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
     def qlp_2D(self, kpf2d, output_dir):
@@ -122,18 +154,22 @@ class QuicklookAlg:
             os.makedirs(savedir, exist_ok=True) # make directories if needed
             myGuider = AnalyzeGuider(kpf2d, logger=self.logger)
             myGuider.measure_seeing()
+            
             # Guider image plot
             filename = savedir + self.ObsID + '_guider_image_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myGuider.plot_guider_image(fig_path=filename, show_plot=False)
+            
             # Guider error time series
             filename = savedir + self.ObsID + '_error_time_series_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
+            
             # Guider flux time series
             filename = savedir + self.ObsID + '_flux_time_series_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myGuider.plot_guider_flux_time_series(fig_path=filename, show_plot=False)
+            
             # Guider FWHM time series
             filename = savedir + self.ObsID + '_fwhm_time_series_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
@@ -230,6 +266,46 @@ class QuicklookAlg:
             self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
         
         
+    def qlp_L1(self, kpf1, output_dir):
+        """
+        Description:
+            Generates the standard quicklook data products for an L1 file.
+    
+        Arguments:
+            kpf1 - an L1 filename
+            output_dir - directory for output QLP files (if show_plot=False)
+            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
+                        instead of saving files
+    
+        Attributes:
+            None
+        """
+        
+        primary_header = HeaderParse(kpf1, 'PRIMARY')
+        self.header = primary_header.header
+        self.name = primary_header.get_name()
+        self.ObsID = primary_header.get_obsid()        
+        
+        L1_QLP_file_base = output_dir + self.ObsID + '/'
+        self.logger.info('Working on QLP for L1 file ' + str(kpf1) + '.')
+
+        # Make Exposure Meter images
+        # to-do: check if exposure meter data products are in kpf0
+        try:
+            savedir = L1_QLP_file_base +'L1/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+     
+            myL1 = AnalyzeL1(kpf1, logger=self.logger)
+            myL1.measure_L1_snr()
+
+            # 1D SNR plot 
+            filename = savedir + self.ObsID + '_2D_L1_SNR_zoomable.png'
+            myL1.plot_L1_snr(fig_path=filename, show_plot=False)
+
+        except Exception as e:
+            self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
     def qlp_procedures(self,kpf0_file,output_dir,end_of_night_summary):
 
         saturation_limit = int(self.config['2D']['saturation_limit'])*1.
