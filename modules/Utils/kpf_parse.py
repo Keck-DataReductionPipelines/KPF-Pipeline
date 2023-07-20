@@ -154,27 +154,30 @@ def get_data_products_L0(L0):
         data_products in a 2D file
     """
     data_products = []
-    if 'GREEN_AMP1' in L0:
+    if hasattr(L0, 'GREEN_AMP1'):
         if L0['GREEN_AMP1'].size > 1:
             data_products.append('Green')
-    if 'RED_AMP1' in L0:
+    if hasattr(L0, 'RED_AMP1'):
         if L0['RED_AMP1'].size > 1:
             data_products.append('Red')
-    if 'CA_HK' in L0:
+    if hasattr(L0, 'CA_HK'):
         if L0['CA_HK'].size > 1:
-            data_products.append('CaHK')
-    if 'EXPMETER_SCI' in L0:
+            data_products.append('HK')
+    if hasattr(L0, 'EXPMETER_SCI'):
         if L0['EXPMETER_SCI'].size > 1:
             data_products.append('ExpMeter')
-    if ('GUIDER_AVG' in L0) or ('guider_avg' in L0):
-        if (L0['GUIDER_AVG'].size > 1) or (L0['guider_avg'].size > 1):
+    if hasattr(L0, 'GUIDER_AVG'):
+        if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
-    if 'TELEMETRY' in L0:
+#    if hasattr(L0, 'guider_avg'):
+#        if (L0['guider_avg'].size > 1):
+#            data_products.append('Guider')
+    if hasattr(L0, 'TELEMETRY'):
         if L0['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
-    if 'SOCAL PYRHELIOMETER' in L0:
+    if hasattr(L0, 'SOCAL PYRHELIOMETER'):
         if L0['SOCAL PYRHELIOMETER'].size > 1:
-            data_products.append('Config')
+            data_products.append('Pyrheliometer')
     return data_products
 
 
