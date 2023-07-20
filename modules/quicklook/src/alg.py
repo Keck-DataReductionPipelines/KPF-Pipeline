@@ -17,7 +17,6 @@ from datetime import datetime
 from modules.Utils.analyze_l0 import AnalyzeL0
 from modules.Utils.analyze_guider import AnalyzeGuider
 from modules.Utils.analyze_em import AnalyzeEM
-from modules.Utils.analyze_hk import AnalyzeHK
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.kpf_parse import HeaderParse
@@ -59,7 +58,6 @@ class QuicklookAlg:
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
         self.data_products = get_data_products_L0(kpf0)
-#        self.logger.info("data products = " + str(self.data_products))
         L0_QLP_file_base = output_dir + self.ObsID + '/'
         self.logger.info('Working on QLP for L0 file ' + str(kpf0) + '.')
 
@@ -82,27 +80,27 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
-        # Make CaHK plots
-        if 'HK' in self.data_products:
-            try:
-                savedir = L0_QLP_file_base +'HK/'
-                os.makedirs(savedir, exist_ok=True) # make directories if needed
-    
-                # Exposure Meter spectrum plot
-                trace_file = self.config['CaHK']['trace_file']
-                wavesoln_file = self.config['CaHK']['cahk_wav']
-                myHK = AnalyzeHK(kpf0, trace_file = trace_file, 
-                                       wavesoln_file = wavesoln_file, 
-                                       logger=self.logger)
-                filename = savedir + self.ObsID + '_HK_image_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)
-    
-                # Exposure Meter time series plot
-                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)
-            except Exception as e:
+        # Make CaHK plots#
+        if 'HK' in self.data_products:    
+            try:    
+                savedir = L0_QLP_file_base +'HK/'    
+                os.makedirs(savedir, exist_ok=True) # make directories if needed    
+        
+                # Exposure Meter spectrum plot    
+                trace_file = self.config['CaHK']['trace_file']    
+                wavesoln_file = self.config['CaHK']['cahk_wav']    
+                myHK = AnalyzeHK(kpf0, trace_file = trace_file,     
+                                       wavesoln_file = wavesoln_file,     
+                                       logger=self.logger)    
+                filename = savedir + self.ObsID + '_HK_image_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
+        
+                # Exposure Meter time series plot    
+                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)    
+            except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make stitched L0 images
@@ -110,8 +108,8 @@ class QuicklookAlg:
             chips = []
             if 'Green' in self.data_products: chips.append('green')
             if 'Red' in self.data_products: chips.append('red')
-            myL0 = AnalyzeL0(kpf0, logger=self.logger)
-            # to-do: check if green and red are in kpf0
+            myL0 = AnalyzeL0(kpf0, logger=self.logger)            # to-do: check if green and red are in kpf0
+
             for chip in chips:
                 savedir = L0_QLP_file_base +'L0/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed

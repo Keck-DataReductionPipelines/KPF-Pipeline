@@ -217,7 +217,7 @@ def get_data_products_2D(D2):
     if hasattr(D2, 'RECEIPT'):
         if D2['RECEIPT'].size > 1:
             data_products.append('Receipt')
-    if hasattrD2, 'SOCAL PYRHELIOMETER'):
+    if hasattr(D2, 'SOCAL PYRHELIOMETER'):
         if D2['SOCAL PYRHELIOMETER'].size > 1:
             data_products.append('Pyrheliometer')
     return data_products
@@ -257,4 +257,3 @@ def get_data_products_L1(L1):
         if L1['RECEIPT'].size > 1:
             data_products.append('Receipt')
     return data_products
-
