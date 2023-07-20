@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-#from astropy.table import Table
 from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeHK:
@@ -14,16 +13,16 @@ class AnalyzeHK:
         Some of the functions need to be filled in.
 
     Arguments:
-        L0 - an L0 object
+        L0 - a KPF L0 object
 
     Attributes:
         TBD
     """
 
 #[pipeline_20230720.log][INFO]:/data/masters/kpfMaster_HKwave20220909_sci.csv
-#[pipeline_20230720.log][INFO]:/data/masters/kpfMaster_HKOrderBounds20220909.csv
+#        plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
 
-    def __init__(self, L0, trace_file=None, offset=-1, wave_soln=None, logger=None):
+    def __init__(self, L0, trace_file=None, offset=-1, wavesoln_file=None, logger=None):
 
         if logger:
             self.logger = logger
@@ -31,7 +30,8 @@ class AnalyzeHK:
         else:
             self.logger = None
         self.trace_file = trace_file
-        self.wave_soln = wave_soln
+        self.wavesoln_file = wavesoln_file
+        self.offset = offset
         self.image = L0['CA_HK'].data
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
@@ -39,9 +39,6 @@ class AnalyzeHK:
         self.ObsID = primary_header.get_obsid()
         self.rv_shift = self.header['TARGRADV'] #TO-DO: check if keyword exists
         if trace_file != None:
-            #self.trace_location_sci = self.load_trace_location('sky', self.trace_file, -1) #correct?
-            #self.trace_location_sky = self.load_trace_location('sci', self.trace_file, -1)
-            #
             for fiber in ['sci','sky']:
                 order_col_name = 'order'
                 fiber_col_name = 'fiber'
@@ -55,17 +52,15 @@ class AnalyzeHK:
                 loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
                 trace_location = dict()
                 for loc in loc_for_fiber: # add each row from loc_for_fiber to trace_location for fiber
-                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['y0']]-offset,
-                                                      'x2': loc[loc_idx['yf']]-offset,
+                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['y0']]-self.offset,
+                                                      'x2': loc[loc_idx['yf']]-self.offset,
                                                       'y1': loc[loc_idx['x0']],
                                                       'y2': loc[loc_idx['xf']]}
                 if fiber == 'sci': self.trace_location_sky = trace_location # sci/sky seem to be backwards
                 if fiber == 'sky': self.trace_location_sci = trace_location
-
-#        trace_file = self.config['CaHK']['trace_file']
-#        trace_location = load_trace_location('sky',trace_file,offset=-1)
-#        trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
-#        plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+        if wavesoln_file != None:
+            self.wave_lib = pd.read_csv(wavesoln_file, header=None, sep = ' ', comment = '#')
+            self.wave_lib *= 1 - self.rv_shift/3e5 # Doppler shift wavelength solution
 
 
     def plot_HK_image_2D(self, fig_path=None, show_plot=False):
@@ -128,6 +123,8 @@ class AnalyzeHK:
         ax.set_title('Ca H&K CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
         ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
+        ax.xaxis.set_tick_params(labelsize=14)
+        ax.yaxis.set_tick_params(labelsize=14)
         plt.legend()
 
         # Display the plot
@@ -137,58 +134,50 @@ class AnalyzeHK:
             plt.show()
         plt.close()
 
-    def plot_HK_spectrum_1D(data, trace_location, rv_shift, wavesoln):
+    def plot_HK_spectrum_1D(self, fig_path=None, show_plot=False):
 
-        wave_lib = pd.read_csv(wavesoln,header=None, sep = ' ',comment = '#')
-        wave_lib*=1-rv_shift/3e5
-        #print(trace_location)
-        orders = np.array(wave_lib.columns)
+        orders = np.array(self.wave_lib.columns)
         padding = 200
 
-        plt.figure(figsize=(12,6),tight_layout=True)
+        plt.figure(figsize=(12,5),tight_layout=True)
         color_grid = ['purple','blue','green','yellow','orange','red']
-        chk_bandpass  =  [384, 401.7]
-        caK = [393.2,393.5]
-        caH = [396.7,397.0]
-        Vcont = [389.9,391.9]
-        Rcont = [397.4,399.4]
+        chk_bandpass  = [384.0, 401.7]
+        caK           = [393.2, 393.5]
+        caH           = [396.7, 397.0]
+        Vcont         = [389.9, 391.9]
+        Rcont         = [397.4, 399.4]
 
-        fig, ax = plt.subplots(1, 1, figsize=(9,4))
-        ax.fill_between(chk_bandpass,y1=0,y2=1,facecolor='gray',alpha=0.3,zorder=-100)
-        ax.fill_between(caH,y1=0,y2=1,facecolor='m',alpha=0.3)
-        ax.fill_between(caK,y1=0,y2=1,facecolor='m',alpha=0.3)
-        ax.fill_between(Vcont,y1=0,y2=1,facecolor='c',alpha=0.3)
-        ax.fill_between(Rcont,y1=0,y2=1,facecolor='c',alpha=0.3)
+        fig, ax = plt.subplots(1, 1, figsize=(12,5))
+        ax.fill_between(chk_bandpass, y1=0, y2=1, facecolor='gray', alpha=0.3, zorder=-100)
+        ax.fill_between(caH,          y1=0, y2=1, facecolor='m',    alpha=0.3)
+        ax.fill_between(caK,          y1=0, y2=1, facecolor='m',    alpha=0.3)
+        ax.fill_between(Vcont,        y1=0, y2=1, facecolor='c',    alpha=0.3)
+        ax.fill_between(Rcont,        y1=0, y2=1, facecolor='c',    alpha=0.3)
 
         ax.text(np.mean(Vcont)-0.6,0.08,'V cont.')
         ax.text(np.mean(Rcont)-0.6,0.08,'R cont.')
-        ax.text(np.mean(caK)-0.15,0.08,'K')
-        ax.text(np.mean(caH)-0.15,0.08,'H')
-
-        #ax.plot([chk_bandpass[0]-1, chk_bandpass[1]+1], [0.04,0.04],'k--',lw=0.7)
-        #ax.text(385.1,0.041,'Requirement',fontsize=9)
-
-        #ax.plot(x,t_all,label=label) instead iterate over spectral orders plottign
-        ax.set_xlim(388,400)
-        #ax.set_ylim(0,0.09)
-
-        ax.set_xlabel('Wavelength (nm)',fontsize=10)
-        ax.set_ylabel('Flux',fontsize=10)
-
+        ax.text(np.mean(caK)-0.155,0.08,'K')
+        ax.text(np.mean(caH)-0.155,0.08,'H')
+        ax.set_xlim(384,400)
+        ax.set_ylim(0,1)
         ax.plot([396.847,396.847],[0,1],':',color ='black')
         ax.plot([393.366,393.366],[0,1],':',color ='black')
-
-
+ 
+        # Add labels
         for i in range(len(orders)):
-            wav = wave_lib[i]
-            #print(i,trace_location[i]['x1'],trace_location[i]['x2'])
-            flux = np.sum(hdulist['ca_hk'].data[trace_location[i]['x1']:trace_location[i]['x2'],:],axis=0)
+            wav = self.wave_lib[i]
+            flux = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
             ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
-        plt.title('Ca H&K Spectrum '+exposure_name)#
-        plt.legend()
-        plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
+        ax.set_xlabel('Wavelength (nm)',fontsize=18)
+        ax.set_ylabel('Flux',fontsize=18)
+        ax.xaxis.set_tick_params(labelsize=14)
+        ax.yaxis.set_tick_params(labelsize=14)
+        plt.title('Ca H&K Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=200, facecolor='w')
+        if show_plot == True:
+            plt.show()
         plt.close()
-#    #print(np.shape(hdulist['ca_hk'].data))
-#    rv_shift = hdulist[0].header['TARGRADV']
-#    extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
 
