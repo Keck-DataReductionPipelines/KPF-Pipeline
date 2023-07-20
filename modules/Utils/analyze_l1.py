@@ -34,10 +34,12 @@ class AnalyzeL1:
         else:
             self.logger = None
         self.L1 = L1
-        self.header = L1['PRIMARY'].header
-        self.name = HeaderParse(self.header).get_name()
-        self.ObsID = HeaderParse(self.header).get_obsid()
-                    
+        #self.header = L1['PRIMARY'].header
+        primary_header = HeaderParse(L1, 'PRIMARY')
+        self.header = primary_header.header
+        self.name = primary_header.get_name()
+        self.ObsID = primary_header.get_obsid()
+        
 
     def measure_L1_snr(self, snr_percentile=95):
 
@@ -76,7 +78,8 @@ class AnalyzeL1:
         norderlets = len(orderlets)
 
         # Define SNR arrays (needed for operations below where VAR = 0)
-        GREEN_SCI_SNR1 = 0 * L1['GREEN_SCI_VAR1']
+        #GREEN_SCI_SNR1 = np.zeros(L1['GREEN_SCI_VAR1'])
+        GREEN_SCI_SNR1 = 0 * L1['GREEN_SCI_VAR2']
         GREEN_SCI_SNR2 = 0 * L1['GREEN_SCI_VAR2']
         GREEN_SCI_SNR3 = 0 * L1['GREEN_SCI_VAR3']
         GREEN_CAL_SNR  = 0 * L1['GREEN_CAL_VAR']
@@ -152,12 +155,12 @@ class AnalyzeL1:
             RED_SNR[o,5] = np.percentile(RED_SCI_SNR[o], snr_percentile)
 
         # Save SNR arrays to the object
-        self.GREEN_SNR = GREEN_SNR
-        self.RED_SNR   = RED_SNR
+        self.GREEN_SNR     = GREEN_SNR
+        self.RED_SNR       = RED_SNR
         self.GREEN_SNR_WAV = GREEN_SNR_WAV
         self.RED_SNR_WAV   = RED_SNR_WAV
 
-    def plot_L1_snr(self, ObsID, fig_path=None, show_plot=False):
+    def plot_L1_snr(self, fig_path=None, show_plot=False):
         """
 
         Generate a plot of SNR per order as compuated using the compute_l1_snr
@@ -173,8 +176,8 @@ class AnalyzeL1:
             (e.g., in a Jupyter Notebook).
 
         """
-        L1= self.L1
-
+        #L1 = self.L1
+        #
         # Make 3-panel plot. First, create the figure and subplots
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,14))
 
