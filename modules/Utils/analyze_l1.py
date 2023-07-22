@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeL1:
@@ -68,7 +69,7 @@ class AnalyzeL1:
         Returns:
             None
         """
-        L1= self.L1
+        L1 = self.L1
         self.snr_percentile = snr_percentile
 
         # Determine the number of orders
@@ -160,9 +161,9 @@ class AnalyzeL1:
         self.GREEN_SNR_WAV = GREEN_SNR_WAV
         self.RED_SNR_WAV   = RED_SNR_WAV
 
+
     def plot_L1_snr(self, fig_path=None, show_plot=False):
         """
-
         Generate a plot of SNR per order as compuated using the compute_l1_snr
         function.
 
@@ -174,12 +175,10 @@ class AnalyzeL1:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
-
         """
-        #L1 = self.L1
-        #
+
         # Make 3-panel plot. First, create the figure and subplots
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,14))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,14), tight_layout=True)
 
         # Plot the data on each subplot
         ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,5], marker="8", color='darkgreen', label='SCI1+SCI2+SCI3')
@@ -224,17 +223,11 @@ class AnalyzeL1:
             plt.show()
         plt.close()
 
-    def plot_1D_spectrum(self, chip=None, orderlet=None, fig_path=None, show_plot=False):
-
+    def plot_L1_spectrum(self, orderlet=None, fig_path=None, show_plot=False):
         """
-
-        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE.
-               THIS IS A PLACEHOLDER.
-
         Generate a rainbow-colored plot L1 spectrum.  One must select an orderlet.
 
         Args:
-            chip (string) - "green" or "red"
             orderlet (string) - "CAL", "SCI1", "SCI2", "SCI3", "SKY"
             fig_path (string) - set to the path for the file
                 to be generated.
@@ -243,8 +236,88 @@ class AnalyzeL1:
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment
             (e.g., in a Jupyter Notebook).
-
         """
+        
+        # Parameters
+        n_orders_per_panel = 8 # int(self.config['L1']['n_per_row']) #number of orders per panel
+        
+        # Define wavelength and flux arrays
+        if orderlet.lower() == 'sci1':
+            wav_green  = np.array(self.L1['GREEN_SCI_WAVE1'].data,'d')
+            wav_red    = np.array(self.L1['RED_SCI_WAVE1'].data,'d')
+            flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
+            flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
+        elif orderlet.lower() == 'sci2':
+            wav_green  = np.array(self.L1['GREEN_SCI_WAVE2'].data,'d')
+            wav_red    = np.array(self.L1['RED_SCI_WAVE2'].data,'d')
+            flux_green = np.array(self.L1['GREEN_SCI_FLUX2'].data,'d')
+            flux_red   = np.array(self.L1['RED_SCI_FLUX2'].data,'d')
+        elif orderlet.lower() == 'sci3':
+            wav_green  = np.array(self.L1['GREEN_SCI_WAVE3'].data,'d')
+            wav_red    = np.array(self.L1['RED_SCI_WAVE3'].data,'d')
+            flux_green = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d')
+            flux_red   = np.array(self.L1['RED_SCI_FLUX3'].data,'d')
+        elif orderlet.lower() == 'sky':
+            wav_green  = np.array(self.L1['GREEN_SKY_WAVE'].data,'d')
+            wav_red    = np.array(self.L1['RED_SKY_WAVE'].data,'d')
+            flux_green = np.array(self.L1['GREEN_SKY_FLUX'].data,'d')
+            flux_red   = np.array(self.L1['RED_SKY_FLUX'].data,'d')
+        elif orderlet.lower() == 'cal':
+            wav_green  = np.array(self.L1['GREEN_CAL_WAVE'].data,'d')
+            wav_red    = np.array(self.L1['RED_CAL_WAVE'].data,'d')
+            flux_green = np.array(self.L1['GREEN_CAL_FLUX'].data,'d')
+            flux_red   = np.array(self.L1['RED_CAL_FLUX'].data,'d')
+        else:
+            self.logger.error('plot_1D_spectrum: orderlet not specified properly.')
+        if np.shape(flux_green)==(0,):flux_green = wav_green*0. # placeholder when there is no data
+        if np.shape(flux_red)==(0,):  flux_red   = wav_red  *0. # placeholder when there is no data
+        wav = np.concatenate((wav_green,wav_red), axis = 0)
+        flux = np.concatenate((flux_green,flux_red), axis = 0)
+
+        # Set up figure
+        cm = plt.cm.get_cmap('rainbow')
+        gs = gridspec.GridSpec(n_orders_per_panel, 1 , height_ratios=np.ones(n_orders_per_panel))
+        fig, ax = plt.subplots(int(np.shape(wav)[0]/n_orders_per_panel)+1,1, sharey=False, 
+                               figsize=(10,8), tight_layout=True)
+        plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, hspace=0.0) # this doesn't work for unknown reasons
+
+        # Iterate over spectral orders
+        for i in range(np.shape(wav)[0]):
+            if wav[i,0] == 0: continue
+            low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
+            flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
+            j = int(i/n_orders_per_panel)
+            rgba = cm((i % n_orders_per_panel)/n_orders_per_panel*1.)
+            ax[j].plot(wav[i,:],flux[i,:], linewidth = 0.3, color = rgba)
+            ax[j].xaxis.set_tick_params(labelsize=7)
+            ax[j].yaxis.set_tick_params(labelsize=7)
+            ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
+
+        for j in range(int(np.shape(flux)[0]/n_orders_per_panel)):
+            low, high = np.nanpercentile(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:],[0.1,99.9])
+            ax[j].set_ylim(np.nanmin(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:])-high*0.1, high*1.2)
+            ax[j].xaxis.set_tick_params(labelsize=7)
+            ax[j].yaxis.set_tick_params(labelsize=7)
+            ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
+
+        # Add axis labels
+        low, high = np.nanpercentile(flux,[0.1,99.9])
+        ax[int(np.shape(wav)[0]/n_orders_per_panel/2)].set_ylabel('Counts (e-) in ' + orderlet.upper(),fontsize = 14)
+        plt.xlabel('Wavelength (Ang)',fontsize = 14)
+
+        # Add overall title to array of plots
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
+        plt.tight_layout()
+
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=400, facecolor='w')
+        if show_plot == True:
+            plt.show()
+        plt.close()
+        
 
     def plot_1D_spectrum_single_order(self, chip=None, fig_path=None, show_plot=False):
 

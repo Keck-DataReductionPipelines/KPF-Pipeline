@@ -86,10 +86,10 @@ class AnalyzeL2:
 
         
         # Set up plot
-        fig, axes = plt.subplots(1, 5, figsize=(25, 15),tight_layout=True)
+        fig, axes = plt.subplots(1, 5, figsize=(25, 15), tight_layout=True)
         
         # Iterate over orderlets
-        for oo, orderlet in enumerate(['SCI0', 'SCI1', 'SCI2', 'CAL', 'SKY']):
+        for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
             ax = axes[oo]
             
             # Plot vertical lines for RVs and add top annotations

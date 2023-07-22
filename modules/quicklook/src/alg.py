@@ -277,9 +277,8 @@ class QuicklookAlg:
         L1_QLP_file_base = output_dir + self.ObsID + '/'
         self.logger.info('Working on L1 QLP for ' + str(self.ObsID) + '.')
 
-        # Make L1 SNR image
+        # Make L1 SNR plot
         try:
-            # 1D SNR plot 
             savedir = L1_QLP_file_base +'L1/'
             os.makedirs(savedir, exist_ok=True) # make directories if needed
             filename = savedir + self.ObsID + '_2D_L1_SNR_zoomable.png'
@@ -287,6 +286,16 @@ class QuicklookAlg:
             myL1 = AnalyzeL1(kpf1, logger=self.logger)
             myL1.measure_L1_snr()
             myL1.plot_L1_snr(fig_path=filename, show_plot=False)
+
+        except Exception as e:
+            self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make L1 spectra 
+        try:
+            for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
+                filename = savedir + self.ObsID + '_L1_spectrum_' + orderlet + '_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myL1.plot_L1_spectrum(orderlet=orderlet, fig_path=filename, show_plot=False)
 
         except Exception as e:
             self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -862,115 +871,115 @@ class QuicklookAlg:
 
         #Ca HK data
 
-        if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
-            print('Working QLP for on Ca HK data')
-            if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
-                os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
-
-            def plot_trace_boxes(data,trace_location,trace_location_sky):
-
-                fig, ax = plt.subplots(figsize = (12,6),tight_layout=True)
-                im = ax.imshow(data,vmin = np.percentile(data.ravel(),1),vmax = np.percentile(data.ravel(),99), interpolation = 'None',origin = 'lower',aspect='auto')
-                for i in trace_location.keys():
-                    height = trace_location[i]['x2'] - trace_location[i]['x1']
-                    width = trace_location[i]['y2'] - trace_location[i]['y1']
-                    ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none'))
-                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci (Saturation at '+str(64232)+')'))
-
-                for i in trace_location_sky.keys():
-                    height = trace_location_sky[i]['x2'] - trace_location_sky[i]['x1']
-                    width = trace_location_sky[i]['y2'] - trace_location_sky[i]['y1']
-                    ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none'))
-                    if i == 0: ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none',label = 'Sky'))
-                fig.colorbar(im, orientation='vertical',label = 'Counts (ADU)')
-                plt.xlabel('y (pixel number)')
-                plt.ylabel('x (pixel number)')
-                plt.title('Ca H&K 2D '+exposure_name)#
-                plt.legend()
-                plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_2D_zoomable.png', dpi=1000)
-                plt.close()
-
-
-            def load_trace_location(fiber,trace_path,offset=0):
-                loc_result = pd.read_csv(trace_path,header =0, sep = ' ')
-                #print(loc_result)
-                loc_vals = np.array(loc_result.values)
-                loc_cols = np.array(loc_result.columns)
-                #print(loc_cols)
-                order_col_name = 'order'
-                fiber_col_name = 'fiber'
-                loc_col_names = ['y0', 'x0', 'yf','xf']#['x0', 'y0', 'xf','yf']
-
-                loc_idx = {c: np.where(loc_cols == c)[0][0] for c in loc_col_names}
-                order_idx = np.where(loc_cols == order_col_name)[0][0]
-                fiber_idx = np.where(loc_cols == fiber_col_name)[0][0]
-                loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
-                trace_location = dict()
-                for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
-                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['y0']]-offset,'x2': loc[loc_idx['yf']]-offset,'y1': loc[loc_idx['x0']],'y2': loc[loc_idx['xf']]}
-
-                return trace_location
-
-
-            trace_file = self.config['CaHK']['trace_file']
-            trace_location = load_trace_location('sky',trace_file,offset=-1)
-            trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
-            plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
-            
-            def extract_HK_spectrum(data,trace_location,rv_shift,wavesoln ):
-
-                wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
-                wave_lib*=1-rv_shift/3e5
-                #print(trace_location)
-                orders = np.array(wave_lib.columns)
-                padding = 200
-
-                plt.figure(figsize=(12,6),tight_layout=True)
-                color_grid = ['purple','blue','green','yellow','orange','red']
-                chk_bandpass  =  [384, 401.7]
-                caK = [393.2,393.5]
-                caH = [396.7,397.0]
-                Vcont = [389.9,391.9]
-                Rcont = [397.4,399.4]
-
-                fig, ax = plt.subplots(1, 1, figsize=(9,4))
-                ax.fill_between(chk_bandpass,y1=0,y2=1,facecolor='gray',alpha=0.3,zorder=-100)
-                ax.fill_between(caH,y1=0,y2=1,facecolor='m',alpha=0.3)
-                ax.fill_between(caK,y1=0,y2=1,facecolor='m',alpha=0.3)
-                ax.fill_between(Vcont,y1=0,y2=1,facecolor='c',alpha=0.3)
-                ax.fill_between(Rcont,y1=0,y2=1,facecolor='c',alpha=0.3)
-
-                ax.text(np.mean(Vcont)-0.6,0.08,'V cont.')
-                ax.text(np.mean(Rcont)-0.6,0.08,'R cont.')
-                ax.text(np.mean(caK)-0.15,0.08,'K')
-                ax.text(np.mean(caH)-0.15,0.08,'H')
-
-                #ax.plot([chk_bandpass[0]-1, chk_bandpass[1]+1], [0.04,0.04],'k--',lw=0.7)
-                #ax.text(385.1,0.041,'Requirement',fontsize=9)
-
-                #ax.plot(x,t_all,label=label) instead iterate over spectral orders plottign
-                ax.set_xlim(388,400)
-                #ax.set_ylim(0,0.09)
-
-                ax.set_xlabel('Wavelength (nm)',fontsize=10)
-                ax.set_ylabel('Flux',fontsize=10)
-
-                ax.plot([396.847,396.847],[0,1],':',color ='black')
-                ax.plot([393.366,393.366],[0,1],':',color ='black')
-
-
-                for i in range(len(orders)):
-                    wav = wave_lib[i]
-                    #print(i,trace_location[i]['x1'],trace_location[i]['x2'])
-                    flux = np.sum(hdulist['ca_hk'].data[trace_location[i]['x1']:trace_location[i]['x2'],:],axis=0)
-                    ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
-                plt.title('Ca H&K Spectrum '+exposure_name)#
-                plt.legend()
-                plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
-                plt.close()
-            #print(np.shape(hdulist['ca_hk'].data))
-            rv_shift = hdulist[0].header['TARGRADV']
-            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
+#        if 'CA_HK' in hdulist and len(hdulist['CA_HK'].data)>=1:
+#            print('Working QLP for on Ca HK data')
+#            if not os.path.exists(output_dir+'/'+exposure_name+'/CaHK'):
+#                os.makedirs(output_dir+'/'+exposure_name+'/CaHK')
+#
+#            def plot_trace_boxes(data,trace_location,trace_location_sky):
+#
+#                fig, ax = plt.subplots(figsize = (12,6),tight_layout=True)
+#                im = ax.imshow(data,vmin = np.percentile(data.ravel(),1),vmax = np.percentile(data.ravel(),99), interpolation = 'None',origin = 'lower',aspect='auto')
+#                for i in trace_location.keys():
+#                    height = trace_location[i]['x2'] - trace_location[i]['x1']
+#                    width = trace_location[i]['y2'] - trace_location[i]['y1']
+#                    ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none'))
+#                    if i == 0: ax.add_patch(patches.Rectangle((trace_location[i]['y1'], trace_location[i]['x1']),width,height,linewidth=0.5, edgecolor='r',facecolor='none',label = 'Sci (Saturation at '+str(64232)+')'))
+#
+#                for i in trace_location_sky.keys():
+#                    height = trace_location_sky[i]['x2'] - trace_location_sky[i]['x1']
+#                    width = trace_location_sky[i]['y2'] - trace_location_sky[i]['y1']
+#                    ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none'))
+#                    if i == 0: ax.add_patch(patches.Rectangle((trace_location_sky[i]['y1'], trace_location_sky[i]['x1']),width,height,linewidth=0.5, edgecolor='white',facecolor='none',label = 'Sky'))
+#                fig.colorbar(im, orientation='vertical',label = 'Counts (ADU)')
+#                plt.xlabel('y (pixel number)')
+#                plt.ylabel('x (pixel number)')
+#                plt.title('Ca H&K 2D '+exposure_name)#
+#                plt.legend()
+#                plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_2D_zoomable.png', dpi=1000)
+#                plt.close()
+#
+#
+#            def load_trace_location(fiber,trace_path,offset=0):
+#                loc_result = pd.read_csv(trace_path,header =0, sep = ' ')
+#                #print(loc_result)
+#                loc_vals = np.array(loc_result.values)
+#                loc_cols = np.array(loc_result.columns)
+#                #print(loc_cols)
+#                order_col_name = 'order'
+#                fiber_col_name = 'fiber'
+#                loc_col_names = ['y0', 'x0', 'yf','xf']#['x0', 'y0', 'xf','yf']
+#
+#                loc_idx = {c: np.where(loc_cols == c)[0][0] for c in loc_col_names}
+#                order_idx = np.where(loc_cols == order_col_name)[0][0]
+#                fiber_idx = np.where(loc_cols == fiber_col_name)[0][0]
+#                loc_for_fiber = loc_vals[np.where(loc_vals[:, fiber_idx] == fiber)[0], :]  # rows with the same fiber
+#                trace_location = dict()
+#                for loc in loc_for_fiber:       # add each row from loc_for_fiber to trace_location for fiber
+#                    trace_location[loc[order_idx]] = {'x1': loc[loc_idx['y0']]-offset,'x2': loc[loc_idx['yf']]-offset,'y1': loc[loc_idx['x0']],'y2': loc[loc_idx['xf']]}
+#
+#                return trace_location
+#
+#
+#            trace_file = self.config['CaHK']['trace_file']
+#            trace_location = load_trace_location('sky',trace_file,offset=-1)
+#            trace_location_sky = load_trace_location('sci',trace_file,offset=-1)
+#            plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
+#            
+#            def extract_HK_spectrum(data,trace_location,rv_shift,wavesoln ):
+#
+#                wave_lib = pd.read_csv(wavesoln,header =None, sep = ' ',comment = '#')
+#                wave_lib*=1-rv_shift/3e5
+#                #print(trace_location)
+#                orders = np.array(wave_lib.columns)
+#                padding = 200
+#
+#                plt.figure(figsize=(12,6),tight_layout=True)
+#                color_grid = ['purple','blue','green','yellow','orange','red']
+#                chk_bandpass  =  [384, 401.7]
+#                caK = [393.2,393.5]
+#                caH = [396.7,397.0]
+#                Vcont = [389.9,391.9]
+#                Rcont = [397.4,399.4]
+#
+#                fig, ax = plt.subplots(1, 1, figsize=(9,4))
+#                ax.fill_between(chk_bandpass,y1=0,y2=1,facecolor='gray',alpha=0.3,zorder=-100)
+#                ax.fill_between(caH,y1=0,y2=1,facecolor='m',alpha=0.3)
+#                ax.fill_between(caK,y1=0,y2=1,facecolor='m',alpha=0.3)
+#                ax.fill_between(Vcont,y1=0,y2=1,facecolor='c',alpha=0.3)
+#                ax.fill_between(Rcont,y1=0,y2=1,facecolor='c',alpha=0.3)
+#
+#                ax.text(np.mean(Vcont)-0.6,0.08,'V cont.')
+#                ax.text(np.mean(Rcont)-0.6,0.08,'R cont.')
+#                ax.text(np.mean(caK)-0.15,0.08,'K')
+#                ax.text(np.mean(caH)-0.15,0.08,'H')
+#
+#                #ax.plot([chk_bandpass[0]-1, chk_bandpass[1]+1], [0.04,0.04],'k--',lw=0.7)
+#                #ax.text(385.1,0.041,'Requirement',fontsize=9)
+#
+#                #ax.plot(x,t_all,label=label) instead iterate over spectral orders plottign
+#                ax.set_xlim(388,400)
+#                #ax.set_ylim(0,0.09)
+#
+#                ax.set_xlabel('Wavelength (nm)',fontsize=10)
+#                ax.set_ylabel('Flux',fontsize=10)
+#
+#                ax.plot([396.847,396.847],[0,1],':',color ='black')
+#                ax.plot([393.366,393.366],[0,1],':',color ='black')
+#
+#
+#                for i in range(len(orders)):
+#                    wav = wave_lib[i]
+#                    #print(i,trace_location[i]['x1'],trace_location[i]['x2'])
+#                    flux = np.sum(hdulist['ca_hk'].data[trace_location[i]['x1']:trace_location[i]['x2'],:],axis=0)
+#                    ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
+#                plt.title('Ca H&K Spectrum '+exposure_name)#
+#                plt.legend()
+#                plt.savefig(output_dir+'/'+exposure_name+'/CaHK/'+exposure_name+'_CaHK_Spectrum.png', dpi=1000)
+#                plt.close()
+#            #print(np.shape(hdulist['ca_hk'].data))
+#            rv_shift = hdulist[0].header['TARGRADV']
+#            extract_HK_spectrum(hdulist['ca_hk'].data,trace_location,rv_shift,wavesoln = self.config['CaHK']['cahk_wav'])
 
         
         #### L1 ####
@@ -1011,233 +1020,234 @@ class QuicklookAlg:
 
             #print(hdulist1.info())
 
-            wav_green = np.array(hdulist['GREEN_SCI_WAVE1'].data,'d')
-            wav_red = np.array(hdulist['RED_SCI_WAVE1'].data,'d')
-            flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
-            flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
-
-            wav_green2 = np.array(hdulist['GREEN_SCI_WAVE2'].data,'d')
-            wav_red2 = np.array(hdulist['RED_SCI_WAVE2'].data,'d')
-            flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
-            flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
-
-            wav_green3 = np.array(hdulist['GREEN_SCI_WAVE3'].data,'d')
-            wav_red3 = np.array(hdulist['RED_SCI_WAVE3'].data,'d')
-            flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
-            flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
-
-            wav_green_cal = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
-            wav_red_cal = np.array(hdulist['RED_CAL_WAVE'].data,'d')
-            flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
-            flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
-
-            wav_green_sky = np.array(hdulist['GREEN_SKY_WAVE'].data,'d')
-            wav_red_sky = np.array(hdulist['RED_SKY_WAVE'].data,'d')
-            flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
-            flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
-
-
-            if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
-            if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red2)==(0,): flux_red2 = wav_red*0.#place holder when there is no data
-            if np.shape(flux_green3)==(0,):flux_green3 = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red3)==(0,): flux_red3 = wav_red*0.#place holder when there is no data
-            if np.shape(flux_green_cal)==(0,):flux_green_cal = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
-            if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
-            if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
-
-            #print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
-
-            wav = np.concatenate((wav_green,wav_red),axis = 0)
-            wav2 = np.concatenate((wav_green2,wav_red2),axis = 0)
-            wav3 = np.concatenate((wav_green3,wav_red3),axis = 0)
-            wav_cal = np.concatenate((wav_green_cal,wav_red_cal),axis = 0)
-            wav_sky = np.concatenate((wav_green_sky,wav_red_sky),axis = 0)
-            #print('test wave',np.shape(wav))
-            #print(hdulist1.info())
-
-            flux = np.concatenate((flux_green,flux_red),axis = 0)
-            flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
-            flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
-            flux_cal = np.concatenate((flux_green_cal,flux_red_cal),axis = 0)
-            flux_sky = np.concatenate((flux_green_sky,flux_red_sky),axis = 0)
-
-            n = int(self.config['L1']['n_per_row']) #number of orders per panel
-            cm = plt.cm.get_cmap('rainbow')
-
-            from matplotlib import gridspec
-            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
-
-            plt.rcParams.update({'font.size': 15})
-            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
-
-            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
-            fig.subplots_adjust(hspace=0.4)
-
-            for i in range(np.shape(wav)[0]):
-                if wav[i,0] == 0: continue
-                low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
-                flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
-                j = int(i/n)
-                rgba = cm((i % n)/n*1.)
-                #print(j,rgba)
-                ax[j].plot(wav[i,:],flux[i,:], linewidth =  0.3,color = rgba)
-
-            for j in range(int(np.shape(flux)[0]/n)):
-                low, high = np.nanpercentile(flux[j*n:(j+1)*n,:],[.1,99.9])
-                #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
-
-            low, high = np.nanpercentile(flux,[0.1,99.9])
-
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
-            ax[0].set_title('L1 Spectrum SCI1 ' +exposure_name,fontsize = 20)
-            plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci1_zoomable.png',dpi = 200)
-            plt.close()
-
-            n = int(self.config['L1']['n_per_row']) #number of orders per panel
-            cm = plt.cm.get_cmap('rainbow')
-
-            from matplotlib import gridspec
-            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
-
-            plt.rcParams.update({'font.size': 15})
-            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
-
-            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
-            fig.subplots_adjust(hspace=0.4)
-
-            for i in range(np.shape(wav)[0]):
-                if wav[i,0] == 0: continue
-                low, high = np.nanpercentile(flux2[i,:],[0.1,99.9])
-                flux2[i,:][(flux2[i,:]>high) | (flux2[i,:]<low)] = np.nan
-                j = int(i/n)
-                rgba = cm((i % n)/n*1.)
-                #print(j,rgba)
-                ax[j].plot(wav2[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
-
-            for j in range(int(np.shape(flux2)[0]/n)):
-                low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
-                #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux2[j*n:(j+1)*n,:])-high*0.1, high*1.2)
-
-            low, high = np.nanpercentile(flux2,[0.1,99.9])
-
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI2',fontsize = 20)
-            ax[0].set_title('L1 Spectrum SCI2 ' +exposure_name,fontsize = 20)
-            plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci2_zoomable.png',dpi = 200)
-            plt.close()
-
-            n = int(self.config['L1']['n_per_row']) #number of orders per panel
-            cm = plt.cm.get_cmap('rainbow')
-
-            from matplotlib import gridspec
-            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
-
-            plt.rcParams.update({'font.size': 15})
-            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
-
-            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
-            fig.subplots_adjust(hspace=0.4)
-
-            for i in range(np.shape(wav)[0]):
-                if wav[i,0] == 0: continue
-                low, high = np.nanpercentile(flux3[i,:],[0.1,99.9])
-                flux3[i,:][(flux3[i,:]>high) | (flux3[i,:]<low)] = np.nan
-                j = int(i/n)
-                rgba = cm((i % n)/n*1.)
-                #print(j,rgba)
-                ax[j].plot(wav3[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
-
-            for j in range(int(np.shape(flux3)[0]/n)):
-                low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
-                #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux3[j*n:(j+1)*n,:])-high*0.1, high*1.2)
-
-            low, high = np.nanpercentile(flux3,[0.1,99.9])
-
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI3',fontsize = 20)
-            ax[0].set_title('L1 Spectrum SCI3 ' +exposure_name,fontsize = 20)
-            plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci3_zoomable.png',dpi = 200)
-            plt.close()
-
-            n = int(self.config['L1']['n_per_row']) #number of orders per panel
-            cm = plt.cm.get_cmap('rainbow')
-
-            from matplotlib import gridspec
-            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
-
-            plt.rcParams.update({'font.size': 15})
-            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
-
-            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
-            fig.subplots_adjust(hspace=0.4)
-
-            for i in range(np.shape(wav)[0]):
-                if wav[i,0] == 0: continue
-                low, high = np.nanpercentile(flux_cal[i,:],[0.1,99.9])
-                flux_cal[i,:][(flux_cal[i,:]>high) | (flux_cal[i,:]<low)] = np.nan
-                j = int(i/n)
-                rgba = cm((i % n)/n*1.)
-                #print(j,rgba)
-                ax[j].plot(wav_cal[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
-
-            for j in range(int(np.shape(flux_cal)[0]/n)):
-                low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
-                #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux_cal[j*n:(j+1)*n,:])-high*0.1, high*1.2)
-
-            low, high = np.nanpercentile(flux_cal,[0.1,99.9])
-
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in CAL',fontsize = 20)
-            ax[0].set_title('L1 Spectrum CAL ' +exposure_name,fontsize = 20)
-            plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_cal_zoomable.png',dpi = 200)
-            plt.close()
-
-            n = int(self.config['L1']['n_per_row']) #number of orders per panel
-            cm = plt.cm.get_cmap('rainbow')
-
-            from matplotlib import gridspec
-            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
-
-            plt.rcParams.update({'font.size': 15})
-            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
-
-            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
-            fig.subplots_adjust(hspace=0.4)
-
-            for i in range(np.shape(wav)[0]):
-                if wav[i,0] == 0: continue
-                low, high = np.nanpercentile(flux_sky[i,:],[0.1,99.9])
-                flux_sky[i,:][(flux_sky[i,:]>high) | (flux_sky[i,:]<low)] = np.nan
-                j = int(i/n)
-                rgba = cm((i % n)/n*1.)
-                #print(j,rgba)
-                ax[j].plot(wav_sky[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
-
-            for j in range(int(np.shape(flux_sky)[0]/n)):
-                low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
-                #print(j,high*1.5)
-                ax[j].set_ylim(np.nanmin(flux_sky[j*n:(j+1)*n,:])-high*0.1, high*1.2)
-
-            low, high = np.nanpercentile(flux_sky,[0.1,99.9])
-
-            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SKY',fontsize = 20)
-            ax[0].set_title('L1 Spectrum SKY ' +exposure_name,fontsize = 20)
-            plt.xlabel('Wavelength (Ang)',fontsize = 20)
-            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
-            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sky_zoomable.png',dpi = 200)
-            plt.close()
+# these plots are now generated
+#            wav_green = np.array(hdulist['GREEN_SCI_WAVE1'].data,'d')
+#            wav_red = np.array(hdulist['RED_SCI_WAVE1'].data,'d')
+#            flux_green = np.array(hdulist['GREEN_SCI_FLUX1'].data,'d')
+#            flux_red = np.array(hdulist['RED_SCI_FLUX1'].data,'d')#hdulist[40].data
+#
+#            wav_green2 = np.array(hdulist['GREEN_SCI_WAVE2'].data,'d')
+#            wav_red2 = np.array(hdulist['RED_SCI_WAVE2'].data,'d')
+#            flux_green2 = np.array(hdulist['GREEN_SCI_FLUX2'].data,'d')
+#            flux_red2 = np.array(hdulist['RED_SCI_FLUX2'].data,'d')#hdulist[40].data
+#
+#            wav_green3 = np.array(hdulist['GREEN_SCI_WAVE3'].data,'d')
+#            wav_red3 = np.array(hdulist['RED_SCI_WAVE3'].data,'d')
+#            flux_green3 = np.array(hdulist['GREEN_SCI_FLUX3'].data,'d')
+#            flux_red3 = np.array(hdulist['RED_SCI_FLUX3'].data,'d')#hdulist[40].data
+#
+#            wav_green_cal = np.array(hdulist['GREEN_CAL_WAVE'].data,'d')
+#            wav_red_cal = np.array(hdulist['RED_CAL_WAVE'].data,'d')
+#            flux_green_cal = np.array(hdulist['GREEN_CAL_FLUX'].data,'d')
+#            flux_red_cal = np.array(hdulist['RED_CAL_FLUX'].data,'d')#hdulist[40].data
+#
+#            wav_green_sky = np.array(hdulist['GREEN_SKY_WAVE'].data,'d')
+#            wav_red_sky = np.array(hdulist['RED_SKY_WAVE'].data,'d')
+#            flux_green_sky = np.array(hdulist['GREEN_SKY_FLUX'].data,'d')
+#            flux_red_sky = np.array(hdulist['RED_SKY_FLUX'].data,'d')#hdulist[40].data
+#
+#
+#            if np.shape(flux_green)==(0,):flux_green = wav_green*0.#place holder when there is no data
+#            if np.shape(flux_red)==(0,): flux_red = wav_red*0.#place holder when there is no data
+#            if np.shape(flux_green2)==(0,):flux_green2 = wav_green*0.#place holder when there is no data
+#            if np.shape(flux_red2)==(0,): flux_red2 = wav_red*0.#place holder when there is no data
+#            if np.shape(flux_green3)==(0,):flux_green3 = wav_green*0.#place holder when there is no data
+#            if np.shape(flux_red3)==(0,): flux_red3 = wav_red*0.#place holder when there is no data
+#            if np.shape(flux_green_cal)==(0,):flux_green_cal = wav_green*0.#place holder when there is no data
+#            if np.shape(flux_red_cal)==(0,): flux_red_cal = wav_red*0.#place holder when there is no data
+#            if np.shape(flux_green_sky)==(0,):flux_green_sky = wav_green*0.#place holder when there is no data
+#            if np.shape(flux_red_sky)==(0,): flux_red_sky = wav_red*0.#place holder when there is no data
+#
+#            #print(np.shape(flux_green),np.shape(flux_green)==(0,),np.shape(flux_red),np.shape(flux_green))
+#
+#            wav = np.concatenate((wav_green,wav_red),axis = 0)
+#            wav2 = np.concatenate((wav_green2,wav_red2),axis = 0)
+#            wav3 = np.concatenate((wav_green3,wav_red3),axis = 0)
+#            wav_cal = np.concatenate((wav_green_cal,wav_red_cal),axis = 0)
+#            wav_sky = np.concatenate((wav_green_sky,wav_red_sky),axis = 0)
+#            #print('test wave',np.shape(wav))
+#            #print(hdulist1.info())
+#
+#            flux = np.concatenate((flux_green,flux_red),axis = 0)
+#            flux2 = np.concatenate((flux_green2,flux_red2),axis = 0)
+#            flux3 = np.concatenate((flux_green3,flux_red3),axis = 0)
+#            flux_cal = np.concatenate((flux_green_cal,flux_red_cal),axis = 0)
+#            flux_sky = np.concatenate((flux_green_sky,flux_red_sky),axis = 0)
+#
+#            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+#            cm = plt.cm.get_cmap('rainbow')
+#
+#            from matplotlib import gridspec
+#            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+#
+#            plt.rcParams.update({'font.size': 15})
+#            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+#
+#            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+#            fig.subplots_adjust(hspace=0.4)
+#
+#            for i in range(np.shape(wav)[0]):
+#                if wav[i,0] == 0: continue
+#                low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
+#                flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
+#                j = int(i/n)
+#                rgba = cm((i % n)/n*1.)
+#                #print(j,rgba)
+#                ax[j].plot(wav[i,:],flux[i,:], linewidth =  0.3,color = rgba)
+#
+#            for j in range(int(np.shape(flux)[0]/n)):
+#                low, high = np.nanpercentile(flux[j*n:(j+1)*n,:],[.1,99.9])
+#                #print(j,high*1.5)
+#                ax[j].set_ylim(np.nanmin(flux[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+#
+#            low, high = np.nanpercentile(flux,[0.1,99.9])
+#
+#            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI1',fontsize = 20)
+#            ax[0].set_title('L1 Spectrum SCI1 ' +exposure_name,fontsize = 20)
+#            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+#            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+#            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci1_zoomable.png',dpi = 200)
+#            plt.close()
+#
+#            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+#            cm = plt.cm.get_cmap('rainbow')
+#
+#            from matplotlib import gridspec
+#            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+#
+#            plt.rcParams.update({'font.size': 15})
+#            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+#
+#            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+#            fig.subplots_adjust(hspace=0.4)
+#
+#            for i in range(np.shape(wav)[0]):
+#                if wav[i,0] == 0: continue
+#                low, high = np.nanpercentile(flux2[i,:],[0.1,99.9])
+#                flux2[i,:][(flux2[i,:]>high) | (flux2[i,:]<low)] = np.nan
+#                j = int(i/n)
+#                rgba = cm((i % n)/n*1.)
+#                #print(j,rgba)
+#                ax[j].plot(wav2[i,:],flux2[i,:], linewidth =  0.3,color = rgba)
+#
+#            for j in range(int(np.shape(flux2)[0]/n)):
+#                low, high = np.nanpercentile(flux2[j*n:(j+1)*n,:],[.1,99.9])
+#                #print(j,high*1.5)
+#                ax[j].set_ylim(np.nanmin(flux2[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+#
+#            low, high = np.nanpercentile(flux2,[0.1,99.9])
+#
+#            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI2',fontsize = 20)
+#            ax[0].set_title('L1 Spectrum SCI2 ' +exposure_name,fontsize = 20)
+#            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+#            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+#            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci2_zoomable.png',dpi = 200)
+#            plt.close()
+#
+#            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+#            cm = plt.cm.get_cmap('rainbow')
+#
+#            from matplotlib import gridspec
+#            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+#
+#            plt.rcParams.update({'font.size': 15})
+#            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+#
+#            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+#            fig.subplots_adjust(hspace=0.4)
+#
+#            for i in range(np.shape(wav)[0]):
+#                if wav[i,0] == 0: continue
+#                low, high = np.nanpercentile(flux3[i,:],[0.1,99.9])
+#                flux3[i,:][(flux3[i,:]>high) | (flux3[i,:]<low)] = np.nan
+#                j = int(i/n)
+#                rgba = cm((i % n)/n*1.)
+#                #print(j,rgba)
+#                ax[j].plot(wav3[i,:],flux3[i,:], linewidth =  0.3,color = rgba)
+#
+#            for j in range(int(np.shape(flux3)[0]/n)):
+#                low, high = np.nanpercentile(flux3[j*n:(j+1)*n,:],[.1,99.9])
+#                #print(j,high*1.5)
+#                ax[j].set_ylim(np.nanmin(flux3[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+#
+#            low, high = np.nanpercentile(flux3,[0.1,99.9])
+#
+#            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SCI3',fontsize = 20)
+#            ax[0].set_title('L1 Spectrum SCI3 ' +exposure_name,fontsize = 20)
+#            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+#            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+#            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sci3_zoomable.png',dpi = 200)
+#            plt.close()
+#
+#            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+#            cm = plt.cm.get_cmap('rainbow')
+#
+#            from matplotlib import gridspec
+#            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+#
+#            plt.rcParams.update({'font.size': 15})
+#            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+#
+#            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+#            fig.subplots_adjust(hspace=0.4)
+#
+#            for i in range(np.shape(wav)[0]):
+#                if wav[i,0] == 0: continue
+#                low, high = np.nanpercentile(flux_cal[i,:],[0.1,99.9])
+#                flux_cal[i,:][(flux_cal[i,:]>high) | (flux_cal[i,:]<low)] = np.nan
+#                j = int(i/n)
+#                rgba = cm((i % n)/n*1.)
+#                #print(j,rgba)
+#                ax[j].plot(wav_cal[i,:],flux_cal[i,:], linewidth =  0.3,color = rgba)
+#
+#            for j in range(int(np.shape(flux_cal)[0]/n)):
+#                low, high = np.nanpercentile(flux_cal[j*n:(j+1)*n,:],[.1,99.9])
+#                #print(j,high*1.5)
+#                ax[j].set_ylim(np.nanmin(flux_cal[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+#
+#            low, high = np.nanpercentile(flux_cal,[0.1,99.9])
+#
+#            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in CAL',fontsize = 20)
+#            ax[0].set_title('L1 Spectrum CAL ' +exposure_name,fontsize = 20)
+#            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+#            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+#            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_cal_zoomable.png',dpi = 200)
+#            plt.close()
+#
+#            n = int(self.config['L1']['n_per_row']) #number of orders per panel
+#            cm = plt.cm.get_cmap('rainbow')
+#
+#            from matplotlib import gridspec
+#            gs = gridspec.GridSpec(n,1 , height_ratios=np.ones(n))
+#
+#            plt.rcParams.update({'font.size': 15})
+#            fig, ax = plt.subplots(int(np.shape(wav)[0]/n)+1,1, sharey=False,figsize=(24,16))
+#
+#            plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+#            fig.subplots_adjust(hspace=0.4)
+#
+#            for i in range(np.shape(wav)[0]):
+#                if wav[i,0] == 0: continue
+#                low, high = np.nanpercentile(flux_sky[i,:],[0.1,99.9])
+#                flux_sky[i,:][(flux_sky[i,:]>high) | (flux_sky[i,:]<low)] = np.nan
+#                j = int(i/n)
+#                rgba = cm((i % n)/n*1.)
+#                #print(j,rgba)
+#                ax[j].plot(wav_sky[i,:],flux_sky[i,:], linewidth =  0.3,color = rgba)
+#
+#            for j in range(int(np.shape(flux_sky)[0]/n)):
+#                low, high = np.nanpercentile(flux_sky[j*n:(j+1)*n,:],[.1,99.9])
+#                #print(j,high*1.5)
+#                ax[j].set_ylim(np.nanmin(flux_sky[j*n:(j+1)*n,:])-high*0.1, high*1.2)
+#
+#            low, high = np.nanpercentile(flux_sky,[0.1,99.9])
+#
+#            ax[int(np.shape(wav)[0]/n/2)].set_ylabel('Counts (e-) in SKY',fontsize = 20)
+#            ax[0].set_title('L1 Spectrum SKY ' +exposure_name,fontsize = 20)
+#            plt.xlabel('Wavelength (Ang)',fontsize = 20)
+#            #plt.savefig(output_dir+'fig/'+exposure_name+'_L1_spectrum.png')
+#            plt.savefig(output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_sky_zoomable.png',dpi = 200)
+#            plt.close()
 
             #make a comparison plot of the three science fibres
             plt.close()
