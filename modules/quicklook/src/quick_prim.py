@@ -58,6 +58,8 @@ class Quicklook(KPF0_Primitive):
                 self.alg.qlp_2D(self.input_file, self.output_dir)
             elif self.qlp_level == 'L1':
                 self.alg.qlp_L1(self.input_file, self.output_dir)
+            elif self.qlp_level == 'L2':
+                self.alg.qlp_L2(self.input_file, self.output_dir)
         except Exception as e:
             # Allow recipe to continue if QLP fails
             self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")

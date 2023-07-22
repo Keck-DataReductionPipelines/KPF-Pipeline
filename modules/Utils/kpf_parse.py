@@ -257,3 +257,46 @@ def get_data_products_L1(L1):
         if L1['RECEIPT'].size > 1:
             data_products.append('Receipt')
     return data_products
+
+
+def get_data_products_L2(L2):
+    """
+    Returns a list of data products available in a L2 file, which are:
+        Green CCF, Red CCF, Green CCF RW, Red CCF RW, RV, Activity, 
+        Telemetry, Config, Receipt
+
+    Args:
+        L1 - a KPF L2 object 
+
+    Returns:
+        data_products in a L2 file
+    """
+    data_products = []
+    if hasattr(L2, 'GREEN_CCF'):
+        if L2['GREEN_CCF'].size > 1:
+            data_products.append('Green')
+    if hasattr(L2, 'GREEN_CCF_RW'):
+        if L2['GREEN_CCF_RW'].size > 1:
+            data_products.append('Green RW')
+    if hasattr(L2, 'RED_CCF'):
+        if L2['RED_CCF'].size > 1:
+            data_products.append('Red')
+    if hasattr(L2, 'RED_CCF_RW'):
+        if L2['RED_CCF_RW'].size > 1:
+            data_products.append('Red RW')
+    if hasattr(L2, 'RV'):
+        if L2['RV'].size > 1:
+            data_products.append('RV')
+    if hasattr(L2, 'ACTIVITY'):
+        if L2['ACTIVITY'].size > 1:
+            data_products.append('Activity')
+    if hasattr(L2, 'TELEMETRY'):
+        if L2['TELEMETRY'].size > 1:
+            data_products.append('Telemetry')
+    if hasattr(L2, 'CONFIG'):
+        if L2['CONFIG'].size > 1:
+            data_products.append('Config')
+    if hasattr(L2, 'RECEIPT'):
+        if L2['RECEIPT'].size > 1:
+            data_products.append('Receipt')
+    return data_products

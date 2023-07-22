@@ -1,7 +1,7 @@
 from modules.quicklook.src.quick_prim import Quicklook
 
 qlp_level = 'L2'
-path_to_files = config.ARGUMENT.path_to_lone
+path_to_files = config.ARGUMENT.path_to_ltwo
 #files = path_to_files + '*' + '_L2.fits'
 files = path_to_files + 'KP.20230711.54301.42_L2.fits'
 
