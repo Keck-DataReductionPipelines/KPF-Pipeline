@@ -290,7 +290,7 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
-        # Make L1 spectra 
+        # Make L1 spectra plots
         try:
             for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
                 filename = savedir + self.ObsID + '_L1_spectrum_' + orderlet + '_zoomable.png'
@@ -299,6 +299,32 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make L1 spectra plots (single order)
+        if ('Green' in self.data_products) or ('Red' in self.data_products):
+            try:
+                myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                for chip in chips:
+                    if chip == 'green': order = 11
+                    if chip == 'red': order = 11
+                    filename = savedir + self.ObsID + '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                       orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                                       fig_path=filename, show_plot=False)
+                    filename = savedir + self.ObsID + '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                       orderlet=['SKY'], 
+                                                       fig_path=filename, show_plot=False)
+                    filename = savedir + self.ObsID + '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                       orderlet=['CAL'], 
+                                                       fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
     def qlp_L2(self, kpf2, output_dir):
@@ -341,6 +367,7 @@ class QuicklookAlg:
 
             except Exception as e:
                 self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
+
 
 ###### Below is the old QLP code, partially deconstructed.                #######
 ###### There are some notes about elements to put in to analysis modules. #######

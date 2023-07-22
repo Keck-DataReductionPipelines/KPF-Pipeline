@@ -278,8 +278,8 @@ class AnalyzeL1:
         cm = plt.cm.get_cmap('rainbow')
         gs = gridspec.GridSpec(n_orders_per_panel, 1 , height_ratios=np.ones(n_orders_per_panel))
         fig, ax = plt.subplots(int(np.shape(wav)[0]/n_orders_per_panel)+1,1, sharey=False, 
-                               figsize=(10,8), tight_layout=True)
-        plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, hspace=0.0) # this doesn't work for unknown reasons
+                               figsize=(20,16), tight_layout=True)
+        plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, hspace=0.0) 
 
         # Iterate over spectral orders
         for i in range(np.shape(wav)[0]):
@@ -288,48 +288,56 @@ class AnalyzeL1:
             flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
             j = int(i/n_orders_per_panel)
             rgba = cm((i % n_orders_per_panel)/n_orders_per_panel*1.)
-            ax[j].plot(wav[i,:],flux[i,:], linewidth = 0.3, color = rgba)
-            ax[j].xaxis.set_tick_params(labelsize=7)
-            ax[j].yaxis.set_tick_params(labelsize=7)
+            ax[j].plot(wav[i,:], flux[i,:], linewidth = 0.3, color = rgba)
+            left  = min((wav[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:]).flatten())
+            right = max((wav[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:]).flatten())
+            low, high = np.nanpercentile(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:],[0.1,99.9])
+            ax[j].set_xlim(left, right)
+            ax[j].set_ylim(np.nanmin(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:])-high*0.05, high*1.15)
+            ax[j].xaxis.set_tick_params(labelsize=16)
+            ax[j].yaxis.set_tick_params(labelsize=16)
             ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
 
         for j in range(int(np.shape(flux)[0]/n_orders_per_panel)):
+            left  = min((wav[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:]).flatten())
+            right = max((wav[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:]).flatten())
             low, high = np.nanpercentile(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:],[0.1,99.9])
-            ax[j].set_ylim(np.nanmin(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:])-high*0.1, high*1.2)
-            ax[j].xaxis.set_tick_params(labelsize=7)
-            ax[j].yaxis.set_tick_params(labelsize=7)
+            ax[j].set_xlim(left, right)
+            ax[j].set_ylim(np.nanmin(flux[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:])-high*0.05, high*1.15)
+            ax[j].xaxis.set_tick_params(labelsize=16)
+            ax[j].yaxis.set_tick_params(labelsize=16)
             ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
 
         # Add axis labels
         low, high = np.nanpercentile(flux,[0.1,99.9])
-        ax[int(np.shape(wav)[0]/n_orders_per_panel/2)].set_ylabel('Counts (e-) in ' + orderlet.upper(),fontsize = 14)
-        plt.xlabel('Wavelength (Ang)',fontsize = 14)
+        ax[int(np.shape(wav)[0]/n_orders_per_panel/2)].set_ylabel('Counts (e-) in ' + orderlet.upper(),fontsize = 28)
+        plt.xlabel('Wavelength (Ang)',fontsize = 28)
 
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
+        ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=28)
         plt.tight_layout()
 
         # Display the plot
         if fig_path != None:
-            plt.savefig(fig_path, dpi=400, facecolor='w')
+            plt.savefig(fig_path, dpi=288, facecolor='w')
         if show_plot == True:
             plt.show()
         plt.close()
         
 
-    def plot_1D_spectrum_single_order(self, chip=None, fig_path=None, show_plot=False):
+    def plot_1D_spectrum_single_order(self, chip=None, order=11, ylog=False, 
+                                            orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                            fig_path=None, show_plot=False):
 
         """
-
-        TO-DO: MOVE THE PLOTTING CODE FROM THE QLP HERE.
-               THIS IS A PLACEHOLDER.
 
         Generate a plot of a single order of the L1 spectrum showing all orderlets.
 
         Args:
             chip (string) - "green" or "red"
+            order (int) - spectral order to plot
             fig_path (string) - set to the path for the file
                 to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -339,7 +347,62 @@ class AnalyzeL1:
             (e.g., in a Jupyter Notebook).
 
         """
+        # Set parameters based on the chip selected
+        if chip == 'green' or chip == 'red':
+            if chip == 'green':
+                CHIP = 'GREEN'
+                chip_title = 'Green'
+            if chip == 'red':
+                CHIP = 'RED'
+                chip_title = 'Red'
+        else:
+            self.logger.debug('chip not supplied.  Exiting plot_1D_spectrum_single_order')
+            print('chip not supplied.  Exiting plot_1D_spectrum_single_order')
+            return
+        orderlet_lowercase = [o.lower() for o in orderlet]
+        if len(orderlet) == 1:
+            orderlet_label = orderlet[0].upper()
+        else: 
+            orderlet_uppercase = [o.upper() for o in orderlet]
+            orderlet_label = '/'.join(orderlet_uppercase)
 
+        # Define wavelength and flux arrays
+        wav_sci1  = np.array(self.L1[CHIP + '_SCI_WAVE1'].data,'d')[order,:].flatten()
+        flux_sci1 = np.array(self.L1[CHIP + '_SCI_FLUX1'].data,'d')[order,:].flatten()
+        wav_sci2  = np.array(self.L1[CHIP + '_SCI_WAVE2'].data,'d')[order,:].flatten()
+        flux_sci2 = np.array(self.L1[CHIP + '_SCI_FLUX2'].data,'d')[order,:].flatten()
+        wav_sci3  = np.array(self.L1[CHIP + '_SCI_WAVE3'].data,'d')[order,:].flatten()
+        flux_sci3 = np.array(self.L1[CHIP + '_SCI_FLUX3'].data,'d')[order,:].flatten()
+        wav_sky   = np.array(self.L1[CHIP + '_SKY_WAVE'].data,'d')[order,:].flatten()
+        flux_sky  = np.array(self.L1[CHIP + '_SKY_FLUX'].data,'d')[order,:].flatten()
+        wav_cal   = np.array(self.L1[CHIP + '_CAL_WAVE'].data,'d')[order,:].flatten()
+        flux_cal  = np.array(self.L1[CHIP + '_CAL_FLUX'].data,'d')[order,:].flatten()
+
+        plt.figure(figsize=(12, 4), tight_layout=True)
+        if 'sci1' in orderlet_lowercase:
+            plt.plot(wav_sci1, flux_sci1, linewidth=0.5, label='SCI1')
+        if 'sci2' in orderlet_lowercase:
+            plt.plot(wav_sci2, flux_sci2, linewidth=0.5, label='SCI2')
+        if 'sci3' in orderlet_lowercase:
+            plt.plot(wav_sci3, flux_sci3, linewidth=0.5, label='SCI3')
+        if 'sky' in orderlet_lowercase:
+            plt.plot(wav_sci3, flux_sky,  linewidth=0.5, label='SKY')
+        if 'cal' in orderlet_lowercase:
+            plt.plot(wav_sci3, flux_cal,  linewidth=0.5, label='CAL')
+        plt.xlim(min(wav_sci1), max(wav_sci1))
+        plt.title('L1 (' + orderlet_label + ') - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
+        plt.xlabel('Wavelength (Ang)', fontsize=14)
+        plt.ylabel('Counts (e-)', fontsize=14)
+        if ylog: plt.yscale('log')
+        plt.grid(True)
+        plt.legend()
+
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=400, facecolor='w')
+        if show_plot == True:
+            plt.show()
+        plt.close()
 
     def measure_orderlet_flux_ratio(self):
 
