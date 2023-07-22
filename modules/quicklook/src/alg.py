@@ -491,49 +491,6 @@ class QuicklookAlg:
         #print('2d header',hdr,hdr['IMTYPE'],hdr['CAL-OBJ'],hdr['SCI-OBJ'],hdr['SKY-OBJ'])
 
 
-        #### Exposure Meter ####
-        if 'EXPMETER_SCI' in hdulist and len(hdulist['EXPMETER_SCI'].data)>=1:
-            try: 
-                print('Working QLP for on Exposure Meter data')
-                if not os.path.exists(output_dir+'/'+exposure_name+'/EM'):
-                    os.makedirs(output_dir+'/'+exposure_name+'/EM')
-                my_EM = AnalyzeEM(L0)
-                my_EM.plot_EM_time_series(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_time_series_zoomable.png')
-                my_EM.plot_EM_spectrum(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_spectrum_zoomable.png')
-            except:
-                print("Processing QLP for Exposure Meter failed")
-
-        #### Guider ####
-        if (('GUIDER_AVG' in hdulist) and len(hdulist['GUIDER_AVG'].data)>=1) or (('guider_avg' in hdulist) and len(hdulist['guider_avg'].data)>=1):
-            print('Working QLP for Guider data')
-            try: 
-                if not os.path.exists(output_dir+'/'+exposure_name+'/Guider'):
-                    os.makedirs(output_dir+'/'+exposure_name+'/Guider')
-                my_Guider = AnalyzeGuider(L0)
-                my_Guider.measure_seeing()
-                my_Guider.plot_guider_image(            fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_image_zoomable.png')
-                my_Guider.plot_guider_fwhm_time_series( fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_fwhm_time_series_zoomable.png')
-                my_Guider.plot_guider_error_time_series(fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_errors_time_series_zoomable.png')
-                my_Guider.plot_guider_flux_time_series( fig_path=output_dir+'/'+exposure_name+'/Guider/'+exposure_name+'_guider_flux_time_series_zoomable.png')
-            except:
-                print("Processing QLP for Guider image failed")
-
-
-        #### 2D ####
-        
-        #if 2D_exists and len(hdulist['EXPMETER_SCI'].data)>=1:
-        if True:
-            try: 
-                print('Working QLP for on Exposure Meter data')
-                if not os.path.exists(output_dir+'/'+exposure_name+'/EM'):
-                    os.makedirs(output_dir+'/'+exposure_name+'/EM')
-                my_EM = AnalyzeEM(L0)
-                my_EM.plot_EM_time_series(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_time_series_zoomable.png')
-                my_EM.plot_EM_spectrum(fig_path=output_dir+'/'+exposure_name+'/EM/'+exposure_name+'_em_spectrum_zoomable.png')
-            except:
-                print("Processing QLP for Exposure Meter failed")
-
-
         master_file = 'None'
         if version == 'Solar':
             master_file = self.config['2D']['master_solar']
