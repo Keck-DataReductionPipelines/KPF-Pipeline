@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -29,7 +30,7 @@ class AnalyzeGuider:
         self.logger.info('Initiating AnanalyzeGuider object.')
         self.L0 = L0
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
-        
+
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
         header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
         #header_guider_obj  = HeaderParse(L0, 'guider_avg')
@@ -199,7 +200,9 @@ class AnalyzeGuider:
             
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=288, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -262,7 +265,9 @@ class AnalyzeGuider:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -301,7 +306,9 @@ class AnalyzeGuider:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -340,7 +347,9 @@ class AnalyzeGuider:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()

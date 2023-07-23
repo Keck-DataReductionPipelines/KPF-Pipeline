@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import Table
@@ -119,7 +120,9 @@ class AnalyzeEM:
         
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=200, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -186,7 +189,9 @@ class AnalyzeEM:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=200, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()

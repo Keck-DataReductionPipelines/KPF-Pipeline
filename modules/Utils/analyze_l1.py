@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
@@ -218,7 +219,9 @@ class AnalyzeL1:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -321,7 +324,9 @@ class AnalyzeL1:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=288, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -395,7 +400,9 @@ class AnalyzeL1:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=400, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -579,7 +586,9 @@ class AnalyzeL1:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=200, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -635,9 +644,9 @@ class AnalyzeL1:
         o1 = 10
         o2 = 20
         o3 = 30
-        imin1 = 1000; imax1 = 2500
-        imin2 = 1000; imax2 = 2500
-        imin3 = 1000; imax3 = 2500
+        imin1 = 1000; imax1 = 3000
+        imin2 = 1000; imax2 = 3000
+        imin3 = 1000; imax3 = 3000
         
         # Row 0
         o=o1; imin = imin1; imax = imax1
@@ -704,7 +713,9 @@ class AnalyzeL1:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=400, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
