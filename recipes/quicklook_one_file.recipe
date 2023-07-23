@@ -5,7 +5,6 @@ from modules.quicklook.src.quick_prim import Quicklook
 #datecode = get_datecode(config.ARGUMENT.obsid)
 
 output_dir= '/data/QLP/' + config.ARGUMENT.datecode + '/'
-#files = '/data/L0/' + config.ARGUMENT.datecode + '/' + '*.fits'
 
 if config.ARGUMENT.do_l0:
     for input_file in find_files('/data/L0/' + config.ARGUMENT.datecode + '/' + config.ARGUMENT.obsid + '.fits'):
