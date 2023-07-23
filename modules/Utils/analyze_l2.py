@@ -201,4 +201,4 @@ class AnalyzeL2:
             plt.savefig(fig_path, dpi=300, facecolor='w')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')

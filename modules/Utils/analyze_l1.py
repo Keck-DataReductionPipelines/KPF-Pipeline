@@ -224,7 +224,7 @@ class AnalyzeL1:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
     def plot_L1_spectrum(self, orderlet=None, fig_path=None, show_plot=False):
         """
@@ -329,7 +329,7 @@ class AnalyzeL1:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
         
 
     def plot_1D_spectrum_single_order(self, chip=None, order=11, ylog=False, 
@@ -405,7 +405,7 @@ class AnalyzeL1:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
     def my_1d_interp(self, wav, flux, newwav):
         """
@@ -591,8 +591,7 @@ class AnalyzeL1:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
-
+        plt.close('all')
 
 
     def plot_orderlet_flux_ratios_grid(self, chip=None, fig_path=None, show_plot=False):
@@ -718,5 +717,5 @@ class AnalyzeL1:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 

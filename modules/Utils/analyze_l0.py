@@ -138,6 +138,4 @@ class AnalyzeL0:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
-
-
+        plt.close('all')

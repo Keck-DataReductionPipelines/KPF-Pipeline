@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -129,10 +130,12 @@ class AnalyzeHK:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=500, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
     def plot_HK_spectrum_1D(self, fig_path=None, show_plot=False):
 
@@ -176,8 +179,10 @@ class AnalyzeHK:
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=200, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 

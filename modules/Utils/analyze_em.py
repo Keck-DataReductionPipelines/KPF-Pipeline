@@ -125,7 +125,7 @@ class AnalyzeEM:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
     def plot_EM_spectrum(self, fig_path=None, show_plot=False):
 
@@ -194,4 +194,4 @@ class AnalyzeEM:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')

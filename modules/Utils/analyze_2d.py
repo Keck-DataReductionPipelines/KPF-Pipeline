@@ -125,7 +125,6 @@ class Analyze2D:
             self.green_dark_current_regions = reg
         if chip == 'red':
             self.red_dark_current_regions = reg
-        self.logger.info('GOT HERE')
 
 
     def plot_2D_image(self, chip=None, overplot_dark_current=False, 
@@ -248,7 +247,7 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
 
     def plot_2D_image_zoom(self, chip=None, fig_path=None, show_plot=False, 
@@ -309,7 +308,7 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
 
     def plot_2D_image_zoom_3x3(self, chip=None, fig_path=None, show_plot=False):
@@ -398,7 +397,7 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
 
     def plot_bias_histogram(self, chip=None, fig_path=None, show_plot=False):
@@ -514,7 +513,7 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
         
     def plot_bias_histogram2(self, chip=None, fig_path=None, show_plot=False):
@@ -595,7 +594,7 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
 
     
     def plot_2D_image_histogram(self, chip=None, fig_path=None, show_plot=False, 
@@ -667,7 +666,7 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
         
         
     def plot_2D_column_cut(self, chip=None, fig_path=None, show_plot=False,
@@ -758,5 +757,5 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
         
