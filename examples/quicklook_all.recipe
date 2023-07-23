@@ -3,8 +3,7 @@ from modules.quicklook.src.quick_prim import Quicklook
 qlp_level = 'L0'
 path_to_files = config.ARGUMENT.path_to_lzero
 #files = path_to_files + '*' + '.fits'
-files = path_to_files + 'KP.20230711.54301.42.fits'
-#files = path_to_files + 'KP.20230411.41552.71.fits'
+files = path_to_files + config.ARGUMENT.obsid
 
 output_dir = config.ARGUMENT.output_dir
 for input_file in find_files(files):
