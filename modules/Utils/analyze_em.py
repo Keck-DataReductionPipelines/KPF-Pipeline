@@ -178,8 +178,8 @@ class AnalyzeEM:
         plt.title('Exposure Meter Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.yticks(fontsize=14, color='brown')
         ax1.set_xlabel("Wavelength (nm)",fontsize=14)
-        ax1.set_ylabel("SCI Exposure Meter Flux (e-/nm/s)",fontsize=14)
-        ax2.set_ylabel("SKY Exposure Meter Flux (e-/nm/s)",fontsize=14, color='brown')
+        ax1.set_ylabel("Exposure Meter SCI Flux (e-/nm/s)",fontsize=14)
+        ax2.set_ylabel("Exposure Meter SKY Flux (e-/nm/s)",fontsize=14, color='brown')
         lns = lns1+lns2
         labs = [l.get_label() for l in lns]
         ax1.legend(lns, labs, loc=0,fontsize=14)
