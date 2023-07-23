@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from modules.Utils.kpf_parse import HeaderParse
@@ -112,7 +113,6 @@ class AnalyzeL0:
             return
 
         plt.grid(False)
-        plt.figure(tight_layout=True)
         plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(image, cmap='viridis', origin='lower',
                    vmin=np.percentile(image,1),
@@ -133,7 +133,11 @@ class AnalyzeL0:
 
         # Display the plot
         if fig_path != None:
-            plt.savefig(fig_path, dpi=1200, facecolor='w')
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=600, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
+
+

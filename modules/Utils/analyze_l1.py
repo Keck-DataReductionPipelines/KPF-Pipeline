@@ -2,9 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from modules.Utils.kpf_parse import HeaderParse
+from scipy.interpolate import interp1d
+from scipy.interpolate import make_interp_spline
 
 class AnalyzeL1:
-
     """
     Description:
         This class contains functions to analyze L1 spectra (storing them
@@ -43,7 +44,6 @@ class AnalyzeL1:
         
 
     def measure_L1_snr(self, snr_percentile=95):
-
         """
         Compute the signal-to-noise ratio (SNR) for each spectral order and
         orderlet in an L1 spectrum from KPF.
@@ -229,8 +229,7 @@ class AnalyzeL1:
 
         Args:
             orderlet (string) - "CAL", "SCI1", "SCI2", "SCI3", "SKY"
-            fig_path (string) - set to the path for the file
-                to be generated.
+            fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
         Returns:
@@ -315,6 +314,7 @@ class AnalyzeL1:
 
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=28)
         plt.tight_layout()
@@ -330,22 +330,18 @@ class AnalyzeL1:
     def plot_1D_spectrum_single_order(self, chip=None, order=11, ylog=False, 
                                             orderlet=['SCI1', 'SCI2', 'SCI3'], 
                                             fig_path=None, show_plot=False):
-
         """
-
         Generate a plot of a single order of the L1 spectrum showing all orderlets.
 
         Args:
             chip (string) - "green" or "red"
             order (int) - spectral order to plot
-            fig_path (string) - set to the path for the file
-                to be generated.
+            fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment
             (e.g., in a Jupyter Notebook).
-
         """
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -404,12 +400,26 @@ class AnalyzeL1:
             plt.show()
         plt.close()
 
-    def measure_orderlet_flux_ratio(self):
-
+    def my_1d_interp(self, wav, flux, newwav):
         """
-        TO-DO: MOVE THE ANALYSIS CODE FROM THE QLP HERE.
-               THIS IS A PLACEHOLDER.
+        1D interpolation function that uses Bsplines unless the input wavelengths are non-monotonic, 
+        in which case it uses cubic splines.  This function is used in measure_orderlet_flux_ratio().
+        """
+        
+        if np.any(wav[1:] < wav[:-1]):
+            monotonic = False #B-spline is not compatabile with non-monotonic WLS (which we should eliminate anyway)
+        else:
+            monotonic = True
+        if monotonic == True:
+            interpolator = make_interp_spline(wav, flux, k=3)
+            newflux = interpolator(newwav)
+        else:
+             interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
+             newflux = interpolator(newwav)   
+        return newflux
 
+    def measure_orderlet_flux_ratios(self):
+        """
         Compute the flux ratios of SCI2/SCI1, SCI3/SCI1, CAL/SCI1, SKY/SCI1.
 
         Args:
@@ -421,3 +431,281 @@ class AnalyzeL1:
         Returns:
             None
         """
+
+        # Define wavelength and flux arrays
+        self.w_g_sci1 = np.array(self.L1['GREEN_SCI_WAVE1'].data,'d')
+        self.w_r_sci1 = np.array(self.L1['RED_SCI_WAVE1'].data,'d')
+        self.f_g_sci1 = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
+        self.f_r_sci1 = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
+        self.w_g_sci2 = np.array(self.L1['GREEN_SCI_WAVE2'].data,'d')
+        self.w_r_sci2 = np.array(self.L1['RED_SCI_WAVE2'].data,'d')
+        self.f_g_sci2 = np.array(self.L1['GREEN_SCI_FLUX2'].data,'d')
+        self.f_r_sci2 = np.array(self.L1['RED_SCI_FLUX2'].data,'d')
+        self.w_g_sci3 = np.array(self.L1['GREEN_SCI_WAVE3'].data,'d')
+        self.w_r_sci3 = np.array(self.L1['RED_SCI_WAVE3'].data,'d')
+        self.f_g_sci3 = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d')
+        self.f_r_sci3 = np.array(self.L1['RED_SCI_FLUX3'].data,'d')
+        self.w_g_sky  = np.array(self.L1['GREEN_SKY_WAVE'].data,'d')
+        self.w_r_sky  = np.array(self.L1['RED_SKY_WAVE'].data,'d')
+        self.f_g_sky  = np.array(self.L1['GREEN_SKY_FLUX'].data,'d')
+        self.f_r_sky  = np.array(self.L1['RED_SKY_FLUX'].data,'d')
+        self.w_g_cal  = np.array(self.L1['GREEN_CAL_WAVE'].data,'d')
+        self.w_r_cal  = np.array(self.L1['RED_CAL_WAVE'].data,'d')
+        self.f_g_cal  = np.array(self.L1['GREEN_CAL_FLUX'].data,'d')
+        self.f_r_cal  = np.array(self.L1['RED_CAL_FLUX'].data,'d')
+        
+        # Interpolate flux arrays onto SCI2 wavelength scale
+        self.f_g_sci1_int = self.f_g_sci2*0
+        self.f_g_sci3_int = self.f_g_sci2*0
+        self.f_g_sky_int  = self.f_g_sci2*0
+        self.f_g_cal_int  = self.f_g_sci2*0
+        self.f_r_sci1_int = self.f_r_sci2*0
+        self.f_r_sci3_int = self.f_r_sci2*0
+        self.f_r_sky_int  = self.f_r_sci2*0
+        self.f_r_cal_int  = self.f_r_sci2*0
+        for o in np.arange(35):
+            if sum(self.w_g_sky[o,:]) ==0: self.w_g_sky[o,:] = self.w_g_sci2[o,:] # hack to fix bad sky data
+            self.f_g_sci1_int[o,:] = self.my_1d_interp(self.w_g_sci1[o,:], self.f_g_sci1[o,:], self.w_g_sci2[o,:])
+            self.f_g_sci3_int[o,:] = self.my_1d_interp(self.w_g_sci3[o,:], self.f_g_sci3[o,:], self.w_g_sci2[o,:])
+            self.f_g_sky_int[o,:]  = self.my_1d_interp(self.w_g_sky[o,:],  self.f_g_sky[o,:],  self.w_g_sci2[o,:])
+            self.f_g_cal_int[o,:]  = self.my_1d_interp(self.w_g_cal[o,:],  self.f_g_cal[o,:],  self.w_g_sci2[o,:])
+        for o in np.arange(32):
+            if sum(self.w_r_sky[o,:]) ==0: self.w_r_sky[o,:] = self.w_r_sci2[o,:] # hack to fix bad sky data
+            self.f_r_sci1_int[o,:] = self.my_1d_interp(self.w_r_sci1[o,:], self.f_r_sci1[o,:], self.w_r_sci2[o,:])
+            self.f_r_sci3_int[o,:] = self.my_1d_interp(self.w_r_sci3[o,:], self.f_r_sci3[o,:], self.w_r_sci2[o,:])
+            self.f_r_sky_int[o,:]  = self.my_1d_interp(self.w_r_sky[o,:],  self.f_r_sky[o,:],  self.w_r_sci2[o,:])
+            self.f_r_cal_int[o,:]  = self.my_1d_interp(self.w_r_cal[o,:],  self.f_r_cal[o,:],  self.w_r_sci2[o,:])
+        
+        # Define ratios for each order
+        self.ratio_g_sci1_sci2 = np.zeros(35) # for each order median(f_g_sci1(intp on sci2 wav) / f_g_sci2)
+        self.ratio_g_sci3_sci2 = np.zeros(35) # "
+        self.ratio_g_sky_sci2  = np.zeros(35)
+        self.ratio_g_cal_sci2  = np.zeros(35)
+        self.ratio_r_sci1_sci2 = np.zeros(32)
+        self.ratio_r_sci3_sci2 = np.zeros(32)
+        self.ratio_r_sky_sci2  = np.zeros(32)
+        self.ratio_r_cal_sci2  = np.zeros(32)
+        
+        # Define orderlet-to-orderlet ratios over all orders
+        self.f_sci1_flat = np.hstack((self.f_g_sci1.flatten(), self.f_r_sci1.flatten()))
+        self.f_sci2_flat = np.hstack((self.f_g_sci2.flatten(), self.f_r_sci2.flatten()))
+        self.f_sci3_flat = np.hstack((self.f_g_sci3.flatten(), self.f_r_sci3.flatten()))
+        self.f_sky_flat  = np.hstack((self.f_g_sky.flatten(),  self.f_r_sky.flatten()))
+        self.f_cal_flat  = np.hstack((self.f_g_cal.flatten(),  self.f_r_cal.flatten()))
+        self.f_sci2_flat_ind = self.f_sci2_flat != 0
+        self.ratio_sci1_sci2 = np.nanmedian(self.f_sci1_flat[self.f_sci2_flat_ind]/self.f_sci2_flat[self.f_sci2_flat_ind])
+        self.ratio_sci3_sci2 = np.nanmedian(self.f_sci3_flat[self.f_sci2_flat_ind]/self.f_sci2_flat[self.f_sci2_flat_ind])
+        self.ratio_sky_sci2  = np.nanmedian(self.f_sky_flat[self.f_sci2_flat_ind] /self.f_sci2_flat[self.f_sci2_flat_ind])
+        self.ratio_cal_sci2  = np.nanmedian(self.f_cal_flat[self.f_sci2_flat_ind] /self.f_sci2_flat[self.f_sci2_flat_ind])
+        
+        # Compute ratios
+        for o in np.arange(35):
+            ind = (self.f_g_sci2[o,:] != 0) 
+            self.ratio_g_sci1_sci2[o] = np.nanmedian(self.f_g_sci1_int[o,ind]/self.f_g_sci2[o,ind])
+            self.ratio_g_sci3_sci2[o] = np.nanmedian(self.f_g_sci3_int[o,ind]/self.f_g_sci2[o,ind])
+            self.ratio_g_sky_sci2[o]  = np.nanmedian(self.f_g_sky_int[o,ind] /self.f_g_sci2[o,ind])
+            self.ratio_g_cal_sci2[o]  = np.nanmedian(self.f_g_cal_int[o,ind] /self.f_g_sci2[o,ind])
+        for o in np.arange(32):
+            ind = (self.f_r_sci2[o,:] != 0) 
+            self.ratio_r_sci1_sci2[o] = np.nanmedian(self.f_r_sci1_int[o,ind]/self.f_r_sci2[o,ind])
+            self.ratio_r_sci3_sci2[o] = np.nanmedian(self.f_r_sci3_int[o,ind]/self.f_r_sci2[o,ind])
+            self.ratio_r_sky_sci2[o]  = np.nanmedian(self.f_r_sky_int[o,ind] /self.f_r_sci2[o,ind])
+            self.ratio_r_cal_sci2[o]  = np.nanmedian(self.f_r_cal_int[o,ind] /self.f_r_sci2[o,ind])
+            
+        # Define central wavelengths per order
+        self.w_g_order = np.zeros(35) 
+        self.w_r_order = np.zeros(32) 
+        for o in np.arange(35): self.w_g_order[o] = np.nanmedian(self.w_g_sci2[o,:])
+        for o in np.arange(32): self.w_r_order[o] = np.nanmedian(self.w_r_sci2[o,:])
+
+
+    def plot_orderlet_flux_ratios(self, fig_path=None, show_plot=False):
+        """
+        Generate a plot of a orderlet flux ratio as a function of spectral orders.
+
+        Args:
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        fig, axs = plt.subplots(4, 1, figsize=(18, 12), sharex=True, tight_layout=True)
+        axs[0].set_title('L1 Orderlet Flux Ratios: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        
+        # SCI1 / SCI2
+        axs[0].scatter(self.w_g_order, self.ratio_g_sci1_sci2, s=100, facecolors='green', edgecolors='black', zorder=2)
+        axs[0].plot(   self.w_g_order, self.ratio_g_sci1_sci2, 'k-', zorder=1) 
+        axs[0].scatter(self.w_r_order, self.ratio_r_sci1_sci2, s=100, marker='D', facecolors='darkred', edgecolors='black', zorder=2)
+        axs[0].plot(   self.w_r_order, self.ratio_r_sci1_sci2, 'k-', zorder=1) 
+        axs[0].set_ylabel('SCI1 / SCI2', fontsize=18)
+        axs[0].set_xlim(min(self.w_g_order)*0.99, max(self.w_r_order)*1.01)
+        axs[0].axhline(self.ratio_sci1_sci2, color='gray', linestyle='--', label=r'median(SCI1$_\mathrm{interp}$(WAV2) / SCI2(WAV2) = %.5f)' % self.ratio_sci1_sci2)
+        axs[0].legend(fontsize=16, loc='upper right')
+        
+        # SCI3 / SCI2
+        axs[1].scatter(self.w_g_order, self.ratio_g_sci3_sci2, s=100, facecolors='green', edgecolors='black', zorder=2)
+        axs[1].plot(   self.w_g_order, self.ratio_g_sci3_sci2, 'k-', zorder=1) 
+        axs[1].scatter(self.w_r_order, self.ratio_r_sci3_sci2, s=100, marker='D', facecolors='darkred', edgecolors='black', zorder=2)
+        axs[1].plot(   self.w_r_order, self.ratio_r_sci3_sci2, 'k-', zorder=1) 
+        axs[1].set_ylabel('SCI3 / SCI2', fontsize=18)
+        axs[1].axhline(self.ratio_sci3_sci2, color='gray', linestyle='--', label=r'median(SCI3$_\mathrm{interp}$(WAV2) / SCI2(WAV2) = %.5f)' % self.ratio_sci3_sci2)
+        axs[1].legend(fontsize=16, loc='upper right')
+        
+        # SKY / SCI2
+        ind_g = (self.ratio_g_sky_sci2 != 0)
+        ind_r = (self.ratio_r_sky_sci2 != 0)
+        axs[2].scatter(self.w_g_order[ind_g], self.ratio_g_sky_sci2[ind_g], s=100, facecolors='green', edgecolors='black', zorder=2)
+        axs[2].plot(   self.w_g_order[ind_g], self.ratio_g_sky_sci2[ind_g], 'k-', zorder=1) 
+        axs[2].scatter(self.w_r_order[ind_r], self.ratio_r_sky_sci2[ind_r], s=100, marker='D', facecolors='darkred', edgecolors='black', zorder=2)
+        axs[2].plot(   self.w_r_order[ind_r], self.ratio_r_sky_sci2[ind_r], 'k-', zorder=1) 
+        axs[2].set_ylabel('SKY / SCI2', fontsize=18)
+        axs[2].axhline(self.ratio_sky_sci2, color='gray', linestyle='--', label=r'median(SKY$_\mathrm{interp}$(WAV2) / SCI2(WAV2) = %.5f)' % self.ratio_sky_sci2)
+        axs[2].legend(fontsize=16, loc='upper right')
+        
+        # CAL / SCI2
+        axs[3].scatter(self.w_g_order, self.ratio_g_cal_sci2, s=100, facecolors='green', edgecolors='black', zorder=2)
+        axs[3].plot(   self.w_g_order, self.ratio_g_cal_sci2, 'k-', zorder=1) 
+        axs[3].scatter(self.w_r_order, self.ratio_r_cal_sci2, s=100, marker='D', facecolors='darkred', edgecolors='black', zorder=2)
+        axs[3].plot(   self.w_r_order, self.ratio_r_cal_sci2, 'k-', zorder=1) 
+        axs[3].set_ylabel('CAL / SCI2', fontsize=18)
+        axs[3].axhline(self.ratio_cal_sci2, color='gray', linestyle='--', label=r'median(CAL$_\mathrm{interp}$(WAV2) / SCI2(WAV2) = %.5f)' % self.ratio_cal_sci2)
+        axs[3].legend(fontsize=16, loc='upper right')
+        
+        for ax in axs:
+            ax.tick_params(axis='both', which='major', labelsize=14)
+
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=200, facecolor='w')
+        if show_plot == True:
+            plt.show()
+        plt.close()
+
+
+
+    def plot_orderlet_flux_ratios_grid(self, chip=None, fig_path=None, show_plot=False):
+        """
+        Generate a plot of a orderlet flux ratio as a function of spectral orders.
+
+        Args:
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+        
+        # Set parameters based on the chip selected
+        if chip == 'green' or chip == 'red':
+            if chip == 'green':
+                CHIP = 'GREEN'
+                chip_title = 'Green'
+                w_sci2     = self.w_g_sci2
+                f_sci2     = self.f_g_sci2
+                f_sci1_int = self.f_g_sci1_int
+                f_sci3_int = self.f_g_sci3_int
+                f_sky_int  = self.f_g_sky_int
+                f_cal_int  = self.f_g_cal_int
+            if chip == 'red':
+                CHIP = 'RED'
+                chip_title = 'Red'
+                w_sci2     = self.w_r_sci2
+                f_sci2     = self.f_r_sci2
+                f_sci1_int = self.f_r_sci1_int
+                f_sci3_int = self.f_r_sci3_int
+                f_sky_int  = self.f_r_sky_int
+                f_cal_int  = self.f_r_cal_int
+        else:
+            self.logger.debug('chip not supplied.  Exiting plot_1D_spectrum_single_order')
+            print('chip not supplied.  Exiting plot_1D_spectrum_single_order')
+            return
+
+        # Create a 4x4 array of subplots with no vertical space between cells
+        fig, axs = plt.subplots(4, 3, sharex='col', sharey='row', figsize=(18, 12))
+        for i in range(4):
+            for j in range(3):
+#                axs[i, j].set_xlabel('Wavelength (Ang)', fontsize=18)
+                axs[i, j].tick_params(axis='both', which='major', labelsize=14)
+        
+        # orders and pixel ranges to plot (consider making this user configurable)
+        o1 = 10
+        o2 = 20
+        o3 = 30
+        imin1 = 1000; imax1 = 2500
+        imin2 = 1000; imax2 = 2500
+        imin3 = 1000; imax3 = 2500
+        
+        # Row 0
+        o=o1; imin = imin1; imax = imax1
+        axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        axs[0,0].set_ylabel('SCI1 / SCI2', fontsize=18)
+        axs[0,0].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
+        axs[0,0].grid()
+        o=o2; imin = imin2; imax = imax2
+        axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        axs[0,1].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
+        axs[0,1].grid()
+        o=o3; imin = imin3; imax = imax3
+        axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        axs[0,2].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
+        axs[0,2].grid()
+
+        # Row 1
+        o=o1; imin = imin1; imax = imax1
+        axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        axs[1,0].set_ylabel('SCI3 / SCI2', fontsize=18)
+        axs[1,0].grid()
+        o=o2; imin = imin2; imax = imax2
+        axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        axs[1,1].grid()
+        o=o3; imin = imin3; imax = imax3
+        axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        axs[1,2].grid()
+
+        # Row 2
+        o=o1; imin = imin1; imax = imax1
+        axs[2,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        axs[2,0].set_ylabel('SKY / SCI2', fontsize=18)
+        axs[2,0].grid()
+        o=o2; imin = imin2; imax = imax2
+        axs[2,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        axs[2,1].grid()
+        o=o3; imin = imin3; imax = imax3
+        axs[2,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        axs[2,2].grid()
+        
+        # Row 3
+        o=o1; imin = imin1; imax = imax1
+        axs[3,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        axs[3,0].set_ylabel('CAL / SCI2', fontsize=18)
+        axs[3,0].set_xlabel('Wavelength (Ang)', fontsize=18)
+        axs[3,0].grid()
+        o=o2; imin = imin2; imax = imax2
+        axs[3,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        axs[3,1].set_xlabel('Wavelength (Ang)', fontsize=18)
+        axs[3,1].grid()
+        o=o3; imin = imin3; imax = imax3
+        axs[3,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        axs[3,2].set_xlabel('Wavelength (Ang)', fontsize=18)
+        axs[3,2].grid()
+
+        plt.subplots_adjust(hspace=0,wspace=0) # Adjust layout to remove vertical space between subplots
+
+        # Add overall title to array of plots
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title('L1 Orderlet Flux Ratios - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name+ '\n', fontsize=24)
+        plt.tight_layout()
+
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=400, facecolor='w')
+        if show_plot == True:
+            plt.show()
+        plt.close()
+

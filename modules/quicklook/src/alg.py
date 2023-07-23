@@ -17,6 +17,7 @@ from datetime import datetime
 from modules.Utils.analyze_l0 import AnalyzeL0
 from modules.Utils.analyze_guider import AnalyzeGuider
 from modules.Utils.analyze_em import AnalyzeEM
+from modules.Utils.analyze_hk import AnalyzeHK
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.analyze_l2 import AnalyzeL2
@@ -67,6 +68,14 @@ class QuicklookAlg:
         if 'Green' in self.data_products: chips.append('green')
         if 'Red'   in self.data_products: chips.append('red')
 
+        # First create the base output directory, if needed
+        try:
+            basedir = L0_QLP_file_base 
+            os.makedirs(basedir, exist_ok=True) 
+
+        except Exception as e:
+            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
         # Make Exposure Meter images
         if 'ExpMeter' in self.data_products:
             try:
@@ -112,17 +121,18 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make stitched L0 images
-        try:
-            myL0 = AnalyzeL0(kpf0, logger=self.logger)
-            for chip in chips:
-                savedir = L0_QLP_file_base +'L0/'
-                os.makedirs(savedir, exist_ok=True) # make directories if needed
-                filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myL0.plot_L0_stitched_image(fig_path=filename, 
-                                            chip=chip, show_plot=False)
-        except Exception as e:
-            self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
+        if chips != []:    
+            try:
+                myL0 = AnalyzeL0(kpf0, logger=self.logger)
+                for chip in chips:
+                    savedir = L0_QLP_file_base +'L0/'
+                    os.makedirs(savedir, exist_ok=True) # make directories if needed
+                    filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL0.plot_L0_stitched_image(fig_path=filename, 
+                                                chip=chip, show_plot=False)
+            except Exception as e:
+                self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
     def qlp_2D(self, kpf2d, output_dir):
@@ -153,6 +163,14 @@ class QuicklookAlg:
         chips = []
         if 'Green' in self.data_products: chips.append('green')
         if 'Red'   in self.data_products: chips.append('red')
+
+        # First create the base output directory, if needed
+        try:
+            basedir = D2_QLP_file_base 
+            os.makedirs(basedir, exist_ok=True) 
+
+        except Exception as e:
+            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make Guider images
         if 'Guider' in self.data_products:
@@ -187,7 +205,7 @@ class QuicklookAlg:
 
         # Make 2D images
         # to-do: process bias and dark differently
-        if ('Green' in self.data_products) or ('Red' in self.data_products):
+        if chips != []:    
             try:
                 savedir = D2_QLP_file_base +'2D/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
@@ -205,9 +223,9 @@ class QuicklookAlg:
 
 
         # Make 2D images - 3x3 arrays
-        if ('Green' in self.data_products) or ('Red' in self.data_products):
+        if chips != []:    
             try:
-                savedir = D2_QLP_file_base +'2D_Analysis/'
+                savedir = D2_QLP_file_base +'2D/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
@@ -224,7 +242,7 @@ class QuicklookAlg:
 
 
         # Make 2D image histograms
-        if ('Green' in self.data_products) or ('Red' in self.data_products):
+        if chips != []:    
             try:
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
@@ -237,7 +255,7 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make 2D column cuts
-        if ('Green' in self.data_products) or ('Red' in self.data_products):
+        if chips != []:    
             try:
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_column_cut_' + chip + '_zoomable.png'
@@ -277,6 +295,14 @@ class QuicklookAlg:
         L1_QLP_file_base = output_dir + self.ObsID + '/'
         self.logger.info('Working on L1 QLP for ' + str(self.ObsID) + '.')
 
+        # First create the base output directory, if needed
+        try:
+            basedir = L1_QLP_file_base 
+            os.makedirs(basedir, exist_ok=True) 
+
+        except Exception as e:
+            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
         # Make L1 SNR plot
         try:
             savedir = L1_QLP_file_base +'L1/'
@@ -290,6 +316,30 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Make order ratio plots
+        if chips != []:    
+            try:
+                myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                filename = savedir + self.ObsID + '_L1_orderlet_flux_ratios_zoomable.png'
+                self.logger.info('Measuring orderlet flux ratios for ' + str(self.ObsID) + '.')
+                myL1.measure_orderlet_flux_ratios()
+                self.logger.info('Generating QLP image ' + filename)
+                myL1.plot_orderlet_flux_ratios(fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make order ratio grid plots
+        if chips != []:    
+            try:
+                for chip in chips:
+                    filename = savedir + self.ObsID + '_L1_orderlet_flux_ratios_grid_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_orderlet_flux_ratios_grid(chip=chip, fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
         # Make L1 spectra plots
         try:
             for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
@@ -301,7 +351,7 @@ class QuicklookAlg:
             self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make L1 spectra plots (single order)
-        if ('Green' in self.data_products) or ('Red' in self.data_products):
+        if chips != []:    
             try:
                 myL1 = AnalyzeL1(kpf1, logger=self.logger)
                 for chip in chips:
@@ -354,8 +404,16 @@ class QuicklookAlg:
         if 'Green' in self.data_products: chips.append('green')
         if 'Red'   in self.data_products: chips.append('red')
 
+        # First create the base output directory, if needed
+        try:
+            basedir = L2_QLP_file_base 
+            os.makedirs(basedir, exist_ok=True) 
+
+        except Exception as e:
+            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
         # Make CCF grid plots
-        if ('Green' in self.data_products) or ('Red' in self.data_products):
+        if chips != []:    
             try:
                 myL2 = AnalyzeL2(kpf2, logger=self.logger)
                 for chip in chips:
@@ -715,9 +773,9 @@ class QuicklookAlg:
                 if not os.path.exists(output_dir+'/'+exposure_name+'/L1'):
                     os.makedirs(output_dir+'/'+exposure_name+'/L1')
                 L1 = KPF1.from_fits(L1_filename)
-                my_L1 = AnalyzeL1(L1)
-                my_L1.measure_L1_snr()
-                my_L1.plot_L1_snr(exposure_name,fig_path=output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_snr.png')
+                myL1 = AnalyzeL1(L1)
+                myL1.measure_L1_snr()
+                myL1.plot_L1_snr(exposure_name,fig_path=output_dir+'/'+exposure_name+'/L1/'+exposure_name+'_L1_spectrum_snr.png')
             except:
                 print("Processing QLP for L1 failed")
 
@@ -733,7 +791,7 @@ class QuicklookAlg:
                 wav_red = np.array(hdulist1['RED_CAL_WAVE'].data,'d')
                 hdulist1.close()
             '''
-=
+
             #make a comparison plot of the three science fibres
             plt.close()
             plt.figure(figsize=(10,4))

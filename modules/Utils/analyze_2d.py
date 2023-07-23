@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-
 import matplotlib
 matplotlib.use('Agg')  # for plotting .png files faster
 import matplotlib.pyplot as plt
@@ -245,7 +244,9 @@ class Analyze2D:
         
         # Display the plot
         if fig_path != None:
-            plt.savefig(fig_path, dpi=1200, facecolor='w')
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=600, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close()
@@ -383,6 +384,7 @@ class Analyze2D:
         plt.tight_layout()
         plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
