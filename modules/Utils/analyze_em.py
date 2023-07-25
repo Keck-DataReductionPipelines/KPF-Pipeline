@@ -54,12 +54,13 @@ class AnalyzeEM:
         self.wav_SKY_str = self.df_SKY_EM.columns[i:]
         self.wav_SKY     = self.df_SKY_EM.columns[i:].astype(float)
 
-    def plot_EM_time_series(self, fig_path=None, show_plot=False):
+    def plot_EM_time_series(self, fiber='both', fig_path=None, show_plot=False):
 
         """
         Generate a time series plot of the Exposure Meter spectra.  
 
         Args:
+            fiber (string) - ['both', 'sci', 'sky'] - determines which EM spectra are plotted
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -68,6 +69,8 @@ class AnalyzeEM:
             (e.g., in a Jupyter Notebook).
 
         """
+        if fiber not in ['both', 'sky', 'sci']:
+            self.logger.error('plot_EM_time_series: fiber argument must be "both", "sky", or "sci"')
 
         # Define time arrays
         date_end = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64)
@@ -99,24 +102,30 @@ class AnalyzeEM:
         # Plot time series
         plt.figure(figsize=(12, 6), tight_layout=True)
         total_duration = (date_end[-1]-date_beg[0]).astype(float)/1000.
-        plt.plot(time_em, int_SCI_flux_750p    / (870-750) / tdur_sec, marker='o', color='r', label = '750-870 nm')
-        plt.plot(time_em, int_SCI_flux_650_750 / (750-650) / tdur_sec, marker='o', color='orange', label = '650-750 nm')
-        plt.plot(time_em, int_SCI_flux_550_650 / (650-550) / tdur_sec, marker='o', color='g', label = '550-650 nm')
-        plt.plot(time_em, int_SCI_flux_550m    / (550-445) / tdur_sec, marker='o', color='b', label = '445-550 nm')
-        plt.plot(time_em, int_SCI_flux         / (870-445) / tdur_sec, marker='o', color='k', label = 'SCI 445-870 nm')
-        plt.plot(time_em, int_SKY_flux_750p    / (870-750) / tdur_sec,':', marker='o', color='r')
-        plt.plot(time_em, int_SKY_flux_650_750 / (750-650) / tdur_sec,':', marker='o', color='orange')
-        plt.plot(time_em, int_SKY_flux_550_650 / (650-550) / tdur_sec,':', marker='o', color='g')
-        plt.plot(time_em, int_SKY_flux_550m    / (550-445) / tdur_sec,':', marker='o', color='b')
-        plt.plot(time_em, int_SKY_flux         / (870-445) / tdur_sec,':', marker='o', color='k', label = 'SKY 445-870 nm')
+
+        if fiber in ['both', 'sci']:
+            plt.plot(time_em, int_SCI_flux_750p    / (870-750) / tdur_sec, marker='o', linewidth=2, color='r', label = '750-870 nm')
+            plt.plot(time_em, int_SCI_flux_650_750 / (750-650) / tdur_sec, marker='o', linewidth=2, color='orange', label = '650-750 nm')
+            plt.plot(time_em, int_SCI_flux_550_650 / (650-550) / tdur_sec, marker='o', linewidth=2, color='g', label = '550-650 nm')
+            plt.plot(time_em, int_SCI_flux_550m    / (550-445) / tdur_sec, marker='o', linewidth=2, color='b', label = '445-550 nm')
+            plt.plot(time_em, int_SCI_flux         / (870-445) / tdur_sec, marker='o', linewidth=4, color='k', label = 'SCI 445-870 nm')
+    
+        if fiber in ['both', 'sky']:
+            plt.plot(time_em, int_SKY_flux_750p    / (870-750) / tdur_sec,':', marker='o', linewidth=2, color='r', label = '750-870 nm')
+            plt.plot(time_em, int_SKY_flux_650_750 / (750-650) / tdur_sec,':', marker='o', linewidth=2, color='orange', label = '650-750 nm')
+            plt.plot(time_em, int_SKY_flux_550_650 / (650-550) / tdur_sec,':', marker='o', linewidth=2, color='g', label = '550-650 nm')
+            plt.plot(time_em, int_SKY_flux_550m    / (550-445) / tdur_sec,':', marker='o', linewidth=2, color='b', label = '445-550 nm')
+            plt.plot(time_em, int_SKY_flux         / (870-445) / tdur_sec,':', marker='o', linewidth=4, color='k', label = 'SKY 445-870 nm')
+
         plt.title('Exposure Meter Time Series: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.xlabel("Time (sec)",fontsize=14)
         plt.ylabel("Exposure Meter Flux (e-/nm/s)",fontsize=14)
-        plt.yscale('log')
+        if fiber == 'both':
+            plt.yscale('log')
         plt.xlim([-total_duration*0.03,total_duration*1.03])
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
-        plt.legend(fontsize=12, loc='right')
+        plt.legend(fontsize=12)#, loc='right')
         
         # Display the plot
         if fig_path != None:
@@ -152,6 +161,7 @@ class AnalyzeEM:
         
         # Define time arrays
         date_end = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64)
+        n_samples = df_SCI_EM_norm.shape[0]
         if 'Date-Beg-Corr' in self.df_SCI_EM.columns:
             date_beg = np.array(self.df_SCI_EM["Date-Beg-Corr"], dtype=np.datetime64)
             date_end = np.array(self.df_SCI_EM["Date-End-Corr"], dtype=np.datetime64)
@@ -160,8 +170,14 @@ class AnalyzeEM:
             date_end = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64)
         tdur_sec = (date_end-date_beg).astype(float)/1000. # exposure duration in sec
         time_em  = (date_beg-date_beg[0]).astype(float)/1000. # seconds since beginning
-        int_SCI_spec = df_SCI_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
-        int_SKY_spec = df_SKY_EM_norm[:5].sum(axis=0) / np.sum(tdur_sec[:5]) # flux vs. wavelength per sec (use first five samples)
+        
+        if n_samples > 3:
+            int_SCI_spec = df_SCI_EM_norm[1:-1].sum(axis=0) / np.sum(tdur_sec[1:-1]) # flux vs. wavelength per sec (don't use first and last frames because a worry about timing)
+            int_SKY_spec = df_SKY_EM_norm[1:-1].sum(axis=0) / np.sum(tdur_sec[1:-1]) 
+        else:
+            int_SCI_spec = df_SCI_EM_norm.sum(axis=0) / np.sum(tdur_sec) 
+            int_SKY_spec = df_SKY_EM_norm.sum(axis=0) / np.sum(tdur_sec) 
+        
 
         # Plot spectra
         #plt.figure(figsize=(10, 4), tight_layout=True)
