@@ -2,6 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+from matplotlib.ticker import MaxNLocator
 from modules.Utils.kpf_parse import HeaderParse
 from scipy.interpolate import interp1d
 from scipy.interpolate import make_interp_spline
@@ -179,7 +180,7 @@ class AnalyzeL1:
         """
 
         # Make 3-panel plot. First, create the figure and subplots
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,14), tight_layout=True)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,10), tight_layout=True)
 
         # Plot the data on each subplot
         ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,5], marker="8", color='darkgreen', label='SCI1+SCI2+SCI3')
@@ -190,12 +191,15 @@ class AnalyzeL1:
         ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,1],   marker=">", color='r', label='SCI1')
         ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,2],   marker="s", color='r', label='SCI2')
         ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,3],   marker="<", color='r', label='SCI3')
+        ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax1.grid()
         ax2.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,4], marker="D", color='darkgreen', label='SKY')
         ax2.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,4],   marker="D", color='r', label='SKY')
+        ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax2.grid()
         ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,0], marker="D", color='darkgreen', label='CAL')
         ax3.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,0],   marker="D", color='r', label='CAL')
+        ax3.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax3.grid()
         ax3.set_xlim(4450,8700)
 
