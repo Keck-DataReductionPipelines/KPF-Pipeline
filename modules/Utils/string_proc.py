@@ -44,11 +44,11 @@ class str_replace(KPF_Primitive):
 
 class date_from_kpffile(KPF_Primitive):
     """
-    This primitive does string replacement
+    This primitive determines the datecode (YYYYMMDD) of a KPF file.
 
     Description:
         - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
-                  keyword arguments passed by the `str_replace` event issued in the recipe:
+                  keyword arguments passed by the `date_from_kpffile` event issued in the recipe:
 
             - `action.args[0] (string)`: filename in kpf format
     """
@@ -90,3 +90,52 @@ class date_from_kpffile(KPF_Primitive):
                 self.logger.info("File is from " + date_str)
 
         return Arguments(date_str)
+
+
+class level_from_kpffile(KPF_Primitive):
+    """
+    This primitive determines the KPF data level (L0, 2D, L1, L2, None) of a KPF file.
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains 
+                  positional arguments and  keyword arguments passed by the `str_replace` 
+                  event issued in the recipe:
+
+            - `action.args[0] (string)`: filename in kpf format
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) == 1 and isinstance(self.action.args[0], str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        fullpath = self.action.args[0]  # e.g. '/data/L0/20230724/KP.20230720.12345.67.fits'
+        filename = fullpath.rsplit('/', 1)[-1]  # e.g., 'KP.20230720.12345.67.fits'
+        format_type = None
+        # Check that the filename has the correct length
+        if len(filename) in [25, 29, 29, 29]: # L0, 2D, L1, L2
+            # Check each part of the filename
+            parts = filename.split('.')
+            if len(parts) == 5 and parts[0] == 'KP' and parts[1].isdigit() and len(parts[1]) == 8 \
+                    and parts[2].isdigit() and len(parts[2]) == 5:
+                suffix = parts[3].split('_')
+                if len(suffix) == 1 and suffix[0][:2].isdigit() and len(suffix[0][:2]) == 2:
+                    format_type = 'L0'
+                elif len(suffix) == 2 and suffix[0][:2].isdigit() and len(suffix[0][:2]) == 2 \
+                        and suffix[1] in ['2D', 'L1', 'L2']:
+                    format_type = suffix[1]
+        else:
+            format_type = None
+        
+        return Arguments(format_type) # returns 'L0', '2D', 'L1', 'L2', None
+
