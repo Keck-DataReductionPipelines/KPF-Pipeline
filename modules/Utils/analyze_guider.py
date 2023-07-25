@@ -151,6 +151,8 @@ class AnalyzeGuider:
         axs[0].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[0].get_xticks()
         yticks = axs[0].get_yticks()
+        #axs[0].set_xticks(xticks)  # Set the x-ticks explicitly
+        #axs[0].set_yticks(yticks)  # Set the y-ticks explicitly
         # The following line (and others) produces this warning: UserWarning: FixedFormatter should only be used together with FixedLocator
         axs[0].set_xticklabels([f'{int(x * self.pixel_scale)}' for x in xticks])
         axs[0].set_yticklabels([f'{int(y * self.pixel_scale)}' for y in yticks])
@@ -160,6 +162,8 @@ class AnalyzeGuider:
         title = title + "\nJ = " + f"{self.jmag:.2f}" + ", G = " + f"{self.gmag:.2f}" + ', ' + str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain'
         axs[0].set_title(title, fontsize=12)
         axs[0].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
+        #cmap = plt.get_cmap('viridis')
+        #axs[0].set_facecolor(cmap(0))
         #cbar1 = plt.colorbar(im1, ax=axs[0], shrink=0.5)
 
         # Middle panel - zoomed image
@@ -173,6 +177,8 @@ class AnalyzeGuider:
         axs[1].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[1].get_xticks()
         yticks = axs[1].get_yticks()
+        #axs[1].set_xticks(xticks)  # Set the x-ticks explicitly
+        #axs[1].set_yticks(yticks)  # Set the y-ticks explicitly
         axs[1].set_xticklabels([f'{int(x * self.pixel_scale*10)/10}' for x in xticks])
         axs[1].set_yticklabels([f'{int(y * self.pixel_scale*10)/10}' for y in yticks])
         axs[1].set_xlabel('Arcseconds', fontsize=12)
@@ -183,6 +189,7 @@ class AnalyzeGuider:
         axs[1].set_title(title, fontsize=12)
         axs[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar2 = plt.colorbar(im2, ax=axs[1], shrink=0.7)
+        #axs[1].set_facecolor(cmap(0))
 
         # Right panel - zoomed image of residuals to model
         im2 = axs[2].imshow(resid_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
@@ -194,6 +201,8 @@ class AnalyzeGuider:
         axs[2].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[2].get_xticks()
         yticks = axs[2].get_yticks()
+        #axs[2].set_xticks(xticks)  # Set the x-ticks explicitly
+        #axs[2].set_yticks(yticks)  # Set the y-ticks explicitly
         axs[2].set_xticklabels([f'{int(x * self.pixel_scale*10)/10}' for x in xticks])
         axs[2].set_yticklabels([f'{int(y * self.pixel_scale*10)/10}' for y in yticks])
         axs[2].set_xlabel('Arcseconds', fontsize=12)
@@ -207,6 +216,7 @@ class AnalyzeGuider:
         axs[2].set_title(title, fontsize=12)
         axs[2].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar3 = plt.colorbar(im2, ax=axs[2], shrink=0.7)
+        #axs[0].set_facecolor(cmap(0))
             
         # Display the plot
         if fig_path != None:
@@ -362,9 +372,9 @@ class AnalyzeGuider:
         axes[0,0].set_ylabel("Guiding Error (mas)", fontsize=14)
         axes[0,0].set_xlim(0, max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp))) 
         axes[0,0].legend(['Guiding error - x: ' + f'{int(np.sqrt(np.average(x_mas**2))*10)/10}' + ' mas (RMS)', 
-                        'Guiding error - y: ' + f'{int(np.sqrt(np.average(y_mas**2))*10)/10}' + ' mas (RMS)'], 
-                        fontsize=12, 
-                        loc='best') 
+                          'Guiding error - y: ' + f'{int(np.sqrt(np.average(y_mas**2))*10)/10}' + ' mas (RMS)'], 
+                         fontsize=12, 
+                         loc='best') 
 
         # Power spectral density plot
         fps = self.gcfps # my_Guider.guider_header['FPS']  # Sample rate in Hz
@@ -372,9 +382,9 @@ class AnalyzeGuider:
         Pyy, freqs = mlab.psd(y_mas/1000, Fs=fps)
         Prr, freqs = mlab.psd(r_mas/1000, Fs=fps)
 
-        axes[1,0].step(freqs, Prr*1e6, where='mid', color='b', alpha=0.8, label='R - Guiding Errors')
-        axes[1,0].step(freqs, Pxx*1e6, where='mid', color='g', alpha=0.3, label='X - Guiding Errors')
-        axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange', alpha=0.3, label='Y - Guiding Errors')
+#        axes[1,0].step(freqs, Prr*1e6, where='mid', color='b', alpha=0.8, label='R - Guiding Errors')
+        axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding Errors', lw=2)
+        axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding Errors', lw=2)
         axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
         axes[1,0].set_xlabel('frequency [Hz]', fontsize=14)
         axes[1,0].set_ylabel('Guiding Error\n' + r'Power Spectral Density (mas$^2$/Hz)', fontsize=14)
@@ -406,7 +416,7 @@ class AnalyzeGuider:
         axes[3,0].set_xlabel("Time (sec)", fontsize=14)
         axes[3,0].set_ylabel("Guider Flux (fractional)", fontsize=14)
         axes[3,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
-        axes[3,0].legend([r'Guider Flux (fractional))'], fontsize=12, loc='best') 
+        axes[3,0].legend([r'Guider Flux (fractional, normalized by 95 percentile)'], fontsize=12, loc='best') 
 
         # Histogram of guider flux time series plot
         
