@@ -188,20 +188,11 @@ class QuicklookAlg:
                 self.logger.info('Generating QLP image ' + filename)
                 myGuider.plot_guider_image(fig_path=filename, show_plot=False)
 
-                # Guider error time series
+                # Guider error time series, PSD, and other time series
                 filename = savedir + self.ObsID + '_error_time_series_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
+                #myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
                 myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
-                
-                # Guider flux time series
-                filename = savedir + self.ObsID + '_flux_time_series_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myGuider.plot_guider_flux_time_series(fig_path=filename, show_plot=False)
-                
-                # Guider FWHM time series
-                filename = savedir + self.ObsID + '_fwhm_time_series_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myGuider.plot_guider_fwhm_time_series(fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
