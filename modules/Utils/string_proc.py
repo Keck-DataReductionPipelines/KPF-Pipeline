@@ -84,9 +84,9 @@ class date_from_kpffile(KPF_Primitive):
 
         if not date_str:
             if self.logger:
-                self.logger.info("can not find date from flat file name, " + f_name)
+                self.logger.info("can not find date from file name, " + f_name)
         else:
             if self.logger:
-                self.logger.info("flat file is from " + date_str)
+                self.logger.info("File is from " + date_str)
 
         return Arguments(date_str)
