@@ -123,7 +123,7 @@ class level_from_kpffile(KPF_Primitive):
         filename = fullpath.rsplit('/', 1)[-1]  # e.g., 'KP.20230720.12345.67.fits'
         format_type = None
         # Check that the filename has the correct length
-        if len(filename) in [25, 29, 29, 29]: # L0, 2D, L1, L2
+        if len(filename) in [25, 28, 28, 28]: # L0, 2D, L1, L2
             # Check each part of the filename
             parts = filename.split('.')
             if len(parts) == 5 and parts[0] == 'KP' and parts[1].isdigit() and len(parts[1]) == 8 \

@@ -1,27 +1,20 @@
+# This recipe is used to watch a [L0/2D/L1/L2] directory for modified files and 
+# then to run the appropriate section of the QLP (L0/2D/L1/L2) to generate standard
+# data products.  It must be run in watch mode.
+#
+# Example:
+#    > kpf --watch /data/2D/20230711/ -c configs/quicklook_one_file.cfg -r recipes/quicklook_one_file.recipe
+
+from modules.Utils.string_proc import str_replace
+from modules.Utils.string_proc import level_from_kpffile
+from modules.Utils.string_proc import date_from_kpffile
 from modules.quicklook.src.quick_prim import Quicklook
 
-#### the get_datecode() needs modification to work with the DRP Framework
-#from modules.Utils.kpf_parse import get_datecode
-#datecode = get_datecode(config.ARGUMENT.obsid)
+file_path = context.file_path
+level = level_from_kpffile(file_path)
+datecode = date_from_kpffile(file_path)
+output_dir= '/data/QLP/' + datecode + '/'
 
-output_dir= '/data/QLP/' + config.ARGUMENT.datecode + '/'
-
-if config.ARGUMENT.do_l0:
-    for input_file in find_files('/data/L0/' + config.ARGUMENT.datecode + '/' + config.ARGUMENT.obsid + '.fits'):
-        open_file = kpf0_from_fits(input_file, data_type='KPF')
-        Quicklook(open_file, '/data/QLP/' + config.ARGUMENT.datecode + '/', 'L0')
-
-if config.ARGUMENT.do_2d:
-    for input_file in find_files('/data/2D/' + config.ARGUMENT.datecode + '/' + config.ARGUMENT.obsid + '_2D.fits'):
-        open_file = kpf0_from_fits(input_file, data_type='KPF')
-        Quicklook(open_file, '/data/QLP/' + config.ARGUMENT.datecode + '/', '2D')
-
-if config.ARGUMENT.do_l1:
-    for input_file in find_files('/data/L1/' + config.ARGUMENT.datecode + '/' + config.ARGUMENT.obsid + '_L1.fits'):
-        open_file = kpf1_from_fits(input_file, data_type='KPF')
-        Quicklook(open_file, '/data/QLP/' + config.ARGUMENT.datecode + '/', 'L1')
-
-if config.ARGUMENT.do_l2:
-    for input_file in find_files('/data/L2/' + config.ARGUMENT.datecode + '/' + config.ARGUMENT.obsid + '_L2.fits'):
-        open_file = kpf2_from_fits(input_file, data_type='KPF')
-        Quicklook(open_file, '/data/QLP/' + config.ARGUMENT.datecode + '/', 'L2')
+if level != None:
+    open_file = kpf0_from_fits(file_path, data_type='KPF')
+    Quicklook(open_file, '/data/QLP/' + datecode + '/', level)
