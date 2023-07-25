@@ -45,7 +45,7 @@ class QuicklookAlg:
         """
         Description:
             Generates the standard quicklook data products for an L0 file.
-    
+
         Arguments:
             kpf0 - an L0 filename
             output_dir - directory for output QLP files (if show_plot=False)
@@ -81,17 +81,20 @@ class QuicklookAlg:
             try:
                 savedir = L0_QLP_file_base +'EM/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
+                myEM = AnalyzeEM(kpf0, logger=self.logger)
+
+                # Exposure Meter time series plots
+                filename = savedir + self.ObsID + '_EM_time_series_sci_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myEM.plot_EM_time_series(fiber='sci', fig_path=filename, show_plot=False)
+                filename = savedir + self.ObsID + '_EM_time_series_sky_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myEM.plot_EM_time_series(fiber='sky', fig_path=filename, show_plot=False)
     
                 # Exposure Meter spectrum plot
-                myEM = AnalyzeEM(kpf0, logger=self.logger)
                 filename = savedir + self.ObsID + '_EM_spectrum_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
                 myEM.plot_EM_spectrum(fig_path=filename, show_plot=False)
-    
-                # Exposure Meter time series plot
-                filename = savedir + self.ObsID + '_EM_time_series_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myEM.plot_EM_time_series(fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -307,7 +310,7 @@ class QuicklookAlg:
         try:
             savedir = L1_QLP_file_base +'L1/'
             os.makedirs(savedir, exist_ok=True) # make directories if needed
-            filename = savedir + self.ObsID + '_2D_L1_SNR_zoomable.png'
+            filename = savedir + self.ObsID + '_L1_SNR_zoomable.png'
             self.logger.info('Generating QLP image ' + filename)
             myL1 = AnalyzeL1(kpf1, logger=self.logger)
             myL1.measure_L1_snr()
@@ -315,30 +318,6 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
-
-        # Make order ratio plots
-        if chips != []:    
-            try:
-                myL1 = AnalyzeL1(kpf1, logger=self.logger)
-                filename = savedir + self.ObsID + '_L1_orderlet_flux_ratios_zoomable.png'
-                self.logger.info('Measuring orderlet flux ratios for ' + str(self.ObsID) + '.')
-                myL1.measure_orderlet_flux_ratios()
-                self.logger.info('Generating QLP image ' + filename)
-                myL1.plot_orderlet_flux_ratios(fig_path=filename, show_plot=False)
-
-            except Exception as e:
-                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
-
-        # Make order ratio grid plots
-        if chips != []:    
-            try:
-                for chip in chips:
-                    filename = savedir + self.ObsID + '_L1_orderlet_flux_ratios_grid_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    myL1.plot_orderlet_flux_ratios_grid(chip=chip, fig_path=filename, show_plot=False)
-
-            except Exception as e:
-                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make L1 spectra plots
         try:
@@ -354,24 +333,72 @@ class QuicklookAlg:
         if chips != []:    
             try:
                 myL1 = AnalyzeL1(kpf1, logger=self.logger)
-                for chip in chips:
-                    if chip == 'green': order = 11
-                    if chip == 'red': order = 11
+                if 'green' in chips:  # don't use 'for chip in chips:' here so that the file creation order is correct for Jump to display in a certain order
+                    chip = 'green'
                     filename = savedir + self.ObsID + '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
                     myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
                                                        orderlet=['SCI1', 'SCI2', 'SCI3'], 
                                                        fig_path=filename, show_plot=False)
+                if 'red' in chips:
+                    chip = 'red'
+                    filename = savedir + self.ObsID + '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                       orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                                       fig_path=filename, show_plot=False)
+                if 'green' in chips:
+                    chip = 'green'
                     filename = savedir + self.ObsID + '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
                     myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
                                                        orderlet=['SKY'], 
                                                        fig_path=filename, show_plot=False)
+                if 'red' in chips:
+                    chip = 'red'
+                    filename = savedir + self.ObsID + '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                       orderlet=['SKY'], 
+                                                       fig_path=filename, show_plot=False)
+                if 'green' in chips:
+                    chip = 'green'
                     filename = savedir + self.ObsID + '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
                     myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
                                                        orderlet=['CAL'], 
                                                        fig_path=filename, show_plot=False)
+                if 'red' in chips:
+                    chip = 'red'
+                    filename = savedir + self.ObsID + '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                       orderlet=['CAL'], 
+                                                       fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make order ratio grid plots
+        if chips != []:    
+            try:
+                for chip in chips:
+                    filename = savedir + self.ObsID + '_L1_orderlet_flux_ratios_grid_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                    myL1.measure_orderlet_flux_ratios()
+                    myL1.plot_orderlet_flux_ratios_grid(chip=chip, fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make order ratio plot
+        if chips != []:    
+            try:
+                filename = savedir + self.ObsID + '_L1_orderlet_flux_ratios_zoomable.png'
+                self.logger.info('Measuring orderlet flux ratios for ' + str(self.ObsID) + '.')
+                self.logger.info('Generating QLP image ' + filename)
+                myL1.plot_orderlet_flux_ratios(fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
