@@ -30,14 +30,52 @@ from modules.Utils.kpf_parse import get_data_products_L2
 
 class QuicklookAlg:
     """
+    This class contains methods to generate Quicklook data products for L0/2D/L1/L2
+    files from KPF.  The qlp_L0(), qlp_2D(), qlp_L1(), qlp_L2() methods take a KPF object 
+    of the appropriate type and generate the QLP plots using "Analysis" classes and methods 
+    (e.g., AnalyzeL0 in analyze_l0.py).  Data products are put into standard locations 
+    in /data/QLP/<datecode>/<L0/2D/L1/L2/>/.
+    
+    The following recipes are useful for generating QLP data products:
+    
+    quicklook_watch.recipe -- this recipe watches a directory (recursively, if needed) 
+        and triggers the QLP on file modification events.  It must be run in watch mode.  
+        Separate instances should to be run for L0, 2D, L1, and L2 data directories.
+        Example:
+            > kpf --watch /data/L0/20230711/ -c configs/quicklook_watch_dir.cfg -r recipes/quicklook_watch_dir.recipe
 
+    quicklook_date.recipe -- this recipe is run in non-watch mode and is useful for bulk
+         (re)processing of QLP data products.  It computes all QLP data products 
+         (L0, 2D, L1, and L2) for a given datecode (e.g., 20230711).  
+         
+         Example
+             > kpf --date 20230711 -c configs/quicklook_date.cfg -r recipes/quicklook_date.recipe
+             
+    quicklook_match.recipe -- this recipe is used to manually produce a set of QLP 
+         outputs that match the fullpath config variable.  It can be used to produce 
+         QLP for a single data level (L0, 2D, L1, L2) for a single datecode (YYYYDDMM) 
+         or combinations.  All of the examples below are executed using the command 
+             > kpf -c configs/quicklook_match.cfg -r recipes/quicklook_match.recipe
+         but with different values for the config variable 'fullpath'.
+        
+         Example - compute L0 data products for KP.20230724.48905.30:
+            fullpath = '/data/L0/20230724/KP.20230724.48905.30.fits'
+        
+         Example - compute L0/2D/L1/L2 data products for KP.20230724.48905.30:
+            fullpath = '/data/??/20230724/KP.20230724.48905.30*.fits'
+        
+         Example - compute L0/2D/L1/L2 data products for all ObsID on a particular date:
+            fullpath = '/data/??/20230724/KP.*.fits'
+        
+         Example - compute L0/2D/L1/L2 data products for all ObsID on a range of ten dates:
+            fullpath = '/data/??/2023072?/KP.*.fits'
+    
+    The QLP Analysis classes and methods can also be used outside of the pipeline 
+    context, e.g., in a Jupyter Notebook.
     """
 
     def __init__(self,config=None,logger=None):
 
-        """
-
-        """
         self.config=config
         self.logger=logger
 

@@ -1,6 +1,6 @@
 # This recipe is used to watch a [L0/2D/L1/L2] directory for modified files and 
 # then to run the appropriate section of the QLP (L0/2D/L1/L2) to generate standard
-# data products.  It must be run in watch mode.  Separate instances need to be run 
+# data products.  It must be run in watch mode.  Separate instances should to be run 
 # for L0, 2D, L1, and L2 data directories.
 #
 # Example:
