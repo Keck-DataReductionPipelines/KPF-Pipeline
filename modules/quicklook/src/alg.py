@@ -31,12 +31,13 @@ from modules.Utils.kpf_parse import get_data_products_L2
 class QuicklookAlg:
     """
     This class contains methods to generate Quicklook data products for L0/2D/L1/L2
-    files from KPF.  The qlp_L0(), qlp_2D(), qlp_L1(), qlp_L2() methods take a KPF object 
-    of the appropriate type and generate the QLP plots using "Analysis" classes and methods 
-    (e.g., AnalyzeL0 in analyze_l0.py).  Data products are put into standard locations 
-    in /data/QLP/<datecode>/<L0/2D/L1/L2/>/.
+    files from KPF.  The qlp_L0(), qlp_2D(), qlp_L1(), and qlp_L2() methods take a KPF 
+    object of the appropriate type and generate the QLP plots using "Analysis" classes 
+    and methods (e.g., AnalyzeL0 in analyze_l0.py).  Data products are put into standard 
+    locations in /data/QLP/<datecode>/<L0/2D/L1/L2>/.
     
-    The following recipes are useful for generating QLP data products:
+    The following recipes in KPF-Pipeline/recipes/ are useful for generating QLP data 
+    products:
     
     quicklook_watch.recipe -- this recipe watches a directory (recursively, if needed) 
         and triggers the QLP on file modification events.  It must be run in watch mode.  
@@ -79,13 +80,16 @@ class QuicklookAlg:
         self.config=config
         self.logger=logger
 
+    #######################
+    ##### QLP Level 0 #####
+    #######################
     def qlp_L0(self, kpf0, output_dir):
         """
         Description:
-            Generates the standard quicklook data products for an L0 file.
+            Generates the standard quicklook data products for an L0 object.
 
         Arguments:
-            kpf0 - an L0 filename
+            kpf0 - a L0 object
             output_dir - directory for output QLP files (if show_plot=False)
             show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
                         instead of saving files
@@ -112,9 +116,9 @@ class QuicklookAlg:
             os.makedirs(basedir, exist_ok=True) 
 
         except Exception as e:
-            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
-        # Make Exposure Meter images
+        # Make Exposure Meter plots
         if 'ExpMeter' in self.data_products:
             try:
                 savedir = L0_QLP_file_base +'EM/'
@@ -176,13 +180,16 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
+    ##################
+    ##### QLP 2D #####
+    ##################
     def qlp_2D(self, kpf2d, output_dir):
         """
         Description:
-            Generates the standard quicklook data products for a 2D file.
+            Generates the standard quicklook data products for a 2D object.
     
         Arguments:
-            kpf2d - a 2d filename
+            kpf2d - a 2D object
             output_dir - directory for output QLP files (if show_plot=False)
             show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
                         instead of saving files
@@ -211,7 +218,7 @@ class QuicklookAlg:
             os.makedirs(basedir, exist_ok=True) 
 
         except Exception as e:
-            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make Guider images
         if 'Guider' in self.data_products:
@@ -299,13 +306,16 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
         
         
+    #######################
+    ##### QLP Level 1 #####
+    #######################
     def qlp_L1(self, kpf1, output_dir):
         """
         Description:
-            Generates the standard quicklook data products for an L1 file.
+            Generates the standard quicklook data products for an L1 object.
     
         Arguments:
-            kpf1 - an L1 filename
+            kpf1 - a L1 object
             output_dir - directory for output QLP files (if show_plot=False)
             show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
                         instead of saving files
@@ -333,7 +343,7 @@ class QuicklookAlg:
             os.makedirs(basedir, exist_ok=True) 
 
         except Exception as e:
-            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make L1 SNR plot
         try:
@@ -433,13 +443,16 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
+    #######################
+    ##### QLP Level 2 #####
+    #######################
     def qlp_L2(self, kpf2, output_dir):
         """
         Description:
-            Generates the standard quicklook data products for an L2 file.
+            Generates the standard quicklook data products for an L2 object.
     
         Arguments:
-            kpf2 - an L0 filename
+            kpf2 - a L2 object
             output_dir - directory for output QLP files (if show_plot=False)
             show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
                         instead of saving files
@@ -466,7 +479,7 @@ class QuicklookAlg:
             os.makedirs(basedir, exist_ok=True) 
 
         except Exception as e:
-            self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make CCF grid plots
         if chips != []:    
