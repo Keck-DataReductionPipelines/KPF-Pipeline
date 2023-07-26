@@ -111,6 +111,9 @@ for fits_file in master_files:
 
     print("-----> fits_file =",fits_file)
 
+    filename_caltype = 'not_found_yet'
+    filename_object = 'not_found_yet'
+
 
     # In the case of *L1.fits and *L2.fits files, certain keywords are not in the FITS header,
     # so we either parse them from the filename or infer them.
@@ -145,20 +148,22 @@ for fits_file in master_files:
 
         pass
 
-    try:
-        if re.match(r".+_master_flat", fits_file):
-            filename_caltype = 'flat'
-            filename_object = "autocal-flat-all"
-        else:
-            filename_match = re.match(r".+_master_(.+)_(.+)\.fits", fits_file)
-            filename_caltype = filename_match.group(1)
-            filename_object = filename_match.group(2)
+    if filename_caltype == 'not_found_yet' or filename_object == 'not_found_yet':
 
-            print("-------3--------> fn_caltype =",filename_caltype)
-            print("-------3--------> fn_object =",filename_object)
+        try:
+            if re.match(r".+_master_flat", fits_file):
+                filename_caltype = 'flat'
+                filename_object = "autocal-flat-all"
+            else:
+                filename_match = re.match(r".+_master_(.+)_(.+)\.fits", fits_file)
+                filename_caltype = filename_match.group(1)
+                filename_object = filename_match.group(2)
 
-    except:
-        pass
+                print("-------3--------> fn_caltype =",filename_caltype)
+                print("-------3--------> fn_object =",filename_object)
+
+        except:
+            pass
 
     try:
         print("---------------------------------> fn_caltype =",filename_caltype)

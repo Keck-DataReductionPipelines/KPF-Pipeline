@@ -186,10 +186,7 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 				db_wls_master_file = db_wls_rec[6]
 				wave_fits = []
 				for wls in wls_list:
-                                    # Remove /masters from path returned from QueryDBOneNearestMasterFileFramework
-                                    # since it is already included in output_dir.
-                                    modified_file_path = str_replace(db_wls_master_file, '/masters/masters', '/masters')
-                                    wave_fits = wave_fits + [output_dir + modified_file_path]
+                                    wave_fits = wave_fits + [db_wls_master_file]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
@@ -468,11 +465,11 @@ if do_spectral_extraction or do_hk or do_bc:
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 		is_raw = 1
 		if rect_method in input_lev0_file:
-			is_raw = 0
+		   is_raw = 0
 		if lev1_stem_suffix in input_lev0_file:
-			is_raw = 0
+		   is_raw = 0
 		if lev2_stem_suffix in input_lev0_file:
-			is_raw = 0
+		   is_raw = 0
 
 		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
 		if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
