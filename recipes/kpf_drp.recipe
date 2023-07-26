@@ -7,7 +7,7 @@ from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocoty.src.radial_velocity_reweighting import RadialVelocityReweighting
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
-from modules.quicklook.src.quick_prim import Quicklook
+#from modules.quicklook.src.quick_prim import Quicklook
 from modules.Utils.string_proc import str_replace
 from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.data_handler import ExtCopy
@@ -482,9 +482,9 @@ if do_spectral_extraction or do_hk or do_bc:
 			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
 				b_level1_sp = True
 
-
-			if do_qlp and (b_level1_sp or do_hk or do_bc):
-				Quicklook(lev0_data, output_qlp, end_of_night_summary)
+#
+#			if do_qlp and (b_level1_sp or do_hk or do_bc):
+#				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 			# loop through ccd to do spectral extraction
 			if b_level1_sp:
@@ -566,10 +566,10 @@ if do_spectral_extraction or do_hk or do_bc:
 				if output_data != None:
 					result = to_fits(output_data, output_lev1_file)
 
-			if exists(output_lev1_file):
-				lev1_list = lev1_list + [output_lev1_file]
-				if do_qlp:
-					Quicklook(lev0_data, output_qlp, end_of_night_summary)
+#			if exists(output_lev1_file):
+#				lev1_list = lev1_list + [output_lev1_file]
+#				if do_qlp:
+#					Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 ## do radial velocity or rv reweighting:
 #  description: do radial velocity on the specified extensions of L1 data and produce L2 data.
@@ -650,16 +650,16 @@ if do_rv or do_rv_reweighting:
 				if rv_data != None:
 					result = to_fits(rv_data, output_lev2_file)
 
-		if do_qlp:
-			# get lev0 w/o _2D suffix
-			short_lev0 = str_replace(short_lev1, lev1_stem_suffix, "")
-			input_lev0_file = input_2d_dir + short_lev0
-			if not find_files(input_lev0_file):
-				short_lev0 = str_replace(short_lev1, lev1_stem_suffix, lev0_stem_suffix)
-				input_lev0_file = input_2d_dir + short_lev0
-			if find_files(input_lev0_file):
-				lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
-				Quicklook(lev0_data, output_qlp, end_of_night_summary)
+#		if do_qlp:
+#			# get lev0 w/o _2D suffix
+#			short_lev0 = str_replace(short_lev1, lev1_stem_suffix, "")
+#			input_lev0_file = input_2d_dir + short_lev0
+#			if not find_files(input_lev0_file):
+#				short_lev0 = str_replace(short_lev1, lev1_stem_suffix, lev0_stem_suffix)
+#				input_lev0_file = input_2d_dir + short_lev0
+#			if find_files(input_lev0_file):
+#				lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
+#				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 
 		# do reweighting on each L2 in case the rewighting directory is different from the unweighted L2.
