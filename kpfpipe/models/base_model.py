@@ -263,7 +263,7 @@ class KPFDataModel(object):
         """
         if not fn.endswith('.fits'):
             # we only want to write to a '.fits file
-            raise NameError('filename must ends with .fits')    
+            raise NameError('filename must end with .fits')    
 
         gen_hdul = getattr(self, '_create_hdul', None)
         if gen_hdul is None:
