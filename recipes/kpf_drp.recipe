@@ -563,8 +563,8 @@ if do_spectral_extraction or do_hk or do_bc:
 				if output_data != None:
 					result = to_fits(output_data, output_lev1_file)
 
-#			if exists(output_lev1_file):
-#				lev1_list = lev1_list + [output_lev1_file]
+			if exists(output_lev1_file):
+				lev1_list = lev1_list + [output_lev1_file]
 #				if do_qlp:
 #					Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
