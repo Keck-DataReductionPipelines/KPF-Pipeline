@@ -386,7 +386,7 @@ class AnalyzeGuider:
         axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding Errors', lw=2)
         axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding Errors', lw=2)
         axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
-        axes[1,0].set_xlabel('frequency [Hz]', fontsize=14)
+        axes[1,0].set_xlabel('Frequency [Hz]', fontsize=14)
         axes[1,0].set_ylabel('Guiding Error\n' + r'Power Spectral Density (mas$^2$/Hz)', fontsize=14)
         axes[1,0].set_xlim(min(freqs),max(freqs))
         axes[1,0].set_yscale('log')
