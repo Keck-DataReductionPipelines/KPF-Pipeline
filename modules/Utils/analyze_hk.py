@@ -57,8 +57,8 @@ class AnalyzeHK:
                                                       'x2': loc[loc_idx['yf']]-self.offset,
                                                       'y1': loc[loc_idx['x0']],
                                                       'y2': loc[loc_idx['xf']]}
-                if fiber == 'sci': self.trace_location_sky = trace_location # sci/sky seem to be backwards
-                if fiber == 'sky': self.trace_location_sci = trace_location
+                if fiber == 'sci': self.trace_location_sci = trace_location # sci/sky had been backwards in previous versions
+                if fiber == 'sky': self.trace_location_sky = trace_location
         if wavesoln_file != None:
             self.wave_lib = pd.read_csv(wavesoln_file, header=None, sep = ' ', comment = '#')
             self.wave_lib *= 1 - self.rv_shift/3e5 # Doppler shift wavelength solution
