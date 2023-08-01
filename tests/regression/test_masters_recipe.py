@@ -34,8 +34,8 @@ def test_master_wls():
 
 
 def main():
-    # test_master_stacks()
-    # test_master_l1l2()
+    test_master_stacks()
+    test_master_l1l2()
     test_master_wls()
 
 if __name__ == '__main__':
