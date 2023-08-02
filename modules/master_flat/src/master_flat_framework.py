@@ -166,7 +166,8 @@ class MasterFlatFramework(KPF0_Primitive):
 
         """
 
-        smooth_lamp_pattern_path = "/code/KPF-Pipeline/static/kpf_smooth_lamp.fits"
+        # smooth_lamp_pattern_path = "/code/KPF-Pipeline/static/kpf_smooth_lamp.fits"
+        smooth_lamp_pattern_path = "/data/reference_fits/kpf_20230628_smooth_lamp_made20230720_float32.fits"
         smooth_lamp_pattern_data = KPF0.from_fits(smooth_lamp_pattern_path,self.data_type)
 
         order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)

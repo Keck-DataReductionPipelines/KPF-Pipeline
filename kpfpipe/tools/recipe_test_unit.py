@@ -48,7 +48,8 @@ framework_logcfg= 'configs/framework_logger.cfg'
 pipe_config = "examples/default_simple.cfg"
 
 
-def run_recipe(recipe: str, pipe_config: str=pipe_config):
+def run_recipe(recipe: str, pipe_config: str=pipe_config, date_dir=None,
+               file_path='', watch=False):
     """
     This is the code that runs the given recipe.
     It mimics the kpf framework/pipeline startup code in cli.py, but writes
@@ -85,12 +86,16 @@ def run_recipe(recipe: str, pipe_config: str=pipe_config):
         f.write(recipe)
         f.seek(0)
         arg = Arguments(name="start_recipe_args", recipe=f.name)
+        if date_dir != None:
+            arg.date_dir = date_dir
+        arg.file_path = file_path
+        arg.watch = watch
         framework.append_event('start_recipe', arg)
         framework.main_loop()
 
-def recipe_test(recipe: str, pipe_config: str=pipe_config):
+def recipe_test(recipe: str, pipe_config: str=pipe_config, **kwargs):
     try:
-        run_recipe(recipe, pipe_config)
+        run_recipe(recipe, pipe_config, **kwargs)
     except Exception as e:
-        assert False, f"test_recipe_basics: unexpected exception {e}"
+        assert False, f"test_recipe: unexpected exception {e}"
 
