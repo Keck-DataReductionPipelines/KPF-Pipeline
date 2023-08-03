@@ -73,8 +73,8 @@ class HeaderParse:
         """
         try: 
             if 'IMTYPE' in self.header:
-                if (('EXPTIME' in self.header) and 
-                    ((self.header['IMTYPE'] == 'Bias') or (self.header['EXPTIME'] == 0))):
+                if (('ELAPSED' in self.header) and 
+                    ((self.header['IMTYPE'] == 'Bias') or (self.header['ELAPSED'] == 0))):
                         self.name = 'Bias'
                 elif self.header['IMTYPE'] == 'Dark':
                     self.name = 'Dark' 

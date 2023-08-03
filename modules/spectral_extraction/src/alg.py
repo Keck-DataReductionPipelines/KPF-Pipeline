@@ -1505,7 +1505,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         elif 'OBS MJD' in header_keys:
             mjd = flux_header['OBS MJD']
 
-        expt = 'EXPTIME'
+        expt = 'ELAPSED'
         if expt in header_keys:
             exptime = flux_header[expt]
         else:
@@ -1518,7 +1518,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         if mjd != 0.0:
             df_result.attrs['MJD-OBS'] = mjd
             df_result.attrs['OBSJD'] = mjd + 2400000.5
-        df_result.attrs['EXPTIME'] = exptime
+        df_result.attrs['ELAPSED'] = exptime
         df_result.attrs['TOTALORD'] = total_order
         df_result.attrs['FIRSTORD'] = self.start_row_index() if first_row is None else first_row
         df_result.attrs['FROMIMGX'] = self.origin[self.X]

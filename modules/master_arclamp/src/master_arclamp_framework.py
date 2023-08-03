@@ -167,7 +167,7 @@ class MasterArclampFramework(KPF0_Primitive):
             arclamp_file = KPF0.from_fits(arclamp_file_path,self.data_type)
             mjd_obs = float(arclamp_file.header['PRIMARY']['MJD-OBS'])
             mjd_obs_list.append(mjd_obs)
-            exp_time = float(arclamp_file.header['PRIMARY']['EXPTIME'])
+            exp_time = float(arclamp_file.header['PRIMARY']['ELAPSED'])
             exp_time_list.append(exp_time)
             header_object = arclamp_file.header['PRIMARY']['OBJECT']
             arclamp_object_list.append(header_object)
