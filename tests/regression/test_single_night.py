@@ -4,12 +4,11 @@ This should be the same night as the masters recipe test so that changes to mast
 are tested.
 """
 import tempfile
-import pytest
 
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
-from test_masters_recipe import masters_test_date
+from .test_masters_recipe import masters_test_date
 
 
 drp_recipe = open('recipes/kpf_drp.recipe', 'r').read()
@@ -28,7 +27,6 @@ drp_config.write(f)
 drp_config_path = f.name
 f.close()
 
-@pytest.mark.run(after='test_masters_recipe')
 def test_kpf_night():
     recipe_test(drp_recipe, drp_config_path, date_dir=masters_test_date)
 

@@ -27,11 +27,9 @@ def test_master_l1l2():
     recipe_test(master_l1l2_recipe, master_l1l2_config,
                 date_dir=masters_test_date, watch=False)
 
-
 def test_master_wls():
     recipe_test(master_wls_recipe, master_wls_config,
             date_dir=masters_test_date, watch=False)
-
 
 def main():
     test_master_stacks()
