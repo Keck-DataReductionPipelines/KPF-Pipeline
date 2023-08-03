@@ -340,7 +340,7 @@ class QualityControlExposureFramework(KPF0_Primitive):
             mjd_obs = "NotFound"
 
         try:
-            exptime_str = float(l0_file.header['PRIMARY']['EXPTIME'])
+            exptime_str = float(l0_file.header['PRIMARY']['ELAPSED'])
 
             try:
                 exptime = float(exptime_str)

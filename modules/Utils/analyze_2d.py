@@ -52,7 +52,7 @@ class Analyze2D:
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
-        self.exptime = self.header['EXPTIME']
+        self.exptime = self.header['ELAPSED']
         self.green_dark_current_regions = None # Green CCD regions where dark current is measured, defined below
         self.red_dark_current_regions   = None # Red CCD regions where dark current is measured, defined below
         self.green_coll_pressure_torr = 0

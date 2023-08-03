@@ -317,7 +317,7 @@ class RadialVelocity(KPF1_Primitive):
                         exptime_v = 1.0
                 d_obs = 'DATE-MID'
                 if d_obs in p_header: # get from primary header if the key exists
-                    exptime_k = 'EXPTIME' if 'EXPTIME' in p_header else None
+                    exptime_k = 'ELAPSED' if 'ELAPSED' in p_header else None
                     exptime_v = p_header[exptime_k] if exptime_k else 1.0
                     m_obs = Time(p_header[d_obs]).jd - 2400000.5
 
