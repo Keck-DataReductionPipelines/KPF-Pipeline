@@ -8,7 +8,7 @@ import tempfile
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
-from .test_masters_recipe import masters_test_date
+from test_masters_recipe import masters_test_date
 
 
 drp_recipe = open('recipes/kpf_drp.recipe', 'r').read()
