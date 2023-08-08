@@ -156,7 +156,7 @@ class ImageProcessing(KPF0_Primitive):
                     self.correcting_file_or_action
                 )
             
-            if 'IMTYPE' not in self.correcting_file_or_action.header['PRIMARY']:
+            if 'IMTYPE' not in correcting_file_or_action.header['PRIMARY']:
                 raise KeyError("IMTYPE not in header of file {}".format(self.correcting_file_or_action.filename))
 
             if correcting_file_or_action.header['PRIMARY']['IMTYPE'].lower() == 'ordermask':
