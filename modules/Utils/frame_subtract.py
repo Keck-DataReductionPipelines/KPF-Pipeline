@@ -25,7 +25,7 @@ class FrameSubtract(KPF0_Primitive):
                 assert self.correcting_file.header['PRIMARY']['OBSTYPE'] == 'Bias', "Correcting file is not a master bias. Check failed."
             if self.sub_type == 'dark':
                 assert self.correcting_file.header['PRIMARY']['OBSTYPE'] == 'Dark', "Correcting file is not a dark frame file. Check failed."
-                assert self.principal_file.header['PRIMARY']['EXPTIME'] == self.correcting_file.header['PRIMARY']['EXPTIME'], "Frames' exposure times don't match. Check failed."
+                assert self.principal_file.header['PRIMARY']['ELAPSED'] == self.correcting_file.header['PRIMARY']['ELAPSED'], "Frames' exposure times don't match. Check failed."
             subtracted = self.principal_file[ffi] - self.correcting_file[ffi]
                 
     def _perform(self):

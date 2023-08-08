@@ -392,7 +392,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         if seg >= 0 and self.bary_corr_table is not None and not self.bary_corr_table.empty and \
                 np.shape(self.bary_corr_table.values)[0] > ord_idx:
             obs_time = np.array(self.bary_corr_table['PHOTON_BJD'])[ord_idx+self.start_bary_index]
-        elif 'MJD-OBS' in self.header and 'EXPTIME' in self.header:
+        elif 'MJD-OBS' in self.header and 'ELAPSED' in self.header:
             obs_time = self.header['MJD-OBS'] + 2400000.5
         else:
             obs_time = default

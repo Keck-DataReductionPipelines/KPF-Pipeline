@@ -104,7 +104,7 @@ class MasterLFCFramework(KPF0_Primitive):
             frames_data=[]
             for path in all_lfc_files:
                 obj = KPF0.from_fits(path)
-                exp = obj.header['PRIMARY']['EXPTIME']
+                exp = obj.header['PRIMARY']['ELAPSED']
                 frames_data.append(obj[ffi] / exp)
             frames_data = np.array(frames_data)
 

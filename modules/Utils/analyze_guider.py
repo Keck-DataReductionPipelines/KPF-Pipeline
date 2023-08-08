@@ -1,9 +1,13 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib.mlab as mlab
+import matplotlib.gridspec as gridspec
 from scipy.optimize import curve_fit
 from astropy.table import Table
 from astropy.time import Time
+from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeGuider:
 
@@ -20,13 +24,37 @@ class AnalyzeGuider:
     """
 
     def __init__(self, L0, logger=None):
-        self.L0 = L0
         if logger:
             self.logger = logger
             self.logger.debug('AnalyzeGuider class constructor')
         else:
             self.logger = None
-            print('---->AnalyzeGuider class constructor')
+        self.logger.info('Initiating AnanalyzeGuider object.')
+        self.L0 = L0
+        self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
+
+        header_primary_obj = HeaderParse(L0, 'PRIMARY')
+        header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
+        #header_guider_obj  = HeaderParse(L0, 'guider_avg')
+        self.guider_header = header_guider_obj.header
+        self.header = header_primary_obj.header
+        self.name = header_primary_obj.get_name()
+        self.ObsID = header_primary_obj.get_obsid()
+        self.gmag = float(self.header['GAIAMAG']) # Gaia G magnitude
+        self.jmag = float(self.header['2MASSMAG']) # J magnitude
+        self.gcfps = self.header['GCFPS'] # frames per second for guide camera
+        self.gcgain = self.header['GCGAIN'] # detector gain setting 
+        if 'TTGAIN' in self.guider_header:
+            self.tiptilt_gain = self.guider_header['TTGAIN']
+        else:
+            self.tiptilt_gain = 0.3 
+        # to-do: set up logic to determine if L0 is a KPF object or a .fits file
+        #self.df_GUIDER = Table.read(self.L0, format='fits',hdu='guider_cube_origins').to_pandas()
+        #self.df_GUIDER = Table.read(self.L0, hdu='guider_cube_origins').to_pandas()
+        #self.df_GUIDER = self.L0['guider_cube_origins']
+        self.df_GUIDER = self.L0['GUIDER_CUBE_ORIGINS']
+        self.good_fit = None
+
 
     def measure_seeing(self):
 
@@ -52,44 +80,36 @@ class AnalyzeGuider:
             None
         """
         
-        guider_im = L0['GUIDER_AVG'].data - np.median(L0['GUIDER_AVG'].data)
-        guider_header = L0['GUIDER_AVG'].header
-        if 'TTGAIN' in L0['GUIDER_AVG'].header:
-            tiptilt_gain = L0['GUIDER_AVG'].header['TTGAIN']
-        else:
-            tiptilt_gain = 0.3 
+        self.guider_image = self.L0['GUIDER_AVG'].data - np.median(self.L0['GUIDER_AVG'].data)
 
         def moffat_2D(xy, amplitude, x0, y0, alpha, beta):
             x, y = xy
             return amplitude * (1 + ((x - x0) ** 2 + (y - y0) ** 2) / alpha ** 2) ** -beta
 
-        x = np.arange(guider_im.shape[1])
-        y = np.arange(guider_im.shape[0])
+        x = np.arange(self.guider_image.shape[1])
+        y = np.arange(self.guider_image.shape[0])
         X, Y = np.meshgrid(x, y)
         x_flat = X.flatten()
         y_flat = Y.flatten()
-        image_data_flat = guider_im.flatten()
-        p0 = [1, guider_header['CRPIX1'], guider_header['CRPIX2'], 5/0.056, 2.5]  # Initial guess for the parameters
-        #p0 = [1, guider_im.shape[1] / 2, guider_im.shape[0] / 2, 2/0.056, 2]  # Initial guess for the parameters
-        popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0)
-        amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = popt
-        alpha_fit = abs(alpha_fit)
-        #print('amplitude = ' + str(amplitude_fit))
-        #print('seeing = ' + str(alpha_fit*0.056) + ' arcsec')
-        #print('beta = ' + str(beta_fit))
-        #print('x0 = ' + str(x0_fit) + ' pixels')
-        #print('y0 = ' + str(y0_fit) + ' pixels')
+        image_data_flat = self.guider_image.flatten()
+        p0 = [1, self.guider_header['CRPIX1'], self.guider_header['CRPIX2'], 5/0.056, 2.5]  # Initial guess for the parameters
+        #p0 = [1, self.guider_image.shape[1] / 2, self.guider_image.shape[0] / 2, 2/0.056, 2]  # Initial guess for the parameters
         
-        self.guider_image = guider_im
-        self.image_fit = moffat_2D((X, Y), amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit)
-        #resid_im = guider_im - image_fit
+        try:
+            popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0)
+            amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = popt
+            alpha_fit = abs(alpha_fit)
+            self.good_fit = True
+            self.image_fit = moffat_2D((X, Y), amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit)
+            self.amplitude = amplitude_fit
+            self.seeing = alpha_fit
+            self.seeing_550nm = self.seeing*(((1200+950)/2)/550)**0.2  # seeing scales with wavelength^0.2
+            self.beta = beta_fit
+            self.x0 = x0_fit
+            self.y0 = y0_fit
+        except:
+            self.good_fit = False
         
-        self.amplitude = amplitude_fit
-        self.seeing = alpha_fit
-        self.seeing_550nm = self.seeing*(((1200+950)/2)/550)**0.2  # seeing scales with wavelength^0.2
-        self.beta = beta_fit
-        self.x0 = x0_fit
-        self.y0 = y0_fit
 
     def plot_guider_image(self, fig_path=None, show_plot=False):
 
@@ -109,84 +129,190 @@ class AnalyzeGuider:
 
         """
 
-        starname = L0['PRIMARY'].header['TARGNAME']
-        ObsID = L0['PRIMARY'].header['OFNAME']
-        pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
-
         # Plot the original image and residuals
-        guider_im_zoom = self.guider_image[255-38:255+38, 320-38:320+38]
-        resid_im = self.guider_image - self.image_fit
-        resid_im_zoom =   resid_im[255-38:255+38, 320-38:320+38]
+        #guider_im_zoom = self.guider_image[255-38:255+38, 320-38:320+38] # 4 arcsec x 4 arcsec
+        guider_im_zoom = self.guider_image[255-50:255+50, 320-50:320+50]
+        if self.good_fit:
+            resid_im = self.guider_image - self.image_fit
+            resid_im_zoom = resid_im[255-38:255+38, 320-38:320+38]
+        else:
+            resid_im_zoom = 0*self.guider_image[255-38:255+38, 320-38:320+38]
 
-        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5), tight_layout=True)
 
         # Left panel - full image
         im1 = axs[0].imshow(self.guider_image, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
         axs[1].set_aspect(640/512)
         image_size_pixels = self.guider_image.shape
-        image_size_arcsec = (image_size_pixels[1] * pixel_scale, image_size_pixels[0] * pixel_scale)
-        x_tick_locator = ticker.MultipleLocator(5/(pixel_scale-0.001))  # Set tick every 5 arcsec
+        image_size_arcsec = (image_size_pixels[1] * self.pixel_scale, image_size_pixels[0] * self.pixel_scale)
+        x_tick_locator = ticker.MultipleLocator(5/(self.pixel_scale-0.001))  # Set tick every 5 arcsec
         axs[0].xaxis.set_major_locator(x_tick_locator)
-        y_tick_locator = ticker.MultipleLocator(5/(pixel_scale-0.001))  # Set tick every 5 arcsec
+        y_tick_locator = ticker.MultipleLocator(5/(self.pixel_scale-0.001))  # Set tick every 5 arcsec
         axs[0].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[0].get_xticks()
         yticks = axs[0].get_yticks()
-        axs[0].set_xticklabels([f'{int(x * pixel_scale)}' for x in xticks])
-        axs[0].set_yticklabels([f'{int(y * pixel_scale)}' for y in yticks])
+        #axs[0].set_xticks(xticks)  # Set the x-ticks explicitly
+        #axs[0].set_yticks(yticks)  # Set the y-ticks explicitly
+        # The following line (and others) produces this warning: UserWarning: FixedFormatter should only be used together with FixedLocator
+        axs[0].set_xticklabels([f'{int(x * self.pixel_scale)}' for x in xticks])
+        axs[0].set_yticklabels([f'{int(y * self.pixel_scale)}' for y in yticks])
         axs[0].set_xlabel('Arcseconds', fontsize=12)
         axs[0].set_ylabel('Arcseconds', fontsize=12)
-        axs[0].set_title(str(ObsID)+' - ' + starname + '\n' +
-                         "seeing: " + f"{self.seeing*pixel_scale:.2f}" + '" (z+J)'+ r' $\rightarrow$ ' +
-                         f"{self.seeing_550nm*pixel_scale:.2f}" + '" (V, scaled)', fontsize=12)
+        title = str(self.ObsID)+' - ' + self.name 
+        title = title + "\nJ = " + f"{self.jmag:.2f}" + ", G = " + f"{self.gmag:.2f}" + ', ' + str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain'
+        axs[0].set_title(title, fontsize=12)
         axs[0].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
+        #cmap = plt.get_cmap('viridis')
+        #axs[0].set_facecolor(cmap(0))
         #cbar1 = plt.colorbar(im1, ax=axs[0], shrink=0.5)
-        #cbar1.set_label('Intensity', fontsize=12)
 
         # Middle panel - zoomed image
         im2 = axs[1].imshow(guider_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
         axs[1].set_aspect('equal')
         image_size_pixels = guider_im_zoom.shape
-        image_size_arcsec = (image_size_pixels[1] * pixel_scale, image_size_pixels[0] * pixel_scale)
-        x_tick_locator = ticker.MultipleLocator(0.5/(pixel_scale-0.001))  # Set tick every 0.5 arcsec
+        image_size_arcsec = (image_size_pixels[1] * self.pixel_scale, image_size_pixels[0] * self.pixel_scale)
+        x_tick_locator = ticker.MultipleLocator(0.5/(self.pixel_scale-0.001))  # Set tick every 0.5 arcsec
         axs[1].xaxis.set_major_locator(x_tick_locator)
-        y_tick_locator = ticker.MultipleLocator(0.5/(pixel_scale-0.001))  # Set tick every 0.5 arcsec
+        y_tick_locator = ticker.MultipleLocator(0.5/(self.pixel_scale-0.001))  # Set tick every 0.5 arcsec
         axs[1].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[1].get_xticks()
         yticks = axs[1].get_yticks()
-        axs[1].set_xticklabels([f'{int(x * pixel_scale*10)/10}' for x in xticks])
-        axs[1].set_yticklabels([f'{int(y * pixel_scale*10)/10}' for y in yticks])
+        #axs[1].set_xticks(xticks)  # Set the x-ticks explicitly
+        #axs[1].set_yticks(yticks)  # Set the y-ticks explicitly
+        axs[1].set_xticklabels([f'{int(x * self.pixel_scale*10)/10}' for x in xticks])
+        axs[1].set_yticklabels([f'{int(y * self.pixel_scale*10)/10}' for y in yticks])
         axs[1].set_xlabel('Arcseconds', fontsize=12)
         axs[1].set_ylabel('Arcseconds', fontsize=12)
-        axs[1].set_title('Guider Image (zoomed in)', fontsize=12)
+        title = 'Guider Image (zoomed in)'
+        if self.good_fit:
+            title = title + "\n seeing: " + f"{(self.seeing*self.pixel_scale):.2f}" + '" (z+J)'+ r' $\rightarrow$ ' +f"{(self.seeing_550nm*self.pixel_scale):.2f}" + '" (V, scaled)'
+        axs[1].set_title(title, fontsize=12)
         axs[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar2 = plt.colorbar(im2, ax=axs[1], shrink=0.7)
-        #cbar2.set_label('Intensity', fontsize=12)
+        #axs[1].set_facecolor(cmap(0))
 
         # Right panel - zoomed image of residuals to model
         im2 = axs[2].imshow(resid_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
         image_size_pixels = guider_im_zoom.shape
-        image_size_arcsec = (image_size_pixels[1] * pixel_scale, image_size_pixels[0] * pixel_scale)
-        x_tick_locator = ticker.MultipleLocator(0.5/(pixel_scale-0.001))  # Set tick every 0.5 arcsec
+        image_size_arcsec = (image_size_pixels[1] * self.pixel_scale, image_size_pixels[0] * self.pixel_scale)
+        x_tick_locator = ticker.MultipleLocator(0.5/(self.pixel_scale-0.001))  # Set tick every 0.5 arcsec
         axs[2].xaxis.set_major_locator(x_tick_locator)
-        y_tick_locator = ticker.MultipleLocator(0.5/(pixel_scale-0.001))  # Set tick every 0.5 arcsec
+        y_tick_locator = ticker.MultipleLocator(0.5/(self.pixel_scale-0.001))  # Set tick every 0.5 arcsec
         axs[2].yaxis.set_major_locator(y_tick_locator)
         xticks = axs[2].get_xticks()
         yticks = axs[2].get_yticks()
-        axs[2].set_xticklabels([f'{int(x * pixel_scale*10)/10}' for x in xticks])
-        axs[2].set_yticklabels([f'{int(y * pixel_scale*10)/10}' for y in yticks])
+        #axs[2].set_xticks(xticks)  # Set the x-ticks explicitly
+        #axs[2].set_yticks(yticks)  # Set the y-ticks explicitly
+        axs[2].set_xticklabels([f'{int(x * self.pixel_scale*10)/10}' for x in xticks])
+        axs[2].set_yticklabels([f'{int(y * self.pixel_scale*10)/10}' for y in yticks])
         axs[2].set_xlabel('Arcseconds', fontsize=12)
         axs[2].set_ylabel('Arcseconds', fontsize=12)
-        axs[2].set_title('Residuals to Moffat Function Model', fontsize=12)
+        if self.good_fit:
+            title = 'Residuals to Moffat Function Model'
+            axs[2].set_title(title, fontsize=12)
+        else:
+            title = 'Unsuccessful fit to Moffat Function Model'
+            axs[2].set_title(title, fontsize=12, color='r')  # red to indicate unusual image
+        axs[2].set_title(title, fontsize=12)
         axs[2].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar3 = plt.colorbar(im2, ax=axs[2], shrink=0.7)
-        #cbar3.set_label('Intensity', fontsize=12)
+        #axs[0].set_facecolor(cmap(0))
+            
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=288, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+
+    def measure_guider_errors(self):
+
+        """
+        Compute the guiding error RMS for X/Y/R errors. -- TO BE WRITTEN!
+
+        Args:
+            None
+
+        Attributes:
+            TBD
+
+        Returns:
+            None
+        """
+
+
+    def plot_guider_error_time_series_simple(self, fig_path=None, show_plot=False):
+
+        """
+        Generate a two-panel plot of the guider time series errors as 1) a time series 
+        and 2) as a 2-D histogram.
+
+        Args:
+            fig_path (string) - set to the path for a SNR vs. wavelength file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+        
+        if np.sqrt(self.df_GUIDER.shape[0]) < 60:
+            hist_bins = 25
+        else:
+            hist_bins = 40
+        
+        # Create the figure and subplots
+        fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
+        plt.style.use('seaborn-whitegrid')
+
+        x_mas = self.df_GUIDER.command_x/self.tiptilt_gain*self.pixel_scale*1000
+        y_mas = self.df_GUIDER.command_y/self.tiptilt_gain*self.pixel_scale*1000
+        r_mas = (x_mas**2+y_mas**2)**0.5
+
+        # Plot the data
+        im1 = axes[1].hist2d(x_mas, y_mas, bins=hist_bins, cmap='viridis')
+        cmap = plt.get_cmap('viridis')
+        axes[1].set_facecolor(cmap(0))
+        xylim = round(np.nanpercentile(r_mas, 99)*1.4 / 5.0) * 5
+        axes[1].set_xlim(-xylim, xylim) # set symmetric limits for x and y
+        axes[1].set_ylim(-xylim, xylim)
+        axes[1].set_aspect('equal')
+        axes[1].set_title('r: ' + f'{int(np.sqrt(np.average(r_mas**2))*10)/10}' + ' mas (RMS)', fontsize=14)
+        axes[1].set_xlabel('Guiding Error - x (mas)', fontsize=14)
+        axes[1].set_ylabel('Guiding Error - y (mas)', fontsize=14)
+        axes[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
+        cbar = plt.colorbar(im1[3])
+        cbar.set_label('Samples', fontsize=12)
+
+        axes[0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), x_mas, color='royalblue')
+        axes[0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), y_mas, color='orange')
+        axes[0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
+        axes[0].set_xlabel("Time (sec)", fontsize=14)
+        axes[0].set_ylabel("Guiding Error (mas)", fontsize=14)
+        axes[0].legend(['Guiding error - x: ' + f'{int(np.sqrt(np.average(x_mas**2))*10)/10}' + ' mas (RMS)', 
+                        'Guiding error - y: ' + f'{int(np.sqrt(np.average(y_mas**2))*10)/10}' + ' mas (RMS)'], 
+                       fontsize=12, 
+                       loc='best') 
+
+        # Set the font size of tick mark labels
+        axes[0].tick_params(axis='both', which='major', labelsize=14)
+        axes[1].tick_params(axis='both', which='major', labelsize=14)
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
+
+
 
     def plot_guider_error_time_series(self, fig_path=None, show_plot=False):
 
@@ -204,63 +330,121 @@ class AnalyzeGuider:
             (e.g., in a Jupyter Notebook).
 
         """
-
-        df_GUIDER = Table.read(L0, format='fits',hdu='guider_cube_origins').to_pandas()
-        starname = L0['PRIMARY'].header['TARGNAME']
-        ObsID = L0['PRIMARY'].header['OFNAME']
-        if 'TTGAIN' in L0['GUIDER_AVG'].header:
-            tiptilt_gain = L0['GUIDER_AVG'].header['TTGAIN']
-        else:
-            tiptilt_gain = 0.3 
-        pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
         
-        if np.sqrt(df_GUIDER.shape[0]) < 60:
+        # Create the figure and subplots
+        fig, axes = plt.subplots(4, 2, figsize=(16, 16), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
+        plt.style.use('seaborn-whitegrid')
+
+        x_mas = self.df_GUIDER.command_x/self.tiptilt_gain*self.pixel_scale*1000
+        y_mas = self.df_GUIDER.command_y/self.tiptilt_gain*self.pixel_scale*1000
+        r_mas = (x_mas**2+y_mas**2)**0.5
+        
+        # Set the number of histogram bins
+        if np.sqrt(self.df_GUIDER.shape[0]) < 60:
             hist_bins = 25
         else:
             hist_bins = 40
+        if max(max(x_mas), abs(min(x_mas)), max(y_mas), abs(min(y_mas))) / hist_bins > 3:  # if a few really big errors dominate
+            hist_bins = 2 * int(max(max(x_mas), abs(min(x_mas)), max(y_mas), abs(min(y_mas))) / 3)
+
+        # Histogram of guider errors
+        hist = axes[0,1].hist2d(x_mas, y_mas, bins=hist_bins, cmap='viridis')
+        cbar_ax = fig.add_axes([0.95, 0.775, 0.01, 0.20])  # Adjust these values to properly position your colorbar
+        fig.colorbar(hist[3], cax=cbar_ax, label='Samples')#, fontsize=12)
+        #cbar = plt.colorbar(hist[3])
+        #cbar_ax.set_label('Samples', fontsize=12)
+        cmap = plt.get_cmap('viridis')
+        axes[0,1].set_facecolor(cmap(0))
+        xylim = round(np.nanpercentile(r_mas, 95)*1.4 / 5.0) * 5
+        axes[0,1].set_xlim(-xylim, xylim) # set symmetric limits for x and y
+        axes[0,1].set_ylim(-xylim, xylim)
+        axes[0,1].set_aspect('equal')
+        axes[0,1].set_title('r: ' + f'{int(np.sqrt(np.average(r_mas**2))*10)/10}' + ' mas (RMS)', fontsize=14)
+        axes[0,1].set_xlabel('Guiding Error - x (mas)', fontsize=14)
+        axes[0,1].set_ylabel('Guiding Error - y (mas)', fontsize=14)
+        axes[0,1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
+
+        # Time series plot of guider errors
+        axes[0,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), x_mas, color='royalblue')
+        axes[0,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), y_mas, color='orange')
+        axes[0,0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
+        axes[0,0].set_xlabel("Time (sec)", fontsize=14)
+        axes[0,0].set_ylabel("Guiding Error (mas)", fontsize=14)
+        axes[0,0].set_xlim(0, max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp))) 
+        axes[0,0].legend(['Guiding error - x: ' + f'{int(np.sqrt(np.average(x_mas**2))*10)/10}' + ' mas (RMS)', 
+                          'Guiding error - y: ' + f'{int(np.sqrt(np.average(y_mas**2))*10)/10}' + ' mas (RMS)'], 
+                         fontsize=12, 
+                         loc='best') 
+
+        # Power spectral density plot
+        fps = self.gcfps # my_Guider.guider_header['FPS']  # Sample rate in Hz
+        Pxx, freqs = mlab.psd(x_mas/1000, Fs=fps)
+        Pyy, freqs = mlab.psd(y_mas/1000, Fs=fps)
+        Prr, freqs = mlab.psd(r_mas/1000, Fs=fps)
+
+#        axes[1,0].step(freqs, Prr*1e6, where='mid', color='b', alpha=0.8, label='R - Guiding Errors')
+        axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding Errors', lw=2)
+        axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding Errors', lw=2)
+        axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+        axes[1,0].set_xlabel('frequency [Hz]', fontsize=14)
+        axes[1,0].set_ylabel('Guiding Error\n' + r'Power Spectral Density (mas$^2$/Hz)', fontsize=14)
+        axes[1,0].set_xlim(min(freqs),max(freqs))
+        axes[1,0].set_yscale('log')
+        axes[1,0].legend(fontsize=12)
+
+        # Blank - plot to the right of power spectral density
+        axes[1,1].axis('off')
+
+        # Guider FWHM time series plot
+        fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
+        axes[2,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
+        axes[2,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+        axes[2,0].set_xlabel("Time (sec)", fontsize=14)
+        axes[2,0].set_ylabel("Guider FWHM (mas)", fontsize=14)
+        axes[2,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        axes[2,0].legend([r'Guider FWHM ($\neq$ seeing)'], fontsize=12, loc='best') 
+
+        # Histogram of guider FWHM time series plot
+        axes[2,1].hist(fwhm, bins=30, color='royalblue', edgecolor='k')
+        axes[2,1].set_xlabel("Guider FWHM (mas)", fontsize=14)
+        axes[2,1].set_ylabel("Frequency", fontsize=14)
+
+        # Guider flux time series plot
+        flux = self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95)
+        axes[3,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), flux, color='royalblue')
+        axes[3,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+        axes[3,0].set_xlabel("Time (sec)", fontsize=14)
+        axes[3,0].set_ylabel("Guider Flux (fractional)", fontsize=14)
+        axes[3,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        axes[3,0].legend([r'Guider Flux (fractional, normalized by 95 percentile)'], fontsize=12, loc='best') 
+
+        # Histogram of guider flux time series plot
         
-        # Create the figure and subplots
-        fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]})
-        plt.style.use('seaborn-whitegrid')
-
-        x_mas = df_GUIDER.command_x/tiptilt_gain*pixel_scale*1000
-        y_mas = df_GUIDER.command_y/tiptilt_gain*pixel_scale*1000
-        r_mas = (x_mas**2+y_mas**2)**0.5
-
-        # Plot the data
-        im1 = axes[1].hist2d(x_mas, y_mas, bins=hist_bins, cmap='viridis')
-        axes[1].set_title(r'Guiding Errors - $\langle\,\left|\mathrm{r}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(r_mas))*10)/10}'+' mas', fontsize=14)
-        axes[1].set_xlabel('x (mas)', fontsize=14)
-        axes[1].set_ylabel('y (mas)', fontsize=14)
-        axes[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
-        cbar = plt.colorbar(im1[3])
-        cbar.set_label('Samples', fontsize=12)
-
-        axes[0].plot(df_GUIDER.timestamp-min(df_GUIDER.timestamp), x_mas, color='royalblue')
-        axes[0].plot(df_GUIDER.timestamp-min(df_GUIDER.timestamp), y_mas, color='orange')
-        axes[0].set_title("Guiding Error Time Series: " + str(ObsID)+' - ' + starname, fontsize=14)
-        axes[0].set_xlabel("Time (sec)", fontsize=14)
-        axes[0].set_ylabel("Guiding Error (mas)", fontsize=14)
-        axes[0].legend([r'$\langle\,\left|\mathrm{x}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(x_mas))*10)/10}' + ' mas', 
-                        r'$\langle\,\left|\mathrm{y}\right|\,\rangle$ = ' + f'{int(np.average(np.absolute(y_mas))*10)/10}' + ' mas'], 
-                        fontsize=12, loc='best') 
+        axes[3,1].hist(flux, bins=30, color='royalblue', edgecolor='k')
+        axes[3,1].set_xlabel("Flux (fractional)", fontsize=14)
+        axes[3,1].set_ylabel("Frequency", fontsize=14)
 
         # Set the font size of tick mark labels
-        axes[0].tick_params(axis='both', which='major', labelsize=14)
-        axes[1].tick_params(axis='both', which='major', labelsize=14)
+        axes[0,0].tick_params(axis='both', which='major', labelsize=14)
+        axes[0,1].tick_params(axis='both', which='major', labelsize=14)
+        axes[1,0].tick_params(axis='both', which='major', labelsize=14)
+        axes[2,0].tick_params(axis='both', which='major', labelsize=14)
+        axes[3,0].tick_params(axis='both', which='major', labelsize=14)
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
-        
+        plt.close('all')
+
+
     def plot_guider_flux_time_series(self, fig_path=None, show_plot=False):
 
         """
-        Generate a two-panel plot of the guider time series errors as 1) a time series 
-        and 2) as a 2-D histogram.
+        Generate a plot of the guider flux time series errors.
         
         To-do: compute the flux in a octagonal aperture centered on the guiding origin
 
@@ -275,26 +459,65 @@ class AnalyzeGuider:
 
         """
 
-        starname = L0['PRIMARY'].header['TARGNAME']
-        ObsID = L0['PRIMARY'].header['OFNAME']
-        guider_header = L0['GUIDER_AVG'].header
-
         # Construct plots
         plt.style.use('seaborn-whitegrid')
-        plt.figure(figsize=(12, 5), tight_layout=True)
-        plt.plot(df_GUIDER.timestamp-min(df_GUIDER.timestamp), df_GUIDER.object1_flux/np.nanpercentile(df_GUIDER.object1_flux, 95), color='royalblue')
+        plt.figure(figsize=(8, 4), tight_layout=True)
+        plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
         #plt.plot(time, int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec / max(int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec), marker='o', color='k')
-        plt.title("Guiding Error Time Series: " + str(ObsID)+' - ' + starname, fontsize=14)
-        plt.xlabel("Seconds since " + str(guider_header['DATE-BEG']), fontsize=14)
+        plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
+        plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("Flux (fractional)", fontsize=14)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
-        plt.xlim(min(df_GUIDER.timestamp-min(df_GUIDER.timestamp)), max(df_GUIDER.timestamp-min(df_GUIDER.timestamp)))
+        plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
         plt.legend(['Guider Flux', 'Exposure Meter Flux'], fontsize=12, loc='best') 
 
         # Display the plot
         if fig_path != None:
+            t0 = time.process_time()
             plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        plt.close()
+        plt.close('all')
+
+
+    def plot_guider_fwhm_time_series(self, fig_path=None, show_plot=False):
+
+        """
+        Generate a plot of the guider FWHM time series errors.
+
+        Args:
+            fig_path (string) - set to the path for a SNR vs. wavelength file 
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+
+        # Make FWHM time series
+        fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
+
+        # Construct plots
+        plt.style.use('seaborn-whitegrid')
+        plt.figure(figsize=(8, 4), tight_layout=True)
+        plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
+        plt.title("Guider FWHM Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
+        plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
+        plt.ylabel("FWHM (mas)", fontsize=14)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        plt.legend([r'Guider FWHM ($\neq$ seeing)'], fontsize=12, loc='best') 
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=144, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')

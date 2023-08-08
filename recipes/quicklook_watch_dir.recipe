@@ -1,0 +1,20 @@
+# This recipe is used to watch a [L0/2D/L1/L2] directory for modified files and 
+# then to run the appropriate section of the QLP (L0/2D/L1/L2) to generate standard
+# data products.  It must be run in watch mode.  Separate instances should to be run 
+# for L0, 2D, L1, and L2 data directories.
+#
+# Example:
+#    > kpf --watch /data/2D/20230711/ -c configs/quicklook_watch_dir.cfg -r recipes/quicklook_watch_dir.recipe
+
+from modules.Utils.string_proc import level_from_kpffile
+from modules.Utils.string_proc import date_from_kpffile
+from modules.quicklook.src.quick_prim import Quicklook
+
+file_path = context.file_path # from context in watch mode, e.g. /data/2D/20230711/KP.20230711.00415.52_2D.fits
+level = level_from_kpffile(file_path)  # 'L0', '2D', 'L1', 'L2', None
+datecode = date_from_kpffile(file_path)  # e.g. 20230711
+output_dir= '/data/QLP/' + datecode + '/'
+
+if level != None:
+    open_file = kpf0_from_fits(file_path, data_type='KPF')
+    Quicklook(open_file, output_dir, level)

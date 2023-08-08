@@ -47,7 +47,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
     
     DATE_MID = 'DATE-MID'
     DATE_BEG = 'DATE-BEG'
-    EXPTIME = 'EXPTIME'
+    EXPTIME = 'ELAPSED'
     IMTYPE = 'IMTYPE'
     TARGFRAM = 'TARGFRAM'
     year_days = 365.25

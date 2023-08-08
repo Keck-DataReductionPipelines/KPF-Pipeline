@@ -122,7 +122,7 @@ class ImageProcessingAlg():
             return
 
         for ffi in self.ffi_exts:
-            image_exptime = float(self.rawimage.header['PRIMARY']['EXPTIME'])
+            image_exptime = float(self.rawimage.header['PRIMARY']['ELAPSED'])
             dark_exptime = 1.0   # master darks are already normalized
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]*(image_exptime/dark_exptime)

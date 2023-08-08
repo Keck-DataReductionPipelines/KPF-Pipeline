@@ -1,4 +1,5 @@
 from os.path import exists
+from os import getenv
 import numpy as np
 import numpy.ma as ma
 import configparser as cp
@@ -165,6 +166,10 @@ class MasterFlatFramework(KPF0_Primitive):
 
         """
 
+        # smooth_lamp_pattern_path = "/code/KPF-Pipeline/static/kpf_smooth_lamp.fits"
+        smooth_lamp_pattern_path = "/data/reference_fits/kpf_20230628_smooth_lamp_made20230720_float32.fits"
+        smooth_lamp_pattern_data = KPF0.from_fits(smooth_lamp_pattern_path,self.data_type)
+
         order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
         self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
 
@@ -301,8 +306,19 @@ class MasterFlatFramework(KPF0_Primitive):
             stack_avg,stack_var,cnt,stack_unc = fs.compute()
 
             # Divide by the smoothed Flatlamp pattern.
-            # Nominal 2-D Gaussian blurring with width sigma to remove the large scale structure in the flats.
-            smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
+            # For GREEN_CCD and RED_CCD used a fixed lamp pattern made by the 7x7-pixel local median of all
+            # stacked-image data within the orderlet mask from a specific observation date (e.g., 100 Flatlamp
+            # frames, 30-second exposures each, were acquired on 20230628).  The fixed smooth lamp pattern enables
+            # the flat-field correction to remove dust and debris signatures on the optics of the instrument and
+            # telescope.  The local median filtering smooths, yet minimizes undesirable effects at the orderlet edges.
+            # For CA_HK, use dynmaic 2-D Gaussian blurring with width sigma to remove the large scale structure
+            # in the flats (as a stop-gap method).
+
+            if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
+                smooth_lamp_pattern = np.array(smooth_lamp_pattern_data[ffi])
+            else:
+                smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
+
             unnormalized_flat = stack_avg / smooth_lamp_pattern
             unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
@@ -330,6 +346,14 @@ class MasterFlatFramework(KPF0_Primitive):
                     vals_for_mode_calc = np.where(np_om_ffi == orderlet_val,np.rint(100.0 * unnormalized_flat),np.nan)
                     vals_for_mode_calc = np.where(stack_avg > self.low_light_limit,vals_for_mode_calc,np.nan)
                     mode_vals,mode_counts = mode(vals_for_mode_calc,axis=None,nan_policy='omit')
+
+                    dump_data_str = getenv('DUMP_MASTER_FLAT_DATA')
+                    if dump_data_str is None:
+                        dump_data_str = "0"
+                    dump_data = int(dump_data_str)
+                    if dump_data == 1:
+                        fname = 'vals_for_mode_' + ffi + '_orderlet' + str(orderlet_val) + '.txt'
+                        np.savetxt(fname, vals_for_mode_calc.flatten(), fmt = '%10.5f', newline = '\n', header = 'value')
 
                     normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
 
