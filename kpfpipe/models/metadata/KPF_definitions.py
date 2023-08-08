@@ -25,15 +25,11 @@ LEVEL2_HEADER_FILE = LEVEL0_HEADER_FILE.replace('L0', 'L2')
 LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'GREEN_AMP1': fits.ImageHDU,
                      'GREEN_AMP2': fits.ImageHDU,
-                     'GREEN_AMP3': fits.ImageHDU,
-                     'GREEN_AMP4': fits.ImageHDU,
                      'GREEN_CCD': fits.ImageHDU,
                      'GREEN_VAR': fits.ImageHDU,
                      
                      'RED_AMP1': fits.ImageHDU,
                      'RED_AMP2': fits.ImageHDU,
-                     'RED_AMP3': fits.ImageHDU,
-                     'RED_AMP4': fits.ImageHDU,
                      'RED_CCD': fits.ImageHDU,
                      'RED_VAR': fits.ImageHDU,
                      

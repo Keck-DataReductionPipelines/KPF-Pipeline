@@ -203,5 +203,13 @@ class ImageProcessing(KPF0_Primitive):
                     f'Background Subtraction: subtracting background from raw FFI(s) {self.ffi_exts}'
                 )
             self.alg.background_subtraction(correcting_file_or_action)
+        
+        if action_type == 'pixelmask':
+            if self.logger:
+                self.logger.info(
+                    f'Bad pixel masking: masking bad pixels in FFI(s) {self.ffi_exts}'
+                )
+            self.alg.bad_pixel_mask(correcting_file_or_action)
+
 
         return Arguments(self.alg.get())

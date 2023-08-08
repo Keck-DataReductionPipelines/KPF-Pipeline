@@ -387,7 +387,8 @@ class KPFDataModel(object):
         if ext_name in core_extensions:
             raise KeyError('Can not remove any of the core extensions: {}'.format(core_extensions))
         elif ext_name not in self.extensions.keys():
-            raise KeyError('Extension {} could not be found'.format(ext_name))
+            return
+            # raise KeyError('Extension {} could not be found'.format(ext_name))
         
         delattr(self, ext_name)
         del self.header[ext_name]

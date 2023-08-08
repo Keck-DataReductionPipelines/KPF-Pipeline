@@ -480,7 +480,7 @@ class OverscanSubtraction(KPF0_Primitive):
                         channel_exts.pop(3)
                         channel_exts.pop(2)
                         self.channel_datasec_nrows = 4080
-                        green2amp = True                        
+                        green2amp = True  
                 elif self.ffi_exts[0] == 'RED_CCD':
                     naxis2 = l0_obj.header['RED_AMP1']['NAXIS2']
                     if naxis2 >= 4000:
@@ -550,12 +550,18 @@ class OverscanSubtraction(KPF0_Primitive):
                     if naxis2 >= 4000:
                         l0_obj.del_extension('GREEN_AMP3')
                         l0_obj.del_extension('GREEN_AMP4')
+                        l0_obj.header['PRIMARY']['GRNAMPS'] = 2
+                    else:
+                        l0_obj.header['PRIMARY']['GRNAMPS'] = 4
                 elif self.ffi_exts[0] == 'RED_CCD':
                     self.logger.debug('---->{}._perform(): self.ffi_exts[0],naxis2 = {},{}'.\
                         format(self.__class__.__name__,self.ffi_exts[0],naxis2))
                     if naxis2 >= 4000:
                         l0_obj.del_extension('RED_AMP3')
                         l0_obj.del_extension('RED_AMP4')
+                        l0_obj.header['PRIMARY']['REDAMPS'] = 2
+                    else:
+                        l0_obj.header['PRIMARY']['REDAMPS'] = 4
 
                 self.logger.debug('---->{}._perform(): Done with overscan_subtraction.py; returning...'.\
                     format(self.__class__.__name__))
