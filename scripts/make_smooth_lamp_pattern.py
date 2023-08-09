@@ -5,8 +5,8 @@
 # stacked-image data within the orderlet mask from a specific observation date (e.g., 100 Flatlamp
 # frames, 30-second exposures each, were acquired on 20230628).  The fixed smooth lamp pattern enables
 # the flat-field correction to remove time-evolving dust and debris signatures on the optics of the
-# instrument and telescope.  A smoothing kernel 15-pixels wide (along dispersion dimension) by
-# 3-pixels high (along cross-dispersion dimension) is used for computing the clipped mean, with
+# instrument and telescope.  A smoothing kernel 200-pixels wide (along dispersion dimension) by
+# 1-pixel high (along cross-dispersion dimension) is used for computing the clipped mean, with
 # 3-sigma, double-sided outlier rejection.  The kernel is centered on the pixel of interest.
 #
 # The implemented method is slow and takes many hours to complete.
@@ -18,7 +18,7 @@ from astropy.io import fits
 
 #fname_order_mask = "kpf_20230716_order_mask_untrimmed_made20230719.fits"
 fname_stack_average = "kpf_20230628_master_flat.fits"
-fname_smooth_lamp = "kpf_20230628_smooth_lamp_made20230720_float32.fits"
+fname_smooth_lamp = "kpf_20230628_smooth_lamp_made20230803_float32.fits"
 
 #hdul_order_mask = fits.open(fname_order_mask)
 hdul_stack_average = fits.open(fname_stack_average)
@@ -26,8 +26,8 @@ hdul_stack_average = fits.open(fname_stack_average)
 ffis = ["GREEN_CCD","RED_CCD"]
 
 hdu_list = []
-x_window = 15          # Approximately along dispersion dimension.
-y_window = 3           # Approximately along cross-dispersion dimension.
+x_window = 200         # Approximately along dispersion dimension.
+y_window = 1           # Approximately along cross-dispersion dimension.
 n_sigma = 3            # 3-sigma, double-sided outlier rejection
 
 empty_data = None
