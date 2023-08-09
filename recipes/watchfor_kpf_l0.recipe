@@ -17,6 +17,7 @@ do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
 masterbias_path = config.WATCHFOR_L0.masterbias_path
 masterdark_path = config.WATCHFOR_L0.masterdark_path
 masterflat_path = config.WATCHFOR_L0.masterflat_path
+bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
 
@@ -115,6 +116,9 @@ for raw_file_path in file_list:
 
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)        
 
-        # cosmics_removed = ImageProcessing(flat_applied, 'remove_cosmics', lev0_ffi_exts, data_type, quicklook)
+        twod = flat_applied
+        for bpm in bad_pixel_masks:
+            pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
+            twod = pixels_masked
 
         recipe_complete = to_fits(flat_applied, output_file_name)

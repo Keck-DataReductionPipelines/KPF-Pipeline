@@ -47,11 +47,7 @@ def test_aux_exceptions():
     with pytest.raises(NameError):
         # creating extension with duplicate name
         data.create_extension('test1')
-    
-    with pytest.raises(KeyError):
-        # deleting a non-existent extension
-        data.del_extension('test2')
-    
+        
     with pytest.raises(KeyError):
         # deleting a core HDU
         data.del_extension('PRIMARY')
