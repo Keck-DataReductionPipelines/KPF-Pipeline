@@ -13,7 +13,8 @@ import warnings
 
 
 EM_gain = 1.48424 # Gain of CCD in KPF Exposure Meter (e-/ADU)
-EMReadCorrection = 96  # additional time (ms) added to exposures for readout photon collection.
+EMReadCorrection = 0 #additional time (ms) added to exposures for readout photon collection.
+#96ms before time correction.
 
 ###WAVE_1 default segments bins
 orderMin=np.array([4459.46696177, 4490.29501275, 4523.38675819, 4557.05458779,
@@ -376,8 +377,8 @@ class MidpointPhotonArrival:
         df_EM_norm = self.df_EM[wav_str] * EM_gain /disp
 
         # define time arrays
-        date_beg = np.array(self.df_EM["Date-Beg"], dtype=np.datetime64)
-        date_end = np.array(self.df_EM["Date-End"], dtype=np.datetime64)
+        date_beg = np.array(self.df_EM["Date-Beg-Corr"], dtype=np.datetime64)
+        date_end = np.array(self.df_EM["Date-End-Corr"], dtype=np.datetime64)
 
         # Bin wavelengths into orders
         df_EM_bin=self.binOrder(df_EM_norm,self.segmentMin,self.segmentMax)
