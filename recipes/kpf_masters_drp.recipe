@@ -191,6 +191,7 @@ if all_bias_files_list:
             flat_n_sigma = config.FLAT.n_sigma
             flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
             masterflat_path = config.FLAT.masterflat_path
+            smoothlamppattern_path = config.FLAT.smoothlamppattern_path
             ordermask_path = config.FLAT.ordermask_path
             flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
@@ -206,6 +207,7 @@ if all_bias_files_list:
                                                  new_masterbias_path,
                                                  new_masterdark_path,
                                                  new_masterflat_path,
+                                                 smoothlamppattern_path,
                                                  ordermask_path)
 
 ####################################
