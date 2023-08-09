@@ -146,6 +146,7 @@ class ImageProcessing(KPF0_Primitive):
 
         DEFINED_ACTIONS = ['remove_cosmics']
 
+        
         if self.correcting_file_or_action not in DEFINED_ACTIONS:
             #until master file part of data model is fixed
             if isinstance(self.correcting_file_or_action, KPF0):
@@ -154,6 +155,10 @@ class ImageProcessing(KPF0_Primitive):
                 correcting_file_or_action = KPF0.from_fits(
                     self.correcting_file_or_action
                 )
+            
+            if 'IMTYPE' not in correcting_file_or_action.header['PRIMARY']:
+                raise KeyError("IMTYPE not in header of file {}".format(correcting_file_or_action.filename))
+
             if correcting_file_or_action.header['PRIMARY']['IMTYPE'].lower() == 'ordermask':
                 action_type = 'Background_Subtraction'
             else:
