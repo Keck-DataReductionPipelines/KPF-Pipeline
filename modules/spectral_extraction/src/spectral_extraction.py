@@ -50,9 +50,9 @@
                       Defaults to 3.
                     - `action.args['origin']: (list, optional)`: Origin of the image where the order trace is related
                       to. Defaults to [0, 0]
-                    - `action.args['do_outliner_rejection']: (bool, optional)`: perform outliner rejection on spectrum
+                    - `action.args['do_outlier_rejection']: (bool, optional)`: perform outlier rejection on spectrum
                       data. Defaults to False.
-                    - `action.args['outliner_file']: (str, optional)`: L0 file with outliner rejection results. Defaults
+                    - `action.args['outlier_file']: (str, optional)`: L0 file with outlier rejection results. Defaults
                       to None.
 
 
@@ -150,8 +150,8 @@ class SpectralExtraction(KPF0_Primitive):
                     'first_orderlet_idx': None,
                     'total_order_per_ccd': None,
                     'orderlets_on_image': None,
-                    'do_outliner_rejection': False,
-                    'outliner_file': ''
+                    'do_outlier_rejection': False,
+                    'outlier_file': ''
                 }
 
     NORMAL = 0
@@ -188,8 +188,8 @@ class SpectralExtraction(KPF0_Primitive):
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
         orderlets_on_image = self.get_args_value("orderlets_on_image", action.args, args_keys)
-        self.outliner_rejection = self.get_args_value('do_outliner_rejection', action.args, args_keys)
-        self.outliner_file = self.get_args_value("outliner_file", action.args, args_keys) if self.outliner_rejection \
+        self.outlier_rejection = self.get_args_value('do_outlier_rejection', action.args, args_keys)
+        self.outlier_file = self.get_args_value("outlier_file", action.args, args_keys) if self.outlier_rejection \
             else ''
 
         # input configuration
@@ -221,20 +221,20 @@ class SpectralExtraction(KPF0_Primitive):
         self.spec_flux = self.input_spectrum[data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, data_ext)) else None
 
-        self.outliner_lev0 = None
-        if self.outliner_rejection:
-            if self.outliner_file:
-                if os.path.exists(self.outliner_file):
-                    self.outliner_lev0 = KPF0.from_fits(self.outliner_file)
+        self.outlier_lev0 = None
+        if self.outlier_rejection:
+            if self.outlier_file:
+                if os.path.exists(self.outlier_file):
+                    self.outlier_lev0 = KPF0.from_fits(self.outlier_file)
                 else:
-                    self.outliner_lev0 = KPF0()
-                if self.outliner_lev0[self.data_ext].size == 0:
-                    self.outliner_lev0[self.data_ext] = np.empty_like(self.spec_flux)
+                    self.outlier_lev0 = KPF0()
+                if self.outlier_lev0[self.data_ext].size == 0:
+                    self.outlier_lev0[self.data_ext] = np.empty_like(self.spec_flux)
 
-                self.outliner_lev0[self.data_ext][:] = self.spec_flux
+                self.outlier_lev0[self.data_ext][:] = self.spec_flux
 
-        outliner_flux = self.outliner_lev0[self.data_ext] \
-            if self.outliner_lev0 is not None and hasattr(self.outliner_lev0, data_ext) else None
+        outlier_flux = self.outlier_lev0[self.data_ext] \
+            if self.outlier_lev0 is not None and hasattr(self.outlier_lev0, data_ext) else None
 
         try:
             self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
@@ -250,8 +250,8 @@ class SpectralExtraction(KPF0_Primitive):
                                         orderlet_names=orderlets_on_image,
                                         total_order_per_ccd=self.total_order_per_ccd,
                                         clip_file=self.clip_file,
-                                        do_outliner_rejection = self.outliner_rejection,
-                                        outliner_flux=outliner_flux)
+                                        do_outlier_rejection = self.outlier_rejection,
+                                        outlier_flux=outlier_flux)
         except Exception as e:
             self.alg = None
 
@@ -355,12 +355,12 @@ class SpectralExtraction(KPF0_Primitive):
                 self.output_level1 = self.construct_level1_data(data_df, ins, kpf1_sample,
                                                             order_name, self.output_level1)
                 self.add_wavecal_to_level1_data(self.output_level1, order_name, kpf1_sample, kpf0_sample)
-                data_outliner = opt_ext_result['outliner_rejection_result']
-                if data_outliner is not None and self.outliner_lev0 is not None:
-                    self.outliner_lev0[self.data_ext][:] = data_outliner
+                data_outlier = opt_ext_result['outlier_rejection_result']
+                if data_outlier is not None and self.outlier_lev0 is not None:
+                    self.outlier_lev0[self.data_ext][:] = data_outlier
 
-        if self.outliner_lev0 is not None and self.outliner_file:
-            self.outliner_lev0.to_fits(self.outliner_file)
+        if self.outlier_lev0 is not None and self.outlier_file:
+            self.outlier_lev0.to_fits(self.outlier_file)
 
         if good_result and self.output_level1 is not None:
             self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,

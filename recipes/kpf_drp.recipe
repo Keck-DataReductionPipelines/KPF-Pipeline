@@ -36,7 +36,7 @@ do_hk = config.ARGUMENT.do_hk
 #do_qlp = config.ARGUMENT.do_qlp
 do_bk_subtraction = config.ARGUMENT.do_bk_subtraction
 do_bc = config.ARGUMENT.do_bc
-do_outliner = config.ARGUMENT.do_outliner_rejection
+do_outlier = config.ARGUMENT.do_outlier_rejection
 
 # data type of data model, 'KPF' for kpf data.
 data_type = config.ARGUMENT.data_type
@@ -417,7 +417,7 @@ if do_order_trace:
 #
 
 lev1_list = []
-outliner_path = None
+outlier_path = None
 
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
@@ -506,10 +506,10 @@ if do_spectral_extraction or do_hk or do_bc:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
-				if outliner_path == None:
-					outliner_rejection_file = ''
+				if outlier_path == None:
+					outlier_rejection_file = ''
 				else:
-					outliner_rejection_file = outliner_path + short_lev0_file
+					outlier_rejection_file = outlier_path + short_lev0_file
 
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
@@ -526,7 +526,7 @@ if do_spectral_extraction or do_hk or do_bc:
 								ccd_index = idx,
 								rectification_method=rect_method, extraction_method=extract_method,
 								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
-								do_outliner_rejection=do_outliner, outliner_file=outliner_rejection_file)
+								do_outlier_rejection=do_outlier, outlier_file=outlier_rejection_file)
 
 
 				if op_data != None:

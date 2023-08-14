@@ -150,7 +150,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
                  config=None, logger=None,
                  rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
                  total_order_per_ccd=None, orderlet_names=None, clip_file=None, logger_name=None,
-                 do_outliner_rejection=False, outliner_flux=None):
+                 do_outlier_rejection=False, outlier_flux=None):
 
         if not isinstance(flat_data, np.ndarray):
             raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
@@ -215,8 +215,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.poly_clip_dict = dict()
         self.poly_clip_update = False
         self.ccd_index = ccd_index
-        self.do_outliner_rejection = do_outliner_rejection
-        self.outliner_flux = outliner_flux
+        self.do_outlier_rejection = do_outlier_rejection
+        self.outlier_flux = outlier_flux
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -498,11 +498,11 @@ class SpectralExtractionAlg(ModuleAlgBase):
             output_widths (numpy.ndarray): from lower to upper width in output domain
             input_x (numpy.ndarry): x positions covering trace in input domain
             x_output_step (numpy.ndarray): x positions covering trace in output domain
-            mask_height (int): height of the returned mask denoting the outliner pixels of the trace
+            mask_height (int): height of the returned mask denoting the outlier pixels of the trace
             is_debug (bool): output debug message
 
         Returns:
-            numpy.ndarray: a 2D mask denoting the rejected outliner with the same size of height and width as
+            numpy.ndarray: a 2D mask denoting the rejected outlier with the same size of height and width as
                            mask_height and the size of inut_x.
 
         """
@@ -544,7 +544,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return s_data, f_data, is_sdata_raw
 
-    def outliner_rejection_for_optimal_extraction(self, s_data, f_data, input_x, x_output_step, is_sdata_raw,
+    def outlier_rejection_for_optimal_extraction(self, s_data, f_data, input_x, x_output_step, is_sdata_raw,
                                                   input_widths, output_widths,  y_mid, y_output_mid,
                                                   do_column=True, is_debug=False):
         """
@@ -559,27 +559,27 @@ class SpectralExtractionAlg(ModuleAlgBase):
             output_widths  (numpy.ndarray): from lower to upper width in output domain
             y_mid (numpy.ndarray): y location of the trace in input domain
             y_output_mid (int): y location of the trace in output domain
-            do_column (bool): do outliner rejection compuatation column by column.
+            do_column (bool): do outlier rejection compuatation column by column.
             is_debug (bool): output debug message
 
         Returns:
-            t_mask (numpy.ndarray):  a 2D mask denoting the rejected outliner with the same size as that of s_data.
-            s_data_outliner (numpy.ndarray): a 2D spectrum data in which the outliner is replaced by the interpolation of
-                                    the neighbors which are not outliners or the scaled profile.
+            t_mask (numpy.ndarray):  a 2D mask denoting the rejected outlier with the same size as that of s_data.
+            s_data_outlier (numpy.ndarray): a 2D spectrum data in which the outlier is replaced by the interpolation of
+                                    the neighbors which are not outliers or the scaled profile.
 
         """
         input_x_dim, input_y_dim = self.get_spectrum_size()
-        outliner_sigma = self.get_config_value("outliner_sigma", 5.0)
+        outlier_sigma = self.get_config_value("outlier_sigma", 5.0)
         p_height = input_widths.size
         p_width = input_x.size
         a_w = 3
 
-        t_mask, scaled_profile = self.outliner_rejection(s_data, f_data, input_x, do_column,
-                                                         outliner_sigma, y_mid, input_widths, input_y_dim, is_debug)
-        s_data_outliner = np.copy(s_data)
+        t_mask, scaled_profile = self.outlier_rejection(s_data, f_data, input_x, do_column,
+                                                         outlier_sigma, y_mid, input_widths, input_y_dim, is_debug)
+        s_data_outlier = np.copy(s_data)
 
         if t_mask is None:
-            return t_mask, s_data_outliner
+            return t_mask, s_data_outlier
         for x in range(p_width):
             for y in range(p_height):
                 y_input = np.floor(input_widths[y] + y_mid[x]).astype(int)
@@ -601,26 +601,26 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
                         collect_pixels.append(s_data[y_nb, x_nb])
                 p_avg = np.mean(np.array(collect_pixels)) if len(collect_pixels) > 0 else scaled_profile[y, x]
-                s_data_outliner[y, x] = p_avg
+                s_data_outlier[y, x] = p_avg
 
-                if self.outliner_flux is not None:
+                if self.outlier_flux is not None:
                     if is_sdata_raw:
                         original_x = input_x[x]
                         original_y = y_input
                     else:
                         original_x = x_output_step[x]
                         original_y = (output_widths[y] + y_output_mid)
-                    if self.outliner_flux[original_y, original_x] != s_data[y, x]:
-                        self.d_print("Error:outliner flux is not the same as the original flux at position",
+                    if self.outlier_flux[original_y, original_x] != s_data[y, x]:
+                        self.d_print("Error:outlier flux is not the same as the original flux at position",
                                      str(original_y), str(original_x))
 
-                    self.outliner_flux[original_y, original_x] = p_avg
+                    self.outlier_flux[original_y, original_x] = p_avg
 
-        return t_mask, s_data_outliner
+        return t_mask, s_data_outlier
 
 
     @staticmethod
-    def outliner_rejection(s_data, f_data, input_x, is_column_analysis, outliner_sigma, y_mid, input_widths, input_y_dim, is_debug=False):
+    def outlier_rejection(s_data, f_data, input_x, is_column_analysis, outlier_sigma, y_mid, input_widths, input_y_dim, is_debug=False):
         """
 
         Args:
@@ -629,7 +629,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
             input_x (numpy.ndarray): x positions that cover the trace in input domain
             is_column_analysis (bool): do the analysis column by column per orderlet or do the analysis on entier
                     orderlet
-            outliner_sigma (float): thresold for the deviation to find the outliner.
+            outlier_sigma (float): thresold for the deviation to find the outlier.
             y_mid (numpy.ndarray): y location of the trace in input domain
             y_output_mid (int): y location of the trace in output domain
             input_widths (numpy.ndarray): from lower to upper width in input domain
@@ -637,7 +637,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
             is_debug (bool): prints out the analysis result if it is True.
 
         Returns:
-            np.ndarray: t_mask in which each pixel indicates if the trace pixel is an outliner(0) or not (1).
+            np.ndarray: t_mask in which each pixel indicates if the trace pixel is an outlier(0) or not (1).
 
         """
 
@@ -664,7 +664,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 if c_std == 0.0:
                     c_std = mad_std(np.unique(c_residuals))
                 c_deviation = np.absolute(c_residuals/c_std) if c_std != 0.0 else np.ones_like(c_residuals)
-                t_mask[y_valid_idx, i_x] = np.where((c_deviation < outliner_sigma), 1, 0)
+                t_mask[y_valid_idx, i_x] = np.where((c_deviation < outlier_sigma), 1, 0)
 
                 # for testing purpose
                 if is_debug:
@@ -682,17 +682,17 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 relative_values[to_nan_zero] = 0.0
 
             total_iterate = 3
-            max_rejected = 10  # max outliner allowed each iteration
+            max_rejected = 10  # max outlier allowed each iteration
 
             for t in range(total_iterate):
-                valid_pixel = np.where(t_mask != 0)  # doing analysis on non-outliner pixels
+                valid_pixel = np.where(t_mask != 0)  # doing analysis on non-outlier pixels
                 c_median = np.nanmedian(relative_values[valid_pixel])
                 c_std = mad_std(relative_values[valid_pixel], ignore_nan=True)
-                p_threshold = [c_median + outliner_sigma * c_std, c_median - outliner_sigma * c_std]
+                p_threshold = [c_median + outlier_sigma * c_std, c_median - outlier_sigma * c_std]
                 to_zero_idx = np.where(((relative_values > p_threshold[0]) | (relative_values < p_threshold[1])) &
                                    (t_mask != 0))
 
-                # no more outliner, stop the iteration
+                # no more outlier, stop the iteration
                 if to_zero_idx[0].size <= 0:
                     break
 
@@ -777,20 +777,20 @@ class SpectralExtractionAlg(ModuleAlgBase):
                                                                      input_x, x_output_step, mask_height, is_debug)
 
 
-        if self.do_outliner_rejection and self.extraction_method == SpectralExtractionAlg.OPTIMAL and \
+        if self.do_outlier_rejection and self.extraction_method == SpectralExtractionAlg.OPTIMAL and \
                 self.rectification_method == SpectralExtractionAlg.NoRECT and \
                 s_data is not None and f_data is not None:
-            trace_mask, s_data_outliner = self.outliner_rejection_for_optimal_extraction(s_data, f_data,
+            trace_mask, s_data_outlier = self.outlier_rejection_for_optimal_extraction(s_data, f_data,
                                                             input_x, x_output_step, is_sdata_raw,
                                                             input_widths, y_output_widths,
                                                             y_mid, y_output_mid,
                                                             do_column=True, is_debug=is_debug)
         else:
             trace_mask = None
-            s_data_outliner = None
+            s_data_outlier = None
 
 
-        total_outliner = 0
+        total_outlier = 0
         for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
             """
             x_i = input_x[s_x]
@@ -808,15 +808,15 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 out_data[self.FDATA][:] = f_data[:, s_x][:, np.newaxis]
             if s_data is not None:
                 out_data[self.SDATA][:] = s_data[:, s_x][:, np.newaxis] \
-                    if s_data_outliner is None else s_data_outliner[:, s_x][:, np.newaxis]
+                    if s_data_outlier is None else s_data_outlier[:, s_x][:, np.newaxis]
 
             extracted_result = self.extraction_handler(out_data, y_size, data_group)
             extracted_data[:, o_x:o_x+1] = extracted_result['extraction']
 
         if trace_mask is not None and is_debug:
-            total_outliner = np.where(trace_mask[0:y_size, :] == 0)[0].size
-            self.d_print('total outliner :', total_outliner, ' out of ', x_output_step.size*input_widths.size, ' pixels: ',
-                  total_outliner/(x_output_step.size*input_widths.size))
+            total_outlier = np.where(trace_mask[0:y_size, :] == 0)[0].size
+            self.d_print('total outlier :', total_outlier, ' out of ', x_output_step.size*input_widths.size, ' pixels: ',
+                  total_outlier/(x_output_step.size*input_widths.size))
         # out data starting from origin [0, 0] contains the reduced flux associated with the data range
         result_data = {'y_center': y_output_mid,
                        'widths': [lower_width, upper_width],
@@ -2195,4 +2195,4 @@ class SpectralExtractionAlg(ModuleAlgBase):
         else:
             data_df = self.write_data_to_dataframe(out_data, first_row=start_row_at)
         return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on,
-                'outliner_rejection_result':self.outliner_flux}
+                'outlier_rejection_result':self.outlier_flux}
