@@ -93,7 +93,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.4';
+my $version = '1.5';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -207,6 +207,34 @@ foreach my $file (@files) {
         } else {
             print "Copied $file to $destdir\n";
         }
+    }
+}
+
+
+# Make directory to store wlpixelfiles.
+
+my $destdir2  = "${mastersdir}/$procdate/wlpixelfiles";
+
+if (! (-e $destdir2)) {
+    if (! make_path($destdir2)) {
+        die "*** Error: Could not make directory ($destdir2): $!\n";
+    } else {
+        print "Made new directory $destdir2\n";
+    }
+}
+
+sleep(30);
+
+my $globfiles2 = "${sandbox}/masters/wlpixelfiles/*kpf_${procdate}*";
+
+my @files2  = glob("$globfiles2");
+
+foreach my $file (@files2) {
+    if (! (copy($file, $destdir2))) {
+        print "*** Warning: couldn't copy $file to $destdir2 ($!); " .
+            "skipping...\n";
+    } else {
+        print "Copied $file to $destdir2\n";
     }
 }
 
