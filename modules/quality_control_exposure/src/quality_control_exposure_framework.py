@@ -130,7 +130,7 @@ class QualityControlExposureFramework(KPF0_Primitive):
         if isExist is False:
             self.logger.info('Input file does not exist...')
             quality_control_exposure_exit_code = 65
-            return Arguments(quality_control_exposure_exit_code)
+            return Arguments([quality_control_exposure_exit_code,0])
 
 
         # Parse date from filename.  Assume filename has the following form: KP.20230529.69419.77.fits
@@ -156,7 +156,7 @@ class QualityControlExposureFramework(KPF0_Primitive):
         except:
             self.logger.info('Could not connect to database...')
             quality_control_exposure_exit_code = 64
-            return Arguments(quality_control_exposure_exit_code)
+            return Arguments([quality_control_exposure_exit_code,0])
 
         # Open database cursor.
 
@@ -208,7 +208,10 @@ class QualityControlExposureFramework(KPF0_Primitive):
 
         for ffi in self.lev0_ffi_exts:
 
-            image = np.array(l0_file[ffi])
+            try:
+                image = np.array(l0_file[ffi])
+            except:
+                image = np.array([0])
 
             image_shape = np.shape(image)
             len_image_shape = len(image_shape)
@@ -630,12 +633,14 @@ class QualityControlExposureFramework(KPF0_Primitive):
 
         try:
             cur.execute(query)
-            rid = cur.fetchone()
+            rid_tuple = cur.fetchone()
+            rid = rid_tuple[0]
             self.logger.info('PostgreSQL database L0Image ID: rid = {}'.format(rid))
 
         except (Exception, psycopg2.DatabaseError) as error:
             self.logger.info('*** Error inserting record ({}); skipping...'.format(error))
             quality_control_exposure_exit_code = 66
+            rid = 0
 
 
         # Commit transaction.
@@ -656,4 +661,4 @@ class QualityControlExposureFramework(KPF0_Primitive):
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
-        return Arguments(quality_control_exposure_exit_code)
+        return Arguments([quality_control_exposure_exit_code,rid])
