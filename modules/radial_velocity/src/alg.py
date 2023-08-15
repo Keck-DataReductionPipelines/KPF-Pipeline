@@ -1246,7 +1246,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                           original_ccf=analyzed_ccf,
                                           ccf_rw_nonnorm=analyzed_rw_ccf_nonnorm,
                                           ref_ccf=ref_ccf)
-        return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd}
+        return {'ccf_df': df, 'ccf_ary': analyzed_ccf, 'jd': self.obs_jd, 'msg': msg}
 
     @staticmethod
     def ccf_error_calc(velocities, ccfs, fit_wid, vel_span_pixel, rv_guess = 0.0):
