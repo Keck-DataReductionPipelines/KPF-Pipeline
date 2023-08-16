@@ -22,6 +22,8 @@ from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
 from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
+from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
