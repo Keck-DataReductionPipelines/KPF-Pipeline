@@ -2,6 +2,7 @@ import numpy as np
 import math
 import pandas as pd
 from astropy.io import fits
+from astropy.stats import mad_std
 import re
 from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.alg_base import ModuleAlgBase
@@ -148,7 +149,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
     def __init__(self, flat_data, flat_header, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None,
                  rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
-                 total_order_per_ccd=None, orderlet_names=None, clip_file=None, logger_name=None):
+                 total_order_per_ccd=None, orderlet_names=None, clip_file=None, logger_name=None,
+                 do_outlier_rejection=False, outlier_flux=None):
 
         if not isinstance(flat_data, np.ndarray):
             raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
@@ -213,6 +215,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.poly_clip_dict = dict()
         self.poly_clip_update = False
         self.ccd_index = ccd_index
+        self.do_outlier_rejection = do_outlier_rejection
+        self.outlier_flux = outlier_flux
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -480,6 +484,232 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return y_output_mid, lower_width, upper_width, y_mid, x_step, x_output_step, clip_areas
 
+    def data_extraction_for_optimal_extraction(self, data_group,
+                            y_mid, y_output_mid,
+                            input_widths, output_widths,
+                            input_x, x_output_step, mask_height, is_debug):
+        """
+
+        Args:
+            data_group (list): a list containing spectrum data and flat_data
+            y_mid (numpy.ndarray): y location of the trace in input domain
+            y_output_mid (int): y location of the trace in output domain
+            input_widths (numpy.ndarray): from lower to upper width in input domain
+            output_widths (numpy.ndarray): from lower to upper width in output domain
+            input_x (numpy.ndarry): x positions covering trace in input domain
+            x_output_step (numpy.ndarray): x positions covering trace in output domain
+            mask_height (int): height of the returned mask denoting the outlier pixels of the trace
+            is_debug (bool): output debug message
+
+        Returns:
+            numpy.ndarray: a 2D mask denoting the rejected outlier with the same size of height and width as
+                           mask_height and the size of inut_x.
+
+        """
+        # collect all data
+
+        # is_debug = False
+        input_x_dim, input_y_dim = self.get_spectrum_size()
+        p_height = mask_height
+        p_width = input_x.size
+        s_dt = None
+        f_dt = None
+        is_sdata_raw = True
+        for dt in data_group:
+            if dt['idx'] == self.SDATA:
+                s_dt = dt
+                is_sdata_raw = dt['is_raw_data']
+            else:
+                f_dt = dt
+
+        s_data = np.zeros((p_height, p_width), dtype=float) if s_dt is not None else None
+        f_data = np.zeros((p_height, p_width), dtype=float) if f_dt is not None else None
+
+        for i_x, p_x in enumerate(input_x):
+            y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
+            y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
+            y_input = y_input[y_input_idx]
+
+            if s_data is not None:
+                if s_dt['is_raw_data']:
+                    s_data[y_input_idx, i_x] = s_dt['data'][y_input, p_x]
+                else:
+                    s_data[y_input_idx, i_x] = s_dt['data'][output_widths[y_input_idx] + y_output_mid, x_output_step[i_x]]
+
+            if f_data is not None:
+                if f_dt['is_raw_data']:
+                    f_data[y_input_idx, i_x] = f_dt['data'][y_input, p_x]
+                else:
+                    f_data[y_input_idx, i_x] = f_dt['data'][output_widths[y_input_idx] + y_output_mid, x_output_step[i_x]]
+
+        return s_data, f_data, is_sdata_raw
+
+    def outlier_rejection_for_optimal_extraction(self, s_data, f_data, input_x, x_output_step, is_sdata_raw,
+                                                  input_widths, output_widths,  y_mid, y_output_mid,
+                                                  do_column=True, is_debug=False):
+        """
+
+        Args:
+            s_data (numpy.ndarray): extracted spectrum data of one order
+            f_data (numpy.ndarray): extracted flat data of one order
+            input_x (numpy.ndarray):  x positions covering trace in input domain
+            x_output_step (numpy.ndarray): x positions covering trace in output domain
+            is_sdata_raw (bool): if the spectrum is the original or rectified.
+            input_widths (numpy.ndarray): from lower to upper width in input domain
+            output_widths  (numpy.ndarray): from lower to upper width in output domain
+            y_mid (numpy.ndarray): y location of the trace in input domain
+            y_output_mid (int): y location of the trace in output domain
+            do_column (bool): do outlier rejection compuatation column by column.
+            is_debug (bool): output debug message
+
+        Returns:
+            t_mask (numpy.ndarray):  a 2D mask denoting the rejected outlier with the same size as that of s_data.
+            s_data_outlier (numpy.ndarray): a 2D spectrum data in which the outlier is replaced by the interpolation of
+                                    the neighbors which are not outliers or the scaled profile.
+
+        """
+        input_x_dim, input_y_dim = self.get_spectrum_size()
+        outlier_sigma = self.get_config_value("outlier_sigma", 5.0)
+        p_height = input_widths.size
+        p_width = input_x.size
+        a_w = 3
+
+        t_mask, scaled_profile = self.outlier_rejection(s_data, f_data, input_x, do_column,
+                                                         outlier_sigma, y_mid, input_widths, input_y_dim, is_debug)
+        s_data_outlier = np.copy(s_data)
+
+        if t_mask is None:
+            return t_mask, s_data_outlier
+        for x in range(p_width):
+            for y in range(p_height):
+                y_input = np.floor(input_widths[y] + y_mid[x]).astype(int)
+                if y_input < 0 or y_input >= input_y_dim:
+                    continue
+
+                if t_mask[y, x] != 0:
+                    continue
+                collect_pixels = []
+
+                for dh in range(0, a_w):          # neighbor position y_nb, x_nb in [p_height, p_width] domain
+                    y_nb = y + dh - 1
+                    if y_nb < 0 or y_nb >= p_height or dh == 1:
+                        continue
+                    for dw in range(0, 1):
+                        x_nb = x + dw
+                        if x_nb < 0 or x_nb >= p_width or t_mask[y_nb, x_nb] == 0:
+                            continue
+
+                        collect_pixels.append(s_data[y_nb, x_nb])
+                p_avg = np.mean(np.array(collect_pixels)) if len(collect_pixels) > 0 else scaled_profile[y, x]
+                s_data_outlier[y, x] = p_avg
+
+                if self.outlier_flux is not None:
+                    if is_sdata_raw:
+                        original_x = input_x[x]
+                        original_y = y_input
+                    else:
+                        original_x = x_output_step[x]
+                        original_y = (output_widths[y] + y_output_mid)
+                    if self.outlier_flux[original_y, original_x] != s_data[y, x]:
+                        self.d_print("Error:outlier flux is not the same as the original flux at position",
+                                     str(original_y), str(original_x))
+
+                    self.outlier_flux[original_y, original_x] = p_avg
+
+        return t_mask, s_data_outlier
+
+
+    @staticmethod
+    def outlier_rejection(s_data, f_data, input_x, is_column_analysis, outlier_sigma, y_mid, input_widths, input_y_dim, is_debug=False):
+        """
+
+        Args:
+            s_data (numpy.ndarray): spectrum pixels of one order trace (starightened trace)
+            f_data (numpy.ndarray): flat pixels of one order trace (straightened trace)
+            input_x (numpy.ndarray): x positions that cover the trace in input domain
+            is_column_analysis (bool): do the analysis column by column per orderlet or do the analysis on entier
+                    orderlet
+            outlier_sigma (float): thresold for the deviation to find the outlier.
+            y_mid (numpy.ndarray): y location of the trace in input domain
+            y_output_mid (int): y location of the trace in output domain
+            input_widths (numpy.ndarray): from lower to upper width in input domain
+            input_y_dim (int): height of original spectrum
+            is_debug (bool): prints out the analysis result if it is True.
+
+        Returns:
+            np.ndarray: t_mask in which each pixel indicates if the trace pixel is an outlier(0) or not (1).
+
+        """
+
+        scaled_profile = None
+
+        t_mask = np.ones_like(s_data, dtype=int)
+        if is_column_analysis:
+            profile_order = np.nanmedian(f_data, axis=1)
+            profile_median = np.nanmedian(profile_order)
+            scaled_profile = np.zeros_like(f_data)
+            for i_x, p_x in enumerate(input_x):
+                y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
+                y_valid_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
+                # if y_valid_idx.size != y_input.size:
+                #    print(' loc ', i_x,  p_x, ' has less pixels extracted', y_valid_idx.size, ' vs ', y_input.size)
+
+                c_flux = s_data[y_valid_idx, i_x]
+                c_median = np.nanmedian(c_flux)
+                if profile_median == 0:
+                    profile_median = 1
+                scaled_profile[y_valid_idx, i_x] = profile_order[y_valid_idx] * (c_median/profile_median)
+                c_residuals = c_flux - scaled_profile[y_valid_idx, i_x]
+                c_std = mad_std(c_residuals)
+                if c_std == 0.0:
+                    c_std = mad_std(np.unique(c_residuals))
+                c_deviation = np.absolute(c_residuals/c_std) if c_std != 0.0 else np.ones_like(c_residuals)
+                t_mask[y_valid_idx, i_x] = np.where((c_deviation < outlier_sigma), 1, 0)
+
+                # for testing purpose
+                if is_debug:
+                    print('i_x: ', i_x, ' c_median: ', c_median, ' c_deviation max: ', np.max(c_deviation),
+                          ' reject no:', np.where(t_mask[:, i_x] == 0)[0].size)
+
+        else:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                relative_values = np.true_divide(s_data, f_data)
+                to_zero = (relative_values == np.inf)
+                relative_values[to_zero] = 0.0
+                t_mask[to_zero] = 0
+                to_nan_zero = np.where(np.isnan(relative_values))
+                t_mask[to_nan_zero] = 0
+                relative_values[to_nan_zero] = 0.0
+
+            total_iterate = 3
+            max_rejected = 10  # max outlier allowed each iteration
+
+            for t in range(total_iterate):
+                valid_pixel = np.where(t_mask != 0)  # doing analysis on non-outlier pixels
+                c_median = np.nanmedian(relative_values[valid_pixel])
+                c_std = mad_std(relative_values[valid_pixel], ignore_nan=True)
+                p_threshold = [c_median + outlier_sigma * c_std, c_median - outlier_sigma * c_std]
+                to_zero_idx = np.where(((relative_values > p_threshold[0]) | (relative_values < p_threshold[1])) &
+                                   (t_mask != 0))
+
+                # no more outlier, stop the iteration
+                if to_zero_idx[0].size <= 0:
+                    break
+
+                to_reject = max_rejected if to_zero_idx[0].size > max_rejected else to_zero_idx[0].size
+
+                if c_median == 0.0 and c_std == 0.0:  # for some reason, we got zero median and std on the pixels ??
+                    break
+
+                t_mask[to_zero_idx[0][0:to_reject], to_zero_idx[1][0:to_reject]] = 0
+                relative_values[to_zero_idx[0][0:to_reject], to_zero_idx[1][0:to_reject]] = 0
+            scaled_profile = relative_values
+
+        if np.where(t_mask == 0)[0].size == 0:
+            t_mask = None
+
+        return t_mask, scaled_profile
+
     def collect_and_extract_spectrum_curve(self, data_group, order_idx, s_rate=1):
         """ Collect and extract the spectral data along the order per polynomial fit data and no rectification.
 
@@ -536,10 +766,33 @@ class SpectralExtractionAlg(ModuleAlgBase):
         extracted_data = np.zeros((y_size if self.extraction_method == self.NOEXTRACT else 1, output_x_dim))
         y_output_widths = np.arange(-lower_width, upper_width)      # in parallel to input_widths
 
-        for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
-            # if o_x % 1000 == 0:
-            #    self.d_print(o_x, end=" ")
 
+        is_debug = False
+        mask_height = np.shape(out_data)[1]
+
+        #if order_idx == 0:
+        #    is_debug = True
+        s_data, f_data, is_sdata_raw = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
+                                                                     input_widths, y_output_widths,
+                                                                     input_x, x_output_step, mask_height, is_debug)
+
+
+        if self.do_outlier_rejection and self.extraction_method == SpectralExtractionAlg.OPTIMAL and \
+                self.rectification_method == SpectralExtractionAlg.NoRECT and \
+                s_data is not None and f_data is not None:
+            trace_mask, s_data_outlier = self.outlier_rejection_for_optimal_extraction(s_data, f_data,
+                                                            input_x, x_output_step, is_sdata_raw,
+                                                            input_widths, y_output_widths,
+                                                            y_mid, y_output_mid,
+                                                            do_column=True, is_debug=is_debug)
+        else:
+            trace_mask = None
+            s_data_outlier = None
+
+
+        total_outlier = 0
+        for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
+            """
             x_i = input_x[s_x]
             y_input = np.floor(input_widths + y_mid[s_x]).astype(int)
             y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
@@ -549,16 +802,28 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 out_data[dt['idx']][y_input_idx, 0] = dt['data'][y_input[y_input_idx], x_i]
             for dt in rectified_group:
                 out_data[dt['idx']][y_input_idx, 0] = dt['data'][y_output_widths[y_input_idx] + y_output_mid, o_x]
+            """
+
+            if f_data is not None:
+                out_data[self.FDATA][:] = f_data[:, s_x][:, np.newaxis]
+            if s_data is not None:
+                out_data[self.SDATA][:] = s_data[:, s_x][:, np.newaxis] \
+                    if s_data_outlier is None else s_data_outlier[:, s_x][:, np.newaxis]
 
             extracted_result = self.extraction_handler(out_data, y_size, data_group)
             extracted_data[:, o_x:o_x+1] = extracted_result['extraction']
 
+        if trace_mask is not None and is_debug:
+            total_outlier = np.where(trace_mask[0:y_size, :] == 0)[0].size
+            self.d_print('total outlier :', total_outlier, ' out of ', x_output_step.size*input_widths.size, ' pixels: ',
+                  total_outlier/(x_output_step.size*input_widths.size))
         # out data starting from origin [0, 0] contains the reduced flux associated with the data range
         result_data = {'y_center': y_output_mid,
                        'widths': [lower_width, upper_width],
                        'extracted_data': extracted_data}
 
         return result_data
+
 
     def rectify_and_extract_spectrum_curve(self, data_group, order_idx, s_rate=1):
         """ Rectify and extraction the order trace based on the pixel collection method.
@@ -1837,11 +2102,12 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         if order_set is None:
             order_set = self.get_order_set(order_name)
-
+        """"
         self.d_print('SpectralExtractionAlg: do ', self.rectifying_method[self.rectification_method],
                      'rectification and ',
                      self.extracting_method[self.extraction_method], 'extraction on ',
                      order_set.size, ' orders')
+        """
 
         t_start = self.start_time()
         noop = False
@@ -1867,6 +2133,10 @@ class SpectralExtractionAlg(ModuleAlgBase):
         if noop:
             return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on}
 
+        # rectification_on == flat or spectrum  => do rectification on flat or spectrum, no extraction
+        #                     data_group contains one data set
+        # rectification_on = "" => do extraction on spectrum
+        #                     data_group contains spectrum and flat data
         data_group = list()     # containing the data set needed for spectral extraction or rectification only
         if rectification_on != 'flat':
             data_group.append({'data': self.spectrum_flux, 'is_raw_data': self.is_raw_spectrum, 'idx': self.SDATA})
@@ -1924,4 +2194,5 @@ class SpectralExtractionAlg(ModuleAlgBase):
             data_df = self.write_rectified_data_to_dataframe(out_data, order_rectification_result)
         else:
             data_df = self.write_data_to_dataframe(out_data, first_row=start_row_at)
-        return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on}
+        return {'spectral_extraction_result': data_df, 'rectification_on': rectification_on,
+                'outlier_rejection_result':self.outlier_flux}

@@ -474,7 +474,8 @@ class RadialVelocity(KPF1_Primitive):
                 if one_df is None or one_df.empty or not one_df.values.any():
                     if self.logger:
                         self.logger.info('RadialVelocity: orderlet ' + self.od_names[i] + ' message => ' +
-                                rv_results['msg'])
+                                rv_results['msg'] or 'all ccfs are zeros')
+                    one_df = None
                 output_df[self.od_names[i]] = one_df
 
         # do rv on CAL ccfs
