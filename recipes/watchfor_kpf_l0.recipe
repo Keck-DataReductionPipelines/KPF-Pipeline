@@ -68,6 +68,29 @@ else:
 file_path = context.file_path
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
+
+# Register L0 file in L0Files database table.  Perform quality-control tasks.
+
+lev0_ffi_exts_full = config.WATCHFOR_L0.lev0_ffi_exts_full
+actual_dir = config.WATCHFOR_L0.actual_dir
+
+do_quality_control = True
+
+if do_quality_control:
+
+    for l0_filename in file_list:
+
+        quality_control_list = QualityControlExposureFramework(data_type,
+                                                               l0_filename,
+                                                               lev0_ffi_exts_full,
+                                                               actual_dir)
+
+        quality_control_exit_code = quality_control_list[0]
+        quality_control_rid = quality_control_list[1]
+
+
+# Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
+
 for raw_file_path in file_list:
     td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
 
@@ -122,3 +145,19 @@ for raw_file_path in file_list:
             twod = pixels_masked
 
         recipe_complete = to_fits(flat_applied, output_file_name)
+
+
+        # Query database for QC information and update header of 2D FITS file.
+
+        rid = quality_control_rid
+        verbose = config.WATCHFOR_L0.verbose
+
+        do_query_l0_file = True
+
+        if do_query_l0_file:
+            if rid > 0:
+
+                do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
+                                                                    rid,
+                                                                    output_file_name,
+                                                                    verbose)
