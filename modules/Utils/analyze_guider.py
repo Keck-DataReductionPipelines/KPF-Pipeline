@@ -141,7 +141,7 @@ class AnalyzeGuider:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5), tight_layout=True)
 
         # Left panel - full image
-        im1 = axs[0].imshow(self.guider_image, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
+        im1 = axs[0].imshow(self.guider_image, cmap='viridis', origin='lower', vmin=0, vmax=np.nanpercentile(guider_im_zoom,99.9))
         axs[1].set_aspect(640/512)
         image_size_pixels = self.guider_image.shape
         image_size_arcsec = (image_size_pixels[1] * self.pixel_scale, image_size_pixels[0] * self.pixel_scale)
@@ -167,7 +167,7 @@ class AnalyzeGuider:
         #cbar1 = plt.colorbar(im1, ax=axs[0], shrink=0.5)
 
         # Middle panel - zoomed image
-        im2 = axs[1].imshow(guider_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
+        im2 = axs[1].imshow(guider_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.nanpercentile(guider_im_zoom,99.9))
         axs[1].set_aspect('equal')
         image_size_pixels = guider_im_zoom.shape
         image_size_arcsec = (image_size_pixels[1] * self.pixel_scale, image_size_pixels[0] * self.pixel_scale)
@@ -192,7 +192,7 @@ class AnalyzeGuider:
         #axs[1].set_facecolor(cmap(0))
 
         # Right panel - zoomed image of residuals to model
-        im2 = axs[2].imshow(resid_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.percentile(guider_im_zoom,99.9))
+        im2 = axs[2].imshow(resid_im_zoom, cmap='viridis', origin='lower', vmin=0, vmax=np.nanpercentile(guider_im_zoom,99.9))
         image_size_pixels = guider_im_zoom.shape
         image_size_arcsec = (image_size_pixels[1] * self.pixel_scale, image_size_pixels[0] * self.pixel_scale)
         x_tick_locator = ticker.MultipleLocator(0.5/(self.pixel_scale-0.001))  # Set tick every 0.5 arcsec
@@ -321,7 +321,6 @@ class AnalyzeGuider:
         plt.close('all')
 
 
-
     def plot_guider_error_time_series(self, fig_path=None, show_plot=False):
 
         """
@@ -429,12 +428,12 @@ class AnalyzeGuider:
         # Blank - plot to the right of power spectral density
         strings = ["Sun's altitude below horizon = " + str(int(-get_sun_alt(self.date_mid))) + " deg"]
         strings.append("Lunar separation = " + str(int(get_moon_sep(self.date_mid, self.ra, self.dec))) + " deg")
-        strings.append('\n')
-        strings.append('Nframes = ' + str(nframes))
-        strings.append('   ' + str(nframes_0stars) + ' with 0 stars detected')
-        strings.append('   ' + str(nframes_1stars) + ' with 1 star detected')
-        strings.append('   ' + str(nframes_2stars) + ' with 2 stars detected')
-        strings.append('   ' + str(nframes_3stars) + ' with 3 stars detected')
+        #strings.append('\n')
+        #strings.append('Nframes = ' + str(nframes))
+        #strings.append('   ' + str(nframes_0stars) + ' with 0 stars detected')
+        #strings.append('   ' + str(nframes_1stars) + ' with 1 star detected')
+        #strings.append('   ' + str(nframes_2stars) + ' with 2 stars detected')
+        #strings.append('   ' + str(nframes_3stars) + ' with 3 stars detected')
         axes[1,1].axis('off')
         axes[1,1].text(0.03, 0.9, '\n'.join(strings), fontsize=14, ha='left', va='top')
 

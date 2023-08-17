@@ -80,8 +80,8 @@ class AnalyzeHK:
         """
         fig, ax = plt.subplots(figsize = (12,5),tight_layout=True)
         im = ax.imshow(self.image, 
-                       vmin = np.percentile(self.image,1),
-                       vmax = np.percentile(self.image,99.5), 
+                       vmin = np.nanpercentile(self.image,1),
+                       vmax = np.nanpercentile(self.image,99.5), 
                        interpolation = 'None',
                        origin = 'lower',
                        aspect='auto')
@@ -170,7 +170,7 @@ class AnalyzeHK:
         for i in range(len(orders)):
             wav = self.wave_lib[i]
             flux = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
-            ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
+            ax.plot(wav[padding:-padding],flux[padding:-padding]/np.nanpercentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
         ax.set_xlabel('Wavelength (nm)',fontsize=18)
         ax.set_ylabel('Flux',fontsize=18)
         ax.xaxis.set_tick_params(labelsize=14)

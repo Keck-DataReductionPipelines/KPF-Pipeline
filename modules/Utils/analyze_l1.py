@@ -142,20 +142,20 @@ class AnalyzeL1:
         # Compute SNR per order and per orderlet
         for o in range(norders_green):
             GREEN_SNR_WAV[o] = L1['GREEN_SCI_WAVE1'][o,2040]
-            GREEN_SNR[o,0] = np.percentile(GREEN_CAL_SNR[o], snr_percentile)
-            GREEN_SNR[o,1] = np.percentile(GREEN_SCI_SNR1[o], snr_percentile)
-            GREEN_SNR[o,2] = np.percentile(GREEN_SCI_SNR2[o], snr_percentile)
-            GREEN_SNR[o,3] = np.percentile(GREEN_SCI_SNR3[o], snr_percentile)
-            GREEN_SNR[o,4] = np.percentile(GREEN_SKY_SNR[o], snr_percentile)
-            GREEN_SNR[o,5] = np.percentile(GREEN_SCI_SNR[o], snr_percentile)
+            GREEN_SNR[o,0] = np.nanpercentile(GREEN_CAL_SNR[o], snr_percentile)
+            GREEN_SNR[o,1] = np.nanpercentile(GREEN_SCI_SNR1[o], snr_percentile)
+            GREEN_SNR[o,2] = np.nanpercentile(GREEN_SCI_SNR2[o], snr_percentile)
+            GREEN_SNR[o,3] = np.nanpercentile(GREEN_SCI_SNR3[o], snr_percentile)
+            GREEN_SNR[o,4] = np.nanpercentile(GREEN_SKY_SNR[o], snr_percentile)
+            GREEN_SNR[o,5] = np.nanpercentile(GREEN_SCI_SNR[o], snr_percentile)
         for o in range(norders_red):
             RED_SNR_WAV[o] = L1['RED_SCI_WAVE1'][o,2040]
-            RED_SNR[o,0] = np.percentile(RED_CAL_SNR[o], snr_percentile)
-            RED_SNR[o,1] = np.percentile(RED_SCI_SNR1[o], snr_percentile)
-            RED_SNR[o,2] = np.percentile(RED_SCI_SNR2[o], snr_percentile)
-            RED_SNR[o,3] = np.percentile(RED_SCI_SNR3[o], snr_percentile)
-            RED_SNR[o,4] = np.percentile(RED_SKY_SNR[o], snr_percentile)
-            RED_SNR[o,5] = np.percentile(RED_SCI_SNR[o], snr_percentile)
+            RED_SNR[o,0] = np.nanpercentile(RED_CAL_SNR[o], snr_percentile)
+            RED_SNR[o,1] = np.nanpercentile(RED_SCI_SNR1[o], snr_percentile)
+            RED_SNR[o,2] = np.nanpercentile(RED_SCI_SNR2[o], snr_percentile)
+            RED_SNR[o,3] = np.nanpercentile(RED_SCI_SNR3[o], snr_percentile)
+            RED_SNR[o,4] = np.nanpercentile(RED_SKY_SNR[o], snr_percentile)
+            RED_SNR[o,5] = np.nanpercentile(RED_SCI_SNR[o], snr_percentile)
 
         # Save SNR arrays to the object
         self.GREEN_SNR     = GREEN_SNR
@@ -584,7 +584,8 @@ class AnalyzeL1:
         axs[3].set_ylabel('CAL / SCI2', fontsize=18)
         axs[3].axhline(self.ratio_cal_sci2, color='gray', linestyle='--', label=r'median(CAL$_\mathrm{interp}$(WAV2) / SCI2(WAV2) = %.5f)' % self.ratio_cal_sci2)
         axs[3].legend(fontsize=16, loc='upper right')
-        
+        axs[3].set_xlabel('Wavelength (Ang)', fontsize=18)
+
         for ax in axs:
             ax.tick_params(axis='both', which='major', labelsize=14)
 
