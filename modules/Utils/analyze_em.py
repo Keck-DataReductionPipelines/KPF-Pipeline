@@ -153,7 +153,7 @@ class AnalyzeEM:
             avg_flux_ratio = np.nansum(int_SKY_flux/SKY_SCI_ratio) / np.nansum(int_SCI_flux)
             coefficient, exponent = f"{avg_flux_ratio:.2e}".split("e")
             flux_ratio_latex = r"${} \times 10^{{{}}}$".format(coefficient, int(exponent))
-            plottitle = r'EM Time Series - total(SKY$_{\mathrm{corrected}}$) / total(SCI) = ' + flux_ratio_latex + r' $\rightarrow \geq$' + "{:.3g}".format(-2.5 * math.log10(avg_flux_ratio)) + ' mag: ' + str(self.ObsID) + ' - ' + self.name
+            plottitle = r'EM: total(SKY$_{\mathrm{corrected}}$) / total(SCI) = ' + flux_ratio_latex + r' $\rightarrow$ ' + "{:.3g}".format(-2.5 * math.log10(avg_flux_ratio)) + ' mag: ' + str(self.ObsID) + ' - ' + self.name
         else:
              plottitle = ''
         plt.title(plottitle, fontsize=14)
