@@ -22,6 +22,8 @@ from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
 from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
+from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -36,6 +38,7 @@ do_hk = config.ARGUMENT.do_hk
 #do_qlp = config.ARGUMENT.do_qlp
 do_bk_subtraction = config.ARGUMENT.do_bk_subtraction
 do_bc = config.ARGUMENT.do_bc
+do_outlier = config.ARGUMENT.do_outlier_rejection
 
 # data type of data model, 'KPF' for kpf data.
 data_type = config.ARGUMENT.data_type
@@ -156,7 +159,7 @@ for wls in wls_list:
 
 
 ## do L0->2D conversion for watch mode
-if context.watch and do_l0_to_2d:
+if do_l0_to_2d:
     invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
 
@@ -220,6 +223,7 @@ if lev0_file_path:
     lev0_science_pattern = lev0_file_path
 else:
     lev0_science_pattern = input_2d_dir + '*' + fits_ext
+    
 output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
 wave_to_ext = config.ARGUMENT.wave_to_ext
 orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
@@ -415,6 +419,7 @@ if do_order_trace:
 #
 
 lev1_list = []
+outlier_path = None
 
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
@@ -503,6 +508,11 @@ if do_spectral_extraction or do_hk or do_bc:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
+				if outlier_path == None:
+					outlier_rejection_file = ''
+				else:
+					outlier_rejection_file = outlier_path + short_lev0_file
+
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
 					order_names = orderlet_names[idx]
@@ -517,7 +527,8 @@ if do_spectral_extraction or do_hk or do_bc:
 								start_order=start_order[idx],
 								ccd_index = idx,
 								rectification_method=rect_method, extraction_method=extract_method,
-								clip_file=clip_file, data_extension=ccd, trace_file=trace_file)
+								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
+								do_outlier_rejection=do_outlier, outlier_file=outlier_rejection_file)
 
 
 				if op_data != None:
@@ -563,8 +574,8 @@ if do_spectral_extraction or do_hk or do_bc:
 				if output_data != None:
 					result = to_fits(output_data, output_lev1_file)
 
-#			if exists(output_lev1_file):
-#				lev1_list = lev1_list + [output_lev1_file]
+			if exists(output_lev1_file):
+				lev1_list = lev1_list + [output_lev1_file]
 #				if do_qlp:
 #					Quicklook(lev0_data, output_qlp, end_of_night_summary)
 

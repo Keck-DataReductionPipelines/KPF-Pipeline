@@ -9,10 +9,28 @@ do_quality_control = True
 
 if do_quality_control:
 
-    for l0_filename in find_files(lev0_fits_file_glob):
+    file_list = find_files(lev0_fits_file_glob)
+
+    for l0_filename in file_list:
 
         quality_control_exit_code = QualityControlExposureFramework(data_type,
                                                                     l0_filename,
                                                                     lev0_ffi_exts,
                                                                     actual_dir)
 
+    # Do it again, in case more L0 files were received.
+
+    file_list_again = find_files(lev0_fits_file_glob)
+
+    for l0_filename in file_list_again:
+
+        if l0_filename in file_list:
+
+            no_op = 1
+
+        else:
+
+            quality_control_exit_code = QualityControlExposureFramework(data_type,
+                                                                        l0_filename,
+                                                                        lev0_ffi_exts,
+                                                                        actual_dir)
