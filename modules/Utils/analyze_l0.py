@@ -2,6 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from modules.Utils.kpf_parse import HeaderParse
+from datetime import datetime
 
 class AnalyzeL0:
 
@@ -24,7 +25,6 @@ class AnalyzeL0:
         else:
             self.logger = None
         self.L0 = L0
-#        self.header = L0['PRIMARY'].header
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -69,16 +69,16 @@ class AnalyzeL0:
 #                    amp3_present = True
 #                if hdu.name == CHIP + '_AMP4':
 #                    amp4_present = True
-            if L0[CHIP + '_AMP1'] is not None:
+            if CHIP + '_AMP1' in L0.extensions:
                 if L0[CHIP + '_AMP1'].shape[0] > 0:
                     amp1_present = True
-            if L0[CHIP + '_AMP2'] is not None:
+            if CHIP + '_AMP2' in L0.extensions:
                 if L0[CHIP + '_AMP2'].shape[0] > 0:
                     amp2_present = True
-            if L0[CHIP + '_AMP3'] is not None:
+            if CHIP + '_AMP3' in L0.extensions:
                 if L0[CHIP + '_AMP3'].shape[0] > 0:
                     amp3_present = True
-            if L0[CHIP + '_AMP4'] is not None:
+            if CHIP + '_AMP4' in L0.extensions:
                 if L0[CHIP + '_AMP4'].shape[0] > 0:
                     amp4_present = True
             if amp1_present:
@@ -112,7 +112,6 @@ class AnalyzeL0:
             self.logger.debug('plot_L0_stitched_image: need to set chip="green" or "red"')
             return
 
-        plt.grid(False)
         plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(image, cmap='viridis', origin='lower',
                    vmin=np.percentile(image,1),
@@ -126,10 +125,24 @@ class AnalyzeL0:
         cbar_label = 'ADU'
         if twotosixteen:
             cbar_label = cbar_label + r' / $2^{16}$'
-        cbar = plt.colorbar(shrink=0.7, label=cbar_label)
+        cbar = plt.colorbar(shrink=0.95, label=cbar_label)
         cbar.ax.yaxis.label.set_size(14)
         cbar.ax.tick_params(labelsize=12)
         plt.grid(False)
+        
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, 
+                    xy=(1, 0), 
+                    xycoords='axes fraction', 
+                    fontsize=8,
+                    color="lightgray",
+                    ha="right",
+                    va="bottom",
+                    xytext=(100, -32), # adjust the second parameter to control annotation height
+                    textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
