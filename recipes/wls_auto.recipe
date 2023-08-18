@@ -5,6 +5,7 @@ from modules.quicklook.src.nightly_prim import Nightly_summary
 masters_dir = config.ARGUMENT.masters_dir
 output_dir = config.ARGUMENT.output_dir + '/'
 master_wls_file = config.ARGUMENT.master_wls_file
+save_diagnostics_dir = config.ARGUMENT.diagnostic_dir
 quicklook = config.ARGUMENT.quicklook
 f0 = config.ARGUMENT.f0_key
 fr = config.ARGUMENT.frep_key
@@ -58,6 +59,7 @@ for cal_type in ['ThAr', 'LFC']:
                     f0_key=f0, frep_key=fr,
                     output_dir = output_dir,
                     linelist_path=linelist,
+                    save_diagnostics=save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
                 )
 
             output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
