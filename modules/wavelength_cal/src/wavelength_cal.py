@@ -159,7 +159,7 @@ class WaveCalibrate(KPF1_Primitive):
                     )
                     
                     if self.save_wl_pixel_toggle == True:
-                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        wlpixelwavedir = self.output_dir + '/wlpixelfiles/'
                         if not os.path.exists(wlpixelwavedir):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
@@ -190,7 +190,7 @@ class WaveCalibrate(KPF1_Primitive):
                     )
 
                     if self.save_wl_pixel_toggle == True:
-                        wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+                        wlpixelwavedir = self.output_dir + '/wlpixelfiles/'
                         if not os.path.exists(wlpixelwavedir):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
@@ -283,7 +283,7 @@ class WaveCalibrate(KPF1_Primitive):
         )
         
         if self.save_wl_pixel_toggle == True:
-            wlpixelwavedir = self.output_dir + 'wlpixelfiles/'
+            wlpixelwavedir = self.output_dir + '/wlpixelfiles/'
             if not os.path.exists(wlpixelwavedir):
                 os.mkdir(wlpixelwavedir)
             file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
