@@ -17,6 +17,7 @@ from modules.Utils.data_handler import SetHeaderValue
 from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.Utils.amplifier_mask import AmplifierMask
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
@@ -635,10 +636,14 @@ if do_rv or do_rv_reweighting:
 		short_lev2 = str_replace(short_lev1, lev1_stem_suffix, lev2_stem_suffix)
 		output_lev2_file = output_rv + short_lev2
 
-		# do rv if oeverwrite or L2 output doesn't exist
+		# do rv if overwrite or L2 output doesn't exist
 		rv_data = None
 		if overwrite or not exists(output_lev2_file):
 			lev1_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
+
+			# Mask bad amplifiers in 4 amp modes
+			lev1_data = AmplifierMask(lev1_data)
+
 			rv_init = RadialVelocityInit(start_time="2021-03-01", l1_data=lev1_data, bc_corr_path=bc_path, test_data_path=rv_star_dir)
 
 			if rv_init != None:
