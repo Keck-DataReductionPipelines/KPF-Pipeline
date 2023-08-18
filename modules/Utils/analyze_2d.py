@@ -52,7 +52,7 @@ class Analyze2D:
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
-        self.exptime = self.header['ELAPSED']
+        self.exptime = self.header['EXPTIME']
         self.green_dark_current_regions = None # Green CCD regions where dark current is measured, defined below
         self.red_dark_current_regions   = None # Red CCD regions where dark current is measured, defined below
         self.green_coll_pressure_torr = 0
@@ -174,8 +174,8 @@ class Analyze2D:
         
         # Generate 2D image
         plt.figure(figsize=(10,8), tight_layout=True)
-        plt.imshow(image, vmin = np.percentile(image,0.1), 
-                          vmax = np.percentile(image,99.9), 
+        plt.imshow(image, vmin = np.nanpercentile(image,0.1), 
+                          vmax = np.nanpercentile(image,99.9), 
                           interpolation = 'None', 
                           origin = 'lower', 
                           cmap='viridis')
@@ -288,8 +288,8 @@ class Analyze2D:
         plt.figure(figsize=(10,8), tight_layout=True)
         plt.imshow(image[zoom_coords[0]:zoom_coords[2], zoom_coords[1]:zoom_coords[3]], 
                    extent=[zoom_coords[0], zoom_coords[2], zoom_coords[1], zoom_coords[3]], 
-                   vmin = np.percentile(image,0.1), 
-                   vmax = np.percentile(image,99.9), 
+                   vmin = np.nanpercentile(image,0.1), 
+                   vmax = np.nanpercentile(image,99.9), 
                    interpolation = 'None', 
                    origin = 'lower')
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
@@ -368,8 +368,8 @@ class Analyze2D:
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
                 im = axs[2-i, j].imshow(sub_img, origin='lower', 
                                  extent=[start_y, start_y+size, start_x, start_x+size], # these indices appear backwards, but work
-                                 vmin = np.percentile(sub_img,0.1), 
-                                 vmax = np.percentile(sub_img,99.9),
+                                 vmin = np.nanpercentile(sub_img,0.1), 
+                                 vmax = np.nanpercentile(sub_img,99.9),
                                  interpolation = 'None',
                                  cmap='viridis')
                 axs[2-i, j].grid(False)
@@ -645,12 +645,12 @@ class Analyze2D:
                  label='Median: ' + '%4.1f' % np.nanmedian(flatten_image) + ' e-; '
                        'Stddev: ' + '%4.1f' % np.nanstd(flatten_image) + ' e-; '
                        'MAD: '    + '%4.1f' % mad + ' e-; '
-                       'Saturated? ' + str(np.percentile(flatten_image,99.99)>saturation_limit_2d), 
+                       'Saturated? ' + str(np.nanpercentile(flatten_image,99.99)>saturation_limit_2d), 
                  alpha=0.5, 
                  density = False, 
-                 range = (np.percentile(flatten_image,  0.005),
-                          np.percentile(flatten_image, 99.995)))
-        #if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.percentile(master_flatten_counts,0.005),np.percentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.percentile(master_flatten_counts,99.9)]
+                 range = (np.nanpercentile(flatten_image,  0.005),
+                          np.nanpercentile(flatten_image, 99.995)))
+        #if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.nanpercentile(master_flatten_counts,0.005),np.nanpercentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.nanpercentile(master_flatten_counts,99.9)]
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.xlabel('Counts (e-)', fontsize=16)
         plt.ylabel('Number of Pixels', fontsize=16)
@@ -696,10 +696,10 @@ class Analyze2D:
             #image = self.D2[CHIP + '_CCD'].data
             image = np.array(self.D2[CHIP + '_CCD'].data)
             column_sum = np.nansum(image, axis = 0)
-            p_10 = np.percentile(column_sum, 10) # 10th percentile
-            p_50 = np.percentile(column_sum, 50) # 50th percentile
-            p_90 = np.percentile(column_sum, 99) # 99th percentile
-            percentile = np.percentile(column_sum, column_brightness_percentile) # nth percentile
+            p_10 = np.nanpercentile(column_sum, 10) # 10th percentile
+            p_50 = np.nanpercentile(column_sum, 50) # 50th percentile
+            p_90 = np.nanpercentile(column_sum, 99) # 99th percentile
+            percentile = np.nanpercentile(column_sum, column_brightness_percentile) # nth percentile
             which_column_10 = np.argmin(np.abs(column_sum - p_10)) # index of 50th percentile
             which_column_50 = np.argmin(np.abs(column_sum - p_50)) # index of 50th percentile
             which_column_90 = np.argmin(np.abs(column_sum - p_90)) # index of 90th percentile
@@ -710,7 +710,7 @@ class Analyze2D:
             return
             
         # Determine if plot should be logarithmic or not
-        if np.percentile(column_sum, 90) / np.percentile(column_sum, 10) > 20:
+        if np.nanpercentile(column_sum, 90) / np.nanpercentile(column_sum, 10) > 20:
             log_plot = True
         else:
             log_plot = False

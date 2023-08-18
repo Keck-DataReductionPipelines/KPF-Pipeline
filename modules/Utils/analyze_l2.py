@@ -128,27 +128,27 @@ class AnalyzeL2:
             for o in range(n_orders):
                 if orderlet == 'CAL':
                     this_CCF = CCF_data[oo, o, :]
-                    if np.percentile(this_CCF,99) < 0:
-                        norm_CCF = np.divide(this_CCF+np.percentile(this_CCF,0.1), 
-                                             np.percentile(this_CCF+np.percentile(this_CCF,0.1),90))
+                    if np.nanpercentile(this_CCF,99) < 0:
+                        norm_CCF = np.divide(this_CCF+np.nanpercentile(this_CCF,0.1), 
+                                             np.nanpercentile(this_CCF+np.nanpercentile(this_CCF,0.1),90))
                     else:
-                        if np.percentile(this_CCF,[90]) == 0:
+                        if np.nanpercentile(this_CCF,[90]) == 0:
                             norm_CCF = this_CCF
                         else:
-                            norm_CCF = np.divide(this_CCF, np.percentile(this_CCF,[90]))
+                            norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[90]))
                 elif orderlet == 'SKY':
                     this_CCF = CCF_data[oo, o, :]
-                    if np.percentile(this_CCF,99) < 0:
-                        norm_CCF = np.divide(this_CCF+np.percentile(this_CCF,0.1), 
-                                             np.percentile(this_CCF+np.percentile(this_CCF,0.1),90))
+                    if np.nanpercentile(this_CCF,99) < 0:
+                        norm_CCF = np.divide(this_CCF+np.nanpercentile(this_CCF,0.1), 
+                                             np.nanpercentile(this_CCF+np.nanpercentile(this_CCF,0.1),90))
                     else:
-                        if np.percentile(this_CCF,[90]) == 0:
+                        if np.nanpercentile(this_CCF,[90]) == 0:
                             norm_CCF = this_CCF
                         else:
-                            norm_CCF = np.divide(this_CCF, np.percentile(this_CCF,[90]))
+                            norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[90]))
                 elif (np.sum(CCF_data[oo, o, :]) != 0): # SCI1/SCI2/SCI3 - only show if CCF was computed
                     this_CCF = CCF_data[oo, o, :]
-                    norm_CCF = np.divide(this_CCF, np.percentile(this_CCF,[99]))
+                    norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[99]))
                 # The zoom feature is not yet implemented
                 #if zoom:
                 #    middle = len(RVgrid) // 4

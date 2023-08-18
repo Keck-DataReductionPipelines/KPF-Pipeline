@@ -57,8 +57,8 @@ class AnalyzeHK:
                                                       'x2': loc[loc_idx['yf']]-self.offset,
                                                       'y1': loc[loc_idx['x0']],
                                                       'y2': loc[loc_idx['xf']]}
-                if fiber == 'sci': self.trace_location_sky = trace_location # sci/sky seem to be backwards
-                if fiber == 'sky': self.trace_location_sci = trace_location
+                if fiber == 'sci': self.trace_location_sci = trace_location # sci/sky had been backwards in previous versions
+                if fiber == 'sky': self.trace_location_sky = trace_location
         if wavesoln_file != None:
             self.wave_lib = pd.read_csv(wavesoln_file, header=None, sep = ' ', comment = '#')
             self.wave_lib *= 1 - self.rv_shift/3e5 # Doppler shift wavelength solution
@@ -80,8 +80,8 @@ class AnalyzeHK:
         """
         fig, ax = plt.subplots(figsize = (12,5),tight_layout=True)
         im = ax.imshow(self.image, 
-                       vmin = np.percentile(self.image,1),
-                       vmax = np.percentile(self.image,99.5), 
+                       vmin = np.nanpercentile(self.image,1),
+                       vmax = np.nanpercentile(self.image,99.5), 
                        interpolation = 'None',
                        origin = 'lower',
                        aspect='auto')
@@ -170,7 +170,7 @@ class AnalyzeHK:
         for i in range(len(orders)):
             wav = self.wave_lib[i]
             flux = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
-            ax.plot(wav[padding:-padding],flux[padding:-padding]/np.percentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
+            ax.plot(wav[padding:-padding],flux[padding:-padding]/np.nanpercentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
         ax.set_xlabel('Wavelength (nm)',fontsize=18)
         ax.set_ylabel('Flux',fontsize=18)
         ax.xaxis.set_tick_params(labelsize=14)

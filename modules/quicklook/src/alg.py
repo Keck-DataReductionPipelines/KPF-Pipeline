@@ -132,7 +132,10 @@ class QuicklookAlg:
                 filename = savedir + self.ObsID + '_EM_time_series_sky_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
                 myEM.plot_EM_time_series(fiber='sky', fig_path=filename, show_plot=False)
-    
+                filename = savedir + self.ObsID + '_EM_time_series_ratio_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myEM.plot_EM_time_series(fiber='ratio', fig_path=filename, show_plot=False)
+
                 # Exposure Meter spectrum plot
                 filename = savedir + self.ObsID + '_EM_spectrum_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
