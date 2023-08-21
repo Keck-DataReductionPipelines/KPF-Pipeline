@@ -1182,7 +1182,7 @@ class WaveCalibration:
 
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
-            popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=100000)
+            popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0)#, maxfev=100000)
 
         return popt  
           
