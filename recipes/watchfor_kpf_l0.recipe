@@ -17,6 +17,7 @@ do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
 masterbias_path = config.WATCHFOR_L0.masterbias_path
 masterdark_path = config.WATCHFOR_L0.masterdark_path
 masterflat_path = config.WATCHFOR_L0.masterflat_path
+bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
 
@@ -67,6 +68,29 @@ else:
 file_path = context.file_path
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 
+
+# Register L0 file in L0Files database table.  Perform quality-control tasks.
+
+lev0_ffi_exts_full = config.WATCHFOR_L0.lev0_ffi_exts_full
+actual_dir = config.WATCHFOR_L0.actual_dir
+
+do_quality_control = True
+
+if do_quality_control:
+
+    for l0_filename in file_list:
+
+        quality_control_list = QualityControlExposureFramework(data_type,
+                                                               l0_filename,
+                                                               lev0_ffi_exts_full,
+                                                               actual_dir)
+
+        quality_control_exit_code = quality_control_list[0]
+        quality_control_rid = quality_control_list[1]
+
+
+# Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
+
 for raw_file_path in file_list:
     td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
 
@@ -115,6 +139,25 @@ for raw_file_path in file_list:
 
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)        
 
-        # cosmics_removed = ImageProcessing(flat_applied, 'remove_cosmics', lev0_ffi_exts, data_type, quicklook)
+        twod = flat_applied
+        for bpm in bad_pixel_masks:
+            pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
+            twod = pixels_masked
 
         recipe_complete = to_fits(flat_applied, output_file_name)
+
+
+        # Query database for QC information and update header of 2D FITS file.
+
+        rid = quality_control_rid
+        verbose = config.WATCHFOR_L0.verbose
+
+        do_query_l0_file = True
+
+        if do_query_l0_file:
+            if rid > 0:
+
+                do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
+                                                                    rid,
+                                                                    output_file_name,
+                                                                    verbose)

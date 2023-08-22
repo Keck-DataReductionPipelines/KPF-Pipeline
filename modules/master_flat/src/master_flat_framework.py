@@ -1,4 +1,5 @@
 from os.path import exists
+from os import getenv
 import numpy as np
 import numpy.ma as ma
 import configparser as cp
@@ -47,7 +48,7 @@ class MasterFlatFramework(KPF0_Primitive):
         3. Further modifications to this recipe are needed in order to use
            a master flat-lamp pattern from a prior night.
         4. Low-light pixels cannot be reliably used to
-           compute the flat-field correction (e.g., less than 500 DN/sec).
+           compute the flat-field correction (e.g., less than 5 DN/sec).
         5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
 
         Algorithm:
@@ -72,7 +73,8 @@ class MasterFlatFramework(KPF0_Primitive):
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_master_bias.fits).
         masterdark_path (str): Pathname of input master dark (e.g., /testdata/kpf_master_dark.fits).
         masterflat_path (str): Pathname of output master flat (e.g., /testdata/kpf_master_flat.fits).
-        ordermask_path (str): Pathname of input order mask (e.g., /testdata/order_mask_3_2_20230414.fits).
+        smoothlamppattern_path (str): Pathname of input smooth lamp pattern (e.g., /data/reference_fits/kpf_20230628_smooth_lamp_made20230720_float32.fits).
+        ordermask_path (str): Pathname of input order mask (e.g., /data/reference_fits/order_mask_G4-3_2_R4-3_2_20230717.fits).
 
     Attributes:
         data_type (str): Type of data (e.g., KPF).
@@ -80,14 +82,16 @@ class MasterFlatFramework(KPF0_Primitive):
         all_fits_files_path (str , which can include file glob): Location of inputs (e.g., /data/KP*.fits).
         lev0_ffi_exts (list of str): FITS extensions to stack (e.g., ['GREEN_CCD','RED_CCD']).
         masterbias_path (str): Pathname of input master bias (e.g., /testdata/kpf_green_red_bias.fits).
+        masterdark_path (str): Pathname of input master dark (e.g., /testdata/kpf_master_dark.fits).
         masterflat_path (str): Pathname of output master flat (e.g., /testdata/kpf_green_red_flat.fits).
-        ordermask_path (str): Pathname of input order mask (e.g., /testdata/order_mask_3_2_20230414.fits).
+        smoothlamppattern_path (str): Pathname of input smooth lamp pattern (e.g., /data/reference_fits/kpf_20230628_smooth_lamp_made20230720_float32.fits).
+        ordermask_path (str): Pathname of input order mask (e.g., /data/reference_fits/order_mask_G4-3_2_R4-3_2_20230717.fits).
         imtype_keywords (str): FITS keyword for filtering input flat files (fixed as 'IMTYPE').
         imtype_values_str (str): Value of FITS keyword (fixed as 'Flatlamp'), to be converted to lowercase for test.
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
         gaussian_filter_sigma (float): 2-D Gaussian-blur sigma for smooth lamp pattern calculation (default = 2.0 pixels)
-        low_light_limit = Low-light limit where flat is set to unity (default = 500.0 DN/sec)
+        low_light_limit = Low-light limit where flat is set to unity (default = 5.0 DN/sec)
 
     Outputs:
         Full-frame-image FITS extensions in output master flat:
@@ -115,7 +119,8 @@ class MasterFlatFramework(KPF0_Primitive):
         self.masterbias_path = self.action.args[4]
         self.masterdark_path = self.action.args[5]
         self.masterflat_path = self.action.args[6]
-        self.ordermask_path = self.action.args[7]
+        self.smoothlamppattern_path = self.action.args[7]
+        self.ordermask_path = self.action.args[8]
 
         self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
         self.imtype_values_str = ['Flatlamp','autocal-flat-all']
@@ -147,7 +152,7 @@ class MasterFlatFramework(KPF0_Primitive):
         module_param_cfg = module_config_obj['PARAM']
 
         self.gaussian_filter_sigma = float(module_param_cfg.get('gaussian_filter_sigma', 2.0))
-        self.low_light_limit = float(module_param_cfg.get('low_light_limit', 500.0))
+        self.low_light_limit = float(module_param_cfg.get('low_light_limit', 5.0))
         self.green_ccd_flat_exptime_maximum = float(module_param_cfg.get('green_ccd_flat_exptime_maximum', 2.0))
         self.red_ccd_flat_exptime_maximum = float(module_param_cfg.get('red_ccd_flat_exptime_maximum', 1.0))
         self.ca_hk_flat_exptime_maximum = float(module_param_cfg.get('ca_hk_flat_exptime_maximum', 1.0))
@@ -164,6 +169,20 @@ class MasterFlatFramework(KPF0_Primitive):
         Returns [exitcode, infobits] after computing and writing master-flat FITS file.
 
         """
+
+        smoothlamppattern_path_exists = exists(self.smoothlamppattern_path)
+        if not smoothlamppattern_path_exists:
+            raise FileNotFoundError('File does not exist: {}'.format(self.smoothlamppattern_path))
+        self.logger.info('self.smoothlamppattern_path = {}'.format(self.smoothlamppattern_path))
+        self.logger.info('smoothlamppattern_path_exists = {}'.format(smoothlamppattern_path_exists))
+
+        smooth_lamp_pattern_data = KPF0.from_fits(self.smoothlamppattern_path,self.data_type)
+
+        ordermask_path_exists = exists(self.ordermask_path)
+        if not ordermask_path_exists:
+            raise FileNotFoundError('File does not exist: {}'.format(self.ordermask_path))
+        self.logger.info('self.ordermask_path = {}'.format(self.ordermask_path))
+        self.logger.info('ordermask_path_exists = {}'.format(ordermask_path_exists))
 
         order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
         self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
@@ -300,9 +319,23 @@ class MasterFlatFramework(KPF0_Primitive):
             fs = FrameStacker(normalized_frames_data,self.n_sigma,self.logger)
             stack_avg,stack_var,cnt,stack_unc = fs.compute()
 
-            # Divide by the smoothed Flatlamp pattern.
-            # Nominal 2-D Gaussian blurring with width sigma to remove the large scale structure in the flats.
-            smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
+            # Divide by the smoothed Flatlamp pattern.  For GREEN_CCD and RED_CCD, use a fixed lamp pattern
+            # to "flatten" of all stacked-image data for the current observation date within the orderlet mask.
+            # The fixed lamp pattern is made from a stacked image from a specific observation date
+            # (e.g., 100 Flatlamp frames, 30-second exposures each, were acquired on 20230628). The fixed lamp
+            # pattern is smoothed with a sliding-window kernel 15-pixels wide (along dispersion dimension)
+            # by 3-pixels high (along cross-dispersion dimension) by computing the clipped mean
+            # with 3-sigma double-sided outlier rejection.   The fixed smooth lamp pattern enables the flat-field
+            # correction to remove dust and debris signatures on the optics of the instrument and telescope.
+            # The local median filtering smooths, yet minimizes undesirable effects at the orderlet edges.
+            # For CA_HK, use dynmaic 2-D Gaussian blurring with width sigma to remove the large scale structure
+            # in the flats (as a stop-gap method).
+
+            if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
+                smooth_lamp_pattern = np.array(smooth_lamp_pattern_data[ffi])
+            else:
+                smooth_lamp_pattern = gaussian_filter(stack_avg, sigma=self.gaussian_filter_sigma)
+
             unnormalized_flat = stack_avg / smooth_lamp_pattern
             unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
 
@@ -330,6 +363,14 @@ class MasterFlatFramework(KPF0_Primitive):
                     vals_for_mode_calc = np.where(np_om_ffi == orderlet_val,np.rint(100.0 * unnormalized_flat),np.nan)
                     vals_for_mode_calc = np.where(stack_avg > self.low_light_limit,vals_for_mode_calc,np.nan)
                     mode_vals,mode_counts = mode(vals_for_mode_calc,axis=None,nan_policy='omit')
+
+                    dump_data_str = getenv('DUMP_MASTER_FLAT_DATA')
+                    if dump_data_str is None:
+                        dump_data_str = "0"
+                    dump_data = int(dump_data_str)
+                    if dump_data == 1:
+                        fname = 'vals_for_mode_' + ffi + '_orderlet' + str(orderlet_val) + '.txt'
+                        np.savetxt(fname, vals_for_mode_calc.flatten(), fmt = '%10.5f', newline = '\n', header = 'value')
 
                     normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
 
@@ -449,6 +490,10 @@ class MasterFlatFramework(KPF0_Primitive):
 
             ffi_lamp_ext_name = ffi + '_LAMP'
             master_holder.header[ffi_lamp_ext_name]['BUNIT'] = ('DN/sec','Lamp pattern per exposure time')
+
+            if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
+                master_holder.header[ffi]['ORDRMASK'] = self.ordermask_path
+                master_holder.header[ffi]['LAMPPATT'] = self.smoothlamppattern_path
 
         master_holder.to_fits(self.masterflat_path)
 

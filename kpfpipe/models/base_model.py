@@ -263,7 +263,7 @@ class KPFDataModel(object):
         """
         if not fn.endswith('.fits'):
             # we only want to write to a '.fits file
-            raise NameError('filename must ends with .fits')    
+            raise NameError('filename must end with .fits')    
 
         gen_hdul = getattr(self, '_create_hdul', None)
         if gen_hdul is None:
@@ -387,7 +387,8 @@ class KPFDataModel(object):
         if ext_name in core_extensions:
             raise KeyError('Can not remove any of the core extensions: {}'.format(core_extensions))
         elif ext_name not in self.extensions.keys():
-            raise KeyError('Extension {} could not be found'.format(ext_name))
+            return
+            # raise KeyError('Extension {} could not be found'.format(ext_name))
         
         delattr(self, ext_name)
         del self.header[ext_name]

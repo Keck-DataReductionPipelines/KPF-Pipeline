@@ -93,7 +93,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.3';
+my $version = '1.5';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -202,11 +202,39 @@ foreach my $file (@files) {
     my $destfile = "$destdir/$file";
     if (! (-e $destfile)) {
         if (! (copy($file, $destdir))) {
-            die "*** Warning: couldn't copy $file to $destdir ($!); " .
-                "quitting...\n";
+            print "*** Warning: couldn't copy $file to $destdir ($!); " .
+                "skipping...\n";
         } else {
             print "Copied $file to $destdir\n";
         }
+    }
+}
+
+
+# Make directory to store wlpixelfiles.
+
+my $destdir2  = "${mastersdir}/$procdate/wlpixelfiles";
+
+if (! (-e $destdir2)) {
+    if (! make_path($destdir2)) {
+        die "*** Error: Could not make directory ($destdir2): $!\n";
+    } else {
+        print "Made new directory $destdir2\n";
+    }
+}
+
+sleep(30);
+
+my $globfiles2 = "${sandbox}/masters/wlpixelfiles/*kpf_${procdate}*";
+
+my @files2  = glob("$globfiles2");
+
+foreach my $file (@files2) {
+    if (! (copy($file, $destdir2))) {
+        print "*** Warning: couldn't copy $file to $destdir2 ($!); " .
+            "skipping...\n";
+    } else {
+        print "Copied $file to $destdir2\n";
     }
 }
 
@@ -221,7 +249,7 @@ print "Elapsed total time (sec.) = ", $endscript - $startscript, "\n";
 print "Terminating normally...\n";
 
 
-# Move log file from runtime directory to product directory.
+# Copy log file from runtime directory to product directory.
 
 my ($logfileBase) = $iam =~ /(.+)\.pl/;
 
@@ -229,11 +257,11 @@ my $logfile = $logdir . '/' . $logfileBase . '_' . $procdate . '.out';
 
 if (-e $logfile) {
 
-    if (! (move($logfile, $destdir))) {
-        die "*** Warning: couldn't move $logfile to $destdir ($!); " .
+    if (! (copy($logfile, $destdir))) {
+        die "*** Warning: couldn't copy $logfile to $destdir ($!); " .
             "quitting...\n";
     } else {
-        print "Moved $logfile to $destdir\n";
+        print "Copied $logfile to $destdir\n";
     }
 }
 

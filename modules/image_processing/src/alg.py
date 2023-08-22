@@ -60,6 +60,14 @@ class ImageProcessingAlg():
         ins = cfg_params.get_config_value('instrument', '') if cfg_params is not None else ''
         self.config_ins = ConfigHandler(config, ins, cfg_params)
 
+    def num_amps(self):
+        amps = {'GREEN_CCD': 2, 'RED_CCD': 2}
+        header = self.rawimage.header['PRIMARY']
+        amps['RED_CCD'] = int(header['REDAMPS'])
+        amps['GREEN_CCD'] = int(header['GRNAMPS'])
+
+        return amps
+
     def bias_subtraction(self, masterbias):
         """Subtracts bias data from raw data.
         In pipeline terms: inputs two L0 files, produces one L0 file.
@@ -122,7 +130,7 @@ class ImageProcessingAlg():
             return
 
         for ffi in self.ffi_exts:
-            image_exptime = float(self.rawimage.header['PRIMARY']['EXPTIME'])
+            image_exptime = float(self.rawimage.header['PRIMARY']['ELAPSED'])
             dark_exptime = 1.0   # master darks are already normalized
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]*(image_exptime/dark_exptime)
@@ -216,6 +224,37 @@ class ImageProcessingAlg():
             self.rawimage[ffi] = self.rawimage[ffi] - bkg
 
         return self.rawimage
+    
+    def bad_pixel_mask(self, mask):
+        """Performs bad pixel masking
+        In pipeline terms: inputs two 2D files, produces one 2D file.
+
+        Args:
+            rawfile (KPF0): KPF0 object of the raw L0 file (not 2D)
+            mask (FITS File): L0 FITS file object with boolean values,
+            One's where pixels are good and zeros where pixels are bad
+
+        """
+        header = self.rawimage.header['PRIMARY']
+        if header['IMTYPE'].lower() != 'object':
+            self.logger.info("Image is {}, skipping BPM correction.".format(header['IMTYPE']))
+            return
+        
+        num_amps = self.num_amps()
+
+        for ffi in self.ffi_exts:
+            if 'amplifier' in mask.filename.lower() and \
+                num_amps[ffi] < 4:
+                continue
+            mask[ffi][mask[ffi]==0] = np.nan
+            try:
+                self.rawimage[ffi] = self.rawimage[ffi] * mask[ffi]
+                self.rawimage.header['PRIMARY']['PIXMASK'] = True
+            except Exception as e:
+                if self.logger:
+                    self.logger.info('*** Exception raised: {}'.format(e))
+                else:
+                    print("*** Exception raised:", e)
 
     def get(self):
         """Returns bias-corrected raw image result.

@@ -61,6 +61,8 @@ class KPF0(KPFDataModel):
         self.header_definitions = pd.read_csv(KPF_definitions.LEVEL0_HEADER_FILE)
         for i, row in self.header_definitions.iterrows():
             ext_name = row['Ext']
+            if ext_name not in self.header.keys():
+                continue
             key = row['Keyword']
             val = row['Value']
             desc = row['Description']

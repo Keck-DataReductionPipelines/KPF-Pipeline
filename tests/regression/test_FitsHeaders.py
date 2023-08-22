@@ -9,7 +9,7 @@ def test_match_headers_float_le():
     Find all fits files with matching EXPTIME less than or equal zero.
     """
 
-    fh = FitsHeaders(files_in_dir, 'EXPTIME', '0.0')
+    fh = FitsHeaders(files_in_dir, 'ELAPSED', '0.0')
     input_files = fh.match_headers_float_le()
 
     print('Output from match_headers_float_le...')

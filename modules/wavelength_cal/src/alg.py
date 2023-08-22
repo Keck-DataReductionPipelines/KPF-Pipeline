@@ -192,7 +192,7 @@ class WaveCalibration:
         
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
-        expected_peak_locs=None, plt_path=None, print_update=False):
+        expected_peak_locs=None, plt_path='/data/wls/', print_update=False):
         """
         Iteratively performs wavelength calibration for all orders.
         Args:
@@ -925,7 +925,7 @@ class WaveCalibration:
 
     def mode_match(
         self, order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, 
-        comb_lines_angstrom, print_update=False, plot_path=None, start_check=True,
+        comb_lines_angstrom, print_update=False, plot_path='/data/wls/', start_check=True,
     ):
         """
         Matches detected order_flux peaks to the theoretical locations of LFC wavelengths
@@ -1182,7 +1182,7 @@ class WaveCalibration:
 
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
-            popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=100000)
+            popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
 
         return popt  
           

@@ -166,7 +166,7 @@ class MasterDarkFramework(KPF0_Primitive):
             dark_file = KPF0.from_fits(dark_file_path,self.data_type)
             mjd_obs = float(dark_file.header['PRIMARY']['MJD-OBS'])
             mjd_obs_list.append(mjd_obs)
-            exp_time = float(dark_file.header['PRIMARY']['EXPTIME'])
+            exp_time = float(dark_file.header['PRIMARY']['ELAPSED'])
             exp_time_list.append(exp_time)
             self.logger.debug('dark_file_path,exp_time = {},{}'.format(dark_file_path,exp_time))
             header_object = dark_file.header['PRIMARY']['OBJECT']

@@ -268,6 +268,7 @@ class OrderMaskAlg(ModuleAlgBase):
         """
         all_names = self.get_orderlet_names()
         order_name_idx = all_names.index(order_name) if order_name in all_names else 0
+        self.get_total_orderlets_from_image()
         order_name_idx = order_name_idx % self.total_trace_per_order
 
         return order_name_idx

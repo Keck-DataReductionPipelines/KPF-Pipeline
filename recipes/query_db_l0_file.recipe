@@ -1,0 +1,15 @@
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
+
+data_type = config.ARGUMENT.data_type
+rid = config.ARGUMENT.rid
+fits_filename = config.ARGUMENT.fits_filename
+verbose = config.ARGUMENT.verbose
+
+do_query_l0_file = True
+
+if do_query_l0_file:
+
+    do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
+                                                        rid,
+                                                        fits_filename,
+                                                        verbose)

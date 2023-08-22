@@ -171,7 +171,7 @@ class FitsHeaders:
                 val1 = fits.getval(fits_file, 'SCI-OBJ')
                 val2 = fits.getval(fits_file, 'CAL-OBJ')
                 val3 = fits.getval(fits_file, 'SKY-OBJ')
-                val4 = fits.getval(fits_file, 'EXPTIME')        # Require EXPTIME <= 2.0 seconds to avoid saturation.
+                val4 = fits.getval(fits_file, 'ELAPSED')        # Require EXPTIME <= 2.0 seconds to avoid saturation.
 
                 if ((val1 == val2) and (val2 == val3) and (val1 != '') and (val1.lower() != 'none') and (val4 <= 2.0)):
                     flag = 'keep'
@@ -225,7 +225,7 @@ class FitsHeaders:
 
             try:
 
-                val4 = float(fits.getval(fits_file, 'EXPTIME'))
+                val4 = float(fits.getval(fits_file, 'ELAPSED'))
 
                 if (val4 >= exptime_minimum):
                     flag = 'keep'
@@ -341,7 +341,7 @@ class FitsHeaders:
 
             try:
 
-                val4 = float(fits.getval(fits_file, 'EXPTIME'))
+                val4 = float(fits.getval(fits_file, 'ELAPSED'))
 
                 if (val4 <= exptime_maximum):
                     flag = 'keep'
