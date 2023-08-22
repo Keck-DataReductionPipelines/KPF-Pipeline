@@ -47,7 +47,6 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
     parser.add_argument('--date', dest='date', type=str, default=None, help="Date for the data to be processed.")
     parser.add_argument('-n', '--ncpus', dest='ncpus', type=int, default=1, help="Number of CPU cores to utilize.")
 
-
     args = parser.parse_args(in_args[1:])
 
     return args
@@ -164,13 +163,14 @@ def main():
     datestr = datetime.now().strftime(format='%Y%m%d')
 
     # randomize queue manager port to avoid crosstalk between pipeline instances
-    port = str(random.randint(50102, 50151))
+    port = str(random.randint(50101, 60101))
+    frame_config = ConfigClass(framework_config_multi)
+    print(f"Setting queue manager port to {port}")
+    frame_config['DEFAULT']['queue_manager_portnr'] = port
+    frame_config['DEFAULT']['queue_manager_auth_code'] = str(hash(port))
 
     # Using the multiprocessing library, create the specified number of instances
     if args.watch and args.ncpus > 1:
-        frame_config = ConfigClass(framework_config_multi)
-        print(f"Setting queue manager port to {port}")
-        frame_config['DEFAULT']['queue_manager_portnr'] = port
         for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
             p = Process(target=worker, args=(i, pipe_config, framework_logcfg, frame_config))
@@ -197,9 +197,6 @@ def main():
 
 
     if args.watch != None:
-        framework.logger.info("Starting queue manager only, no processing")
-        framework._get_queue_manager(frame_config)
-
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
