@@ -18,7 +18,7 @@ class AnalyzeWLS:
     """
 
     def __init__(self, L1, logger=None):
-        if logger:
+        if self.logger:
             self.logger = logger
             self.logger.debug('Initializing AnalyzeWLS object.')
         else:
