@@ -7,6 +7,7 @@ from glob import glob
 from copy import copy
 import argparse
 import traceback
+import random
 from datetime import datetime
 import time
 import threading
@@ -27,6 +28,7 @@ from kpfpipe.logger import start_logger
 
 # This is the default framework configuration file path
 framework_config = 'configs/framework.cfg'
+framework_config_multi = 'configs/framework_multi.cfg'
 framework_logcfg= 'configs/framework_logger.cfg'
 pipeline_logcfg = 'configs/logger.cfg'
 
@@ -161,15 +163,25 @@ def main():
     recipe = args.recipe
     datestr = datetime.now().strftime(format='%Y%m%d')
 
+    # randomize queue manager port to avoid crosstalk between pipeline instances
+    port = str(random.randint(50101, 51101))
+
     # Using the multiprocessing library, create the specified number of instances
     if args.watch and args.ncpus > 1:
-        frame_config = 'configs/framework_multi.cfg'
+        frame_config = ConfigClass(framework_config_multi)
+        print(f"Setting queue manager port to {port}")
+        frame_config['DEFAULT']['queue_manager_portnr'] = port
         for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
             p = Process(target=worker, args=(i, pipe_config, framework_logcfg, frame_config))
             p.start()
     else:
-        frame_config = framework_config
+        frame_config = ConfigClass(framework_config)
+
+    if args.reprocess:
+        print(f"Setting queue manager to shutdown after reprocessing.")
+        frame_config['DEFAULT']['event_timeout'] = '5'
+        frame_config['DEFAULT']['no_event_event'] = 'None'
 
     # Try to initialize the framework
     try:
@@ -186,7 +198,7 @@ def main():
 
     if args.watch != None:
         framework.logger.info("Starting queue manager only, no processing")
-        framework._get_queue_manager(ConfigClass(frame_config))
+        framework._get_queue_manager(frame_config)
 
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
