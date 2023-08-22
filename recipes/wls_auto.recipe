@@ -52,6 +52,11 @@ for cal_type in ['ThAr', 'LFC']:
                     min_order = config.ARGUMENT.green_min_order
                     max_order = config.ARGUMENT.green_max_order
                 
+                if save_diagnostics_dir != None:
+                    plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
+                else:
+                    plot_dir = None
+
                 wave_soln = WaveCalibrate(
                     l1_obj, cal_type, orderlet_names, True, quicklook, min_order, max_order,
                     'KPF', output_exts,
@@ -59,7 +64,7 @@ for cal_type in ['ThAr', 'LFC']:
                     f0_key=f0, frep_key=fr,
                     output_dir = output_dir,
                     linelist_path=linelist,
-                    save_diagnostics=save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
+                    save_diagnostics=plot_dir
                 )
 
             output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
