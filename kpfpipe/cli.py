@@ -164,7 +164,7 @@ def main():
     datestr = datetime.now().strftime(format='%Y%m%d')
 
     # randomize queue manager port to avoid crosstalk between pipeline instances
-    port = str(random.randint(50101, 51101))
+    port = str(random.randint(50102, 50151))
 
     # Using the multiprocessing library, create the specified number of instances
     if args.watch and args.ncpus > 1:
