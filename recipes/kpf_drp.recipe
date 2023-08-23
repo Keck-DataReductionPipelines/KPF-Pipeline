@@ -7,7 +7,6 @@ from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocoty.src.radial_velocity_reweighting import RadialVelocityReweighting
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
-#from modules.quicklook.src.quick_prim import Quicklook
 from modules.Utils.string_proc import str_replace
 from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.data_handler import ExtCopy
@@ -17,14 +16,11 @@ from modules.Utils.data_handler import SetHeaderValue
 from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
-from modules.Utils.amplifier_mask import AmplifierMask
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
 from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
-from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
-from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -39,7 +35,6 @@ do_hk = config.ARGUMENT.do_hk
 #do_qlp = config.ARGUMENT.do_qlp
 do_bk_subtraction = config.ARGUMENT.do_bk_subtraction
 do_bc = config.ARGUMENT.do_bc
-do_outlier = config.ARGUMENT.do_outlier_rejection
 
 # data type of data model, 'KPF' for kpf data.
 data_type = config.ARGUMENT.data_type
@@ -160,7 +155,7 @@ for wls in wls_list:
 
 
 ## do L0->2D conversion for watch mode
-if do_l0_to_2d:
+if context.watch and do_l0_to_2d:
     invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
 
@@ -190,7 +185,10 @@ if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
 				db_wls_master_file = db_wls_rec[6]
 				wave_fits = []
 				for wls in wls_list:
-                                    wave_fits = wave_fits + [db_wls_master_file]
+                                    # Remove /masters from path returned from QueryDBOneNearestMasterFileFramework
+                                    # since it is already included in output_dir.
+                                    modified_file_path = str_replace(db_wls_master_file, '/masters/masters', '/masters')
+                                    wave_fits = wave_fits + [output_dir + modified_file_path]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv and qlp
@@ -224,7 +222,6 @@ if lev0_file_path:
     lev0_science_pattern = lev0_file_path
 else:
     lev0_science_pattern = input_2d_dir + '*' + fits_ext
-    
 output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
 wave_to_ext = config.ARGUMENT.wave_to_ext
 orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
@@ -288,16 +285,6 @@ hk_wavelength_csvs = config.ARGUMENT.hk_wavelength_path
 hk_wavelength_tables = []
 for hk_w in hk_wavelength_csvs:
 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
-
-## for qlp
-output_qlp =  output_dir + config.ARGUMENT.output_qlp + date_dir + "/"
-end_of_night_summary = False
-
-####  process for order trace, spectral extraction and CA-HK, radial velocity, and qlp
-## qlp are invoked at the following processing spots,
-#  - before spectral extraction
-#  - after spectral extraction
-#  - after radial velocity
 
 ## do order trace
 #  description: find traces from L0 flat data for each ccd, and produce rectified L0 flat data.
@@ -420,7 +407,6 @@ if do_order_trace:
 #
 
 lev1_list = []
-outlier_path = None
 
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
@@ -471,11 +457,11 @@ if do_spectral_extraction or do_hk or do_bc:
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 		is_raw = 1
 		if rect_method in input_lev0_file:
-		   is_raw = 0
+			is_raw = 0
 		if lev1_stem_suffix in input_lev0_file:
-		   is_raw = 0
+			is_raw = 0
 		if lev2_stem_suffix in input_lev0_file:
-		   is_raw = 0
+			is_raw = 0
 
 		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
 		if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
@@ -484,10 +470,6 @@ if do_spectral_extraction or do_hk or do_bc:
 			# do spectral extraction if do_spectral_extraction, rectified flat data existing and all trace results exist.
 			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
 				b_level1_sp = True
-
-#
-#			if do_qlp and (b_level1_sp or do_hk or do_bc):
-#				Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 			# loop through ccd to do spectral extraction
 			if b_level1_sp:
@@ -509,11 +491,6 @@ if do_spectral_extraction or do_hk or do_bc:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
-				if outlier_path == None:
-					outlier_rejection_file = ''
-				else:
-					outlier_rejection_file = outlier_path + short_lev0_file
-
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
 					order_names = orderlet_names[idx]
@@ -528,8 +505,7 @@ if do_spectral_extraction or do_hk or do_bc:
 								start_order=start_order[idx],
 								ccd_index = idx,
 								rectification_method=rect_method, extraction_method=extract_method,
-								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
-								do_outlier_rejection=do_outlier, outlier_file=outlier_rejection_file)
+								clip_file=clip_file, data_extension=ccd, trace_file=trace_file)
 
 
 				if op_data != None:
@@ -575,10 +551,6 @@ if do_spectral_extraction or do_hk or do_bc:
 				if output_data != None:
 					result = to_fits(output_data, output_lev1_file)
 
-			if exists(output_lev1_file):
-				lev1_list = lev1_list + [output_lev1_file]
-#				if do_qlp:
-#					Quicklook(lev0_data, output_qlp, end_of_night_summary)
 
 ## do radial velocity or rv reweighting:
 #  description: do radial velocity on the specified extensions of L1 data and produce L2 data.
@@ -640,10 +612,6 @@ if do_rv or do_rv_reweighting:
 		rv_data = None
 		if overwrite or not exists(output_lev2_file):
 			lev1_data = kpf1_from_fits(input_lev1_file, data_type=data_type)
-
-			# Mask bad amplifiers in 4 amp modes
-			lev1_data = AmplifierMask(lev1_data)
-
 			rv_init = RadialVelocityInit(start_time="2021-03-01", l1_data=lev1_data, bc_corr_path=bc_path, test_data_path=rv_star_dir)
 
 			if rv_init != None:
@@ -662,18 +630,6 @@ if do_rv or do_rv_reweighting:
 						input_ref=ratio_ref, reweighting_masks=rw_mask )
 				if rv_data != None:
 					result = to_fits(rv_data, output_lev2_file)
-
-#		if do_qlp:
-#			# get lev0 w/o _2D suffix
-#			short_lev0 = str_replace(short_lev1, lev1_stem_suffix, "")
-#			input_lev0_file = input_2d_dir + short_lev0
-#			if not find_files(input_lev0_file):
-#				short_lev0 = str_replace(short_lev1, lev1_stem_suffix, lev0_stem_suffix)
-#				input_lev0_file = input_2d_dir + short_lev0
-#			if find_files(input_lev0_file):
-#				lev0_data = kpf0_from_fits(input_lev0_file,data_type=data_type)
-#				Quicklook(lev0_data, output_qlp, end_of_night_summary)
-
 
 		# do reweighting on each L2 in case the rewighting directory is different from the unweighted L2.
 		if 'static' in reweighting_method and do_rv_reweighting:
@@ -695,4 +651,3 @@ if do_rv or do_rv_reweighting:
 								reweighting_masks=rw_mask)
 				if lev2_rv is not None:
 					result = to_fits(lev2_rv, reweighted_output)
-
