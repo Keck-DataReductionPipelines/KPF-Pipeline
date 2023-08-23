@@ -1,6 +1,6 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 from modules.Utils.string_proc import str_replace
-from modules.quicklook.src.nightly_prim import Nightly_summary
+#from modules.quicklook.src.nightly_prim import Nightly_summary # this is not supported in the updated QLP.  It will be added back soon.
 
 masters_dir = config.ARGUMENT.masters_dir
 output_dir = config.ARGUMENT.output_dir + '/'
@@ -73,4 +73,4 @@ for cal_type in ['ThAr', 'LFC']:
             if cal_type == 'Thar':
                 master_wls_file = output_filename
 
-Nightly_summary(date_dir)
+#Nightly_summary(date_dir)
