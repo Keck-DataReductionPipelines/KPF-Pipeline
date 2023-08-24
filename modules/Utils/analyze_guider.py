@@ -52,7 +52,8 @@ class AnalyzeGuider:
         #self.df_GUIDER = Table.read(self.L0, hdu='guider_cube_origins').to_pandas()
         #self.df_GUIDER = self.L0['guider_cube_origins']
         self.df_GUIDER = self.L0['GUIDER_CUBE_ORIGINS']
-        self.df_GUIDER = self.df_GUIDER[self.df_GUIDER.timestamp != 0.0] # remove bogus lines
+        self.df_GUIDER = self.df_GUIDER[self.df_GUIDER.timestamp != 0.0]    # remove bogus lines
+        self.df_GUIDER = self.df_GUIDER[self.df_GUIDER.object1_flux != 0.0] # remove bogus lines
         self.good_fit = None
 
 
@@ -211,7 +212,7 @@ class AnalyzeGuider:
             title = 'Residuals to Moffat Function Model'
             axs[2].set_title(title, fontsize=12)
         else:
-            title = 'Unsuccessful fit to Moffat Function Model'
+            title = 'Unsuccessful fit with Moffat Function'
             axs[2].set_title(title, fontsize=12, color='r')  # red to indicate unusual image
         axs[2].set_title(title, fontsize=12)
         axs[2].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
@@ -292,14 +293,14 @@ class AnalyzeGuider:
         axes[1].set_ylim(-xylim, xylim)
         axes[1].set_aspect('equal')
         axes[1].set_title('r: ' + f'{int(r_rms*10)/10}' + ' mas (RMS)', fontsize=14)
-        axes[1].set_xlabel('Guiding Error - x (mas)', fontsize=14)
-        axes[1].set_ylabel('Guiding Error - y (mas)', fontsize=14)
+        axes[1].set_xlabel('Guiding Error - x (mas)', fontsize=14, alpha=0.5)
+        axes[1].set_ylabel('Guiding Error - y (mas)', fontsize=14, alpha=0.5)
         axes[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar = plt.colorbar(im1[3])
         cbar.set_label('Samples', fontsize=12)
 
-        axes[0].plot(t, x_mas, color='royalblue')
-        axes[0].plot(t, y_mas, color='orange')
+        axes[0].plot(t, x_mas, color='royalblue', alpha=0.5)
+        axes[0].plot(t, y_mas, color='orange', alpha=0.5)
         axes[0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         axes[0].set_xlabel("Time (sec)", fontsize=14)
         axes[0].set_ylabel("Guiding Error (mas)", fontsize=14)
@@ -401,8 +402,8 @@ class AnalyzeGuider:
         axes[0,1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
 
         # Time series plot of guider errors
-        axes[0,0].plot(t, x_mas, color='royalblue')
-        axes[0,0].plot(t, y_mas, color='orange')
+        axes[0,0].plot(t, x_mas, color='royalblue', alpha=0.5)
+        axes[0,0].plot(t, y_mas, color='orange', alpha=0.5)
         axes[0,0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         axes[0,0].set_xlabel("Time (sec)", fontsize=14)
         axes[0,0].set_ylabel("Guiding Error (mas)", fontsize=14)
@@ -418,8 +419,8 @@ class AnalyzeGuider:
         Pyy, freqs = mlab.psd(y_mas/1000, Fs=fps)
         Prr, freqs = mlab.psd(r_mas/1000, Fs=fps)
 #        axes[1,0].step(freqs, Prr*1e6, where='mid', color='b', alpha=0.8, label='R - Guiding Errors')
-        axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding errors', lw=2)
-        axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding errors', lw=2)
+        axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding errors', lw=2, alpha=0.5)
+        axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding errors', lw=2, alpha=0.5)
         axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
         axes[1,0].set_xlabel('Frequency [Hz]', fontsize=14)
         axes[1,0].set_ylabel('Guiding Error\n' + r'Power Spectral Density (mas$^2$/Hz)', fontsize=14)
@@ -430,6 +431,10 @@ class AnalyzeGuider:
         # Blank - plot to the right of power spectral density
         strings = ["Sun's altitude below horizon = " + str(int(-get_sun_alt(self.date_mid))) + " deg"]
         strings.append("Lunar separation = " + str(int(get_moon_sep(self.date_mid, self.ra, self.dec))) + " deg")
+        strings.append('\n')
+        strings.append("J = " + f"{self.jmag:.2f}" + ", G = " + f"{self.gmag:.2f}")
+        strings.append(str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain')
+
         #strings.append('\n')
         #strings.append('Nframes = ' + str(nframes))
         #strings.append('   ' + str(nframes_0stars) + ' with 0 stars detected')
@@ -441,7 +446,7 @@ class AnalyzeGuider:
 
         # Guider FWHM time series plot
         fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
-        axes[2,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
+        axes[2,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue', alpha=0.5)
         axes[2,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
 #        axes[2,0].set_title('Nframes = ' + str(nframes) + '; median number of detected stars/frame=' + str(median_nstars) + ', ' + str(nframes_fewer_detections) + ' w/fewer, ' + str(nframes_extra_detections) + ' w/more', fontsize=14) 
         axes[2,0].set_xlabel("Time (sec)", fontsize=14)
@@ -450,30 +455,49 @@ class AnalyzeGuider:
         axes[2,0].legend([r'Guider FWHM ($\neq$ seeing)'], fontsize=12, loc='best') 
 
         # Histogram of guider FWHM time series plot
-        axes[2,1].hist(fwhm, bins=30, color='royalblue', edgecolor='k')
+        axes[2,1].hist(fwhm, bins=30, color='royalblue', alpha=0.5)
         axes[2,1].set_xlabel("Guider FWHM (mas)", fontsize=14)
-        axes[2,1].set_ylabel("Frequency", fontsize=14)
+        axes[2,1].set_ylabel("Samples", fontsize=14)
+        axes[2,1].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
 
         # Guider flux time series plot
-        flux = self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95)
-        axes[3,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), flux, color='royalblue')
+        flux      = self.df_GUIDER.object1_flux # /np.nanpercentile(self.df_GUIDER.object1_flux, 95)
+        peak_flux = self.df_GUIDER.object1_peak
+        axes[3,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), flux,      color='royalblue', alpha=0.5)
+        axesb = axes[3,0].twinx()
+        axesb.set_ylabel(r'Peak Flux (DN pixel$^{-1}$)', color='orange', fontsize=14)
+        axesb.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), peak_flux, color='orange',    alpha=0.5)
+        axesb.grid(False)
         axes[3,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
         axes[3,0].set_xlabel("Time (sec)", fontsize=14)
-        axes[3,0].set_ylabel("Guider Flux (fractional)", fontsize=14)
+        axes[3,0].set_ylabel("Flux (integrated)", fontsize=14, color='royalblue')
         axes[3,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
-        axes[3,0].legend([r'Guider Flux (fractional, normalized by 95th percentile)'], fontsize=12, loc='best') 
+        #axes[3,0].legend(['Guider Flux', 'Peak Guider Flux'], fontsize=12, loc='best') 
 
         # Histogram of guider flux time series plot
-        axes[3,1].hist(flux, bins=30, color='royalblue', edgecolor='k')
-        axes[3,1].set_xlabel("Flux (fractional)", fontsize=14)
-        axes[3,1].set_ylabel("Frequency", fontsize=14)
+        axes[3,1].hist(flux, bins=30, color='royalblue', alpha=0.5)
+        axes[3,1].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+        axesc = axes[3,1].twiny()
+        axesc.hist(peak_flux, bins=30, color='orange', alpha=0.5)
+        axesc.set_xlabel(r'Peak Flux (DN pixel$^{-1}$; saturation $\approx$ 16,000)', color='orange', fontsize=14)
+        axesc.grid(False)
+        axes[3,1].set_xlabel("Flux (DN integrated)", fontsize=14, color='royalblue')
+        axes[3,1].set_ylabel("Samples", fontsize=14)
 
         # Set the font size of tick mark labels
         axes[0,0].tick_params(axis='both', which='major', labelsize=14)
         axes[0,1].tick_params(axis='both', which='major', labelsize=14)
         axes[1,0].tick_params(axis='both', which='major', labelsize=14)
         axes[2,0].tick_params(axis='both', which='major', labelsize=14)
+        axes[2,1].tick_params(axis='both', which='major', labelsize=10)
         axes[3,0].tick_params(axis='both', which='major', labelsize=14)
+        axes[3,1].tick_params(axis='both', which='major', labelsize=10)
+        axes[3,1].tick_params(axis='x', labelcolor='royalblue')
+        axesc.tick_params(axis='x', labelcolor='orange')
+        axes[3,0].tick_params(axis='y', labelcolor='royalblue')
+        axesb.tick_params(axis='y', labelcolor='orange')
+        axesb.tick_params(axis='both', which='major', labelsize=14)
+        axesc.tick_params(axis='both', which='major', labelsize=10)
 
         # Display the plot
         if fig_path != None:
