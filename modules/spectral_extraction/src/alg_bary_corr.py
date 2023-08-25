@@ -115,6 +115,8 @@ class BaryCorrTableAlg(ModuleAlgBase):
         else:
             self.bary_corr_table = None
 
+        self.configure()
+
     def get_value_from_config(self, prop, default='', config=None):
         """ Get value of specific parameter from the configuration file.
 
@@ -202,6 +204,28 @@ class BaryCorrTableAlg(ModuleAlgBase):
         Returns:
             numpy.ndarray: Barycentric correction velocity of all orders
         """
+        bc_config = self.bc_config
+        for od in range(self.start_bary_index, self.end_bary_index+1):
+            if is_single_time and od > self.start_bary_index:
+                self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] \
+                    = self.bary_corr_table[BaryCorrTableAlg.BC_col6][self.start_bary_index]
+            else:
+                if RadialVelocityAlgInit.is_unknown_target(self.instrument, bc_config[RadialVelocityAlgInit.STARNAME],
+                                                           bc_config[RadialVelocityAlgInit.EPOCH]):
+                    # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
+                    #    import pdb;pdb.set_trace()
+                    self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] = 0.0
+                else:
+                    bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(bc_config,
+                                                                self.bary_corr_table[BaryCorrTableAlg.BC_col3][od])[0]
+                    self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] = bc_corr   # m/sec
+
+        return self.bary_corr_table[BaryCorrTableAlg.BC_col6]
+
+    def configure(self):
+        """
+        Extract neccesary information from the header and config file.
+        """
         bc_config = dict()
         header_keys = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                        RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
@@ -230,22 +254,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
             bc_config[n_key] = h_key_data
         bc_config[RadialVelocityAlgInit.SPEC] = self.instrument
 
-        for od in range(self.start_bary_index, self.end_bary_index+1):
-            if is_single_time and od > self.start_bary_index:
-                self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] \
-                    = self.bary_corr_table[BaryCorrTableAlg.BC_col6][self.start_bary_index]
-            else:
-                if RadialVelocityAlgInit.is_unknown_target(self.instrument, bc_config[RadialVelocityAlgInit.STARNAME],
-                                                           bc_config[RadialVelocityAlgInit.EPOCH]):
-                    # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
-                    #    import pdb;pdb.set_trace()
-                    self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] = 0.0
-                else:
-                    bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(bc_config,
-                                                                self.bary_corr_table[BaryCorrTableAlg.BC_col3][od])[0]
-                    self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] = bc_corr   # m/sec
-
-        return self.bary_corr_table[BaryCorrTableAlg.BC_col6]
+        self.bc_config = bc_config
 
     def get_obs_utc(self, default=None):
         """ Get observation exposure time in UTC in string format
@@ -309,6 +318,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
         else:
             self.bary_corr_table[BaryCorrTableAlg.BC_col1][self.start_bary_index:self.end_bary_index+1] = mid_utc
             self.bary_corr_table[BaryCorrTableAlg.BC_col2][self.start_bary_index:self.end_bary_index+1] = Time(mid_utc).jd
+
             if RadialVelocityAlgInit.STARNAME.lower() == 'sun':
                 GEOMID_BJD, warn, stat = barycorrpy.utc_tdb.JDUTC_to_HJDTDB(Time(mid_utc).jd,
                                 ra=None,
@@ -317,22 +327,22 @@ class BaryCorrTableAlg(ModuleAlgBase):
                                 pmra=None,
                                 pmdec=None,
                                 px=None,
-                                lat=RadialVelocityAlgInit.LAT,
-                                longi=RadialVelocityAlgInit.LON,
-                                alt=RadialVelocityAlgInit.ALT,
+                                lat=self.bc_config[RadialVelocityAlgInit.OBSLAT],
+                                longi=self.bc_config[RadialVelocityAlgInit.OBSLON],
+                                alt=self.bc_config[RadialVelocityAlgInit.OBSALT],
                                 rv=None)
             else:
                 GEOMID_BJD, warn, stat = barycorrpy.utc_tdb.JDUTC_to_BJDTDB(Time(mid_utc).jd,
-                                                ra=RadialVelocityAlgInit.RA,
-                                                dec=RadialVelocityAlgInit.DEC,
-                                                epoch=RadialVelocityAlgInit.EPOCH,
-                                                pmra=RadialVelocityAlgInit.PMRA,
-                                                pmdec=RadialVelocityAlgInit.PMDEC,
-                                                px=RadialVelocityAlgInit.PX,
-                                                lat=RadialVelocityAlgInit.LAT,
-                                                longi=RadialVelocityAlgInit.LON,
-                                                alt=RadialVelocityAlgInit.ALT,
-                                                rv=RadialVelocityAlgInit.RV)
+                                                ra=self.bc_config[RadialVelocityAlgInit.RA],
+                                                dec=self.bc_config[RadialVelocityAlgInit.DEC],
+                                                epoch=self.bc_config[RadialVelocityAlgInit.EPOCH],
+                                                pmra=self.bc_config[RadialVelocityAlgInit.PMRA],
+                                                pmdec=self.bc_config[RadialVelocityAlgInit.PMDEC],
+                                                px=self.bc_config[RadialVelocityAlgInit.PARALLAX],
+                                                lat=self.bc_config[RadialVelocityAlgInit.OBSLAT],
+                                                longi=self.bc_config[RadialVelocityAlgInit.OBSLON],
+                                                alt=self.bc_config[RadialVelocityAlgInit.OBSALT],
+                                                rv=self.bc_config[RadialVelocityAlgInit.STAR_RV])
             self.bary_corr_table[BaryCorrTableAlg.BC_col4][self.start_bary_index:self.end_bary_index+1] = GEOMID_BJD
 
         df_em = self.get_expmeter_science()
@@ -368,22 +378,22 @@ class BaryCorrTableAlg(ModuleAlgBase):
                                 pmra=None,
                                 pmdec=None,
                                 px=None,
-                                lat=RadialVelocityAlgInit.LAT,
-                                longi=RadialVelocityAlgInit.LON,
-                                alt=RadialVelocityAlgInit.ALT,
+                                lat=self.bc_config[RadialVelocityAlgInit.OBSLAT],
+                                longi=self.bc_config[RadialVelocityAlgInit.OBSLON],
+                                alt=self.bc_config[RadialVelocityAlgInit.OBSALT],
                                 rv=None)
             else:
                 PHOTMID_BJD, warn, stat = barycorrpy.utc_tdb.JDUTC_to_BJDTDB(Time(midphoton[i]).jd,
-                                                ra=RadialVelocityAlgInit.RA,
-                                                dec=RadialVelocityAlgInit.DEC,
-                                                epoch=RadialVelocityAlgInit.EPOCH,
-                                                pmra=RadialVelocityAlgInit.PMRA,
-                                                pmdec=RadialVelocityAlgInit.PMDEC,
-                                                px=RadialVelocityAlgInit.PX,
-                                                lat=RadialVelocityAlgInit.LAT,
-                                                longi=RadialVelocityAlgInit.LON,
-                                                alt=RadialVelocityAlgInit.ALT,
-                                                rv=RadialVelocityAlgInit.RV)
+                                                ra=self.bc_config[RadialVelocityAlgInit.RA],
+                                                dec=self.bc_config[RadialVelocityAlgInit.DEC],
+                                                epoch=self.bc_config[RadialVelocityAlgInit.EPOCH],
+                                                pmra=self.bc_config[RadialVelocityAlgInit.PMRA],
+                                                pmdec=self.bc_config[RadialVelocityAlgInit.PMDEC],
+                                                px=self.bc_config[RadialVelocityAlgInit.PARALLAX],
+                                                lat=self.bc_config[RadialVelocityAlgInit.OBSLAT],
+                                                longi=self.bc_config[RadialVelocityAlgInit.OBSLON],
+                                                alt=self.bc_config[RadialVelocityAlgInit.OBSALT],
+                                                rv=self.bc_config[RadialVelocityAlgInit.STAR_RV])
                 
             self.bary_corr_table[BaryCorrTableAlg.BC_col5][i+self.start_bary_index] = PHOTMID_BJD
 

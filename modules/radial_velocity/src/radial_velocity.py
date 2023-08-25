@@ -796,7 +796,7 @@ class RadialVelocity(KPF1_Primitive):
         results.attrs['ccd_rv'] = (f_decimal(final_rv - cal_rv), unit) \
             if do_corr and final_rv != 0.0 else (f_decimal(final_rv), unit)
         results.attrs['ccd_erv'] = f_decimal(final_rv_err)
-        results.attrs['ccd_jd'] = jd[0]
+        results.attrs['ccd_jd'] = np.mean(jd)
         results.attrs['star_rv'] = starrv
         results.attrs['do_rv_corr'] = do_corr
 
