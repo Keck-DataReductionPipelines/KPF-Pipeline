@@ -163,11 +163,16 @@ def main():
     datestr = datetime.now().strftime(format='%Y%m%d')
 
     # randomize queue manager port to avoid crosstalk between pipeline instances
-    port = str(random.randint(50101, 60101))
+    port = random.randint(50101, 60101)
     frame_config = ConfigClass(framework_config_multi)
     print(f"Setting queue manager port to {port}")
-    frame_config['DEFAULT']['queue_manager_portnr'] = port
-    frame_config['DEFAULT']['queue_manager_auth_code'] = str(hash(port))
+    frame_config.set('DEFAULT', 'queue_manager_portnr', str(port))
+    frame_config.set('DEFAULT', 'queue_manager_auth_code', str(hash(port)))
+
+    if args.reprocess:
+        print(f"Setting queue manager to shutdown after reprocessing.")
+        frame_config.set('DEFAULT', 'event_timeout', '5')
+        frame_config.set('DEFAULT', 'no_event_event', 'None')
 
     # Using the multiprocessing library, create the specified number of instances
     if args.watch and args.ncpus > 1:
@@ -177,11 +182,6 @@ def main():
             p.start()
     else:
         frame_config = ConfigClass(framework_config)
-
-    if args.reprocess:
-        print(f"Setting queue manager to shutdown after reprocessing.")
-        frame_config['DEFAULT']['event_timeout'] = '5'
-        frame_config['DEFAULT']['no_event_event'] = 'None'
 
     # Try to initialize the framework
     try:
