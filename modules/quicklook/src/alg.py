@@ -5,6 +5,7 @@ import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
+from kpfpipe.models.level2 import KPF2
 from keckdrpframework.models.arguments import Arguments
 import traceback
 import os
@@ -22,7 +23,7 @@ from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.analyze_l2 import AnalyzeL2
 from modules.Utils.kpf_parse import HeaderParse
-import kpfpipe.pipelines.fits_primitives as fits_primitives
+#import kpfpipe.pipelines.fits_primitives as fits_primitives
 from modules.Utils.kpf_parse import get_data_products_L0
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
@@ -39,7 +40,7 @@ class QuicklookAlg:
     The following recipes in KPF-Pipeline/recipes/ are useful for generating QLP data 
     products:
     
-    quicklook_watch.recipe -- this recipe watches a directory (recursively, if needed) 
+    quicklook_watch_dir.recipe -- this recipe watches a directory (recursively, if needed) 
         and triggers the QLP on file modification events.  It must be run in watch mode.  
         Separate instances should to be run for L0, 2D, L1, and L2 data directories.
         Example:
@@ -495,10 +496,10 @@ class QuicklookAlg:
     def qlp_master(self, input_file, output_dir):
         """
         Description:
-            Generates the standard quicklook data product for a master files.
+            Generates the standard quicklook data product for a master file.
     
         Arguments:
-            master_dir (string) - the directory where master files are stored
+            input_file (string) - full path to the master file to be processed
             output_dir - directory for output QLP files (if show_plot=False)
     
         Attributes:
@@ -510,11 +511,19 @@ class QuicklookAlg:
         master_type, data_type = determine_master_type(self.input_file)
         self.logger.info('The master file ' + str(self.input_file) + ' was determined to be a ' + 
                          str(data_type) + ' ' + str(master_type) + ' file.')
-        kpf2d = KPF0.from_fits(self.input_file)
-        self.data_products = get_data_products_2D(kpf2d)
+        if data_type == '2D':
+            kpf2d = KPF0.from_fits(self.input_file)
+            self.data_products = get_data_products_2D(kpf2d)
+        if data_type == 'L1':
+            kpf1 = KPF1.from_fits(self.input_file)
+            self.data_products = get_data_products_L1(kpf1)
+        if data_type == 'L2':
+            kpf2 = KPF2.from_fits(self.input_file)
+            self.data_products = get_data_products_L2(kpf2)
         chips = []
-        if 'Green' in self.data_products: chips.append('green')
-        if 'Red'   in self.data_products: chips.append('red')
+        if master_type != None:
+            if 'Green' in self.data_products: chips.append('green')
+            if 'Red'   in self.data_products: chips.append('red')
 
         # Make directory, if needed
         try:
@@ -548,7 +557,8 @@ class QuicklookAlg:
                 try:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
                     for chip in chips:
-                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_image_' + chip + '_zoomable.png'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_image_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_image(chip=chip, fig_path=filename, show_plot=False)
     
@@ -559,7 +569,8 @@ class QuicklookAlg:
                 try:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
                     for chip in chips:  
-                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_image_3x3zoom_' + chip + '_zoomable.png'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_image_3x3zoom_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
 
@@ -570,23 +581,151 @@ class QuicklookAlg:
                 try:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
                     for chip in chips:
-                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_histogram_' + chip + '_zoomable.png'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_histogram_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_image_histogram(chip=chip, fig_path=filename, show_plot=False)
     
                 except Exception as e:
-                    self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
     
                 # Make 2D column cuts
                 try:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
                     for chip in chips:
-                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_column_cut_' + chip + '_zoomable.png'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_column_cut_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
 
                 except Exception as e:
-                    self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+        
+        
+        ### L1 Masters ###
+        if data_type == 'L1':
+
+            # Make L1 SNR plot
+            try:
+                filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                           '_L1_SNR_' + '_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                myL1.measure_L1_snr()
+                myL1.plot_L1_snr(fig_path=filename, show_plot=False)
+    
+            except Exception as e:
+                self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            # Make L1 spectra plots
+            try:
+                for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
+                    filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                               '_L1_spectrum_' + orderlet  + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_L1_spectrum(orderlet=orderlet, fig_path=filename, show_plot=False)
+    
+            except Exception as e:
+                self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            # Make L1 spectra plots (single order)
+            if chips != []:    
+                try:
+                    myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                    if 'green' in chips:  # don't use 'for chip in chips:' here so that the file creation order is correct for Jump to display in a certain order
+                        chip = 'green'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'red' in chips:
+                        chip = 'red'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'green' in chips:
+                        chip = 'green'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SKY'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'red' in chips:
+                        chip = 'red'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SKY'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'green' in chips:
+                        chip = 'green'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['CAL'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'red' in chips:
+                        chip = 'red'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['CAL'], 
+                                                           fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            # Make order ratio grid plots
+            if chips != []:    
+                try:
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_orderlet_flux_ratios_grid_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                        myL1.measure_orderlet_flux_ratios()
+                        myL1.plot_orderlet_flux_ratios_grid(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+    
+            # Make order ratio plot
+            if chips != []:    
+                try:
+                    filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                               '_L1_orderlet_flux_ratios_zoomable.png'
+                    self.logger.info('Measuring orderlet flux ratios for ' + filename)
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_orderlet_flux_ratios(fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+        ### L2 Masters ###
+        if data_type == 'L2':
+        
+        # Make CCF grid plots
+            if chips != []:    
+                try:
+                    myL2 = AnalyzeL2(kpf2, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_CCF_grid_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL2.plot_CCF_grid(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
 def determine_master_type(fullpath):
