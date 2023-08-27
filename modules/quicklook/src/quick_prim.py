@@ -61,8 +61,8 @@ class Quicklook(KPF0_Primitive):
             elif self.qlp_level == 'L2':
                 self.alg.qlp_L2(self.input_file, self.output_dir)
             elif self.qlp_level == 'master':
-                self.alg.qlp_mastser(self.input_file, self.output_dir) #input_file is actually a datecode
+                self.alg.qlp_master(self.input_file, self.output_dir)
         except Exception as e:
             # Allow recipe to continue if QLP fails
-            self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Failure in Quicklook pipeline: {e}\n{traceback.format_exc()}")
             pass
