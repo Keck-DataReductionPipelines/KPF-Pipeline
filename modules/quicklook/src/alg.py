@@ -91,8 +91,6 @@ class QuicklookAlg:
         Arguments:
             kpf0 - a L0 object
             output_dir - directory for output QLP files (if show_plot=False)
-            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
-                        instead of saving files
     
         Attributes:
             None
@@ -177,8 +175,7 @@ class QuicklookAlg:
                     os.makedirs(savedir, exist_ok=True) # make directories if needed
                     filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    myL0.plot_L0_stitched_image(fig_path=filename, 
-                                                chip=chip, show_plot=False)
+                    myL0.plot_L0_stitched_image(fig_path=filename, chip=chip, show_plot=False)
             except Exception as e:
                 self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
@@ -194,8 +191,6 @@ class QuicklookAlg:
         Arguments:
             kpf2d - a 2D object
             output_dir - directory for output QLP files (if show_plot=False)
-            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
-                        instead of saving files
     
         Attributes:
             None
@@ -251,14 +246,13 @@ class QuicklookAlg:
             try:
                 savedir = D2_QLP_file_base +'2D/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
-                my_2D = AnalyzeL0(kpf2d, logger=self.logger)    
+                my_2D = AnalyzeL0(kpf2d, logger=self.logger)    # should this be Analyze2D instead?
                 for chip in chips:
                     # next line not working yet
                     #Analyze2D.measure_2D_dark_current(self, chip=chip)
                     filename = savedir + self.ObsID + '_2D_image_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_image(self, chip=chip, fig_path=filename, 
-                                                  show_plot=False)
+                    my_2D.plot_2D_image(self, chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -273,8 +267,7 @@ class QuicklookAlg:
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_image_3x3zoom_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_image_zoom_3x3(self, chip=chip, fig_path=filename, 
-                                                           show_plot=False)
+                    my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -290,8 +283,7 @@ class QuicklookAlg:
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_histogram_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_image_histogram(self, chip=chip, fig_path=filename, 
-                                                            show_plot=False)
+                    my_2D.plot_2D_image_histogram(self, chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -299,11 +291,11 @@ class QuicklookAlg:
         # Make 2D column cuts
         if chips != []:    
             try:
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_column_cut_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_column_cut(self, chip=chip, fig_path=filename, 
-                                                       show_plot=False)
+                    my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -320,8 +312,6 @@ class QuicklookAlg:
         Arguments:
             kpf1 - a L1 object
             output_dir - directory for output QLP files (if show_plot=False)
-            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
-                        instead of saving files
     
         Attributes:
             None
@@ -497,3 +487,187 @@ class QuicklookAlg:
 
             except Exception as e:
                 self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+    #######################
+    ##### QLP MASTERS #####
+    #######################
+    def qlp_master(self, input_file, output_dir):
+        """
+        Description:
+            Generates the standard quicklook data product for a master files.
+    
+        Arguments:
+            master_dir (string) - the directory where master files are stored
+            output_dir - directory for output QLP files (if show_plot=False)
+    
+        Attributes:
+            None
+        """
+
+        self.input_file = input_file
+        self.output_dir = output_dir
+        master_type, data_type = determine_master_type(self.input_file)
+        self.logger.info('The master file ' + str(self.input_file) + ' was determined to be a ' + 
+                         str(data_type) + ' ' + str(master_type) + ' file.')
+        kpf2d = KPF0.from_fits(self.input_file)
+        self.data_products = get_data_products_2D(kpf2d)
+        chips = []
+        if 'Green' in self.data_products: chips.append('green')
+        if 'Red'   in self.data_products: chips.append('red')
+
+        # Make directory, if needed
+        try:
+            if master_type == 'bias':
+                savedir = self.output_dir + 'Bias/' 
+            elif master_type == 'dark':
+                savedir = self.output_dir + 'Dark/' 
+            elif master_type == 'flat':
+                savedir = self.output_dir + 'Flat/' 
+            elif master_type == 'lfc':
+                savedir = self.output_dir + 'LFC/' 
+            elif master_type == 'etalon':
+                savedir = self.output_dir + 'Etalon/' 
+            elif master_type == 'thar':
+                savedir = self.output_dir + 'ThAr/' 
+            elif master_type == 'une':
+                savedir = self.output_dir + 'UNe/' 
+            else:
+                self.logger.error(f"Couldn't determine data type to create directory in Master quicklook pipeline.")
+                savedir = self.output_dir + 'Unidentified/' 
+            os.makedirs(savedir, exist_ok=True) 
+
+        except Exception as e:
+            self.logger.error(f"Failure creating base output diretory in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        ### 2D Masters ###
+        if data_type == '2D':
+            if chips != []:
+
+                # Make 2D images
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_image_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+                # Make 2D images - 3x3 arrays
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:  
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_image_3x3zoom_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+                # Make 2D image histograms
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_histogram_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image_histogram(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+    
+                # Make 2D column cuts
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + '_2D_column_cut_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+def determine_master_type(fullpath):
+    """
+    Description:
+        Generates the standard quicklook data products for all of the master files in 
+        a directory.
+
+    Arguments:
+        fullpath (string) - full path to master file (usually a .fits)
+
+    Outputs:
+        master_type - possible values: None, 'bias', dark, 'flat', 'thar', 'une', 'lfc'
+        data_type - possible values: None, 'L0', '2D', 'L1', 'L2', 'WLS'
+
+    Attributes:
+        None
+    """
+    fullpath = fullpath.lower()
+    master_type = None
+    data_type = None
+    
+    # Bias
+    if (('bias' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'bias'
+        if 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # Dark
+    if (('dark' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'dark'
+        if 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # Flat
+    if (('flat' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'flat'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # LFC
+    if (('lfc' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'lfc'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # Etalon
+    if (('etalon' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'etalon'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # ThAr
+    if (('thar' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'thar'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # UNe
+    if (('une' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'une'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+
+    return master_type, data_type
+
