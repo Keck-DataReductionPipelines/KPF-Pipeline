@@ -27,7 +27,6 @@ class str_replace(KPF_Primitive):
     def _pre_condition(self) -> bool:
         success = len(self.action.args) >= 3 and isinstance(self.action.args[0], str) and \
                   isinstance(self.action.args[1], str) and isinstance(self.action.args[2], str)
-
         return success
 
     def _post_condition(self) -> bool:
@@ -37,7 +36,6 @@ class str_replace(KPF_Primitive):
         original_value = self.action.args[0]
         old_value = self.action.args[1]
         new_value = self.action.args[2]
-
         new_string = original_value.replace(old_value, new_value)
         return Arguments(new_string)
 
@@ -90,6 +88,50 @@ class date_from_kpffile(KPF_Primitive):
                 self.logger.info("File is from " + date_str)
 
         return Arguments(date_str)
+
+
+class date_from_path(KPF_Primitive):
+    """
+    This primitive determines the datecode (YYYYMMDD) from a path 
+    (e.g., '/data/masters/20230711/kpf_20230711_master_arclamp_autocal-etalon-all-eve.fits').
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
+                  keyword arguments passed by the `date_from_path` event issued in the recipe:
+
+            - `action.args[0] (string)`: path
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) == 1 and isinstance(self.action.args[0], str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        # This algorithm finds the first 8-digit string and returns it.
+        path = self.action.args[0]
+        digit_count = 0
+        potential_match = ""
+        for char in path:
+            if char.isdigit():
+                digit_count += 1
+                potential_match += char
+                if digit_count == 8:
+                    return Arguments(potential_match)
+            else:
+                digit_count = 0
+                potential_match = ""
+                
+        return Arguments('99999999') # Error code indicating that no match was found
 
 
 class level_from_kpffile(KPF_Primitive):
