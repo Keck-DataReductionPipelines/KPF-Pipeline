@@ -192,13 +192,11 @@ class MidpointPhotonArrival:
     
         cdfTot=0
         i=0
-    
         while x > expEnd[i]:
-        
             cdfTot+=exposures[i]
         
         
-        ####Interpolation between exposures
+            ####Interpolation between exposures
             if i>1:
                 rateRight=exposures[i]/((expEnd[i]-expBeg[i]).astype(float)+EMReadCorrection)
                 rateLeft=exposures[i-1]/((expEnd[i-1]-expBeg[i-1]).astype(float)+EMReadCorrection)

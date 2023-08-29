@@ -217,6 +217,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.ccd_index = ccd_index
         self.do_outlier_rejection = do_outlier_rejection
         self.outlier_flux = outlier_flux
+        self.order_name = None
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -379,7 +380,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return self.extracted_flux_pixels
 
-    def extraction_handler(self, out_data, height, data_group):
+    def extraction_handler(self, out_data, height, data_group, t_mask=None):
         """Perform the spectral extraction on one column of rectification data based on the extraction method.
 
         Args:
@@ -392,7 +393,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         """
 
         if self.extraction_method == SpectralExtractionAlg.OPTIMAL:
-            return self.optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height], height, 1)
+            return self.optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height], height, 1, t_mask)
         elif self.extraction_method == SpectralExtractionAlg.SUM:
             return self.summation_extraction(out_data[self.SDATA][0:height])
 
@@ -499,7 +500,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
             input_x (numpy.ndarry): x positions covering trace in input domain
             x_output_step (numpy.ndarray): x positions covering trace in output domain
             mask_height (int): height of the returned mask denoting the outlier pixels of the trace
-            is_debug (bool): output debug message
 
         Returns:
             numpy.ndarray: a 2D mask denoting the rejected outlier with the same size of height and width as
@@ -507,8 +507,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         """
         # collect all data
-
-        # is_debug = False
         input_x_dim, input_y_dim = self.get_spectrum_size()
         p_height = mask_height
         p_width = input_x.size
@@ -572,66 +570,54 @@ class SpectralExtractionAlg(ModuleAlgBase):
         outlier_sigma = self.get_config_value("outlier_sigma", 5.0)
         p_height = input_widths.size
         p_width = input_x.size
-        a_w = 3
 
-        t_mask, scaled_profile = self.outlier_rejection(s_data, f_data, input_x, do_column,
+        t_mask, scaled_profile = self.outlier_rejection_local_profile(s_data, f_data, input_x,
                                                          outlier_sigma, y_mid, input_widths, input_y_dim, is_debug)
         s_data_outlier = np.copy(s_data)
 
         if t_mask is None:
             return t_mask, s_data_outlier
+
+        if t_mask is not None and is_debug:
+            total_outlier = np.where(t_mask == 0)[0].size
+            self.d_print('total outlier :', total_outlier, ' out of ', p_height*p_width, ' pixels: ',
+                  total_outlier/(p_height*p_width))
+
         for x in range(p_width):
-            for y in range(p_height):
-                y_input = np.floor(input_widths[y] + y_mid[x]).astype(int)
-                if y_input < 0 or y_input >= input_y_dim:
-                    continue
+            y_inputs = np.floor(input_widths + y_mid[x]).astype(int)
+            y_sel_idx = np.where((y_inputs >= 0) & (y_inputs < input_y_dim))[0]
+            y_out_idx = np.where(t_mask[y_sel_idx, x] == 0)[0]   # check any outlier t_mask = 0
 
-                if t_mask[y, x] != 0:
-                    continue
-                collect_pixels = []
+            if y_out_idx.size == 0:          # no mask found
+                continue
+            else:
+                y_out_idx = y_sel_idx[y_out_idx]
 
-                for dh in range(0, a_w):          # neighbor position y_nb, x_nb in [p_height, p_width] domain
-                    y_nb = y + dh - 1
-                    if y_nb < 0 or y_nb >= p_height or dh == 1:
-                        continue
-                    for dw in range(0, 1):
-                        x_nb = x + dw
-                        if x_nb < 0 or x_nb >= p_width or t_mask[y_nb, x_nb] == 0:
-                            continue
+            s_data_outlier[y_out_idx, x] = 0.0
 
-                        collect_pixels.append(s_data[y_nb, x_nb])
-                p_avg = np.mean(np.array(collect_pixels)) if len(collect_pixels) > 0 else scaled_profile[y, x]
-                s_data_outlier[y, x] = p_avg
+            if self.outlier_flux is not None:
+                if is_sdata_raw:
+                    original_x = input_x[x]                 # a number
+                    original_y = y_inputs[y_out_idx]        # an array
+                else:
+                    original_x = x_output_step[x]
+                    original_y = (output_widths[y_out_idx] + y_output_mid)
 
-                if self.outlier_flux is not None:
-                    if is_sdata_raw:
-                        original_x = input_x[x]
-                        original_y = y_input
-                    else:
-                        original_x = x_output_step[x]
-                        original_y = (output_widths[y] + y_output_mid)
-                    if self.outlier_flux[original_y, original_x] != s_data[y, x]:
-                        self.d_print("Error:outlier flux is not the same as the original flux at position",
-                                     str(original_y), str(original_x))
-
-                    self.outlier_flux[original_y, original_x] = p_avg
+                self.outlier_flux[original_y, original_x] = 1
 
         return t_mask, s_data_outlier
 
 
     @staticmethod
-    def outlier_rejection(s_data, f_data, input_x, is_column_analysis, outlier_sigma, y_mid, input_widths, input_y_dim, is_debug=False):
+    def outlier_rejection_fix_profile(s_data, f_data, input_x, outlier_sigma, y_mid, input_widths, input_y_dim, is_debug=False):
         """
 
         Args:
             s_data (numpy.ndarray): spectrum pixels of one order trace (starightened trace)
             f_data (numpy.ndarray): flat pixels of one order trace (straightened trace)
             input_x (numpy.ndarray): x positions that cover the trace in input domain
-            is_column_analysis (bool): do the analysis column by column per orderlet or do the analysis on entier
-                    orderlet
             outlier_sigma (float): thresold for the deviation to find the outlier.
             y_mid (numpy.ndarray): y location of the trace in input domain
-            y_output_mid (int): y location of the trace in output domain
             input_widths (numpy.ndarray): from lower to upper width in input domain
             input_y_dim (int): height of original spectrum
             is_debug (bool): prints out the analysis result if it is True.
@@ -641,74 +627,130 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         """
 
-        scaled_profile = None
-
         t_mask = np.ones_like(s_data, dtype=int)
-        if is_column_analysis:
-            profile_order = np.nanmedian(f_data, axis=1)
-            profile_median = np.nanmedian(profile_order)
-            scaled_profile = np.zeros_like(f_data)
-            for i_x, p_x in enumerate(input_x):
-                y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
-                y_valid_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
-                # if y_valid_idx.size != y_input.size:
-                #    print(' loc ', i_x,  p_x, ' has less pixels extracted', y_valid_idx.size, ' vs ', y_input.size)
+        p_h, p_w = np.shape(s_data)
 
-                c_flux = s_data[y_valid_idx, i_x]
+        profile_order = np.nanmedian(f_data, axis=1)
+        profile_median = np.nanmedian(profile_order)
+
+        if profile_median == 0:
+            profile_median = 1
+        scaled_profile = np.zeros_like(f_data)
+
+        for i_x, p_x in enumerate(input_x):
+
+            y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
+            y_valid_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
+
+            p_median = np.nanmedian(profile_order[y_valid_idx]) if y_valid_idx.size < y_input.size else profile_median
+
+            total_rejection = p_h//2
+            for i in range(total_rejection):
+                p_non_outlier = np.where(t_mask[y_valid_idx, i_x] != 0)[0]
+
+                if p_non_outlier.size == 0:
+                    break
+
+                eff_y = y_valid_idx[p_non_outlier]
+                c_flux = s_data[eff_y, i_x]
                 c_median = np.nanmedian(c_flux)
-                if profile_median == 0:
-                    profile_median = 1
-                scaled_profile[y_valid_idx, i_x] = profile_order[y_valid_idx] * (c_median/profile_median)
-                c_residuals = c_flux - scaled_profile[y_valid_idx, i_x]
+                scaled_profile[:, i_x] = profile_order * (c_median/p_median)
+                c_residuals = c_flux - scaled_profile[eff_y, i_x]
                 c_std = mad_std(c_residuals)
                 if c_std == 0.0:
                     c_std = mad_std(np.unique(c_residuals))
-                c_deviation = np.absolute(c_residuals/c_std) if c_std != 0.0 else np.ones_like(c_residuals)
-                t_mask[y_valid_idx, i_x] = np.where((c_deviation < outlier_sigma), 1, 0)
-
-                # for testing purpose
-                if is_debug:
-                    print('i_x: ', i_x, ' c_median: ', c_median, ' c_deviation max: ', np.max(c_deviation),
-                          ' reject no:', np.where(t_mask[:, i_x] == 0)[0].size)
-
-        else:
-            with np.errstate(divide='ignore', invalid='ignore'):
-                relative_values = np.true_divide(s_data, f_data)
-                to_zero = (relative_values == np.inf)
-                relative_values[to_zero] = 0.0
-                t_mask[to_zero] = 0
-                to_nan_zero = np.where(np.isnan(relative_values))
-                t_mask[to_nan_zero] = 0
-                relative_values[to_nan_zero] = 0.0
-
-            total_iterate = 3
-            max_rejected = 10  # max outlier allowed each iteration
-
-            for t in range(total_iterate):
-                valid_pixel = np.where(t_mask != 0)  # doing analysis on non-outlier pixels
-                c_median = np.nanmedian(relative_values[valid_pixel])
-                c_std = mad_std(relative_values[valid_pixel], ignore_nan=True)
-                p_threshold = [c_median + outlier_sigma * c_std, c_median - outlier_sigma * c_std]
-                to_zero_idx = np.where(((relative_values > p_threshold[0]) | (relative_values < p_threshold[1])) &
-                                   (t_mask != 0))
-
-                # no more outlier, stop the iteration
-                if to_zero_idx[0].size <= 0:
+                if c_std == 0.0:
                     break
 
-                to_reject = max_rejected if to_zero_idx[0].size > max_rejected else to_zero_idx[0].size
-
-                if c_median == 0.0 and c_std == 0.0:  # for some reason, we got zero median and std on the pixels ??
-                    break
-
-                t_mask[to_zero_idx[0][0:to_reject], to_zero_idx[1][0:to_reject]] = 0
-                relative_values[to_zero_idx[0][0:to_reject], to_zero_idx[1][0:to_reject]] = 0
-            scaled_profile = relative_values
+                c_deviation = np.absolute(c_residuals/c_std)
+                outside_p = (np.min(scaled_profile) > s_data[eff_y, i_x]) | (s_data[eff_y, i_x] > np.max(scaled_profile))
+                outlier_idx = np.where((c_deviation >= outlier_sigma) & outside_p)[0]
+                if outlier_idx.size > 0:
+                    max_idx = outlier_idx[np.argmax(c_deviation[outlier_idx])]
+                    t_mask[eff_y[max_idx], i_x] = 0
+                    # t_mask[eff_y[outlier_idx[0]], i_x] = 0
+                else:
+                    break          # converge
+            #if is_debug:
+            #    print("p_x: ", p_x, "total iterate: ", i, ' out of ', p_h)
 
         if np.where(t_mask == 0)[0].size == 0:
             t_mask = None
+        else:
+            if is_debug:
+                print("outlier at ", np.where(t_mask == 0)[1]+input_x[0])
 
         return t_mask, scaled_profile
+
+    @staticmethod
+    def outlier_rejection_local_profile(s_data, f_data, input_x, outlier_sigma, y_mid, input_widths, input_y_dim, is_debug=False):
+        """
+
+        Args:
+            s_data (numpy.ndarray): spectrum pixels of one order trace (starightened trace)
+            f_data (numpy.ndarray): flat pixels of one order trace (straightened trace)
+            input_x (numpy.ndarray): x positions that cover the trace in input domain
+            outlier_sigma (float): thresold for the deviation to find the outlier.
+            y_mid (numpy.ndarray): y location of the trace in input domain
+            input_widths (numpy.ndarray): from lower to upper width in input domain
+            input_y_dim (int): height of original spectrum
+            is_debug (bool): prints out the analysis result if it is True.
+
+        Returns:
+            np.ndarray: t_mask in which each pixel indicates if the trace pixel is an outlier(0) or not (1).
+
+        """
+
+        t_mask = np.ones_like(s_data, dtype=int)
+        p_h, p_w = np.shape(s_data)
+
+        scaled_profile = np.zeros_like(f_data)
+
+        for i_x, p_x in enumerate(input_x):
+            y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
+            y_valid_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
+
+            profile_order = f_data[:, i_x]
+            profile_median = np.nanmedian(profile_order[y_valid_idx])
+            total_rejection = y_valid_idx.size//2
+            i = 0
+            while i < total_rejection:
+                p_non_outlier = np.where(t_mask[y_valid_idx, i_x] != 0)[0]
+
+                if p_non_outlier.size == 0:
+                    break
+
+                eff_y = y_valid_idx[p_non_outlier]
+                c_flux = s_data[eff_y, i_x]
+                c_median = np.nanmedian(c_flux)
+
+                scaled_profile[:, i_x] = profile_order * (c_median/profile_median)
+                c_residuals = c_flux - scaled_profile[eff_y, i_x]
+                c_std = mad_std(c_residuals)
+                if c_std == 0.0:
+                    c_std = mad_std(np.unique(c_residuals))
+                if c_std == 0.0:
+                    break
+
+                c_deviation = np.absolute(c_residuals/c_std)
+                outside_p = (np.min(scaled_profile) > s_data[eff_y, i_x]) | (s_data[eff_y, i_x] > np.max(scaled_profile))
+                outlier_idx = np.where((c_deviation >= outlier_sigma) & outside_p)[0]
+                if outlier_idx.size > 0:
+                    max_idx = outlier_idx[np.argmax(c_deviation[outlier_idx])]         # max_idx: within area of eff_y
+                    t_mask[eff_y[max_idx], i_x] = 0
+                    i += 1
+                else:
+                    break          # converge
+            if is_debug:
+                print("p_x: ", p_x, "total iterate: ", i, ' out of ', p_h)
+
+        if np.where(t_mask == 0)[0].size == 0:
+            t_mask = None
+        else:
+            if is_debug:
+                print("outlier at ", np.where(t_mask == 0)[1] + input_x[0])
+        return t_mask, scaled_profile
+
 
     def collect_and_extract_spectrum_curve(self, data_group, order_idx, s_rate=1):
         """ Collect and extract the spectral data along the order per polynomial fit data and no rectification.
@@ -741,6 +783,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         raw_group = list()
         rectified_group = list()
+
         for dt in data_group:
             if dt['is_raw_data']:
                 raw_group.append(dt)
@@ -770,8 +813,9 @@ class SpectralExtractionAlg(ModuleAlgBase):
         is_debug = False
         mask_height = np.shape(out_data)[1]
 
-        #if order_idx == 0:
-        #    is_debug = True
+        if self.order_name == 'GREEN_SKY_FLUX':
+            if order_idx == 134:
+                is_debug = True
         s_data, f_data, is_sdata_raw = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
                                                                      input_widths, y_output_widths,
                                                                      input_x, x_output_step, mask_height, is_debug)
@@ -780,29 +824,16 @@ class SpectralExtractionAlg(ModuleAlgBase):
         if self.do_outlier_rejection and self.extraction_method == SpectralExtractionAlg.OPTIMAL and \
                 self.rectification_method == SpectralExtractionAlg.NoRECT and \
                 s_data is not None and f_data is not None:
-            trace_mask, s_data_outlier = self.outlier_rejection_for_optimal_extraction(s_data, f_data,
+            t_mask, s_data_outlier = self.outlier_rejection_for_optimal_extraction(s_data, f_data,
                                                             input_x, x_output_step, is_sdata_raw,
                                                             input_widths, y_output_widths,
                                                             y_mid, y_output_mid,
                                                             do_column=True, is_debug=is_debug)
         else:
-            trace_mask = None
             s_data_outlier = None
+            t_mask = None
 
-
-        total_outlier = 0
         for s_x, o_x in enumerate(x_output_step):               # ox: 0...x_dim-1, out_data: 0...x_dim-1, corners: 0...
-            """
-            x_i = input_x[s_x]
-            y_input = np.floor(input_widths + y_mid[s_x]).astype(int)
-            y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
-
-            out_data.fill(0.0)
-            for dt in raw_group:
-                out_data[dt['idx']][y_input_idx, 0] = dt['data'][y_input[y_input_idx], x_i]
-            for dt in rectified_group:
-                out_data[dt['idx']][y_input_idx, 0] = dt['data'][y_output_widths[y_input_idx] + y_output_mid, o_x]
-            """
 
             if f_data is not None:
                 out_data[self.FDATA][:] = f_data[:, s_x][:, np.newaxis]
@@ -810,13 +841,11 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 out_data[self.SDATA][:] = s_data[:, s_x][:, np.newaxis] \
                     if s_data_outlier is None else s_data_outlier[:, s_x][:, np.newaxis]
 
-            extracted_result = self.extraction_handler(out_data, y_size, data_group)
+            extracted_result = self.extraction_handler(out_data, y_size, data_group,
+                                                       t_mask[:, s_x][:, np.newaxis] if t_mask is not None else None)
             extracted_data[:, o_x:o_x+1] = extracted_result['extraction']
 
-        if trace_mask is not None and is_debug:
-            total_outlier = np.where(trace_mask[0:y_size, :] == 0)[0].size
-            self.d_print('total outlier :', total_outlier, ' out of ', x_output_step.size*input_widths.size, ' pixels: ',
-                  total_outlier/(x_output_step.size*input_widths.size))
+
         # out data starting from origin [0, 0] contains the reduced flux associated with the data range
         result_data = {'y_center': y_output_mid,
                        'widths': [lower_width, upper_width],
@@ -1288,7 +1317,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 'out_y_center': flux_results.get('y_center')}
 
     @staticmethod
-    def optimal_extraction(s_data, f_data, data_height, data_width):
+    def optimal_extraction(s_data, f_data, data_height, data_width, t_mask=None):
         """ Do optimal extraction on collected pixels along the order.
 
         This optimal extraction method does the calculation based on the variance of the spectrum data and the
@@ -1325,15 +1354,19 @@ class SpectralExtractionAlg(ModuleAlgBase):
         # taking weighted summation on spectral data of each column,
         # the weight is based on flat data.
         # formula: sum((f/sum(f)) * s/variance)/sum((f/sum(f))^2)/variance) ref. Horne 1986
+        if t_mask is not None:
+            pixel_mask = t_mask
+        else:
+            pixel_mask = np.ones_like(f_data)
 
         d_var = np.full((data_height, 1), 1.0)  # set the variance to be 1.0
-        w_sum = np.sum(f_data, axis=0)
+        w_sum = np.sum(f_data[0:data_height, :], axis=0)
         nz_idx = np.where(w_sum != 0.0)[0]
         if nz_idx.size > 0:
-            p_data = f_data[:, nz_idx]/w_sum[nz_idx]
-            num = p_data * s_data[:, nz_idx]/d_var
-            dem = np.power(p_data, 2)/d_var
-            w_data[0, nz_idx] = np.sum(num, axis=0)/np.sum(dem, axis=0)
+            p_data = f_data[0:data_height, nz_idx]/w_sum[nz_idx]
+            num = pixel_mask[0:data_height, nz_idx] * p_data * s_data[0:data_height, nz_idx]/d_var
+            dem = pixel_mask[0:data_height, nz_idx] * np.power(p_data, 2)/d_var
+            w_data[0, nz_idx] = (np.sum(num, axis=0)/np.sum(dem, axis=0))
 
         # for x in range(0, data_width):
         #    w_sum = sum(f_data[:, x])
@@ -1570,7 +1603,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
             #    print(b)
 
         new_corners = self.remove_duplicate_point2(new_poly_borders)
-        # print('\n new corners: ', new_corners)
+
         return np.array(new_corners)
 
     @staticmethod
@@ -2094,7 +2127,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
                     }
 
         """
-
+        self.order_name = order_name
         self.add_file_logger(print_debug)
         self.enable_time_profile(show_time)
         if self.spectrum_flux is not None:
@@ -2165,11 +2198,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
                          ' xrange: ', self.get_order_xrange(c_order))
 
             order_flux = self.get_flux_from_order(data_group, c_order)
-            # order_flux = self.get_flux_from_order(self.order_coeffs[c_order], self.get_order_edges(c_order),
-            #                                      self.get_order_xrange(c_order), data_group,
-            #                                      c_order)
-            # prepare out_data to contain rectification result
 
+            # prepare out_data to contain rectification result
             order_result[c_order] = order_flux
             t_start = self.time_check(t_start, '**** time [' + str(c_order) + ']: ')
 
