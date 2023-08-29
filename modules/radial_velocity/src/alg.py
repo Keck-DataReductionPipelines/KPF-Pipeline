@@ -161,6 +161,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         self.orderlet_mask_line = None
         self.vel_span_pixel = vel_span_pixel if vel_span_pixel is not None else \
             RadialVelocityAlg.comp_velocity_span_pixel(init_data, config, self.spectro)
+        self.obs_bjd = None
 
     @staticmethod
     def comp_velocity_span_pixel(init_data, config, instrument):
@@ -348,6 +349,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         if self.obs_jd is None:
 
             self.obs_jd = np.zeros(self.get_total_segments(), dtype=float)
+            self.obs_bjd = np.zeros(self.get_total_segments(), dtype=float)
 
             if self.spectro == 'neid':
                 self.obs_jd[:] = self.get_obs_time_neid(default=default)
@@ -355,11 +357,12 @@ class RadialVelocityAlg(RadialVelocityBase):
                 self.obs_jd[:]= self.get_obs_time_harps(default=default)
             elif self.spectro == 'kpf':
                 for s in range(self.get_total_segments()):
-                    self.obs_jd[s] = self.get_obs_time_kpf(default=default, seg=s)
+                    self.obs_jd[s], self.obs_bjd[s] = self.get_obs_time_kpf(default=default, seg=s)
 
         if seg < 0:
             if self.spectro == 'kpf':
-                return self.get_obs_time_kpf(seg=-1)
+                obs_bj, _ = self.get_obs_time_kpf(seg=-1)
+                return obs_bj
             else:
                 seg = 0
 
@@ -389,15 +392,17 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             ord_idx = 0
 
+        obs_bjd = None
         if seg >= 0 and self.bary_corr_table is not None and not self.bary_corr_table.empty and \
                 np.shape(self.bary_corr_table.values)[0] > ord_idx:
-            obs_time = np.array(self.bary_corr_table['PHOTON_BJD'])[ord_idx+self.start_bary_index]
+            obs_time = np.array(self.bary_corr_table['PHOTON_JD'])[ord_idx+self.start_bary_index]
+            obs_bjd = np.array(self.bary_corr_table['PHOTON_BJD'])[ord_idx+self.start_bary_index]
         elif 'MJD-OBS' in self.header and 'ELAPSED' in self.header:
             obs_time = self.header['MJD-OBS'] + 2400000.5
         else:
             obs_time = default
 
-        return obs_time
+        return obs_time, obs_bjd
 
     # get redshift for kpf on specific segment
     def get_redshift_kpf(self, seg=0, default=None):
@@ -1135,6 +1140,14 @@ class RadialVelocityAlg(RadialVelocityBase):
         else:
             results.attrs['CCFJDSUM'] = self.get_obs_time(seg=-1)   # exposure time from the header
             results.attrs['CCFJDSEG'] = self.obs_jd                 # an array for all segments
+
+            obs_bjd = np.zeros_like(self.obs_jd) if self.obs_bjd is None else self.obs_bjd
+            if obs_bjd[0] == 0.0:
+                bc_config = self.configure()
+                for i in range(obs_bjd.size):
+                    obs_bjd[i], _, _ = BarycentricCorrectionAlg.get_bjd(bc_config, self.obs_jd[i])
+
+            results.attrs['CCFBJDSEG'] = obs_bjd
             results.attrs['CCF-RVC'] = (f_decimal(rv_result), 'BaryC RV (km/s)')    # rv based on CCF summation
             results.attrs['CCFSTART'] = self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP][0]
             results.attrs['CCFSTEP'] = self.rv_config[RadialVelocityAlgInit.STEP]
@@ -1153,6 +1166,18 @@ class RadialVelocityAlg(RadialVelocityBase):
             results.attrs['CCF_NONNORM'] = ccf_rw_nonnorm if ccf_rw_nonnorm is not None else original_ccf
 
         return results
+
+    def configure(self):
+        bc_config = dict()
+        bc_keys = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
+                    RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
+                    RadialVelocityAlgInit.EPOCH, RadialVelocityAlgInit.PARALLAX,
+                    RadialVelocityAlgInit.STARNAME, RadialVelocityAlgInit.STAR_RV,
+                    RadialVelocityAlgInit.OBSLAT, RadialVelocityAlgInit.OBSLON, RadialVelocityAlgInit.OBSALT]
+        for k in bc_keys:
+            bc_config[k] = self.init_data[RadialVelocityAlgInit.RV_CONFIG][k]
+        bc_config[RadialVelocityAlgInit.SPEC] = self.spectro
+        return bc_config
 
     def is_none_fiberobject(self, fiberobj_key):
         """ Check if fiber object is None
