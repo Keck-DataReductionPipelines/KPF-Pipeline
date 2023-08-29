@@ -597,7 +597,7 @@ class WaveCalibration:
         fitted_peaks = detected_peaks.astype(float)
         gauss_coeffs = np.empty((4, len(detected_peaks)))
         # width = np.mean(np.diff(detected_peaks)) // 2
-        width = self.fit_width
+        width = self.fit_width // 2
 
         for j, p in enumerate(detected_peaks):
             idx = p + np.arange(-width, width + 1, 1)
