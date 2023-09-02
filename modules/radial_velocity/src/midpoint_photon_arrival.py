@@ -288,7 +288,7 @@ class MidpointPhotonArrival:
             It is essential that exposures, expBeg, and expEnd all be arrays of the same length.            
         
         """
- 
+
         if np.min(exposures)<0:
             ### Make sure all the expsosures are positive
             exposures=exposures-np.min(exposures)+1
@@ -330,7 +330,7 @@ class MidpointPhotonArrival:
         indxHigh=np.min(np.where(dummyVarEnd>=midVal))
         indxLow=np.max(np.where(dummyVarBeg<=midVal))
     
-    
+
         ####Use the rate to estimate the time the middle number of photons was recieved
         if indxLow==indxHigh:
             rate=exposures[indxLow]/(expEnd[indxLow]-expBeg[indxLow]).astype(float)
@@ -392,5 +392,4 @@ class MidpointPhotonArrival:
         self.orderMid=df_EM_bin.columns.astype(float)
         self.midPhoto=midBand    
     
-        return (self.orderMid,self.midPhoto)   
-       
+        return (self.orderMid,self.midPhoto)
