@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial.legendre import Legendre
 import os
+import time
 import pandas as pd
 import scipy
 from scipy import signal
@@ -10,6 +11,7 @@ from scipy.special import erf
 from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline
 from scipy.optimize.minpack import curve_fit
 from modules.Utils.config_parser import ConfigHandler
+import warnings
 
 class WaveCalibration:
     """
@@ -162,10 +164,10 @@ class WaveCalibration:
                         )
 
                     ax[0].set_title('Derived WLS - Approx WLS')
-                    ax[0].set_xlabel('pixel')
+                    ax[0].set_xlabel('Pixel')
                     ax[0].set_ylabel('[$\\rm \AA$]')
-                    ax[1].set_xlabel('pixel')
-                    ax[1].set_ylabel('[pixel]')
+                    ax[1].set_xlabel('Pixel')
+                    ax[1].set_ylabel('[Pixel]')
                     plt.tight_layout()
                     plt.savefig(
                         '{}/all_wls.png'.format(self.save_diagnostics_dir), 
@@ -224,11 +226,11 @@ class WaveCalibration:
 
         # 2D extracted spectra
         if plt_path is not None:
-            plt.figure(figsize=(20,10))
+            plt.figure(figsize=(20,10), tight_layout=True)
             im = plt.imshow(cal_flux, aspect='auto')
             im.set_clim(0, 20000)
-            plt.xlabel('pixel')
-            plt.ylabel('order number')
+            plt.xlabel('Pixel')
+            plt.ylabel('Order Number')
             plt.savefig('{}/extracted_spectra.png'.format(plt_path), dpi=250)
             plt.close()
 
@@ -249,14 +251,20 @@ class WaveCalibration:
                 if not os.path.isdir(order_plt_path):
                     os.makedirs(order_plt_path)
 
-                plt.figure(figsize=(20,10))
-                plt.plot(cal_flux[order_num,:], color='k', alpha=0.5)
-                plt.title('Order # {}'.format(order_num))
-                plt.xlabel('pixel')
-                plt.ylabel('flux')
+                plt.figure(figsize=(20,10), tight_layout=True)
+                #plt.plot(cal_flux[order_num,:], color='k', alpha=0.5)
+                plt.plot(cal_flux[order_num,:], color='k', linewidth = 0.5)
+                plt.title('Order # {}'.format(order_num), fontsize=36)
+                plt.xlabel('Pixel', fontsize=28)
+                plt.ylabel('Flux', fontsize=28)
+                plt.yscale('symlog')
+                plt.tick_params(axis='both', direction='inout', length=6, width=3, colors='k', labelsize=24)
+                #t0 = time.process_time()
                 plt.savefig(
                     '{}/order_spectrum.png'.format(order_plt_path), dpi=250
                 )
+                #self.logger.info(f'Seconds to execute savefig for order number {order_num}: {(time.process_time()-t0):.1f}')
+                #print(f'Seconds to execute savefig for order number {order_num}: {(time.process_time()-t0):.1f}')
                 plt.close()
             else:
                 order_plt_path = None
@@ -400,8 +408,8 @@ class WaveCalibration:
                         color='k'
                     )
 
-                    ax[1].set_ylabel('[pixels]')
-                    ax[1].set_xlabel('pixel')
+                    ax[1].set_ylabel('[Pixels]')
+                    ax[1].set_xlabel('Pixel')
                     plt.tight_layout()
                     plt.savefig(
                         '{}/precise_vs_rough.png'.format(order_plt_path),
@@ -531,18 +539,26 @@ class WaveCalibration:
                 )
         
         if plot_path is not None:
-            plt.figure()
-            plt.plot(order_flux, color='k', lw=0.1)   
-            plt.scatter(detected_peak_pixels, detected_peak_heights, s=1, color='r')
+            plt.figure(figsize=(20,10), tight_layout=True)
+            #plt.plot(order_flux, color='k', lw=0.1)   
+            plt.plot(order_flux, color='k', lw=0.5)   
+            plt.scatter(detected_peak_pixels, detected_peak_heights, s=2, color='r')
+            plt.xlabel('Pixel', fontsize=28)
+            plt.ylabel('Flux', fontsize=28)
+            plt.yscale('symlog')
+            plt.tick_params(axis='both', direction='inout', length=6, width=3, colors='k', labelsize=24)
+            #t0 = time.process_time()
             plt.savefig('{}/detected_peaks.png'.format(plot_path), dpi=250)
             plt.close()
+            #self.logger.info(f'Seconds to execute savefig for order number {order_num}: {(time.process_time()-t0):.1f}')
+            #print(f'Seconds to execute savefig for order number {order_num}: {(time.process_time()-t0):.1f}')
 
-            n_zoom_sections = 10
+            n_zoom_sections = 5
             zoom_section_pixels = n_pixels // n_zoom_sections
 
-            _, ax_list = plt.subplots(n_zoom_sections, 1, figsize=(6,12))
+            _, ax_list = plt.subplots(n_zoom_sections, 1, figsize=(12,6))
             for i, ax in enumerate(ax_list):
-                ax.plot(order_flux,color='k', lw=0.1)
+                ax.plot(order_flux,color='k', lw=0.5)
                 ax.scatter(detected_peak_pixels,detected_peak_heights,s=1,color='r')
                 ax.set_xlim(zoom_section_pixels * i, zoom_section_pixels * (i+1))
                 ax.set_ylim(
@@ -551,6 +567,9 @@ class WaveCalibration:
                         order_flux[zoom_section_pixels * i : zoom_section_pixels * (i+1)]
                     )
                 )
+                ax.set_ylabel('Flux', fontsize=14)
+                if i == n_zoom_sections-1:
+                    ax.set_xlabel('Pixel', fontsize=14)
 
             plt.tight_layout()
             plt.savefig('{}/detected_peaks_zoom.png'.format(plot_path),dpi=250)
@@ -1037,14 +1056,20 @@ class WaveCalibration:
         peak_diff_spline = UnivariateSpline(fitted_peak_pixels[good_peak_idx][1:][index], spline_peak_diff_new, k = 2)
         
         if plot_path is not None:
-            plt.figure()
-            plt.plot(fitted_peak_pixels[good_peak_idx][:-1], peak_diff, 'ko', alpha = 0.5, label = 'Peak Difference', markersize = 8)
-            plt.plot(fitted_peak_pixels[good_peak_idx][:-1][index], spline_peak_diff_new,'bo', alpha = 0.3, label = 'Filtered Peak Difference', markersize = 6)
-            plt.plot(np.arange(n_pixels), peak_diff_spline(np.arange(n_pixels)), 'r-', label = 'SPLINE Fit', lw =2)
-            plt.xlabel('Pixel Location')
-            plt.ylabel('Peak Spacing (to subsequent peak)')
+            plt.figure(tight_layout=True)
+            plt.plot(fitted_peak_pixels[good_peak_idx][:-1], peak_diff, 
+                     'ko', alpha = 0.5, label = 'Peak Difference', markersize = 8)
+            plt.plot(fitted_peak_pixels[good_peak_idx][:-1][index], spline_peak_diff_new, 
+                     'bo', alpha = 0.3, label = 'Filtered Peak Difference', markersize = 6)
+            plt.plot(np.arange(n_pixels), peak_diff_spline(np.arange(n_pixels)), 
+                     'r-', label = 'SPLINE Fit', lw =2)
+            plt.xlabel('Pixel Location', fontsize=14)
+            plt.ylabel('Peak Spacing (to subsequent peak)', fontsize=14)
+            plt.tick_params(axis='both', direction='inout', length=6, width=3, colors='k', labelsize=12)
             plt.legend()
             plt.savefig('{}/peak_diff.png'.format(plot_path), dpi=250)
+            plt.close()
+                
         
         for i in range(n_clipped_peaks):
             # estimate local peak diff from SPLINE fit function
@@ -1087,22 +1112,26 @@ class WaveCalibration:
             n_skipped_modes_in_chip_first_half)
         
         if plot_path is not None:
-            plt.figure()
-            plt.plot(rough_wls_order, order_flux, alpha=0.2)
-            plt.vlines(comb_lines_angstrom, ymin=0, ymax=5000, color='r')
+            plt.figure(tight_layout=True)
+            plt.plot(rough_wls_order, order_flux, alpha=0.2, label='Flux')
+            plt.vlines(comb_lines_angstrom, ymin=0, ymax=5000, color='r', label='Comb Lines')
             plt.xlim(np.nanmin(rough_wls_order), np.nanmin(rough_wls_order) + 6)
-            plt.xlabel('wavelength [$\\rm \AA$]')
+            plt.yscale('symlog')
+            plt.xlabel('Wavelength [$\\rm \AA$]', fontsize=14)
+            plt.ylabel('Flux', fontsize=14)
+            plt.title('Rough Solution and LFC Lines', fontsize=18)
             plt.savefig('{}/rough_sol_and_lfc_lines.png'.format(plot_path), dpi=250)
+            plt.legend()
             plt.close()
 
-            n_zoom_sections = 20
+            n_zoom_sections = 10
             zoom_section_wavelen = (
                 (np.nanmax(rough_wls_order) - np.nanmin(rough_wls_order)) // 
                 n_zoom_sections
             )
             zoom_section_pixels = n_pixels // n_zoom_sections
 
-            _, ax_list = plt.subplots(n_zoom_sections, 1, figsize=(6, 20))
+            _, ax_list = plt.subplots(n_zoom_sections, 1, figsize=(12, 10))
             for i, ax in enumerate(ax_list):
                 ax.plot(rough_wls_order, order_flux, color='k', alpha=0.1)
                 for mode_num in mode_nums:
@@ -1130,6 +1159,9 @@ class WaveCalibration:
                     )
                 )
                 ax.set_yticks([])
+                ax.set_ylabel('Flux')
+                if i == n_zoom_sections-1:
+                    ax.set_xlabel(r'Wavelength ($\AA$)')
             plt.tight_layout()
             plt.savefig('{}/labeled_line_locs.png'.format(plot_path), dpi=250)
             plt.close()
@@ -1139,7 +1171,7 @@ class WaveCalibration:
     
     def integrate_gaussian(self, x, a, mu, sig, const, int_width=0.5):
         """
-        Returns the integral of a Gaussian over a specified symamtric range. 
+        Returns the integral of a Gaussian over a specified symmetric range. 
         Gaussian given by:
         g(x) = a * exp(-(x - mu)**2 / (2 * sig**2)) + const
         Args:
@@ -1247,21 +1279,27 @@ class WaveCalibration:
             # plt.close()
 
             if plot_path is not None:
-
                 sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
                 s = InterpolatedUnivariateSpline(fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx])
                 interpolated_ground_truth = s(np.arange(n_pixels))
+                
+                approx_dispersion = (our_wavelength_solution_for_order[2000] - our_wavelength_solution_for_order[2100])/100
 
                 # plot ground truth wls vs our wls
-                plt.figure()
-                plt.plot(
+                fig, ax1 = plt.subplots(tight_layout=True, figsize=(8, 4))
+                ax1.plot(
                     np.arange(n_pixels), 
                     interpolated_ground_truth - our_wavelength_solution_for_order, 
                     color='k'
                 )
-
-                plt.xlabel('pixel')
-                plt.ylabel('wavelength diff (A)')
+                ax1.set_xlabel('Pixel')
+                ax1.set_ylabel(r'Wavelength Difference ($\AA$)')
+                ax2 = ax1.twinx()
+                warnings.filterwarnings("ignore", "FixedFormatter should only be used together with FixedLocator")
+                ax2.set_ylabel("Difference (pixels) \nusing dispersion " + r'$\approx$' + '{0:.2}'.format(approx_dispersion) + r' $\AA$/pixel')
+                ax2.set_ylim(ax1.get_ylim())
+                ax1_ticks = ax1.get_yticks()
+                ax2.set_yticklabels([str(round(tick / approx_dispersion, 2)) for tick in ax1_ticks])
                 plt.savefig('{}/interp_vs_our_wls.png'.format(plot_path))
                 plt.close()
         else:
@@ -1303,6 +1341,7 @@ class WaveCalibration:
         # and our wavelength solution wavelengths for (fractional) peak pixels
         abs_residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
         abs_precision_cm_s = 100 * np.nanstd(abs_residual)/np.sqrt(len(fitted_peak_pixels))
+        # the above line should use RMS not STD
 
         # relative RV precision of order = difference between rough wls wavelengths
         # and our wavelength solution wavelengths for all pixels
@@ -1315,13 +1354,13 @@ class WaveCalibration:
             print('Relative standard error (this order): {:.2f} cm/s'.format(rel_precision_cm_s))
         
         if plot_path is not None:
-            fig, ax = plt.subplots(2,1)
+            fig, ax = plt.subplots(2,1) #figsize=(20,16), tight_layout=True
             ax[0].plot(abs_residual)
-            ax[0].set_xlabel('pixel')
-            ax[0].set_ylabel('absolute error [m/s]')
+            ax[0].set_xlabel('Pixel')
+            ax[0].set_ylabel('Absolute Error [m/s]')
             ax[1].plot(rel_residual)
-            ax[1].set_xlabel('pixel')
-            ax[1].set_ylabel('relative error [m/s]')
+            ax[1].set_xlabel('Pixel')
+            ax[1].set_ylabel('Relative Error [m/s]')
             plt.savefig('{}/rv_precision.png'.format(plot_path), dpi=250)
             plt.close()
 
@@ -1413,24 +1452,7 @@ class WaveCalibration:
         
         return calflux
 
-    ## instrument drift fxns ## plot_drift, calcdrift_polysolution
-
     
-    ## plotting/unused? ## plot_poly_coefs, calcdrift_ccf, 
-#     def plot_poly_coefs(self,coef_num,order_num):
-#         """*** to implement in the future: polynomial coeffs vs time for 
-#             specific order (inputs: poly num, order num)
-
-#         Args:
-#             coef_num ([type]): [description]
-#             order_num ([type]): [description]
-#         """
-#         pass
-    
-#     def calcdrift_ccf(self,obstime,calfile1,calfile2):
-#         pass
-    
-    ## quicklook ## order_flux_gen
     def comb_gen(self, f0, f_rep):
         """ Computes wavelengths of LFC modes using the comb equation
         Args:
@@ -1535,6 +1557,7 @@ def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
         drift[:,0],drift[:,1],'ko',ls='-'
     )
     plt.title('Inst. drift: {} to {}'.format(obsname1,obsname2))
-    plt.xlabel('order')
-    plt.ylabel('drift [cm s$^{-1}$]')
+    plt.xlabel('Order')
+    plt.ylabel('Drift [cm s$^{-1}$]')
     plt.savefig(figsave_name, dpi=250)
+    plt.close()
