@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import barycorrpy
 
 from astropy.time import Time
 from modules.radial_velocity.src.midpoint_photon_arrival import MidpointPhotonArrival
@@ -53,13 +54,17 @@ class BaryCorrTableAlg(ModuleAlgBase):
     year_days = 365.25
     name = 'BaryCorrTable'
     BC_col1 = 'GEOMID_UTC'
-    BC_col2 = 'GEOMID_BJD'
-    BC_col3 = 'PHOTON_BJD'
-    BC_col4 = 'BARYVEL'
+    BC_col2 = 'GEOMID_JD'
+    BC_col3 = 'PHOTON_JD'
+    BC_col4 = 'GEOMID_BJD'
+    BC_col5 = 'PHOTON_BJD'
+    BC_col6 = 'BARYVEL'
     BARY_TABLE_KEYS = {BC_col1: "geometric midpoint UTC",
-                       BC_col2: "geometric midpoint BJD",
-                       BC_col3: "weighted-photon midpoint BJD",
-                       BC_col4: "barycentric velocity(m/sec)"}
+                       BC_col2: "geometric midpoint JD UTC",
+                       BC_col3: "weighted-photon midpoint JD UTC",
+                       BC_col4: "geometric midpoint BJD_TDB",
+                       BC_col5: "weighted-photon midpoint BJD_TDB",
+                       BC_col6: "barycentric velocity(m/sec)"}
 
     def __init__(self, df_em, df_bc, pheader, wls_data, total_order, ccd_order,
                  start_bary_index=0, config=None, logger=None):
@@ -91,7 +96,8 @@ class BaryCorrTableAlg(ModuleAlgBase):
             columns = df_bc.columns
             self.bary_corr_table = dict()
             for cl in [BaryCorrTableAlg.BC_col1, BaryCorrTableAlg.BC_col2,
-                       BaryCorrTableAlg.BC_col3, BaryCorrTableAlg.BC_col4]:
+                       BaryCorrTableAlg.BC_col3, BaryCorrTableAlg.BC_col4,
+                       BaryCorrTableAlg.BC_col5, BaryCorrTableAlg.BC_col6]:
                 if cl == BaryCorrTableAlg.BC_col1:
                     self.bary_corr_table[cl] = np.array(df_bc[cl]) if cl in columns \
                         else np.empty(self.total_table_order, dtype=object)
@@ -103,9 +109,13 @@ class BaryCorrTableAlg(ModuleAlgBase):
                         BaryCorrTableAlg.BC_col1: np.empty(self.total_table_order, dtype=object),
                         BaryCorrTableAlg.BC_col2: np.zeros(self.total_table_order, dtype=float),
                         BaryCorrTableAlg.BC_col3: np.zeros(self.total_table_order, dtype=float),
-                        BaryCorrTableAlg.BC_col4: np.zeros(self.total_table_order, dtype=float)}
+                        BaryCorrTableAlg.BC_col4: np.zeros(self.total_table_order, dtype=float),
+                        BaryCorrTableAlg.BC_col5: np.zeros(self.total_table_order, dtype=float),
+                        BaryCorrTableAlg.BC_col6: np.zeros(self.total_table_order, dtype=float)}
         else:
             self.bary_corr_table = None
+
+        self.configure()
 
     def get_value_from_config(self, prop, default='', config=None):
         """ Get value of specific parameter from the configuration file.
@@ -194,6 +204,28 @@ class BaryCorrTableAlg(ModuleAlgBase):
         Returns:
             numpy.ndarray: Barycentric correction velocity of all orders
         """
+        bc_config = self.bc_config
+        for od in range(self.start_bary_index, self.end_bary_index+1):
+            if is_single_time and od > self.start_bary_index:
+                self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] \
+                    = self.bary_corr_table[BaryCorrTableAlg.BC_col6][self.start_bary_index]
+            else:
+                if RadialVelocityAlgInit.is_unknown_target(self.instrument, bc_config[RadialVelocityAlgInit.STARNAME],
+                                                           bc_config[RadialVelocityAlgInit.EPOCH]):
+                    # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
+                    #    import pdb;pdb.set_trace()
+                    self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] = 0.0
+                else:
+                    bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(bc_config,
+                                                                self.bary_corr_table[BaryCorrTableAlg.BC_col3][od])[0]
+                    self.bary_corr_table[BaryCorrTableAlg.BC_col6][od] = bc_corr   # m/sec
+
+        return self.bary_corr_table[BaryCorrTableAlg.BC_col6]
+
+    def configure(self):
+        """
+        Extract necessary information from the header and config file.
+        """
         bc_config = dict()
         header_keys = [RadialVelocityAlgInit.RA, RadialVelocityAlgInit.DEC,
                        RadialVelocityAlgInit.PMRA, RadialVelocityAlgInit.PMDEC,
@@ -222,22 +254,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
             bc_config[n_key] = h_key_data
         bc_config[RadialVelocityAlgInit.SPEC] = self.instrument
 
-        for od in range(self.start_bary_index, self.end_bary_index+1):
-            if is_single_time and od > self.start_bary_index:
-                self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] \
-                    = self.bary_corr_table[BaryCorrTableAlg.BC_col4][self.start_bary_index]
-            else:
-                if RadialVelocityAlgInit.is_unknown_target(self.instrument, bc_config[RadialVelocityAlgInit.STARNAME],
-                                                           bc_config[RadialVelocityAlgInit.EPOCH]):
-                    # if bc_config[RadialVelocityAlgInit.EPOCH] is not None:
-                    #    import pdb;pdb.set_trace()
-                    self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] = 0.0
-                else:
-                    bc_corr = BarycentricCorrectionAlg.get_zb_from_bc_corr(bc_config,
-                                                                self.bary_corr_table[BaryCorrTableAlg.BC_col3][od])[0]
-                    self.bary_corr_table[BaryCorrTableAlg.BC_col4][od] = bc_corr   # m/sec
-
-        return self.bary_corr_table[BaryCorrTableAlg.BC_col4]
+        self.bc_config = bc_config
 
     def get_obs_utc(self, default=None):
         """ Get observation exposure time in UTC in string format
@@ -283,15 +300,17 @@ class BaryCorrTableAlg(ModuleAlgBase):
             Pandas.DataFrame: BARY_CORR table containing columns of
 
                 * geometric midpoint in UTC string,
-                * geometric midpoint in BJD,
-                * weighted-photon midpoint BJD,
+                * geometric midpoint in JD UTC,
+                * weighted-photon midpoint JD UTC,
+                * geometric midpoint in BJD TDB,
+                * weighted-photon midpoint BJD TDB,
                 * barycentric velocity(m/sec)
 
         """
         if self.bary_corr_table is None:
             return None
 
-        # fill in "GEOMID_UTC" and "GEOMID_BJD" columns
+        # fill in "GEOMID_UTC" and "GEOMID_JD" columns
         mid_utc = self.get_obs_utc()
 
         if mid_utc is None:
@@ -299,6 +318,8 @@ class BaryCorrTableAlg(ModuleAlgBase):
         else:
             self.bary_corr_table[BaryCorrTableAlg.BC_col1][self.start_bary_index:self.end_bary_index+1] = mid_utc
             self.bary_corr_table[BaryCorrTableAlg.BC_col2][self.start_bary_index:self.end_bary_index+1] = Time(mid_utc).jd
+            GEOMID_BJD, warn, stat = BarycentricCorrectionAlg.get_bjd(self.bc_config, Time(mid_utc).jd)
+            self.bary_corr_table[BaryCorrTableAlg.BC_col4][self.start_bary_index:self.end_bary_index+1] = GEOMID_BJD
 
         df_em = self.get_expmeter_science()
 
@@ -323,12 +344,17 @@ class BaryCorrTableAlg(ModuleAlgBase):
         else:  # using observation time for midpoint arrival time if no df_em exists
             midphoton = self.bary_corr_table[BaryCorrTableAlg.BC_col1][self.start_bary_index:self.end_bary_index+1]
             is_single_mid = True
+
         for i in range(midphoton.size):
             self.bary_corr_table[BaryCorrTableAlg.BC_col3][i+self.start_bary_index] = Time(midphoton[i]).jd
+            PHOTMID_BJD, warn, stat = BarycentricCorrectionAlg.get_bjd(self.bc_config, Time(midphoton[i]).jd)
+
+            self.bary_corr_table[BaryCorrTableAlg.BC_col5][i+self.start_bary_index] = PHOTMID_BJD
 
         if self.is_bc_calculated():
             self.get_rv_col(is_single_mid)
 
         bc_df_res = pd.DataFrame(self.bary_corr_table)
         bc_df_res.attrs['BCV_UNIT'] = 'm/sec'
+
         return bc_df_res
