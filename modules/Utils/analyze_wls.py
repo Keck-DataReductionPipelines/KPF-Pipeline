@@ -14,7 +14,7 @@ class AnalyzeWLS:
 
     Arguments:
         L1 - an L1 object
-        L1b (optiona) - a second L1 object to compare to L1
+        L1b (optional) - a second L1 object to compare to L1
 
     Attributes:
         None so far
@@ -34,22 +34,6 @@ class AnalyzeWLS:
         
         #self.ObsID = primary_header.get_obsid()
         # need a filename instead or in addition
-
-
-#    def __init__(self, L1, logger=None):
-#        if self.logger:
-#            self.logger = logger
-#            self.logger.debug('Initializing AnalyzeWLS object.')
-#        else:
-#            self.logger = None
-#        self.L1 = L1
-#        #self.L1b = L1b
-#        primary_header = HeaderParse(L1, 'PRIMARY')
-#        self.header = primary_header.header
-#        self.name = primary_header.get_name()
-#        
-#        #self.ObsID = primary_header.get_obsid()
-#        # need a filename instead or in addition
 
 
     def plot_WLS_orderlet_diff(self, chip=None, fig_path=None, show_plot=False):
@@ -79,7 +63,6 @@ class AnalyzeWLS:
             print('chip not supplied.  Exiting plot_WLS_orderlet_diff')
             return
 
-
         if chip == 'green':
             wav1 = self.L1.GREEN_SCI_WAVE1
             wav2 = self.L1.GREEN_SCI_WAVE2
@@ -93,13 +76,12 @@ class AnalyzeWLS:
             cal  = self.L1.RED_CAL_WAVE
             sky  = self.L1.RED_SKY_WAVE
             
-        
         wls = [wav1, wav3, cal, sky]
-        labels = ['WLS1', 'WL3', 'CAL', 'SKY']
+        labels = ['SCI1', 'SCI3', 'CAL', 'SKY']
         num_orders = len(wav2)
         
         fig, ax = plt.subplots(4, 1, sharex='col', sharey='row', figsize=(18, 12))
-        
+
         for i, w in enumerate(wls):
             # plot the data
             for order in range(num_orders):
@@ -114,12 +96,18 @@ class AnalyzeWLS:
             ax[i].tick_params(axis='both', which='major', labelsize=14)
             ax[i].set_xlim(wav2.min()-25,wav2.max()+25)
             ax[i].set_ylim(y50-dy, y50+dy)
-            ax[i].set_ylabel('{0}-WLS2'.format(labels[i]), fontsize=18)
+            ax[i].set_ylabel('{0} - SCI2'.format(labels[i]), fontsize=18)
+            ax[i].grid(True)
             
-        title = "{0} Chip:  {1}".format(CHIP, self.L1.header['PRIMARY']['OFNAME'])
+        title = "{0} Chip:  {1}".format(chip_title, self.L1.header['PRIMARY']['OFNAME'])
         ax[0].set_title(title, fontsize=22)
+        ax[0].axhline(y=0, color='k', linestyle='-')        
+        ax[1].axhline(y=0, color='k', linestyle='-')        
+        ax[2].axhline(y=0, color='k', linestyle='-')        
+        ax[3].axhline(y=0, color='k', linestyle='-')        
         plt.xlabel('Wavelength (Ang)', fontsize=18)
-    
+        plt.tight_layout()
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
