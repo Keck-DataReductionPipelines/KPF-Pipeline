@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from modules.Utils.kpf_parse import HeaderParse
 from datetime import datetime
 
@@ -78,52 +79,47 @@ class AnalyzeWLS:
             print('chip not supplied.  Exiting plot_WLS_orderlet_diff')
             return
 
-# placeholder line
-        fig = plt.plot(np.arange(10))
 
-# Substitute good plotting stuff here.
-#        # Make 3-panel plot. First, create the figure and subplots
-#        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,10), tight_layout=True)
-#
-#        # Plot the data on each subplot
-#        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,5], marker="8", color='darkgreen', label='SCI1+SCI2+SCI3')
-#        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,1], marker=">", color='darkgreen', label='SCI1')
-#        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,2], marker="s", color='darkgreen', label='SCI2')
-#        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,3], marker="<", color='darkgreen', label='SCI3')
-#        ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,5],   marker="8", color='r', label='SCI1+SCI2+SCI3')
-#        ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,1],   marker=">", color='r', label='SCI1')
-#        ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,2],   marker="s", color='r', label='SCI2')
-#        ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,3],   marker="<", color='r', label='SCI3')
-#        ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
-#        ax1.grid()
-#        ax2.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,4], marker="D", color='darkgreen', label='SKY')
-#        ax2.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,4],   marker="D", color='r', label='SKY')
-#        ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
-#        ax2.grid()
-#        ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,0], marker="D", color='darkgreen', label='CAL')
-#        ax3.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,0],   marker="D", color='r', label='CAL')
-#        ax3.yaxis.set_major_locator(MaxNLocator(nbins=12))
-#        ax3.grid()
-#        ax3.set_xlim(4450,8700)
-#
-#        # Add legend
-#        ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
-#
-#        # Set titles and labels for each subplot
-#        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=16)
-#        ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
-#        ax1.set_ylabel('SNR - SCI', fontsize=14)
-#        ax2.set_ylabel('SNR - SKY', fontsize=14)
-#        ax3.set_ylabel('SNR - CAL', fontsize=14)
-#        ax3.xaxis.set_tick_params(labelsize=14)
-#        ax1.yaxis.set_tick_params(labelsize=14)
-#        ax2.yaxis.set_tick_params(labelsize=14)
-#        ax3.yaxis.set_tick_params(labelsize=14)
-#
-#        # Adjust spacing between subplots
-#        plt.subplots_adjust(hspace=0)
-#        plt.tight_layout()
-
+        if chip == 'green':
+            wav1 = self.L1.GREEN_SCI_WAVE1
+            wav2 = self.L1.GREEN_SCI_WAVE2
+            wav3 = self.L1.GREEN_SCI_WAVE3
+            cal  = self.L1.GREEN_CAL_WAVE
+            sky  = self.L1.GREEN_SKY_WAVE
+        elif chip == 'red':
+            wav1 = self.L1.RED_SCI_WAVE1
+            wav2 = self.L1.RED_SCI_WAVE2
+            wav3 = self.L1.RED_SCI_WAVE3
+            cal  = self.L1.RED_CAL_WAVE
+            sky  = self.L1.RED_SKY_WAVE
+            
+        
+        wls = [wav1, wav3, cal, sky]
+        labels = ['WLS1', 'WL3', 'CAL', 'SKY']
+        num_orders = len(wav2)
+        
+        fig, ax = plt.subplots(4, 1, sharex='col', sharey='row', figsize=(18, 12))
+        
+        for i, w in enumerate(wls):
+            # plot the data
+            for order in range(num_orders):
+                ax[i].plot(wav2[order,:], w[order,:]-wav2[order,:], c=cm.gist_rainbow(0.9*(1-order/num_orders)), lw=3)
+                
+            # make the axes pretty
+            y02 = np.percentile(w-wav2, 2.5)
+            y50 = np.percentile(w-wav2, 50)
+            y98 = np.percentile(w-wav2, 97.5)
+            dy = 0.5*((y98-y50)+(y50-y02))
+    
+            ax[i].tick_params(axis='both', which='major', labelsize=14)
+            ax[i].set_xlim(wav2.min()-25,wav2.max()+25)
+            ax[i].set_ylim(y50-dy, y50+dy)
+            ax[i].set_ylabel('{0}-WLS2'.format(labels[i]), fontsize=18)
+            
+        title = "{0} Chip:  {1}".format(CHIP, self.L1.header['PRIMARY']['OFNAME'])
+        ax[0].set_title(title, fontsize=22)
+        plt.xlabel('Wavelength (Ang)', fontsize=18)
+    
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
