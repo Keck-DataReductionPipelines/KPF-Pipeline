@@ -377,8 +377,13 @@ class MidpointPhotonArrival:
         df_EM_norm = self.df_EM[wav_str] * EM_gain /disp
 
         # define time arrays
-        date_beg = np.array(self.df_EM["Date-Beg-Corr"], dtype=np.datetime64)
-        date_end = np.array(self.df_EM["Date-End-Corr"], dtype=np.datetime64)
+        startkey = "Date-Beg"
+        endkey = "Date-End"
+        if "Date-Beg-Corr" in self.df_EM.columns:
+            startkey += "-Corr"
+            endkey += "-Corr"
+        date_beg = np.array(self.df_EM[startkey], dtype=np.datetime64)
+        date_end = np.array(self.df_EM[endkey], dtype=np.datetime64)
 
         # Bin wavelengths into orders
         df_EM_bin=self.binOrder(df_EM_norm,self.segmentMin,self.segmentMax)
