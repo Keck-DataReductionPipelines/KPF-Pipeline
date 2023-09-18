@@ -23,6 +23,8 @@
                     - `action.args['rectification_method'] (str, optional)`: Rectification method, '`norect`',
                       '`vertial`', or '`normal`', to rectify the curved order trace. Defaults to '`norect`',
                       meaning no rectification.
+                    - `action.args['data_extension']: (str, optional)`: the name of the extension in spectrum containing data.
+                    - `action.args['flat_extension']: (str, optional)`: the name of the extension in flat containing data.
                     - `action.args['clip_file'] (str, optional)`:  Prefix of clip file path. Defaults to None.
                       Clip file is used to store the polygon clip data for the rectification method
                       which is not NoRECT.
@@ -96,6 +98,7 @@ class OrderRectification(KPF0_Primitive):
                     'rectification_method': 'norect',  # 'norect', 'normal', 'vertical',
                     'clip_file': None,
                     'data_extension': 'DATA',
+                    'flat_extension': 'DATA',
                     'trace_extension': None,
                     'trace_file': None,
                     'poly_degree': 3,
@@ -131,6 +134,8 @@ class OrderRectification(KPF0_Primitive):
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
 
+        self.flat_ext = self.get_args_value('flat_extension', action.args, args_keys)
+
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -151,11 +156,10 @@ class OrderRectification(KPF0_Primitive):
         spec_header = self.input_spectrum.header[self.data_ext] \
             if (self.input_spectrum is not None and hasattr(self.input_spectrum, self.data_ext)) else None
 
-        flat_data = self.input_flat[self.data_ext] \
-            if self.input_flat is not None and hasattr(self.input_flat, self.data_ext) else None
-        flat_header = self.input_flat.header[self.data_ext] \
-            if (self.input_flat is not None and hasattr(self.input_flat, self.data_ext)) else None
-
+        flat_data = self.input_flat[self.flat_ext] \
+            if self.input_flat is not None and hasattr(self.input_flat, self.flat_ext) else None
+        flat_header = self.input_flat.header[self.flat_ext] \
+            if (self.input_flat is not None and hasattr(self.input_flat, self.flat_ext)) else None
 
         self.order_trace_data = None
         if order_trace_file:
@@ -218,11 +222,11 @@ class OrderRectification(KPF0_Primitive):
                 self.logger.info("OrderRectification: the order of the spectrum is rectified already")
                 return Arguments(self.input_spectrum)
         else:
-            if SpectralExtractionAlg.RECTIFYKEY in self.input_flat.header[self.data_ext]:
+            if SpectralExtractionAlg.RECTIFYKEY in self.input_flat.header[self.flat_ext]:
                 self.logger.info("OrderRectification: the order of the flat is rectified already")
                 return Arguments(self.input_flat)
         # no spectrum data case
-        if self.input_flat is not None and self.input_flat[self.data_ext].size == 0:
+        if self.input_flat is not None and self.input_flat[self.flat_ext].size == 0:
             if self.logger:
                 self.logger.info("OrderRectification: no spectrum data to rectify")
             return Arguments(None)
@@ -264,7 +268,7 @@ class OrderRectification(KPF0_Primitive):
 
         level0_obj = self.input_spectrum if rect_on == 'spectrum' else self.input_flat
 
-        self.update_level0_data(data_df, level0_obj)
+        self.update_level0_data(data_df, level0_obj, rect_on)
         level0_obj.receipt_add_entry('OrderRectification', self.__module__, f'order trace is rectified', 'PASS')
 
         if self.logger:
@@ -275,11 +279,12 @@ class OrderRectification(KPF0_Primitive):
 
         return Arguments(level0_obj)
 
-    def update_level0_data(self, data_result, lev0_obj):
+    def update_level0_data(self, data_result, lev0_obj, rect_on):
         # img_d = np.where(np.isnan(data_result.values), 0.0, data_result.values)
-        lev0_obj[self.data_ext] = data_result.values
+        ext =   self.data_ext if rect_on == 'spectrum' else self.flat_ext
+        lev0_obj[ext] = data_result.values
         for att in data_result.attrs:
-            lev0_obj.header[self.data_ext][att] = data_result.attrs[att]
+            lev0_obj.header[ext][att] = data_result.attrs[att]
 
 
     def get_args_value(self, key: str, args: Arguments, args_keys: list):
