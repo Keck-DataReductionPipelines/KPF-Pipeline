@@ -170,6 +170,11 @@ class MasterFlatFramework(KPF0_Primitive):
 
         """
 
+        # Optionally override self.smoothlamppattern_path from input argument.
+        smoothlamppattern_envar = getenv('SMOOTH_LAMP_PATTERN')
+        if smoothlamppattern_envar is not None:
+            self.smoothlamppattern_path = smoothlamppattern_envar
+
         smoothlamppattern_path_exists = exists(self.smoothlamppattern_path)
         if not smoothlamppattern_path_exists:
             raise FileNotFoundError('File does not exist: {}'.format(self.smoothlamppattern_path))
@@ -403,6 +408,9 @@ class MasterFlatFramework(KPF0_Primitive):
                 # Less than low-light pixels cannot be reliably adjusted.  Reset below-threshold pixels to have unity flat values.
                 flat = np.where(stack_avg < self.low_light_limit, 1.0, flat)
 
+            # Reset flat to unity if flat < 0.1 or flat > 2.5.
+            flat = np.where(flat < 0.1, 1.0, flat)
+            flat = np.where(flat > 2.5, 1.0, flat)
 
             ### kpf master file creation ###
             master_holder[ffi] = flat
