@@ -65,7 +65,6 @@ class WaveCalibration:
         self.peak_height_threshold = configpull.get_config_value('peak_height_threshold',1.5)
         self.sigma_clip = configpull.get_config_value('sigma_clip',2.1)
         self.fit_iterations = configpull.get_config_value('fit_iterations',5)
-        self.fit_width = configpull.get_config_value('fit_width', 10)
         self.logger = logger
  
     def run_wavelength_cal(
@@ -603,8 +602,7 @@ class WaveCalibration:
         # fit peaks with Gaussian to get accurate position
         fitted_peaks = detected_peaks.astype(float)
         gauss_coeffs = np.empty((4, len(detected_peaks)))
-        # width = np.mean(np.diff(detected_peaks)) // 2
-        width = self.fit_width // 2
+        width = np.mean(np.diff(detected_peaks)) // 2
 
         # Create mask initially set to True for all detected peaks
         mask = np.ones(len(detected_peaks), dtype=bool)
@@ -848,6 +846,7 @@ class WaveCalibration:
         """
         num_input_lines = len(linelist)  
         num_pixels = len(flux)
+        successful_fits = []
 
         missed_lines = 0
         coefs = np.zeros((4,num_input_lines))
@@ -868,10 +867,16 @@ class WaveCalibration:
                     last_fit_pixel = peak_pixel + gaussian_fit_width
 
                 # fit gaussian to matched peak location
-                coefs[:,i] = self.fit_gaussian(
+                result= self.fit_gaussian(
                     np.arange(first_fit_pixel,last_fit_pixel),
                     flux[first_fit_pixel:last_fit_pixel]
                 )
+
+                if result is not None:
+                    coefs[:, i] = result
+                    successful_fits.append(i)  # Append index of successful fit
+                else:
+                    missed_lines += 1
 
                 amp = coefs[0,i]
                 if amp < 0:
@@ -881,6 +886,8 @@ class WaveCalibration:
                 coefs[:,i] = np.nan
                 missed_lines += 1
 
+        linelist = linelist[successful_fits]
+        coefs = coefs[:, successful_fits]
         linelist = linelist[np.isfinite(coefs[0,:])]
         coefs = coefs[:, np.isfinite(coefs[0,:])]
 
@@ -1208,8 +1215,7 @@ class WaveCalibration:
             np.warnings.simplefilter("ignore")
             popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
 
-        if self.cal_type == 'LFC':
-           
+        if self.cal_type == 'LFC' or 'ThAr':          
             # Quality Checks for Gaussian Fits
             chi_squared_threshold = int(self.chi_2_threshold)
 
