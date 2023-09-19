@@ -2,11 +2,11 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.utils import DummyLogger
 from astropy.table import Table
 from datetime import datetime
 #import emcee
@@ -41,11 +41,8 @@ class Analyze2D:
     """
 
     def __init__(self, D2, logger=None):
-        if logger:
-            self.logger = logger
-            self.logger.debug('Initializing Analyze2D object')
-        else:
-            self.logger = None
+        self.logger = logger if logger is not None else DummyLogger()
+        self.logger.debug('Initializing Analyze2D object')
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
         self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
         primary_header = HeaderParse(D2, 'PRIMARY')
@@ -134,8 +131,8 @@ class Analyze2D:
         dark current or bias measurements in preset regions, if commanded.
         
         Args:
-            overlay_dark_current - if True, dark current measurements are over-plotted
             chip (string) - "green" or "red"
+            overlay_dark_current - if True, dark current measurements are over-plotted
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -169,7 +166,6 @@ class Analyze2D:
             image = self.D2[CHIP + '_CCD'].data
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
-            print('chip not supplied.  Exiting plot_2D_image')
             return
         
         # Generate 2D image
@@ -281,7 +277,6 @@ class Analyze2D:
             image = self.D2[CHIP + '_CCD'].data
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
-            print('chip not supplied.  Exiting plot_2D_image')
             return
         
         # Plot and annotate
@@ -341,8 +336,7 @@ class Analyze2D:
             #image = self.D2[CHIP + '_CCD'].data
             image = np.array(self.D2[CHIP + '_CCD'].data)
         else:
-            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
-            print('chip not supplied.  Exiting plot_2D_image')
+            self.logger.info('chip not supplied.  Exiting plot_2D_image')
             return
                 
         # Calculate center of the image and define offsets
@@ -627,7 +621,7 @@ class Analyze2D:
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
         else:
-            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             print('chip not supplied.  Exiting plot_2D_image')
             return
 
@@ -650,7 +644,6 @@ class Analyze2D:
                  density = False, 
                  range = (np.nanpercentile(flatten_image,  0.005),
                           np.nanpercentile(flatten_image, 99.995)))
-        #if master_file != 'None' and len(master_flatten_counts)>1: plt.hist(master_flatten_counts, bins = 50,alpha =0.5, label = 'Master Median: '+ '%4.1f' % np.nanmedian(master_flatten_counts)+'; Std: ' + '%4.1f' % np.nanstd(master_flatten_counts), histtype='step',density = False, color = 'orange', linewidth = 1 , range = (np.nanpercentile(master_flatten_counts,0.005),np.nanpercentile(master_flatten_counts,99.995))) #[master_flatten_counts<np.nanpercentile(master_flatten_counts,99.9)]
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.xlabel('Counts (e-)', fontsize=16)
         plt.ylabel('Number of Pixels', fontsize=16)
@@ -705,8 +698,7 @@ class Analyze2D:
             which_column_90 = np.argmin(np.abs(column_sum - p_90)) # index of 90th percentile
             which_column = np.argmin(np.abs(column_sum - percentile)) # index of nth percentile
         else:
-            self.logger.debug('chip not supplied.  Exiting plot_2D_column_cut')
-            print('chip not supplied.  Exiting plot_2D_column_cut')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             return
             
         # Determine if plot should be logarithmic or not
@@ -736,7 +728,6 @@ class Analyze2D:
             plt.axhline(y=saturation_limit_2d, color='r', linestyle='-') # Saturation limit
             plt.text(100, 0.9*saturation_limit_2d, 'Saturation', fontsize=12, verticalalignment='top', color='r')
             plt.ylim(0.5, 1.2*saturation_limit_2d)
-        #if master_file != 'None' and len(master_flatten_counts)>1: plt.plot(master_counts[:,which_column],alpha = 0.5,linewidth =  0.5, label = 'Master', color = 'Orange')
         plt.title('Column Cuts though 2D ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.ylabel('e-', fontsize=16)
         plt.xlabel('Row Number', fontsize=16)
@@ -758,4 +749,3 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
-        

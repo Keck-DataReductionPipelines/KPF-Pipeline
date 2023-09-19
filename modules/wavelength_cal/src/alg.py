@@ -65,6 +65,7 @@ class WaveCalibration:
         self.peak_height_threshold = configpull.get_config_value('peak_height_threshold',1.5)
         self.sigma_clip = configpull.get_config_value('sigma_clip',2.1)
         self.fit_iterations = configpull.get_config_value('fit_iterations',5)
+        self.fit_width = configpull.get_config_value('fit_width', 10)
         self.logger = logger
  
     def run_wavelength_cal(
@@ -602,7 +603,8 @@ class WaveCalibration:
         # fit peaks with Gaussian to get accurate position
         fitted_peaks = detected_peaks.astype(float)
         gauss_coeffs = np.empty((4, len(detected_peaks)))
-        width = np.mean(np.diff(detected_peaks)) // 2
+        # width = np.mean(np.diff(detected_peaks)) // 2
+        width = self.fit_width // 2
 
         # Create mask initially set to True for all detected peaks
         mask = np.ones(len(detected_peaks), dtype=bool)

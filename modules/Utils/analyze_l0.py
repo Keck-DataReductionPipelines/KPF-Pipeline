@@ -2,6 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.utils import DummyLogger
 from datetime import datetime
 
 class AnalyzeL0:
@@ -19,11 +20,8 @@ class AnalyzeL0:
     """
 
     def __init__(self, L0, logger=None):
-        if logger:
-            self.logger = logger
-            self.logger.debug('Initializing AnalyzeL0 object.')
-        else:
-            self.logger = None
+        self.logger = logger if logger is not None else DummyLogger()
+        self.logger.debug('Initializing AnalyzeL0 object.')
         self.L0 = L0
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header

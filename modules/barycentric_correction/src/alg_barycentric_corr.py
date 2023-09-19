@@ -3,6 +3,7 @@ import os
 import os.path
 import logging
 from barycorrpy import get_BC_vel
+import barycorrpy
 from astropy.utils import iers
 import pandas as pd
 from astropy import constants as const
@@ -318,3 +319,26 @@ class BarycentricCorrectionAlg(ModuleAlgBase):
                             alt=obs_config[BarycentricCorrectionAlg.ALT],
                             rv=obs_config[BarycentricCorrectionAlg.RV])
             return bc_obj[0][0]
+
+    @staticmethod
+    def get_bjd(bc_config, jdtime):
+        star = bc_config[BarycentricCorrectionAlg.STARNAME].lower()
+        if star == 'sun':
+            V_BJD, warn, stat = barycorrpy.utc_tdb.JDUTC_to_HJDTDB(jdtime,
+                                                                        lat=bc_config[BarycentricCorrectionAlg.LAT],
+                                                                        longi=bc_config[BarycentricCorrectionAlg.LON],
+                                                                        alt=bc_config[BarycentricCorrectionAlg.ALT])
+        else:
+            V_BJD, warn, stat = barycorrpy.utc_tdb.JDUTC_to_BJDTDB(jdtime,
+                                                                        ra=bc_config[BarycentricCorrectionAlg.RA],
+                                                                        dec=bc_config[BarycentricCorrectionAlg.DEC],
+                                                                        epoch=bc_config[BarycentricCorrectionAlg.EPOCH],
+                                                                        pmra=bc_config[BarycentricCorrectionAlg.PMRA],
+                                                                        pmdec=bc_config[BarycentricCorrectionAlg.PMDEC],
+                                                                        px=bc_config[BarycentricCorrectionAlg.PX],
+                                                                        lat=bc_config[BarycentricCorrectionAlg.LAT],
+                                                                        longi=bc_config[BarycentricCorrectionAlg.LON],
+                                                                        alt=bc_config[BarycentricCorrectionAlg.ALT],
+                                                                        rv=bc_config[BarycentricCorrectionAlg.RV])
+
+        return V_BJD[0], warn, stat
