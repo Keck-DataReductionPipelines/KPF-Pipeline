@@ -99,7 +99,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '1.5';
+my $version = '1.6';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -113,6 +113,12 @@ $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment wit
 my $containerimage = 'kpf-drp:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
+
+my $configenvar = $ENV{KPFCRONJOB_CONFIG_L0};
+
+if (defined $configenvar) {
+    $config = $configenvar;
+}
 
 
 # Print environment.

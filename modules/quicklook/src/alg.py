@@ -21,6 +21,7 @@ from modules.Utils.analyze_em import AnalyzeEM
 from modules.Utils.analyze_hk import AnalyzeHK
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
+from modules.Utils.analyze_wls import AnalyzeWLS
 from modules.Utils.analyze_l2 import AnalyzeL2
 from modules.Utils.kpf_parse import HeaderParse
 #import kpfpipe.pipelines.fits_primitives as fits_primitives
@@ -338,6 +339,23 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make WLS plots
+        try:
+            savedir = L1_QLP_file_base +'WLS/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            if chips != []:    
+                try:
+                    for chip in chips:
+                        filename = savedir + self.ObsID + '_WLS_orderlet_diff_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myWLS = AnalyzeWLS(kpf1, logger=self.logger)
+                        myWLS.plot_WLS_orderlet_diff(chip=chip, fig_path=filename, show_plot=False)
+                except Exception as e:
+                    self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        except Exception as e:
+            self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make L1 SNR plot
         try:
