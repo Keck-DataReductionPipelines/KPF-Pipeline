@@ -671,8 +671,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
                     # t_mask[eff_y[outlier_idx[0]], i_x] = 0
                 else:
                     break          # converge
-            #if is_debug:
-            #    print("p_x: ", p_x, "total iterate: ", i, ' out of ', p_h)
 
         if np.where(t_mask == 0)[0].size == 0:
             t_mask = None
@@ -741,8 +739,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
                     i += 1
                 else:
                     break          # converge
-            if is_debug:
-                print("p_x: ", p_x, "total iterate: ", i, ' out of ', p_h)
 
         if np.where(t_mask == 0)[0].size == 0:
             t_mask = None
@@ -813,9 +809,9 @@ class SpectralExtractionAlg(ModuleAlgBase):
         is_debug = False
         mask_height = np.shape(out_data)[1]
 
-        if self.order_name == 'GREEN_SKY_FLUX':
-            if order_idx == 134:
-                is_debug = True
+        # if self.order_name == 'GREEN_SKY_FLUX':
+        #    if order_idx == 134:
+        #        is_debug = True
         s_data, f_data, is_sdata_raw = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
                                                                      input_widths, y_output_widths,
                                                                      input_x, x_output_step, mask_height, is_debug)
