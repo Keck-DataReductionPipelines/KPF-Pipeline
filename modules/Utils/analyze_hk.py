@@ -64,7 +64,7 @@ class AnalyzeHK:
             self.wave_lib *= 1 - self.rv_shift/3e5 # Doppler shift wavelength solution
 
 
-    def plot_HK_image_2D(self, fig_path=None, show_plot=False):
+    def plot_HK_image_2D(self, fig_path=None, kpftype='L0', show_plot=False):
 
         """
         Generate a 2D image of the Ca H& K spectrum.  
@@ -84,7 +84,9 @@ class AnalyzeHK:
                        vmax = np.nanpercentile(self.image,99.5), 
                        interpolation = 'None',
                        origin = 'lower',
+                       cmap='viridis',
                        aspect='auto')
+        ax.grid(False)
 
         if self.trace_file != None:
             for i in self.trace_location_sci.keys():
@@ -121,12 +123,12 @@ class AnalyzeHK:
                                                            facecolor='none',
                                                            label = 'Sky'))
         fig.colorbar(im, orientation='vertical',label = 'Counts (ADU) - Saturation at '+str(64232))
-        ax.set_title('Ca H&K CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        ax.set_title('Ca H&K CCD: ' + str(self.ObsID) + ' (' + str(kpftype)+ ') - ' + self.name, fontsize=18)
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
         ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
         ax.xaxis.set_tick_params(labelsize=14)
         ax.yaxis.set_tick_params(labelsize=14)
-        plt.legend()
+        plt.legend(facecolor='lightgray')
 
         # Display the plot
         if fig_path != None:
