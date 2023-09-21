@@ -1213,7 +1213,10 @@ class WaveCalibration:
                     returns the Legendre polynomial wavelength solutions
         """
         weights = 1 / np.sqrt(peak_heights)
-        if self.fit_type == 'Legendre': 
+        if self.fit_type.lower() not in ['legendre', 'spline']:
+            raise NotImplementedError("Fit type must be either legendre or spline")
+        
+        if self.fit_type.lower() == 'legendre' or self.fit_type.lower() == 'spline': 
 
             _, unique_idx, count = np.unique(fitted_peak_pixels, return_index=True, return_counts=True)
             unclipped_idx = np.where(
@@ -1224,14 +1227,13 @@ class WaveCalibration:
             sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
             x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]
             for i in range(fit_iterations):
-                # leg_out = Legendre.fit(x, y, self.fit_order, w=w)
-                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-
-                leg_out = UnivariateSpline(x, y, w, k=5)
-                our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-
-                # leg_out = UnivariateSpline(x, y, w, k=5)
-                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+                if self.fit_type.lower() == 'legendre':
+                    leg_out = Legendre.fit(x, y, self.fit_order, w=w)
+                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+                    
+                if self.fit_type == 'spline':
+                    leg_out = UnivariateSpline(x, y, w, k=5)
+                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))
