@@ -150,13 +150,13 @@ class QuicklookAlg:
                 savedir = L0_QLP_file_base +'HK/'    
                 os.makedirs(savedir, exist_ok=True) # make directories if needed    
         
-                # Exposure Meter spectrum plot    
+                # Exposure Meter image plot    
                 trace_file = self.config['CaHK']['trace_file']    
                 wavesoln_file = self.config['CaHK']['cahk_wav']    
                 myHK = AnalyzeHK(kpf0, trace_file = trace_file,     
                                        wavesoln_file = wavesoln_file,     
                                        logger=self.logger)    
-                filename = savedir + self.ObsID + '_HK_image_zoomable.png'    
+                filename = savedir + self.ObsID + '_HK_image_L0_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
                 myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
         
@@ -241,6 +241,25 @@ class QuicklookAlg:
 
             except Exception as e:
                 self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make CaHK plots
+        if 'HK' in self.data_products:    
+            try:    
+                savedir = D2_QLP_file_base +'HK/'    
+                os.makedirs(savedir, exist_ok=True) # make directories if needed    
+        
+                # Exposure Meter spectrum plot    
+                trace_file = self.config['CaHK']['trace_file']    
+                wavesoln_file = self.config['CaHK']['cahk_wav']    
+                myHK = AnalyzeHK(kpf2d, trace_file = trace_file,     
+                                       wavesoln_file = wavesoln_file,     
+                                       logger=self.logger)    
+                filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
+        
+            except Exception as e:    
+                self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make 2D images
         # to-do: process bias and dark differently
