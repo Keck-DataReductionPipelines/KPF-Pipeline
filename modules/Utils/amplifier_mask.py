@@ -23,8 +23,8 @@ class AmplifierMask(KPF1_Primitive):
         #Input arguments
         self.input_l1 = self.action.args[0]
         self.header = self.input_l1.header['PRIMARY']
-        self.namps = {'GREEN': self.header['GRNAMPS'],
-                      'RED': self.header['REDAMPS']}
+        self.namps = {'GREEN': int(self.header['GRNAMPS']),
+                      'RED': int(self.header['REDAMPS'])}
 
         # self.chips = ['RED', 'GREEN']
         self.chips = ['GREEN',]
