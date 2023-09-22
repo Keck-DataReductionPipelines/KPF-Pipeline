@@ -504,7 +504,7 @@ if do_spectral_extraction or do_hk or do_bc:
 						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
 								start_order=start_order[idx], trace_file=trace_list[idx],
 								data_extension=ccd_list[idx],
-								orderlet_widths=orderlet_widths)
+								orderlet_widths=orderlet_widths, full_coverage=1)
 					# update L0 by background subtraction
 					if order_mask != None:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)

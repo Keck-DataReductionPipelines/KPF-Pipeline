@@ -522,7 +522,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         s_data = np.zeros((p_height, p_width), dtype=float) if s_dt is not None else None
         f_data = np.zeros((p_height, p_width), dtype=float) if f_dt is not None else None
-
         for i_x, p_x in enumerate(input_x):
             y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
             y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
@@ -805,12 +804,11 @@ class SpectralExtractionAlg(ModuleAlgBase):
         extracted_data = np.zeros((y_size if self.extraction_method == self.NOEXTRACT else 1, output_x_dim))
         y_output_widths = np.arange(-lower_width, upper_width)      # in parallel to input_widths
 
-
         is_debug = False
         mask_height = np.shape(out_data)[1]
 
-        # if self.order_name == 'GREEN_SKY_FLUX':
-        #    if order_idx == 134:
+        #if self.order_name == 'GREEN_SKY_FLUX':
+        #    if order_idx == 4:
         #        is_debug = True
         s_data, f_data, is_sdata_raw = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
                                                                      input_widths, y_output_widths,
@@ -836,7 +834,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
             if s_data is not None:
                 out_data[self.SDATA][:] = s_data[:, s_x][:, np.newaxis] \
                     if s_data_outlier is None else s_data_outlier[:, s_x][:, np.newaxis]
-
             extracted_result = self.extraction_handler(out_data, y_size, data_group,
                                                        t_mask[:, s_x][:, np.newaxis] if t_mask is not None else None)
             extracted_data[:, o_x:o_x+1] = extracted_result['extraction']
