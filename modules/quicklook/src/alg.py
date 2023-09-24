@@ -159,11 +159,6 @@ class QuicklookAlg:
                 filename = savedir + self.ObsID + '_HK_image_L0_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
                 myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
-        
-                # Exposure Meter time series plot    
-                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)    
 
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -257,6 +252,11 @@ class QuicklookAlg:
                 filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
                 myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
+        
+                # Exposure Meter spectrum plot    
+                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)    
         
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")

@@ -80,8 +80,8 @@ class AnalyzeHK:
         """
         fig, ax = plt.subplots(figsize = (12,5),tight_layout=True)
         im = ax.imshow(self.image, 
-                       vmin = np.nanpercentile(self.image,1),
-                       vmax = np.nanpercentile(self.image,99.5), 
+                       vmin = np.nanpercentile(self.image,0.1),
+                       vmax = np.nanpercentile(self.image,99.9), 
                        interpolation = 'None',
                        origin = 'lower',
                        cmap='viridis',
@@ -142,42 +142,52 @@ class AnalyzeHK:
     def plot_HK_spectrum_1D(self, fig_path=None, show_plot=False):
 
         orders = np.array(self.wave_lib.columns)
-        padding = 200
+        padding = 1
 
         plt.figure(figsize=(12,5),tight_layout=True)
-        color_grid = ['purple','blue','green','yellow','orange','red']
-        chk_bandpass  = [384.0, 401.7]
+        fig, ax = plt.subplots(1, 1, figsize=(12,5))
+
+        color_grid = ['purple','darkblue','darkgreen','gold','darkorange','darkred']
+        chk_bandpass  = [383.0, 401.0]#[384.0, 401.7]
         caK           = [393.2, 393.5]
         caH           = [396.7, 397.0]
         Vcont         = [389.9, 391.9]
         Rcont         = [397.4, 399.4]
 
-        fig, ax = plt.subplots(1, 1, figsize=(12,5))
-        ax.fill_between(chk_bandpass, y1=0, y2=1, facecolor='gray', alpha=0.3, zorder=-100)
-        ax.fill_between(caH,          y1=0, y2=1, facecolor='m',    alpha=0.3)
-        ax.fill_between(caK,          y1=0, y2=1, facecolor='m',    alpha=0.3)
-        ax.fill_between(Vcont,        y1=0, y2=1, facecolor='c',    alpha=0.3)
-        ax.fill_between(Rcont,        y1=0, y2=1, facecolor='c',    alpha=0.3)
-
-        ax.text(np.mean(Vcont)-0.6,0.08,'V cont.')
-        ax.text(np.mean(Rcont)-0.6,0.08,'R cont.')
-        ax.text(np.mean(caK)-0.155,0.08,'K')
-        ax.text(np.mean(caH)-0.155,0.08,'H')
-        ax.set_xlim(384,400)
-        ax.set_ylim(0,1)
-        ax.plot([396.847,396.847],[0,1],':',color ='black')
-        ax.plot([393.366,393.366],[0,1],':',color ='black')
- 
-        # Add labels
+        # Compute and Plot spectra
+        specHK = np.zeros((len(orders), self.image.shape[1]), dtype=np.float64)
         for i in range(len(orders)):
             wav = self.wave_lib[i]
-            flux = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
-            ax.plot(wav[padding:-padding],flux[padding:-padding]/np.nanpercentile(flux[padding:-padding],99.9),color = color_grid[i],linewidth = 0.5)
+            # This should be correct, but the sky and sci orders are flipped in the definition file
+            #flux = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
+            # so for now use the sky orders
+            #flux = np.sum(self.image[self.trace_location_sky[i]['x1']:self.trace_location_sky[i]['x2'],:],axis=0)
+            specHK[i,:] = np.sum(self.image[self.trace_location_sky[i]['x1']:self.trace_location_sky[i]['x2'],:],axis=0)
+            ax.plot(wav[padding:-padding],
+                    specHK[i,padding:-padding],
+                    color = color_grid[i],
+                    linewidth = 1.0)
+        ymax = 1.15*np.nanpercentile(specHK[:,padding:-padding],99.9)
+        ax.set_ylim(0, ymax)
+        ax.set_xlim(chk_bandpass[0], chk_bandpass[1])
+
+        # Add labels
+        plt.title('Ca H&K Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         ax.set_xlabel('Wavelength (nm)',fontsize=18)
-        ax.set_ylabel('Flux',fontsize=18)
+        ax.set_ylabel('Flux (ADU)',fontsize=18)
         ax.xaxis.set_tick_params(labelsize=14)
         ax.yaxis.set_tick_params(labelsize=14)
-        plt.title('Ca H&K Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        ax.fill_between(chk_bandpass, y1=0, y2=ymax, facecolor='gray', alpha=0.3, zorder=-100)
+        ax.fill_between(caH,          y1=0, y2=ymax, facecolor='m',    alpha=0.3)
+        ax.fill_between(caK,          y1=0, y2=ymax, facecolor='m',    alpha=0.3)
+        ax.fill_between(Vcont,        y1=0, y2=ymax, facecolor='c',    alpha=0.3)
+        ax.fill_between(Rcont,        y1=0, y2=ymax, facecolor='c',    alpha=0.3)
+        ax.text(np.mean(Vcont)-0.89, 0.95*ymax, 'V continuum')
+        ax.text(np.mean(Rcont)-0.89, 0.95*ymax, 'R continuum')
+        ax.text(np.mean(caK)-0.40, 0.95*ymax, 'K')
+        ax.text(np.mean(caH)-0.40, 0.95*ymax, 'H')
+        ax.plot([396.847,396.847],[0,ymax],':',color ='black')
+        ax.plot([393.366,393.366],[0,ymax],':',color ='black')
 
         # Display the plot
         if fig_path != None:
