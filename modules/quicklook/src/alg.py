@@ -21,6 +21,7 @@ from modules.Utils.analyze_em import AnalyzeEM
 from modules.Utils.analyze_hk import AnalyzeHK
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
+from modules.Utils.analyze_wls import AnalyzeWLS
 from modules.Utils.analyze_l2 import AnalyzeL2
 from modules.Utils.kpf_parse import HeaderParse
 #import kpfpipe.pipelines.fits_primitives as fits_primitives
@@ -149,13 +150,13 @@ class QuicklookAlg:
                 savedir = L0_QLP_file_base +'HK/'    
                 os.makedirs(savedir, exist_ok=True) # make directories if needed    
         
-                # Exposure Meter spectrum plot    
+                # Exposure Meter image plot    
                 trace_file = self.config['CaHK']['trace_file']    
                 wavesoln_file = self.config['CaHK']['cahk_wav']    
                 myHK = AnalyzeHK(kpf0, trace_file = trace_file,     
                                        wavesoln_file = wavesoln_file,     
                                        logger=self.logger)    
-                filename = savedir + self.ObsID + '_HK_image_zoomable.png'    
+                filename = savedir + self.ObsID + '_HK_image_L0_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
                 myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
         
@@ -240,6 +241,25 @@ class QuicklookAlg:
 
             except Exception as e:
                 self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make CaHK plots
+        if 'HK' in self.data_products:    
+            try:    
+                savedir = D2_QLP_file_base +'HK/'    
+                os.makedirs(savedir, exist_ok=True) # make directories if needed    
+        
+                # Exposure Meter spectrum plot    
+                trace_file = self.config['CaHK']['trace_file']    
+                wavesoln_file = self.config['CaHK']['cahk_wav']    
+                myHK = AnalyzeHK(kpf2d, trace_file = trace_file,     
+                                       wavesoln_file = wavesoln_file,     
+                                       logger=self.logger)    
+                filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
+        
+            except Exception as e:    
+                self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make 2D images
         # to-do: process bias and dark differently
@@ -338,6 +358,23 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make WLS plots
+        try:
+            savedir = L1_QLP_file_base +'WLS/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            if chips != []:    
+                try:
+                    for chip in chips:
+                        filename = savedir + self.ObsID + '_WLS_orderlet_diff_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myWLS = AnalyzeWLS(kpf1, logger=self.logger)
+                        myWLS.plot_WLS_orderlet_diff(chip=chip, fig_path=filename, show_plot=False)
+                except Exception as e:
+                    self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        except Exception as e:
+            self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make L1 SNR plot
         try:
