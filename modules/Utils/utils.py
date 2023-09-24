@@ -1,5 +1,5 @@
-# This file contains assorted utility functions for computing astronomical 
-# quantities associated with KPF data.
+# This file contains assorted utility functions that are mostly 
+# for computing astronomical quantities associated with KPF data.
 
 from astropy.time import Time
 from astropy import units as u
@@ -43,3 +43,29 @@ def get_moon_sep(UTdatetime, RA, dec):
     sep = target.separation(moon)
 
     return sep.deg # in degrees
+    
+
+class DummyLogger:
+    """
+    Make a dummy logger that prints messages in case a Python logger object is 
+    not provided.  
+
+    Usage:
+       in def __init__(self, logger=None) for some class, include this line:
+           self.logger = logger if logger is not None else DummyLogger()
+    """
+    def info(self, msg):
+        print(f"INFO: {msg}")
+
+    def debug(self, msg):
+        print(f"DEBUG: {msg}")
+
+    def warning(self, msg):
+        print(f"WARNING: {msg}")
+
+    def error(self, msg):
+        print(f"ERROR: {msg}")
+
+    def critical(self, msg):
+        print(f"CRITICAL: {msg}")
+

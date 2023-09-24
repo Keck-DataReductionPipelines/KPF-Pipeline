@@ -1,7 +1,3 @@
-# pipeline_config.py
-"""
-(explanation here)
-"""
 
 import keckdrpframework.config.framework_config as fc
 

@@ -25,6 +25,7 @@ class OrderMaskAlg(ModuleAlgBase):
             listed in the order_trace_data may not the first orderlet of the first order.
             A negative number like -n means the first n traces are not included in the order_trace_data.
         order_mask_data (numpy.ndarray): 2D array to contain the order mask data. Defaults to None.
+        full_coverage (int): if set order mask to cover full width for each order. Defaults to 0.
         config (configparser.ConfigParser, optional): config context. Defaults to None.
         logger (logging.Logger, optional): Instance of logging.Logger. Defaults to None.
         logger_name (str, optional): Name of the logger defined for the OrderMaskAlg instance.
@@ -62,6 +63,7 @@ class OrderMaskAlg(ModuleAlgBase):
                  orderlet_names=None,
                  start_order=0,
                  order_mask_data=None,
+                 full_coverage=0,
                  config=None, logger=None,
                  logger_name=None):
 
@@ -129,6 +131,8 @@ class OrderMaskAlg(ModuleAlgBase):
             self.order_mask_data = np.ones(np.shape(self.spectrum_flux), dtype=float) * float(order_mask_data)
         else:
             self.order_mask_data = order_mask_data
+
+        self.full_coverage = full_coverage
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -221,8 +225,40 @@ class OrderMaskAlg(ModuleAlgBase):
         # y_lower = np.floor(y_mid - y_widths[0]).astype(int)
         # y_upper = np.ceil(y_mid + y_widths[1]).astype(int)
 
+        #y_lower = np.where(y_lower <= 0, 0, y_lower)
+        #y_upper = np.where(y_upper >= self.dim_h, self.dim_h-1, y_upper)
+
+        # xrange correction if full coverage is required.
+        if self.full_coverage:
+            y_mid_original = np.polyval(coeffs, np.arange(0, self.dim_w, dtype=int))
+            y_lower_original = np.ceil(y_mid_original - y_widths[0]).astype(int)
+            y_upper_original = np.floor(y_mid_original + y_widths[1]).astype(int)
+
+            new_x1 = xrange[0]
+            new_x2 = xrange[1]
+            if xrange[0] > 0:
+                for x in range(xrange[0]-1, -1, -1):
+                    if (0 < y_upper_original[x] <= self.dim_h) or (0 <= y_lower_original[x] < self.dim_h):
+                        new_x1 = x
+                    else:
+                        break
+                if new_x1 != xrange[0]:
+                    xrange[0] = new_x1
+            if xrange[1] < self.dim_w-1:
+                for x in range(xrange[1]+1, self.dim_w, 1):
+                    if (0 < y_upper_original[x] <= self.dim_h) or (0 <= y_lower_original[x] < self.dim_h):
+                        new_x2 = x
+                    else:
+                        break
+                if new_x2 != xrange[1]:
+                    xrange[1] = new_x2
+
+            x_step = np.arange(new_x1, new_x2+1).astype(int)
+            y_lower = y_lower_original[new_x1:new_x2+1]
+            y_upper = y_upper_original[new_x1:new_x2+1]
+
         y_lower = np.where(y_lower <= 0, 0, y_lower)
-        y_upper = np.where(y_upper >= self.dim_h, self.dim_h-1, y_upper)
+        y_upper = np.where(y_upper >= self.dim_h, self.dim_h, y_upper)
 
         x_img_step = x_step + x_o
         for idx, x in enumerate(x_img_step):

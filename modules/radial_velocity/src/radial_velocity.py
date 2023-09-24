@@ -180,6 +180,7 @@ class RadialVelocity(KPF1_Primitive):
     RV_COL_CAL_ERR = 'CAL error'
     RV_COL_SKY_ERR = 'SKY error'
     RV_COL_CCFJD = 'CCFJD'
+    RV_COL_CCFBJD = 'CCFBJD'
     RV_COL_BARY = 'Bary_RVC'
     RV_COL_SOURCE = 'source'
     RV_COL_CAL = 'CAL RV'
@@ -189,7 +190,7 @@ class RadialVelocity(KPF1_Primitive):
     RV_WEIGHTS = 'CCF Weights'
     rv_col_names = [RV_COL_ORDERLET, RV_COL_START_W, RV_COL_END_W, RV_COL_SEG_NO, RV_COL_ORD_NO,
                     RV_COL_RV, RV_COL_RV_ERR, RV_COL_CAL, RV_COL_CAL_ERR, RV_COL_SKY, RV_COL_SKY_ERR,
-                    RV_COL_CCFJD, RV_COL_BARY,
+                    RV_COL_CCFBJD, RV_COL_BARY,
                     RV_COL_SOURCE, RV_COL_CAL_SOURCE, RV_COL_SKY_SOURCE, RV_WEIGHTS]
     rv_col_on_orderlet = [RV_COL_ORDERLET, RV_COL_SOURCE]
 
@@ -565,7 +566,8 @@ class RadialVelocity(KPF1_Primitive):
 
         self.output_level2.header[self.rv_ext][ccd_p+'rv'] = new_rv_table.attrs[ccd_+'rv']
         self.output_level2.header[self.rv_ext][ccd_p+'erv'] = new_rv_table.attrs[ccd_+'erv']
-        self.output_level2.header[self.rv_ext][ccd_p+'jd'] = new_rv_table.attrs[ccd_+'jd']
+        # self.output_level2.header[self.rv_ext][ccd_p+'jd'] = new_rv_table.attrs[ccd_+'jd']
+        self.output_level2.header[self.rv_ext][ccd_p + 'bjd'] = new_rv_table.attrs[ccd_ + 'bjd']
         self.output_level2.header[self.rv_ext]['rv'+str(self.rv_set_idx+1)+'corr'] = 'T' \
             if new_rv_table.attrs['do_rv_corr'] else 'F'
 
@@ -698,6 +700,7 @@ class RadialVelocity(KPF1_Primitive):
 
             if jd is None:
                 jd = output_df[od_name].attrs['CCFJDSEG']
+                bjd = output_df[od_name].attrs['CCFBJDSEG']
             if bary is None:
                 bary = output_df[od_name].attrs['BARY']
             if starrv is None:
@@ -762,7 +765,8 @@ class RadialVelocity(KPF1_Primitive):
         rv_table[self.RV_COL_END_W] = segment_table[s_seg:e_seg, RadialVelocityAlg.SEGMENT_W2]
         rv_table[self.RV_COL_SEG_NO] = segment_table[s_seg:e_seg, RadialVelocityAlg.SEGMENT_IDX].astype(int)
         rv_table[self.RV_COL_ORD_NO] = segment_table[s_seg:e_seg,  RadialVelocityAlg.SEGMENT_ORD].astype(int)
-        rv_table[self.RV_COL_CCFJD] = np.ones(total_segment) * jd
+        # rv_table[self.RV_COL_CCFJD] = np.ones(total_segment) * jd
+        rv_table[self.RV_COL_CCFBJD] = np.ones(total_segment) * bjd
         rv_table[self.RV_COL_BARY] = np.ones(total_segment) * bary
         rv_table[self.RV_WEIGHTS] = np.ones(total_segment) if sci_ccf_ratio is None else sci_ccf_ratio[:, -1][0:total_segment]
 
@@ -796,7 +800,8 @@ class RadialVelocity(KPF1_Primitive):
         results.attrs['ccd_rv'] = (f_decimal(final_rv - cal_rv), unit) \
             if do_corr and final_rv != 0.0 else (f_decimal(final_rv), unit)
         results.attrs['ccd_erv'] = f_decimal(final_rv_err)
-        results.attrs['ccd_jd'] = jd[0]
+        # results.attrs['ccd_jd'] = np.mean(jd)
+        results.attrs['ccd_bjd'] = np.mean(bjd)
         results.attrs['star_rv'] = starrv
         results.attrs['do_rv_corr'] = do_corr
 

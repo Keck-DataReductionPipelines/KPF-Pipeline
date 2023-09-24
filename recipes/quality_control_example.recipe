@@ -1,0 +1,30 @@
+from modules.quality_control.src.quality_control_framework import QualityControlFramework
+
+data_type = config.ARGUMENT.data_type
+data_level_str = config.ARGUMENT.data_level_str
+input_fits_filename = config.ARGUMENT.input_fits_filename
+output_fits_filename = config.ARGUMENT.output_fits_filename
+
+qc_list_flag = 1
+
+if exists(input_fits_filename):
+
+    if 'L0' in data_level_str:
+        fits_object = kpf0_from_fits(input_fits_filename, data_type = data_type)
+    elif '2D' in data_level_str:
+        fits_object = kpf0_from_fits(input_fits_filename, data_type = data_type)
+    elif 'L1' in data_level_str:
+        fits_object = kpf1_from_fits(input_fits_filename, data_type = data_type)
+    elif 'L2' in data_level_str:
+        fits_object = kpf2_from_fits(input_fits_filename, data_type = data_type)
+
+    quality_control_return_list = QualityControlFramework(data_type,
+                                                          data_level_str,
+                                                          input_fits_filename,
+                                                          fits_object,
+							  qc_list_flag)
+
+    exit_code = quality_control_return_list[0]
+    output_fits_object = quality_control_return_list[1]
+
+    result = to_fits(output_fits_object, output_fits_filename)

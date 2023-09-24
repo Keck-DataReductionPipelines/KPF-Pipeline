@@ -315,6 +315,7 @@ flat_stem, flat_ext = splitext(short_flat_file)
 trace_list = []
 b_all_traces = False
 lev0_flat_rect = None
+ccd_stack = '_STACK'
 
 if do_order_trace:
 	trace_list = []
@@ -334,7 +335,7 @@ if do_order_trace:
 			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext);
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if not exists(output_lev0_trace_csv):
-				order_result_data = OrderTrace(flat_data, data_extension=ccd + '_STACK',
+				order_result_data = OrderTrace(flat_data, data_extension=ccd+ccd_stack,
 					result_path=output_lev0_trace_csv, is_output_file=True,
 					data_col_range=data_col_range, data_row_range=data_row_range,
 					fitting_poly_degree=poly_degree)
@@ -363,6 +364,7 @@ if do_order_trace:
 					lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
 							orderlet_names=orderlet_names[idx],
 							trace_file=trace_file, data_extension=ccd,
+							flat_extension = ccd+ccd_stack,
 							rectification_method=rect_method,
 							clip_file=clip_file,
 							origin=origin, poly_degree=poly_degree)
@@ -408,8 +410,7 @@ if do_order_trace:
 #
 
 lev1_list = []
-outlier_path = None
-
+outlier_mask_path = config.ARGUMENT.outlier_mask_path
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
 	trace_list = []
@@ -487,16 +488,16 @@ if do_spectral_extraction or do_hk or do_bc:
 						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
 								start_order=start_order[idx], trace_file=trace_list[idx],
 								data_extension=ccd_list[idx],
-								orderlet_widths=orderlet_widths)
+								orderlet_widths=orderlet_widths, full_coverage=1)
 					# update L0 by background subtraction
 					if order_mask != None:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
-				if outlier_path == None:
-					outlier_rejection_file = ''
+				if outlier_mask_path == None:
+					outlier_mask_file = ''
 				else:
-					outlier_rejection_file = outlier_path + short_lev0_file
+					outlier_mask_file = outlier_mask_path + short_lev0_file
 
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
@@ -513,7 +514,8 @@ if do_spectral_extraction or do_hk or do_bc:
 								ccd_index = idx,
 								rectification_method=rect_method, extraction_method=extract_method,
 								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
-								do_outlier_rejection=do_outlier, outlier_file=outlier_rejection_file)
+								flat_extension=ccd+ccd_stack,
+								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file)
 
 
 				if op_data != None:

@@ -40,7 +40,8 @@
                       Clip file is used to store the polygon clip data for the rectification method
                       which is not NoRECT.
                     - `action.args['total_order_per_ccd']: (int, optional)`: total order per ccd. Defaults to False.
-                    - `action.args['data_extension']: (str, optional)`: the name of the extension containing data.
+                    - `action.args['data_extension']: (str, optional)`: the name of the extension in spectrum containing data.
+                    - `action.args['flat_extension']: (str, optional)`: the name of the extension in flat containing data.
                     - `action.args['trace_extension']: (str, optional)`: the name of the extension containing order
                       trace results.
                     - `action.args['trace_file']: (str, optional)`: the name file containing order trace results.
@@ -142,6 +143,7 @@ class SpectralExtraction(KPF0_Primitive):
                     'to_set_wavelength_cal': False,
                     'clip_file': None,
                     'data_extension': 'DATA',
+                    'flat_extension': 'DATA',
                     'poly_degree': 3,
                     'origin': [0, 0],
                     'trace_extension': None,
@@ -184,6 +186,7 @@ class SpectralExtraction(KPF0_Primitive):
         self.total_order_per_ccd = self.get_args_value('total_order_per_ccd', action.args, args_keys)
 
         data_ext = self.get_args_value('data_extension', action.args, args_keys)
+        flat_ext = self.get_args_value('flat_extension', action.args, args_keys)
         self.data_ext = data_ext
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
@@ -229,16 +232,16 @@ class SpectralExtraction(KPF0_Primitive):
                 else:
                     self.outlier_lev0 = KPF0()
                 if self.outlier_lev0[self.data_ext].size == 0:
-                    self.outlier_lev0[self.data_ext] = np.empty_like(self.spec_flux)
+                    self.outlier_lev0[self.data_ext] = np.zeros_like(self.spec_flux)
 
-                self.outlier_lev0[self.data_ext][:] = self.spec_flux
+                # self.outlier_lev0[self.data_ext][:] = self.spec_flux
 
         outlier_flux = self.outlier_lev0[self.data_ext] \
             if self.outlier_lev0 is not None and hasattr(self.outlier_lev0, data_ext) else None
 
         try:
-            self.alg = SpectralExtractionAlg(self.input_flat[data_ext] if hasattr(self.input_flat, data_ext) else None,
-                                        self.input_flat.header[data_ext] if hasattr(self.input_flat, data_ext) else None,
+            self.alg = SpectralExtractionAlg(self.input_flat[flat_ext] if hasattr(self.input_flat, flat_ext) else None,
+                                        self.input_flat.header[flat_ext] if hasattr(self.input_flat, flat_ext) else None,
                                         self.spec_flux,
                                         self.spec_header,
                                         self.order_trace_data,
@@ -342,7 +345,7 @@ class SpectralExtraction(KPF0_Primitive):
                                      SpectralExtractionAlg.extracting_method[self.extraction_method] +
                                      " extraction on " + order_name + " of " + str(o_set.size) + " orders")
 
-                opt_ext_result = self.alg.extract_spectrum(order_set=o_set, first_index=first_index)
+                opt_ext_result = self.alg.extract_spectrum(order_set=o_set, first_index=first_index, order_name = order_name)
 
                 assert('spectral_extraction_result' in opt_ext_result and
                        isinstance(opt_ext_result['spectral_extraction_result'], pd.DataFrame))
