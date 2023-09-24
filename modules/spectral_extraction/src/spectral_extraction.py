@@ -232,9 +232,9 @@ class SpectralExtraction(KPF0_Primitive):
                 else:
                     self.outlier_lev0 = KPF0()
                 if self.outlier_lev0[self.data_ext].size == 0:
-                    self.outlier_lev0[self.data_ext] = np.empty_like(self.spec_flux)
+                    self.outlier_lev0[self.data_ext] = np.zeros_like(self.spec_flux)
 
-                self.outlier_lev0[self.data_ext][:] = self.spec_flux
+                # self.outlier_lev0[self.data_ext][:] = self.spec_flux
 
         outlier_flux = self.outlier_lev0[self.data_ext] \
             if self.outlier_lev0 is not None and hasattr(self.outlier_lev0, data_ext) else None

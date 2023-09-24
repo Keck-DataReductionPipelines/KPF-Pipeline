@@ -422,8 +422,7 @@ if do_order_trace:
 #
 
 lev1_list = []
-outlier_path = None
-
+outlier_mask_path = config.ARGUMENT.outlier_mask_path
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
 	trace_list = []
@@ -505,16 +504,16 @@ if do_spectral_extraction or do_hk or do_bc:
 						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
 								start_order=start_order[idx], trace_file=trace_list[idx],
 								data_extension=ccd_list[idx],
-								orderlet_widths=orderlet_widths)
+								orderlet_widths=orderlet_widths, full_coverage=1)
 					# update L0 by background subtraction
 					if order_mask != None:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
 
 				op_data = None
-				if outlier_path == None:
-					outlier_rejection_file = ''
+				if outlier_mask_path == None:
+					outlier_mask_file = ''
 				else:
-					outlier_rejection_file = outlier_path + short_lev0_file
+					outlier_mask_file = outlier_mask_path + short_lev0_file
 
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
@@ -532,7 +531,7 @@ if do_spectral_extraction or do_hk or do_bc:
 								rectification_method=rect_method, extraction_method=extract_method,
 								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
 								flat_extension=ccd+ccd_stack,
-								do_outlier_rejection=do_outlier, outlier_file=outlier_rejection_file)
+								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file)
 
 
 				if op_data != None:

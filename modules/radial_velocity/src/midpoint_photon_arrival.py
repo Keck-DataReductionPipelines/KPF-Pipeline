@@ -192,13 +192,11 @@ class MidpointPhotonArrival:
     
         cdfTot=0
         i=0
-    
         while x > expEnd[i]:
-        
             cdfTot+=exposures[i]
         
         
-        ####Interpolation between exposures
+            ####Interpolation between exposures
             if i>1:
                 rateRight=exposures[i]/((expEnd[i]-expBeg[i]).astype(float)+EMReadCorrection)
                 rateLeft=exposures[i-1]/((expEnd[i-1]-expBeg[i-1]).astype(float)+EMReadCorrection)
@@ -322,11 +320,11 @@ class MidpointPhotonArrival:
         ###Find the exposure containing the middle number of photons
         dummyVarBeg=np.ones(len(expBeg))
         dummyVarEnd=np.ones(len(expEnd))
-    
+
         for i in range(len(expEnd)):
             dummyVarBeg[i]=self.CalcCDF(expBeg[i],exposures,expBeg,expEnd)
             dummyVarEnd[i]=self.CalcCDF(expEnd[i],exposures,expBeg,expEnd)
-    
+
         indxHigh=np.min(np.where(dummyVarEnd>=midVal))
         indxLow=np.max(np.where(dummyVarBeg<=midVal))
     
@@ -385,6 +383,10 @@ class MidpointPhotonArrival:
         date_beg = np.array(self.df_EM[startkey], dtype=np.datetime64)
         date_end = np.array(self.df_EM[endkey], dtype=np.datetime64)
 
+        valid_idx = np.where(date_beg < date_end)[0]
+        date_beg = date_beg[valid_idx]
+        date_end = date_end[valid_idx]
+
         # Bin wavelengths into orders
         df_EM_bin=self.binOrder(df_EM_norm,self.segmentMin,self.segmentMax)
         wav_str = df_EM_bin.columns
@@ -393,7 +395,7 @@ class MidpointPhotonArrival:
         midBand = np.empty(len(wav_str), dtype='datetime64[ms]')
         for i in range(len(wav_str)):
             midBand[i]=(self.midPoint(self.start,self.finish,df_EM_bin[wav_str[i]].astype(float),date_beg,date_end,self.clip))
-    
+
         self.orderMid=df_EM_bin.columns.astype(float)
         self.midPhoto=midBand    
     
