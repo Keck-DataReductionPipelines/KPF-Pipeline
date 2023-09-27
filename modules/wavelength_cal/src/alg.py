@@ -1016,20 +1016,30 @@ class WaveCalibration:
         
         # Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
         peak_diff = fitted_peak_pixels[good_peak_idx][1:] - fitted_peak_pixels[good_peak_idx][:-1]
-        recursive_peak_diff = signal.medfilt(fitted_peak_pixels[good_peak_idx][1:] - fitted_peak_pixels[good_peak_idx][:-1],kernel_size=7) # not recursing yet
-        new_recursive_peak_diff = signal.medfilt(recursive_peak_diff, kernel_size = 7)
-        counter = 1
         
-        # Now, recursively apply a median filter to further smooth the peak spacing
-        while sum(new_recursive_peak_diff != recursive_peak_diff) > 0:
-            newest_recursive_peak_diff = signal.medfilt(new_recursive_peak_diff, kernel_size = 7)
-            recursive_peak_diff = new_recursive_peak_diff
-            new_recursive_peak_diff = newest_recursive_peak_diff
-            counter += 1
-            #print(counter)
-            if counter == 5:
-                print('Medfilt iterations > 5') 
-                break
+
+        # Calculate the difference between every third element and its preceding element to check for several missed peaks
+        peak_indices_difference = good_peak_idx[3:] - good_peak_idx[:-3]
+
+        # Check for large gaps > 9
+        large_gaps_detected = np.any(peak_indices_difference > 9)
+        
+        # Adjust kernel size if large differences are detected
+        kernel_size = 7
+        if large_gaps_detected:
+            kernel_size += 10  # Increment by 10. Adjust as needed.
+
+        recursive_peak_diff = peak_diff.copy()
+
+        for iteration in range(5):
+            filtered = signal.medfilt(recursive_peak_diff, kernel_size=kernel_size)
+
+            if np.array_equal(filtered, recursive_peak_diff):
+                break  # Stop if there's no change after filtering
+            recursive_peak_diff = filtered
+
+        else:
+            print('Medfilt iterations > 5')
 
         # Identify and remove outlier peak spacings not removed by recursive median filter
         # This process primarily removes peak spacing aliases (2x, 3x, etc) 
@@ -1055,7 +1065,7 @@ class WaveCalibration:
             spline_peak_diff_bool1 = spline_peak_diff_diff/spline_peak_diff_min < -0.5 # bool mask to identify half of bad peak spacings
             spline_peak_diff_bool0 = np.insert(spline_peak_diff_bool0, 0, False) # bool padding to select correct peak
             spline_peak_diff_bool1 = np.append(False, spline_peak_diff_bool1) # bool padding to select correct peak
-            index = np.where(spline_peak_diff_bool0 | spline_peak_diff_bool1 == False)[0]
+            index = np.where((spline_peak_diff_bool0 | spline_peak_diff_bool1) == False)[0]
             spline_peak_diff_new = spline_peak_diff[index]
 
             counter_spline += 1     
@@ -1194,17 +1204,6 @@ class WaveCalibration:
         return integrated_gaussian_val
     
     def fit_gaussian(self, x, y):
-        """
-        Fits a continuous Gaussian to a discrete set of x and y datapoints
-        using scipy.curve_fit
-        
-        Args:
-            x (np.array): x data to be fit
-            y (np.array): y data to be fit
-        Returns:
-            list: best-fit parameters [a, mu, sigma**2, const]
-        """
-
         x = np.ma.compressed(x)
         y = np.ma.compressed(y)
 
@@ -1240,7 +1239,7 @@ class WaveCalibration:
             '''
             # Run checks against defined quality thresholds
             if (chi_squared > chi_squared_threshold):
-                print("Chi squared exceeded the threshold for this line. Line skipped")
+                #print("Chi squared exceeded the threshold for this line. Line skipped")
                 return None
         
         return popt
@@ -1270,10 +1269,7 @@ class WaveCalibration:
                     returns the Legendre polynomial wavelength solutions
         """
         weights = 1 / np.sqrt(peak_heights)
-        if self.fit_type.lower() not in ['legendre', 'spline']:
-            raise NotImplementedError("Fit type must be either legendre or spline")
-        
-        if self.fit_type.lower() == 'legendre' or self.fit_type.lower() == 'spline': 
+        if self.fit_type == 'Legendre': 
 
             _, unique_idx, count = np.unique(fitted_peak_pixels, return_index=True, return_counts=True)
             unclipped_idx = np.where(
@@ -1284,13 +1280,14 @@ class WaveCalibration:
             sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
             x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]
             for i in range(fit_iterations):
-                if self.fit_type.lower() == 'legendre':
-                    leg_out = Legendre.fit(x, y, self.fit_order, w=w)
-                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-                    
-                if self.fit_type == 'spline':
-                    leg_out = UnivariateSpline(x, y, w, k=5)
-                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+                # leg_out = Legendre.fit(x, y, self.fit_order, w=w)
+                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+
+                leg_out = UnivariateSpline(x, y, w, k=5)
+                our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+
+                # leg_out = UnivariateSpline(x, y, w, k=5)
+                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))
