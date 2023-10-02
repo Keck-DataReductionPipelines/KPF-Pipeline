@@ -54,7 +54,7 @@ class QualityControlFramework(KPF0_Primitive):
 
         self.logger.info('Started {}'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
-        
+
         self.logger.info('self.data_type = {}'.format(self.data_type))
         self.logger.info('self.fits_filename = {}'.format(self.fits_filename))
 
@@ -70,8 +70,8 @@ class QualityControlFramework(KPF0_Primitive):
 
         self.logger.info('self.debug_level_cfg = {}'.format(self.debug_level_cfg))
 
-        self.logger.info('Type of self.debug_level_cfg = {}'.format(type(self.debug_level_cfg)))            
-        
+        self.logger.info('Type of self.debug_level_cfg = {}'.format(type(self.debug_level_cfg)))
+
 
     def _perform(self):
 
@@ -81,7 +81,6 @@ class QualityControlFramework(KPF0_Primitive):
         """
 
         quality_control_exit_code = 0
-
 
         # Perform quality control.
 
@@ -98,10 +97,17 @@ class QualityControlFramework(KPF0_Primitive):
             value = 3.14159256
             qc_obj.add_qc_keyword_to_header(name,value)
         elif 'L1' in self.data_level_str:
+
+            self.logger.info('self.data_level_str = {}'.format(self.data_level_str))
+
             qc_obj = qc.QCL1(self.fits_object)
-            name = 'jarque_bera_test_red_amp1'
-            value = 3.14159256
-            qc_obj.add_qc_keyword_to_header(name,value)
+
+            name = 'monotonic_wavelength_solution_check'
+            try:
+                qc_obj.add_qc_keyword_to_header_for_monotonic_wls(name)
+            except:
+                pass
+
         elif 'L2' in self.data_level_str:
             qc_obj = qc.QCL2(self.fits_object)
             name = 'jarque_bera_test_red_amp1'
@@ -114,7 +120,7 @@ class QualityControlFramework(KPF0_Primitive):
             qc_obj.qcdefinitions.list_qc_metrics()
 
         # Finish.
-        
+
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
         return Arguments([quality_control_exit_code, self.fits_object])
