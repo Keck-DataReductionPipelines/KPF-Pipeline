@@ -168,7 +168,7 @@ class QCDefinitions:
         self.descriptions[name1] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
         self.data_types[name1] = 'float'
         self.fits_keywords[name1] = 'JBTRED1'
-        self.fits_comments[name1] = 'J-B test for RED AMP-1 detector'
+        self.fits_comments[name1] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name1] = None
         self.methods[name1] = ["add_qc_keyword_to_header"]
 
@@ -177,7 +177,7 @@ class QCDefinitions:
         self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
         self.data_types[name2] = 'int'
         self.fits_keywords[name2] = 'MONOTWLS'
-        self.fits_comments[name2] = 'Monotonic wavelength-solution check'
+        self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
         self.db_columns[name2] = None
         self.methods[name2] = ["add_qc_keyword_to_header","monotonic_check","add_qc_keyword_to_header_for_monotonic_wls"]
 
@@ -186,7 +186,7 @@ class QCDefinitions:
         self.descriptions[name3] = 'Check if data in file are not junk.'
         self.data_types[name3] = 'int'
         self.fits_keywords[name3] = 'JUNKDATA'
-        self.fits_comments[name3] = 'Not-junk check'
+        self.fits_comments[name3] = 'QC: Not-junk check'
         self.db_columns[name3] = None
         self.methods[name3] = ["add_qc_keyword_to_header"]
 
@@ -260,6 +260,8 @@ class QC:
         comment = self.qcdefinitions.fits_comments[qc_name]
 
         self.fits_object.header['PRIMARY'][keyword] = (value,comment)
+
+        print('---->add_qc_keyword_to_header: qc_name,keyword,value,comment = {},{},{},{}'.format(qc_name,keyword,value,comment))
 
 
 
@@ -352,7 +354,7 @@ class QCL1(QC):
 
         fits_object = from_fits('KPF',l1_file)
         qcl1 = qc.QCL1(fits_object)
-        qcl1.add_qc_keyword_to_header_for_monotonic_wls()
+        qcl1.add_qc_keyword_to_header_for_monotonic_wls(qc_name)
         to_fits(qcl1.fits_object,l1_file)
     """
 
@@ -364,25 +366,22 @@ class QCL1(QC):
 
     def add_qc_keyword_to_header_for_monotonic_wls(self,qc_name):
 
-        keyword = self.qcdefinitions.fits_keywords[qc_name]
-        comment = self.qcdefinitions.fits_comments[qc_name]
-        qc_pass = self.monotonic_check(self.fits_filename)
+        qc_pass = self.monotonic_check()
 
         if qc_pass:
             value = 1
         else:
             value = 0
 
-        self.fits_object.header['PRIMARY'][keyword] = (value,comment)
+        self.add_qc_keyword_to_header(qc_name,value)
 
-    def monotonic_check(self,L1,debug=False):
+    def monotonic_check(self,debug=False):
         """
         This Quality Control function checks to see if a wavelength solution is
         monotonic, specifically if wavelength decreases (or stays constant) with
         increasing array index.
 
         Args:
-             L1 - an L1 file that the QC check is to be run on
              debug - an optional flag.  If True, nonmonotonic orders/orderlets will be noted with
                      print statements and plots.
 
@@ -391,7 +390,14 @@ class QCL1(QC):
              bad_orders - an array of strings listing the nonmonotonic orders and orderlets
         """
 
-        #self.L1 = L1
+        L1 = self.fits_object
+
+        if debug:
+            print(L1.info())
+            type_L1 = type(L1)
+            print("type_L1 = ",type_L1)
+            print("L1 = ",L1)
+
         QC_pass = True
         bad_orders = []
 
@@ -405,13 +411,39 @@ class QCL1(QC):
 
         # Iterate over extensions (orderlets) and orders to check for monotonicity in each combination.
         for ext in extensions:
-            if ext in L1:  # Check if extension exists (e.g., if RED isn't processed)
+
+            if debug:
+                print("ext = ",ext)
+
+            naxis1 = L1.header[ext]["NAXIS1"]
+            naxis2 = L1.header[ext]["NAXIS2"]
+            extname = L1.header[ext]["EXTNAME"]
+
+            if debug:
+                print("naxis1,naxis2,extname = ",naxis1,naxis2,extname)
+
+            if ext == extname:  # Check if extension exists (e.g., if RED isn't processed)
+
+                if debug:
+                    data_shape = np.shape(L1[ext])
+                    print("data_shape = ", data_shape)
+
                 norders = L1[ext].shape[0]
                 for o in range(norders):
-                    WLS = L1[ext].data[o,:] # wavelength solution of the current order/orderlet
+
+                    if debug:
+                         print("order = ",o)
+
+                    np_obj_ffi = np.array(L1[ext])
+
+                    if debug:
+                        print("wls_shape = ", np.shape(np_obj_ffi))
+
+                    WLS = np_obj_ffi[o,:] # wavelength solution of the current order/orderlet
+
                     isMonotonic = np.all(WLS[:-1] >= WLS[1:]) # this expression determines monotonicity for the orderlet/order
                     if not isMonotonic:
-                        QC_pass = False # the QC test fails if one order/orderlet is not monotonic
+                        QC_pass = False                             # the QC test fails if one order/orderlet is not monotonic
                         bad_orders.append(ext + '(' + str(o)+')') # append the bad order/orderlet to the list
                         if debug:
                             print('L1[' + ext + ']['+ str(o) +']: monotonic = ' + str(isMonotonic))
@@ -423,7 +455,8 @@ class QCL1(QC):
                 print("File: " + L1['PRIMARY'].header['OFNAME'])
             except:
                 pass
-            print("Monotonic = " + str(QC_pass))
+
+        print("QC_pass = ",QC_pass)
 
         return QC_pass, bad_orders
 
