@@ -19,7 +19,6 @@
 use strict;
 use warnings;
 use File::Copy;
-use File::Path qw/make_path/;
 
 select STDERR; $| = 1; select STDOUT; $| = 1;
 
@@ -93,7 +92,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.5';
+my $version = '1.6';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -134,17 +133,21 @@ my $script = "#! /bin/bash\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "mkdir -p /data/masters/${procdate}\n" .
+             "cp -pr /masters/${procdate}/kpf_${procdate}*L1.fits /data/masters/${procdate}\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "cp -p /data/masters/${procdate}/*master_WLS* /masters/${procdate}\n" .
+             "mkdir -p /masters/${procdate}/wlpixelfiles\n" .
+             "cp -p /data/masters/wlpixelfiles/*kpf_${procdate}* /masters/${procdate}/wlpixelfiles\n" .
+             "cp -p /code/KPF-Pipeline/pipeline_${procdate}.log /masters/${procdate}/pipeline_wls_auto_${procdate}.log\n" .
+             "rm /code/KPF-Pipeline/pipeline_${procdate}.log\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
-`mkdir -p $sbxdir`;
-`cp -pr ${mastersdir}/${procdate}/kpf_${procdate}*L1.fits $sbxdir`;
-
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
@@ -182,63 +185,6 @@ printf "Elapsed time to run recipe (sec.) = %d\n",
 $icheckpoint++;
 
 
-# Directory to store products should already exist because
-# cronjob kpfmastersruncmd_l0.pl ran before.
-
-my $destdir  = "${mastersdir}/$procdate";
-
-if (! (-e $destdir)) {
-    print "*** Error: Product directory does not exist ($destdir): $!\n";
-    exit(64);
-}
-
-sleep(30);
-
-my $globfiles = "$sbxdir/*master_WLS*";
-
-my @files  = glob("$globfiles");
-
-foreach my $file (@files) {
-    my $destfile = "$destdir/$file";
-    if (! (-e $destfile)) {
-        if (! (copy($file, $destdir))) {
-            print "*** Warning: couldn't copy $file to $destdir ($!); " .
-                "skipping...\n";
-        } else {
-            print "Copied $file to $destdir\n";
-        }
-    }
-}
-
-
-# Make directory to store wlpixelfiles.
-
-my $destdir2  = "${mastersdir}/$procdate/wlpixelfiles";
-
-if (! (-e $destdir2)) {
-    if (! make_path($destdir2)) {
-        die "*** Error: Could not make directory ($destdir2): $!\n";
-    } else {
-        print "Made new directory $destdir2\n";
-    }
-}
-
-sleep(30);
-
-my $globfiles2 = "${sandbox}/masters/wlpixelfiles/*kpf_${procdate}*";
-
-my @files2  = glob("$globfiles2");
-
-foreach my $file (@files2) {
-    if (! (copy($file, $destdir2))) {
-        print "*** Warning: couldn't copy $file to $destdir2 ($!); " .
-            "skipping...\n";
-    } else {
-        print "Copied $file to $destdir2\n";
-    }
-}
-
-
 # Log end time.
 
 $endscript = time();
@@ -247,23 +193,6 @@ print "End time = ", scalar localtime($endscript), "\n";
 print "Elapsed total time (sec.) = ", $endscript - $startscript, "\n";
 
 print "Terminating normally...\n";
-
-
-# Copy log file from runtime directory to product directory.
-
-my ($logfileBase) = $iam =~ /(.+)\.pl/;
-
-my $logfile = $logdir . '/' . $logfileBase . '_' . $procdate . '.out';
-
-if (-e $logfile) {
-
-    if (! (copy($logfile, $destdir))) {
-        die "*** Warning: couldn't copy $logfile to $destdir ($!); " .
-            "quitting...\n";
-    } else {
-        print "Copied $logfile to $destdir\n";
-    }
-}
 
 
 exit(0);
