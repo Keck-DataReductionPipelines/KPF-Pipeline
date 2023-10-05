@@ -85,7 +85,7 @@ def worker(worker_num, pipeline_config, framework_logcfg_file, framework_config_
     # tells this instance to wait for something to happen, forever
     # qm_only=False, ingest_data_only=False,
     framework.pipeline.start(pipeline_config)
-    framework.start(wait_for_event=False, continuous=False)
+    framework.start(wait_for_event=True, continuous=True)
 
 
 class FileAlarm(PatternMatchingEventHandler):
