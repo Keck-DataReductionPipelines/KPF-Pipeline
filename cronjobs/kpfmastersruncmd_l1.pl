@@ -22,7 +22,6 @@
 use strict;
 use warnings;
 use File::Copy;
-use File::Path qw/make_path/;
 
 select STDERR; $| = 1; select STDOUT; $| = 1;
 
@@ -113,7 +112,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.7';
+my $version = '1.8';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -183,14 +182,15 @@ my $script = "#! /bin/bash\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "pip install psycopg2-binary\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "mkdir -p /data/masters/${procdate}\n" .
+             "cp -pr /masters/${procdate}/kpf_${procdate}*.fits /data/masters/${procdate}\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "cp -p /data/masters/${procdate}/* /masters/${procdate}\n" .
+             "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l1_${procdate}.log\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
-
-`mkdir -p $sandbox/masters/$procdate`;
-`cp -pr ${mastersdir}/${procdate}/kpf_${procdate}*.fits ${sandbox}/masters/$procdate`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
@@ -232,35 +232,6 @@ printf "Elapsed time to run recipe (sec.) = %d\n",
 $icheckpoint++;
 
 
-# Directory to store products should already exist because
-# cronjob kpfmastersruncmd_l0.pl ran before.
-
-my $destdir  = "${mastersdir}/$procdate";
-
-if (! (-e $destdir)) {
-    print "*** Error: Product directory does not exist ($destdir): $!\n";
-    exit(64);
-}
-
-sleep(30);
-
-my $globfiles = "${sandbox}/masters/$procdate/*";
-
-my @files  = glob("$globfiles");
-
-foreach my $file (@files) {
-    my $destfile = "$destdir/$file";
-    if (! (-e $destfile)) {
-        if (! (copy($file, $destdir))) {
-            print "*** Warning: couldn't copy $file to $destdir ($!); " .
-                "skipping...\n";
-        } else {
-            print "Copied $file to $destdir\n";
-        }
-    }
-}
-
-
 # Log end time.
 
 $endscript = time();
@@ -269,24 +240,6 @@ print "End time = ", scalar localtime($endscript), "\n";
 print "Elapsed total time (sec.) = ", $endscript - $startscript, "\n";
 
 print "Terminating normally...\n";
-
-
-# Copy log file from runtime directory to product directory, assuming
-# that the following convention for log-file naming is followed.
-
-my ($logfileBase) = $iam =~ /(.+)\.pl/;
-
-my $logfile = $logdir . '/' . $logfileBase . '_' . $procdate . '.out';
-
-if (-e $logfile) {
-
-    if (! (copy($logfile, $destdir))) {
-        die "*** Warning: couldn't copy $logfile to $destdir ($!); " .
-            "quitting...\n";
-    } else {
-        print "Copied $logfile to $destdir\n";
-    }
-}
 
 
 exit(0);
