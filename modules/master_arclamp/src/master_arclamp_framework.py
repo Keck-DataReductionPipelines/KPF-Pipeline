@@ -26,7 +26,7 @@ class MasterArclampFramework(KPF0_Primitive):
         by stacking input images for exposures with IMTYPE.lower() == 'arclamp'
         and specified input arclamp_object.  The input FITS files are selected from the
         given path that can include many kinds of FITS files, not just arclamp files.
-        Subtract master bias from each input flat 2D raw image.  Separately normalize 
+        Subtract master bias from each input flat 2D raw image.  Separately normalize
         debiased images by EXPTIME, and then subtract master dark.  Optionally divide by
         the master flat.  Stack all normalized debiased, flattened images.
         Set appropriate infobit if number of pixels with less than 5 samples
@@ -173,7 +173,41 @@ class MasterArclampFramework(KPF0_Primitive):
             arclamp_object_list.append(header_object)
             #self.logger.debug('arclamp_file_path,exp_time,header_object = {},{},{}'.format(arclamp_file_path,exp_time,header_object))
 
-        tester = KPF0.from_fits(all_arclamp_files[0])
+
+        # Ensure prototype FITS header for product file has matching OBJECT and contains both
+        # GRNAMPS and REDAMPS keywords (indicating that the data exist).
+
+        for arclamp_file_path in (all_arclamp_files):
+
+            tester = KPF0.from_fits(arclamp_file_path)
+            tester_object = tester.header['PRIMARY']['OBJECT']
+
+            if tester_object == self.arclamp_object:
+
+                try:
+                    tester_grnamps = tester.header['PRIMARY']['GRNAMPS']
+                except KeyError as err:
+                    continue
+
+                try:
+                    tester_redamps = tester.header['PRIMARY']['REDAMPS']
+                except KeyError as err:
+                    continue
+
+                self.logger.info('Prototype FITS header from {}'.format(arclamp_file_path))
+
+                break
+
+            else:
+
+                tester = None
+
+        if tester is None:
+            master_arclamp_exit_code = 6
+            exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+            return Arguments(exit_list)
+
+
         del_ext_list = []
         for i in tester.extensions.keys():
             if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
@@ -257,11 +291,9 @@ class MasterArclampFramework(KPF0_Primitive):
                 single_frame_data = frames_data[i]
                 exp_time = frames_data_exptimes[i]
 
-                #self.logger.debug('Normalizing arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
+                # Subtract off exposure time times master-dark-current rate.
 
-                single_normalized_frame_data = single_frame_data / exp_time       # Separately normalize by EXPTIME.
-
-                single_normalized_frame_data -= np.array(master_dark_data[ffi])   # Subtract master-dark-current rate.
+                single_normalized_frame_data = single_frame_data - exp_time * np.array(master_dark_data[ffi])
 
                 if self.skip_flattening == 0:
                     #self.logger.debug('Flattening arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
@@ -317,7 +349,7 @@ class MasterArclampFramework(KPF0_Primitive):
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
-            master_holder.header[ffi]['BUNIT'] = ('DN/sec','Units of master arclamp')
+            master_holder.header[ffi]['BUNIT'] = ('electrons','Units of master arclamp')
             master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['SKIPFLAT'] = (self.skip_flattening,'Flag to skip flat-field calibration')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
@@ -337,7 +369,7 @@ class MasterArclampFramework(KPF0_Primitive):
             master_holder.header[ffi]['BIT01'] = ('2**1 = 2', 'RED_CCD has gt 1% pixels with lt 5 samples')
 
             ffi_unc_ext_name = ffi + '_UNC'
-            master_holder.header[ffi_unc_ext_name]['BUNIT'] = ('DN/sec','Units of master-arclamp uncertainty')
+            master_holder.header[ffi_unc_ext_name]['BUNIT'] = ('electrons','Units of master-arclamp uncertainty')
 
             ffi_cnt_ext_name = ffi + '_CNT'
             master_holder.header[ffi_cnt_ext_name]['BUNIT'] = ('Count','Number of stack samples')
