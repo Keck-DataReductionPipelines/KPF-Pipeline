@@ -194,7 +194,7 @@ class AnalyzeL2:
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name + '\n', fontsize=30)
+        ax.set_title('L2 - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name + '\n', fontsize=30)
 
         # Display the plot
         if fig_path != None:
