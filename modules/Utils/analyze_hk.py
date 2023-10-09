@@ -63,6 +63,7 @@ class AnalyzeHK:
         if wavesoln_file != None:
             self.wave_lib = pd.read_csv(wavesoln_file, header=None, sep = ' ', comment = '#')
             self.wave_lib *= 1 - self.rv_shift/3e5 # Doppler shift wavelength solution
+        self.color_grid = ['purple','darkblue','darkgreen','gold','darkorange','darkred']
 
 
     def plot_HK_image_2D(self, fig_path=None, kpftype='L0', show_plot=False):
@@ -139,6 +140,82 @@ class AnalyzeHK:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+    def plot_HK_2D_column_cut(self, column=512, fig_path=None, kpftype='L0', show_plot=False):
+
+        """
+        Generate a column cut plot of a 2D image of the Ca H& K spectrum.  
+
+        Args:
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+        lw = 1 # linewidth
+        fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True, tight_layout=True)
+        axs[0].step(np.arange(255), self.image[:,column], color='k', linewidth=lw)
+        axs[1].step(np.arange(255), self.image[:,column], color='k', linewidth=lw)
+        
+        ymin = np.percentile(self.image[:,column],1)
+        ymax = np.percentile(self.image[:,column],99)
+        yrange = ymax-ymin
+
+        # to determine ymin/ymax, create subarray with missing pixels for SCI orders 
+        remove_indices = []
+        remove_indices.extend(range(0,25)) # hack because there's an unextracted order not in the trace locations
+        remove_indices.extend(range(230,255)) # hack because there's an unextracted order not in the trace locations
+        for key, value in self.trace_location_sky.items():
+            remove_indices.extend(range(value['x1']-2, value['x2']+2))
+        new_cut = np.delete(self.image[:,column], remove_indices)
+        ymin_off_order = np.percentile(new_cut,1)
+        ymax_off_order = np.percentile(new_cut,99)
+        yrange_off_order = ymax_off_order-ymin_off_order
+
+        # Add color highlights
+        for o in range(-1,5):  # iterate through the order definitions -- -1 to +5
+            axs[0].step(range(self.trace_location_sky[o]['x1'],self.trace_location_sky[o]['x2']), 
+                        self.image[self.trace_location_sky[o]['x1']:self.trace_location_sky[o]['x2'],column], 
+                        color= self.color_grid[o+1], linewidth=lw)
+            axs[0].step(range(self.trace_location_sci[o]['x1'],self.trace_location_sci[o]['x2']), 
+                        self.image[self.trace_location_sci[o]['x1']:self.trace_location_sci[o]['x2'],column], 
+                        color= self.color_grid[o+1], linewidth=lw)
+            axs[1].step(range(self.trace_location_sky[o]['x1'],self.trace_location_sky[o]['x2']), 
+                        self.image[self.trace_location_sky[o]['x1']:self.trace_location_sky[o]['x2'],column], 
+                        color= self.color_grid[o+1], linewidth=lw)
+            axs[1].step(range(self.trace_location_sci[o]['x1'],self.trace_location_sci[o]['x2']), 
+                        self.image[self.trace_location_sci[o]['x1']:self.trace_location_sci[o]['x2'],column], 
+                        color= self.color_grid[o+1], linewidth=lw)
+
+        # Set axis parameters
+        axs[0].set_title('Ca H&K - Cut at Column #' + str(column) + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        axs[1].set_xlabel('Row Number',fontsize=18)
+        axs[0].set_ylabel('Flux (ADU)',fontsize=18)
+        axs[1].set_ylabel('Flux (ADU)',fontsize=18)
+        axs[0].plot(0,255,[0,0],':',color ='white')
+        axs[0].xaxis.set_tick_params(labelsize=14)
+        axs[0].yaxis.set_tick_params(labelsize=14)
+        axs[1].xaxis.set_tick_params(labelsize=14)
+        axs[1].yaxis.set_tick_params(labelsize=14)
+        axs[0].fill_between([0,255], y1=-1000000, y2=1000000, facecolor='lightgray', alpha=0.3, zorder=-100)
+        axs[1].fill_between([0,255], y1=-1000000, y2=1000000, facecolor='lightgray', alpha=0.3, zorder=-100)
+        axs[0].set_xlim(0,255)
+        axs[1].set_xlim(0,255)
+        axs[0].set_ylim(min([0,ymin-0.05*yrange]), ymax+0.05*yrange)
+        axs[1].set_ylim(min([0,ymin_off_order-0.05*yrange_off_order]), ymax_off_order+0.05*yrange_off_order)
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
 
     def plot_HK_spectrum_1D(self, trace='sci', fig_path=None, show_plot=False):
 
