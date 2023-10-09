@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.ticker import ScalarFormatter
 from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeHK:
@@ -80,7 +81,7 @@ class AnalyzeHK:
         """
         fig, ax = plt.subplots(figsize = (12,5),tight_layout=True)
         im = ax.imshow(self.image, 
-                       vmin = np.nanpercentile(self.image,0.1),
+                       vmin = np.nanpercentile(self.image,0.01),
                        vmax = np.nanpercentile(self.image,99.9), 
                        interpolation = 'None',
                        origin = 'lower',
@@ -139,18 +140,32 @@ class AnalyzeHK:
             plt.show()
         plt.close('all')
 
-    def plot_HK_spectrum_1D(self, fig_path=None, show_plot=False):
+    def plot_HK_spectrum_1D(self, trace='sci', fig_path=None, show_plot=False):
+
+        """
+        Generate a 1D spectrum plot of the Ca H& K spectrum.  
+
+        Args:
+            trace (string) - 'sci' or 'sky' to select the fiber
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
 
         orders = np.array(self.wave_lib.columns)
         padding = 1
 
-        plt.figure(figsize=(12,5),tight_layout=True)
+        #plt.figure(figsize=(12,5),tight_layout=True)
         fig, ax = plt.subplots(1, 1, figsize=(12,5))
 
         color_grid = ['purple','darkblue','darkgreen','gold','darkorange','darkred']
         chk_bandpass  = [383.0, 401.0]#[384.0, 401.7]
-        caK           = [393.2, 393.5]
-        caH           = [396.7, 397.0]
+        caK           = [393.3663-0.150, 393.3663+0.150]
+        caH           = [396.8469-0.150, 396.8469+0.150]
         Vcont         = [389.9, 391.9]
         Rcont         = [397.4, 399.4]
 
@@ -159,35 +174,144 @@ class AnalyzeHK:
         for i in range(len(orders)):
             wav = self.wave_lib[i]
             # This should be correct, but the sky and sci orders are flipped in the definition file
-            #flux = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
-            # so for now use the sky orders
-            #flux = np.sum(self.image[self.trace_location_sky[i]['x1']:self.trace_location_sky[i]['x2'],:],axis=0)
-            specHK[i,:] = np.sum(self.image[self.trace_location_sky[i]['x1']:self.trace_location_sky[i]['x2'],:],axis=0)
+            if trace == 'sci':
+                specHK[i,:] = np.sum(self.image[self.trace_location_sky[i]['x1']:self.trace_location_sky[i]['x2'],:],axis=0)
+            elif trace == 'sky':
+                specHK[i,:] = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
             ax.plot(wav[padding:-padding],
                     specHK[i,padding:-padding],
                     color = color_grid[i],
                     linewidth = 1.0)
+        ymin =      np.nanpercentile(specHK[:,padding:-padding],0.1)
         ymax = 1.15*np.nanpercentile(specHK[:,padding:-padding],99.9)
-        ax.set_ylim(0, ymax)
+        yrange = (ymax-ymin)
+        ax.set_ylim(ymin, ymax)
         ax.set_xlim(chk_bandpass[0], chk_bandpass[1])
 
         # Add labels
-        plt.title('Ca H&K Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        plt.title('Ca H&K ' + trace.upper() + ' Spectrum: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         ax.set_xlabel('Wavelength (nm)',fontsize=18)
         ax.set_ylabel('Flux (ADU)',fontsize=18)
         ax.xaxis.set_tick_params(labelsize=14)
         ax.yaxis.set_tick_params(labelsize=14)
-        ax.fill_between(chk_bandpass, y1=0, y2=ymax, facecolor='gray', alpha=0.3, zorder=-100)
-        ax.fill_between(caH,          y1=0, y2=ymax, facecolor='m',    alpha=0.3)
-        ax.fill_between(caK,          y1=0, y2=ymax, facecolor='m',    alpha=0.3)
-        ax.fill_between(Vcont,        y1=0, y2=ymax, facecolor='c',    alpha=0.3)
-        ax.fill_between(Rcont,        y1=0, y2=ymax, facecolor='c',    alpha=0.3)
+        ax.fill_between(chk_bandpass, y1=ymin, y2=ymin+yrange, facecolor='gray', alpha=0.3, zorder=-100)
+        ax.fill_between(caH,          y1=ymin, y2=ymin+yrange, facecolor='m',    alpha=0.3)
+        ax.fill_between(caK,          y1=ymin, y2=ymin+yrange, facecolor='m',    alpha=0.3)
+        ax.fill_between(Vcont,        y1=ymin, y2=ymin+yrange, facecolor='c',    alpha=0.3)
+        ax.fill_between(Rcont,        y1=ymin, y2=ymin+yrange, facecolor='c',    alpha=0.3)
         ax.text(np.mean(Vcont)-0.89, 0.95*ymax, 'V continuum')
         ax.text(np.mean(Rcont)-0.89, 0.95*ymax, 'R continuum')
-        ax.text(np.mean(caK)-0.40, 0.95*ymax, 'K')
-        ax.text(np.mean(caH)-0.40, 0.95*ymax, 'H')
-        ax.plot([396.847,396.847],[0,ymax],':',color ='black')
-        ax.plot([393.366,393.366],[0,ymax],':',color ='black')
+        ax.text(np.mean(caK)  -0.40, 0.95*ymax, 'K')
+        ax.text(np.mean(caH)  -0.40, 0.95*ymax, 'H')
+        ax.plot([396.847,396.847],[ymin,ymax],':',color ='black')
+        ax.plot([393.366,393.366],[ymin,ymax],':',color ='black')
+        ax.plot([chk_bandpass[0], chk_bandpass[1]],[0,0],':',color ='white')
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=200, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+    def plot_HK_spectrum_1D_zoom(self, trace='sci', fig_path=None, show_plot=False):
+
+        """
+        Generate a 1D spectrum plot zoomed in on the C&K lines
+
+        Args:
+            trace (string) - 'sci' or 'sky' to select the fiber
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+
+        """
+
+        orders = np.array(self.wave_lib.columns)
+        padding = 1
+
+        fig, (axk, axh) = plt.subplots(1,2, figsize=(12,5))
+
+        color_grid = ['purple','darkblue','darkgreen','gold','darkorange','darkred']
+        chk_bandpass  = [383.0, 401.0]#[384.0, 401.7]
+        caK           = [393.3663-0.150, 393.3663+0.150]
+        caH           = [396.8469-0.150, 396.8469+0.150]
+        Vcont         = [389.9, 391.9]
+        Rcont         = [397.4, 399.4]
+
+        # Compute and Plot spectra
+        specHK = np.zeros((len(orders), self.image.shape[1]), dtype=np.float64)
+        for i in range(len(orders)):
+            # This should be correct, but the sky and sci orders are flipped in the definition file
+            if trace == 'sci':
+                specHK[i,:] = np.sum(self.image[self.trace_location_sky[i]['x1']:self.trace_location_sky[i]['x2'],:],axis=0)
+            elif trace == 'sky':
+                specHK[i,:] = np.sum(self.image[self.trace_location_sci[i]['x1']:self.trace_location_sci[i]['x2'],:],axis=0)
+
+        axh.set_xlim(np.mean(caH)-1.25, np.mean(caH)+1.25)
+        for o in [4,5]:
+            wav = self.wave_lib[o]
+            axh.step(wav[padding:-padding],
+                    specHK[o,padding:-padding],
+                    color = color_grid[o],
+                    linewidth = 2.0)
+        axk.set_xlim(np.mean(caK)-1.25, np.mean(caK)+1.25)
+        for o in [3]:
+            wav = self.wave_lib[o]
+            axk.step(wav[padding:-padding],
+                    specHK[o,padding:-padding],
+                    color = color_grid[o],
+                    linewidth = 2.0)
+
+        # Find y ranges
+        indh = (self.wave_lib[5] > (np.mean(caH)-1.25)).values * (self.wave_lib[5] < (np.mean(caH)+1.25)).values
+        indk = (self.wave_lib[3] > (np.mean(caK)-1.25)).values * (self.wave_lib[3] < (np.mean(caK)+1.25)).values
+        yminh = min([0,np.nanpercentile(specHK[5,indh],0.1)])
+        ymaxh = 1.15*np.nanpercentile(specHK[5,indh],99.9)
+        yrangeh = (ymaxh-yminh)
+        ymink = min([0,np.nanpercentile(specHK[3,indk],0.1)])
+        ymaxk = 1.15*np.nanpercentile(specHK[3,indk],99.9)
+        yrangek = (ymaxk-ymink)
+        axh.set_ylim(yminh, ymaxh)
+        axk.set_ylim(ymink, ymaxk)
+
+        # Add labels
+        axk.set_xlabel('Wavelength (nm)',fontsize=18)
+        axk.set_ylabel('Flux (ADU)',fontsize=18)
+        axk.xaxis.set_tick_params(labelsize=14)
+        axk.yaxis.set_tick_params(labelsize=14)
+        axh.set_xlabel('Wavelength (nm)',fontsize=18)
+        axh.set_ylabel('Flux (ADU)',fontsize=18)
+        axh.xaxis.set_tick_params(labelsize=14)
+        axh.yaxis.set_tick_params(labelsize=14)
+        axk.fill_between(chk_bandpass, y1=ymink, y2=ymink+yrangek, facecolor='gray', alpha=0.3, zorder=-100)
+        axh.fill_between(chk_bandpass, y1=yminh, y2=yminh+yrangeh, facecolor='gray', alpha=0.3, zorder=-100)
+        axh.fill_between(caH,          y1=yminh, y2=yminh+yrangeh, facecolor='m',    alpha=0.3)
+        axk.fill_between(caK,          y1=ymink, y2=ymink+yrangek, facecolor='m',    alpha=0.3)
+        axk.text(np.mean(caK)  -0.10, ymink+0.92*yrangek, 'K', fontsize=14)
+        axh.text(np.mean(caH)  -0.10, yminh+0.92*yrangeh, 'H', fontsize=14)
+        axh.plot([396.847,396.847],[yminh,ymaxh],':',color ='black')
+        axk.plot([393.366,393.366],[ymink,ymaxk],':',color ='black')
+        axk.plot([chk_bandpass[0], chk_bandpass[1]],[0,0],':',color ='white')
+        axh.plot([chk_bandpass[0], chk_bandpass[1]],[0,0],':',color ='white')
+
+        # Set y-axis to display in scientific notation
+        formatter = ScalarFormatter(useMathText=True)
+        formatter.set_scientific(True)
+        formatter.set_powerlimits((-1,1))
+        axh.yaxis.set_major_formatter(formatter)
+        axk.yaxis.set_major_formatter(formatter)
+
+        # Add overall title to array of plots
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title('Ca H&K ' + trace.upper() + ' Spectrum: ' + str(self.ObsID) + ' - ' + self.name + '\n', fontsize=18)
+        ax.grid(False)
 
         # Display the plot
         if fig_path != None:
