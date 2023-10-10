@@ -34,6 +34,8 @@
                       trace pixels.
                     - `action.args['non_orderlet_value']: (number, optional)`: Value for non orderlet pixels.
                       Defaults to 0.
+                    - `action.args['full_coverage']: (number, optional)`: Make order mask to cover entire image width
+                      regardless of the horizontal coverage provided by order trace result.  Defaults to 0.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace in the master
@@ -104,7 +106,8 @@ class OrderMask(KPF0_Primitive):
                     'poly_degree': 3,
                     'origin': [0, 0],
                     'orderlets_on_image': None,
-                    'orderlet_widths': None
+                    'orderlet_widths': None,
+                    'full_coverage': 0
             }
 
     NORMAL = 0
@@ -159,6 +162,7 @@ class OrderMask(KPF0_Primitive):
                 self.orderlet_values.append(self.orderlet_values[-1])
 
         non_od_value = action.args['non_orderlet_value'] if 'non_orderlet_value' in args_keys else None
+        self.full_coverage = self.get_args_value("full_coverage", action.args, args_keys)
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -196,6 +200,7 @@ class OrderMask(KPF0_Primitive):
                                 order_mask_data=non_od_value,
                                 orderlet_names=self.orderlet_names,
                                 start_order=start_order,
+                                full_coverage = self.full_coverage,
                                 config=self.config, logger=self.logger)
         except Exception as e:
             self.alg = None

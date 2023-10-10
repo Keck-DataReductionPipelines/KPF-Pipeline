@@ -1,8 +1,8 @@
 #! /bin/bash -l
 
-printenv >& $KPFCRONJOB_LOGS/jobs/runDailyPipelines.env
-
 procdate=$(date +\%Y\%m\%d)
+
+printenv >& $KPFCRONJOB_LOGS/jobs/runDailyPipelines_$procdate.env
 
 echo "Processing date: $procdate"
 $KPFCRONJOB_CODE/cronjobs/kpfmastersruncmd_l0.pl $procdate >& $KPFCRONJOB_LOGS/jobs/kpfmastersruncmd_l0_$procdate.out

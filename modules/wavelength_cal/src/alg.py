@@ -51,6 +51,7 @@ class WaveCalibration:
         )
         self.red_skip_orders = configpull.get_config_value('red_skip_orders')
         self.green_skip_orders = configpull.get_config_value('green_skip_orders')
+        self.chi_2_threshold = configpull.get_config_value('chi_2_threshold')
         self.skip_orders = configpull.get_config_value('skip_orders',None)
         self.quicklook_steps = configpull.get_config_value('quicklook_steps',10)
         self.min_wave = configpull.get_config_value('min_wave',3800)
@@ -194,7 +195,7 @@ class WaveCalibration:
         
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
-        expected_peak_locs=None, plt_path='/data/wls/', print_update=False):
+        expected_peak_locs=None, plt_path=None, print_update=False):
         """
         Iteratively performs wavelength calibration for all orders.
         Args:
@@ -576,7 +577,7 @@ class WaveCalibration:
             plt.close()
 
         return fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs
-        
+
     def find_peaks(self, order_flux, peak_height_threshold=1.5):
         """
         Finds all order_flux peaks in an array. This runs scipy.signal.find_peaks 
@@ -611,17 +612,37 @@ class WaveCalibration:
         detected_peaks, properties = signal.find_peaks(c, distance=distance, height=height)
         peak_heights = np.array(properties['peak_heights'])
 
+    
+        # Only consider peaks with height greater than 5
+        valid_peak_indices = np.where(peak_heights > 5)[0]
+        detected_peaks = detected_peaks[valid_peak_indices]
+        peak_heights = peak_heights[valid_peak_indices]
+        
         # fit peaks with Gaussian to get accurate position
         fitted_peaks = detected_peaks.astype(float)
         gauss_coeffs = np.empty((4, len(detected_peaks)))
         width = np.mean(np.diff(detected_peaks)) // 2
 
+        # Create mask initially set to True for all detected peaks
+        mask = np.ones(len(detected_peaks), dtype=bool)
+
         for j, p in enumerate(detected_peaks):
             idx = p + np.arange(-width, width + 1, 1)
             idx = np.clip(idx, 0, len(c) - 1).astype(int)
             coef = self.fit_gaussian(np.arange(len(idx)), c[idx])
-            gauss_coeffs[:,j] = coef
-            fitted_peaks[j] = coef[1] + p - width
+
+            if coef is None:
+                mask[j] = False # mask out bad fits
+
+            else:# Only update the coefficients and peaks if fit_gaussian did not return None
+                gauss_coeffs[:, j] = coef
+                fitted_peaks[j] = coef[1] + p - width
+
+        # Remove the peaks where fit_gaussian returned None
+        fitted_peaks = fitted_peaks[mask]
+        detected_peaks = detected_peaks[mask]
+        peak_heights = peak_heights[mask]
+        gauss_coeffs = gauss_coeffs[:, mask]
 
         return fitted_peaks, detected_peaks, peak_heights, gauss_coeffs
         
@@ -844,6 +865,7 @@ class WaveCalibration:
         """
         num_input_lines = len(linelist)  
         num_pixels = len(flux)
+        successful_fits = []
 
         missed_lines = 0
         coefs = np.zeros((4,num_input_lines))
@@ -864,10 +886,16 @@ class WaveCalibration:
                     last_fit_pixel = peak_pixel + gaussian_fit_width
 
                 # fit gaussian to matched peak location
-                coefs[:,i] = self.fit_gaussian(
+                result= self.fit_gaussian(
                     np.arange(first_fit_pixel,last_fit_pixel),
                     flux[first_fit_pixel:last_fit_pixel]
                 )
+
+                if result is not None:
+                    coefs[:, i] = result
+                    successful_fits.append(i)  # Append index of successful fit
+                else:
+                    missed_lines += 1
 
                 amp = coefs[0,i]
                 if amp < 0:
@@ -877,6 +905,8 @@ class WaveCalibration:
                 coefs[:,i] = np.nan
                 missed_lines += 1
 
+        linelist = linelist[successful_fits]
+        coefs = coefs[:, successful_fits]
         linelist = linelist[np.isfinite(coefs[0,:])]
         coefs = coefs[:, np.isfinite(coefs[0,:])]
 
@@ -944,7 +974,7 @@ class WaveCalibration:
 
     def mode_match(
         self, order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, 
-        comb_lines_angstrom, print_update=False, plot_path='/data/wls/', start_check=True,
+        comb_lines_angstrom, print_update=False, plot_path=None, start_check=True,
     ):
         """
         Matches detected order_flux peaks to the theoretical locations of LFC wavelengths
@@ -1194,7 +1224,7 @@ class WaveCalibration:
             ) + (const * 2 * int_width)
         
         return integrated_gaussian_val
-
+    
     def fit_gaussian(self, x, y):
         """
         Fits a continuous Gaussian to a discrete set of x and y datapoints
@@ -1206,6 +1236,7 @@ class WaveCalibration:
         Returns:
             list: best-fit parameters [a, mu, sigma**2, const]
         """
+
         x = np.ma.compressed(x)
         y = np.ma.compressed(y)
 
@@ -1216,8 +1247,36 @@ class WaveCalibration:
             np.warnings.simplefilter("ignore")
             popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
 
-        return popt  
-          
+        if self.cal_type == 'LFC' or 'ThAr':          
+            # Quality Checks for Gaussian Fits
+            chi_squared_threshold = int(self.chi_2_threshold)
+
+            # Calculate chi^2
+            predicted_y = self.integrate_gaussian(x, *popt)
+            chi_squared = np.sum(((y - predicted_y) ** 2) / np.var(y))
+            '''
+            # Calculate RMS of residuals for Gaussian fit
+            rms_residual = np.sqrt(np.mean(np.square(y - predicted_y)))
+
+            rms_threshold = 1000 # RMS Quality threshold
+            disagreement_threshold = 1000 # Disagreement with initial guess threshold
+            asymmetry_threshold = 1000 # Asymmetry in residuals threshold
+            # Calculate disagreement between Gaussian fit and initial guesss
+            disagreement = np.abs(popt[1] - p0[1])
+
+            # Check for asymmetry in residuals
+            residuals = y - predicted_y
+            left_residuals = residuals[:len(residuals)//2]
+            right_residuals = residuals[len(residuals)//2:]
+            asymmetry = np.abs(np.mean(left_residuals) - np.mean(right_residuals))
+            '''
+            # Run checks against defined quality thresholds
+            if (chi_squared > chi_squared_threshold):
+                print("Chi squared exceeded the threshold for this line. Line skipped")
+                return None
+        
+        return popt
+    
     def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, fit_iterations=5, sigma_clip=2.1, peak_heights=None, plot_path=None):
         """
         Given precise wavelengths of detected LFC order_flux lines, fits a 
@@ -1243,7 +1302,10 @@ class WaveCalibration:
                     returns the Legendre polynomial wavelength solutions
         """
         weights = 1 / np.sqrt(peak_heights)
-        if self.fit_type == 'Legendre': 
+        if self.fit_type.lower() not in ['legendre', 'spline']:
+            raise NotImplementedError("Fit type must be either legendre or spline")
+        
+        if self.fit_type.lower() == 'legendre' or self.fit_type.lower() == 'spline': 
 
             _, unique_idx, count = np.unique(fitted_peak_pixels, return_index=True, return_counts=True)
             unclipped_idx = np.where(
@@ -1254,14 +1316,13 @@ class WaveCalibration:
             sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
             x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]
             for i in range(fit_iterations):
-                # leg_out = Legendre.fit(x, y, self.fit_order, w=w)
-                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-
-                leg_out = UnivariateSpline(x, y, w, k=5)
-                our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-
-                # leg_out = UnivariateSpline(x, y, w, k=5)
-                # our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+                if self.fit_type.lower() == 'legendre':
+                    leg_out = Legendre.fit(x, y, self.fit_order, w=w)
+                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+                    
+                if self.fit_type == 'spline':
+                    leg_out = UnivariateSpline(x, y, w, k=5)
+                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
 
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))

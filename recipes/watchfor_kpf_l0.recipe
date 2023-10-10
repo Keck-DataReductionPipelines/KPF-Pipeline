@@ -11,6 +11,7 @@ order = config.WATCHFOR_L0.overscan_order
 oscan_clip = config.WATCHFOR_L0.overscan_clip
 lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
 lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
+lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
 prescan_reg = config.WATCHFOR_L0.prescan_reg
 gain_key = config.WATCHFOR_L0.gain_keyword
 do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
@@ -67,7 +68,7 @@ else:
 
 file_path = context.file_path
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
-
+lev0_ffi_exts_subbed = lev0_ffi_ext_red + lev0_ffi_ext_green + lev0_ffi_ext_cahk
 
 # Register L0 file in L0Files database table.  Perform quality-control tasks.
 
@@ -133,9 +134,9 @@ for raw_file_path in file_list:
                                           channel_datasec_nrows_green,
                                           n_sigma)
 
-        bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts, data_type, quicklook)
+        bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
 
-        dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts, data_type, quicklook)
+        dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts_subbed, data_type, quicklook)
 
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)        
 
