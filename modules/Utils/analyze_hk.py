@@ -141,7 +141,8 @@ class AnalyzeHK:
             plt.show()
         plt.close('all')
 
-    def plot_HK_2D_column_cut(self, column=512, fig_path=None, kpftype='L0', show_plot=False):
+
+    def plot_HK_2D_column_cut(self, fig_path=None, kpftype='L0', show_plot=False):
 
         """
         Generate a column cut plot of a 2D image of the Ca H& K spectrum.  
@@ -156,61 +157,69 @@ class AnalyzeHK:
 
         """
         lw = 1 # linewidth
-        fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True, tight_layout=True)
-        axs[0].step(np.arange(255), self.image[:,column], color='k', linewidth=lw)
-        axs[1].step(np.arange(255), self.image[:,column], color='k', linewidth=lw)
+        fig, axs = plt.subplots(4,1, figsize=(8, 12), tight_layout=True)
         
-        ymin = np.percentile(self.image[:,column],1)
-        ymax = np.percentile(self.image[:,column],99)
-        yrange = ymax-ymin
+        cols = [512, 900]
+        
+        for i, col in enumerate(cols):
+            axs[0+2*i].step(np.arange(255), self.image[:,col], color='k', linewidth=lw)
+            axs[1+2*i].step(np.arange(255), self.image[:,col], color='k', linewidth=lw)
+            
+            ymin = np.percentile(self.image[:,col],1)
+            ymax = np.percentile(self.image[:,col],99)
+            yrange = ymax-ymin
+    
+            # to determine ymin/ymax, create subarray with missing pixels for SCI orders 
+            remove_indices = []
+            remove_indices.extend(range(0,25)) # hack because there's an unextracted order not in the trace locations
+            remove_indices.extend(range(230,255)) # hack because there's an unextracted order not in the trace locations
+            for key, value in self.trace_location_sky.items():
+                remove_indices.extend(range(value['x1']-2, value['x2']+2))
+            new_cut = np.delete(self.image[:,col], remove_indices)
+            ymin_off_order = np.percentile(new_cut,1)
+            ymax_off_order = np.percentile(new_cut,99)
+            yrange_off_order = ymax_off_order-ymin_off_order
+    
+            # Add color highlights
+            for o in range(-1,5):  # iterate through the order definitions -- -1 to +5
+                axs[0+2*i].step(range(self.trace_location_sky[o]['x1'],self.trace_location_sky[o]['x2']), 
+                            self.image[self.trace_location_sky[o]['x1']:self.trace_location_sky[o]['x2'],col], 
+                            color= self.color_grid[o+1], linewidth=lw)
+                axs[0+2*i].step(range(self.trace_location_sci[o]['x1'],self.trace_location_sci[o]['x2']), 
+                            self.image[self.trace_location_sci[o]['x1']:self.trace_location_sci[o]['x2'],col], 
+                            color= self.color_grid[o+1], linewidth=lw)
+                axs[1+2*i].step(range(self.trace_location_sky[o]['x1'],self.trace_location_sky[o]['x2']), 
+                            self.image[self.trace_location_sky[o]['x1']:self.trace_location_sky[o]['x2'],col], 
+                            color= self.color_grid[o+1], linewidth=lw)
+                axs[1+2*i].step(range(self.trace_location_sci[o]['x1'],self.trace_location_sci[o]['x2']), 
+                            self.image[self.trace_location_sci[o]['x1']:self.trace_location_sci[o]['x2'],col], 
+                            color= self.color_grid[o+1], linewidth=lw)
+            axs[0+2*i].plot([0,255],[0,0],':',color ='darkgray', linewidth=lw)
+            axs[1+2*i].plot([0,255],[0,0],':',color ='darkgray', linewidth=lw)
+            axs[0+2*i].fill_between([0,255], y1=-1000000, y2=1000000, facecolor='lightgray', alpha=0.3, zorder=-100)
+            axs[1+2*i].fill_between([0,255], y1=-1000000, y2=1000000, facecolor='lightgray', alpha=0.3, zorder=-100)
 
-        # to determine ymin/ymax, create subarray with missing pixels for SCI orders 
-        remove_indices = []
-        remove_indices.extend(range(0,25)) # hack because there's an unextracted order not in the trace locations
-        remove_indices.extend(range(230,255)) # hack because there's an unextracted order not in the trace locations
-        for key, value in self.trace_location_sky.items():
-            remove_indices.extend(range(value['x1']-2, value['x2']+2))
-        new_cut = np.delete(self.image[:,column], remove_indices)
-        ymin_off_order = np.percentile(new_cut,1)
-        ymax_off_order = np.percentile(new_cut,99)
-        yrange_off_order = ymax_off_order-ymin_off_order
+            # Set axis parameters
+            axs[0+2*i].set_xlabel('Row Number in Column #' + str(col),fontsize=14)
+            axs[1+2*i].set_xlabel('Row Number in Column #' + str(col),fontsize=14)
+            axs[0+2*i].set_ylabel('Flux (ADU)',fontsize=14)
+            axs[1+2*i].set_ylabel('Flux (ADU) [zoomed in]',fontsize=14)
+            axs[0+2*i].xaxis.set_tick_params(labelsize=12)
+            axs[0+2*i].yaxis.set_tick_params(labelsize=12)
+            axs[1+2*i].xaxis.set_tick_params(labelsize=12)
+            axs[1+2*i].yaxis.set_tick_params(labelsize=12)
+            axs[0+2*i].set_xlim(0,255)
+            axs[1+2*i].set_xlim(0,255)
+            axs[0+2*i].set_ylim(min([-1,ymin-0.05*yrange]), ymax+0.05*yrange)
+            axs[1+2*i].set_ylim(min([-1,ymin_off_order-0.05*yrange_off_order]), ymax_off_order+0.05*yrange_off_order)
 
-        # Add color highlights
-        for o in range(-1,5):  # iterate through the order definitions -- -1 to +5
-            axs[0].step(range(self.trace_location_sky[o]['x1'],self.trace_location_sky[o]['x2']), 
-                        self.image[self.trace_location_sky[o]['x1']:self.trace_location_sky[o]['x2'],column], 
-                        color= self.color_grid[o+1], linewidth=lw)
-            axs[0].step(range(self.trace_location_sci[o]['x1'],self.trace_location_sci[o]['x2']), 
-                        self.image[self.trace_location_sci[o]['x1']:self.trace_location_sci[o]['x2'],column], 
-                        color= self.color_grid[o+1], linewidth=lw)
-            axs[1].step(range(self.trace_location_sky[o]['x1'],self.trace_location_sky[o]['x2']), 
-                        self.image[self.trace_location_sky[o]['x1']:self.trace_location_sky[o]['x2'],column], 
-                        color= self.color_grid[o+1], linewidth=lw)
-            axs[1].step(range(self.trace_location_sci[o]['x1'],self.trace_location_sci[o]['x2']), 
-                        self.image[self.trace_location_sci[o]['x1']:self.trace_location_sci[o]['x2'],column], 
-                        color= self.color_grid[o+1], linewidth=lw)
-
-        # Set axis parameters
-        axs[0].set_title('Ca H&K - Cut at Column #' + str(column) + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
-        axs[1].set_xlabel('Row Number',fontsize=18)
-        axs[0].set_ylabel('Flux (ADU)',fontsize=18)
-        axs[1].set_ylabel('Flux (ADU)',fontsize=18)
-        axs[0].plot(0,255,[0,0],':',color ='white')
-        axs[0].xaxis.set_tick_params(labelsize=14)
-        axs[0].yaxis.set_tick_params(labelsize=14)
-        axs[1].xaxis.set_tick_params(labelsize=14)
-        axs[1].yaxis.set_tick_params(labelsize=14)
-        axs[0].fill_between([0,255], y1=-1000000, y2=1000000, facecolor='lightgray', alpha=0.3, zorder=-100)
-        axs[1].fill_between([0,255], y1=-1000000, y2=1000000, facecolor='lightgray', alpha=0.3, zorder=-100)
-        axs[0].set_xlim(0,255)
-        axs[1].set_xlim(0,255)
-        axs[0].set_ylim(min([0,ymin-0.05*yrange]), ymax+0.05*yrange)
-        axs[1].set_ylim(min([0,ymin_off_order-0.05*yrange_off_order]), ymax_off_order+0.05*yrange_off_order)
+        # Add overall title
+        axs[0].set_title('Ca H&K - Column Cuts through 2D Image: ' + str(self.ObsID) + ' - ' + self.name, fontsize=12)
 
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
-            plt.savefig(fig_path, dpi=300, facecolor='w')
+            plt.savefig(fig_path, dpi=200, facecolor='w')
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
@@ -271,7 +280,7 @@ class AnalyzeHK:
         ax.set_ylabel('Flux (ADU)',fontsize=18)
         ax.xaxis.set_tick_params(labelsize=14)
         ax.yaxis.set_tick_params(labelsize=14)
-        ax.fill_between(chk_bandpass, y1=ymin, y2=ymin+yrange, facecolor='gray', alpha=0.3, zorder=-100)
+        ax.fill_between(chk_bandpass, y1=ymin, y2=ymin+yrange, facecolor='lightgray', alpha=0.3, zorder=-100)
         ax.fill_between(caH,          y1=ymin, y2=ymin+yrange, facecolor='m',    alpha=0.3)
         ax.fill_between(caK,          y1=ymin, y2=ymin+yrange, facecolor='m',    alpha=0.3)
         ax.fill_between(Vcont,        y1=ymin, y2=ymin+yrange, facecolor='c',    alpha=0.3)
@@ -366,8 +375,8 @@ class AnalyzeHK:
         axh.set_ylabel('Flux (ADU)',fontsize=18)
         axh.xaxis.set_tick_params(labelsize=14)
         axh.yaxis.set_tick_params(labelsize=14)
-        axk.fill_between(chk_bandpass, y1=ymink, y2=ymink+yrangek, facecolor='gray', alpha=0.3, zorder=-100)
-        axh.fill_between(chk_bandpass, y1=yminh, y2=yminh+yrangeh, facecolor='gray', alpha=0.3, zorder=-100)
+        axk.fill_between(chk_bandpass, y1=ymink, y2=ymink+yrangek, facecolor='lightgray', alpha=0.3, zorder=-100)
+        axh.fill_between(chk_bandpass, y1=yminh, y2=yminh+yrangeh, facecolor='lightgray', alpha=0.3, zorder=-100)
         axh.fill_between(caH,          y1=yminh, y2=yminh+yrangeh, facecolor='m',    alpha=0.3)
         axk.fill_between(caK,          y1=ymink, y2=ymink+yrangek, facecolor='m',    alpha=0.3)
         axk.text(np.mean(caK)  -0.10, ymink+0.92*yrangek, 'K', fontsize=14)
