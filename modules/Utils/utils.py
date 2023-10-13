@@ -69,3 +69,98 @@ class DummyLogger:
     def critical(self, msg):
         print(f"CRITICAL: {msg}")
 
+def get_kpf_echelle_order(lambda_ang):
+    """
+    Returns the echelle order that a specified wavelength is in the free 
+    spectral range of.  An example use case is to identify the spectral orders 
+    in a wavelength solution when the "order number" in the L1 file is just the
+    order index (starting from 0).  This function expects an input wavelength 
+    in Angstroms, but will reluctantly convert to nm if the input is in the 
+    range 350-900.
+
+    Args:
+        lambda_ang (Angstroms)
+
+    Returns:
+        order - echelle order - 137-103 on the green CCD and 102-71 on the red CCD
+    """
+
+    if lambda_ang < 900 and lambda_ang > 350: 
+        lambda_ang *= 10
+        print("Converting input wavelength from nm to Ang in get_kpf_echelle_order.")
+        
+    ech_order = -1 # default value if match not found
+    fsr = {
+        71:  [8709, 8587],
+        72:  [8587, 8468],
+        73:  [8468, 8353],
+        74:  [8353, 8241],
+        75:  [8241, 8132],
+        76:  [8132, 8026],
+        77:  [8026, 7922],
+        78:  [7922, 7821],
+        79:  [7821, 7723],
+        80:  [7723, 7627],
+        81:  [7627, 7533],
+        82:  [7533, 7442],
+        83:  [7442, 7353],
+        84:  [7353, 7266],
+        85:  [7266, 7181],
+        86:  [7181, 7098],
+        87:  [7098, 7017],
+        88:  [7017, 6937],
+        89:  [6937, 6860],
+        90:  [6860, 6784],
+        91:  [6784, 6710],
+        92:  [6710, 6637],
+        93:  [6637, 6566],
+        94:  [6566, 6497],
+        95:  [6497, 6429],
+        96:  [6429, 6362],
+        97:  [6362, 6297],
+        98:  [6297, 6233],
+        99:  [6233, 6171],
+        100: [6171, 6109],
+        101: [6109, 6049],
+        102: [6049, 5990],
+        103: [5990, 5932],
+        104: [5932, 5875],
+        105: [5875, 5820],
+        106: [5820, 5765],
+        107: [5765, 5711],
+        108: [5711, 5659],
+        109: [5659, 5607],
+        110: [5607, 5556],
+        111: [5556, 5506],
+        112: [5506, 5458],
+        113: [5458, 5409],
+        114: [5409, 5362],
+        115: [5362, 5316],
+        116: [5316, 5270],
+        117: [5270, 5225],
+        118: [5225, 5181],
+        119: [5181, 5138],
+        120: [5138, 5095],
+        121: [5095, 5053],
+        122: [5053, 5012],
+        123: [5012, 4971],
+        124: [4971, 4931],
+        125: [4931, 4892],
+        126: [4892, 4854],
+        127: [4854, 4815],
+        128: [4815, 4778],
+        129: [4778, 4741],
+        130: [4741, 4705],
+        131: [4705, 4669],
+        132: [4669, 4634],
+        133: [4634, 4599],
+        134: [4599, 4565],
+        135: [4565, 4531],
+        136: [4531, 4498],
+        137: [4498, 4465],
+    }
+    for key, wavs in fsr.items():
+        if lambda_ang < wavs[0] and lambda_ang > wavs[1]:
+            ech_order = key
+            
+    return ech_order
