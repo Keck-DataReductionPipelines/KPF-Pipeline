@@ -218,7 +218,6 @@ class AnalyzeWLSDict:
         """
         orderdict = self.wls_dict['orderlets'][orderlet]['orders'][order]
         nlines = count_dict(orderdict['lines'])
-        print('nlines = ' + str(nlines))
         sidelength = int(np.ceil(np.sqrt(nlines)))
 
         fig, axes = plt.subplots(sidelength, sidelength, figsize=(sidelength*2.5,sidelength*2.5))
@@ -237,25 +236,30 @@ class AnalyzeWLSDict:
                     err = np.sqrt(np.abs(data))
                     npix = len(data)
                     pix = np.arange(npix)
-                    amp     = linedict['amp']
-                    mu      = linedict['mu']
-                    sig     = linedict['sig']
-                    const   = linedict['const']
-                    mu_diff = linedict['mu_diff']
-                    annotation1  = 'line = ' + str(i+j*sidelength) + '\n'
-                    annotation1 += 'A = ' + f'{linedict["amp"]:.3g}' + '\n'
-                    annotation1 += r'$\mu$ = ' + f'{linedict["mu"]:.3g}' + '\n'
-                    annotation1 += r'$\sigma$ = ' + f'{linedict["sig"]:.3g}' + '\n'
-                    annotation1 += 'c = ' + f'{linedict["const"]:.3g}' + '\n'
-                    annotation1 += r'$\Delta\mu$ = ' + f'{linedict["mu_diff"]:.3g}' + '\n'
+                    #amp     = linedict['amp']
+                    #mu      = linedict['mu']
+                    #sig     = linedict['sig']
+                    #const   = linedict['const']
+                    #mu_diff = linedict['mu_diff']
+                    #chi2    = linedict['chi2']
+                    annotation1 =  'A = ' + str(int(linedict["amp"])) + '\n'
+                    annotation1 += r'$\mu$ = ' + f'{linedict["mu"]:.4f}' + '\n'
+                    annotation1 += r'$\sigma$ = ' + f'{linedict["sig"]:.4f}' + '\n'
+                    annotation1 += 'c = ' + f'{linedict["const"]:.2f}' + '\n'
+                    annotation2  = 'line = ' + str(i+j*sidelength) + '\n'
+                    annotation2 += r'$\chi^2$ = ' + f'{linedict["chi2"]:.3g}' + '\n'
+                    annotation2 += 'RMS = ' + f'{linedict["rms"]:.3g}' + '\n'
+                    annotation2 += r'$\Delta\mu$ = ' + f'{linedict["mu_diff"]:.3g}' + '\n'
                     axes[i,j].step(pix, data,  c='b', where='mid')
                     axes[i,j].step(pix, model, c='r', where='mid')
                     axes[i,j].errorbar(pix, data,  yerr=err, c='b', fmt='none')
                     axes[i,j].set_facecolor(cmap(norm(linedict['chi2']), alpha=0.5))
                     axes[i,j].set_xticks([])  
                     axes[i,j].set_yticks([])  
-                    axes[i,j].annotate(annotation1, xy=(0.02, 0.96), 
+                    axes[i,j].annotate(annotation1, xy=(0.02, 0.97), 
                                 xycoords='axes fraction', fontsize=8, color='k', va='top')
+                    axes[i,j].annotate(annotation2, xy=(0.98, 0.97), 
+                                xycoords='axes fraction', fontsize=8, color='k', va='top', ha='right')
                 except:
                     axes[i,j].set_xticks([])  
                     axes[i,j].set_yticks([])  
