@@ -8,6 +8,7 @@ update:
 
 clear: 
 	rm -f -r *.log
+	rm -f -r cores
 
 clean: clear
 	rm -f -r build/
