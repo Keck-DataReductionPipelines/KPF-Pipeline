@@ -12,6 +12,7 @@ from datetime import datetime
 import time
 import threading
 import logging
+import tempfile
 from multiprocessing import Process, cpu_count
 
 from watchdog.observers import Observer
@@ -172,7 +173,13 @@ def main():
     if args.reprocess:
         print(f"Setting queue manager to shutdown after reprocessing.")
         frame_config.set('DEFAULT', 'event_timeout', '5')
-        frame_config.set('DEFAULT', 'no_event_event', 'None')
+        frame_config.set('DEFAULT', 'no_event_event', 'exit')
+        frame_config.set('DEFAULT', 'no_event_wait_time', '60')
+
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='cfg') as tp:
+        frame_config.write(tp)
+    
+    frame_config = tp.name
 
     # Using the multiprocessing library, create the specified number of instances
     if args.watch and args.ncpus > 1:
@@ -182,6 +189,7 @@ def main():
             p.start()
     else:
         frame_config = ConfigClass(framework_config)
+
 
     # Try to initialize the framework
     try:
