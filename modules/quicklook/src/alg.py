@@ -252,12 +252,24 @@ class QuicklookAlg:
                 filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
                 myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
-        
-                # Exposure Meter spectrum plot    
-                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'    
+
+                # Exposure Meter spectra plots    
+                filename = savedir + self.ObsID + '_HK_spectrum_sci_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)    
-        
+                myHK.plot_HK_spectrum_1D(trace='sci', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_spectrum_sky_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D(trace='sky', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_spectrum_sci_zoom_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D_zoom(trace='sci', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_spectrum_sky_zoom_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D_zoom(trace='sky', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_column_cut_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_2D_column_cut(fig_path=filename, kpftype='2D', show_plot=False)    
+
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 

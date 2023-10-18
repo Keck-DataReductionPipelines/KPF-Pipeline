@@ -5,7 +5,7 @@ from modules.spectral_extraction.src.spectral_extraction import SpectralExtracti
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
-from modules.radial_velocoty.src.radial_velocity_reweighting import RadialVelocityReweighting
+from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
 from modules.Utils.string_proc import str_replace
 from modules.Utils.string_proc import date_from_kpffile
@@ -24,6 +24,7 @@ from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_
 from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
 from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
+from modules.quality_control.src.quality_control_framework import QualityControlFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -545,6 +546,33 @@ if do_spectral_extraction or do_hk or do_bc:
 					output_data = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx],
 								start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
 				result = to_fits(output_data, output_lev1_file)
+
+
+
+
+
+
+			# do quality_control
+			if True:
+				quality_control_return_list = QualityControlFramework('KPF',
+											'L1',
+											output_lev1_file,
+											output_data,
+											1)
+
+				exit_code = quality_control_return_list[0]
+				output_data = quality_control_return_list[1]
+
+				if output_data != None:
+				   result = to_fits(output_data, output_lev1_file)
+
+
+
+
+
+
+
+
 
 			# do ca_hk extraction
 			if do_hk:
