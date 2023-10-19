@@ -17,7 +17,7 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = '20230731'
 cal_type = 'LFC'
-#cal_type = 'ThAr'
+cal_type = 'ThAr'
 
 #date_dir = context.date_dir
 #
@@ -39,7 +39,7 @@ search_string = config.ARGUMENT.lfc_search_string
 full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
 
 L1_file = masters_dir + '/20230731/kpf_20230731_master_arclamp_autocal-lfc-all-morn_L1.fits'
-#L1_file = masters_dir + '/20230731/kpf_20230731_master_arclamp_autocal-thar-all-morn_L1.fits'
+L1_file = masters_dir + '/20230731/kpf_20230731_master_arclamp_autocal-thar-all-morn_L1.fits'
     
 #    file_list = find_files(masters_dir + date_dir + '/*' + search_string + '*')
 #

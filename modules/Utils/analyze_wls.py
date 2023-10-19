@@ -394,7 +394,7 @@ class AnalyzeWLSDict:
     
     def plot_wave_diff_final_initial(self, orderlet, fig_path=None, show_plot=False, warning_ms=10, alarm_ms=100): 
         """
-        Generate an array plots of spectral lines for all orders of a given orderlet.
+        Generate an array of plots of spectral lines for all orders of a given orderlet.
 
         Args:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
