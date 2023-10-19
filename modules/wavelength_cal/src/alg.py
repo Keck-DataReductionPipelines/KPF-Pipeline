@@ -65,7 +65,6 @@ class WaveCalibration:
         self.sigma_clip = configpull.get_config_value('sigma_clip',2.1)
         self.fit_iterations = configpull.get_config_value('fit_iterations',5)
         self.logger = logger       
-#        print('Trace: __init__')
 
  
     def run_wavelength_cal(
@@ -124,8 +123,6 @@ class WaveCalibration:
                     for each pixel.
                 dictionary: information about the fits for each line and order (orderlet_dict)
         """
-
-#        print('Trace: run_wavelength_cal')
 
         # create directories for diagnostic plots
         if type(self.save_diagnostics_dir) == str:
@@ -226,8 +223,6 @@ class WaveCalibration:
                           peaks fall
                 dict: the orderlet dictionary, that is folded into wls_dict at a higher level
         """    
-
-#        print('Trace: fit_many_orders')
         
         # Construct dictionary for each order in wlsdict 
         orderlet_dict = {}
@@ -280,7 +275,7 @@ class WaveCalibration:
             
             # Add information for this order to the orderlet dictionary
             orderlet_dict[order_num]['flux'] = order_flux
-            orderlet_dict[order_num]['rough_wls'] = rough_wls_order
+            orderlet_dict[order_num]['initial_wls'] = rough_wls_order
             orderlet_dict[order_num]['echelle_order'] = \
                 modules.Utils.utils.get_kpf_echelle_order(np.median(rough_wls_order))
             orderlet_dict[order_num]['n_pixels'] = n_pixels
@@ -379,10 +374,13 @@ class WaveCalibration:
                     np.arange(1, len(line_pixels_expected)) if 
                     line_pixels_expected[i] != line_pixels_expected[i-1]
                 ])
-                wls, gauss_coeffs = self.line_match(
+                wls, gauss_coeffs, lines_dict = self.line_match(
                     order_flux, line_wavelengths, line_pixels_expected, 
                     plot_toggle, order_plt_path
                 )
+                orderlet_dict[order_num]['lines'] = lines_dict
+                #print('lines_dict = ')
+                #print(lines_dict)
 
                 fitted_peak_pixels = gauss_coeffs[1,:]
 
@@ -405,30 +403,16 @@ class WaveCalibration:
 
                 if plt_path is not None:
                     fig, ax = plt.subplots(2, 1, figsize=(12,5))
-
                     ax[0].set_title('Precise WLS - Rough WLS')
-                    ax[0].plot(
-                        np.arange(n_pixels), 
-                        leg_out(np.arange(n_pixels)) - rough_wls_order, 
-                        color='k'
-                    )
+                    ax[0].plot(np.arange(n_pixels), leg_out(np.arange(n_pixels)) - rough_wls_order, color='k')
                     ax[0].set_ylabel('[$\\rm \AA$]')
-
                     pixel_sizes = rough_wls_order[1:] - rough_wls_order[:-1]
-                    ax[1].plot(
-                        np.arange(n_pixels - 1), 
-                        (leg_out(np.arange(n_pixels - 1)) - rough_wls_order[:-1]) / 
-                            pixel_sizes, 
-                        color='k'
-                    )
-
+                    ax[1].plot(np.arange(n_pixels - 1),   
+                              (leg_out(np.arange(n_pixels - 1)) - rough_wls_order[:-1]) / pixel_sizes, color='k')
                     ax[1].set_ylabel('[Pixels]')
                     ax[1].set_xlabel('Pixel')
                     plt.tight_layout()
-                    plt.savefig(
-                        '{}/precise_vs_rough.png'.format(order_plt_path),
-                        dpi=250
-                    )
+                    plt.savefig('{}/precise_vs_rough.png'.format(order_plt_path), dpi=250)
                     plt.close()
 
                 # compute various RV precision values for order
@@ -436,7 +420,6 @@ class WaveCalibration:
                     fitted_peak_pixels, wls, leg_out, rough_wls_order, plot_path=order_plt_path, 
                     print_update=print_update
                 )
-
                 order_precisions.append(abs_precision)
                 num_detected_peaks.append(len(fitted_peak_pixels))
         
@@ -450,7 +433,7 @@ class WaveCalibration:
             orderlet_dict[order_num]['abs_precision_cms'] = abs_precision 
             orderlet_dict[order_num]['num_detected_peaks'] = len(fitted_peak_pixels) 
             orderlet_dict[order_num]['known_wavelengths_vac'] = wls 
-            orderlet_dict[order_num]['line_positions'] = fitted_peak_pixels # this still includes masked lines - fix!
+            orderlet_dict[order_num]['line_positions'] = fitted_peak_pixels 
 
             wavelengths_and_pixels[order_num] = {
                 'known_wavelengths_vac':wls, 
@@ -476,7 +459,6 @@ class WaveCalibration:
         Returns:
             list: List of orders to run wavelength calibration on.
         """
-#        print('Trace: remove_orders')
 
         order_list = [*range(self.min_order, self.max_order + 1, step)]
     
@@ -511,7 +493,6 @@ class WaveCalibration:
                 dict: dictionary of information about each line in the order
         """
 
-#        print('Trace: find_peaks_in_order')
         lines_dict = {}
     
         n_pixels = len(order_flux)
@@ -612,7 +593,6 @@ class WaveCalibration:
                     parameters [a, mu, sigma**2, const] for each detected peak
         """
 
-#        print('Trace: find_peaks')
         lines_dict = {} # dictionary of lines and their parameters
         
         c = order_flux - np.ma.min(order_flux)
@@ -685,7 +665,6 @@ class WaveCalibration:
         Returns: 
             np.array: indices of surviving peaks
         """
-#        print('Trace: clip_peaks')
 
         n_pixels = len(order_flux)
 
@@ -780,6 +759,8 @@ class WaveCalibration:
                 notnearmask_peaks.append(i)
         
         good_peak_idx = np.intersect1d(notnearmask_peaks, good_peak_idx)
+        
+        # TODO: remove bad peaks from the line dictionary
 
         if print_update:
             print('{} peaks fit'.format(len(detected_peak_pixels)))
@@ -875,11 +856,13 @@ class WaveCalibration:
             tuple of:
                 np.array: same input linelist, with unfit lines removed
                 np.array: array of size (4, n_peaks) containing best-fit 
-                    Gaussian parameters [a, mu, sigma**2, const] for each detected peak  
+                    Gaussian parameters [a, mu, sigma**2, const] for each detected peak
+                dictionary: a dictionary of information about the lines fit within this order 
         """
         num_input_lines = len(linelist)  
         num_pixels = len(flux)
         successful_fits = []
+        lines_dict = {}
 
         missed_lines = 0
         coefs = np.zeros((4,num_input_lines))
@@ -900,7 +883,7 @@ class WaveCalibration:
                     last_fit_pixel = peak_pixel + gaussian_fit_width
 
                 # fit gaussian to matched peak location
-                result, _ = self.fit_gaussian(
+                result, line_dict = self.fit_gaussian(
                     np.arange(first_fit_pixel,last_fit_pixel),
                     flux[first_fit_pixel:last_fit_pixel]
                 )
@@ -908,6 +891,7 @@ class WaveCalibration:
                 if result is not None:
                     coefs[:, i] = result
                     successful_fits.append(i)  # Append index of successful fit
+                    lines_dict[str(i)] = line_dict  # Add line dictionary to lines dictionary
                 else:
                     missed_lines += 1
 
@@ -983,8 +967,7 @@ class WaveCalibration:
             plt.savefig('{}/spectrum_and_gaussian_fits.png'.format(savefig), dpi=250)
             plt.close()
 
-
-        return linelist, coefs
+        return linelist, coefs, lines_dict
 
     def mode_match(
         self, order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, 
@@ -1262,6 +1245,8 @@ class WaveCalibration:
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
             popt, pcov = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
+            pcov[np.isinf(pcov)] = 0 # convert inf to zero
+            pcov[np.isnan(pcov)] = 0 # convert nan to zero
             line_dict['amp']   = popt[0] # optimized parameters
             line_dict['mu']    = popt[1] # "
             line_dict['sig']   = popt[2] # "
@@ -1269,6 +1254,7 @@ class WaveCalibration:
             line_dict['covar'] = pcov    # covariance
             line_dict['data']  = y
             line_dict['model'] = self.integrate_gaussian(x, *popt)
+            
 
         if self.cal_type == 'LFC' or 'ThAr':          
             # Quality Checks for Gaussian Fits

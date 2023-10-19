@@ -4,8 +4,7 @@ import numpy as np
 import os
 from astropy import constants as cst, units as u
 import datetime
-import json
-import gzip
+from modules.Utils.analyze_wls import write_wls_json
 
 # pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
@@ -138,10 +137,11 @@ class WaveCalibrate(KPF1_Primitive):
             for i, prefix in enumerate(self.cal_orderlet_names):
                 print('\nCalibrating orderlet {}.'.format(prefix))
                 
-                # Create a dictionary for each orderlet which will be filled in later
+                # Create a dictionary for each orderlet that will be filled in later
                 full_name = prefix.replace('_FLUX', '') # like GREEN_SCI1
                 orderlet_name = full_name.split('_')[1]
                 chip_name = prefix.split('_')[0]
+                self.wls_dict['chip'] = chip_name
                 self.wls_dict['orderlets'][orderlet_name] = {
                     'full_name' : full_name, # e.g., RED_SCI1
                     'orderlet' : orderlet_name, # SCI1, SCI2, SCI3, SKY, CAL
@@ -159,6 +159,7 @@ class WaveCalibrate(KPF1_Primitive):
                 if self.cal_type == 'LFC':
                     line_list, wl_soln, orderlet_dict = self.calibrate_lfc(calflux, output_ext=output_ext)
                     # self.drift_correction(prefix, line_list, wl_soln)
+                    self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
                     self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
  
                 #### thar ####    
@@ -185,7 +186,8 @@ class WaveCalibrate(KPF1_Primitive):
                         wl_pixel_filename = self.alg.save_wl_pixel_info(file_name, wls_and_pixels)
 
                     self.l1_obj[output_ext] = wl_soln
-                    #self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
+                    self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
+                    self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
 
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
@@ -228,13 +230,12 @@ class WaveCalibrate(KPF1_Primitive):
                         wl_soln = wl_soln + delta_lambda
 
                     self.l1_obj[output_ext] = wl_soln
-                    #self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
             
             # Save WLS dictionary as a JSON file 
             if self.json_filename != None:
                 print('*******************************************')
                 print('Saving JSON file with WLS fit information: ' +  self.json_filename)
-                write_json(self.wls_dict, self.json_filename)
+                write_wls_json(self.wls_dict, self.json_filename)
 
         else:
             raise ValueError('cal_type {} not recognized. Available options are LFC, ThAr, & Etalon'.format(self.cal_type))
