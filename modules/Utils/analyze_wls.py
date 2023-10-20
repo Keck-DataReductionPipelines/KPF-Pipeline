@@ -143,7 +143,6 @@ class AnalyzeWLSDict:
         
     To do:
     	wave vs. pixel per order
-    	LFC - line positions vs. initial guess
     	heatmap or 1D plot for a parameter (like mu_diff)
     	# lines per order/orderlet
     	chi^2 distribution (perhaps by order/orderlet)
@@ -167,6 +166,8 @@ class AnalyzeWLSDict:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
             order (integer) - order number
             line (integer) - line number
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -218,6 +219,8 @@ class AnalyzeWLSDict:
         Args:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
             order (integer) - order number
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -305,6 +308,8 @@ class AnalyzeWLSDict:
         Args:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
             order (integer) - order number
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -394,10 +399,16 @@ class AnalyzeWLSDict:
     
     def plot_wave_diff_final_initial(self, orderlet, fig_path=None, show_plot=False, warning_ms=10, alarm_ms=100): 
         """
-        Generate an array of plots of spectral lines for all orders of a given orderlet.
+        Generate an array of plots of the difference between initial and initial 
+        wavelength solutions for the orders of a given orderlet.
 
         Args:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
+            warming_ms (double) - level in m/s where the orange 'warning' boxes start
+            alarm_ms (double) - level in m/s where the orange 'warning' boxes end
+                                and the red 'alarm' boxes being
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -518,6 +529,171 @@ class AnalyzeWLSDict:
             plt.show()
         plt.close('all')
 
+class AnalyzeTwoWLSDict:
+
+    """
+    Description:
+        This class contains functions to compare two wavelength solutions 
+        stored as dictionaries.  It is assumed that the two WLSs will be 
+        of the same chip (Green or Red).
+
+    Arguments:
+        WLSDict1 - a WLS Dictionary, stored either the filename of a 
+                  (possibly) zip-compressed JSON file, or a TBD object
+        WLSDict2 - a second WLS Dictionary
+
+    Attributes:
+        wls_dict1 - dictionary of wavelength solution
+        wls_dict2 - dictionary of wavelength solution
+    """
+
+    def __init__(self, WLSDict_filename1, WLSDict_filename2, name1='', name2='', logger=None):
+        self.logger = logger if logger is not None else DummyLogger()        
+        self.wls_dict1 = read_wls_json(WLSDict_filename1) 
+        self.wls_dict2 = read_wls_json(WLSDict_filename2)
+        self.name1 = name1
+        self.name2 = name2
+        try:
+            self.chip = self.wls_dict1['chip']
+        except:
+            self.chip = '<chip>'
+
+
+    def plot_wave_diff_wls(self, orderlet, fig_path=None, show_plot=False, warning_ms=10, alarm_ms=100): 
+        """
+        Generate an array of plots of the difference between two wavelength solutions 
+        for the orders of a given orderlet.
+
+        Args:
+            orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
+            warming_ms (double) - level in m/s where the orange 'warning' boxes start
+            alarm_ms (double) - level in m/s where the orange 'warning' boxes end
+                                and the red 'alarm' boxes being
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+        """
+
+        orderletdict1 = self.wls_dict1['orderlets'][orderlet]
+        orderletdict2 = self.wls_dict2['orderlets'][orderlet]
+        norders = self.wls_dict2['orderlets'][orderlet]['norders']
+        nrows = 9
+        ncolumns = 4
+        avg_delta_rv_arr = np.zeros(norders, dtype=np.int)
+
+        fig, axes = plt.subplots(nrows, ncolumns, figsize=(36, 25))
+        plt.subplots_adjust(wspace=0.10, hspace=0.15, left=0.10, right=0.99, top=0.95, bottom=0.08)
+        plt.suptitle(self.chip + ' ' + orderlet, fontsize=48)
+        fig.text(0.04, 0.5, r'$\Delta$WLS (' + self.name2 + ' - ' + self.name1 + ') [m/s]', fontsize=36, va='center', rotation='vertical')
+        fig.text(0.5, 0.04, r'$\lambda$  [Ang]', fontsize=36, va='center', rotation='horizontal')
+
+        for i in np.arange(nrows):
+            for j in range(ncolumns):
+                o = nrows*j + i
+                try:
+                    # Plot data
+                    orderdict1 = orderletdict1['orders'][o]
+                    orderdict2 = orderletdict2['orders'][o]
+#                    wls1 = 
+                    delta_rv = 2.998e8*(orderdict2['fitted_wls']-orderdict1['fitted_wls'])/orderdict1['fitted_wls']
+                    avg_delta_rv_arr[o] = np.mean(delta_rv)
+                    axes[i,j].plot(orderdict1['fitted_wls'], delta_rv, linewidth=4)
+            
+                    # Draw a rectangular boxes
+                    xmin, xmax = axes[i,j].get_xlim()  # Get the current x-axis limits to span the entire range horizontally
+                    ymin_green,  ymax_green  = -warning_ms, warning_ms
+                    ymin_orange, ymax_orange =  warning_ms, alarm_ms
+                    ymin_red,    ymax_red    =  alarm_ms,   alarm_ms*100
+                    alpha_green   = 0.20
+                    alpha_orange1 = 0.20
+                    alpha_orange2 = 0.20
+                    alpha_red1    = 0.15
+                    alpha_red2    = 0.15
+                    if np.all((delta_rv <  warning_ms) & (delta_rv > -warning_ms)): 
+                        alpha_green = 0.50
+                    if np.any((delta_rv >  warning_ms) & (delta_rv <  alarm_ms)): # highlight WLS problems
+                        alpha_orange1 = 0.50
+                    if np.any((delta_rv < -warning_ms) & (delta_rv > -alarm_ms)):
+                        alpha_orange2 = 0.50
+                    if np.any((delta_rv >  alarm_ms)):
+                        alpha_red1 = 0.40
+                    if np.any((delta_rv < -alarm_ms)):
+                        alpha_red2 = 0.40
+                    rect_green   = Rectangle((xmin, ymin_green),   xmax-xmin,   ymax_green -ymin_green,   facecolor='green',  alpha=alpha_green)
+                    rect_orange1 = Rectangle((xmin, ymin_orange),  xmax-xmin,   ymax_orange-ymin_orange,  facecolor='orange', alpha=alpha_orange1)
+                    rect_orange2 = Rectangle((xmin, -ymin_orange), xmax-xmin, -(ymax_orange-ymin_orange), facecolor='orange', alpha=alpha_orange2)
+                    rect_red1    = Rectangle((xmin, ymin_red),     xmax-xmin,   ymax_red   -ymin_red,     facecolor='red',    alpha=alpha_red1)
+                    rect_red2    = Rectangle((xmin, -ymin_red),    xmax-xmin, -(ymax_red   -ymin_red),    facecolor='red',    alpha=alpha_red2)
+                    axes[i,j].add_patch(rect_green)
+                    axes[i,j].add_patch(rect_orange1)
+                    axes[i,j].add_patch(rect_orange2)
+                    axes[i,j].add_patch(rect_red1)
+                    axes[i,j].add_patch(rect_red2)
+
+                    # Dots, lines, annotations
+                    #blend_transform = transforms.blended_transform_factory(axes[i,j].transData, axes[i,j].transAxes)
+                    #for l in np.arange(len(orderdict['known_wavelengths_vac'])):
+                        #axes[i,j].axvline(orderdict['known_wavelengths_vac'][l], color='darkgray', linestyle='-', linewidth=0.5)
+                        #axes[i,j].plot(orderdict['known_wavelengths_vac'][l], 0.95, 'ko', transform=blend_transform, markersize=2)
+                    axes[i,j].annotate(r'<$\Delta$WLS> = ' + str(int(avg_delta_rv_arr[o])) + ' m/s', xy=(0.99, 0.03), xycoords='axes fraction', 
+                                 fontsize=10, ha='right', va='bottom',
+                                 bbox=dict(boxstyle="square,pad=0.3", facecolor="white", alpha=0.75))
+                    
+                    # Axes setup
+                    if i == nrows-1 or o == norders-1:
+                        axes[i,j].set_xlabel(r'Wavelength (final) [Ang]', fontsize=18)
+                    axes[i,j].set_ylabel('Order ' + str(o) + '', fontsize=18)
+                    axes[i,j].tick_params(axis='both', labelsize=12)
+                    axes[i,j].axhline(0, color='black', linestyle='--', linewidth=1)
+                    axes[i,j].set_xlim(np.max(orderdict1['fitted_wls']), np.min(orderdict1['fitted_wls']))
+                    axes[i,j].set_ylim(-alarm_ms*100, alarm_ms*100)
+                    axes[i,j].set_yscale('symlog', linthresh=warning_ms/10, linscale=1)
+                    if j == 0:
+                        locator = SymmetricalLogLocator(base=10, linthresh=warning_ms/10, subs=[1])
+                        axes[i,j].yaxis.set_major_locator(locator)
+                        axes[i,j].yaxis.set_major_formatter(ScalarFormatter())
+                        yticks = axes[i,j].get_yticks()
+                        labels = ['' if label == '0.0' else label for label in yticks.astype(str)]
+                        axes[i,j].set_yticks(yticks) 
+                        axes[i,j].set_yticklabels(labels)
+                    else:
+                        axes[i,j].set_yticklabels([])
+                            
+                except Exception as e:
+                    #print(e)
+                    if o != nrows*ncolumns-1:
+                        axes[i,j].set_xticks([])  
+                        axes[i,j].set_yticks([])  
+                        for spine in axes[i,j].spines.values():
+                            spine.set_visible(False)
+                    pass
+
+        # Delta RV vs order number plot in lower-right corner
+        pos = axes[nrows-1, ncolumns-1].get_position()
+        new_pos = [pos.x0+0.05, pos.y0, pos.width * 0.75, pos.height * 0.7]  # Example adjustment
+        axes[nrows-1, ncolumns-1].set_position(new_pos)
+        axes[nrows-1, ncolumns-1].scatter(np.arange(norders), avg_delta_rv_arr, s=50, c='tab:blue')
+        axes[nrows-1, ncolumns-1].axhline(0, color='black', linestyle='-', linewidth=2)
+        axes[nrows-1, ncolumns-1].set_xlabel('Order Number', fontsize=16)
+        axes[nrows-1, ncolumns-1].set_ylabel(r'<$\Delta$WLS> (m/s)', fontsize=16)
+        axes[nrows-1, ncolumns-1].tick_params(axis='both', labelsize=14)
+        axes[nrows-1, ncolumns-1].grid(True, linewidth=1.5)
+        axes[nrows-1, ncolumns-1].xaxis.set_minor_locator(MultipleLocator(1))
+        for spine in axes[nrows-1, ncolumns-1].spines.values():
+            spine.set_linewidth(3) 
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=500, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
 
 def count_dict(wls_dict):
     """
@@ -553,6 +729,8 @@ def list_to_numpy(obj):
     """
     Inverse of the above function.  This method also recognizes 'lines' and 'orders'
     and makes the next level down an integer not a string.
+    This method is called recursively in read_wls_json() to it needs to be separate
+    from that.
     """
     if isinstance(obj, dict):
         new_obj = {}

@@ -230,7 +230,14 @@ class WaveCalibrate(KPF1_Primitive):
                         wl_soln = wl_soln + delta_lambda
 
                     self.l1_obj[output_ext] = wl_soln
-            
+                    # The two lines haven't been tested yet - AWH oct 19 2023
+                    try:
+                        self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
+                        self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
+                    except Exception as e:
+                        print('wls_dist re: etalon did not work.  It is untested.')
+                        print(e)
+  
             # Save WLS dictionary as a JSON file 
             if self.json_filename != None:
                 print('*******************************************')
