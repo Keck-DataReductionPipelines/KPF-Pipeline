@@ -122,6 +122,48 @@ class HeaderParse:
             self.ObsID = self.ObsID.replace('_L1', '')
             self.ObsID = self.ObsID.replace('_L2', '')
         return self.ObsID
+        
+    def get_read_speed(self):
+        """
+        This method determines the read speed of the CCDs.  
+        The two options are 'fast' (~12 sec) and 'normal' (~48 sec)
+
+        Parameters:
+            None 
+
+        Attributes:
+            self.read_speed (string) - 'fast', 'regular', 'unknown'
+            self.green_acf (string) - name of ACF file used to read the Green CCD 
+            self.red_acf (string) - name of ACF file used to read Red CCD 
+
+        Returns:
+            None
+        """
+        self.read_speed = 'unknown'
+        self.green_acf = 'unknown'
+        self.red_acf = 'unknown'
+        if hasattr(self, 'header'): 
+            try:
+                self.green_acf = self.header['GRACFFLN']
+            except:
+                pass
+            try:
+                self.red_acf = self.header['RDACFFLN']
+            except:
+                pass
+            
+            if ('fast' in self.green_acf) or ('fast' in self.red_acf):
+                self.read_speed = 'fast'
+            elif ('regular' in self.green_acf) or ('regular' in self.red_acf):
+                self.read_speed = 'regular'
+            #elif 
+            
+#GRDATE  = '2023-09-10T13:29:09.804475' / FITS file write time Kwd green DATE    
+#GRDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd green DATE-BEG   
+#GRDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd green DATE-END  
+#RDDATE  = '2023-09-10T13:29:09.896907' / FITS file write time Kwd red DATE      
+#RDDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd red DATE-BEG     
+#RDDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd red DATE-END    
 
 
 def get_datecode(ObsID):
