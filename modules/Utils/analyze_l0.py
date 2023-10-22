@@ -62,6 +62,9 @@ class AnalyzeL0:
             except Exception as e:
                 print(e)
                 print('measure_read_noise_overscan() failed on ' + self.ObsID)
+            
+            self.read_speed, self.green_acf, self.red_acf, self.green_read_time, self.red_read_time = \
+                  primary_header.get_read_speed()
     
     def reject_outliers(self, data, n=5.0):
         """
@@ -155,8 +158,10 @@ class AnalyzeL0:
         after applying an n-sigma iterative outlier rejection.
         
         Args:
-            nparallel (integer) - overscan length in parallel direction (30 pixels was final value in 2023)
-            nserial (integer) - overscan length in serial direction (30 pixels was final value in 2023)
+            nparallel (integer) - overscan length in parallel direction 
+                                  (30 pixels was final value in 2023)
+            nserial (integer) - overscan length in serial direction 
+                                (30 pixels was final value in 2023)
     
         Attributes:
             TBD
@@ -259,7 +264,8 @@ class AnalyzeL0:
         rn_text = ''
         if self.read_noise_overscan != {}:
             rn_text = 'Read noise = '
-            for i, region in enumerate(self.regions):
+            chip_regions = [item for item in self.regions if CHIP in item]
+            for i, region in enumerate(chip_regions):
                 if CHIP == 'GREEN':
                     nregions = self.nregions_green
                 if CHIP == 'RED':

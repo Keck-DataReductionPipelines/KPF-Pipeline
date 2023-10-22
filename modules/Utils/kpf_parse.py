@@ -1,4 +1,5 @@
 from astropy.io import fits
+from datetime import datetime
 
 class KPFParse:
 
@@ -126,38 +127,86 @@ class HeaderParse:
     def get_read_speed(self):
         """
         This method determines the read speed of the CCDs.  
-        The two options are 'fast' (~12 sec) and 'normal' (~48 sec)
+        The two options are 'fast' (~12 sec) and 'normal' (~48 sec).
+        This method also reports the ACF files used (CCD waveform files) and 
+        the read times for each CCD.
 
         Parameters:
             None 
 
         Attributes:
-            self.read_speed (string) - 'fast', 'regular', 'unknown'
-            self.green_acf (string) - name of ACF file used to read the Green CCD 
-            self.red_acf (string) - name of ACF file used to read Red CCD 
+            read_speed (string) - 'fast', 'regular', 'unknown'
+            green_acf (string) - name of ACF file used to read the Green CCD 
+            red_acf (string) - name of ACF file used to read Red CCD 
+            green_read_time (double) - seconds to read out the Green CCD 
+            red_read_time (double) - seconds to read out the Red CCD 
 
         Returns:
-            None
+            a tuple of (read_speed, green_acf, red_acf, green_read_time, red_read_time)
         """
-        self.read_speed = 'unknown'
-        self.green_acf = 'unknown'
-        self.red_acf = 'unknown'
+        fast_read_time_max = 20 # sec
+        datetime_format = "%Y-%m-%dT%H:%M:%S.%f"
+        green_acf = 'unknown'
+        red_acf = 'unknown'
+        read_speed = 'unknown'
+        green_read_time = 0.
+        red_read_time = 0.
+        
         if hasattr(self, 'header'): 
+            # Green CCD Read Time
             try:
-                self.green_acf = self.header['GRACFFLN']
+                dt1 = datetime.strptime(self.header['GRDATE'], datetime_format) # fits file write time
+                dt2 = datetime.strptime(self.header['GRDATE-E'], datetime_format) # shutter-close time
+                deltat = dt1-dt2
+                green_read_time = deltat.total_seconds()
             except:
                 pass
+            # Red CCD Read Time
             try:
-                self.red_acf = self.header['RDACFFLN']
+                dt1 = datetime.strptime(self.header['RDDATE'], datetime_format) # fits file write time
+                dt2 = datetime.strptime(self.header['RDDATE-E'], datetime_format) # shutter-close time
+                deltat = dt1-dt2
+                red_read_time = deltat.total_seconds()
             except:
                 pass
-            
-            if ('fast' in self.green_acf) or ('fast' in self.red_acf):
-                self.read_speed = 'fast'
-            elif ('regular' in self.green_acf) or ('regular' in self.red_acf):
-                self.read_speed = 'regular'
-            #elif 
-            
+            # ACF file for Green CCD
+            try:
+                green_acf = self.header['GRACFFLN']
+            except:
+                pass
+            # ACF file for Red CCD
+            try:
+                red_acf = self.header['RDACFFLN']
+            except:
+                pass
+            # Determine read speed ('fast' or 'regular')
+            try:
+                if ('fast' in green_acf) or ('fast' in red_acf):
+                    read_speed = 'fast'
+                elif ('regular' in green_acf) or ('regular' in red_acf):
+                    read_speed = 'regular'
+                else:
+                    a = green_read_time
+                    b = red_read_time
+                    best_read_time = min(x for x in [a, b] if x != 0) if a * b != 0 else (a or b)
+                    if (best_read_time > 0) and (best_read_time < fast_read_time_max):
+                        read_speed = 'fast'
+                    elif best_read_time >= fast_read_time_max:
+                        read_speed = 'regular'
+            except:
+                pass 
+            return (read_speed, green_acf, red_acf, green_read_time, red_read_time)
+
+#datetime_format = "%Y-%m-%dT%H:%M:%S.%f"
+#dt1 = datetime.strptime(time1, datetime_format)
+#dt2 = datetime.strptime(time2, datetime_format)
+
+# Compute the difference
+#difference = dt2 - dt1
+    
+# Return the total seconds rounded to 0.1-second precision
+#round(difference.total_seconds(), 1)
+    
 #GRDATE  = '2023-09-10T13:29:09.804475' / FITS file write time Kwd green DATE    
 #GRDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd green DATE-BEG   
 #GRDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd green DATE-END  
