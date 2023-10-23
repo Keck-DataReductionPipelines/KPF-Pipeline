@@ -53,6 +53,7 @@ class OrderTraceAlg(ModuleAlgBase):
         data_range (list): Range of data to be traced, [<y_start>, <y_end>, <x_start>, <x_end>].
         original_size (list): Original size of the flat data, [<y_size>, <x_size>].
         poly_degree (int): Order of polynomial for order trace fitting.
+        orders_ccd (number, options)`: Total orders of the ccd. Defaults to -1.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -65,7 +66,7 @@ class OrderTraceAlg(ModuleAlgBase):
     LOWER = 0
     name = 'OrderTrace'
 
-    def __init__(self, data, poly_degree=None, expected_traces = None, config=None, logger=None):
+    def __init__(self, data, poly_degree=None, expected_traces=None, orders_ccd=-1, config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
         if not isinstance(config, ConfigParser):
@@ -87,6 +88,7 @@ class OrderTraceAlg(ModuleAlgBase):
         self.poly_degree = poly_degree
         self.trace_ratio = None
         self.expected_traces = expected_traces    # this is useful for regression test
+        self.orders_ccd = orders_ccd
 
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
@@ -131,6 +133,9 @@ class OrderTraceAlg(ModuleAlgBase):
         if self.data_range is None:
             self.set_data_range()
         return self.data_range
+
+    def get_total_orderlet(self):
+        return self.get_config_value('total_image_orderlets', 1)
 
     def get_poly_degree(self):
         """Order of polynomial for order trace fitting.
@@ -214,6 +219,12 @@ class OrderTraceAlg(ModuleAlgBase):
         self.flat_data = np.nan_to_num(self.flat_data)
         return self.flat_data
 
+    def get_total_orders(self, traces=0):
+        if self.orders_ccd < 0:
+            if traces != 0:
+                self.orders_ccd = (traces+self.get_total_orderlet())//self.get_total_orderlet() \
+                    if traces%self.get_total_orderlet() else traces//self.get_total_orderlet()
+        return self.orders_ccd
 
     @ staticmethod
     def opt_filter(y_data: np.ndarray, par: int, weight: np.ndarray = None):
@@ -2490,7 +2501,6 @@ class OrderTraceAlg(ModuleAlgBase):
         for c_idx in range(1, max_index+1):
             idx_at_order = np.where(index == c_idx)[0]
             if x[idx_at_order].size == 0:       # for debugging
-                import pdb;pdb.set_trace()
                 print('c_idx ', c_idx, x, y)
             else:
                 poly, error, area = self.curve_fitting_on_one_cluster(c_idx, index, x, y, power)
@@ -2825,6 +2835,215 @@ class OrderTraceAlg(ModuleAlgBase):
         new_str = f"{afloat:.4f}"
         return new_str
 
+    def post_process(self, orig_coeffs, orig_widths, orderlet_gap = 2):
+        """ post process and refine the calculated widths to make the widths located closer to the valley between two
+            consecutive orderlet traces and in the style of being more symmetric to the valley.
+        Args:
+            orig_coeffs: coeffs from high order to low order
+            orig_widths: widths array of lower and upper widths
+        Returns:
+            numpy.array: new_coeffs with one extra row added to orig_coeffs as the same format of the parameter
+                `cluster_coeffs` to `write_cluster_info_to_dataframe`.
+            list: orig_widths containing the width information in the same format of the parameter `cluster_widths`
+                to `write_cluster_info_to_dataframe`.
+        """
+
+        ext_data, nx, ny = self.get_spectral_data()
+        power = self.get_poly_degree()
+        total_trace = np.shape(orig_coeffs)[0]
+        total_orderlets = self.get_total_orderlet()
+
+        # assume the missing traces are located at the bottom if there is any trace missing
+        # i.e. total_orders * total_orderlets < total_trace
+        total_orders = self.get_total_orders(total_trace)
+        start_order = total_trace - total_orders * total_orderlets
+        od_idxs = np.arange(start_order, start_order+total_orderlets, dtype=int)
+        # the trace index in orig_coeffs for each order
+        od_sets = np.array([od_idxs + i * total_orderlets for i in range(total_orders)])
+
+        # setting for post process
+        # skip the trace which vertical position falls outside the range of [y_v_off, ny-1-y_v_off]
+        th_v = 1
+        y_v_off = 3
+        w_th = orderlet_gap/2
+        th = 0.35
+        x_int = 10
+
+
+        xrange = np.arange(0, nx, dtype=int)
+        lower_widths = orig_widths[:, 0]
+        upper_widths = orig_widths[:, 1]
+        xlefts = orig_coeffs[:, power+1].astype(int)
+        xrights = orig_coeffs[:, power+2].astype(int)
+        y_vals = np.array([np.polyval(orig_coeffs[i, 0:power+1], xrange) for i in range(total_trace)])
+        v_limit = [y_v_off + th_v, ny - 1 - y_v_off - th_v]  # range limit for trace top and bottom
+        new_widths = [{}] * total_trace
+
+        for order_idx in range(total_orders):
+            t_idxs = od_sets[order_idx]
+            v_orderlet = np.where(t_idxs >= 0)[0]   # valid orderlet per order to process 0-4 for kpf
+            t_idxs = t_idxs[v_orderlet]             # trace index per order to process. 0-174/0-159 for kpf green/red
+            #print('order_idx: ', order_idx, 'trace:', t_idxs)
+            new_order_trace = []
+            for x in range(0, nx, x_int):
+                v_orderlet_x = np.where((xlefts[t_idxs] <= x) & (xrights[t_idxs] >= x))[0]   # valid orderlet per x
+                # if only one trace is included or the included traces are not consecutive
+                if v_orderlet_x.size <= 1 or np.max(np.ediff1d(v_orderlet_x)) > 1:
+                    continue
+                t_idx_x = t_idxs[v_orderlet_x].copy()               # trace index
+                t_orderlet_x = v_orderlet[v_orderlet_x].copy()      # orderlet index
+
+                y_orig_range = np.array(
+                    [np.floor(y_vals[t, x] + np.array([-lower_widths[t], upper_widths[t]], dtype=int)) for t in t_idx_x])
+
+                v_y_range = np.where( (v_limit[0] <= y_orig_range[:, 0]) & (y_orig_range[:, 0] <= v_limit[1]) &
+                                      (v_limit[0] <= y_orig_range[:, 1]) & (y_orig_range[:, 1] <= v_limit[1]))[0]
+
+                if v_y_range.size <= 1 or np.max(np.ediff1d(v_y_range)) > 1:
+                    continue
+
+                t_idx_x = t_idx_x[v_y_range]                        # valid traces of one order at x
+                t_orderlet_x = t_orderlet_x[v_y_range]              # valid orderlets of one order at x
+
+                # recalculate y range in case trace exclusion is changed
+                if v_y_range.size != v_orderlet_x.size:
+                    y_orig_range = np.array(
+                        [np.floor(y_vals[t, x] + np.array([-lower_widths[t], upper_widths[t]], dtype=int)) for t in t_idx_x])
+
+                # valley (flux) between consecutive traces of each order including the one before the first trace and
+                # after the last trace
+                y_valley_centers = np.zeros(t_idx_x.size+1).astype(int)
+                flux_valley_mins = np.zeros(t_idx_x.size+1)
+
+                # valley between two consecutive orderlets (traces)
+                for i in range(1, t_idx_x.size):
+                    left_idx = i-1
+                    right_idx = i
+                    v_left = min(max(y_orig_range[left_idx][1] - y_v_off, 0), ny - 1)
+                    v_right = max(min(y_orig_range[right_idx][0] + y_v_off, ny - 1), 0)
+                    y_valley_list = np.arange(v_left, v_right+1, dtype=int)
+                    y_avgs_list = []
+                    for y_p in y_valley_list:
+                        y_inc = np.arange(max(y_p-th_v, 0), min(y_p+th_v, ny-1)+1, dtype=int)
+                        y_avgs_list.append(np.average(ext_data[y_inc, x]))
+
+                    y_valley_centers[i] = y_valley_list[np.argmin(y_avgs_list)]
+                    flux_valley_mins[i] = ext_data[y_valley_centers[i], x]
+                y_peaks = y_vals[t_idx_x, x].astype(int)
+
+                # add valley to the left of the first and the right of the last orderlet
+                for i in [0, t_idx_x.size]:
+                    if i == 0:
+                        delta_y = y_valley_centers[i + 1] - y_peaks[i]
+                        y_valley_centers[i] = max(y_peaks[i] - delta_y, 0)
+                    else:
+                        delta_y = y_peaks[i - 1] - y_valley_centers[i - 1]
+                        y_valley_centers[i] = min(y_peaks[i - 1] + delta_y, ny - 1)
+
+                    flux_valley_mins[i] = ext_data[y_valley_centers[i], x]
+
+                # halves of peak to valley around the valley
+                y_left_halves = np.ones(t_idx_x.size+1, dtype=int) * -1
+                y_right_halves = np.ones(t_idx_x.size+1, dtype=int) * -1
+                y_center_halves = np.ones(t_idx_x.size+1, dtype=int)
+
+                for i in range(t_idx_x.size+1):
+                    # get right side around the valleys
+                    if i < t_idx_x.size:
+                        y_right_th = (ext_data[y_peaks[i], x] - flux_valley_mins[i]) * th + flux_valley_mins[i]
+                        for y in range(y_valley_centers[i], y_peaks[i]):
+                            if ext_data[y, x] > y_right_th:
+                                y_right_halves[i] = y
+                                break
+
+                    if i > 0:
+                        y_left_th = (ext_data[y_peaks[i-1], x] - flux_valley_mins[i]) * th + flux_valley_mins[i]
+                        for y in range(y_valley_centers[i], y_peaks[i-1], -1):
+                            if ext_data[y, x] > y_left_th:
+                                y_left_halves[i] = y
+                                break
+                    mid_to_set = 1
+                    # symmetric to the valley center at two ends
+                    if i == 0:
+                        y_left_halves[i] = y_valley_centers[i] * 2 - y_right_halves[i]
+                        if y_left_halves[i] < 0:
+                            y_center_halves[i] = y_valley_centers[i]
+                            y_left_halves[i] = -1
+                            mid_to_set = 0
+                    elif i == t_idx_x.size:
+                        y_right_halves[i] = y_valley_centers[i] * 2 - y_left_halves[i]
+                        if y_right_halves[i] > ny - 1:
+                            y_right_halves[i] = -1
+                            y_center_halves[i] = y_valley_centers[i]
+                            mid_to_set = 0
+                    if mid_to_set == 1:
+                        # the center is located at <x>.5 location
+                        if (y_left_halves[i] + y_right_halves[i]) % 2 == 1:
+                            y_op1 = (y_left_halves[i] + y_right_halves[i]) // 2
+                            y_op2 = (y_left_halves[i] + y_right_halves[i] + 1) // 2
+                            y_center_halves[i] = y_op1 if ext_data[y_op1, x] < ext_data[y_op2, x] else y_op2
+                        else:
+                            y_center_halves[i] = (y_left_halves[i] + y_right_halves[i]) // 2
+                    else:
+                        y_center_halves[i] = -1
+
+                new_info = {}
+                new_info['x'] = x
+                new_info['y_valley_centers'] = y_valley_centers
+                new_info['y_left_halves'] = y_left_halves
+                new_info['y_right_halves'] = y_right_halves
+                new_info['y_peaks'] = y_peaks
+                new_info['y_middle_halves'] = y_center_halves
+                new_info['valid_orderlet'] = t_orderlet_x
+                new_info['valid_trace_index'] = t_idx_x
+                new_order_trace.append(new_info)
+
+            # loop through the trace included in the same order
+            for od_t in t_idxs:
+                new_lower_widths = []
+                new_upper_widths = []
+
+                # loop through new order trace at different x location
+                for one_info in new_order_trace:
+                    idx_in_valid = np.where(one_info['valid_trace_index'] == od_t)[0]
+                    if idx_in_valid.size == 0:
+                        continue
+                    idx = idx_in_valid[0]
+                    new_lower_widths.append(one_info['y_peaks'][idx]-one_info['y_valley_centers'][idx] - w_th)
+                    new_upper_widths.append(one_info['y_valley_centers'][idx+1] - one_info['y_peaks'][idx] - w_th)
+                if len(new_lower_widths) == 0:
+                    bot = orig_widths[od_t, 0]          # use the original widths
+                else:
+                    bot = sum(new_lower_widths)/len(new_lower_widths)
+                if len(new_upper_widths) == 0:          # use the original widths
+                    top = orig_widths[od_t, 1]
+                else:
+                    top = sum(new_upper_widths)/len(new_upper_widths)
+
+                new_widths[od_t] = {'bottom_edge': bot, 'top_edge': top}
+
+        new_coeffs = np.zeros((total_trace+1, power+3))
+        new_coeffs[1:, :] = orig_coeffs
+        return new_coeffs, new_widths
+
+    def convert_for_post_process(self, coeffs, widths = None):
+        power = self.get_poly_degree()
+        if widths is None:
+            poly_coeffs = np.flip(coeffs[:, 0:power+1], axis=1)
+            t_trace = np.shape(coeffs)[0]
+            new_coeffs = np.zeros((t_trace, power+3))
+            new_coeffs[:, 0:power+1] = poly_coeffs
+            new_coeffs[:, power+1:power+3] = coeffs[:, power+3:power+5]
+            new_widths = np.array(coeffs[:, power+1:power+3])
+        else:
+            t_trace = np.shape(coeffs)[0] -1
+            new_coeffs = np.zeros((t_trace, power+3))
+            new_coeffs[:, 0:power+1] = coeffs[1:, 0:power+1]
+            new_coeffs[:, power+1:power+3] = coeffs[1:, power+1:power+3]
+            new_widths = np.array([[widths[i]['bottom_edge'], widths[i]['top_edge']] for i in range(len(widths))])
+
+        return new_coeffs, new_widths
+
     def extract_order_trace(self, power_for_width_estimation: int = -1, data_range = None, show_time: bool = False,
                             print_debug: str = None, rows_to_reset = None, cols_to_reset = None):
         """ Order trace extraction.
@@ -2898,7 +3117,19 @@ class OrderTraceAlg(ModuleAlgBase):
         all_widths, cluster_coeffs = self.find_all_cluster_widths(new_index, new_x, new_y,
                                                                   power_for_width_estimation=power_for_width_estimation)
         self.time_check(t_start, "*** find widths: ")
+        post_coeffs, post_widths = self.convert_for_post_process(cluster_coeffs, all_widths)
 
+        post_coeffs, all_widths = self.post_process(post_coeffs, post_widths)
         self.d_print("OrderTraceAlg: write result to Pandas Dataframe", info=True)
         df = self.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         return {'order_trace_result': df, 'cluster_index': new_index, 'cluster_x': new_x, 'cluster_y': new_y}
+
+    def refine_order_trace(self, order_trace_path, is_output_file, orderlet_gap=2):
+        order_trace_data = pd.read_csv(order_trace_path, header=0, index_col=0)
+        coeffs, widths = self.convert_for_post_process(order_trace_data.values)
+        new_coeffs, new_widths = self.post_process(coeffs, widths, orderlet_gap=orderlet_gap)
+
+        df = self.write_cluster_info_to_dataframe(new_widths, new_coeffs)
+        if is_output_file:
+            df.to_csv(order_trace_path)
+        return df

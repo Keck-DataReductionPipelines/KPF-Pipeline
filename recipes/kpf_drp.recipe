@@ -211,6 +211,7 @@ lev0_flat_pattern = config.ARGUMENT.flat_file
 # use the full path of ourder trace files defind in config
 order_trace_flat = config.ARGUMENT.order_trace_flat
 output_order_trace = config.ARGUMENT.order_trace_files
+orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
 
 ## for spectral extraction: input and output
 #    lev0_science_pattern: if watch mode => a single 2D file, /data/2D/<date_dir>/<a single watched 2D fits>
@@ -265,6 +266,8 @@ if 'static' in reweighting_method:
 	static_ccf_ratio = config.ARGUMENT.static_ccf_ratio
 else:
 	static_ccf_ratio = None
+rv_start_x = config.ARGUMENT.rv_start_x
+rv_end_x = config.ARGUMENT.rv_end_x
 
 ## for ca_hk input 2D  and output L1, ca_hk trace and wavelength solution tables
 #    input_hk_pattern: for watch mode =>  a single 2D file,
@@ -339,7 +342,8 @@ if do_order_trace:
 				order_result_data = OrderTrace(flat_data, data_extension=ccd+ccd_stack,
 					result_path=output_lev0_trace_csv, is_output_file=True,
 					data_col_range=data_col_range, data_row_range=data_row_range,
-					fitting_poly_degree=poly_degree)
+					fitting_poly_degree=poly_degree, orders_ccd=orders_per_ccd[idx],
+					orderlet_gap_pixels=orderlet_gap_pixels)
 
 			b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
 
@@ -618,7 +622,7 @@ if do_rv or do_rv_reweighting:
 	rv_star_dir = masters_data_dir
 
 	# L1 area to be processed
-	area_def = [[0, orders_per_ccd[0]-1, 500, -500], [0, orders_per_ccd[1]-1, 500, -500]]
+	area_def = [[0, orders_per_ccd[0]-1, rv_start_x, rv_end_x], [0, orders_per_ccd[1]-1, rv_start_x, rv_end_x]]
 
 	if not lev1_list:
 		lev1_list = find_files(input_lev1_pattern)
