@@ -320,7 +320,7 @@ trace_list = []
 b_all_traces = False
 lev0_flat_rect = None
 ccd_stack = '_STACK'
-do_order_trace=True
+
 if do_order_trace:
 	trace_list = []
 	flat_data = None
