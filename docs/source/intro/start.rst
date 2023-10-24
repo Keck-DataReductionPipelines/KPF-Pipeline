@@ -33,7 +33,7 @@ This will prompt the use case message, which should be::
     usage: kpf [-h] -r recipe -c config_file
     kpf: error: the following arguments are required: recipe, config_file
 
-The two mandatory input arguments to ``kpf`` is: a ``recipe`` file and a
+The two mandatory input arguments to ``kpf`` are: a ``recipe`` file and a
 ``config`` configuration file. The recipe file is expected to be a ``.recipe`` script,
 while the ``config`` file is expected to be a ``.cfg`` file. See :doc:`example_trivial`
 for a basic example and :doc:`process_night` to process a night of data.
