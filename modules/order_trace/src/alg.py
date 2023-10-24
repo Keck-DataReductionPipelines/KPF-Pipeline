@@ -53,7 +53,8 @@ class OrderTraceAlg(ModuleAlgBase):
         data_range (list): Range of data to be traced, [<y_start>, <y_end>, <x_start>, <x_end>].
         original_size (list): Original size of the flat data, [<y_size>, <x_size>].
         poly_degree (int): Order of polynomial for order trace fitting.
-        orders_ccd (number, options)`: Total orders of the ccd. Defaults to -1.
+        orders_ccd (number, options): Total orders of the ccd. Defaults to -1.
+        do_post (bool, options): do post process to refine the upper/lower edges. Defaults to False.
 
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
@@ -66,7 +67,8 @@ class OrderTraceAlg(ModuleAlgBase):
     LOWER = 0
     name = 'OrderTrace'
 
-    def __init__(self, data, poly_degree=None, expected_traces=None, orders_ccd=-1, config=None, logger=None):
+    def __init__(self, data, poly_degree=None, expected_traces=None, orders_ccd=-1, do_post=False,
+                 config=None, logger=None):
         if not isinstance(data, np.ndarray):
             raise TypeError('image data type error, cannot construct object from OrderTraceAlg')
         if not isinstance(config, ConfigParser):
@@ -89,6 +91,7 @@ class OrderTraceAlg(ModuleAlgBase):
         self.trace_ratio = None
         self.expected_traces = expected_traces    # this is useful for regression test
         self.orders_ccd = orders_ccd
+        self.do_post = do_post
 
     def get_config_value(self, param: str, default):
         """Get defined value from the config file.
@@ -2835,7 +2838,7 @@ class OrderTraceAlg(ModuleAlgBase):
         new_str = f"{afloat:.4f}"
         return new_str
 
-    def post_process(self, orig_coeffs, orig_widths, orderlet_gap = 2):
+    def post_process(self, orig_coeffs, orig_widths, orderlet_gap=2):
         """ post process and refine the calculated widths to make the widths located closer to the valley between two
             consecutive orderlet traces and in the style of being more symmetric to the valley.
         Args:
@@ -3045,7 +3048,8 @@ class OrderTraceAlg(ModuleAlgBase):
         return new_coeffs, new_widths
 
     def extract_order_trace(self, power_for_width_estimation: int = -1, data_range = None, show_time: bool = False,
-                            print_debug: str = None, rows_to_reset = None, cols_to_reset = None):
+                            print_debug: str = None, rows_to_reset = None, cols_to_reset = None,
+                            orderlet_gap_pixels=2):
         """ Order trace extraction.
 
         The order trace extraction includes the steps to smooth the image, locate the clusters, form clusters,
@@ -3065,6 +3069,7 @@ class OrderTraceAlg(ModuleAlgBase):
                 Defaults to None.
             rows_to_reset (list, optional): Collection of rows to reset. Default to None.
             cols_to_reset (list, optional): Collection of columns to reset. Default to None.
+            orderlet_gap_pixels(number, optional): number of pixels to ignore between orderlets during extraction.
 
         Returns:
             dict: order trace extraction and analysis result, like::
@@ -3116,10 +3121,12 @@ class OrderTraceAlg(ModuleAlgBase):
         self.d_print("OrderTraceAlg: find widths", info=True)
         all_widths, cluster_coeffs = self.find_all_cluster_widths(new_index, new_x, new_y,
                                                                   power_for_width_estimation=power_for_width_estimation)
-        self.time_check(t_start, "*** find widths: ")
-        post_coeffs, post_widths = self.convert_for_post_process(cluster_coeffs, all_widths)
+        if self.do_post:
+            self.time_check(t_start, "***OrderTraceAlg: post process: ")
+            post_coeffs, post_widths = self.convert_for_post_process(cluster_coeffs, all_widths)
 
-        _, all_widths = self.post_process(post_coeffs, post_widths)
+            _, all_widths = self.post_process(post_coeffs, post_widths, orderlet_gap=orderlet_gap_pixels)
+
         self.d_print("OrderTraceAlg: write result to Pandas Dataframe", info=True)
         df = self.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         return {'order_trace_result': df, 'cluster_index': new_index, 'cluster_x': new_x, 'cluster_y': new_y}

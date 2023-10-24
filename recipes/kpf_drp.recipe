@@ -320,7 +320,7 @@ trace_list = []
 b_all_traces = False
 lev0_flat_rect = None
 ccd_stack = '_STACK'
-
+do_order_trace=True
 if do_order_trace:
 	trace_list = []
 	flat_data = None
@@ -338,12 +338,12 @@ if do_order_trace:
 			# output_lev0_trace_csv = output_order_trace[idx] 
 			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext);
 			trace_list = trace_list + [output_lev0_trace_csv]
-			if not exists(output_lev0_trace_csv):
+			if overwrite or not exists(output_lev0_trace_csv):
 				order_result_data = OrderTrace(flat_data, data_extension=ccd+ccd_stack,
 					result_path=output_lev0_trace_csv, is_output_file=True,
 					data_col_range=data_col_range, data_row_range=data_row_range,
 					fitting_poly_degree=poly_degree, orders_ccd=orders_per_ccd[idx],
-					orderlet_gap_pixels=orderlet_gap_pixels)
+					do_post=True, orderlet_gap_pixels=orderlet_gap_pixels, overwrite=overwrite)
 
 			b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
 
@@ -352,7 +352,7 @@ if do_order_trace:
 
 	# generate rectification result to flat level0 to avoid repeating the same process in spectral extraction
 
-	if not exists(output_lev0_flat_rect):
+	if overwrite or not exists(output_lev0_flat_rect):
 		# do rectification on the flat data in case the order trace result files for all ccds exist.
 		# b_lev0_rect: a boolean to determine if continuing to do OrderRectification and produce output_lev0_flat_rect
 

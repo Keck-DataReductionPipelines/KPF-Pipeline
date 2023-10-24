@@ -32,6 +32,8 @@
                     - `action.args['do_post'] (boolean, optional)`: do post process only on existing order trace file.
                     - `action.args['orderlet_pixel_gaps'] (number, options)`: orderlet gap pixels between consecutive
                       orderlets, i.e. number of pixels to ignore between orderlets during extraction. Defaults to 2.
+                    - `action.args['overwrite'] (bool, options)`: overwrite existing order trace file or not.
+                      Defaults to False.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace  in the master
@@ -56,6 +58,7 @@
                 - `poly_degree (int)`: Order of polynomial for order trace fitting.
                 - `do_post (bool)`: if doing post processing on existing order trace data.
                 - `orderlet_gap_pixels`: number of pixels to ignore between orderlets during extraction.
+                - `overwrite (bool, options)`: overwrite existing order trace file or not. Defaults to False.
 
 
         * Method `__perform`:
@@ -129,6 +132,7 @@ class OrderTrace(KPF0_Primitive):
         self.do_post = False
         self.orderlet_gap_pixels = 2
         self.orders_ccd = -1
+        self.overwrite = False
 
         if 'data_row_range' in args_keys and action.args['data_row_range'] is not None:
             self.row_range = self.find_range(action.args['data_row_range'], row)
@@ -162,6 +166,8 @@ class OrderTrace(KPF0_Primitive):
         if 'orderlet_gap_pixels' in args_keys and action.args['orderlet_gap_pixels'] is not None:
             self.orderlet_gap_pixels = action.args['orderlet_gap_pixels']
 
+        if 'overwrite' in args_keys and action.args['overwrite'] is not None:
+            self.overwrite = action.args['overwrite']
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -182,7 +188,7 @@ class OrderTrace(KPF0_Primitive):
         # Order trace algorithm setup
         self.alg = OrderTraceAlg(self.flat_data, poly_degree=self.poly_degree,
                                  expected_traces=self.expected_traces, config=self.config, logger=self.logger,
-                                 orders_ccd=self.orders_ccd)
+                                 orders_ccd=self.orders_ccd, do_post=self.do_post)
 
     def _pre_condition(self) -> bool:
         """
@@ -212,7 +218,8 @@ class OrderTrace(KPF0_Primitive):
                                 self.row_range[0], self.row_range[1]])
 
         # if order trace result file exists and do_post is True, then process the result only
-        if self.result_path and os.path.isfile(self.result_path) and os.path.exists(self.result_path) and self.do_post:
+        if self.result_path and os.path.isfile(self.result_path) and \
+                os.path.exists(self.result_path) and (not self.overwrite) and self.do_post:
             df = self.alg.refine_order_trace(self.result_path, self.is_output_file, orderlet_gap = self.orderlet_gap_pixels)
             self.input.receipt_add_entry('OrderTrace', self.__module__, f'config_path={self.config_path}', 'PASS')
             if self.logger:
@@ -254,12 +261,12 @@ class OrderTrace(KPF0_Primitive):
         all_widths, cluster_coeffs = self.alg.find_all_cluster_widths(c_index, c_x, c_y, power_for_width_estimation=3)
 
         # 7) post processing
-        if self.logger:
-            self.logger.warning('OrderTrace: post processing...')
+        if self.do_post:
+            if self.logger:
+                self.logger.warning('OrderTrace: post processing...')
 
-        post_coeffs, post_widths = self.alg.convert_for_post_process(cluster_coeffs, all_widths)
-
-        _, all_widths = self.alg.post_process(post_coeffs, post_widths, orderlet_gap=self.orderlet_gap_pixels)
+            post_coeffs, post_widths = self.alg.convert_for_post_process(cluster_coeffs, all_widths)
+            _, all_widths = self.alg.post_process(post_coeffs, post_widths, orderlet_gap=self.orderlet_gap_pixels)
 
         # 8) convert result to dataframe
         if self.logger:
