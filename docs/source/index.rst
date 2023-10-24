@@ -10,6 +10,7 @@ Welcome! This is the documentation for the KPF Data Reduction Pipeline.
 .. toctree::
    :maxdepth: 2
 
+   info/info.rst
    intro/start.rst
    data_exploration/start.rst
    develop/start.rst
