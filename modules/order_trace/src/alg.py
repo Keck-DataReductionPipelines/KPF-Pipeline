@@ -3119,7 +3119,7 @@ class OrderTraceAlg(ModuleAlgBase):
         self.time_check(t_start, "*** find widths: ")
         post_coeffs, post_widths = self.convert_for_post_process(cluster_coeffs, all_widths)
 
-        post_coeffs, all_widths = self.post_process(post_coeffs, post_widths)
+        _, all_widths = self.post_process(post_coeffs, post_widths)
         self.d_print("OrderTraceAlg: write result to Pandas Dataframe", info=True)
         df = self.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)
         return {'order_trace_result': df, 'cluster_index': new_index, 'cluster_x': new_x, 'cluster_y': new_y}
