@@ -76,7 +76,8 @@ def get_kpf_echelle_order(lambda_ang):
     in a wavelength solution when the "order number" in the L1 file is just the
     order index (starting from 0).  This function expects an input wavelength 
     in Angstroms, but will reluctantly convert to nm if the input is in the 
-    range 350-900.
+    range 350-900.  
+    The wavelengths are from a Zemax-generated plot from Steve Gibson.
 
     Args:
         lambda_ang (Angstroms)
