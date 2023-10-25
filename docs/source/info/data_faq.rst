@@ -5,6 +5,10 @@ How do I download my data?
 --------------------------
 <add answer here>
 
+How do I cite the KPF DRP in scientific publicaitons?
+-----------------------------------------------------
+<add answer here>
+
 Is there a quick-start guide to plot and interpret KPF spectra and RVs?
 -----------------------------------------------------------------------
 <add link to tutorials>
