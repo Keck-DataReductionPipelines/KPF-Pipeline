@@ -1,5 +1,5 @@
-KPF Data, DRP Overview & Algorithms, Master Files, and FAQ
-==========================================================
+Overview of KPF Data and the DRP
+================================
 
 .. toctree::
    :maxdepth: 1
