@@ -231,13 +231,10 @@ def main():
                 framework.pipeline.logger.debug("Waiting for event queue to clear {}".format(framework.get_pending_events()[0]))
                 time.sleep(3)
 
-            framework.append_event('exit', arg)
-
         if args.ncpus > 1:
             framework.start(qm_only=True)
         else:
             framework.start(wait_for_event=True, continuous=True)
-
     else:
         arg.watch = False
         if hasattr(args, 'date') and args.date:

@@ -145,7 +145,7 @@ for raw_file_path in file_list:
             pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
             twod = pixels_masked
 
-        recipe_complete = to_fits(flat_applied, output_file_name)
+        recipe_complete = to_fits(twod, output_file_name)
 
 
         # Query database for QC information and update header of 2D FITS file.

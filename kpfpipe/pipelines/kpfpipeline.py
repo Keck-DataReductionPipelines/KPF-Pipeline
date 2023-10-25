@@ -2,12 +2,8 @@
 # algorithm module. 
 from asyncio.log import logger
 import os
-import gc
-import sys
 from copy import copy
-import importlib
 import configparser as cp
-import logging
 import glob
 from dotenv.main import load_dotenv
 
@@ -266,6 +262,4 @@ class KPFPipeline(BasePipeline):
 
         self.start_recipe(action, context)
         
-        gc.collect()
-
         return Arguments(name="next_file")

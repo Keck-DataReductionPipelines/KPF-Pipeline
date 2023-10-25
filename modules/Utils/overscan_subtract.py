@@ -517,7 +517,7 @@ class OverscanSubtraction(KPF0_Primitive):
                 frames_data = np.array(frames_data)
 
                 if self.mode == 'clippedmean':
-                    global overscan_clipped_mean
+                    # global overscan_clipped_mean
                     overscan_clipped_mean = {}
 
                 for frame in range(len(self.ffi_exts)):
