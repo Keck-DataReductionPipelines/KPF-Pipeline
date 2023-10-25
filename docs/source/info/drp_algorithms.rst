@@ -20,7 +20,8 @@ Current Limitations and Development Plans
 Include:
 
 * Doppler stability on timescales longer than 1 day
-* Consistency of wavelength solutions
+* consistency of wavelength solutions
+* scattered light correction
 * outlier rejection in spectral extraction
 * sky subtraction
 * telluric corrections
