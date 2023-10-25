@@ -15,7 +15,15 @@ The description of each algorithm should include:
 Current Limitations and Development Plans
 -----------------------------------------
 
-<TBD to add content here>
+<Add a list of current limitations and plans to address them>
+
+Include:
+
+* Doppler stability on timescales longer than 1 day
+* Consistency of wavelength solutions
+* outlier rejection in spectral extraction
+* sky subtraction
+* telluric corrections
 
 
 CCD Image Processing
