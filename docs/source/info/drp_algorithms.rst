@@ -21,10 +21,12 @@ Include:
 
 * Doppler stability on timescales longer than 1 day
 * consistency of wavelength solutions
+* intranight drift corrections for wavelength solutions
 * scattered light correction
 * outlier rejection in spectral extraction
 * sky subtraction
 * telluric corrections
+* Stellar activity indicators (see below)
 
 
 CCD Image Processing
@@ -77,10 +79,10 @@ Cross-Correlation based RVs
 
 Include a note about RV header information
 
-Stellar Activity Information (not yet implemented)
---------------------------------------------------
+Stellar Activity Information
+----------------------------
+KPF does not yet have stellar activity indicators produced as a standard data product from the DRP.  The Ca H & K spectrometer covers the Ca H & K lines and we expect the DRP to produce S-values on the Mt. Wilson scale.  Future DRP developments are also expected to include code to generate other activity indicators (Ca IR triplet, Hα, etc.)
 
-<TBD to add content here>
 
 Ca H&K Spectrometer Data Processing
 -----------------------------------
@@ -98,3 +100,7 @@ Quality Control
 <TBD to add content here>
 
 Explain how the QC framework operates and describe the current status.
+
+Guider Data Processing
+----------------------
+The DRP does not further process the data from the KPF Guider that are stored in FITS extensions in the L0 files.  These data include a guider image summed over the spectrometer integration and a table of guiding corrections, flux measurements, and other diagnostics taken from real-time Source Extractor analysis of the guider frames (typically at 100 Hz speed).
