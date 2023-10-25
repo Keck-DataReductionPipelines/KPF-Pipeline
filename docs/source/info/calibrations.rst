@@ -1,5 +1,5 @@
-KPF Calibrations and Master Files:
-==================================
+KPF Calibrations and Master Files
+=================================
 
 Calibrations
 ------------
