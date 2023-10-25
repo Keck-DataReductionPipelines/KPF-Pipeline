@@ -15,44 +15,71 @@ The description of each algorithm should include:
 CCD Image Processing
 --------------------
 
+<TBD to add content here>
+
+
 Master Files Creation
 ---------------------
+
+<TBD to add content here>
 
 Include a description of how master stacks are made for bias, dark, flats, LFC, etalon, and ThAr.
 
 Scattered light correction
 --------------------------
 
+<TBD to add content here>
+
 Spectral Extraction
 -------------------
+
+<TBD to add content here>
 
 Sky Correction (not yet implemented)
 ------------------------------------
 
+<TBD to add content here>
+
 Wavelength Calibration
 ----------------------
+
+<TBD to add content here>
 
 Barycentric Correction
 ----------------------
 
+<TBD to add content here>
+
 Telluric Model (not yet implemented)
 ------------------------------------
 
+<TBD to add content here>
+
 Cross-Correlation based RVs
 ---------------------------
+
+<TBD to add content here>
 
 Include a note about RV header information
 
 Stellar Activity Information (not yet implemented)
 --------------------------------------------------
 
+<TBD to add content here>
+
 Ca H&K Spectrometer Data Processing
 -----------------------------------
+
+<TBD to add content here>
 
 Exposure Meter Data Processing
 ------------------------------
 
+<TBD to add content here>
+
 Quality Control
 ---------------
-Explain how the QC framework operates and describe the current status.
 
+<TBD to add content here>
+
+Explain how the QC framework operates and describe the current status.
