@@ -42,4 +42,4 @@ Master Files
 
 .. |date| date::
 
-* Last Updated on |date| *
+Last Updated on |date|
