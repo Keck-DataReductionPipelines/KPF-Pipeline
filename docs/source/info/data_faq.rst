@@ -24,3 +24,7 @@ What is the difference between the SCI1, SCI2, and SCI3 spectra?
 Are KPF wavelengths in vacuum or air?
 -------------------------------------
 The KPF DRP produces L1 and L2 data with vacuum wavelengths.
+
+.. |date| date::
+
+Last Updated on |date|
