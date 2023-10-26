@@ -39,3 +39,7 @@ Master Files
 ------------
 
 <Add a list of the master files that are created from standard calibrations.>
+
+.. |date| date::
+
+Last Updated on |date|
