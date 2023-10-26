@@ -8,4 +8,5 @@ Provide a high-level overview of:
 * planned algorithms and other capabilities for the DRP
 
 .. |date| date::
-*Last Updated on |date|*
+
+Last Updated on |date|
