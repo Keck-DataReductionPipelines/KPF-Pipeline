@@ -26,4 +26,5 @@ Are KPF wavelengths in vacuum or air?
 The KPF DRP produces L1 and L2 data with vacuum wavelengths.
 
 .. |date| date::
-*Last Updated on |date|*
+
+Last Updated on |date|
