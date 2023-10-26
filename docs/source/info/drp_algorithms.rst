@@ -13,7 +13,7 @@ The description of each algorithm should include:
 
 
 Current Limitations and Development Plans
------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 <Add a list of current limitations and plans to address them>
 
