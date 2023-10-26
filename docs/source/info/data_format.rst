@@ -36,5 +36,4 @@ Level 2 Data Format
 Add a table of the HDUs and their contents.  Add a list of important Level 2 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.
 
 .. |date| date::
-
-Last Updated on |date|
+*Last Updated on |date|*
