@@ -92,13 +92,13 @@ class OverscanSubtraction(KPF0_Primitive):
             self.n_sigma = self.action.args[13]
         except:
             self.n_sigma = 2.5
-            
+
         self.module_config_path = DEFAULT_CFG_PATH
         if self.ffi_exts[0] == 'RED_CCD':
             self.module_config_path = DEFAULT_CFG_PATH_RED
         elif self.ffi_exts[0] == 'GREEN_CCD':
             self.module_config_path = DEFAULT_CFG_PATH_GREEN
-    
+
         print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
 
         print("Starting logger...")
@@ -111,6 +111,9 @@ class OverscanSubtraction(KPF0_Primitive):
 
         self.logger.info('Started {}'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
+
+        if self.mode == 'clippedmean':
+            self.overscan_clipped_mean = {}
 
 
         ########################################################################################
@@ -253,7 +256,7 @@ class OverscanSubtraction(KPF0_Primitive):
         mask = b | c
         mx = ma.masked_array(a, mask)
         avg = ma.getdata(mx.mean())
-        overscan_clipped_mean[ext] = avg.item()
+        self.overscan_clipped_mean[ext] = avg.item()
 
         self.logger.debug('---->{}.clippedmean_subtraction(): ext,overscan_reg,n_sigma,p16,med,p84,sigma,avg = {},{},{},{},{},{},{},{}'.\
             format(self.__class__.__name__,ext,overscan_reg,n_sigma,p16,med,p84,sigma,avg))
@@ -480,7 +483,7 @@ class OverscanSubtraction(KPF0_Primitive):
                         channel_exts.pop(3)
                         channel_exts.pop(2)
                         self.channel_datasec_nrows = 4080
-                        green2amp = True  
+                        green2amp = True
                 elif self.ffi_exts[0] == 'RED_CCD':
                     naxis2 = l0_obj.header['RED_AMP1']['NAXIS2']
                     if naxis2 >= 4000:
@@ -516,10 +519,6 @@ class OverscanSubtraction(KPF0_Primitive):
                     frames_data.append(data_gain_corr)
                 frames_data = np.array(frames_data)
 
-                if self.mode == 'clippedmean':
-                    # global overscan_clipped_mean
-                    overscan_clipped_mean = {}
-
                 for frame in range(len(self.ffi_exts)):
 
                     self.logger.debug('---->{}._perform(): frame = {}'.\
@@ -534,9 +533,9 @@ class OverscanSubtraction(KPF0_Primitive):
 
                     if self.mode == 'clippedmean':
                         i = 1
-                        for key in overscan_clipped_mean:
+                        for key in self.overscan_clipped_mean:
                             keywrd = "OSCANV" + str(i)
-                            keyval = overscan_clipped_mean[key]
+                            keyval = self.overscan_clipped_mean[key]
                             keycmt = "Overscan clipped mean (e-), " + key
                             l0_obj.header[self.ffi_exts[frame]][keywrd] = (keyval, keycmt)
                             i = i + 1
