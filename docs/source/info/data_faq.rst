@@ -5,7 +5,7 @@ How do I download my data?
 --------------------------
 <add answer here>
 
-How do I cite the KPF DRP in scientific publicaitons?
+How do I cite the KPF DRP in scientific publications?
 -----------------------------------------------------
 <add answer here>
 
