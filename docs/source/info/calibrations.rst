@@ -46,7 +46,7 @@ Processing data from KPF's Exposure Meter (EM) is handled in real-time with a se
 ======  ===========================  ===============  =======  ==================
 Type    Object name                  Exp. time (sec)  Num/day  Comment
 ======  ===========================  ===============  =======  ==================
-TBD
+Bias    bias                         0.12             50       taken daily, then stacked, and used by ExpMeter DRP that night.
 ======  ===========================  ===============  =======  ==================
 
 
