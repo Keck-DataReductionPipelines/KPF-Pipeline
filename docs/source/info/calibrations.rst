@@ -4,7 +4,7 @@ KPF Calibrations and Master Files
 Calibrations
 ------------
 
-With rare exceptions, calibration spectra are taken on a daily basis with KPF to characterize the instrument.  While the set of calibrations has evolved with time, it is mostly fixed, as shown in the table below (current as of October 2023).  This set of calibrations is designed to be sufficient for regular DRP processing without 'manual' calibrations taken by KPF observers.
+With rare exceptions, calibration spectra are taken on a daily basis with KPF to characterize the instrument.  While the calibration set has evolved with time, but is now mostly fixed (the table below is current as of October 2023).  This set of calibrations is designed to be sufficient for regular DRP processing without 'manual' calibrations taken by KPF observers.
 
 ======  ===========================  ===============  =======  ==================
 Type    Object name                  Exp. time (sec)  Num/day  Comment
@@ -30,15 +30,30 @@ UNe     autocal-une-all-morn         5                5        not used
         autocal-une-all-eve          5                5        not used 
 ======  ===========================  ===============  =======  ==================
 
+The Ca H&K spectrometer shares several calibration exposures with the main spectrometer.  The full set is listed below.  
 
-<Add note about Ca H&K spectrometer calibrations>
+======  ===========================  ===============  =======  ==================
+Type    Object name                  Exp. time (sec)  Num/day  Comment
+======  ===========================  ===============  =======  ==================
+Dark    autocal-dark                 1200             5        the same exposures as for the main spectrometer (above)
+Bias    autocal-bias                 0                22       the same exposures as for the main spectrometer (above)
+ThAr    autocal-thar-hk              60               3        light detected in two bluest orders only
+======  ===========================  ===============  =======  ==================
 
-<Add note about exposure meter calibrations>
+
+Processing data from KPF's Exposure Meter (EM) is handled in real-time with a separate pipeline.  For documentation proposes, the table below lists the EM calibrations.  Note that because of coatings on optics in the Fiber Injection Unit that are specific to the light path for calibrations, most calibrations of that type do not deliver measurable flux to the Ca H&K Spectrometer.
+
+======  ===========================  ===============  =======  ==================
+Type    Object name                  Exp. time (sec)  Num/day  Comment
+======  ===========================  ===============  =======  ==================
+TBD
+======  ===========================  ===============  =======  ==================
+
 
 Master Files
 ------------
 
-<Add a list of the master files that are created from standard calibrations.>
+Master files for bias, dark, flat, and the wavelength calibration sources listed above are created each day from the calibrations during the UT date.  The co-addition process involves iterative outlier rejection per pixel.  
 
 .. |date| date::
 
