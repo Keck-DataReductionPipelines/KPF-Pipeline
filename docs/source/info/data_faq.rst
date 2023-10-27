@@ -7,7 +7,7 @@ How do I download my data?
 
 How do I cite the KPF DRP in scientific publications?
 -----------------------------------------------------
-<add answer here>
+See the `Readme file <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/blob/docs-pipeline-info/README.md>`_ for the DRP.
 
 Is there a quick-start guide to plot and interpret KPF spectra and RVs?
 -----------------------------------------------------------------------
