@@ -44,17 +44,105 @@ GUIDER_CUBE_ORIGINS  table      variable        Table of time-series guide camer
 '2D' Data Format
 -------------------
 
-Add a table of the HDUs and their contents.  Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.
+*Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.*
+
+2D File FITS Extensions
+^^^^^^^^^^^^^^^^^^^^^^^
+
+===================  =========  ==============  =======
+Extension Name       Data Type  Data Dimension  Description    
+===================  =========  ==============  =======
+RECEIPT              table      variable        Receipt of DRP processing
+CONFIG               table      variable        Configuration parameters
+GREEN_CCD            image      4080 x 4080     Assembled Green CCD image with bias/dark correction   
+RED_CCD              image      4080 x 4080     Assembled Red CCD image with bias/dark correction   
+CA_HK                image      255 x 1024      Same as in L0 file    
+EXPMETER_SCI         table      variable        Same as in L0 file 
+EXPMETER_SKY         table      variable        Same as in L0 file 
+TELEMETRY            table      variable        Same as in L0 file 
+SOLAR_IRRADIANCE     table      variable        Same as in L0 file 
+GUIDER_AVG           image      512 x 640       Same as in L0 file 
+GUIDER_CUBE_ORIGINS  table      variable        Same as in L0 file          
+===================  =========  ==============  =======
+
 
 Level 1 Data Format
 -------------------
 
-Add a table of the HDUs and their contents.  Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.
+*Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.*
+
+Level 1 FITS Extensions
+^^^^^^^^^^^^^^^^^^^^^^^
+
+===================  =========  ==============  =======
+Extension Name       Data Type  Data Dimension  Description    
+===================  =========  ==============  =======
+RECEIPT              table      variable        Receipt of DRP processing
+CONFIG               table      variable        Configuration parameters
+TELEMETRY            table      variable        Table of telemetry measurements
+GREEN_SCI_FLUX1      image      35 x 4080       1D spectra for 35 GREEN CCD orders of SCI1 orderlet
+GREEN_SCI_FLUX2      image      35 x 4080       1D spectra for 35 GREEN CCD orders of SCI2 orderlet
+GREEN_SCI_FLUX3      image      35 x 4080       1D spectra for 35 GREEN CCD orders of SCI3 orderlet
+GREEN_SKY_FLUX       image      35 x 4080       1D spectra for 35 GREEN CCD orders of SKY orderlet
+GREEN_CAL_FLUX       image      35 x 4080       1D spectra for 35 GREEN CCD orders of CAL orderlet
+GREEN_SCI_VAR1       image      35 x 4080       Variance vs. pixel for GREEN_SCI_FLUX1
+GREEN_SCI_VAR2       image      35 x 4080       Variance vs. pixel for GREEN_SCI_FLUX2
+GREEN_SCI_VAR3       image      35 x 4080       Variance vs. pixel for GREEN_SCI_FLUX3
+GREEN_SKY_VAR        image      35 x 4080       Variance vs. pixel for GREEN_SKY_FLUX
+GREEN_CAL_VAR        image      35 x 4080       Variance vs. pixel for GREEN_CAL_FLUX
+GREEN_SCI_WAV1       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX1
+GREEN_SCI_WAV2       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX2
+GREEN_SCI_WAV3       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX3
+GREEN_SKY_WAV        image      35 x 4080       Wavelength vs. pixel for GREEN_SKY_FLUX
+GREEN_CAL_WAV        image      35 x 4080       Wavelength vs. pixel for GREEN_CAL_FLUX
+GREEN_TELLURIC       table      n/a             Not used yet (will include telluric spectrum)
+GREEN_SKY            table      n/a             Not used yet (will include modeled sky spectrum)
+RED_SCI_FLUX1        image      32 x 4080       1D spectra for 32 RED CCD orders of SCI1 orderlet
+RED_SCI_FLUX2        image      32 x 4080       1D spectra for 32 RED CCD orders of SCI2 orderlet
+RED_SCI_FLUX3        image      32 x 4080       1D spectra for 32 RED CCD orders of SCI3 orderlet
+RED_SKY_FLUX         image      32 x 4080       1D spectra for 32 RED CCD orders of SKY orderlet
+RED_CAL_FLUX         image      32 x 4080       1D spectra for 32 RED CCD orders of CAL orderlet
+RED_SCI_VAR1         image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX1
+RED_SCI_VAR2         image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX2
+RED_SCI_VAR3         image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX3
+RED_SKY_VAR          image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX
+RED_CAL_VAR          image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX
+RED_SCI_WAV1         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX1
+RED_SCI_WAV2         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX2
+RED_SCI_WAV3         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX3
+RED_SKY_WAV          image      32 x 4080       Wavelength vs. pixel for RED_SKY_FLUX
+RED_CAL_WAV          image      32 x 4080       Wavelength vs. pixel for RED_CAL_FLUX
+RED_TELLURIC         table      n/a             Not used yet (will include telluric spectrum)
+RED_SKY              table      n/a             Not used yet (will include modeled sky spectrum)
+CA_HK_SCI            image      6 x 1024        1D spectra (6 orders) of SCI in Ca H&K spectrometer
+CA_HK_SKY            image      6 x 1024        1D spectra (6 orders) of SKY in Ca H&K spectrometer
+CA_HK_SCI_WAVE       image      6 x 1024        Wavelength vs. pixel for CA_HK_SCI
+CA_HK_SKY_WAVE       image      6 x 1024        Wavelength vs. pixel for CA_HK_SKY
+BARY_CORR            table      67              Table of barycentric corrections by spectral order
+===================  =========  ==============  =======
+
 
 Level 2 Data Format
 -------------------
 
-Add a table of the HDUs and their contents.  Add a list of important Level 2 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.
+*Add a list of important Level 2 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.  Add a link or explanation here about how to interpret the RVs by order.* 
+
+Level 2 FITS Extensions
+^^^^^^^^^^^^^^^^^^^^^^^
+
+===================  =========  ==============  =======
+Extension Name       Data Type  Data Dimension  Description    
+===================  =========  ==============  =======
+RECEIPT              table      variable        Receipt of DRP processing
+CONFIG               table      variable        Configuration parameters
+TELEMETRY            table      variable        Table of telemetry measurements
+GREEN_CCF            image      5 x 52 x 804    CCFs (orderlet x order x RV step) for GREEN
+RED_CCF              image      5 x 52 x 804    CCFs (orderlet x order x RV step) for RED
+GREEN_CCF            image      5 x 52 x 804    Reweighted CCFs (orderlet x order x RV step) for GREEN
+RED_CCF              image      5 x 52 x 804    Reweighted CCFs (orderlet x order x RV step) for RED
+RV                   table      67              Table of RVs by spectral order
+ACTIVITY             table      n/a             Not used yet (will include activity measurements)
+===================  =========  ==============  =======
 
 .. |date| date::
 
