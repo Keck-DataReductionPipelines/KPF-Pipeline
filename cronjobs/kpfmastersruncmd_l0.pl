@@ -25,7 +25,6 @@
 use strict;
 use warnings;
 use File::Copy;
-use File::Path qw/make_path/;
 
 select STDERR; $| = 1; select STDOUT; $| = 1;
 
@@ -99,7 +98,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '1.5';
+my $version = '1.7';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -113,6 +112,12 @@ $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment wit
 my $containerimage = 'kpf-drp:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
+
+my $configenvar = $ENV{KPFCRONJOB_CONFIG_L0};
+
+if (defined $configenvar) {
+    $config = $configenvar;
+}
 
 
 # Print environment.
@@ -141,6 +146,10 @@ my $script = "#! /bin/bash\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "mkdir -p /masters/${procdate}\n" .
+             "cp -p /testdata/kpf_${procdate}* /masters/${procdate}\n" .
+             "chown root:root /masters/${procdate}/*\n" .
+             "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
@@ -151,7 +160,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
@@ -189,34 +198,6 @@ printf "Elapsed time to run recipe (sec.) = %d\n",
 $icheckpoint++;
 
 
-# Make directory to store products.
-
-my $destdir  = "${mastersdir}/$procdate";
-
-if (! (-e $destdir)) {
-    if (! make_path($destdir)) {
-        die "*** Error: Could not make directory ($destdir): $!\n";
-    } else {
-        print "Made new directory $destdir\n";
-    }
-}
-
-sleep(30);
-
-my $globfiles = "${testdatadir}/kpf_${procdate}*";
-
-my @files  = glob("$globfiles");
-
-foreach my $file (@files) {
-    if (! (copy($file, $destdir))) {
-        print "*** Warning: couldn't copy $file to $destdir ($!); " .
-            "skipping...\n";
-    } else {
-        print "Copied $file to $destdir\n";
-    }
-}
-
-
 # Log end time.
 
 $endscript = time();
@@ -225,25 +206,6 @@ print "End time = ", scalar localtime($endscript), "\n";
 print "Elapsed total time (sec.) = ", $endscript - $startscript, "\n";
 
 print "Terminating normally...\n";
-
-
-# Copy log file from runtime directory to product directory, assuming
-# that the following convention for log-file naming is followed.
-
-
-my ($logfileBase) = $iam =~ /(.+)\.pl/;
-
-my $logfile = $logdir . '/' . $logfileBase . '_' . $procdate . '.out';
-
-if (-e $logfile) {
-
-    if (! (copy($logfile, $destdir))) {
-        die "*** Warning: couldn't copy $logfile to $destdir ($!); " .
-            "quitting...\n";
-    } else {
-        print "Copied $logfile to $destdir\n";
-    }
-}
 
 
 exit(0);

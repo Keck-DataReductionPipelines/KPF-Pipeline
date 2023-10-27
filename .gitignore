@@ -5,11 +5,14 @@ examples/V1/recipe_results/
 *~
 *.DS_Store
 .idea/
-#logs/
+logs/
 receipts/
 __pycache__/
 *.py[cod]
 *$py.class
+*.ipynb_checkpoints
+*.log
+*.txt
 
 # C extensions
 *.so

@@ -28,6 +28,12 @@
                       if it is defined.
                     - `action.args['is_output_file'] (boolean, optional)`: if the result is output to a file or data
                       model extension. Defaults to True meaning output to a file.
+                    - `action.args['orders_ccd'] (boolean, optional)`: total orders of the ccd. Defaults to -1.
+                    - `action.args['do_post'] (boolean, optional)`: do post process only on existing order trace file.
+                    - `action.args['orderlet_pixel_gaps'] (number, options)`: orderlet gap pixels between consecutive
+                      orderlets, i.e. number of pixels to ignore between orderlets during extraction. Defaults to 2.
+                    - `action.args['overwrite'] (bool, options)`: overwrite existing order trace file or not.
+                      Defaults to False.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of order trace  in the master
@@ -50,6 +56,9 @@
                 - `alg (modules.order_trace.src.alg.OrderTraceAlg)`: Instance of `OrderTraceAlg` which has operation
                   codes for the computation of order trace.
                 - `poly_degree (int)`: Order of polynomial for order trace fitting.
+                - `do_post (bool)`: if doing post processing on existing order trace data.
+                - `orderlet_gap_pixels`: number of pixels to ignore between orderlets during extraction.
+                - `overwrite (bool, options)`: overwrite existing order trace file or not. Defaults to False.
 
 
         * Method `__perform`:
@@ -120,6 +129,10 @@ class OrderTrace(KPF0_Primitive):
         self.result_path = None
         self.poly_degree = None
         self.expected_traces = None
+        self.do_post = False
+        self.orderlet_gap_pixels = 2
+        self.orders_ccd = -1
+        self.overwrite = False
 
         if 'data_row_range' in args_keys and action.args['data_row_range'] is not None:
             self.row_range = self.find_range(action.args['data_row_range'], row)
@@ -144,6 +157,18 @@ class OrderTrace(KPF0_Primitive):
         if 'expected_traces' in args_keys and action.args['expected_traces'] is not None:
             self.expected_traces = action.args['expected_traces']
 
+        if 'orders_ccd' in args_keys and action.args['orders_ccd'] is not None:
+            self.orders_ccd = action.args['orders_ccd']
+
+        if 'do_post' in args_keys and action.args['do_post'] is not None:
+            self.do_post = action.args['do_post']
+
+        if 'orderlet_gap_pixels' in args_keys and action.args['orderlet_gap_pixels'] is not None:
+            self.orderlet_gap_pixels = action.args['orderlet_gap_pixels']
+
+        if 'overwrite' in args_keys and action.args['overwrite'] is not None:
+            self.overwrite = action.args['overwrite']
+
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -162,7 +187,8 @@ class OrderTrace(KPF0_Primitive):
 
         # Order trace algorithm setup
         self.alg = OrderTraceAlg(self.flat_data, poly_degree=self.poly_degree,
-                                 expected_traces=self.expected_traces, config=self.config, logger=self.logger)
+                                 expected_traces=self.expected_traces, config=self.config, logger=self.logger,
+                                 orders_ccd=self.orders_ccd, do_post=self.do_post)
 
     def _pre_condition(self) -> bool:
         """
@@ -190,6 +216,20 @@ class OrderTrace(KPF0_Primitive):
         """
         self.alg.set_data_range([self.col_range[0], self.col_range[1],
                                 self.row_range[0], self.row_range[1]])
+
+        # if order trace result file exists and do_post is True, then process the result only
+        if self.result_path and os.path.isfile(self.result_path) and \
+                os.path.exists(self.result_path) and (not self.overwrite) and self.do_post:
+            df = self.alg.refine_order_trace(self.result_path, self.is_output_file, orderlet_gap = self.orderlet_gap_pixels)
+            self.input.receipt_add_entry('OrderTrace', self.__module__, f'config_path={self.config_path}', 'PASS')
+            if self.logger:
+                self.logger.info("OrderTrace: refine existing order trace result "+self.result_path)
+
+            if self.logger:
+                # self.logger.info("OrderTrace: Done!")
+                self.logger.warning("OrderTrace: Refinement is done!")
+            return Arguments(df)
+
         # 1) Locate cluster
         if self.logger:
             #self.logger.info("OrderTrace: locating cluster...")
@@ -220,8 +260,16 @@ class OrderTrace(KPF0_Primitive):
             self.logger.warning("OrderTrace: finding width...")
         all_widths, cluster_coeffs = self.alg.find_all_cluster_widths(c_index, c_x, c_y, power_for_width_estimation=3)
 
+        # 7) post processing
+        if self.do_post:
+            if self.logger:
+                self.logger.warning('OrderTrace: post processing...')
+
+            post_coeffs, post_widths = self.alg.convert_for_post_process(cluster_coeffs, all_widths)
+            _, all_widths = self.alg.post_process(post_coeffs, post_widths, orderlet_gap=self.orderlet_gap_pixels)
+
+        # 8) convert result to dataframe
         if self.logger:
-            #self.logger.info("OrderTrace: writing cluster into dataframe...")
             self.logger.warning("OrderTrace: writing cluster into dataframe...")
 
         df = self.alg.write_cluster_info_to_dataframe(all_widths, cluster_coeffs)

@@ -2,6 +2,7 @@
 # algorithm module. 
 from asyncio.log import logger
 import os
+import gc
 import sys
 from copy import copy
 import importlib
@@ -264,5 +265,7 @@ class KPFPipeline(BasePipeline):
                                                    file_path))
 
         self.start_recipe(action, context)
+        
+        gc.collect()
 
         return Arguments(name="next_file")

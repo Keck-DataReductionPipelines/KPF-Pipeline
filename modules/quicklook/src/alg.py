@@ -5,6 +5,7 @@ import matplotlib.patches as patches
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
+from kpfpipe.models.level2 import KPF2
 from keckdrpframework.models.arguments import Arguments
 import traceback
 import os
@@ -20,9 +21,10 @@ from modules.Utils.analyze_em import AnalyzeEM
 from modules.Utils.analyze_hk import AnalyzeHK
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_l1 import AnalyzeL1
+from modules.Utils.analyze_wls import AnalyzeWLS
 from modules.Utils.analyze_l2 import AnalyzeL2
 from modules.Utils.kpf_parse import HeaderParse
-import kpfpipe.pipelines.fits_primitives as fits_primitives
+#import kpfpipe.pipelines.fits_primitives as fits_primitives
 from modules.Utils.kpf_parse import get_data_products_L0
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
@@ -39,7 +41,7 @@ class QuicklookAlg:
     The following recipes in KPF-Pipeline/recipes/ are useful for generating QLP data 
     products:
     
-    quicklook_watch.recipe -- this recipe watches a directory (recursively, if needed) 
+    quicklook_watch_dir.recipe -- this recipe watches a directory (recursively, if needed) 
         and triggers the QLP on file modification events.  It must be run in watch mode.  
         Separate instances should to be run for L0, 2D, L1, and L2 data directories.
         Example:
@@ -91,8 +93,6 @@ class QuicklookAlg:
         Arguments:
             kpf0 - a L0 object
             output_dir - directory for output QLP files (if show_plot=False)
-            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
-                        instead of saving files
     
         Attributes:
             None
@@ -150,20 +150,15 @@ class QuicklookAlg:
                 savedir = L0_QLP_file_base +'HK/'    
                 os.makedirs(savedir, exist_ok=True) # make directories if needed    
         
-                # Exposure Meter spectrum plot    
+                # Exposure Meter image plot    
                 trace_file = self.config['CaHK']['trace_file']    
                 wavesoln_file = self.config['CaHK']['cahk_wav']    
                 myHK = AnalyzeHK(kpf0, trace_file = trace_file,     
                                        wavesoln_file = wavesoln_file,     
                                        logger=self.logger)    
-                filename = savedir + self.ObsID + '_HK_image_zoomable.png'    
+                filename = savedir + self.ObsID + '_HK_image_L0_zoomable.png'    
                 self.logger.info('Generating QLP image ' + filename)    
                 myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
-        
-                # Exposure Meter time series plot    
-                filename = savedir + self.ObsID + '_HK_spectrum_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D(fig_path=filename, show_plot=False)    
 
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -177,8 +172,7 @@ class QuicklookAlg:
                     os.makedirs(savedir, exist_ok=True) # make directories if needed
                     filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    myL0.plot_L0_stitched_image(fig_path=filename, 
-                                                chip=chip, show_plot=False)
+                    myL0.plot_L0_stitched_image(fig_path=filename, chip=chip, show_plot=False)
             except Exception as e:
                 self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
@@ -194,8 +188,6 @@ class QuicklookAlg:
         Arguments:
             kpf2d - a 2D object
             output_dir - directory for output QLP files (if show_plot=False)
-            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
-                        instead of saving files
     
         Attributes:
             None
@@ -245,20 +237,55 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Make CaHK plots
+        if 'HK' in self.data_products:    
+            try:    
+                savedir = D2_QLP_file_base +'HK/'    
+                os.makedirs(savedir, exist_ok=True) # make directories if needed    
+        
+                # Exposure Meter spectrum plot    
+                trace_file = self.config['CaHK']['trace_file']    
+                wavesoln_file = self.config['CaHK']['cahk_wav']    
+                myHK = AnalyzeHK(kpf2d, trace_file = trace_file,     
+                                       wavesoln_file = wavesoln_file,     
+                                       logger=self.logger)    
+                filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
+
+                # Exposure Meter spectra plots    
+                filename = savedir + self.ObsID + '_HK_spectrum_sci_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D(trace='sci', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_spectrum_sky_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D(trace='sky', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_spectrum_sci_zoom_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D_zoom(trace='sci', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_spectrum_sky_zoom_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_spectrum_1D_zoom(trace='sky', fig_path=filename, show_plot=False)    
+                filename = savedir + self.ObsID + '_HK_column_cut_zoomable.png'    
+                self.logger.info('Generating QLP image ' + filename)    
+                myHK.plot_HK_2D_column_cut(fig_path=filename, kpftype='2D', show_plot=False)    
+
+            except Exception as e:    
+                self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
+
         # Make 2D images
         # to-do: process bias and dark differently
         if chips != []:    
             try:
                 savedir = D2_QLP_file_base +'2D/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
-                my_2D = AnalyzeL0(kpf2d, logger=self.logger)    
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
                     # next line not working yet
                     #Analyze2D.measure_2D_dark_current(self, chip=chip)
                     filename = savedir + self.ObsID + '_2D_image_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_image(self, chip=chip, fig_path=filename, 
-                                                  show_plot=False)
+                    my_2D.plot_2D_image(chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -273,8 +300,7 @@ class QuicklookAlg:
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_image_3x3zoom_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_image_zoom_3x3(self, chip=chip, fig_path=filename, 
-                                                           show_plot=False)
+                    my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -290,8 +316,7 @@ class QuicklookAlg:
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_histogram_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_image_histogram(self, chip=chip, fig_path=filename, 
-                                                            show_plot=False)
+                    my_2D.plot_2D_image_histogram(chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -299,11 +324,11 @@ class QuicklookAlg:
         # Make 2D column cuts
         if chips != []:    
             try:
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
                     filename = savedir + self.ObsID + '_2D_column_cut_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    Analyze2D.plot_2D_column_cut(self, chip=chip, fig_path=filename, 
-                                                       show_plot=False)
+                    my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -320,8 +345,6 @@ class QuicklookAlg:
         Arguments:
             kpf1 - a L1 object
             output_dir - directory for output QLP files (if show_plot=False)
-            show_plot - plots are generated inline (e.g., for Jupyter Notebooks) 
-                        instead of saving files
     
         Attributes:
             None
@@ -347,6 +370,23 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make WLS plots
+        try:
+            savedir = L1_QLP_file_base +'WLS/'
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            if chips != []:    
+                try:
+                    for chip in chips:
+                        filename = savedir + self.ObsID + '_WLS_orderlet_diff_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myWLS = AnalyzeWLS(kpf1, logger=self.logger)
+                        myWLS.plot_WLS_orderlet_diff(chip=chip, fig_path=filename, show_plot=False)
+                except Exception as e:
+                    self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        except Exception as e:
+            self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make L1 SNR plot
         try:
@@ -497,3 +537,325 @@ class QuicklookAlg:
 
             except Exception as e:
                 self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+    #######################
+    ##### QLP MASTERS #####
+    #######################
+    def qlp_master(self, input_file, output_dir):
+        """
+        Description:
+            Generates the standard quicklook data product for a master file.
+    
+        Arguments:
+            input_file (string) - full path to the master file to be processed
+            output_dir - directory for output QLP files (if show_plot=False)
+    
+        Attributes:
+            None
+        """
+
+        self.input_file = input_file
+        self.output_dir = output_dir
+        master_type, data_type = determine_master_type(self.input_file)
+        self.logger.info('The master file ' + str(self.input_file) + ' was determined to be a ' + 
+                         str(data_type) + ' ' + str(master_type) + ' file.')
+        if data_type == '2D':
+            kpf2d = KPF0.from_fits(self.input_file)
+            self.data_products = get_data_products_2D(kpf2d)
+        if data_type == 'L1':
+            kpf1 = KPF1.from_fits(self.input_file)
+            self.data_products = get_data_products_L1(kpf1)
+        if data_type == 'L2':
+            kpf2 = KPF2.from_fits(self.input_file)
+            self.data_products = get_data_products_L2(kpf2)
+        chips = []
+        if master_type != None:
+            if 'Green' in self.data_products: chips.append('green')
+            if 'Red'   in self.data_products: chips.append('red')
+
+        # Make directory, if needed
+        try:
+            if master_type == 'bias':
+                savedir = self.output_dir + 'Bias/' 
+            elif master_type == 'dark':
+                savedir = self.output_dir + 'Dark/' 
+            elif master_type == 'flat':
+                savedir = self.output_dir + 'Flat/' 
+            elif master_type == 'lfc':
+                savedir = self.output_dir + 'LFC/' 
+            elif master_type == 'etalon':
+                savedir = self.output_dir + 'Etalon/' 
+            elif master_type == 'thar':
+                savedir = self.output_dir + 'ThAr/' 
+            elif master_type == 'une':
+                savedir = self.output_dir + 'UNe/' 
+            else:
+                self.logger.error(f"Couldn't determine data type to create directory in Master quicklook pipeline.")
+                savedir = self.output_dir + 'Unidentified/' 
+            os.makedirs(savedir, exist_ok=True) 
+
+        except Exception as e:
+            self.logger.error(f"Failure creating base output diretory in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        ### 2D Masters ###
+        if data_type == '2D':
+            if chips != []:
+
+                # Make 2D images
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_image_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+                # Make 2D images - 3x3 arrays
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:  
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_image_3x3zoom_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+                # Make 2D image histograms
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_histogram_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image_histogram(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+    
+                # Make 2D column cuts
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_column_cut_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+        
+        
+        ### L1 Masters ###
+        if data_type == 'L1':
+
+            # Make L1 SNR plot
+            try:
+                filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                           '_L1_SNR_' + '_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                myL1.measure_L1_snr()
+                myL1.plot_L1_snr(fig_path=filename, show_plot=False)
+    
+            except Exception as e:
+                self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            # Make L1 spectra plots
+            try:
+                for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
+                    filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                               '_L1_spectrum_' + orderlet  + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_L1_spectrum(orderlet=orderlet, fig_path=filename, show_plot=False)
+    
+            except Exception as e:
+                self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            # Make L1 spectra plots (single order)
+            if chips != []:    
+                try:
+                    myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                    if 'green' in chips:  # don't use 'for chip in chips:' here so that the file creation order is correct for Jump to display in a certain order
+                        chip = 'green'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'red' in chips:
+                        chip = 'red'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SCI_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SCI1', 'SCI2', 'SCI3'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'green' in chips:
+                        chip = 'green'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SKY'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'red' in chips:
+                        chip = 'red'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_SKY_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['SKY'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'green' in chips:
+                        chip = 'green'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['CAL'], 
+                                                           fig_path=filename, show_plot=False)
+                    if 'red' in chips:
+                        chip = 'red'
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_spectrum_CAL_order11_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1.plot_1D_spectrum_single_order(chip=chip, order=11, ylog=False, 
+                                                           orderlet=['CAL'], 
+                                                           fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            # Make order ratio grid plots
+            if chips != []:    
+                try:
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_L1_orderlet_flux_ratios_grid_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL1 = AnalyzeL1(kpf1, logger=self.logger)
+                        myL1.measure_orderlet_flux_ratios()
+                        myL1.plot_orderlet_flux_ratios_grid(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+    
+            # Make order ratio plot
+            if chips != []:    
+                try:
+                    filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                               '_L1_orderlet_flux_ratios_zoomable.png'
+                    self.logger.info('Measuring orderlet flux ratios for ' + filename)
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL1.plot_orderlet_flux_ratios(fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+        ### L2 Masters ###
+        if data_type == 'L2':
+        
+        # Make CCF grid plots
+            if chips != []:    
+                try:
+                    myL2 = AnalyzeL2(kpf2, logger=self.logger)
+                    for chip in chips:
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_CCF_grid_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL2.plot_CCF_grid(chip=chip, fig_path=filename, show_plot=False)
+    
+                except Exception as e:
+                    self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
+def determine_master_type(fullpath):
+    """
+    Description:
+        Generates the standard quicklook data products for all of the master files in 
+        a directory.
+
+    Arguments:
+        fullpath (string) - full path to master file (usually a .fits)
+
+    Outputs:
+        master_type - possible values: None, 'bias', dark, 'flat', 'thar', 'une', 'lfc'
+        data_type - possible values: None, 'L0', '2D', 'L1', 'L2', 'WLS'
+
+    Attributes:
+        None
+    """
+    fullpath = fullpath.lower()
+    master_type = None
+    data_type = None
+    
+    # Bias
+    if (('bias' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'bias'
+        if 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # Dark
+    if (('dark' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'dark'
+        if 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # Flat
+    if (('flat' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'flat'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # LFC
+    if (('lfc' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'lfc'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # Etalon
+    if (('etalon' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'etalon'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # ThAr
+    if (('thar' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'thar'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+    # UNe
+    if (('une' in fullpath) and fullpath.endswith('.fits')):
+        master_type = 'une'
+        if 'l2' in fullpath:
+            data_type = 'L2'
+        elif 'l1' in fullpath:
+            data_type = 'L1'
+        else:
+            data_type = '2D'
+
+    return master_type, data_type
+
