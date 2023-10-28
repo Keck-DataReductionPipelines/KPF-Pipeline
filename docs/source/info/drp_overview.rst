@@ -9,10 +9,12 @@ Main Recipe
 Level 0 to 2D
 ^^^^^^^^^^^^^
 
-* Step 1
-* Step 2
-* Step 3
-* ...
+* Subtract overscan
+* Subtract maser bias
+* Subtract scaled master dark
+* Apply master flat
+* Apply bad-pixel mask
+
 
 2D to Level 1
 ^^^^^^^^^^^^^
@@ -23,7 +25,6 @@ Level 0 to 2D
 * ...
 
 
-
 Level 1 to Level 2
 ^^^^^^^^^^^^^^^^^^
 
@@ -31,6 +32,7 @@ Level 1 to Level 2
 * Step 2
 * Step 3
 * ...
+
 
 The DRP also creates 'master' files that are stacks of particular observations of a particular type (e.g., darks, bias, flats).  The DRP also has a set of 'quick-look' recipes to produce diagnostic plots and measurements.
 
