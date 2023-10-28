@@ -9,29 +9,53 @@ Main Recipe
 Level 0 to 2D
 ^^^^^^^^^^^^^
 
-* Subtract overscan
-* Subtract maser bias
-* Subtract scaled master dark
-* Apply master flat
-* Apply bad-pixel mask
+#. Subtract overscan
+#. Subtract maser bias
+#. Subtract scaled master dark
+#. Apply master flat
+#. Apply bad-pixel mask
 
 
 2D to Level 1
 ^^^^^^^^^^^^^
 
-* Step 1
-* Step 2
-* Step 3
-* ...
+#. Spectral Extraction
+
+   #. <part 1>
+
+   #. <part 2>
+
+   #. <part 3>
+
+#. ... <more>
+
+#. Ca H&K Spectrometer Spectra
+
+   #. Subtract master bias
+
+   #. Subtract scaled master dark
+
+   #. Spectral Extraction
+
+   #. Apply default wavelength solution to extracted spectra
 
 
 Level 1 to Level 2
 ^^^^^^^^^^^^^^^^^^
 
-* Step 1
-* Step 2
-* Step 3
-* ...
+* Compute Cross-correlation functions (CCFs) with binary masks
+* Compute RVs per order and per orderlet from fitting CCF peaks
+* Compute reweighted RVs based on information content per order
+* <more ?>
+
+
+Wavelength Solution Construction
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+#. Step 1
+#. Step 2
+#. Step 3
+#. ...
 
 
 The DRP also creates 'master' files that are stacks of particular observations of a particular type (e.g., darks, bias, flats).  The DRP also has a set of 'quick-look' recipes to produce diagnostic plots and measurements.
