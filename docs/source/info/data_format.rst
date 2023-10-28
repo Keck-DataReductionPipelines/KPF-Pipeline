@@ -15,10 +15,8 @@ Each of these data levels is a standardized, multi-extension FITS format, and ca
 
 KPF L0 files follow the naming convention: KP.YYYYMMDD.SSSSS.ss.fits, where YYYYMMDD is a date and SSSSS.ss is the number of decimal seconds after UT midnight corresponding to the start of the exposure.  2D/L1/L2 files have similar file names, but with '_2D', '_L1', or '_L2' before '.fits'.  For example, KP.YYYYMMDD.SSSSS.ss_2D.fits is a 2D file name.
 
-Level 0 Data Format
--------------------
-
-*Add a list of important Level 0 primary keywords.  Add a link to the tutorial showing how to open and examine L0 files.*
+Data Format of KPF Files
+------------------------
 
 Level 0 FITS Extensions
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -41,8 +39,6 @@ GUIDER_CUBE_ORIGINS  table      variable        Table of time-series guide camer
 
 [a] - the example shown above is for two-amplifier mode.  When KPF is operated in fast' read mode, four amplifiers per CCD will be used and there will be a corresponding number of AMP extensions.
 
-'2D' Data Format
--------------------
 
 *Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.*
 
@@ -65,11 +61,6 @@ GUIDER_AVG           image      512 x 640       Same as in L0 file
 GUIDER_CUBE_ORIGINS  table      variable        Same as in L0 file          
 ===================  =========  ==============  =======
 
-
-Level 1 Data Format
--------------------
-
-*Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.*
 
 Level 1 FITS Extensions
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -122,11 +113,6 @@ BARY_CORR            table      67              Table of barycentric corrections
 ===================  =========  ==============  =======
 
 
-Level 2 Data Format
--------------------
-
-*Add a list of important Level 2 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.  Add a link or explanation here about how to interpret the RVs by order.* 
-
 Level 2 FITS Extensions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -143,6 +129,53 @@ RED_CCF              image      5 x 52 x 804    Reweighted CCFs (orderlet x orde
 RV                   table      67              Table of RVs by spectral order
 ACTIVITY             table      n/a             Not used yet (will include activity measurements)
 ===================  =========  ==============  =======
+
+Important FITS Header Keywords
+------------------------------
+
+Level 0 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Most of the important keywords are stored in the primary extension of the Level 0 file, which is written immediately after each KPF exposure.
+
+========  ==============================  =========
+Keyword   Value (example)                 Comment
+========  ==============================  =========
+DATE-BEG  2023-10-22T15:30:01.056733      Start of exposure from kpfexpose
+DATE-MID  2023-10-22T15:32:31.065         Halfway point of the exposure (unweighted)
+DATE-END  2023-10-22T15:35:01.072797      End of exposure
+EXPTIME   300.0                           Requested exposure time
+ELAPSED   300.0                           Actual exposure time
+PROGNAME  N226                            Program name from kpfexpose
+OBJECT    42813                           Object name
+TARGRA    06:12:13.80                     Right ascension [hr] from DCS
+TARGDEC   -14:38:56.0                     Declination [deg] from DCS
+TARGEPOC  2000.0                          Target epoch from DCS
+TARGEQUI  2000.0                          Target equinox from DCS
+TARGPLAX  14.7                            Target parallax [arcsec] from DCS
+TARGPMDC  0.0                             Target proper motion [arcsec/yr] in declination from DCS
+TARGPMRA  0.0                             Target proper motion [s/yr] in right ascension from DCS
+TARGRADV  81.87                           Target radial velocity [km/s]
+AIRMASS   1.26                            Airmass from DCS
+PARANTEL  23.58                           Parallactic angle of the telescope from DCS
+HA        +01:01:37.22                    Hour angle
+EL        52.46                           Elevation [deg]
+AZ        204.46                          Azimuth [deg]
+LST       07:13:51.02                     Local sidereal time
+GAIAID    DR3 2993561629444856960         GAIA Target name
+2MASSID   J06121397-1439002               2MASS Target name
+GAIAMAG   9.28                            GAIA G band magnitude
+2MASSMAG  8.06                            2MASS J band magnitude
+TARGTEFF  5398.0                          Target effective temperature (K)
+OCTAGON   EtalonFiber                     Selected octagon calibration source (not necessarily powered on)
+TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide  Cameras that were sent triggers
+IMTYPE    Object                          Image Type
+CAL-OBJ   None                            Calibration fiber source
+SKY-OBJ   Sky                             Sky fiber source
+SCI-OBJ   Target                          Science fiber source
+AGITSTA   Running                         Agitator status
+========  ==============================  =========
+
 
 .. |date| date::
 
