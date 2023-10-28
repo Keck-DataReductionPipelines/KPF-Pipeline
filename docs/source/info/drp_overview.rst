@@ -49,14 +49,36 @@ Level 1 to Level 2
 * <more ?>
 
 
-Wavelength Solution Construction
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Wavelength Solution Recipes
+---------------------------
+
+ThAr
+^^^^
 
 #. Step 1
 #. Step 2
 #. Step 3
 #. ...
 
+LFC
+^^^^
+
+#. Step 1
+#. Step 2
+#. Step 3
+#. ...
+
+Etalon
+^^^^
+
+#. Step 1
+#. Step 2
+#. Step 3
+#. ...
+
+
+Master Construction Recipes
+---------------------------
 
 The DRP also creates 'master' files that are stacks of particular observations of a particular type (e.g., darks, bias, flats).  The DRP also has a set of 'quick-look' recipes to produce diagnostic plots and measurements.
 
