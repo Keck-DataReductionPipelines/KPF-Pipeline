@@ -9,11 +9,12 @@ Main Recipe
 Level 0 to 2D
 ^^^^^^^^^^^^^
 
-#. Subtract overscan
-#. Subtract maser bias
-#. Subtract scaled master dark
-#. Apply master flat
-#. Apply bad-pixel mask
+#. Remove the overscan region from each amplifier region
+#. Stitch amplifier regions into a single image (per CCD)
+#. Subtract master bias (per CCD)
+#. Subtract scaled master dark (per CCD)
+#. Apply master flat (per CCD)
+#. Apply bad-pixel mask (per CCD)
 
 
 2D to Level 1
@@ -43,10 +44,10 @@ Level 0 to 2D
 Level 1 to Level 2
 ^^^^^^^^^^^^^^^^^^
 
-* Compute Cross-correlation functions (CCFs) with binary masks
-* Compute RVs per order and per orderlet from fitting CCF peaks
-* Compute reweighted RVs based on information content per order
-* <more ?>
+#. Compute Cross-correlation functions (CCFs) with binary masks
+#. Compute RVs per order and per orderlet from fitting CCF peaks
+#. Compute reweighted RVs based on information content per order
+#. <more ?>
 
 
 Wavelength Solution Recipes
