@@ -1,0 +1,19 @@
+from modules.Utils.string_proc import level_from_kpffile
+from modules.Utils.string_proc import date_from_kpffile
+from modules.quicklook.src.quick_prim import Quicklook
+
+#file_path = context.file_path # from context in watch mode, e.g. /data/2D/20230711/KP.20230711.00415.52_2D.fits
+#level = level_from_kpffile(file_path)  # 'L0', '2D', 'L1', 'L2', None
+#datecode = date_from_kpffile(file_path)  # e.g. 20230711
+#output_dir= '/data/QLP/' + datecode + '/'
+
+file_path = '/data/L0/20230731/KP.20230731.86376.18.fits'
+masters_str = 'L0'
+
+if masters_str in file_path:
+    open_file = kpf0_from_fits(file_path, data_type='KPF')
+
+
+#if level != None:
+#    open_file = kpf0_from_fits(file_path, data_type='KPF')
+#    Quicklook(open_file, output_dir, level)
