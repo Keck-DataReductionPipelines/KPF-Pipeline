@@ -1,3 +1,5 @@
+.. _label-tutorials:
+
 Opening, Examining, and Manipulating KPF Files
 ==============================================
 
