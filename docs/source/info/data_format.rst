@@ -15,6 +15,8 @@ Each of these data levels is a standardized, multi-extension FITS format, and ca
 
 KPF L0 files follow the naming convention: KP.YYYYMMDD.SSSSS.ss.fits, where YYYYMMDD is a date and SSSSS.ss is the number of decimal seconds after UT midnight corresponding to the start of the exposure.  2D/L1/L2 files have similar file names, but with '_2D', '_L1', or '_L2' before '.fits'.  For example, KP.YYYYMMDD.SSSSS.ss_2D.fits is a 2D file name.
 
+See the section titled :ref:`label-tutorials` for a set of tutorials on the various KPF data files.
+
 Data Format of KPF Files
 ------------------------
 
@@ -39,8 +41,6 @@ GUIDER_CUBE_ORIGINS  table      variable        Table of time-series guide camer
 
 [a] - the example shown above is for two-amplifier mode.  When KPF is operated in fast' read mode, four amplifiers per CCD will be used and there will be a corresponding number of AMP extensions.
 
-
-*Add a list of important Level 1 primary keywords.  Add a link to the Tutorial showing how to open and examine L0 files.*
 
 2D File FITS Extensions
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -176,6 +176,7 @@ SCI-OBJ   Target                          Science fiber source
 AGITSTA   Running                         Agitator status
 ========  ==============================  =========
 
+*Add a list of important Level 1 and Level 2 primary keywords.*
 
 .. |date| date::
 
