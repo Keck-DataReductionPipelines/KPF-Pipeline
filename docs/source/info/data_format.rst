@@ -176,8 +176,4 @@ SCI-OBJ   Target                          Science fiber source
 AGITSTA   Running                         Agitator status
 ========  ==============================  =========
 
-*Add a list of important Level 1 and Level 2 primary keywords.*
-
-.. |date| date::
-
-Last Updated on |date|
+*To-do: add a list of important Level 1 and Level 2 primary keywords.*
