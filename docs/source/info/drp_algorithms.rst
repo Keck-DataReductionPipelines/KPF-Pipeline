@@ -105,6 +105,3 @@ Guider Data Processing
 ----------------------
 The DRP does not further process the data from the KPF Guider that are stored in FITS extensions in the L0 files.  These data include a guider image summed over the spectrometer integration and a table of guiding corrections, flux measurements, and other diagnostics taken from real-time Source Extractor analysis of the guider frames (typically at 100 Hz speed).
 
-.. |date| date::
-
-Last Updated on |date|
