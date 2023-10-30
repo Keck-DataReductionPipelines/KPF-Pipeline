@@ -44,7 +44,7 @@ for cal_type in ['ThAr', 'LFC']:
                     orderlet_names = config.ARGUMENT.red_cal_orderlet_name
                     min_order = config.ARGUMENT.red_min_order
                     max_order = config.ARGUMENT.red_max_order
-                    json_filename = str_replace(obj_string, '_L1.fits', '_RED_L1.json.gz')
+                    json_filename = str_replace(output_filename, '_L1.fits', '_RED_L1.json.gz')
                     
                 if ext == 'GREEN_CAL_WAVE':
                     linelist = config.ARGUMENT.green_linelist
@@ -52,7 +52,7 @@ for cal_type in ['ThAr', 'LFC']:
                     orderlet_names = config.ARGUMENT.green_cal_orderlet_name
                     min_order = config.ARGUMENT.green_min_order
                     max_order = config.ARGUMENT.green_max_order
-                    json_filename = str_replace(obj_string, '_L1.fits', '_GREEN_L1.json.gz')
+                    json_filename = str_replace(output_filename, '_L1.fits', '_GREEN_L1.json.gz')
                 
                 if save_diagnostics_dir != None:
                     plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
