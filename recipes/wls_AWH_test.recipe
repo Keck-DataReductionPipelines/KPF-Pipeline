@@ -21,24 +21,24 @@ if cal_type == 'ThAr':
 L1_file = base_dir + obj_string
 l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
 obj_string_short = str_replace(obj_string, '_L1.fits', '')
+output_filename = output_dir + date_dir + '/' + obj_string + '_WLS_L1.fits'
 
 for ext in ['RED_SCI_WAVE2', 'GREEN_SCI_WAVE2']:
     master_wls = full_master_wls[ext]
     if ext == 'RED_SCI_WAVE2':
-        CHIP = 'RED'
         linelist = config.ARGUMENT.red_linelist
         output_exts = config.ARGUMENT.red_output_ext
         orderlet_names = config.ARGUMENT.red_cal_orderlet_name
         min_order = config.ARGUMENT.red_min_order
         max_order = 1 #config.ARGUMENT.red_max_order
+        json_filename = str_replace(output_filename, '_L1.fits', '_RED_L1.json.gz')
     if ext == 'GREEN_SCI_WAVE2':
-        CHIP = 'GREEN'
         linelist = config.ARGUMENT.green_linelist
         output_exts = config.ARGUMENT.green_output_ext
         orderlet_names = config.ARGUMENT.green_cal_orderlet_name
         min_order = config.ARGUMENT.green_min_order
         max_order = 1 #config.ARGUMENT.green_max_order
-    json_filename   = output_dir + date_dir + '/' + obj_string + '_WLS' + '_' + CHIP + '.json.gz'
+        json_filename = str_replace(output_filename, '_L1.fits', '_GREEN_L1.json.gz')
         
     l1_obj = WaveCalibrate(
         l1_obj, cal_type, orderlet_names, True, quicklook, 
@@ -48,5 +48,4 @@ for ext in ['RED_SCI_WAVE2', 'GREEN_SCI_WAVE2']:
         json_filename=json_filename
     )
 
-output_filename = output_dir + date_dir + '/' + obj_string + '_' + CHIP + '_WLS_L1.fits'
 result = to_fits(l1_obj, output_filename)
