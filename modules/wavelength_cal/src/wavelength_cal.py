@@ -242,6 +242,9 @@ class WaveCalibrate(KPF1_Primitive):
             if self.json_filename != None:
                 print('*******************************************')
                 print('Saving JSON file with WLS fit information: ' +  self.json_filename)
+                json_dir = os.path.dirname(self.json_filename)
+                if not os.path.isdir(json_dir):
+                    os.makedirs(json_dir)
                 write_wls_json(self.wls_dict, self.json_filename)
 
         else:
