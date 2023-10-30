@@ -83,6 +83,3 @@ Master Construction Recipes
 
 The DRP also creates 'master' files that are stacks of particular observations of a particular type (e.g., darks, bias, flats).  The DRP also has a set of 'quick-look' recipes to produce diagnostic plots and measurements.
 
-.. |date| date::
-
-Last Updated on |date|
