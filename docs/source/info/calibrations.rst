@@ -64,6 +64,3 @@ Master Files
 
 For the main spectrometer, master files for bias, dark, flat, and the wavelength calibration sources listed above are created each day from the calibrations during the UT date.  The co-addition process involves iterative outlier rejection per pixel.  
 
-.. |date| date::
-
-Last Updated on |date|
