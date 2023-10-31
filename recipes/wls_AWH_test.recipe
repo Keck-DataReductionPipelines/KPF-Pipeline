@@ -13,39 +13,58 @@ cal_type = 'LFC'
 master_wls_file = '/data/reference_fits/Th_new_WLS_102523_orders_0_10_green_SPH.fits'
 full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
 
+
 base_dir = '/data/L1/20230430/'
-if cal_type == 'LFC':
-    obj_string = 'KP.20230430.56774.47_L1.fits'
-if cal_type == 'ThAr':
-    obj_string = 'KP.20230430.63725.01_L1.fits'
-L1_file = base_dir + obj_string
-l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
-obj_string_short = str_replace(obj_string, '_L1.fits', '')
-output_filename = output_dir + date_dir + '/' + obj_string + '_WLS_L1.fits'
-
-for ext in ['RED_SCI_WAVE2', 'GREEN_SCI_WAVE2']:
-    master_wls = full_master_wls[ext]
-    if ext == 'RED_SCI_WAVE2':
-        linelist = config.ARGUMENT.red_linelist
-        output_exts = config.ARGUMENT.red_output_ext
-        orderlet_names = config.ARGUMENT.red_cal_orderlet_name
-        min_order = config.ARGUMENT.red_min_order
-        max_order = 1 #config.ARGUMENT.red_max_order
-        json_filename = str_replace(output_filename, '_L1.fits', '_RED_L1.json.gz')
-    if ext == 'GREEN_SCI_WAVE2':
-        linelist = config.ARGUMENT.green_linelist
-        output_exts = config.ARGUMENT.green_output_ext
-        orderlet_names = config.ARGUMENT.green_cal_orderlet_name
-        min_order = config.ARGUMENT.green_min_order
-        max_order = 1 #config.ARGUMENT.green_max_order
-        json_filename = str_replace(output_filename, '_L1.fits', '_GREEN_L1.json.gz')
-        
-    l1_obj = WaveCalibrate(
-        l1_obj, cal_type, orderlet_names, True, quicklook, 
-        min_order, max_order, 'KPF', output_exts,
-        rough_wls = master_wls, f0_key=f0, frep_key=fr, output_dir = output_dir,
-        linelist_path=linelist, save_diagnostics=save_diagnostics_dir, 
-        json_filename=json_filename
-    )
-
-result = to_fits(l1_obj, output_filename)
+for d in [0, 1, 2, 3]:
+    if cal_type == 'LFC':
+        if d == 0:
+            obj_string = 'KP.20230430.56774.47_L1.fits'
+        if d == 1:
+            obj_string = 'KP.20230430.56896.43_L1.fits'
+        if d == 2:
+            obj_string = 'KP.20230430.80335.49_L1.fits'
+        if d == 3:
+            obj_string = 'KP.20230430.80335.49_L1.fits'
+    if cal_type == 'ThAr':
+        if d == 0:
+            obj_string = 'KP.20230430.31963.46_L1.fits'
+        if d == 1:
+            obj_string = 'KP.20230430.32027.23_L1.fits'
+        if d == 2:
+            obj_string = 'KP.20230430.63725.01_L1.fits'
+        if d == 3:
+            obj_string = 'KP.20230430.63789.14_L1.fits'
+    L1_file = base_dir + obj_string
+    l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
+    obj_string_short = str_replace(obj_string, '_L1.fits', '')
+    output_filename = output_dir + date_dir + '/' + obj_string + '_WLS_L1.fits'
+    
+    for ext in ['RED_CAL_WAVE', 'GREEN_CAL_WAVE']: # iterate over RED/GREEN CCDs
+        master_wls = full_master_wls[ext]
+        if ext == 'RED_CAL_WAVE':
+            linelist = config.ARGUMENT.red_linelist
+            output_exts = config.ARGUMENT.red_output_ext
+            orderlet_names = config.ARGUMENT.red_cal_orderlet_name
+            min_order = config.ARGUMENT.red_min_order
+            max_order = config.ARGUMENT.red_max_order
+            #json_filename = str_replace(output_filename, '_L1.fits', '_RED_L1.json.gz')
+            json_filename = output_dir + date_dir + '/' + obj_string + '_WLS_RED_L1.json.gz'
+        if ext == 'GREEN_CAL_WAVE':
+            linelist = config.ARGUMENT.green_linelist
+            output_exts = config.ARGUMENT.green_output_ext
+            orderlet_names = config.ARGUMENT.green_cal_orderlet_name
+            min_order = config.ARGUMENT.green_min_order
+            max_order = config.ARGUMENT.green_max_order
+            #json_filename = str_replace(output_filename, '_L1.fits', '_GREEN_L1.json.gz')
+            json_filename = output_dir + date_dir + '/' + obj_string + '_WLS_GREEN_L1.json.gz'
+            
+        l1_obj = WaveCalibrate(
+            l1_obj, cal_type, orderlet_names, True, quicklook, 
+            min_order, max_order, 'KPF', output_exts,
+            rough_wls = master_wls, f0_key=f0, frep_key=fr, output_dir = output_dir,
+            linelist_path=linelist, save_diagnostics=save_diagnostics_dir, 
+            json_filename=json_filename
+        )
+    
+    result = to_fits(l1_obj, output_filename)
+    

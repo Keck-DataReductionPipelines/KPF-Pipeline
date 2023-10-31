@@ -34,7 +34,7 @@ for cal_type in ['ThAr', 'LFC']:
             obj_string_short = str_replace(obj_string, '_L1.fits', '')
             output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
 
-            for ext in ['RED_CAL_WAVE', 'GREEN_CAL_WAVE']:
+            for ext in ['RED_CAL_WAVE', 'GREEN_CAL_WAVE']: # iterate over RED/GREEN CCDs
 
                 master_wls = full_master_wls[ext]
 
