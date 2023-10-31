@@ -281,6 +281,12 @@ class WaveCalibration:
             orderlet_dict[order_num]['n_pixels'] = n_pixels
             orderlet_dict[order_num]['lines'] = {}
 
+            # check if there's flux in the orderlet (e.g., SKY order 0 is off of the GREEN CCD)
+            npixels_wflux = len([x for x in order_flux if x != 0])
+            if npixels_wflux == 0: 
+                self.logger.warn('This order has no flux, defaulting to rough WLS')
+                continue
+
             # find, clip, and compute precise wavelengths for peaks.
             # this code snippet will only execute for Etalon and LFC frames.
             if expected_peak_locs is None:
@@ -308,7 +314,6 @@ class WaveCalibration:
                         detected_peak_heights, gauss_coeffs, lines_dict = self.find_peaks_in_order(
                         order_flux, plot_path=order_plt_path
                     )
-                    # add lines_dict['nlines'] = XXX
                     orderlet_dict[order_num]['lines'] = lines_dict
                     
                 except TypeError as e:
