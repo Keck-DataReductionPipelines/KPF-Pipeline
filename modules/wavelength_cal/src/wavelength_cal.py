@@ -118,6 +118,7 @@ class WaveCalibrate(KPF1_Primitive):
         Returns:
             Level 1 Data Object
         """
+
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
             self.file_name_split = self.l1_obj.filename.split('_')[0]
             self.file_name = self.l1_obj.filename.split('.')[0]
@@ -177,16 +178,17 @@ class WaveCalibrate(KPF1_Primitive):
                     ):
                         raise ValueError('Not an Etalon file!')
                     
-                    if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(
-                            self.linelist_path, allow_pickle=True
-                        ).tolist()
-                    else:
-                        peak_wavelengths_ang = None
-
+                    #if self.linelist_path is not None:
+                    #    peak_wavelengths_ang = np.load(
+                    #        self.linelist_path, allow_pickle=True
+                    #    ).tolist()
+                    #else:
+                    #    peak_wavelengths_ang = None
+                    print("made it here.")
                     _, wls_and_pixels = self.alg.run_wavelength_cal(
                         calflux, self.rough_wls, 
-                        peak_wavelengths_ang=peak_wavelengths_ang
+                    #    peak_wavelengths_ang=peak_wavelengths_ang,
+                        input_filename=self.l1_obj.filename
                     )
 
                     if self.save_wl_pixel_toggle == True:
