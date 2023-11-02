@@ -59,7 +59,7 @@ class WaveCalibration:
         self.n_sections = configpull.get_config_value('n_sections',1)
         #self.linelist_path = configpull.get_config_value(
         #    'linelist_path_etalon',None
-        )
+        # )
         self.clip_peaks_toggle = configpull.get_config_value('clip_peaks',False)
         self.clip_below_median  = configpull.get_config_value('clip_below_median',True)
         self.peak_height_threshold = configpull.get_config_value('peak_height_threshold',1.5)
@@ -193,13 +193,7 @@ class WaveCalibration:
         return poly_soln, wls_and_pixels    
 
     def find_etalon_peaks(self,flux,wave,etalon_mask):
-        #flux_data = fetch_etalon_frame(CCD,FILE_PATH) 
-        #wave_data = fetch_wls_soln(CCD,FILE_WLS)
-        #etalon_mask = fetch_current_etalon_mask(FILE_ETALON_MASK)
-        #flux = flux_data[ord,:] 
-        #wave = wave_data[ord,:] 
-        
-        mask1 = etalon_mask[(etalon_mask['wave'] > min(wave)) & (etalon_mask['wave'] < max(wave)) ] 
+        mask1 = etalon_mask[(etalon_mask['wave'] > min(wave)) & (etalon_mask['wave'] < max(wave))] 
         mask = np.sort(mask1['wave'].values) # This may be causing problems on edges of orderw, where they overlap.
 
         params=[]
@@ -219,7 +213,7 @@ class WaveCalibration:
             #init_vals = self.gaussian_func(wave_clp,max(flux_clp), item, 0.03)        
             
                 #popt, _ = curve_fit( gaussian_func,wave_clp, flux_clp,p0=[max(flux_clp), item, 0.01])#,maxfev=1e4)
-            popt, _ = self.fit_gaussian(wave_clp, flux_clp)
+            popt = self.fit_gaussian(wave_clp, flux_clp)
             #except RuntimeError:
                 #print('Fit Failing')
             #    popt = init_vals    
@@ -228,11 +222,11 @@ class WaveCalibration:
             new_peaks.append(popt[1])
             #output_array = [mask,new_peaks]
         #return output_array
-        return new_peaks
+        return mask, new_peaks
 
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
-        expected_peak_locs=None, plt_path=None, print_update=False,etalon_mask_in=None):
+        expected_peak_locs=None, plt_path=None, print_update=False):
         """
         Iteratively performs wavelength calibration for all orders.
         Args:
@@ -305,9 +299,16 @@ class WaveCalibration:
             rough_wls_order = rough_wls[order_num,:]
             n_pixels = len(order_flux)
 
+            if self.cal_type == 'Etalon':  # For etalon
+                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], delim_whitespace=True)
+                wls, fitted_peak_pixels = self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask)
+                # etalon_file_out = self.filename.replace('.fits','_mask.csv') 
+                # etalon_mask['wave'] = output_peaks 
+                # etalon_mask.to_csv(etalon_file_out)
+
             # find, clip, and compute precise wavelengths for peaks.
             # this code snippet will only execute for Etalon and LFC frames.
-            if expected_peak_locs is None:
+            elif expected_peak_locs is None:
                 skip_orders_wls = None
                 if self.red_skip_orders and max(order_list) == 31:  # KPF max order for red chip (update if changed in KPF.cfg)
                     skip_orders_wls = np.fromstring(self.red_skip_orders, dtype=int, sep=',')
@@ -406,7 +407,6 @@ class WaveCalibration:
             # if we don't have an etalon frame, we won't use drift to 
             # calculate the wls
             if self.cal_type != 'Etalon':
-
                 if expected_peak_locs is None:
                     peak_heights = detected_peak_heights[good_peak_idx]
                 else:
@@ -458,14 +458,6 @@ class WaveCalibration:
                 order_precisions.append(abs_precision)
                 num_detected_peaks.append(len(fitted_peak_pixels))
 
-        
-            # compute drift, and use this to update the wavelength solution
-            elif self.cal_type == 'Etalon':  # For etalon
-                etalon_mask_in = pd.read_csv(self.etalon_mask_in,names=['wave','weight'])
-                output_peaks =self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask_in)
-                etalon_file_out = self.filename.replace('.fits','_mask.csv') 
-                etalon_mask_in['wave'] = output_peaks 
-                etalon_mask_in.to_csv(etalon_file_out)               
             else:
                 pass
 
@@ -723,7 +715,6 @@ class WaveCalibration:
                 adjacent_fluxes = np.concatenate((detected_peak_heights[peak_idx-9:peak_idx-1], detected_peak_heights[peak_idx+1:peak_idx+9]))
                 #print(peak_flux)
                 max_adjacent_flux = np.max(adjacent_fluxes)
-                #import pdb; pdb.set_trace()
                 if peak_flux <= 3 * max_adjacent_flux:
                     new_good_peak_idx.append(peak_idx)
             elif peak_idx < 8:
@@ -1262,7 +1253,8 @@ class WaveCalibration:
                 popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
             except RuntimeError:
                 return p0
-        if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':          
+
+        if self.cal_type == 'LFC' or self.cal_type == 'ThAr':          
             # Quality Checks for Gaussian Fits
             chi_squared_threshold = int(self.chi_2_threshold)
 
