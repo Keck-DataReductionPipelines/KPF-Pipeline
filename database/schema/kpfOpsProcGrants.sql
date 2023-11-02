@@ -42,3 +42,19 @@ grant EXECUTE on FUNCTION getCalFile (
     contentbitmask_  integer,
     maxage_          interval
 ) to kpfporole, kpfreadrole;
+
+grant EXECUTE on FUNCTION registerReadNoise (
+    rId_           integer,
+    rngreen1_      real,
+    rngreen2_      real,
+    rngreen3_      real,
+    rngreen4_      real,
+    rnred1_        real,
+    rnred2_        real,
+    rnred3_        real,
+    rnred4_        real,
+    rncahk_        real,
+    greenreadtime_ real,
+    redreadtime_   real,
+    readspeed_     character varying(16)
+) to kpfporole, kpfreadrole;
