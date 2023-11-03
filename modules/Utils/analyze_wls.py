@@ -31,7 +31,6 @@ class AnalyzeWLS:
     def __init__(self, L1, logger=None):
         if logger:
             self.logger = logger
-            self.logger.debug('Initializing AnalyzeWLS object')
         else:
             self.logger = None
         self.L1 = L1
@@ -167,7 +166,9 @@ class AnalyzeWLSDict:
             order (integer) - order number
             line (integer) - line number
             fig_path (string) - set to the path for the file to be generated.
+                                default=None
             show_plot (boolean) - show the plot in the current environment.
+                                  default=False
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -220,7 +221,9 @@ class AnalyzeWLSDict:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
             order (integer) - order number
             fig_path (string) - set to the path for the file to be generated.
+                                default=None
             show_plot (boolean) - show the plot in the current environment.
+                                  default=False
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -309,7 +312,9 @@ class AnalyzeWLSDict:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
             order (integer) - order number
             fig_path (string) - set to the path for the file to be generated.
+                                default=None
             show_plot (boolean) - show the plot in the current environment.
+                                  default=False
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -403,12 +408,15 @@ class AnalyzeWLSDict:
         wavelength solutions for the orders of a given orderlet.
 
         Args:
-            orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
-            fig_path (string) - set to the path for the file to be generated
-            show_plot (boolean) - show the plot in the current environment
+            fig_path (string) - set to the path for the file to be generated.
+                                default=None
+            show_plot (boolean) - show the plot in the current environment.
+                                  default=False                                  
             warming_ms (double) - level in m/s where the orange 'warning' boxes start
+                                  default=10
             alarm_ms (double) - level in m/s where the orange 'warning' boxes end
                                 and the red 'alarm' boxes being
+                                default=100
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
@@ -566,11 +574,15 @@ class AnalyzeTwoWLSDict:
 
         Args:
             orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
-            fig_path (string) - set to the path for the file to be generated
-            show_plot (boolean) - show the plot in the current environment
+            fig_path (string) - set to the path for the file to be generated.
+                                default=None
+            show_plot (boolean) - show the plot in the current environment.
+                                  default=False                                  
             warming_ms (double) - level in m/s where the orange 'warning' boxes start
+                                  default=10
             alarm_ms (double) - level in m/s where the orange 'warning' boxes end
                                 and the red 'alarm' boxes being
+                                default=100
 
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
