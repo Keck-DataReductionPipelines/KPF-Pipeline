@@ -49,9 +49,10 @@ class AnalyzeWLS:
 
         Args:
             chip (string) - "green" or "red"
-            fig_path (string) - set to the path for a SNR vs. wavelength file
-                to be generated.
-            show_plot (boolean) - show the plot in the current environment 
+            fig_path (string) - set to the path for the file to be generated.
+                                default=None
+            show_plot (boolean) - show the plot in the current environment.
+                                  default=False
 
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
@@ -104,7 +105,7 @@ class AnalyzeWLS:
             ax[i].tick_params(axis='both', which='major', labelsize=14)
             ax[i].set_xlim(wav2.min()-25,wav2.max()+25)
             ax[i].set_ylim(y50-dy, y50+dy)
-            ax[i].set_ylabel('{0} - SCI2'.format(labels[i]), fontsize=18)
+            ax[i].set_ylabel(r'{0} - SCI2 [$\AA$]'.format(labels[i]), fontsize=18)
             ax[i].grid(True)
             
         title = "{0} Chip:  {1}".format(chip_title, self.L1.header['PRIMARY']['OFNAME'])
@@ -707,6 +708,36 @@ class AnalyzeTwoWLSDict:
         plt.close('all')
 
 
+def print_dict(dictionary, max_depth=1):
+    """
+    The wavelength solution dictionaries can be so large (10s of MB) that they cause 
+    Jupyter notebooks to crash.  This method is a way to safely print particular 
+    levels of a dictionary to avoid that problem.
+
+    Args:
+        dictionary - the wavelength solution dictionary (or any dictionary) whose
+                     elements are to be printed
+        max_depth - the maximum depth (starting from 0) to print.  For example, 
+                    max_depth=2 prints two levels deep.
+
+    Returns:
+        None
+    """
+    min_depth=0
+    if min_depth > max_depth:
+        return
+    if isinstance(dictionary, dict):
+        print("got here")
+        for key, value in dictionary.items():
+            print('\t' * min_depth + str(key) + ':')
+            if isinstance(value, dict):
+                print_dict(value, min_depth+1, max_depth)
+            elif min_depth < max_depth:
+                print('\t' * (min_depth+1) + str(value))
+    else:
+        print('\t' * min_depth + str(dictionary))
+
+
 def count_dict(wls_dict):
     """
     Count the number of lines or orders (whichever is the next level of hierarchy) 
@@ -723,6 +754,20 @@ def count_dict(wls_dict):
         if isinstance(key, int):
             nlines += 1
     return nlines
+    
+def combine_two_wls_dicts(wls_dict1, wls_dict2):
+    """
+    This method combines two wavelength solution dictionaries.  
+    Usually it is used to combine the green and red dictionaries from a single spectrum.
+
+    Args:
+        wls_dict1 - first WLS dictionary
+        wls_dict1 - second WLS dictionary
+
+    Returns:
+        wls_dict_combined
+    """
+
 
 
 # These methods are used to read and write JSON-formatted files that store WLS dictionaries.
