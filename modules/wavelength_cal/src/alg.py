@@ -205,7 +205,7 @@ class WaveCalibration:
             incr = 0.18 # Ang
             w_lw = item-incr
             w_hi  = item+incr
-            fit_indx = (wave > w_lw) & (wave < w_hi)
+            fit_indx = (wave > w_lw) & (wave < w_hi) # may need to catch exceptions here.
             wave_clp = wave[fit_indx]
             flux_clp = flux[fit_indx] 
         
@@ -220,8 +220,6 @@ class WaveCalibration:
             #params.append(popt)
             #fit_vals = gaussian_func(wave_clp,popt[0],popt[1],popt[2])
             new_peaks.append(popt[1])
-            #output_array = [mask,new_peaks]
-        #return output_array
         return mask, new_peaks
 
     def fit_many_orders(
@@ -301,10 +299,8 @@ class WaveCalibration:
 
             if self.cal_type == 'Etalon':  # For etalon
                 etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], delim_whitespace=True)
-                wls, fitted_peak_pixels = self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask)
-                # etalon_file_out = self.filename.replace('.fits','_mask.csv') 
-                # etalon_mask['wave'] = output_peaks 
-                # etalon_mask.to_csv(etalon_file_out)
+                wls, fitted_peak_pixels = self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask) # returns original mask and new mask positions for one order.
+                wls=wls.tolist()
 
             # find, clip, and compute precise wavelengths for peaks.
             # this code snippet will only execute for Etalon and LFC frames.
@@ -1246,7 +1242,6 @@ class WaveCalibration:
 
         i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
         p0 = [y[i], x[i], 1, np.min(y)]
-
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
             try:   
@@ -1564,7 +1559,35 @@ class WaveCalibration:
         """
 
         np.save(file_name,wave_pxl_data,allow_pickle=True)
+
+    def save_etalon_mask_update(self,file_name,wave_pxl_data):
+        """
+        Saves nightly etalon mask
         
+        Args: 
+            file_name (str): Filename including date and time from original science file
+            new_mask (np.array): Wavlengths of updated etalon mask
+                function 'run_wavelength_cal'.
+                
+        Returns:
+            str: Updated mask in two column, csv file
+        """
+        df_out = pd.DataFrame()     
+        for i,item in enumerate(wave_pxl_data):
+            dic1 = wave_pxl_data[i]  # Assuming you want the first dictionary in the values list
+
+            # Extract 'known_wavelengths_vac' and 'line_positions' into lists
+            known_wavelengths_vac = dic1['known_wavelengths_vac']
+            line_positions = dic1['line_positions']
+
+            # Keep the old and new values in temporarily, but eventually output new values and a weight.
+            data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions}
+            df_one = pd.DataFrame(data)
+            df_out = pd.concat([df_out, df_one], ignore_index=True)   
+        
+        df_out.to_csv(file_name,index=False,header=False)
+        #import pdb; pdb.set_trace()
+
 def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
     
     peak_wavelengths_ang1 = np.load(
