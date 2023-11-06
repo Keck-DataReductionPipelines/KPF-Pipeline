@@ -21,6 +21,7 @@ masterflat_path = config.WATCHFOR_L0.masterflat_path
 bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
+n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 
 date_dir = context.date_dir + '/'
 
@@ -162,3 +163,13 @@ for raw_file_path in file_list:
                                                                     rid,
                                                                     output_file_name,
                                                                     verbose)
+
+        do_read_noise = True
+
+        if do_read_noise:
+            if rid > 0:
+
+                read_noise_exit_code = ReadNoiseFramework(data_type,
+                                                          output_file_name,
+                                                          n_sigma_read_noise,
+                                                          rid)

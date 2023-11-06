@@ -98,9 +98,23 @@ GRANT USAGE ON SEQUENCE l0infobits_bid_seq TO kpfporole;
 
 
 
+-------------------
+-- Readnoise table
+-------------------
+
+-- kpfreadrole
+
+REVOKE ALL ON TABLE readnoise FROM kpfreadrole;
+GRANT SELECT ON TABLE readnoise TO GROUP kpfreadrole;
 
 
+-- kpfadminrole
+
+REVOKE ALL ON TABLE readnoise FROM kpfadminrole;
+GRANT ALL ON TABLE readnoise TO GROUP kpfadminrole;
 
 
+-- kpfporole
 
-
+REVOKE ALL ON TABLE readnoise FROM kpfporole;
+GRANT INSERT,UPDATE,SELECT,REFERENCES ON TABLE readnoise TO kpfporole;

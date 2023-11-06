@@ -28,7 +28,7 @@ mask_file_map = {
                  'M2_espresso': ('M2_espresso.txt', 'air'),
                  'thar': ('Thorium_mask_031921.mas', 'vac'),
                  'lfc': ('kpf_lfc_mask_1025.mas', 'vac'),
-                 'etalon': ('kpf_etalon_masks_11may2023.csv', 'vac')}
+                 'etalon': ('kpf_etalon_masks_30Oct2023.csv', 'vac')}
 
 class RadialVelocityAlgInit(RadialVelocityBase):
     """ Radial velocity Init.
