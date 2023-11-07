@@ -4,6 +4,7 @@ import gzip
 import numpy as np
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
 import matplotlib.transforms as transforms
 from matplotlib.colors import LinearSegmentedColormap
@@ -11,6 +12,7 @@ from matplotlib.ticker import SymmetricalLogLocator, ScalarFormatter, MultipleLo
 from matplotlib.patches import Rectangle
 from datetime import datetime
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.utils import *
 from modules.Utils.utils import DummyLogger
 
 class AnalyzeWLS:
@@ -560,6 +562,9 @@ class AnalyzeTwoWLSDict:
         self.logger = logger if logger is not None else DummyLogger()        
         self.wls_dict1 = read_wls_json(WLSDict_filename1) 
         self.wls_dict2 = read_wls_json(WLSDict_filename2)
+        self.wls_dict1_nobadlines = remove_bad_lines_dict(self.wls_dict1)
+        self.wls_dict2_nobadlines = remove_bad_lines_dict(self.wls_dict2)
+
         self.name1 = name1
         self.name2 = name2
         try:
@@ -610,7 +615,6 @@ class AnalyzeTwoWLSDict:
                     # Plot data
                     orderdict1 = orderletdict1['orders'][o]
                     orderdict2 = orderletdict2['orders'][o]
-#                    wls1 = 
                     delta_rv = 2.998e8*(orderdict2['fitted_wls']-orderdict1['fitted_wls'])/orderdict1['fitted_wls']
                     avg_delta_rv_arr[o] = np.mean(delta_rv)
                     axes[i,j].plot(orderdict1['fitted_wls'], delta_rv, linewidth=4)
@@ -708,7 +712,158 @@ class AnalyzeTwoWLSDict:
         plt.close('all')
 
 
-def print_dict(dictionary, max_depth=1):
+    def plot_wavelength_coverage(self, orderlet='SCI2', fig_path=None, show_plot=False): 
+        """
+        Generate a plot showing the coverage of fitted lines in a wavelength solution.
+
+        Args:
+            orderlet (string) - 'SCI1', 'SCI2', 'SCI3', 'CAL', or 'SKY'
+            fig_path (string) - set to the path for the file to be generated.
+                                default=None
+            show_plot (boolean) - show the plot in the current environment.
+                                  default=False                                  
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+        """
+        orderlet = 'SCI2'
+        
+        #wls_dict1 = self.wls_dict1_nobadlines
+        #wls_dict2 = self.wls_dict2_nobadlines
+        wls_dict1 = self.wls_dict1
+        wls_dict2 = self.wls_dict2
+        
+        # Define figure parameters
+        fig = plt.figure(figsize=(12, 12))
+        height_ratios = [65, 17.5, 17.5]
+        gs = gridspec.GridSpec(3, 1, height_ratios=height_ratios)
+        ax1 = fig.add_subplot(gs[0])
+        ax2 = fig.add_subplot(gs[1], sharex=ax1)
+        ax3 = fig.add_subplot(gs[2], sharex=ax1)
+
+        # Loop over orders
+        for this_dict in [wls_dict1, wls_dict2]:
+            chip = this_dict['orderlets'][orderlet]['chip'].lower()
+            if chip == 'green': color = 'g'
+            else: color = 'r'
+            norders = len(this_dict['orderlets'][orderlet]['orders'])
+            inter_max = np.zeros(norders, dtype=np.float64)
+            edge_red  = np.zeros(norders, dtype=np.float64)
+            edge_blue = np.zeros(norders, dtype=np.float64)
+            ind = 0
+            for o in this_dict['orderlets'][orderlet]['orders']:
+                this_order = this_dict['orderlets'][orderlet]['orders'][o]
+                nlines = len(this_order['lines'])
+                if 'fitted_wls' in this_order.keys():
+                    wls = this_order['fitted_wls']
+                else:
+                    wls = this_order['initial_wls']
+                echelle_order = this_order['echelle_order']
+                this_min = min(wls)
+                this_max = max(wls)
+                this_mid = this_min + (this_max - this_min)/2
+                delta_min = this_min - this_mid
+                delta_max = this_max - this_mid 
+                for l in this_order['lines']:
+                    line_dict = this_order['lines'][l]
+                    if line_dict['quality'] == 'good':
+                        #print(l, line_dict['lambda_fit'])
+                        ax1.plot(echelle_order, line_dict['lambda_fit']-this_mid, 'o', 
+                                 markersize=7, markerfacecolor=color, markeredgecolor='black', markeredgewidth=0.1)  
+                ax1.plot(echelle_order, delta_min, '^', markersize=10, color='gray')
+                ax1.plot(echelle_order, delta_max, 'v', markersize=10, color='gray')
+
+                # Find distances from edges and maximum inter-line distance within order
+                if 0 in this_order['lines']:
+                    wav_vac = this_order['known_wavelengths_vac']
+                    wav_vac = wav_vac[wav_vac != 0]
+                    wav_vac = np.sort(wav_vac)
+                    edge_blue[ind] = np.min(wav_vac) - this_min
+                    edge_red[ind] = this_max - np.max(wav_vac)
+                    wav_diff = np.diff(wav_vac)
+                    inter_max[ind] = np.max(wav_diff)
+
+                # Points in bottom two panels
+                wav_max = np.max(this_order['initial_wls'])
+                wav_min = np.min(this_order['initial_wls'])
+                if 0 in this_order['lines']:
+                    wav_max = np.max(this_order['known_wavelengths_vac'])
+                    wav_min = np.min(this_order['known_wavelengths_vac'])
+
+                ax1.plot([echelle_order, echelle_order], 
+                         [np.min(wav_min-this_mid), np.max(wav_max-this_mid)], 
+                         color='gray', linewidth=1)
+                if inter_max[ind] != 0:
+                    ax2.plot(echelle_order, inter_max[ind], 'o', markersize=7, color='green')
+                if edge_red[ind] != 0:
+                    ax3.plot(echelle_order, edge_red[ind],  'o', markersize=7, color='red')
+                if edge_blue[ind] != 0:
+                    ax3.plot(echelle_order, edge_blue[ind], 'o', markersize=7, color='blue')
+                
+                # Order labels in top panel
+                if echelle_order % 2 == 0: # even order number
+                    if echelle_order % 4 == 0:
+                        offset = 6
+                    else:
+                        offset = 12
+                    ax1.annotate(nlines, 
+                                 xy=(    echelle_order, this_min-this_mid-2), 
+                                 xytext=(echelle_order, this_min-this_mid-offset), 
+                                 horizontalalignment='center', verticalalignment='bottom', fontsize=14, 
+                                 arrowprops=dict(arrowstyle="-", color='lightgray', lw=1))
+                else:
+                    if (echelle_order-1) % 4 == 0:
+                        offset = 6
+                    else:
+                        offset = 12
+                    ax1.annotate(nlines, 
+                                 xy=(    echelle_order, this_max-this_mid+2), 
+                                 xytext=(echelle_order, this_max-this_mid+offset), 
+                                 horizontalalignment='center', verticalalignment='top', fontsize=14,  
+                                 arrowprops=dict(arrowstyle="-", color='lightgray', lw=1))                
+                ind += 1
+
+            ax2_max = 0 
+            ax3_max = 0 
+            if np.max(inter_max) > ax2_max:
+                ax2_max = np.max(inter_max)
+            if np.max(np.concatenate((edge_red, edge_blue))) > ax3_max:
+                ax3_max = np.max(np.concatenate((edge_red, edge_blue)))
+
+        # Labels and limits
+        ax1.set_title('Wavelength Coverage', fontsize=24)
+        ax1.set_ylabel(r'Distance from order center $\lambda$ [$\AA$]', fontsize=24)
+        ax2.set_ylabel(r'$\Delta\lambda$ [$\AA$]', fontsize=24)
+        ax3.set_xlabel(r'Echelle Order', fontsize=24)
+        ax3.set_ylabel(r'$\Delta\lambda$ [$\AA$]', fontsize=24)
+        ax2.text(0.01, 0.97, 'Maximum inter-line distance within order', fontsize=18, horizontalalignment='left', verticalalignment='top', transform=ax2.transAxes)
+        ax3.text(0.01, 0.97, 'Distance from outer edge', fontsize=18, horizontalalignment='left', verticalalignment='top', transform=ax3.transAxes)
+        ax1.tick_params(axis='x', which='both', length=5, labelbottom=False, labelleft=False)
+        ax1.tick_params(axis='y', direction='out')
+        ax2.tick_params(axis='x', which='both', length=5, labelbottom=False, labelleft=False)
+        ax1.set_xlim(139,69)
+        ax1.set_ylim(-65,65)
+        ax2.set_ylim(0, ax2_max*1.2)
+        ax3.set_ylim(0, ax3_max*1.5)
+        for ax in [ax1, ax2, ax3]:
+            ax.tick_params(axis='both', which='major', width=2, labelsize=14)
+            ax.grid(True)
+            for spine in ax.spines.values():
+                spine.set_linewidth(2)  
+        plt.tight_layout()
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=500, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+        
+def print_dict(dictionary, min_depth=0, max_depth=1):
     """
     The wavelength solution dictionaries can be so large (10s of MB) that they cause 
     Jupyter notebooks to crash.  This method is a way to safely print particular 
@@ -717,6 +872,7 @@ def print_dict(dictionary, max_depth=1):
     Args:
         dictionary - the wavelength solution dictionary (or any dictionary) whose
                      elements are to be printed
+        min_depth - ignore; this is used for recursion
         max_depth - the maximum depth (starting from 0) to print.  For example, 
                     max_depth=2 prints two levels deep.
 
@@ -727,7 +883,6 @@ def print_dict(dictionary, max_depth=1):
     if min_depth > max_depth:
         return
     if isinstance(dictionary, dict):
-        print("got here")
         for key, value in dictionary.items():
             print('\t' * min_depth + str(key) + ':')
             if isinstance(value, dict):
@@ -755,18 +910,27 @@ def count_dict(wls_dict):
             nlines += 1
     return nlines
     
-def combine_two_wls_dicts(wls_dict1, wls_dict2):
+def remove_bad_lines_dict(wls_dict):
     """
-    This method combines two wavelength solution dictionaries.  
-    Usually it is used to combine the green and red dictionaries from a single spectrum.
+    Remove all lines with 'quality' = 'bad' in a WLS dictionary.
 
     Args:
-        wls_dict1 - first WLS dictionary
-        wls_dict1 - second WLS dictionary
+        wls_dict - WLS dictionary, top level, including orderlets
 
     Returns:
-        wls_dict_combined
+        wls_dict
     """
+
+    orderlets_keys = list(wls_dict['orderlets'].keys())
+    for oo in orderlets_keys:
+        orders_keys = list(wls_dict['orderlets'][oo]['orders'].keys())
+        for o in orders_keys:
+            lines_keys = list(wls_dict['orderlets'][oo]['orders'][o]['lines'].keys())
+            for l in lines_keys:
+                if 'quality' in wls_dict['orderlets'][oo]['orders'][o]['lines'][l]['quality']:
+                    if wls_dict['orderlets'][oo]['orders'][o]['lines'][l]['quality'] == 'bad':
+                        del wls_dict['orderlets'][oo]['orders'][o]['lines'][l]
+    return wls_dict
 
 
 

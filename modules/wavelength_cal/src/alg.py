@@ -227,9 +227,7 @@ class WaveCalibration:
         # Construct dictionary for each order in wlsdict 
         orderlet_dict = {}
         for order_num in order_list:
-            orderlet_dict[order_num] = {
-                "ordernum" : order_num, #
-            }
+            orderlet_dict[order_num] = {"ordernum" : order_num}
 
         # Plot 2D extracted spectra
         if plt_path is not None:
@@ -247,6 +245,7 @@ class WaveCalibration:
         wavelengths_and_pixels = {}
         poly_soln_final_array = np.zeros(np.shape(cal_flux))
 
+        # Iterate over orders
         for order_num in order_list:
             if print_update:
                 print('\nRunning order # {}'.format(order_num))
@@ -355,7 +354,17 @@ class WaveCalibration:
 
                 fitted_peak_pixels = fitted_peak_pixels[good_peak_idx]
 
+                # Mark lines with bad fits and lambda_fit for each line in dictionary:
+                good_line_ind = 0
+                for l in np.arange(len(lines_dict)):
+                    if l not in good_peak_idx:
+                        orderlet_dict[order_num]['lines'][l]['quality'] = 'bad' #TODO: add this functionality to ThAr dictionaries
+                    else:
+                        orderlet_dict[order_num]['lines'][l]['lambda_fit'] = wls[good_line_ind]
+                        good_line_ind += 1
+
             # use expected peak locations to compute updated precise wavelengths for each pixel
+            # (only ThAr)
             else:
                 if order_plt_path is not None:
                     plot_toggle = True
@@ -383,13 +392,13 @@ class WaveCalibration:
                     order_flux, line_wavelengths, line_pixels_expected, 
                     plot_toggle, order_plt_path
                 )
+                
                 orderlet_dict[order_num]['lines'] = lines_dict
-                #print('lines_dict = ')
-                #print(lines_dict)
-
+                
                 fitted_peak_pixels = gauss_coeffs[1,:]
 
             # if we don't have an etalon frame, we won't use drift to calculate the wls
+            # To-do for Etalon: add line_dicts
             if self.cal_type != 'Etalon':
 
                 if expected_peak_locs is None:
@@ -401,9 +410,7 @@ class WaveCalibration:
                 polynomial_wls, leg_out = self.fit_polynomial(
                     wls, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
                     plot_path=order_plt_path, fit_iterations=self.fit_iterations,
-                    sigma_clip=self.sigma_clip
-                )
-
+                    sigma_clip=self.sigma_clip)
                 poly_soln_final_array[order_num,:] = polynomial_wls
 
                 if plt_path is not None:
@@ -431,7 +438,7 @@ class WaveCalibration:
             # compute drift, and use this to update the wavelength solution
             else:
                 pass
-
+                
             # Add to dictionary for this order
             orderlet_dict[order_num]['fitted_wls'] = polynomial_wls 
             orderlet_dict[order_num]['rel_precision_cms'] = rel_precision 
@@ -575,7 +582,7 @@ class WaveCalibration:
             plt.tight_layout()
             plt.savefig('{}/detected_peaks_zoom.png'.format(plot_path),dpi=250)
             plt.close()
-            
+                  
         return fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs, lines_dict
 
     def find_peaks(self, order_flux, peak_height_threshold=1.5):
@@ -639,7 +646,7 @@ class WaveCalibration:
         detected_peaks = detected_peaks[mask]
         peak_heights = peak_heights[mask]
         gauss_coeffs = gauss_coeffs[:, mask]
-        
+                
         return fitted_peaks, detected_peaks, peak_heights, gauss_coeffs, lines_dict
         
     def clip_peaks(
@@ -692,7 +699,6 @@ class WaveCalibration:
             if peak_idx >= 8 and peak_idx < n_pixels - 8:
                 peak_flux = detected_peak_heights[peak_idx]
                 adjacent_fluxes = np.concatenate((detected_peak_heights[peak_idx-9:peak_idx-1], detected_peak_heights[peak_idx+1:peak_idx+9]))
-                #print(peak_flux)
                 max_adjacent_flux = np.max(adjacent_fluxes)
                 #import pdb; pdb.set_trace()
                 if peak_flux <= 3 * max_adjacent_flux:
@@ -842,9 +848,8 @@ class WaveCalibration:
 
         return good_peak_idx
     
-    def line_match(
-        self, flux, linelist, line_pixels_expected, plot_toggle, savefig,
-        gaussian_fit_width = 10):
+    
+    def line_match(self, flux, linelist, line_pixels_expected, plot_toggle, savefig, gaussian_fit_width=10):
         """
         Given a linelist of known wavelengths of peaks and expected pixel locations
         (from a previous wavelength solution), returns precise, updated pixel locations 
@@ -863,7 +868,7 @@ class WaveCalibration:
                 np.array: array of size (4, n_peaks) containing best-fit 
                     Gaussian parameters [a, mu, sigma**2, const] for each detected peak
                 dictionary: a dictionary of information about the lines fit within this order 
-        """
+        """        
         num_input_lines = len(linelist)  
         num_pixels = len(flux)
         successful_fits = []
@@ -893,9 +898,11 @@ class WaveCalibration:
                     flux[first_fit_pixel:last_fit_pixel]
                 )
 
+                #add_to_line_dict = False
                 if result is not None:
                     coefs[:, i] = result
                     successful_fits.append(i)  # Append index of successful fit
+                    line_dict['lambda_fit'] = linelist[i]
                     lines_dict[str(i)] = line_dict  # Add line dictionary to lines dictionary
                 else:
                     missed_lines += 1
@@ -904,6 +911,7 @@ class WaveCalibration:
                 if amp < 0:
                     missed_lines += 1
                     coefs[:,i] = np.nan
+
             else:
                 coefs[:,i] = np.nan
                 missed_lines += 1
@@ -912,7 +920,7 @@ class WaveCalibration:
         coefs = coefs[:, successful_fits]
         linelist = linelist[np.isfinite(coefs[0,:])]
         coefs = coefs[:, np.isfinite(coefs[0,:])]
-
+        
         print('{}/{} lines not fit.'.format(missed_lines, num_input_lines))
         if plot_toggle:
 
@@ -1046,7 +1054,6 @@ class WaveCalibration:
             recursive_peak_diff = new_recursive_peak_diff
             new_recursive_peak_diff = newest_recursive_peak_diff
             counter += 1
-            #print(counter)
             if counter == 5:
                 print('Medfilt iterations > 5') 
                 break
@@ -1259,6 +1266,7 @@ class WaveCalibration:
             line_dict['covar'] = pcov    # covariance
             line_dict['data']  = y
             line_dict['model'] = self.integrate_gaussian(x, *popt)
+            line_dict['quality'] = 'good' # fits are assumed good until marked bad elsewhere
             
 
         if self.cal_type == 'LFC' or 'ThAr':          
