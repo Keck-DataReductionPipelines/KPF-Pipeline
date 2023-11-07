@@ -182,6 +182,6 @@ AGITSTA   Running                         Agitator status
 
 
 WLS Dictionaries
-^^^^^^^^^^^^^^^^
+----------------
 
 Andrew H. to add a description of the WLS dictionaries here.
