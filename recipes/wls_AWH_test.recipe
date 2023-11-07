@@ -13,7 +13,6 @@ cal_type = 'LFC'
 master_wls_file = '/data/reference_fits/Th_new_WLS_102523_orders_0_10_green_SPH.fits'
 full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
 
-
 base_dir = '/data/L1/20230430/'
 for d in [0, 1, 2, 3]:
     if cal_type == 'LFC':
