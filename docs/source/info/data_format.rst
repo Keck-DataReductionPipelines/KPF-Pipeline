@@ -17,6 +17,8 @@ KPF L0 files follow the naming convention: KP.YYYYMMDD.SSSSS.ss.fits, where YYYY
 
 See the section titled :ref:`label-tutorials` for a set of tutorials on the various KPF data files.
 
+In addition, the DRP is able produce WLS Dictionaries that contain detailed diagnostic information about the fits of individual lines, orders, and orderlets for the wavelength solutions.  These are described at the bottom of this page.
+
 Data Format of KPF Files
 ------------------------
 
@@ -177,3 +179,9 @@ AGITSTA   Running                         Agitator status
 ========  ==============================  =========
 
 *To-do: add a list of important Level 1 and Level 2 primary keywords.*
+
+
+WLS Dictionaries
+^^^^^^^^^^^^^^^^
+
+Andrew H. to add a description of the WLS dictionaries here.
