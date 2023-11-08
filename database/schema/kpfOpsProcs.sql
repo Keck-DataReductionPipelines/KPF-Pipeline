@@ -269,3 +269,83 @@ create function getCalFile (
 
 
 $$ language plpgsql;
+
+
+-- Insert a new record into or update an existing record in the ReadNoise table.
+--
+create function registerReadNoise (
+    rId_           integer,
+    rngreen1_      real,
+    rngreen2_      real,
+    rngreen3_      real,
+    rngreen4_      real,
+    rnred1_        real,
+    rnred2_        real,
+    rnred3_        real,
+    rnred4_        real,
+    rncahk_        real,
+    greenreadtime_ real,
+    redreadtime_   real,
+    readspeed_     character varying(16)
+)
+    returns void as $$
+
+    declare
+
+        rId__     integer;
+
+    begin
+
+
+        -- Insert or update record, as appropriate.
+
+        select rId
+        into rId__
+        from ReadNoise
+        where rId = rId_;
+
+        if not found then
+
+
+            -- Insert ReadNoise record.
+
+            begin
+
+                insert into ReadNoise
+                (rId, rngreen1, rngreen2, rngreen3, rngreen4, rnred1, rnred2, rnred3, rnred4, rncahk,
+		greenreadtime, redreadtime, readspeed)
+                values
+                (rId_, rngreen1_, rngreen2_, rngreen3_, rngreen4_, rnred1_, rnred2_, rnred3_, rnred4_, rncahk_,
+		greenreadtime_, redreadtime_, readspeed_);
+                exception
+                    when no_data_found then
+                        raise exception
+                            '*** Error in registerReadNoise: ReadNoise record for rId=% not inserted.', rId_;
+
+            end;
+
+        else
+
+
+            -- Update ReadNoise record.
+
+            update ReadNoise
+            set rngreen1 = rngreen1_,
+                rngreen2 = rngreen2_,
+                rngreen3 = rngreen3_,
+                rngreen4 = rngreen4_,
+		rnred1 = rnred1_,
+                rnred2 = rnred2_,
+                rnred3 = rnred3_,
+                rnred4 = rnred4_,
+                rncahk = rncahk_,
+		greenreadtime = greenreadtime_,
+                redreadtime = redreadtime_,
+                readspeed = readspeed_
+            where rId = rId_;
+
+        end if;
+
+    end;
+
+$$ language plpgsql;
