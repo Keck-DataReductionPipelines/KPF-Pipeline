@@ -193,16 +193,18 @@ class WaveCalibration:
         return poly_soln, wls_and_pixels    
 
     def find_etalon_peaks(self,flux,wave,etalon_mask):
+        #import pdb; pdb.set_trace()
         mask1 = etalon_mask[(etalon_mask['wave'] > min(wave)) & (etalon_mask['wave'] < max(wave))] 
         mask = np.sort(mask1['wave'].values) # This may be causing problems on edges of orderw, where they overlap.
-
+        mask = mask[::-1]#reverse order
         params=[]
         new_peaks = []
 
         # Next loop over the peaks in the mask, extacting a wavelength section on each side, how many pixels?
         for i,item in enumerate(mask[0:]): # remove the first element of mask, too close to edge
             #print('peak # =',i,item)
-            incr = 0.18 # Ang
+            #incr = 0.18 # Ang
+            incr = 0.12
             w_lw = item-incr
             w_hi  = item+incr
             fit_indx = (wave > w_lw) & (wave < w_hi) # may need to catch exceptions here.
@@ -1248,13 +1250,17 @@ class WaveCalibration:
                 popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
             except RuntimeError:
                 return p0
-
-        if self.cal_type == 'LFC' or self.cal_type == 'ThAr':          
+        
+        if self.cal_type == 'LFC' or self.cal_type == 'ThAr' or self.cal_type == 'Etalon':          
             # Quality Checks for Gaussian Fits
             chi_squared_threshold = int(self.chi_2_threshold)
 
             # Calculate chi^2
             predicted_y = self.integrate_gaussian(x, *popt)
+            chi_squared = np.sum(((y - predicted_y) ** 2) / np.var(y))
+            # This error happened here for order 0 of 'red_sky_flux'
+            #/code/KPF-Pipeline/modules/wavelength_cal/src/alg.py:1260: RuntimeWarning: invalid value encountered in true_divide
+            
             chi_squared = np.sum(((y - predicted_y) ** 2) / np.var(y))
             '''
             # Calculate RMS of residuals for Gaussian fit
@@ -1273,9 +1279,14 @@ class WaveCalibration:
             asymmetry = np.abs(np.mean(left_residuals) - np.mean(right_residuals))
             '''
             # Run checks against defined quality thresholds
-            if (chi_squared > chi_squared_threshold):
-                print("Chi squared exceeded the threshold for this line. Line skipped")
-                return None
+            #print("chi_squared=",chi_squared)
+            #print()
+            if chi_squared > 20:
+                import pdb; pdb.set_trace()
+
+            #if (chi_squared > chi_squared_threshold):
+            #    print("Chi squared exceeded the threshold for this line. Line skipped")
+            #    return None
         
         return popt
     
