@@ -1281,8 +1281,9 @@ class WaveCalibration:
             # Run checks against defined quality thresholds
             #print("chi_squared=",chi_squared)
             #print()
-            if chi_squared > 20:
-                import pdb; pdb.set_trace()
+            #HTI: if the predicted_y values are all the same, something is wrong.
+#            if chi_squared > 20:
+            #import pdb; pdb.set_trace()
 
             #if (chi_squared > chi_squared_threshold):
             #    print("Chi squared exceeded the threshold for this line. Line skipped")
@@ -1592,12 +1593,13 @@ class WaveCalibration:
             line_positions = dic1['line_positions']
 
             # Keep the old and new values in temporarily, but eventually output new values and a weight.
-            data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions}
+            # data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions} #test
+            data = {'line_positions': line_positions,'weight': np.ones_like(line_positions)}
             df_one = pd.DataFrame(data)
-            df_out = pd.concat([df_out, df_one], ignore_index=True)   
-        
-        df_out.to_csv(file_name,index=False,header=False)
-        #import pdb; pdb.set_trace()
+            df_out = pd.concat([df_out, df_one])   
+        df_out.sort_values(df_out.columns[0],inplace=True)
+        df_out.to_csv(file_name,index=False,header=False,sep=' ')
+        import pdb; pdb.set_trace()
 
 def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
     
