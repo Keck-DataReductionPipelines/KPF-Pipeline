@@ -75,7 +75,7 @@ CREATE TABLE l0files (
     calobj character varying(64) NOT NULL,        -- FITS-header keyword: CAL-OBJ
     skyobj character varying(64) NOT NULL,        -- FITS-header keyword: SKY-OBJ
     "object" character varying(64) NOT NULL,      -- FITS-header keyword: TARGOBJ or OBJECT
-    contentbits integer NOT NULL,                 -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK 
+    contentbits integer NOT NULL,                 -- BIT-WISE FLAGS FOR INCLUDING CCDs: BIT0: GREEN; BIT1: RED; BIT2: CA_HK
     infobits bigint DEFAULT 0 NOT NULL,           -- Bit-wise information flags
     filename character varying(255) NOT NULL,     -- Full path and filename
     checksum character varying(32) NOT NULL,      -- MD5 checksum of entire file
@@ -187,3 +187,38 @@ ALTER TABLE ONLY l0infobits ADD CONSTRAINT l0infobits_pkey PRIMARY KEY (bid);
 ALTER TABLE ONLY l0infobits ADD CONSTRAINT l0infobitspk UNIQUE (bit, created);
 
 CREATE INDEX l0infobits_bit_idx ON l0infobits (bit);
+
+
+-----------------------------
+-- TABLE: ReadNoise
+--
+-- Exposure-level instantaneous read noise for all readout channels.
+-----------------------------
+
+SET default_tablespace = pipeline_data_01;
+
+CREATE TABLE readnoise (
+    rid integer NOT NULL,                        -- Foreign key, from L0Files table
+    rngreen1 real,                               -- Read noise (electrons) of GREEN_AMP1 image
+    rngreen2 real,                               -- Read noise (electrons) of GREEN_AMP2 image
+    rngreen3 real,                               -- Read noise (electrons) of GREEN_AMP3 image
+    rngreen4 real,                               -- Read noise (electrons) of GREEN_AMP4 image
+    rnred1 real,                                 -- Read noise (electrons) of RED_AMP1 image
+    rnred2 real,                                 -- Read noise (electrons) of RED_AMP2 image
+    rnred3 real,                                 -- Read noise (electrons) of RED_AMP3 image
+    rnred4 real,                                 -- Read noise (electrons) of RED_AMP4 image
+    rncahk real,                                 -- Read noise (electrons) of CA_HK image
+    greenreadtime real,                          -- Total read time for GREEN chip (seconds)
+    redreadtime real,                            -- Total read time for RED chip (seconds)
+    readspeed character varying(16)              -- Categorized as "fast", "regular", or "unknown"
+);
+
+ALTER TABLE readnoise OWNER TO kpfadminrole;
+
+SET default_tablespace = pipeline_indx_01;
+
+ALTER TABLE ONLY readnoise ADD CONSTRAINT readnoisefk1 FOREIGN KEY (rid) REFERENCES l0files(rid);
+
+ALTER TABLE ONLY readnoise ADD CONSTRAINT readnoisepk UNIQUE (rid);
+
+CREATE index readnoise_rid_idx ON readnoise (rid);

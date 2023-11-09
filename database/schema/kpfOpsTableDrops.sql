@@ -29,3 +29,10 @@ DROP SEQUENCE l0files_rid_seq;
 
 DROP TABLE l0infobits;
 DROP SEQUENCE l0infobits;
+
+
+-----------------------------
+-- ReadNoise table
+-----------------------------
+
+DROP TABLE readnoise;

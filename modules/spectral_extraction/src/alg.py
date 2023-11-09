@@ -488,7 +488,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
     def data_extraction_for_optimal_extraction(self, data_group,
                             y_mid, y_output_mid,
                             input_widths, output_widths,
-                            input_x, x_output_step, mask_height, is_debug):
+                            input_x, x_output_step, mask_height, is_debug=False):
         """
 
         Args:
@@ -522,6 +522,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         s_data = np.zeros((p_height, p_width), dtype=float) if s_dt is not None else None
         f_data = np.zeros((p_height, p_width), dtype=float) if f_dt is not None else None
+
         for i_x, p_x in enumerate(input_x):
             y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
             y_input_idx = np.where((y_input <= (input_y_dim - 1)) & (y_input >= 0))[0]
@@ -542,8 +543,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
         return s_data, f_data, is_sdata_raw
 
     def outlier_rejection_for_optimal_extraction(self, s_data, f_data, input_x, x_output_step, is_sdata_raw,
-                                                  input_widths, output_widths,  y_mid, y_output_mid,
-                                                  do_column=True, is_debug=False):
+                                                 input_widths, output_widths,  y_mid, y_output_mid,
+                                                 do_column=True, is_debug=False):
         """
 
         Args:
@@ -556,8 +557,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
             output_widths  (numpy.ndarray): from lower to upper width in output domain
             y_mid (numpy.ndarray): y location of the trace in input domain
             y_output_mid (int): y location of the trace in output domain
-            do_column (bool): do outlier rejection compuatation column by column.
-            is_debug (bool): output debug message
+            do_columm (bool, optional): do outlier rejection column by column.
+            is_debug (bool, optional): output debug message
 
         Returns:
             t_mask (numpy.ndarray):  a 2D mask denoting the rejected outlier with the same size as that of s_data.
@@ -807,8 +808,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
         is_debug = False
         mask_height = np.shape(out_data)[1]
 
-        #if self.order_name == 'GREEN_SKY_FLUX':
-        #    if order_idx == 4:
+        #if self.order_name == 'GREEN_SCI_FLUX2':
+        #    if order_idx == 1:
         #        is_debug = True
         s_data, f_data, is_sdata_raw = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
                                                                      input_widths, y_output_widths,
