@@ -32,13 +32,13 @@ docker:
 	
 
 regression_tests:
-	pytest --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
-	pytest --pyargs tests.performance
+	pytest -x --pyargs tests.performance
 
 validation_tests:
-	pytest --pyargs tests.validation
+	pytest -x --pyargs tests.validation
 
 .PHONY: init
