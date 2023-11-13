@@ -224,7 +224,7 @@ class MasterBiasFramework(KPF0_Primitive):
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
-            master_holder.header[ffi]['BUNIT'] = ('DN','Units of master bias')
+            master_holder.header[ffi]['BUNIT'] = ('electrons','Units of master bias')
             master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of bias observations')
