@@ -1014,22 +1014,31 @@ class WaveCalibration:
 
         peak_mode_num = 0
         
-        # Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
+	# Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
         peak_diff = fitted_peak_pixels[good_peak_idx][1:] - fitted_peak_pixels[good_peak_idx][:-1]
-        recursive_peak_diff = signal.medfilt(fitted_peak_pixels[good_peak_idx][1:] - fitted_peak_pixels[good_peak_idx][:-1],kernel_size=7) # not recursing yet
-        new_recursive_peak_diff = signal.medfilt(recursive_peak_diff, kernel_size = 7)
-        counter = 1
         
-        # Now, recursively apply a median filter to further smooth the peak spacing
-        while sum(new_recursive_peak_diff != recursive_peak_diff) > 0:
-            newest_recursive_peak_diff = signal.medfilt(new_recursive_peak_diff, kernel_size = 7)
-            recursive_peak_diff = new_recursive_peak_diff
-            new_recursive_peak_diff = newest_recursive_peak_diff
-            counter += 1
-            #print(counter)
-            if counter == 5:
-                print('Medfilt iterations > 5') 
-                break
+        # Calculate the difference between the peak indices
+        peak_indices_difference = good_peak_idx[3:] - good_peak_idx[:-3]
+
+        # Check for large gaps in peak indices
+        large_gaps_detected = np.any(peak_indices_difference > 9)
+        
+        # Adjust kernel size if large gaps are detected
+        kernel_size = 7
+        if large_gaps_detected:
+            kernel_size += 10  # Increase by 10. Adjust as needed.
+
+        recursive_peak_diff = peak_diff.copy()
+    
+        for iteration in range(5):
+            filtered = signal.medfilt(recursive_peak_diff, kernel_size=kernel_size)
+    
+            if np.array_equal(filtered, recursive_peak_diff):
+                break  # Stop if there's no change after filtering
+            recursive_peak_diff = filtered
+    
+        else: 
+            print('Medfilt iterations > 5')
 
         # Identify and remove outlier peak spacings not removed by recursive median filter
         # This process primarily removes peak spacing aliases (2x, 3x, etc) 
@@ -1055,7 +1064,7 @@ class WaveCalibration:
             spline_peak_diff_bool1 = spline_peak_diff_diff/spline_peak_diff_min < -0.5 # bool mask to identify half of bad peak spacings
             spline_peak_diff_bool0 = np.insert(spline_peak_diff_bool0, 0, False) # bool padding to select correct peak
             spline_peak_diff_bool1 = np.append(False, spline_peak_diff_bool1) # bool padding to select correct peak
-            index = np.where(spline_peak_diff_bool0 | spline_peak_diff_bool1 == False)[0]
+            index = np.where((spline_peak_diff_bool0 | spline_peak_diff_bool1) == False)[0]
             spline_peak_diff_new = spline_peak_diff[index]
 
             counter_spline += 1     
