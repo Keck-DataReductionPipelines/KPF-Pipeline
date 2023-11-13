@@ -31,7 +31,8 @@ GRANT ALL ON SEQUENCE calfiles_cid_seq TO GROUP kpfadminrole;
 -- kpfporole
 
 REVOKE ALL ON TABLE calfiles FROM kpfporole;
-GRANT INSERT,UPDATE,SELECT,REFERENCES ON TABLE calfiles TO kpfporole;
+-- DELETE is granted in the following, because a Python script deletes old records before inserting new ones.
+GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE calfiles TO kpfporole;
 
 REVOKE ALL ON SEQUENCE calfiles_cid_seq FROM kpfporole;
 GRANT USAGE ON SEQUENCE calfiles_cid_seq TO kpfporole;
