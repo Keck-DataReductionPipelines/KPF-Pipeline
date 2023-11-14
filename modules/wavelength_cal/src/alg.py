@@ -193,7 +193,15 @@ class WaveCalibration:
         return poly_soln, wls_and_pixels    
 
     def find_etalon_peaks(self,flux,wave,etalon_mask):
-        #import pdb; pdb.set_trace()
+        """
+        Fit peaks of etalon calibration with a gaussian function
+        Args: 
+            Wavelengths of one order
+            Flux of one order
+            Full etalon mask from master file.
+        Returns
+            Original an new etalon peak positions for one order
+        """
         mask1 = etalon_mask[(etalon_mask['wave'] > min(wave)) & (etalon_mask['wave'] < max(wave))] 
         mask = np.sort(mask1['wave'].values) # This may be causing problems on edges of orderw, where they overlap.
         mask = mask[::-1]#reverse order
@@ -201,27 +209,28 @@ class WaveCalibration:
         new_peaks = []
 
         # Next loop over the peaks in the mask, extacting a wavelength section on each side, how many pixels?
-        for i,item in enumerate(mask[0:]): # remove the first element of mask, too close to edge
-            #print('peak # =',i,item)
-            #incr = 0.18 # Ang
-            incr = 0.12
+        for i,item in enumerate(mask[:]): # remove the first element of mask, too close to edge
+            if item < 6000: # Green CCD  # green: 0.15:54 bad peaks.
+                incr = 0.15
+            else:
+                incr = 0.29  # Red CCD  0.29:278 missed peaks
+                        
             w_lw = item-incr
             w_hi  = item+incr
             fit_indx = (wave > w_lw) & (wave < w_hi) # may need to catch exceptions here.
             wave_clp = wave[fit_indx]
-            flux_clp = flux[fit_indx] 
-        
-            #init_vals = gaussian_func(wave_clp,max(flux_clp), item, 0.03)
-            #init_vals = self.gaussian_func(wave_clp,max(flux_clp), item, 0.03)        
-            
-                #popt, _ = curve_fit( gaussian_func,wave_clp, flux_clp,p0=[max(flux_clp), item, 0.01])#,maxfev=1e4)
-            popt = self.fit_gaussian(wave_clp, flux_clp)
-            #except RuntimeError:
-                #print('Fit Failing')
-            #    popt = init_vals    
-            #params.append(popt)
-            #fit_vals = gaussian_func(wave_clp,popt[0],popt[1],popt[2])
-            new_peaks.append(popt[1])
+            flux_clp = flux[fit_indx] # Sometimes flux_clp is always false. Avoid this.
+            #Quality check:
+            no_flux_index = not any(flux_clp) # True if no flux values are found for this wavelength
+            if not no_flux_index:
+                popt = self.fit_gaussian(wave_clp,flux_clp)
+                if np.abs(popt[1] - item) < 0.5: # wavelength sections are much smaller than 0.1
+                    new_peaks.append(popt[1]) # if fit is okay.
+                else:
+                    new_peaks.append(item) # If new fit is way off, keep initial guess
+            else:
+                new_peaks.append(item) # Fill with initial guess. This happens due to edge trimming
+
         return mask, new_peaks
 
     def fit_many_orders(
@@ -645,16 +654,16 @@ class WaveCalibration:
         for j, p in enumerate(detected_peaks):
             idx = p + np.arange(-width, width + 1, 1)
             idx = np.clip(idx, 0, len(c) - 1).astype(int)
-            coef = self.fit_gaussian(np.arange(len(idx)), c[idx])
+            coef = self.fit_gaussian_integral(np.arange(len(idx)), c[idx])
 
             if coef is None:
                 mask[j] = False # mask out bad fits
 
-            else:# Only update the coefficients and peaks if fit_gaussian did not return None
+            else:# Only update the coefficients and peaks if fit_gaussian_integral did not return None
                 gauss_coeffs[:, j] = coef
                 fitted_peaks[j] = coef[1] + p - width
 
-        # Remove the peaks where fit_gaussian returned None
+        # Remove the peaks where fit_gaussian_integral returned None
         fitted_peaks = fitted_peaks[mask]
         detected_peaks = detected_peaks[mask]
         peak_heights = peak_heights[mask]
@@ -901,7 +910,7 @@ class WaveCalibration:
                     last_fit_pixel = peak_pixel + gaussian_fit_width
 
                 # fit gaussian to matched peak location
-                result= self.fit_gaussian(
+                result= self.fit_gaussian_integral(
                     np.arange(first_fit_pixel,last_fit_pixel),
                     flux[first_fit_pixel:last_fit_pixel]
                 )
@@ -1201,6 +1210,54 @@ class WaveCalibration:
         wls = comb_lines_angstrom[mode_nums.astype(int)]
         return wls, mode_nums
     
+    def fit_gaussian(self,x,y):
+        """
+        Fits a continous Gaussian in wavelength space for an input flux
+
+        Args:
+            x (np.array): wavelength segment to fit
+            y (np.array): Flux data to be fit
+        Returns:
+            Height of Gaussian
+            Center of Gaussian
+            Width  of Gaussian
+        """
+        x = np.ma.compressed(x)
+        y = np.ma.compressed(y)
+
+        i = np.argmax(y)# or use previous peak position
+        p0 = [y[i], x[i], 0.015*3, np.min(y)] #0.015 Ang/pix. Args are heigh, center,width, zero-pt
+        #print("Initial guess:",p0)
+
+        with np.warnings.catch_warnings():
+            np.warnings.simplefilter("ignore")
+            try:   
+                popt, _ = curve_fit(self.calculate_gaussian, x, y, p0=p0, maxfev=1000000)
+            except RuntimeError:
+                print("Runtime Error")
+                return p0
+        return popt
+
+    def calculate_gaussian(self,x, y, height, center, width):
+        """
+        Fits a continous Gaussian in wavelength space for
+
+        Args:
+            x (np.array): wavelength segment to fit
+            y (np.array): Flux data to be fit
+        Returns:
+            Height of Gaussian
+            Center of Gaussian
+            Width  of Gaussian
+        """
+        x = np.ma.compressed(x)
+        y = np.ma.compressed(y)
+
+        #i = np.argmax(y) # index of maximum flux
+        #p0 = [y[i],x[i],0.015*3] # ~0.015 Ang/pix
+        output = height * np.exp(-(x - center)**2 / (2 * width**2))
+        return output
+
     def integrate_gaussian(self, x, a, mu, sig, const, int_width=0.5):
         """
         Returns the integral of a Gaussian over a specified symamtric range. 
@@ -1227,7 +1284,7 @@ class WaveCalibration:
         
         return integrated_gaussian_val
     
-    def fit_gaussian(self, x, y):
+    def fit_gaussian_integral(self, x, y):
         """
         Fits a continuous Gaussian to a discrete set of x and y datapoints
         using scipy.curve_fit
@@ -1247,7 +1304,7 @@ class WaveCalibration:
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
             try:   
-                popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
+                popt, _ = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=100000)
             except RuntimeError:
                 return p0
         
@@ -1587,19 +1644,17 @@ class WaveCalibration:
         df_out = pd.DataFrame()     
         for i,item in enumerate(wave_pxl_data):
             dic1 = wave_pxl_data[i]  # Assuming you want the first dictionary in the values list
-
-            # Extract 'known_wavelengths_vac' and 'line_positions' into lists
             known_wavelengths_vac = dic1['known_wavelengths_vac']
             line_positions = dic1['line_positions']
 
-            # Keep the old and new values in temporarily, but eventually output new values and a weight.
-            # data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions} #test
+            # Keep the old and new values in to check results against original mask.
+            #data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions} #test
             data = {'line_positions': line_positions,'weight': np.ones_like(line_positions)}
             df_one = pd.DataFrame(data)
             df_out = pd.concat([df_out, df_one])   
+        df_out.drop_duplicates(subset='line_positions',keep='first',inplace=True)
         df_out.sort_values(df_out.columns[0],inplace=True)
         df_out.to_csv(file_name,index=False,header=False,sep=' ')
-        import pdb; pdb.set_trace()
 
 def calcdrift_polysolution(wlpixelfile1, wlpixelfile2):
     
