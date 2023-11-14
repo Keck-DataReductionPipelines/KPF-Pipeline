@@ -25,7 +25,7 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   ``orderlet``: 'CAL' or 'SCI1' or 'SCI2' or 'SCI3' or 'SKY', |br|
   ``chip``: 'RED' or 'GREEN', |br|
   ``norders``: number of orders, |br|
-  ``orders``: { dictionary of ``orderlet_dict`` dictionaries named 0 .. 31 (up to ``norders-1``) } |br|
+  ``orders``: { dictionary of ``orderlet_dict`` dictionaries named 0 to ``norders-1`` } |br|
   }
 
 ``order_dict`` = { |br|
@@ -40,7 +40,7 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   ``line_positions``: Numpy array of fitted line centers (length = ``num_detected_peaks``),  |br|
   ``rel_precision_cms``: estimated relative precision in cm/s, |br|
   ``abs_precision_cms``: estimated absolute precision in cm/s, |br|
-  ``lines``: { dictionary of ``line_dict`` dictionaries named 0 .. 31 (up to ``num_detected_peaks-1``) } |br|
+  ``lines``: { dictionary of ``line_dict`` dictionaries named 0 to ``num_detected_peaks-1`` } |br|
   }
 
 ``line_dict`` = { |br|
