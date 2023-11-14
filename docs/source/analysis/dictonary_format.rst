@@ -17,41 +17,60 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
 ``wls_dict`` = { |br|
   ``wls_processing_date``: datetime of running WLS code |br|
   ``cal_type``: 'ThAr' or 'LFC' (etalon not included yet) |br|
-  ``orderlets``: a list of ``orderlet_dict`` (usually named 'CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY') |br|
+  ``orderlets``: { dictionary of ``orderlet_dict`` dictionaries named 'CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY' }  |br|
   }
 
-``orderlet_dict`` = {
-'CAL':
-      full_name: 'RED_CAL' or 'GREEN_CAL' (or similar for other orderlets)
-      orderlet: 'CAL',
-      chip: 'RED',
-      norders: 32,
-      orders: {
-        ordernum: 0,
-        flux: [ -1.59750346  ... 7.02040416],
-        initial_wls: [6057.6004352 ... 5985.06984392],
-        echelle_order: 102,
-        n_pixels: 4080,
-        fitted_wls:	[6057.60083972 ... 5985.05723645]
-        rel_precision_cms: 170.0354479170775
-        abs_precision_cms: 15206.271268770482
-        num_detected_peaks: 35
-        known_wavelengths_vac: [6055.056876 6052.6571 ... 5987.924637]
-        line_positions: [ 178.41693342 ... 3944.10304143]
-        lines: {
-          0: {
-            amp: 824.2076897704594
-            mu: 178.4169334249592
-            sig: 1.6482448783761718
-            const: -1.4816422789405224
-            covar:[[ 4.03987293e+03  ...  2.26986027e+01]]
-            data: [ 11.97709366 ... 5.9710143 ]
-            model: [ -1.48161703 ... -1.48162795]
-            quality: 'good'
-            chi2: 0.9533437579975779
-            rms: 14.197982419898949
-            mu_diff:0.41693342495921115
-            lambda_fit: 6055.056876
+``orderlet_dict`` = { |br|
+  ``full_name``: 'REDCAL' or 'REDSCI1' or 'REDSCI2' or 'REDSCI3' or 'REDSKY' (or similar GREEN`) |br|
+  ``orderlet``: 'CAL' or 'SCI1' or 'SCI2' or 'SCI3' or 'SKY', |br|
+  ``chip``: 'RED' or 'GREEN', |br|
+  ``norders``: number of orders, |br|
+  ``orders``: { dictionary of ``orderlet_dict`` dictionaries named 0 .. 31 (up to ``norders-1``) } |br|
+  }
 
+``order_dict`` = { |br|
+  ``ordernum``: order number, |br|
+  ``echelle_order``: echelle order number (from the grating equation; not ``ordernum``), |br|
+  ``flux``: Numpy array of flux values (length = ``npixels``), |br|
+  ``n_pixels``: number of pixels in order (= 4080), |br|
+  ``num_detected_peaks``: number of fitted peaks in order,  |br|
+  ``initial_wls``: Numpy array of initial wavelengths (length = ``npixels``), |br|
+  ``fitted_wls``: Numpy array of fitted wavelengths (length = ``npixels``), |br|
+  ``known_wavelengths_vac``: Numpy array of wavelengths (Ang) from line list (length = ``num_detected_peaks``), |br|
+  ``line_positions``: Numpy array of fitted line centers (length = ``num_detected_peaks``),  |br|
+  ``rel_precision_cms``: estimated relative precision in cm/s, |br|
+  ``abs_precision_cms``: estimated absolute precision in cm/s, |br|
+  ``lines``: { dictionary of ``line_dict`` dictionaries named 0 .. 31 (up to ``num_detected_peaks-1``) } |br|
+  }
 
+``line_dict`` = { |br|
+  ``amp``: amplitude parameter value from the fit, |br|
+  ``mu``: line center parameter value from the fit, |br|
+  ``sig``: line width parameter value from the fit, |br|
+  ``const``: contact offset parameter from the fit, |br|
+  ``covar``: 2-dimensional covariance matrix from the fit, |br|
+  ``data``: data (intensities with implied pixel index starting at 0), |br|
+  ``model``: best fit model of ``data``, |br|
+  ``quality``: 'good' or 'bad', |br|
+  ``chi2``: chi^2 value for fit, |br|
+  ``rms``: root mean square value for fit, |br|
+  ``mu_diff``: difference in pixels between initial guess and fit, |br|
+  ``lambda_fit``: best-fit wavelength (Ang), |br|
+  }
+
+Accessing parts WLS Dictionaries
+--------------------------------
+Below are examples of accessing the hierarchical structure of a WLS dictionary.
+
+To print the number of type of calibration spectrum (LFC or ThAr), one would type |br|
+``> print(wls_dict['cal_type'])``
+
+To print the number of orders in the orderlet CAL, one would type |br|
+``> print(wls_dict['orderlets']['CAL']['norders'])``
+
+To print the echelle order number in order 3, of orderlet CAL, one would type |br|
+``> print(wls_dict['orderlets']['CAL']['orders'][3]['echelle_order'])``
+  
+To print the best-fit wavelength of line 2, in order 3, of orderlet CAL, one would type |br|
+``> print(wls_dict['orderlets']['CAL']['orders'][3]['lines'][2]['lambda_fit'])``
   
