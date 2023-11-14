@@ -62,15 +62,15 @@ Accessing parts WLS Dictionaries
 --------------------------------
 Below are examples of accessing the hierarchical structure of a WLS dictionary.
 
-To print the number of type of calibration spectrum (LFC or ThAr), one would type |br|
-``> print(wls_dict['cal_type'])``
+To print the number of type of calibration spectrum (LFC or ThAr): |br|
+``print(wls_dict['cal_type'])``
 
-To print the number of orders in the orderlet CAL, one would type |br|
-``> print(wls_dict['orderlets']['CAL']['norders'])``
+To print the number of orders in the orderlet CAL: |br|
+``print(wls_dict['orderlets']['CAL']['norders'])``
 
-To print the echelle order number in order 3, of orderlet CAL, one would type |br|
-``> print(wls_dict['orderlets']['CAL']['orders'][3]['echelle_order'])``
+To print the echelle order number in order 3, of orderlet CAL: |br|
+``print(wls_dict['orderlets']['CAL']['orders'][3]['echelle_order'])``
   
-To print the best-fit wavelength of line 2, in order 3, of orderlet CAL, one would type |br|
-``> print(wls_dict['orderlets']['CAL']['orders'][3]['lines'][2]['lambda_fit'])``
+To print the best-fit wavelength of line 2, in order 3, of orderlet CAL: |br|
+``print(wls_dict['orderlets']['CAL']['orders'][3]['lines'][2]['lambda_fit'])``
   
