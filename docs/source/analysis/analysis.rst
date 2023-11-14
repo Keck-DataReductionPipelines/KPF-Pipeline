@@ -4,7 +4,7 @@ Using Analysis Methods
 ======================
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
     :titlesonly:
 
     dictonary_format.rst
