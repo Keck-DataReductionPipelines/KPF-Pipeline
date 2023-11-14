@@ -197,10 +197,7 @@ class WaveCalibrate(KPF1_Primitive):
                         # Save updated mask positions, start with testdir, same as above
                         maskdir = self.output_dir+ '/wlpixelfiles/'
                         filename = maskdir + self.cal_type + 'mask_'+self.cal_orderlet_names[0]+'_' + self.file_name + ".csv"
-                        #print("M:",maskdir)
-                        #print("F:",filename)
-                        
-                        self.alg.save_etalon_mask_update(filename,wls_and_pixels) #HTIHTI
+                        self.alg.save_etalon_mask_update(filename,wls_and_pixels)
 
                 
                     # if we've just got one etalon frame, the wl solution
