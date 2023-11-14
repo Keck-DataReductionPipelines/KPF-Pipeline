@@ -1,5 +1,7 @@
 .. |br| raw:: html
 
+   <br />
+
 Format of Wavelength Solution Dictionaries
 ==========================================
 
@@ -12,13 +14,15 @@ Organization of WLS Dictionaries
 WLS dictionaries are (currently) per CCD, so there will be two WLS dictionaries per WLS.  (We might update this.)
 They are organized hierarchically with by orderlet, order, line, as shown the example below:
 
-``red_thar_WLSDict`` = { |br|
+``wls_dict`` = { |br|
   ``wls_processing_date``: datetime of running WLS code |br|
   ``cal_type``: 'ThAr' or 'LFC' (etalon not included yet) |br|
+  ``orderlets``: a list of ``orderlet_dict`` (usually named 'CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY') |br|
+  }
 
-  orderlets: {
-    'CAL':
-      full_name: 'RED_CAL',
+``orderlet_dict`` = {
+'CAL':
+      full_name: 'RED_CAL' or 'GREEN_CAL' (or similar for other orderlets)
       orderlet: 'CAL',
       chip: 'RED',
       norders: 32,
