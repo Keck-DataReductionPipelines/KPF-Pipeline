@@ -49,7 +49,7 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   ``sig``: line width parameter value from the fit, |br|
   ``const``: contact offset parameter from the fit, |br|
   ``covar``: 2-dimensional covariance matrix from the fit, |br|
-  ``data``: data (intensities with implied pixel index starting at 0), |br|
+  ``data``: intensities around line center with implied pixel index starting at 0, |br|
   ``model``: best fit model of ``data``, |br|
   ``quality``: 'good' or 'bad', |br|
   ``chi2``: chi^2 value for fit, |br|
