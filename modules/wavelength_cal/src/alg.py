@@ -1315,10 +1315,6 @@ class WaveCalibration:
             # Calculate chi^2
             predicted_y = self.integrate_gaussian(x, *popt)
             chi_squared = np.sum(((y - predicted_y) ** 2) / np.var(y))
-            # This error happened here for order 0 of 'red_sky_flux'
-            #/code/KPF-Pipeline/modules/wavelength_cal/src/alg.py:1260: RuntimeWarning: invalid value encountered in true_divide
-            
-            chi_squared = np.sum(((y - predicted_y) ** 2) / np.var(y))
             '''
             # Calculate RMS of residuals for Gaussian fit
             rms_residual = np.sqrt(np.mean(np.square(y - predicted_y)))
