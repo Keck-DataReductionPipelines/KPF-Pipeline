@@ -328,7 +328,7 @@ class MasterDarkFramework(KPF0_Primitive):
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
-            master_holder.header[ffi]['BUNIT'] = ('DN/sec','Units of master dark')
+            master_holder.header[ffi]['BUNIT'] = ('electrons/sec','Units of master dark')
             master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['MINEXPTM'] = (self.exptime_minimum,'Minimum exposure time of input darks (seconds)')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
