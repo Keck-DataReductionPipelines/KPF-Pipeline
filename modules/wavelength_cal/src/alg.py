@@ -1308,7 +1308,7 @@ class WaveCalibration:
             except RuntimeError:
                 return p0
         
-        if self.cal_type == 'LFC' or self.cal_type == 'ThAr' or self.cal_type == 'Etalon':          
+        if self.cal_type == 'LFC' or self.cal_type == 'ThAr':
             # Quality Checks for Gaussian Fits
             chi_squared_threshold = int(self.chi_2_threshold)
 
@@ -1336,15 +1336,9 @@ class WaveCalibration:
             asymmetry = np.abs(np.mean(left_residuals) - np.mean(right_residuals))
             '''
             # Run checks against defined quality thresholds
-            #print("chi_squared=",chi_squared)
-            #print()
-            #HTI: if the predicted_y values are all the same, something is wrong.
-#            if chi_squared > 20:
-            #import pdb; pdb.set_trace()
-
-            #if (chi_squared > chi_squared_threshold):
-            #    print("Chi squared exceeded the threshold for this line. Line skipped")
-            #    return None
+            if (chi_squared > chi_squared_threshold):
+                print("Chi squared exceeded the threshold for this line. Line skipped")
+                return None
         
         return popt
     
