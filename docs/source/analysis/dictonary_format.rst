@@ -21,8 +21,8 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   }
 
 ``orderlet_dict`` = { |br|
-  ``full_name``: 'REDCAL' or 'REDSCI1' or 'REDSCI2' or 'REDSCI3' or 'REDSKY' (or similar GREEN`) |br|
-  ``orderlet``: 'CAL' or 'SCI1' or 'SCI2' or 'SCI3' or 'SKY', |br|
+  ``full_name``: 'REDCAL', 'REDSCI1', 'REDSCI2', 'REDSCI3', or 'REDSKY' (or similar for GREEN) |br|
+  ``orderlet``: 'CAL', 'SCI1', 'SCI2', 'SCI3', or 'SKY', |br|
   ``chip``: 'RED' or 'GREEN', |br|
   ``norders``: number of orders, |br|
   ``orders``: { list of ``orderlet_dict`` dictionaries named 0 to ``norders-1`` } |br|
@@ -36,7 +36,7 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   ``num_detected_peaks``: number of fitted peaks in order,  |br|
   ``initial_wls``: Numpy array of initial wavelengths (length = ``npixels``), |br|
   ``fitted_wls``: Numpy array of fitted wavelengths (length = ``npixels``), |br|
-  ``known_wavelengths_vac``: Numpy array of wavelengths (Ang) from line list (length = ``num_detected_peaks``), |br|
+  ``known_wavelengths_vac``: Numpy array of line wavelengths (Ang) (length = ``num_detected_peaks``), |br|
   ``line_positions``: Numpy array of fitted line centers (length = ``num_detected_peaks``),  |br|
   ``rel_precision_cms``: estimated relative precision in cm/s, |br|
   ``abs_precision_cms``: estimated absolute precision in cm/s, |br|
@@ -73,4 +73,3 @@ To print the echelle order number in order 3, of orderlet CAL: |br|
   
 To print the best-fit wavelength of line 2, in order 3, of orderlet CAL: |br|
 ``print(wls_dict['orderlets']['CAL']['orders'][3]['lines'][2]['lambda_fit'])``
-  
