@@ -122,6 +122,7 @@ class WaveCalibrate(KPF1_Primitive):
         Returns:
             Level 1 Data Object
         """
+
         if self.cal_type == 'LFC' or 'ThAr' or 'Etalon':
             self.file_name_split = self.l1_obj.filename.split('_')[0]
             self.file_name = self.l1_obj.filename.split('.')[0]
@@ -194,15 +195,12 @@ class WaveCalibrate(KPF1_Primitive):
                     if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
                     
-                    if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(
-                            self.linelist_path, allow_pickle=True
-                        ).tolist()
-                    else:
-                        peak_wavelengths_ang = None
-
+                    peak_wavelengths_ang = None
                     _, wls_and_pixels, orderlet_dict = self.alg.run_wavelength_cal(
-                        calflux, self.rough_wls,peak_wavelengths_ang=peak_wavelengths_ang)
+                        calflux, self.rough_wls, 
+                        peak_wavelengths_ang=peak_wavelengths_ang,
+                        input_filename=self.l1_obj.filename
+                    )
 
                     if self.save_wl_pixel_toggle == True:
                         wlpixelwavedir = self.output_dir + '/wlpixelfiles/'
@@ -210,7 +208,14 @@ class WaveCalibrate(KPF1_Primitive):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
                             self.file_name + "_" + '{}.npy'.format(prefix)
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name, wls_and_pixels)
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(
+                            file_name, wls_and_pixels
+                        )
+                        # Save updated mask positions, start with testdir, same as above
+                        maskdir = self.output_dir+ '/wlpixelfiles/'
+                        filename = maskdir + self.cal_type + 'mask_'+self.cal_orderlet_names[0]+'_' + self.file_name + ".csv"
+                        self.alg.save_etalon_mask_update(filename,wls_and_pixels)
+
                 
                     # if we've just got one etalon frame, the wl solution that should be
                     # assigned to the file is the master (usually LFC) solution
