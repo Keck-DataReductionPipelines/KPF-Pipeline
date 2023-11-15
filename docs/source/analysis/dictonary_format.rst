@@ -21,7 +21,7 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   }
 
 ``orderlet_dict`` = { |br|
-  ``full_name``: 'REDCAL', 'REDSCI1', 'REDSCI2', 'REDSCI3', or 'REDSKY' (or similar for GREEN) |br|
+  ``full_name``: 'RED_CAL', 'RED_SCI1', 'RED_SCI2', 'RED_SCI3', or 'RED_SKY' (or similar for GREEN) |br|
   ``orderlet``: 'CAL', 'SCI1', 'SCI2', 'SCI3', or 'SKY', |br|
   ``chip``: 'RED' or 'GREEN', |br|
   ``norders``: number of orders, |br|
