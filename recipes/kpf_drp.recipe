@@ -26,6 +26,7 @@ from modules.quality_control_exposure.src.quality_control_exposure_framework imp
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 from modules.quality_control.src.quality_control_framework import QualityControlFramework
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.var_exts.src.var_exts_framework import VarExtsFramework
 
 # set the flags for each process
 # note: no rv reweighting is made here.
