@@ -3,6 +3,8 @@ import configparser
 import numpy as np
 import os
 from astropy import constants as cst, units as u
+import datetime
+from modules.Utils.analyze_wls import write_wls_json
 
 # pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
@@ -74,6 +76,8 @@ class WaveCalibrate(KPF1_Primitive):
             'filename' in args_keys else None
         self.save_diagnostics = action.args['save_diagnostics'] if \
             'save_diagnostics' in args_keys else None
+        self.json_filename = action.args['json_filename'] if \
+            'json_filename' in args_keys else None
         #getting filename so as to steal its date suffix 
         self.rough_wls = action.args['rough_wls'] if \
             'rough_wls' in args_keys else None
@@ -122,9 +126,27 @@ class WaveCalibrate(KPF1_Primitive):
             self.file_name_split = self.l1_obj.filename.split('_')[0]
             self.file_name = self.l1_obj.filename.split('.')[0]
 
+            # Create dictionary for storing information about the WLS, fits of each order, fits of each line, etc.
+            self.wls_dict = {
+                #"name" = 'KP.20230829.12345.67_WLS', # unique string to identify WLS
+                'wls_processing_date' : str(datetime.datetime.now()), # data and time that this dictionary was created
+                'cal_type' : self.cal_type, # LFC, etalon, ThAr, UNe
+                'orderlets' : {} #one orderlet_dict for each combination of chip and orderlet, e.g. 'RED_SCI1'
+            }
 
             for i, prefix in enumerate(self.cal_orderlet_names):
                 print('\nCalibrating orderlet {}.'.format(prefix))
+                
+                # Create a dictionary for each orderlet that will be filled in later
+                full_name = prefix.replace('_FLUX', '') # like GREEN_SCI1
+                orderlet_name = full_name.split('_')[1]
+                chip_name = prefix.split('_')[0]
+                self.wls_dict['chip'] = chip_name
+                self.wls_dict['orderlets'][orderlet_name] = {
+                    'full_name' : full_name, # e.g., RED_SCI1
+                    'orderlet' : orderlet_name, # SCI1, SCI2, SCI3, SKY, CAL
+                    'chip' : chip_name, # GREEN or RED
+                }
 
                 if self.save_diagnostics is not None:
                     self.alg.save_diagnostics_dir = '{}/{}/'.format(self.save_diagnostics, prefix)
@@ -135,25 +157,23 @@ class WaveCalibrate(KPF1_Primitive):
                         
                 #### lfc ####
                 if self.cal_type == 'LFC':
-                    line_list, wl_soln = self.calibrate_lfc(calflux, output_ext=output_ext)
+                    line_list, wl_soln, orderlet_dict = self.calibrate_lfc(calflux, output_ext=output_ext)
                     # self.drift_correction(prefix, line_list, wl_soln)
-                
+                    self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
+                    self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
+ 
                 #### thar ####    
                 elif self.cal_type == 'ThAr':
-                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
-                        'ThAr'
-                    ):
+                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('ThAr'):
                         pass # TODO: fix
                         # raise ValueError('Not a ThAr file!')
                     
                     if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(
-                            self.linelist_path, allow_pickle=True
-                        ).tolist()
+                        peak_wavelengths_ang = np.load(self.linelist_path, allow_pickle=True).tolist()
                     else:
                         raise ValueError('ThAr run requires linelist_path')
 
-                    wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+                    wl_soln, wls_and_pixels, orderlet_dict = self.alg.run_wavelength_cal(
                         calflux,peak_wavelengths_ang=peak_wavelengths_ang, 
                         rough_wls=self.rough_wls
                     )
@@ -162,19 +182,16 @@ class WaveCalibrate(KPF1_Primitive):
                         wlpixelwavedir = self.output_dir + '/wlpixelfiles/'
                         if not os.path.exists(wlpixelwavedir):
                             os.mkdir(wlpixelwavedir)
-                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
-                            self.file_name + "_" + '{}.npy'.format(prefix)
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(
-                            file_name, wls_and_pixels
-                        )
+                        file_name = wlpixelwavedir + self.cal_type + 'lines_' + self.file_name + "_" + '{}.npy'.format(prefix)
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name, wls_and_pixels)
 
                     self.l1_obj[output_ext] = wl_soln
+                    self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
+                    self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
 
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
-                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
-                        'Etalon'
-                    ):
+                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
                         raise ValueError('Not an Etalon file!')
                     
                     if self.linelist_path is not None:
@@ -184,10 +201,8 @@ class WaveCalibrate(KPF1_Primitive):
                     else:
                         peak_wavelengths_ang = None
 
-                    _, wls_and_pixels = self.alg.run_wavelength_cal(
-                        calflux, self.rough_wls, 
-                        peak_wavelengths_ang=peak_wavelengths_ang
-                    )
+                    _, wls_and_pixels, orderlet_dict = self.alg.run_wavelength_cal(
+                        calflux, self.rough_wls,peak_wavelengths_ang=peak_wavelengths_ang)
 
                     if self.save_wl_pixel_toggle == True:
                         wlpixelwavedir = self.output_dir + '/wlpixelfiles/'
@@ -195,67 +210,61 @@ class WaveCalibrate(KPF1_Primitive):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
                             self.file_name + "_" + '{}.npy'.format(prefix)
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(
-                            file_name, wls_and_pixels
-                        )
+                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name, wls_and_pixels)
                 
-                    # if we've just got one etalon frame, the wl solution
-                    # that should be assigned to the file is the master (usually 
-                    # LFC) solution
+                    # if we've just got one etalon frame, the wl solution that should be
+                    # assigned to the file is the master (usually LFC) solution
                     wl_soln = self.rough_wls
                     if peak_wavelengths_ang is not None:
 
                         # calculate drift [cm/s]
-                        drift_all_orders = calcdrift_polysolution(
-                            self.linelist_path, file_name
-                        )
+                        drift_all_orders = calcdrift_polysolution(self.linelist_path, file_name)
                         avg_drift = np.mean(drift_all_orders[:,1])
 
                         # convert drift to angstroms
                         beta = avg_drift / cst.c.to(u.cm/u.s).value
-                        delta_lambda_over_lambda = -1 + np.sqrt(
-                            (1 + beta)/ (1 - beta)
-                        )
+                        delta_lambda_over_lambda = -1 + np.sqrt((1 + beta)/ (1 - beta))
                         delta_lambda = delta_lambda_over_lambda * wl_soln
 
                         # update wls using calculated average drift
                         wl_soln = wl_soln + delta_lambda
 
                     self.l1_obj[output_ext] = wl_soln
+                    # The two lines haven't been tested yet - AWH oct 19 2023
+                    try:
+                        self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
+                        self.wls_dict['orderlets'][orderlet_name]['orders'] = orderlet_dict
+                    except Exception as e:
+                        print('wls_dist re: etalon did not work.  It is untested.')
+                        print(e)
+  
+            # Save WLS dictionary as a JSON file 
+            if self.json_filename != None:
+                print('*******************************************')
+                print('Saving JSON file with WLS fit information: ' +  self.json_filename)
+                json_dir = os.path.dirname(self.json_filename)
+                if not os.path.isdir(json_dir):
+                    os.makedirs(json_dir)
+                write_wls_json(self.wls_dict, self.json_filename)
 
         else:
-            raise ValueError(
-                'cal_type {} not recognized. Available options are LFC, ThAr, \
-                & Etalon'.format(self.cal_type)
-            )
+            raise ValueError('cal_type {} not recognized. Available options are LFC, ThAr, & Etalon'.format(self.cal_type))
                             
         return Arguments(self.l1_obj)
             ## where to save final polynomial solution
             
-                
         
     def calibrate_lfc(self, calflux, output_ext=None):
-        if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith(
-            'LFC'
-        ):
+        if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('LFC'):
             pass # TODO: fix
-            # raise ValueError(
-            #     'Not an LFC file! CAL-OBJ is {}.'.format(
-            #         self.l1_obj.header['PRIMARY']['CAL-OBJ']
-            #     )
-            # )
+            # raise ValueError('Not an LFC file! CAL-OBJ is {}.'.format(self.l1_obj.header['PRIMARY']['CAL-OBJ']))
         
         if self.logger:
-            self.logger.info(
-                "Wavelength Calibration: Getting comb frequency \
-                    values."
-            )
+            self.logger.info("Wavelength Calibration: Getting comb frequency values.")
 
         if self.f0_key is not None:
             if type(self.f0_key) == str:
-                comb_f0 = float(
-                    self.l1_obj.header['PRIMARY'][self.f0_key]
-                )
+                comb_f0 = float(self.l1_obj.header['PRIMARY'][self.f0_key])
             if type(self.f0_key) == float or type(self.f0_key) == int:
                 comb_f0 = self.f0_key
 
@@ -264,9 +273,7 @@ class WaveCalibrate(KPF1_Primitive):
         
         if self.frep_key is not None:
             if type(self.frep_key) == str:
-                comb_fr = float(
-                    self.l1_obj.header['PRIMARY'][self.frep_key]
-                )
+                comb_fr = float(self.l1_obj.header['PRIMARY'][self.frep_key])
             if type(self.frep_key) == float or type(self.frep_key) == int:
                 comb_fr = self.frep_key
         else:
@@ -276,7 +283,7 @@ class WaveCalibrate(KPF1_Primitive):
 
         lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
 
-        wl_soln, wls_and_pixels = self.alg.run_wavelength_cal(
+        wl_soln, wls_and_pixels, orderlet_dict = self.alg.run_wavelength_cal(
             calflux, peak_wavelengths_ang=peak_wavelengths_ang,
             rough_wls=self.rough_wls, 
             lfc_allowed_wls=lfc_allowed_wls
@@ -293,7 +300,7 @@ class WaveCalibrate(KPF1_Primitive):
         if output_ext != None:
             self.l1_obj[output_ext] = wl_soln
 
-        return (file_name, wl_soln)
+        return (file_name, wl_soln, orderlet_dict)
     
     def drift_correction(self, orderlet, line_list, wl_soln):
 
@@ -301,20 +308,18 @@ class WaveCalibrate(KPF1_Primitive):
         output_ext = orderlet.replace('FLUX', 'WAVE')
         file_name, _ = self.calibrate_lfc(calflux)
 
-        drift_all_orders = calcdrift_polysolution(
-            line_list, file_name
-        )
+        drift_all_orders = calcdrift_polysolution(line_list, file_name)
         avg_drift = np.nanmedian(drift_all_orders[:,1])
         print("Average drift for {} = {:.2f} cm/s".format(orderlet, avg_drift))
 
         # convert drift to angstroms
         beta = avg_drift / cst.c.to(u.cm/u.s).value
-        delta_lambda_over_lambda = -1 + np.sqrt(
-            (1 + beta)/ (1 - beta)
-        )
+        delta_lambda_over_lambda = -1 + np.sqrt((1 + beta)/ (1 - beta))
         delta_lambda = delta_lambda_over_lambda * wl_soln
 
         # update wls using calculated average drift
         wl_soln = wl_soln - delta_lambda
 
         self.l1_obj[output_ext] = wl_soln
+
+    

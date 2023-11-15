@@ -140,8 +140,8 @@ class level_from_kpffile(KPF_Primitive):
 
     Description:
         - `action (keckdrpframework.models.action.Action)`: `action.args` contains 
-                  positional arguments and  keyword arguments passed by the `str_replace` 
-                  event issued in the recipe:
+                  positional arguments and  keyword arguments passed by the 
+                  `level_from_kpffile` event issued in the recipe:
 
             - `action.args[0] (string)`: filename in kpf format
     """
@@ -180,4 +180,3 @@ class level_from_kpffile(KPF_Primitive):
             format_type = None
         
         return Arguments(format_type) # returns 'L0', '2D', 'L1', 'L2', None
-
