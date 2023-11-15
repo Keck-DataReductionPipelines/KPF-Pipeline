@@ -1,5 +1,8 @@
+import os
 import numpy as np
 import numpy.ma as ma
+import pandas as pd
+from modules.Utils.kpf_parse import get_data_products_L0
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -11,7 +14,7 @@ upon the special requirements for some QC metrics.
 """
 
 iam = 'quality_control'
-version = '1.2'
+version = '1.3'
 
 """
 The following are methods common across data levels, which are given at the beginning
@@ -80,10 +83,6 @@ def not_junk_check(kpfobs, junk_ObsIDs_csv='/code/KPF-Pipeline/Junk_Observations
          QC_pass - a boolean signifying that the input(s) are not junk (i.e., = False if junk)
     """
 
-    import os
-    import numpy as np
-    import pandas as pd
-
     QC_pass = True                # Assume not junk unless explicitly listed in junk_ObsIDs_csv
 
     # read list of junk files
@@ -123,6 +122,57 @@ def not_junk_check(kpfobs, junk_ObsIDs_csv='/code/KPF-Pipeline/Junk_Observations
 
     return QC_pass
 
+
+def L0_data_products_check(L0, debug=False):
+    """
+    This Quality Control function checks if the expected data_products 
+    in an L0 file are present and if their data extensions are populated 
+    with arrays of non-zero size.
+    
+    Args:
+         L0 - an L0 object
+         debug - an optional flag.  If True, missing data products are noted.
+
+     Returns:
+         QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+    """
+    
+    # determine which extensions should be in the L0 file
+    # first add triggrered cameras (Green, Red, CaHK, ExpMeter)
+    trigtarg = L0.header['PRIMARY']['TRIGTARG']
+    if len(trigtarg) > 0:
+        data_products = trigtarg.split(',')
+    # add Guider
+    if hasattr(L0, 'GUIDER_AVG'):
+        data_products.append('Guider')
+    if hasattr(L0, 'guider_avg'):  # some early files had lower case
+        data_products.append('Guider')
+    # add Telemetry
+    if hasattr(L0, 'TELEMETRY'):
+        data_products.append('Telemetry')
+    # add Pyrheliometer
+    if hasattr(L0, 'SOCAL PYRHELIOMETER'):
+        data_products.append('Pyrheliometer')
+    if debug:
+        print('Data products that are supposed to be in this L0 file: ' + str(data_products))
+ 
+    QC_pass = True
+
+    # Use helper funtion to get data products and check their characteristics.
+    data_products_present = get_data_products_L0(L0)
+    if debug:
+        print('Data products in L0 file: ' + str(data_products_present))
+
+    # Check for specific data products
+    possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
+    for dp in possible_data_products:
+        if dp in data_products:
+            if not dp in data_products_present:
+                QC_pass = False
+                if debug:
+                    print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+    
+    return QC_pass
 
 #####################################################################
 
@@ -189,6 +239,16 @@ class QCDefinitions:
         self.fits_comments[name3] = 'QC: Not-junk check'
         self.db_columns[name3] = None
         self.methods[name3] = ["add_qc_keyword_to_header"]
+
+        name4 = 'L0_data_products_check'
+        self.names.append(name4)
+        self.descriptions[name4] = 'Check if expected data products are present with non-zero array sizes.'
+        self.data_types[name4] = 'int'
+        self.fits_keywords[name4] = 'DATAPRES'
+        self.fits_comments[name4] = 'QC: Data present check'
+        self.db_columns[name4] = None
+        self.methods[name4] = ["add_qc_keyword_to_header"]
+
 
         # Integrity checks.
 
@@ -261,7 +321,7 @@ class QC:
 
         self.fits_object.header['PRIMARY'][keyword] = (value,comment)
 
-        print('---->add_qc_keyword_to_header: qc_name,keyword,value,comment = {},{},{},{}'.format(qc_name,keyword,value,comment))
+        print('---->add_qc_keyword_to_header: qc_name, keyword, value, comment = {}, {}, {}, {}'.format(qc_name,keyword,value,comment))
 
 
 
@@ -287,7 +347,7 @@ class QCL0(QC):
 
     Example python code to illustrate usage of this module in calling program:
 
-        import modules.Utils.quality_control as qc
+        import modules.quality_control.src.quality_control as qc
 
         qc.what_am_i()
 
@@ -346,7 +406,7 @@ class QCL1(QC):
 
     Example python code to illustrate usage of this module in calling program:
 
-        import modules.Utils.quality_control as qc
+        import modules.quality_control as qc
 
         qc.what_am_i()
 
