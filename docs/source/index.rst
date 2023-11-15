@@ -11,3 +11,4 @@ Welcome! This is the documentation for the KPF Data Reduction Pipeline.
    develop/start.rst
    api/api.rst
    primitives/primitives.rst
+   analysis/analysis.rst
