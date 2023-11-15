@@ -1,0 +1,16 @@
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+
+data_type = config.ARGUMENT.data_type
+lev0_fits_file = config.ARGUMENT.lev0_fits_file
+n_sigma = config.ARGUMENT.n_sigma
+rid = config.ARGUMENT.rid
+
+do_read_noise = True
+
+if do_read_noise:
+
+    read_noise_exit_code = ReadNoiseFramework(data_type,
+                                              lev0_fits_file,
+                                              n_sigma,
+                                              rid)
+

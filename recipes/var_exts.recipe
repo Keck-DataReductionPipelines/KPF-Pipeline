@@ -1,0 +1,21 @@
+from modules.var_exts.src.var_exts_framework import VarExtsFramework
+
+data_type = config.ARGUMENT.data_type
+lev0_fits_file = config.ARGUMENT.lev0_fits_file
+masterbias_path = config.ARGUMENT.masterbias_path
+masterdark_path = config.ARGUMENT.masterdark_path
+masterflat_path = config.ARGUMENT.masterflat_path
+rid = config.ARGUMENT.rid
+
+do_var_exts = True
+
+if do_var_exts:
+    if rid > 0:
+
+        var_exts_exit_code = VarExtsFramework(data_type,
+                                              lev0_fits_file,
+                                              masterbias_path,
+                                              masterdark_path,
+                                              masterflat_path,
+                                              rid)
+

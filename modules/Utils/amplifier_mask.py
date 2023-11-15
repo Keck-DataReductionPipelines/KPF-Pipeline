@@ -1,3 +1,4 @@
+import numpy as np
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from keckdrpframework.models.arguments import Arguments
@@ -37,7 +38,7 @@ class AmplifierMask(KPF1_Primitive):
             if self.namps[chip] > 2:
                 for ol in self.orderlets:
                     ol_name = chip + '_' + ol
-                    self.input_l1[ol_name][self.bad_regions[chip]] = 0
+                    self.input_l1[ol_name][self.bad_regions[chip]] = np.nan
         
         return self.input_l1
                 
