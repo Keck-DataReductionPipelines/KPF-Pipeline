@@ -1638,10 +1638,11 @@ class WaveCalibration:
             line_positions = dic1['line_positions']
 
             # Keep the old and new values in to check results against original mask.
-            #data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions} #test
+            # data = {'known_wavelengths_vac': known_wavelengths_vac, 'line_positions': line_positions} #test
             data = {'line_positions': line_positions,'weight': np.ones_like(line_positions)}
             df_one = pd.DataFrame(data)
             df_out = pd.concat([df_out, df_one])   
+        #df_out.drop_duplicates(subset='known_wavelengths_vac',keep='first',inplace=True)    
         df_out.drop_duplicates(subset='line_positions',keep='first',inplace=True)
         df_out.sort_values(df_out.columns[0],inplace=True)
         df_out.to_csv(file_name,index=False,header=False,sep=' ')

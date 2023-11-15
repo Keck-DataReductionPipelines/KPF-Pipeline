@@ -12,10 +12,13 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = context.date_dir
 
-for cal_type in ['ThAr', 'LFC']:
+for cal_type in ['ThAr', 'LFC','Etalon']:
     if cal_type == 'ThAr':
         search_string = config.ARGUMENT.thar_search_string
         full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
+    elif cal_type == 'Etalon':
+        full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
+        search_string=config.ARGUMENT.etalon_search_string
     elif cal_type == 'LFC':
         search_string = config.ARGUMENT.lfc_search_string
         # if exists(output_filename):
@@ -44,6 +47,9 @@ for cal_type in ['ThAr', 'LFC']:
                     orderlet_names = config.ARGUMENT.red_cal_orderlet_name
                     min_order = config.ARGUMENT.red_min_order
                     max_order = config.ARGUMENT.red_max_order
+                    if cal_type == 'Etalon':
+                        orderlet_names = ['RED_SCI_FLUX2']
+                        output_exts = ['RED_SCI_WAVE2']
                     
                 if ext == 'GREEN_CAL_WAVE':
                     linelist = config.ARGUMENT.green_linelist
@@ -51,6 +57,10 @@ for cal_type in ['ThAr', 'LFC']:
                     orderlet_names = config.ARGUMENT.green_cal_orderlet_name
                     min_order = config.ARGUMENT.green_min_order
                     max_order = config.ARGUMENT.green_max_order
+                    if cal_type == 'Etalon':
+                        orderlet_names = ['GREEN_SCI_FLUX2']
+                        output_exts = ['GREEN_SCI_WAVE2']
+
                 
                 if save_diagnostics_dir != None:
                     plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
@@ -68,8 +78,8 @@ for cal_type in ['ThAr', 'LFC']:
                 )
 
             output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
-
-            result = to_fits(wave_soln, output_filename)
+            
+            #result = to_fits(wave_soln, output_filename)
             if cal_type == 'Thar':
                 master_wls_file = output_filename
 
