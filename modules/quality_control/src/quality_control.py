@@ -188,41 +188,42 @@ def L0_header_keywords_present_check(L0, essential_keywords=['auto'], debug=Fals
          QC_pass - a boolean signifying that the QC passed (True) for failed (False)
     """
     
-    essential_keywords = [
-        'DATE-BEG',  # Start of exposure from kpfexpose
-        'DATE-MID',  # Halfway point of the exposure (unweighted)
-        'DATE-END',  # End of exposure
-        'EXPTIME',   # Requested exposure time
-        'ELAPSED',   # Actual exposure time
-        'PROGNAME',  # Program name from kpfexpose
-        'OBJECT',    # Object name
-        'TARGRA',    # Right ascension [hr] from DCS
-        'TARGDEC',   # Declination [deg] from DCS
-        'TARGEPOC',  # Target epoch from DCS
-        'TARGEQUI',  # Target equinox from DCS
-        'TARGPLAX',  # Target parallax [arcsec] from DCS
-        'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
-        'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
-        'TARGRADV',  # Target radial velocity [km/s]
-        'AIRMASS',   # Airmass from DCS
-        'PARANTEL',  # Parallactic angle of the telescope from DCS
-        'HA',        # Hour angle
-        'EL',        # Elevation [deg]
-        'AZ',        # Azimuth [deg]
-        'LST',       # Local sidereal time
-        'GAIAID',    # GAIA Target name
-        '2MASSID',   # 2MASS Target name
-        'GAIAMAG',   # GAIA G band magnitude
-        '2MASSMAG',  # 2MASS J band magnitude
-        'TARGTEFF',  # Target effective temperature (K)
-        'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
-        'TRIGTARG',  # Cameras that were sent triggers
-        'IMTYPE',    # Image Type
-        'CAL-OBJ',   # Calibration fiber source
-        'SKY-OBJ',   # Sky fiber source
-        'SCI-OBJ',   # Science fiber source
-        'AGITSTA',   # Agitator status
-    ] 
+    if essential_keywords == ['auto']:
+         essential_keywords = [
+             'DATE-BEG',  # Start of exposure from kpfexpose
+             'DATE-MID',  # Halfway point of the exposure (unweighted)
+             'DATE-END',  # End of exposure
+             'EXPTIME',   # Requested exposure time
+             'ELAPSED',   # Actual exposure time
+             'PROGNAME',  # Program name from kpfexpose
+             'OBJECT',    # Object name
+             'TARGRA',    # Right ascension [hr] from DCS
+             'TARGDEC',   # Declination [deg] from DCS
+             'TARGEPOC',  # Target epoch from DCS
+             'TARGEQUI',  # Target equinox from DCS
+             'TARGPLAX',  # Target parallax [arcsec] from DCS
+             'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
+             'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
+             'TARGRADV',  # Target radial velocity [km/s]
+             'AIRMASS',   # Airmass from DCS
+             'PARANTEL',  # Parallactic angle of the telescope from DCS
+             'HA',        # Hour angle
+             'EL',        # Elevation [deg]
+             'AZ',        # Azimuth [deg]
+             'LST',       # Local sidereal time
+             'GAIAID',    # GAIA Target name
+             '2MASSID',   # 2MASS Target name
+             'GAIAMAG',   # GAIA G band magnitude
+             '2MASSMAG',  # 2MASS J band magnitude
+             'TARGTEFF',  # Target effective temperature (K)
+             'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
+             'TRIGTARG',  # Cameras that were sent triggers
+             'IMTYPE',    # Image Type
+             'CAL-OBJ',   # Calibration fiber source
+             'SKY-OBJ',   # Sky fiber source
+             'SCI-OBJ',   # Science fiber source
+             'AGITSTA',   # Agitator status
+         ] 
 
     QC_pass = True
     for keyword in essential_keywords:
