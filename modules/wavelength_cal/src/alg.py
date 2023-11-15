@@ -848,7 +848,35 @@ class WaveCalibration:
 
         return good_peak_idx
     
-    
+    def estimate_fwhm(self, flux, peak_pixel):
+        """
+        Estimate the FWHM of a line at a given pixel position.
+
+        Args:
+            flux (np.array): The flux values of the spectrum.
+            peak_pixel (int): The pixel position of the peak of the line.
+
+        Returns:
+            float: An estimated FWHM value.
+        """
+        half_max = flux[peak_pixel] / 2
+
+        # Find the points at half maximum on both sides of the peak
+        left_idx = right_idx = peak_pixel
+        while left_idx > 0 and flux[left_idx] > half_max:
+            left_idx -= 1
+        while right_idx < len(flux) - 1 and flux[right_idx] > half_max:
+            right_idx += 1
+
+        # Interpolate to find more accurate positions where the flux crosses the half maximum
+        if left_idx > 0:
+            left_idx += (half_max - flux[left_idx]) / (flux[left_idx + 1] - flux[left_idx])
+        if right_idx < len(flux) - 1:
+            right_idx -= (half_max - flux[right_idx]) / (flux[right_idx - 1] - flux[right_idx])
+
+        fwhm = right_idx - left_idx
+        return fwhm
+
     def line_match(self, flux, linelist, line_pixels_expected, plot_toggle, savefig, gaussian_fit_width=10):
         """
         Given a linelist of known wavelengths of peaks and expected pixel locations
@@ -869,6 +897,8 @@ class WaveCalibration:
                     Gaussian parameters [a, mu, sigma**2, const] for each detected peak
                 dictionary: a dictionary of information about the lines fit within this order 
         """        
+        if self.cal_type == 'ThAr':
+            gaussian_fit_width = 5
         num_input_lines = len(linelist)  
         num_pixels = len(flux)
         successful_fits = []
@@ -879,7 +909,6 @@ class WaveCalibration:
         for i in np.arange(num_input_lines):
             line_location = line_pixels_expected[i]
             peak_pixel = np.floor(line_location).astype(int)
-
             # don't fit saturated lines
             if peak_pixel < len(flux) and flux[peak_pixel] <= 1e6:
                 if peak_pixel < gaussian_fit_width:
@@ -1260,10 +1289,9 @@ class WaveCalibration:
 
         x = np.ma.compressed(x)
         y = np.ma.compressed(y)
-
         i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
+        
         p0 = [y[i], x[i], 1.5, np.min(y)]
-
         with np.warnings.catch_warnings():
             np.warnings.simplefilter("ignore")
             popt, pcov = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
@@ -1280,7 +1308,7 @@ class WaveCalibration:
             
 
         if self.cal_type == 'LFC' or 'ThAr':          
-            # Quality Checks for Gaussian Fits
+            #Quality Checks for Gaussian Fits
             chi_squared_threshold = int(self.chi_2_threshold)
 
             # Calculate chi^2
@@ -1304,15 +1332,19 @@ class WaveCalibration:
             #residuals = y - predicted_y
             #left_residuals = residuals[:len(residuals)//2]
             #right_residuals = residuals[len(residuals)//2:]
-            #asymmetry = np.abs(np.mean(left_residuals) - np.mean(right_residuals))
+            #asymmetry = np.abs(np.me/an(left_residuals) - np.mean(right_residuals))
             
-            # **** AWH (Oct 13) -- I'm turing this off for now because it crashes the DRP 
-            #                      and I can't figure out why!
             # Run checks against defined quality thresholds
-            #if (chi_squared > chi_squared_threshold):
-            #    print("Chi squared exceeded the threshold for this line. Line skipped")
-            #    return None
-        
+            if (chi_squared > chi_squared_threshold):
+                print("Chi squared exceeded the threshold for this line. Line skipped")
+                return None, line_dict
+
+            #Check if the Gaussian amplitude is positive and the peak is higher than the wings
+            if popt[0] <= 0 or popt[0] <= popt[3]:
+                line_dict['quality'] = 'bad_amplitude'  # Mark the fit as bad due to negative amplitude or U shaped gaussian
+                print('Negative amplitude detected')
+                return None, line_dict
+
         return (popt, line_dict)
     
     def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, fit_iterations=5, sigma_clip=2.1, peak_heights=None, plot_path=None):
