@@ -83,4 +83,3 @@ for cal_type in ['ThAr', 'LFC','Etalon']:
             if cal_type == 'Thar':
                 master_wls_file = output_filename
 
-#Nightly_summary(date_dir)
