@@ -156,9 +156,8 @@ def L0_data_products_check(L0, debug=False):
     if debug:
         print('Data products that are supposed to be in this L0 file: ' + str(data_products))
  
-    QC_pass = True
-
     # Use helper funtion to get data products and check their characteristics.
+    QC_pass = True
     data_products_present = get_data_products_L0(L0)
     if debug:
         print('Data products in L0 file: ' + str(data_products_present))
@@ -171,6 +170,66 @@ def L0_data_products_check(L0, debug=False):
                 QC_pass = False
                 if debug:
                     print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+    
+    return QC_pass
+
+
+def L0_header_keywords_present_check(L0, essential_keywords=['auto'], debug=False):
+    """
+    This Quality Control function checks if a specified set of FITS header keywords are present.
+    
+    Args:
+         L0 - an L0 object
+         essential_keywords - an optional list of keywords to check.  If set to ['auto'], 
+         then a default list of keywords will be checked. 
+         debug - an optional flag.  If True, missing data products are noted.
+
+     Returns:
+         QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+    """
+    
+    essential_keywords = [
+        'DATE-BEG',  # Start of exposure from kpfexpose
+        'DATE-MID',  # Halfway point of the exposure (unweighted)
+        'DATE-END',  # End of exposure
+        'EXPTIME',   # Requested exposure time
+        'ELAPSED',   # Actual exposure time
+        'PROGNAME',  # Program name from kpfexpose
+        'OBJECT',    # Object name
+        'TARGRA',    # Right ascension [hr] from DCS
+        'TARGDEC',   # Declination [deg] from DCS
+        'TARGEPOC',  # Target epoch from DCS
+        'TARGEQUI',  # Target equinox from DCS
+        'TARGPLAX',  # Target parallax [arcsec] from DCS
+        'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
+        'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
+        'TARGRADV',  # Target radial velocity [km/s]
+        'AIRMASS',   # Airmass from DCS
+        'PARANTEL',  # Parallactic angle of the telescope from DCS
+        'HA',        # Hour angle
+        'EL',        # Elevation [deg]
+        'AZ',        # Azimuth [deg]
+        'LST',       # Local sidereal time
+        'GAIAID',    # GAIA Target name
+        '2MASSID',   # 2MASS Target name
+        'GAIAMAG',   # GAIA G band magnitude
+        '2MASSMAG',  # 2MASS J band magnitude
+        'TARGTEFF',  # Target effective temperature (K)
+        'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
+        'TRIGTARG',  # Cameras that were sent triggers
+        'IMTYPE',    # Image Type
+        'CAL-OBJ',   # Calibration fiber source
+        'SKY-OBJ',   # Sky fiber source
+        'SCI-OBJ',   # Science fiber source
+        'AGITSTA',   # Agitator status
+    ] 
+
+    QC_pass = True
+    for keyword in essential_keywords:
+        if keyword not in L0.header['PRIMARY']
+            QC_pass = False
+            if debug:
+                print('The keyword ' + keyword + ' is missing from the primary header.')
     
     return QC_pass
 
@@ -190,6 +249,8 @@ class QCDefinitions:
         names (list of strings): Each element is a unique and descriptive name for the metric.  No spaces allowed.
         descriptions (dictionary of strings): Each dictionary entry specifies a short description of the metric
             Try to keep it under 50 characters for brevity (this is not enforced but recommended).
+        kpf_data_levels (dictionary of lists of strings): Each entry specifies the set of KPF data levels for the test.
+            Possible values in the list: 'L0', '2D', 'L1', 'L2'
         data_types (dictionary of strings): Each entry specifies the Python data type of the metric.
             Only string, int, float are allowed.  Use 0/1 for boolean.
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
@@ -205,6 +266,7 @@ class QCDefinitions:
 
         self.names = []
         self.descriptions = {}
+        self.kpf_data_levels = {} 
         self.data_types = {}
         self.fits_keywords = {}
         self.fits_comments = {}
@@ -216,6 +278,7 @@ class QCDefinitions:
         name1 = 'jarque_bera_test_red_amp1'
         self.names.append(name1)
         self.descriptions[name1] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
+        self.kpf_data_levels[name1] = ['L0']
         self.data_types[name1] = 'float'
         self.fits_keywords[name1] = 'JBTRED1'
         self.fits_comments[name1] = 'QC: J-B test for RED AMP-1 detector'
@@ -225,6 +288,7 @@ class QCDefinitions:
         name2 = 'monotonic_wavelength_solution_check'
         self.names.append(name2)
         self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
+        self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
@@ -234,6 +298,7 @@ class QCDefinitions:
         name3 = 'not_junk_data_check'
         self.names.append(name3)
         self.descriptions[name3] = 'Check if data in file are not junk.'
+        self.kpf_data_levels[name3] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name3] = 'int'
         self.fits_keywords[name3] = 'JUNKDATA'
         self.fits_comments[name3] = 'QC: Not-junk check'
@@ -242,27 +307,36 @@ class QCDefinitions:
 
         name4 = 'L0_data_products_check'
         self.names.append(name4)
+        self.kpf_data_levels[name4] = ['L0']
         self.descriptions[name4] = 'Check if expected data products are present with non-zero array sizes.'
         self.data_types[name4] = 'int'
-        self.fits_keywords[name4] = 'DATAPRES'
-        self.fits_comments[name4] = 'QC: Data present check'
+        self.fits_keywords[name4] = 'DATAPRL0'
+        self.fits_comments[name4] = 'QC: L0 data present check'
         self.db_columns[name4] = None
         self.methods[name4] = ["add_qc_keyword_to_header"]
 
 
         # Integrity checks.
+        if len(self.names) != len(self.kpf_data_levels):
+            raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
 
         if len(self.names) != len(self.descriptions):
             raise ValueError("Length of names list does not equal number of entries in descriptions dictionary.")
 
         if len(self.names) != len(self.data_types):
-            raise ValueError("Length of names list does not equal number of entries in data_types dictionary.")
+            raise ValueError("Length of data_types list does not equal number of entries in data_types dictionary.")
 
         if len(self.names) != len(self.fits_keywords):
-            raise ValueError("Length of names list does not equal number of entries in fits_keywords dictionary.")
+            raise ValueError("Length of fits_keywords list does not equal number of entries in fits_keywords dictionary.")
+
+        if len(self.names) != len(self.fits_comments):
+            raise ValueError("Length of fits_comments list does not equal number of entries in fits_comments dictionary.")
 
         if len(self.names) != len(self.db_columns):
-            raise ValueError("Length of names list does not equal number of entries in db_columns dictionary.")
+            raise ValueError("Length of db_columns list does not equal number of entries in db_columns dictionary.")
+
+        if len(self.names) != len(self.methods):
+            raise ValueError("Length of methods list does not equal number of entries in methods dictionary.")
 
         keys_list = self.data_types.keys()
         for key in keys_list:
