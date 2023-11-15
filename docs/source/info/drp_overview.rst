@@ -22,13 +22,17 @@ Level 0 to 2D
 
 #. Spectral Extraction
 
-   #. <part 1>
+   #. Map the orderlet locations using a rectified master flat.
 
-   #. <part 2>
+   #. Extract each order and orderlet using a weighted sum. The weights are determined from the rectified flat.
 
-   #. <part 3>
+   #. Reject outliers by comparing the cross-dispersion profile in each column to that expected in a scaled master flat.
 
-#. ... <more>
+   #. Subtract background by measuring the inter-order light.
+
+   #. Copy wavelength solution from the day's master ThAr or LFC frames.
+
+   #. Calculate photon-weighted midpoint for each order from the exposure meter spectral timeseries.
 
 #. Ca H&K Spectrometer Spectra
 
@@ -47,7 +51,7 @@ Level 1 to Level 2
 #. Compute Cross-correlation functions (CCFs) with binary masks
 #. Compute RVs per order and per orderlet from fitting CCF peaks
 #. Compute reweighted RVs based on information content per order
-#. <more ?>
+#. Compute and correct for the barycentric RV using the photon-weighted midpoints.
 
 
 Wavelength Solution Recipes
