@@ -1398,8 +1398,8 @@ class WaveCalibration:
             line_dict['quality'] = 'good' # fits are assumed good until marked bad elsewhere
             
 
-        if self.cal_type == 'LFC' or 'ThAr':          
-            #Quality Checks for Gaussian Fits
+        if self.cal_type == 'ThAr':          
+            # Quality Checks for Gaussian Fits
             chi_squared_threshold = int(self.chi_2_threshold)
 
             # Calculate chi^2
@@ -1423,7 +1423,7 @@ class WaveCalibration:
             #residuals = y - predicted_y
             #left_residuals = residuals[:len(residuals)//2]
             #right_residuals = residuals[len(residuals)//2:]
-            #asymmetry = np.abs(np.me/an(left_residuals) - np.mean(right_residuals))
+            #asymmetry = np.abs(np.mean(left_residuals) - np.mean(right_residuals))
             
             # Run checks against defined quality thresholds
             if (chi_squared > chi_squared_threshold):
