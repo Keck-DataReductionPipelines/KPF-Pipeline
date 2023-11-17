@@ -335,8 +335,8 @@ class KPFDataModel(object):
         self.RECEIPT = self.receipt
 
         # add SWVERSION and SWHASH to primary header
-        self.header['PRIMARY']['SWVERSION'] = git_tag
-        self.header['PRIMARY']['SWHASH'] = git_commit_hash
+        self.header['PRIMARY']['DRPTAG'] = git_tag
+        self.header['PRIMARY']['DRPHASH'] = git_commit_hash
 
     def receipt_info(self, receipt_name):
         '''
