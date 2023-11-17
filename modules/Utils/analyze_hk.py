@@ -78,7 +78,6 @@ class AnalyzeHK:
         Returns:
             PNG plot in fig_path or shows the plot it in the current environment 
             (e.g., in a Jupyter Notebook).
-
         """
         fig, ax = plt.subplots(figsize = (12,5),tight_layout=True)
         im = ax.imshow(self.image, 

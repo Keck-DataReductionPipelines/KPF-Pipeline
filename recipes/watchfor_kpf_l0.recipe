@@ -21,6 +21,7 @@ masterflat_path = config.WATCHFOR_L0.masterflat_path
 bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
+n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 
 date_dir = context.date_dir + '/'
 
@@ -138,7 +139,7 @@ for raw_file_path in file_list:
 
         dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts_subbed, data_type, quicklook)
 
-        flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)        
+        flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
 
         twod = flat_applied
         for bpm in bad_pixel_masks:
@@ -162,3 +163,25 @@ for raw_file_path in file_list:
                                                                     rid,
                                                                     output_file_name,
                                                                     verbose)
+
+        do_read_noise = True
+
+        if do_read_noise:
+            if rid > 0:
+
+                read_noise_exit_code = ReadNoiseFramework(data_type,
+                                                          raw_file_path,
+                                                          n_sigma_read_noise,
+                                                          rid)
+
+        do_var_exts = True
+
+        if do_var_exts:
+            if rid > 0:
+
+                var_exts_exit_code = VarExtsFramework(data_type,
+                                                      raw_file_path,
+                                                      masterbias_path,
+                                                      masterdark_path,
+                                                      masterflat_path,
+                                                      rid)

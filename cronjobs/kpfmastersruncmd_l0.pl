@@ -98,12 +98,16 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '1.7';
+my $version = '1.8';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
 if (! (defined $procdate)) {
     die "*** Error: Missing command-line parameter YYYYMMDD; quitting...\n";
+}
+
+if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
+    die "*** Error: Command-line parameter YYYYMMDD contains extra characters or digits; quitting...\n";
 }
 
 # These parameters are fixed for this Perl script.
@@ -145,8 +149,12 @@ my $script = "#! /bin/bash\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "rm -rf /data/masters/${procdate}\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "rm -rf /masters/${procdate}\n" .
+             "sleep 3\n" .
              "mkdir -p /masters/${procdate}\n" .
+             "sleep 3\n" .
              "cp -p /testdata/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
