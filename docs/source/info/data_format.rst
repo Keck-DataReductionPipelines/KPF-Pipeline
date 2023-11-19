@@ -223,3 +223,8 @@ WLS Dictionaries
 ----------------
 
 Andrew H. to add a description of the WLS dictionaries here.
+
+Try :doc:`../analysis/dictonary_format`
+
+See `this page <_dictionary_format-label>`_ for details about the format of WLS dictionaries.
+
