@@ -48,7 +48,6 @@ class DiagnosticsFramework(KPF0_Primitive):
 
         self.logger.info('Started {}'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
-
         self.logger.info('self.diagnostics_name = {}'.format(self.diagnostics_name))
 
         module_config_obj = cp.ConfigParser()
@@ -60,9 +59,7 @@ class DiagnosticsFramework(KPF0_Primitive):
 
         debug_level_cfg_str = module_param_cfg.get('debug_level')
         self.debug_level_cfg = ast.literal_eval(debug_level_cfg_str)
-
         self.logger.info('self.debug_level_cfg = {}'.format(self.debug_level_cfg))
-
         self.logger.info('Type of self.debug_level_cfg = {}'.format(type(self.debug_level_cfg)))
 
 
@@ -70,10 +67,11 @@ class DiagnosticsFramework(KPF0_Primitive):
 
         """
         Returns exitcode:
-            0 = Normal
+            1 = Normal
+            0 = Don't save file
         """
 
-        diagnostics_exit_code = 0
+        exit_code = 0
 
         # Measure Diagnostics.
         if 'L0' in self.data_level_str:
@@ -83,6 +81,7 @@ class DiagnosticsFramework(KPF0_Primitive):
             if self.diagnostics_name == 'add_headers_dark_current_2D':
                 self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
                 self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=None)
+                exit_code = 1
             
         elif 'L1' in self.data_level_str:
             pass
@@ -93,5 +92,4 @@ class DiagnosticsFramework(KPF0_Primitive):
         # Finish.
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
-        #return Arguments([diagnostics_exit_code, self.kpf_object])
-        return Arguments(self.kpf_object)
+        return Arguments(exit_code, self.kpf_object)
