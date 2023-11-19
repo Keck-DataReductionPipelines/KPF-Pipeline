@@ -1,0 +1,45 @@
+# This recipe measures diagnostic information (e.g., dark current) from KPF objects 
+# read from FITS files (2D, L1, L2, Masters), adds that information to the headers of the 
+# objects and saves to KPF objects to FITS files.
+# Which diagnostic information is set is determined by the config parameters that 
+# are traditionally stored in configs/write_headers_match_files.cfg
+# This recipe is intended for bulk processing.  After the headers are created with 
+# the standard recipe (kpf_dpr.recipe), this recipe will likely only be needed in cases 
+# when a new diagnostic test is added and the goal is to add that information to 
+# existing files without a full reprocessing.
+# 
+# This script is executed using the command 
+#     > kpf -c configs/write_headers_match_files.cfg -r recipes/write_headers_match_files.recipe
+# The header keywords that are written depend on the flags set in the config file.
+
+from modules.Utils.string_proc import level_from_kpffile
+from modules.Utils.string_proc import date_from_kpffile
+from modules.Utils.string_proc import date_from_path
+from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+
+output_dir = config.ARGUMENT.output_dir
+#add_headers_dark_current_2D = config.ARGUMENT.add_headers_dark_current_2D
+
+for input_filename in find_files(config.ARGUMENT.fullpath):
+    if 'masters' in input_filename: # Masters
+        datecode = date_from_path(input_filename)
+        # no diagnostics created for Masters so far
+    else: # 2D/L1/L2
+        datecode = date_from_kpffile(input_filename)
+        level = level_from_kpffile(input_filename)
+        # Diagnostics for 2D files
+        if level == '2D':
+            if True: #add_headers_dark_current_2D:
+                output_filename = input_filename # for now
+                this2D = kpf0_from_fits(input_filename, data_type='KPF')
+                # to-do: only to the test for darks
+                new2D = DiagnosticsFramework('2D', this2D, 'add_headers_dark_current_2D')
+                result = to_fits(new2D, output_filename)
+        # Diagnostics for L1 files
+        if level == 'L1':
+            output_filename = input_filename # for now
+            # no diagnostics created for L1 so far
+        # Diagnostics for L2 files
+        if level == 'L2':
+            output_filename = input_filename # for now
+            True  # no diagnostics created for L2 so far
