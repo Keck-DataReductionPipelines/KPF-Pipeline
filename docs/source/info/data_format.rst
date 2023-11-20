@@ -208,7 +208,7 @@ FLXCOLLR  1.00                            Dark current [e-/hr] - Red CCD collima
 FLXECHR   1.00                            Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
 ========  ==============================  =========
 
-The keywords above related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made.  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
+The keywords above related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/Utils/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
 
 .. image:: dark_current_example.png
    :alt: Image of KPF Green CCD showing regions where dark current is measured
