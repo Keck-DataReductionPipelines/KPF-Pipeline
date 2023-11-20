@@ -15,33 +15,40 @@
 from modules.Utils.string_proc import level_from_kpffile
 from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.string_proc import date_from_path
+from modules.Utils.string_proc import filename_from_fullfile
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 
-output_dir = config.ARGUMENT.output_dir
+output_dir = config.ARGUMENT.output_dir  # this isn't used below (yet)
 do_dark_curr = config.ARGUMENT.do_dark_curr
 
 for input_filename in find_files(config.ARGUMENT.fullpath):
     if 'masters' in input_filename: # Masters
         datecode = date_from_path(input_filename)
         # no diagnostics created for Masters so far
+
     else: # 2D/L1/L2
-        datecode = date_from_kpffile(input_filename)
         level = level_from_kpffile(input_filename)
-        # Diagnostics for 2D files
-        if level == '2D':
-            # Measure dark current in Darks
-            if do_dark_curr == True:
-                output_filename = input_filename # for now
-                this2D = kpf0_from_fits(input_filename, data_type='KPF')
-                exit_code, new2D = DiagnosticsFramework('2D', this2D, 'add_headers_dark_current_2D')
-                # only write the file if exit_code = 1 (dark current is only computed for Darks)
-                if exit_code:
-                    result = to_fits(new2D, output_filename)
-        # Diagnostics for L1 files
-        if level == 'L1':
-            output_filename = input_filename # for now
-            # no diagnostics created for L1 so far
-        # Diagnostics for L2 files
-        if level == 'L2':
-            output_filename = input_filename # for now
-            True  # no diagnostics created for L2 so far
+        if not level == None:
+            datecode = date_from_kpffile(input_filename)
+            fn = filename_from_fullfile(input_filename)
+            output_filename = output_dir + level + '/' + datecode + '/' + fn
+
+            # Diagnostics for 2D files
+            if level == '2D':
+                # Measure dark current in Darks
+                if do_dark_curr == True:
+                    this2D = kpf0_from_fits(input_filename, data_type='KPF')
+                    exit_code, new2D = DiagnosticsFramework('2D', this2D, 'add_headers_dark_current_2D')
+                    # only write the file if exit_code = 1 (dark current is only computed for Darks)
+                    if exit_code == 1:
+                        result = to_fits(new2D, output_filename)
+    
+            # Diagnostics for L1 files
+            if level == 'L1':
+                abc = 123
+                # no diagnostics created for L1 so far
+    
+            # Diagnostics for L2 files
+            if level == 'L2':
+                abc = 123
+                True  # no diagnostics created for L2 so far
