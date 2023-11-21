@@ -1,12 +1,14 @@
 from modules.Utils.utils import DummyLogger
 from modules.Utils.analyze_2d import Analyze2D
+from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.kpf_parse import get_data_products_2D
+from modules.Utils.kpf_parse import get_data_products_L1
 
-# This file contains methods to write diagnostic information for the KPF headers.
+# This file contains methods to write diagnostic information to the KPF headers.
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
-    Computes the read noise for dark files and adds keywords to the 2D file headers
+    Compute the read noise for dark files and adds keywords to the 2D object headers
     
     Keywords:
         FLXREG1G - Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
@@ -73,7 +75,7 @@ def add_headers_dark_current_2D(D2, logger=None):
         'r_coll': {'key': 'coll', 'keyword': 'FLXCOLLR', 'comment': 'dark e-/hr Red coll reg=[3700:4000,700:1000]'},
         'r_ech':  {'key': 'ech',  'keyword': 'FLXECHR' , 'comment': 'dark e-/hr Red ech reg=[3700:4000,700:1000]'}
                }
-    
+
     # Use the Analyze2D class to compute dark current
     my2D = Analyze2D(D2, logger=logger)
     for chip in chips:
@@ -95,3 +97,84 @@ def add_headers_dark_current_2D(D2, logger=None):
                     D2.header['PRIMARY'][keyword] = (value, comment)
     
     return D2
+
+
+def add_headers_L1_SNR(L1, logger=None):
+    """
+    Computes the SNR of L1 spectra and adds keywords to the L1 object headers
+    
+    Keywords:
+        SNRSC452 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 452 nm (second bluest order); on Green CCD
+        SNRSK452 - SNR of L1 SKY spectrum near 452 nm (second bluest order); on Green CCD
+        SNRCL452 - SNR of L1 CAL spectrum near 452 nm (second bluest order); on Green CCD
+        SNRSC548 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 548 nm; on Green CCD
+        SNRSK548 - SNR of L1 SKY spectrum near 548 nm; on Green CCD
+        SNRCL548 - SNR of L1 CAL spectrum near 548 nm; on Green CCD
+        SNRSC661 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 661 nm; on Red CCD
+        SNRSK661 - SNR of L1 SKY spectrum near 661 nm; on Red CCD
+        SNRCL661 - SNR of L1 CAL spectrum near 661 nm; on Red CCD
+        SNRSC747 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 747 nm; on Red CCD
+        SNRSK747 - SNR of L1 SKY spectrum near 747 nm; on Red CCD
+        SNRCL747 - SNR of L1 CAL spectrum near 747 nm; on Red CCD
+        SNRSC865 - SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm (second reddest order); on Red CCD
+        SNRSK865 - SNR of L1 SKY spectrum near 865 nm (second reddest order); on Red CCD
+        SNRCL865 - SNR of L1 CAL spectrum near 865 nm (second reddest order); on Red CCD
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with headers added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1 KPF file.')
+        return L1
+        
+    # Use the AnalyzeL1 class to compute dark current
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for chip in chips:
+         myL1.measure_L1_snr(snr_percentile=95)
+         if chip == 'green':
+             L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],1), 
+                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 452 nm')
+             L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],1),
+                                                 'SNR of L1 SKY near 452 nm')
+             L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],1),
+                                                 'SNR of L1 CAL near 452 nm')
+             L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],1),
+                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 548 nm')
+             L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],1),
+                                                 'SNR of L1 SKY near 548 nm')
+             L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],1),
+                                                 'SNR of L1 CAL near 548 nm')
+         if chip == 'red':
+             L1.header['PRIMARY']['SNRSC661'] = (round(myL1.RED_SNR[8,-1],1),
+                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 661 nm')
+             L1.header['PRIMARY']['SNRSK661'] = (round(myL1.RED_SNR[8,-2],1),
+                                                 'SNR of L1 SKY near 661 nm')
+             L1.header['PRIMARY']['SNRCL661'] = (round(myL1.RED_SNR[8,0],1),
+                                                 'SNR of L1 CAL near 661 nm')
+             L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
+                                                 'SNR of L1 SKY near 747 nm')
+             L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
+                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 747 nm')
+             L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
+                                                 'SNR of L1 CAL near 747 nm')
+             L1.header['PRIMARY']['SNRSC865'] = (round(myL1.RED_SNR[-1,-1],1),
+                                                 'SNR of L1 SKY near 865 nm')
+             L1.header['PRIMARY']['SNRSK865'] = (round(myL1.RED_SNR[-1,-2],1),
+                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm')
+             L1.header['PRIMARY']['SNRCL865'] = (round(myL1.RED_SNR[-1,0],1),
+                                                 'SNR of L1 CAL near 865 nm')
+
+    return L1

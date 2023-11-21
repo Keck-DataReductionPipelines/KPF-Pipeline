@@ -1,18 +1,22 @@
+# Standard dependencies
 import ast
+import traceback
 import configparser as cp
-import modules.quicklook.src.diagnostics as diagnostics
-from modules.Utils.kpf_parse import HeaderParse
 
 # Pipeline dependencies
 from kpfpipe.logger import *
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
 
+# Local dependencies
+import modules.quicklook.src.diagnostics as diagnostics
+from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import get_data_products_L1
+
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/quicklook/configs/default.cfg'
 
 class DiagnosticsFramework(KPF0_Primitive):
-
     """
     Description:
         Adds diagnostics information to FITS headers of KPF files.
@@ -50,7 +54,6 @@ class DiagnosticsFramework(KPF0_Primitive):
 
 
     def _perform(self):
-
         """
         Returns exitcode:
             1 = Normal
@@ -64,19 +67,39 @@ class DiagnosticsFramework(KPF0_Primitive):
             pass
             
         elif '2D' in self.data_level_str:
+            # Dark Current
             if self.diagnostics_name == 'add_headers_dark_current_2D':
-                primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
-                name = primary_header.get_name()
-                if name == 'Dark':
-                    self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
-                    self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=None)
-                    exit_code = 1
-                else: 
-                    self.logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
+                try:
+                    primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Dark':
+                        self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                        self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=self.logger)
+                        exit_code = 1
+                    else: 
+                        self.logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
+                except Exception as e:
+                    self.logger.error(f"Measuring dark current failed: {e}\n{traceback.format_exc()}")
             
         elif 'L1' in self.data_level_str:
-            pass
-            
+            # L1 SNR
+            if self.diagnostics_name == 'add_headers_L1_SNR':
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    print('data_products = ' + str(data_products))
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                            self.kpf_object = diagnostics.add_headers_L1_SNR(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                            print('exti_code = ' + str(exit_code))
+                        else: 
+                            self.logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. SNR diagnostics not computed.")
+                except Exception as e:
+                    self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
+
         elif 'L2' in self.data_level_str:
             pass
 
