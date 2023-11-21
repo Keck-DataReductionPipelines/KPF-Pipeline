@@ -151,6 +151,7 @@ for raw_file_path in file_list:
         if exit_code == 1:  # only wave the results if exit_code = 1 (dark current is only computed for Darks)
             flat_applied = new2D
 
+        # Write 2D FITS file
         recipe_complete = to_fits(flat_applied, output_file_name)
 
 

@@ -525,6 +525,11 @@ if do_spectral_extraction or do_hk or do_bc:
 								flat_extension=ccd+ccd_stack,
 								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file)
 
+				# Measure SNR of L1 spectra and add keywords to header
+				L1_SNR_exit_code, newL1 = DiagnosticsFramework('L1', op_data, 'add_headers_L1_SNR')
+				if L1_SNR_exit_code == 1:
+					op_data = newL1
+
 
 				if op_data != None:
 					result = to_fits(op_data, output_lev1_file)
@@ -554,8 +559,12 @@ if do_spectral_extraction or do_hk or do_bc:
 								start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
 				result = to_fits(output_data, output_lev1_file)
 
-
-
+######  Comment on the recipe above:
+######  Writing out the L1 file (to_fits(output_data, output_lev1_file)) happens in 
+######  three places above.  I can't tell if this is in part because of conditional 
+######  statements, but we should only save the L1 file a single time in the recipe.
+######  Saving it multiple times causes the QLP for L1 to launch that many times.
+######  It is also I/O inefficient.  Let's fix this.
 
 
 
