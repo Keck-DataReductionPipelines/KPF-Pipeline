@@ -216,7 +216,41 @@ The keywords above related to dark current (starting with FLX) are only added fo
    :height: 400px
    :width: 500px
 
-*To-do: add a list of important 2D, Level 1, and Level 2 primary keywords.*
+L1 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All keywords from Level 0 and 2D are inherited by the L1 file.  Below are additional keywords.
+
+========  ===============  =========
+Keyword   Value (example)  Comment
+========  ===============  =========
+SNRSC452  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRSK452  250.0            SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRCL452  250.0            SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRSC548  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
+SNRSK548  250.0            SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
+SNRCL548  250.0            SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
+SNRSC661  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 661 nm; on Red CCD
+SNRSK661  250.0            SNR of L1 SKY spectrum (95th %ile) near 661 nm; on Red CCD
+SNRCL661  250.0            SNR of L1 CAL spectrum (95th %ile) near 661 nm; on Red CCD
+SNRSC747  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
+SNRSK747  250.0            SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
+SNRCL747  250.0            SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
+SNRSC865  250.0            SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 865 nm (second reddest order); on Red CCD
+SNRSK865  250.0            SNR of L1 SKY spectrum (95th %ile) near 865 nm (second reddest order); on Red CCD
+SNRCL865  250.0            SNR of L1 CAL spectrum (95th %ile) near 865 nm (second reddest order); on Red CCD
+========  ===============  =========
+
+The keywords above related to the signal-to-noise ratio in L1 spectra all start with SNR.  These SNR measurements were made using modules/Utils/analyze_l1.py.  The image below (click to enlarge) shows the wavelengths at which SNR is measured.
+
+.. image:: KPF_L1_SNR.png
+   :alt: L1 Spectrum show wavelengths where SNR is measured
+   :align: center
+   :height: 400px
+   :width: 600px
+
+
+*To-do: add a list of additional 2D, Level 1, and Level 2 primary keywords.*
 
 
 WLS Dictionaries
