@@ -186,6 +186,13 @@ All keywords from Level 0 are inherited by the 2D file.  Below are additional ke
 ========  ==============================  =========
 Keyword   Value (example)                 Comment
 ========  ==============================  =========
+RNGREEN1  4.85283                         Instantaneous GREEN_AMP1 read noise [e-]
+RNGREEN2  4.14966                         Instantaneous GREEN_AMP2 read noise [e-]
+RNRED1    4.0376                          Instantaneous RED_AMP1 read noise [e-]
+RNRED2    4.12717                         Instantaneous RED_AMP2 read noise [e-]
+GREENTRT  46.804                          Green CCD read time [sec]
+REDTRT    46.839                          Red CCD read time [sec]
+READSPED  'regular '                      Categorization of CCD read speed ('regular' or 'fast')
 FLXREG1G  1.00                            Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
 FLXREG2G  1.00                            Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
 FLXREG3G  1.00                            Dark current [e-/hr] - Green CCD region 3 - coords = [2090:2390,1690:1990]
