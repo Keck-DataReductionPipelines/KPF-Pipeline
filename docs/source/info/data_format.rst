@@ -186,10 +186,14 @@ All keywords from Level 0 are inherited by the 2D file.  Below are additional ke
 ========  ==============================  =========
 Keyword   Value (example)                 Comment
 ========  ==============================  =========
-RNGREEN1  4.85283                         Instantaneous GREEN_AMP1 read noise [e-]
-RNGREEN2  4.14966                         Instantaneous GREEN_AMP2 read noise [e-]
-RNRED1    4.0376                          Instantaneous RED_AMP1 read noise [e-]
-RNRED2    4.12717                         Instantaneous RED_AMP2 read noise [e-]
+RNGREEN1  4.85283                         Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
+RNGREEN2  4.14966                         Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
+RNGREEN3  4.85283                         Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
+RNGREEN4  4.14966                         Read noise for GREEN_AMP4 [e-] (fourth amplifier region on Green CCD)
+RNRED1    4.0376                          Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
+RNRED2    4.12717                         Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
+RNRED3    4.0376                          Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
+RNRED4    4.12717                         Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
 GREENTRT  46.804                          Green CCD read time [sec]
 REDTRT    46.839                          Red CCD read time [sec]
 READSPED  'regular '                      Categorization of CCD read speed ('regular' or 'fast')
@@ -215,7 +219,9 @@ FLXCOLLR  1.00                            Dark current [e-/hr] - Red CCD collima
 FLXECHR   1.00                            Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
 ========  ==============================  =========
 
-The keywords above related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/Utils/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
+Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
+
+Keywords related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/Utils/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
 
 .. image:: dark_current_example.png
    :alt: Image of KPF Green CCD showing regions where dark current is measured
