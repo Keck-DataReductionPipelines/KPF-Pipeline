@@ -80,7 +80,16 @@ class DiagnosticsFramework(KPF0_Primitive):
                         self.logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
                 except Exception as e:
                     self.logger.error(f"Measuring dark current failed: {e}\n{traceback.format_exc()}")
-            
+
+            # Guider Headers
+            if self.diagnostics_name == 'add_headers_guider':
+                try:
+                    self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                    self.kpf_object = diagnostics.add_headers_guider(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
+                        
         elif 'L1' in self.data_level_str:
             # L1 SNR
             if self.diagnostics_name == 'add_headers_L1_SNR':

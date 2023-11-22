@@ -21,6 +21,7 @@ from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 output_dir = config.ARGUMENT.output_dir  # this isn't used below (yet)
 do_dark_curr = config.ARGUMENT.do_dark_curr
 do_L1_SNR = config.ARGUMENT.dosnr
+do_gdhdr = config.ARGUMENT.do_gdhdr
 
 for input_filename in find_files(config.ARGUMENT.fullpath):
     if 'masters' in input_filename: # Masters
@@ -43,7 +44,15 @@ for input_filename in find_files(config.ARGUMENT.fullpath):
                     # only write the file if exit_code = 1 (dark current is only computed for Darks)
                     if exit_code == 1:
                         result = to_fits(new2D, output_filename)
-    
+
+                # Add header keywords related to Guider (guiding performance, seeing, Moon sep, Sun alt)
+                if do_gdhdr == True:
+                    this2D = kpf0_from_fits(input_filename, data_type='KPF')
+                    exit_code, new2D = DiagnosticsFramework('2D', this2D, 'add_headers_guider')
+                    # only write the file if exit_code = 1 
+                    if exit_code == 1:
+                        result = to_fits(new2D, output_filename)
+
             # Diagnostics for L1 files
             if level == 'L1':
                 # Measure SNR of spectra

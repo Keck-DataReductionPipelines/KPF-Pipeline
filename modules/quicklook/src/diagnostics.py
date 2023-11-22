@@ -1,15 +1,21 @@
+# This file contains methods to write diagnostic information to the KPF headers.
+
+# Standard dependencies
+import traceback
+
+# Local dependencies
 from modules.Utils.utils import DummyLogger
 from modules.Utils.analyze_2d import Analyze2D
+from modules.Utils.analyze_guider import AnalyzeGuider
 from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
-
-# This file contains methods to write diagnostic information to the KPF headers.
+from modules.Utils.utils import get_moon_sep, get_sun_alt
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
     Compute the read noise for dark files and adds keywords to the 2D object headers
-    
+
     Keywords:
         FLXREG1G - Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
         FLXREG2G - Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
@@ -31,6 +37,15 @@ def add_headers_dark_current_2D(D2, logger=None):
         FLXAMP2R - Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
         FLXCOLLR - Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
         FLXECHR  - Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
+        GDRXRMS  - x-coordinate RMS guiding error in milliarcsec (mas)
+        GDRYRMS  - y-coordinate RMS guiding error in milliarcsec (mas)
+        GDRRRMS  - r-coordinate RMS guiding error in milliarcsec (mas)
+        GDRXBIAS - x-coordinate bias guiding error in milliarcsec (mas)
+        GDRYBIAS - y-coordinate bias guiding error in milliarcsec (mas)
+        GDRSEEJZ - Seeing (arcsec) in J+Z-band from Moffat func fit
+        GDRSEEV  - Scaled seeing (arcsec) in V-band from J+Z-band
+        MOONSEP  - Separation between Moon and target star (deg)
+        SUNALT   - Altitude of Sun (deg)
 
     Args:
         D2 - a KPF 2D object 
@@ -42,12 +57,11 @@ def add_headers_dark_current_2D(D2, logger=None):
     if logger == None:
         logger = DummyLogger()
 
+    # Check that the input object is of the right type
     data_products = get_data_products_2D(D2)
     chips = []
     if 'Green' in data_products: chips.append('green')
     if 'Red'   in data_products: chips.append('red')
-    
-    # Check that the input object is of the right type
     if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
         print('Not a valid 2D KPF file.')
         return D2
@@ -86,16 +100,90 @@ def add_headers_dark_current_2D(D2, logger=None):
                 comment = keywords[k]['comment']
                 value = None
                 if chip == 'green':
-                    if hasattr(my2D, 'green_dark_current_regions'):
-                        if 'med_elec' in my2D.green_dark_current_regions[keywords[k]['key']]:
-                            value = "{:.2f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
+                    try:
+                        if hasattr(my2D, 'green_dark_current_regions'):
+                            if 'med_elec' in my2D.green_dark_current_regions[keywords[k]['key']]:
+                                value = "{:.2f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
+                    except Exception as e:
+                        logger.error(f"Problem with green dark current : {e}\n{traceback.format_exc()}")
                 if chip == 'red':
-                    if hasattr(my2D, 'red_dark_current_regions'):
-                        if 'med_elec' in my2D.red_dark_current_regions[keywords[k]['key']]:
-                            value = "{:.2f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
+                    try:
+                        if hasattr(my2D, 'red_dark_current_regions'):
+                            if 'med_elec' in my2D.red_dark_current_regions[keywords[k]['key']]:
+                                value = "{:.2f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
+                    except Exception as e:
+                        logger.error(f"Problem with red dark current: {e}\n{traceback.format_exc()}")                
                 if value != None:
                     D2.header['PRIMARY'][keyword] = (value, comment)
     
+    return D2
+
+def add_headers_guider(D2, logger=None):
+    """
+    Computes the SNR of L1 spectra and adds keywords to the L1 object headers
+    
+    Keywords:
+        GDRXRMS  - x-coordinate RMS guiding error in milliarcsec (mas)
+        GDRYRMS  - y-coordinate RMS guiding error in milliarcsec (mas)
+        GDRRRMS  - r-coordinate RMS guiding error in milliarcsec (mas)
+        GDRXBIAS - x-coordinate bias guiding error in milliarcsec (mas)
+        GDRYBIAS - y-coordinate bias guiding error in milliarcsec (mas)
+        GDRSEEJZ - Seeing (arcsec) in J+Z-band from Moffat func fit
+        GDRSEEV  - Scaled seeing (arcsec) in V-band from J+Z-band
+        MOONSEP  - Separation between Moon and target star (deg)
+        SUNALT   - Altitude of Sun (deg)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with headers added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    data_products = get_data_products_2D(D2)
+    if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('Guider' in data_products):
+        logger.info('Guider not in the 2D file or not a valid 2D KPF file.')
+        return D2
+        
+    # Use the AnalyzeL1 class to compute dark current
+    myGuider = AnalyzeGuider(D2, logger=logger)
+    myGuider.measure_seeing()
+    try: 
+        D2.header['PRIMARY']['GDRXRMS']  = (round(myGuider.x_rms, 2),
+                                           'x-coordinate RMS guiding error [milliarcsec]')
+        D2.header['PRIMARY']['GDRYRMS']  = (round(myGuider.y_rms, 2),
+                                           'y-coordinate RMS guiding error [milliarcsec]')
+        D2.header['PRIMARY']['GDRRRMS']  = (round(myGuider.r_rms, 2),
+                                           'r-coordinate RMS guiding error [milliarcsec]')
+        D2.header['PRIMARY']['GDRXBIAS'] = (round(myGuider.x_bias, 2),
+                                           'x-coordinate bias guiding error [milliarcsec]')
+        D2.header['PRIMARY']['GDRYBIAS'] = (round(myGuider.y_bias, 2),
+                                           'y-coordinate bias guiding error [milliarcsec]')
+    except Exception as e:
+        logger.error(f"Problem with guider measurements: {e}\n{traceback.format_exc()}")
+    try: 
+        D2.header['PRIMARY']['MOONSEP']  = (round(get_moon_sep(myGuider.date_mid, myGuider.ra, myGuider.dec), 1),
+                                           'Separation between Moon and target star [deg]')
+    except Exception as e:
+        logger.error(f"Problem with moon separation: {e}\n{traceback.format_exc()}")
+    try: 
+        D2.header['PRIMARY']['SUNALT']  = (round(get_sun_alt(myGuider.date_mid), 1),
+                                           'Altitude of Sun [deg]; negative = below horizon')
+    except Exception as e:
+        logger.error(f"Problem with Sun altitude: {e}\n{traceback.format_exc()}")
+    try: 
+        if myGuider.good_fit:
+            D2.header['PRIMARY']['GDRSEEJZ'] = (round(myGuider.seeing*myGuider.pixel_scale, 3),
+                                               'Seeing [arcsec] in J+Z-band from Moffat fit')
+            D2.header['PRIMARY']['GDRSEEV']  = (round(myGuider.seeing_550nm*myGuider.pixel_scale, 3),
+                                               'Scaled seeing [arcsec] in V-band from J+Z-band')
+    except Exception as e:
+        logger.error(f"Problem with guider fit: {e}\n{traceback.format_exc()}")
+                                           
     return D2
 
 
@@ -142,39 +230,44 @@ def add_headers_L1_SNR(L1, logger=None):
         
     # Use the AnalyzeL1 class to compute dark current
     myL1 = AnalyzeL1(L1, logger=logger)
+    myL1.measure_L1_snr(snr_percentile=95)
     for chip in chips:
-         myL1.measure_L1_snr(snr_percentile=95)
-         if chip == 'green':
-             L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],1), 
-                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 452 nm')
-             L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],1),
-                                                 'SNR of L1 SKY near 452 nm')
-             L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],1),
-                                                 'SNR of L1 CAL near 452 nm')
-             L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],1),
-                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 548 nm')
-             L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],1),
-                                                 'SNR of L1 SKY near 548 nm')
-             L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],1),
-                                                 'SNR of L1 CAL near 548 nm')
-         if chip == 'red':
-             L1.header['PRIMARY']['SNRSC661'] = (round(myL1.RED_SNR[8,-1],1),
-                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 661 nm')
-             L1.header['PRIMARY']['SNRSK661'] = (round(myL1.RED_SNR[8,-2],1),
-                                                 'SNR of L1 SKY near 661 nm')
-             L1.header['PRIMARY']['SNRCL661'] = (round(myL1.RED_SNR[8,0],1),
-                                                 'SNR of L1 CAL near 661 nm')
-             L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
-                                                 'SNR of L1 SKY near 747 nm')
-             L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
-                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 747 nm')
-             L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
-                                                 'SNR of L1 CAL near 747 nm')
-             L1.header['PRIMARY']['SNRSC865'] = (round(myL1.RED_SNR[-1,-1],1),
-                                                 'SNR of L1 SKY near 865 nm')
-             L1.header['PRIMARY']['SNRSK865'] = (round(myL1.RED_SNR[-1,-2],1),
-                                                 'SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm')
-             L1.header['PRIMARY']['SNRCL865'] = (round(myL1.RED_SNR[-1,0],1),
-                                                 'SNR of L1 CAL near 865 nm')
-
+        if chip == 'green':
+            try:
+                L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],1), 
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 452 nm')
+                L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],1),
+                                                    'SNR of L1 SKY near 452 nm')
+                L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],1),
+                                                    'SNR of L1 CAL near 452 nm')
+                L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],1),
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 548 nm')
+                L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],1),
+                                                    'SNR of L1 SKY near 548 nm')
+                L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],1),
+                                                    'SNR of L1 CAL near 548 nm')
+            except Exception as e:
+                logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                L1.header['PRIMARY']['SNRSC661'] = (round(myL1.RED_SNR[8,-1],1),
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 661 nm')
+                L1.header['PRIMARY']['SNRSK661'] = (round(myL1.RED_SNR[8,-2],1),
+                                                    'SNR of L1 SKY near 661 nm')
+                L1.header['PRIMARY']['SNRCL661'] = (round(myL1.RED_SNR[8,0],1),
+                                                    'SNR of L1 CAL near 661 nm')
+                L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
+                                                    'SNR of L1 SKY near 747 nm')
+                L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 747 nm')
+                L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
+                                                    'SNR of L1 CAL near 747 nm')
+                L1.header['PRIMARY']['SNRSC865'] = (round(myL1.RED_SNR[-1,-1],1),
+                                                    'SNR of L1 SKY near 865 nm')
+                L1.header['PRIMARY']['SNRSK865'] = (round(myL1.RED_SNR[-1,-2],1),
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm')
+                L1.header['PRIMARY']['SNRCL865'] = (round(myL1.RED_SNR[-1,0],1),
+                                                    'SNR of L1 CAL near 865 nm')
+            except Exception as e:
+                logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
     return L1
