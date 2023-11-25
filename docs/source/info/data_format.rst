@@ -294,7 +294,9 @@ FRC2M865  0.9000           median(CAL/SCI2) flux ratio near 865 nm; on Red CCD
 FRC2U865  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 865 nm; on Red CCD
 ========  ===============  =========
 
-The keywords above related to the signal-to-noise ratio in L1 spectra all start with SNR.  These SNR measurements were made using modules/Utils/analyze_l1.py.  The image below (click to enlarge) shows the wavelengths at which SNR is measured.
+The keywords above related to the signal-to-noise ratio in L1 spectra all start with SNR.  These SNR measurements were made using modules/Utils/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
+
+Keywords related to orderlet flux ratios are computed in 500-pixel regions in the centers the same spectral orders as are used for the SNR calculations.
 
 .. image:: KPF_L1_SNR.png
    :alt: L1 Spectrum show wavelengths where SNR is measured
