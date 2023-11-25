@@ -252,6 +252,46 @@ SNRCL747  250.0            SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Re
 SNRSC865  250.0            SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 865 nm (second reddest order); on Red CCD
 SNRSK865  250.0            SNR of L1 SKY spectrum (95th %ile) near 865 nm (second reddest order); on Red CCD
 SNRCL865  250.0            SNR of L1 CAL spectrum (95th %ile) near 865 nm (second reddest order); on Red CCD
+FR12M452  0.9000           median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FR12U452  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FR32M452  0.9000           median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
+FR32U452  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FRS2M452  0.9000           median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+FRS2U452  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+FRC2M452  0.9000           median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+FRC2U452  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+FR12M548  0.9000           median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FR12U548  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FR32M548  0.9000           median(SCI3/SCI2) flux ratio near 548 nm; on Green CCD
+FR32U548  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FRS2M548  0.9000           median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+FRS2U548  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+FRC2M548  0.9000           median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+FRC2U548  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+FR12M661  0.9000           median(SCI1/SCI2) flux ratio near 661 nm; on Red CCD
+FR12U661  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 661 nm; on Red CCD
+FR32M661  0.9000           median(SCI3/SCI2) flux ratio near 661 nm; on Red CCD
+FR32U661  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 661 nm; on Red CCD
+FRS2M661  0.9000           median(SKY/SCI2) flux ratio near 661 nm; on Red CCD
+FRS2U661  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 661 nm; on Red CCD
+FRC2M661  0.9000           median(CAL/SCI2) flux ratio near 661 nm; on Red CCD
+FRC2U661  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 661 nm; on Red CCD
+FR12M747  0.9000           median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FR12U747  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FR32M747  0.9000           median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
+FR32U747  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FRS2M747  0.9000           median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+FRS2U747  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+FRC2M747  0.9000           median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+FRC2U747  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+FR12M865  0.9000           median(SCI1/SCI2) flux ratio near 865 nm; on Red CCD
+FR12U865  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 865 nm; on Red CCD
+FR32M865  0.9000           median(SCI3/SCI2) flux ratio near 865 nm; on Red CCD
+FR32U865  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 865 nm; on Red CCD
+FRS2M865  0.9000           median(SKY/SCI2) flux ratio near 865 nm; on Red CCD
+FRS2U865  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 865 nm; on Red CCD
+FRC2M865  0.9000           median(CAL/SCI2) flux ratio near 865 nm; on Red CCD
+FRC2U865  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 865 nm; on Red CCD
 ========  ===============  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with SNR.  These SNR measurements were made using modules/Utils/analyze_l1.py.  The image below (click to enlarge) shows the wavelengths at which SNR is measured.
