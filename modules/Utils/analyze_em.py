@@ -20,6 +20,33 @@ class AnalyzeEM:
     Attributes:
         EM_gain - gain (e- per DN) of exposure meter detector
         SKY_SCI_ratio - estimated flux ratio of SKY to SCI flux in the EM based on twilight obs
+        SKY_SCI_main_spectrometer - estimated flux ratio between SKY and SCI in main spectrometer based on EM
+        tdur_sec - exposure duration in sec
+        time_em - array of times since first exposures (sec)
+        wav_SCI - SCI wavelength array (nm)
+        wav_SKY - SKY wavelength array (nm)
+        disp_SCI_smooth - SCI dispersion array (nm/pixel)
+        disp_SKY_smooth - SCI dispersion array (nm/pixel)
+        flux_SCI         - SCI counts array (445-870 nm; ADU) with timesteps from time_em
+        flux_SCI_551m    - SCI counts array (445-551 nm; ADU) with timesteps from time_em
+        flux_SCI_551_658 - SCI counts array (551-658 nm; ADU) with timesteps from time_em
+        flux_SCI_658_764 - SCI counts array (658-764 nm; ADU) with timesteps from time_em
+        flux_SCI_764p    - SCI counts array (764-870 nm; ADU) with timesteps from time_em
+        flux_SKY         - SKY counts array (445-870 nm; ADU) with timesteps from time_em  
+        flux_SKY_551m    - SKY counts array (445-551 nm; ADU) with timesteps from time_em  
+        flux_SKY_551_658 - SKY counts array (551-658 nm; ADU) with timesteps from time_em 
+        flux_SKY_658_764 - SKY counts array (658-764 nm; ADU) with timesteps from time_em  
+        flux_SKY_764p    - SKY counts array (764-870 nm; ADU) with timesteps from time_em
+        flux_SCI         - SCI flux array (445-870 nm; e-/nm/s) with timesteps from time_em
+        flux_SCI_551m    - SCI flux array (445-551 nm; e-/nm/s) with timesteps from time_em
+        flux_SCI_551_658 - SCI flux array (551-658 nm; e-/nm/s) with timesteps from time_em
+        flux_SCI_658_764 - SCI flux array (658-764 nm; e-/nm/s) with timesteps from time_em
+        flux_SCI_764p    - SCI flux array (764-870 nm; e-/nm/s) with timesteps from time_em
+        flux_SKY         - SKY flux array (445-870 nm; e-/nm/s) with timesteps from time_em  
+        flux_SKY_551m    - SKY flux array (445-551 nm; e-/nm/s) with timesteps from time_em  
+        flux_SKY_551_658 - SKY flux array (551-658 nm; e-/nm/s) with timesteps from time_em 
+        flux_SKY_658_764 - SKY flux array (658-764 nm; e-/nm/s) with timesteps from time_em  
+        flux_SKY_764p    - SKY flux array (764-870 nm; e-/nm/s) with timesteps from time_em
     """
 
     def __init__(self, L0, logger=None):
@@ -37,6 +64,11 @@ class AnalyzeEM:
 
         self.EM_gain = 1.48424 # np.float(self.config['EM']['gain'])
         self.SKY_SCI_ratio = 14.1 # ratio flux ratio of SKY to SCI flux based on bright twilight observations (e.g., KP.20230114.15771.04)
+        self.wav0 = 445      # boundaries between wavelength bins
+        self.wav1 = 551.25   # "
+        self.wav2 = 657.50   # "
+        self.wav3 = 763.75   # "
+        self.wav4 = 870      # "
 
         # Read data tables
         self.dat_SCI = L0['EXPMETER_SCI']
@@ -53,58 +85,68 @@ class AnalyzeEM:
         self.wav_SCI     = self.df_SCI_EM.columns[i:].astype(float)
         self.wav_SKY_str = self.df_SKY_EM.columns[i:]
         self.wav_SKY     = self.df_SKY_EM.columns[i:].astype(float)
-        
-        # Flux arrays
-        self.ind_550m    = np.where((self.wav_SCI <  550))
-        self.ind_550_650 = np.where((self.wav_SCI >= 550) & (self.wav_SCI < 650))
-        self.ind_650_750 = np.where((self.wav_SCI >= 650) & (self.wav_SCI < 750))
-        self.ind_750p    = np.where((self.wav_SCI >= 750))
-        self.int_SCI_flux         = self.df_SCI_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
-        self.int_SCI_flux_550m    = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI <  550))]].sum(axis=1)
-        self.int_SCI_flux_550_650 = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= 550) & (self.wav_SCI < 650))]].sum(axis=1)
-        self.int_SCI_flux_650_750 = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= 650) & (self.wav_SCI < 750))]].sum(axis=1)
-        self.int_SCI_flux_750p    = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= 750))]].sum(axis=1)
-        self.int_SKY_flux         = self.df_SKY_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
-        self.int_SKY_flux_550m    = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY <  550))]].sum(axis=1)
-        self.int_SKY_flux_550_650 = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= 550) & (self.wav_SKY < 650))]].sum(axis=1)
-        self.int_SKY_flux_650_750 = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= 650) & (self.wav_SKY < 750))]].sum(axis=1)
-        self.int_SKY_flux_750p    = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= 750))]].sum(axis=1)
-
-        # Dispersion
-        self.disp_SCI = self.wav_SCI*0+np.gradient(self.wav_SCI,1)*-1
-        self.disp_SKY = self.wav_SKY*0+np.gradient(self.wav_SKY,1)*-1
-        self.disp_SCI_smooth = np.polyval(np.polyfit(self.wav_SCI,self.disp_SCI, deg=6),self.wav_SCI)
-        self.disp_SKY_smooth = np.polyval(np.polyfit(self.wav_SKY,self.disp_SKY, deg=6),self.wav_SKY)
-        self.df_SCI_EM_norm  = self.df_SCI_EM[self.wav_SCI_str] * self.EM_gain / self.disp_SCI_smooth
-        self.df_SKY_EM_norm  = self.df_SKY_EM[self.wav_SCI_str] * self.EM_gain / self.disp_SKY_smooth
       
         # Time arrays
         self.date_end = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64)
-        self.n_samples = self.df_SCI_EM_norm.shape[0]
+        self.n_samples = self.df_SCI_EM.shape[0] #self.df_SCI_EM_norm.shape[0]
         if 'Date-Beg-Corr' in self.df_SCI_EM.columns:
             self.date_beg = np.array(self.df_SCI_EM["Date-Beg-Corr"], dtype=np.datetime64)
             self.date_end = np.array(self.df_SCI_EM["Date-End-Corr"], dtype=np.datetime64)
         else:
             self.date_beg = np.array(self.df_SCI_EM["Date-Beg"], dtype=np.datetime64)
             self.date_end = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64)
-        self.tdur_sec = (self.date_end-self.date_beg).astype(float)/1000. # exposure duration in sec
-        self.time_em  = (self.date_beg-self.date_beg[0]).astype(float)/1000. # seconds since beginning
-        self.total_duration = (self.date_end[-1]-self.date_beg[0]).astype(float)/1000.
+        self.tdur_sec = (self.date_end-self.date_beg).astype(float)/1000. # exposure duration in sec [array]
+        self.time_em  = (self.date_beg-self.date_beg[0]).astype(float)/1000. # seconds since beginning [array]
+        self.total_duration = (self.date_end[-1]-self.date_beg[0]).astype(float)/1000. # used for setting x-axis limits
   
-        # Exposure time
+        # Exposure times
         if 'Date-End-Corr' in self.df_SCI_EM.columns:
-            timediff = np.array(self.df_SCI_EM["Date-End-Corr"], dtype=np.datetime64) - np.array(self.df_SCI_EM["Date-Beg-Corr"], dtype=np.datetime64)
-            self.EM_texp = pd.Timedelta(np.median(timediff)).total_seconds() # EM exposure time in seconds
-            self.EM_nexp = timediff.shape[0]
+            self.timediff = np.array(self.df_SCI_EM["Date-End-Corr"], dtype=np.datetime64) - np.array(self.df_SCI_EM["Date-Beg-Corr"], dtype=np.datetime64)
+            self.EM_texp = pd.Timedelta(np.median(self.timediff)).total_seconds() # EM exposure time in seconds
+            self.EM_nexp = self.timediff.shape[0]
         elif 'Date-End' in self.df_SCI_EM.columns:
-            timediff = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64) - np.array(self.df_SCI_EM["Date-Beg"], dtype=np.datetime64)
-            self.EM_texp = pd.Timedelta(np.median(timediff)).total_seconds()
-            self.EM_nexp = timediff.shape[0]
+            self.timediff = np.array(self.df_SCI_EM["Date-End"], dtype=np.datetime64) - np.array(self.df_SCI_EM["Date-Beg"], dtype=np.datetime64)
+            self.EM_texp = pd.Timedelta(np.median(self.timediff)).total_seconds()
+            self.EM_nexp = self.timediff.shape[0]
         elif 'Date-End' in self.df_SCI_EM.columns:
             self.EM_texp = 0.
             self.EM_nexp = 0
 
+        # Spectral dispersion
+        self.disp_SCI = self.wav_SCI*0+np.gradient(self.wav_SCI,1)*-1
+        self.disp_SKY = self.wav_SKY*0+np.gradient(self.wav_SKY,1)*-1
+        self.disp_SCI_smooth = np.polyval(np.polyfit(self.wav_SCI,self.disp_SCI, deg=6),self.wav_SCI)
+        self.disp_SKY_smooth = np.polyval(np.polyfit(self.wav_SKY,self.disp_SKY, deg=6),self.wav_SKY)
+        
+        # Flux arrays
+        self.ind_551m    = np.where((self.wav_SCI <  self.wav1))
+        self.ind_551_658 = np.where((self.wav_SCI >= self.wav1) & (self.wav_SCI < self.wav2))
+        self.ind_658_764 = np.where((self.wav_SCI >= self.wav2) & (self.wav_SCI < self.wav3))
+        self.ind_764p    = np.where((self.wav_SCI >= self.wav3))
+        self.counts_SCI         = self.df_SCI_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+        self.counts_SCI_551m    = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI <  self.wav1))]].sum(axis=1)
+        self.counts_SCI_551_658 = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= self.wav1) & (self.wav_SCI < self.wav2))]].sum(axis=1)
+        self.counts_SCI_658_764 = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= self.wav2) & (self.wav_SCI < self.wav3))]].sum(axis=1)
+        self.counts_SCI_764p    = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= self.wav3))]].sum(axis=1)
+        self.counts_SKY         = self.df_SKY_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+        self.counts_SKY_551m    = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY <  self.wav1))]].sum(axis=1)
+        self.counts_SKY_551_658 = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= self.wav1) & (self.wav_SKY < self.wav2))]].sum(axis=1)
+        self.counts_SKY_658_764 = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= self.wav2) & (self.wav_SKY < self.wav3))]].sum(axis=1)
+        self.counts_SKY_764p    = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= self.wav3))]].sum(axis=1)
+        self.flux_SCI         = self.counts_SCI         / (self.wav4-self.wav0) / self.tdur_sec
+        self.flux_SCI_551m    = self.counts_SCI_551m    / (self.wav1-self.wav0) / self.tdur_sec
+        self.flux_SCI_551_658 = self.counts_SCI_551_658 / (self.wav2-self.wav1) / self.tdur_sec
+        self.flux_SCI_658_764 = self.counts_SCI_658_764 / (self.wav3-self.wav2) / self.tdur_sec
+        self.flux_SCI_764p    = self.counts_SCI_764p    / (self.wav4-self.wav3) / self.tdur_sec
+        self.flux_SKY         = self.counts_SKY         / (self.wav4-self.wav0) / self.tdur_sec
+        self.flux_SKY_551m    = self.counts_SKY_551m    / (self.wav1-self.wav0) / self.tdur_sec
+        self.flux_SKY_551_658 = self.counts_SKY_551_658 / (self.wav2-self.wav1) / self.tdur_sec
+        self.flux_SKY_658_764 = self.counts_SKY_658_764 / (self.wav3-self.wav2) / self.tdur_sec
+        self.flux_SKY_764p    = self.counts_SKY_764p    / (self.wav4-self.wav3) / self.tdur_sec
+
         # Spectra
+        self.df_SCI_EM_norm  = self.df_SCI_EM[self.wav_SCI_str] * self.EM_gain / self.disp_SCI_smooth
+        self.df_SKY_EM_norm  = self.df_SKY_EM[self.wav_SCI_str] * self.EM_gain / self.disp_SKY_smooth
         if self.n_samples > 3:
             self.int_SCI_spec = self.df_SCI_EM_norm[1:-1].sum(axis=0) / np.sum(self.tdur_sec[1:-1]) # flux vs. wavelength per sec (don't use first and last frames because a worry about timing)
             self.int_SKY_spec = self.df_SKY_EM_norm[1:-1].sum(axis=0) / np.sum(self.tdur_sec[1:-1]) 
@@ -113,7 +155,7 @@ class AnalyzeEM:
             self.int_SKY_spec = self.df_SKY_EM_norm.sum(axis=0) / np.sum(self.tdur_sec) 
             
         # SCI / SKY ratio in main spectrometer (estimated from EM)
-        self.SCI_SKY_main_spectrometer = np.nansum(self.int_SKY_flux/self.SKY_SCI_ratio) / np.nansum(self.int_SCI_flux)
+        self.SKY_SCI_main_spectrometer = np.nansum(self.counts_SKY/self.SKY_SCI_ratio) / np.nansum(self.counts_SCI)
 
 
     def plot_EM_time_series(self, fiber='both', fig_path=None, show_plot=False):
@@ -134,28 +176,28 @@ class AnalyzeEM:
         if fiber not in ['both', 'sky', 'sci', 'ratio']:
             self.logger.error('plot_EM_time_series: fiber argument must be "both", "sky", "sci", or "ratio".')
 
-        # Plot time series
+        # Plot flux array time series
         plt.figure(figsize=(12, 6), tight_layout=True)
         if fiber in ['both', 'sci']:
-            plt.plot(self.time_em, self.int_SCI_flux_750p    / (870-750) / self.tdur_sec, marker='o', linewidth=2, color='r', label = '750-870 nm')
-            plt.plot(self.time_em, self.int_SCI_flux_650_750 / (750-650) / self.tdur_sec, marker='o', linewidth=2, color='orange', label = '650-750 nm')
-            plt.plot(self.time_em, self.int_SCI_flux_550_650 / (650-550) / self.tdur_sec, marker='o', linewidth=2, color='g', label = '550-650 nm')
-            plt.plot(self.time_em, self.int_SCI_flux_550m    / (550-445) / self.tdur_sec, marker='o', linewidth=2, color='b', label = '445-550 nm')
-            plt.plot(self.time_em, self.int_SCI_flux         / (870-445) / self.tdur_sec, marker='o', linewidth=4, color='k', label = 'SCI 445-870 nm')
+            plt.plot(self.time_em, self.flux_SCI_764p,    marker='o', linewidth=2, color='r', label = '764-870 nm')
+            plt.plot(self.time_em, self.flux_SCI_658_764, marker='o', linewidth=2, color='orange', label = '658-764 nm')
+            plt.plot(self.time_em, self.flux_SCI_551_658, marker='o', linewidth=2, color='g', label = '551-658 nm')
+            plt.plot(self.time_em, self.flux_SCI_551m,    marker='o', linewidth=2, color='b', label = '445-551 nm')
+            plt.plot(self.time_em, self.flux_SCI,         marker='o', linewidth=4, color='k', label = '445-870')
     
         if fiber in ['both', 'sky']:
-            plt.plot(self.time_em, self.int_SKY_flux_750p    / (870-750) / self.tdur_sec,':', marker='o', linewidth=2, color='r', label = '750-870 nm')
-            plt.plot(self.time_em, self.int_SKY_flux_650_750 / (750-650) / self.tdur_sec,':', marker='o', linewidth=2, color='orange', label = '650-750 nm')
-            plt.plot(self.time_em, self.int_SKY_flux_550_650 / (650-550) / self.tdur_sec,':', marker='o', linewidth=2, color='g', label = '550-650 nm')
-            plt.plot(self.time_em, self.int_SKY_flux_550m    / (550-445) / self.tdur_sec,':', marker='o', linewidth=2, color='b', label = '445-550 nm')
-            plt.plot(self.time_em, self.int_SKY_flux         / (870-445) / self.tdur_sec,':', marker='o', linewidth=4, color='k', label = 'SKY 445-870 nm')
+            plt.plot(self.time_em, self.flux_SKY_764p,    ':', marker='o', linewidth=2, color='r', label = '764-870 nm')
+            plt.plot(self.time_em, self.flux_SKY_658_764, ':', marker='o', linewidth=2, color='orange', label = '658-764 nm')
+            plt.plot(self.time_em, self.flux_SKY_551_658, ':', marker='o', linewidth=2, color='g', label = '551-658 nm')
+            plt.plot(self.time_em, self.flux_SKY_551m,    ':', marker='o', linewidth=2, color='b', label = '445-551 nm')
+            plt.plot(self.time_em, self.flux_SKY,         ':', marker='o', linewidth=4, color='k', label = 'SKY 445-870 nm')
 
         if fiber == 'ratio':
-            plt.plot(self.time_em, self.int_SKY_flux_750p    /self.SKY_SCI_ratio/ self.int_SCI_flux_750p    / self.tdur_sec, marker='o', alpha=0.4, linewidth=2, color='r', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 750-870 nm')
-            plt.plot(self.time_em, self.int_SKY_flux_650_750 /self.SKY_SCI_ratio/ self.int_SCI_flux_650_750 / self.tdur_sec, marker='o', alpha=0.4, linewidth=2, color='orange', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 650-750 nm')
-            plt.plot(self.time_em, self.int_SKY_flux_550_650 /self.SKY_SCI_ratio/ self.int_SCI_flux_550_650 / self.tdur_sec, marker='o', alpha=0.4, linewidth=2, color='g', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 550-650 nm')
-            plt.plot(self.time_em, self.int_SKY_flux_550m    /self.SKY_SCI_ratio/ self.int_SCI_flux_550m    / self.tdur_sec, marker='o', alpha=0.4, linewidth=2, color='b', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 445-550 nm')
-            plt.plot(self.time_em, self.int_SKY_flux         /self.SKY_SCI_ratio/ self.int_SCI_flux         / self.tdur_sec, marker='o',            linewidth=4, color='k', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 445-870 nm')
+            plt.plot(self.time_em, self.flux_SKY_764p    /self.SKY_SCI_ratio/ self.flux_SCI_764p   , marker='o', alpha=0.4, linewidth=2, color='r', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 764-870 nm')
+            plt.plot(self.time_em, self.flux_SKY_658_764 /self.SKY_SCI_ratio/ self.flux_SCI_658_764, marker='o', alpha=0.4, linewidth=2, color='orange', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 658-764 nm')
+            plt.plot(self.time_em, self.flux_SKY_551_658 /self.SKY_SCI_ratio/ self.flux_SCI_551_658, marker='o', alpha=0.4, linewidth=2, color='g', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 551-658 nm')
+            plt.plot(self.time_em, self.flux_SKY_551m    /self.SKY_SCI_ratio/ self.flux_SCI_551m   , marker='o', alpha=0.4, linewidth=2, color='b', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 445-551 nm')
+            plt.plot(self.time_em, self.flux_SKY         /self.SKY_SCI_ratio/ self.flux_SCI        , marker='o',            linewidth=4, color='k', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 445-870 nm')
         plt.plot(0, 0, marker='o', markersize=0.1, color='white') # force the y-axis to go to zero
         if fiber == 'both':
             plottitle = 'Exposure Meter Time Series (SCI and SKY) - ' + str(self.EM_nexp)+ ' EM exposures, ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
@@ -164,8 +206,8 @@ class AnalyzeEM:
         elif fiber == 'sci':
             plottitle = 'Exposure Meter Time Series (SCI) - ' + str(self.EM_nexp)+ ' EM exposures, ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
         elif fiber == 'ratio':
-            median_flux_ratio = np.nanmedian(self.int_SKY_flux/self.SKY_SCI_ratio / self.int_SCI_flux)
-            avg_flux_ratio = np.nansum(self.int_SKY_flux/self.SKY_SCI_ratio) / np.nansum(self.int_SCI_flux)
+            median_flux_ratio = np.nanmedian(self.flux_SKY/self.SKY_SCI_ratio / self.flux_SCI)
+            avg_flux_ratio = np.nansum(self.flux_SKY/self.SKY_SCI_ratio) / np.nansum(self.flux_SCI)
             coefficient, exponent = f"{avg_flux_ratio:.2e}".split("e")
             flux_ratio_latex = r"${} \times 10^{{{}}}$".format(coefficient, int(exponent))
             plottitle = r'EM: total(SKY$_{\mathrm{corrected}}$) / total(SCI) = ' + flux_ratio_latex
@@ -177,7 +219,7 @@ class AnalyzeEM:
         plt.title(plottitle, fontsize=14)
         plt.xlabel("Time (sec)",fontsize=14)
         if fiber == 'ratio':
-            plt.ylim(min([0.0, 1.2*min(self.int_SKY_flux/self.SKY_SCI_ratio/self.int_SCI_flux)]), 1.4*max(self.int_SKY_flux/self.SKY_SCI_ratio/self.int_SCI_flux))
+            plt.ylim(min([0.0, 1.2*min(self.flux_SKY/self.SKY_SCI_ratio/self.flux_SCI)]), 1.4*max(self.flux_SKY/self.SKY_SCI_ratio/self.flux_SCI))
             plt.ylabel(r'SKY$_{\mathrm{corrected}}$ / SCI Exposure Meter Flux Ratio',fontsize=14)
         elif fiber == 'sci':
             plt.ylabel("Exposure Meter SCI Flux (e-/nm/s)",fontsize=14)
@@ -236,13 +278,13 @@ class AnalyzeEM:
 
         # Plot spectra
         fig, ax1 = plt.subplots(figsize=(12, 6), tight_layout=True)
-        plt.axvspan(445, 550, alpha=0.5, color='b')
-        plt.axvspan(550, 650, alpha=0.5, color='g')
-        plt.axvspan(650, 750, alpha=0.5, color='orange')
-        plt.axvspan(750, 870, alpha=0.5, color='red')
+        plt.axvspan(self.wav0, self.wav1, alpha=0.5, color='b')
+        plt.axvspan(self.wav1, self.wav2, alpha=0.5, color='g')
+        plt.axvspan(self.wav2, self.wav3, alpha=0.5, color='orange')
+        plt.axvspan(self.wav3, self.wav4, alpha=0.5, color='red')
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
-        plt.xlim(445,870)
+        plt.xlim(self.wav0,self.wav4)
         lns1 = ax1.plot(self.wav_SCI, self.int_SCI_spec, marker='.', color='k', label ='SCI',zorder = 1)
         ax2 = ax1.twinx()
         lns2 = ax2.plot(self.wav_SKY, self.int_SKY_spec, marker='.', color='brown', label = 'SKY',zorder = 0, alpha = 0.5)
