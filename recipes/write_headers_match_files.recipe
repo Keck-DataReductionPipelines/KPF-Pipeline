@@ -20,9 +20,10 @@ from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 
 output_dir = config.ARGUMENT.output_dir  # this isn't used below (yet)
 do_dark_curr = config.ARGUMENT.do_dark_curr
-do_L1_SNR = config.ARGUMENT.dosnr
 do_gdhdr = config.ARGUMENT.do_gdhdr
 do_emhdr = config.ARGUMENT.do_emhdr
+do_L1_SNR = config.ARGUMENT.do_snr
+do_fr = config.ARGUMENT.do_fr
 
 for input_filename in find_files(config.ARGUMENT.fullpath):
     if 'masters' in input_filename: # Masters
@@ -69,6 +70,13 @@ for input_filename in find_files(config.ARGUMENT.fullpath):
                 if do_L1_SNR == True:
                     thisL1 = kpf1_from_fits(input_filename, data_type='KPF')
                     exit_code, newL1 = DiagnosticsFramework('L1', thisL1, 'add_headers_L1_SNR')
+                    if exit_code == 1:
+                        result = to_fits(newL1, output_filename)
+    
+                # Measure orderlet flux ratios of L1 spectra
+                if do_fr == True:
+                    thisL1 = kpf1_from_fits(input_filename, data_type='KPF')
+                    exit_code, newL1 = DiagnosticsFramework('L1', thisL1, 'add_headers_flux_ratios')
                     if exit_code == 1:
                         result = to_fits(newL1, output_filename)
     

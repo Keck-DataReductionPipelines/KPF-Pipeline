@@ -117,6 +117,24 @@ class DiagnosticsFramework(KPF0_Primitive):
                         self.logger.info("Green/Red not in L1 file. SNR diagnostics not computed.")
                 except Exception as e:
                     self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
+            
+            # Orderlet Flux Ratios
+            if self.diagnostics_name == 'add_headers_flux_ratios':
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    print('data_products = ' + str(data_products))
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                            self.kpf_object = diagnostics.add_headers_flux_ratios(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                            print('exti_code = ' + str(exit_code))
+                        else: 
+                            self.logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
+                except Exception as e:
+                    self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
 
         elif 'L2' in self.data_level_str:
             pass
