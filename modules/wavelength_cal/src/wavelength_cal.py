@@ -4,7 +4,7 @@ import numpy as np
 import os
 from astropy import constants as cst, units as u
 import datetime
-from modules.Utils.analyze_wls import write_wls_json
+from modules.quicklook.src.analyze_wls import write_wls_json
 
 # pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
