@@ -346,46 +346,46 @@ def add_headers_flux_ratios(L1, logger=None):
     adds keywords to the L1 object headers
     
     Keywords:
-        FR12M452 - median SCI1/SCI2 flux ratio near 452 nm
-        FR12U452 - uncertainty on the median SCI1/SCI2 flux ratio near 452 nm
-        FR32M452 - median SCI3/SCI2 flux ratio near 452 nm
-        FR32U452 - uncertainty on the median SCI1/SCI2 flux ratio near 452 nm
-        FRS2M452 - median SKY/SCI2 flux ratio near 452 nm
-        FRS2U452 - uncertainty on the median SKY/SCI2 flux ratio near 452 nm
-        FRC2M452 - median CAL/SCI2 flux ratio near 452 nm
-        FRC2U452 - uncertainty on the median CAL/SCI2 flux ratio near 452 nm
-        FR12M548 - median SCI1/SCI2 flux ratio near 548 nm
-        FR12U548 - uncertainty on the median SCI1/SCI2 flux ratio near 548 nm
-        FR32M548 - median SCI3/SCI2 flux ratio near 548 nm
-        FR32U548 - uncertainty on the median SCI1/SCI2 flux ratio near 548 nm
-        FRS2M548 - median SKY/SCI2 flux ratio near 548 nm
-        FRS2U548 - uncertainty on the median SKY/SCI2 flux ratio near 548 nm
-        FRC2M548 - median CAL/SCI2 flux ratio near 548 nm
-        FRC2U548 - uncertainty on the median CAL/SCI2 flux ratio near 548 nm
-        FR12M661 - median SCI1/SCI2 flux ratio near 661 nm
-        FR12U661 - uncertainty on the median SCI1/SCI2 flux ratio near 661 nm
-        FR32M661 - median SCI3/SCI2 flux ratio near 661 nm
-        FR32U661 - uncertainty on the median SCI1/SCI2 flux ratio near 661 nm
-        FRS2M661 - median SKY/SCI2 flux ratio near 661 nm
-        FRS2U661 - uncertainty on the median SKY/SCI2 flux ratio near 661 nm
-        FRC2M661 - median CAL/SCI2 flux ratio near 661 nm
-        FRC2U661 - uncertainty on the median CAL/SCI2 flux ratio near 661 nm
-        FR12M747 - median SCI1/SCI2 flux ratio near 747 nm
-        FR12U747 - uncertainty on the median SCI1/SCI2 flux ratio near 747 nm
-        FR32M747 - median SCI3/SCI2 flux ratio near 747 nm
-        FR32U747 - uncertainty on the median SCI1/SCI2 flux ratio near 747 nm
-        FRS2M747 - median SKY/SCI2 flux ratio near 747 nm
-        FRS2U747 - uncertainty on the median SKY/SCI2 flux ratio near 747 nm
-        FRC2M747 - median CAL/SCI2 flux ratio near 747 nm
-        FRC2U747 - uncertainty on the median CAL/SCI2 flux ratio near 747 nm
-        FR12M865 - median SCI1/SCI2 flux ratio near 865 nm
-        FR12U865 - uncertainty on the median SCI1/SCI2 flux ratio near 865 nm
-        FR32M865 - median SCI3/SCI2 flux ratio near 865 nm
-        FR32U865 - uncertainty on the median SCI1/SCI2 flux ratio near 865 nm
-        FRS2M865 - median SKY/SCI2 flux ratio near 865 nm
-        FRS2U865 - uncertainty on the median SKY/SCI2 flux ratio near 865 nm
-        FRC2M865 - median CAL/SCI2 flux ratio near 865 nm
-        FRC2U865 - uncertainty on the median CAL/SCI2 flux ratio near 865 nm
+        FR12M452 - median(SCI1/SCI2) flux ratio near 452 nm
+        FR12U452 - uncertainty on median(SCI1/SCI2) flux ratio near 452 nm
+        FR32M452 - median(SCI3/SCI2) flux ratio near 452 nm
+        FR32U452 - uncertainty on median(SCI1/SCI2) flux ratio near 452 nm
+        FRS2M452 - median(SKY/SCI2) flux ratio near 452 nm
+        FRS2U452 - uncertainty on median(SKY/SCI2) flux ratio near 452 nm
+        FRC2M452 - median(CAL/SCI2) flux ratio near 452 nm
+        FRC2U452 - uncertainty on median(CAL/SCI2) flux ratio near 452 nm
+        FR12M548 - median(SCI1/SCI2) flux ratio near 548 nm
+        FR12U548 - uncertainty on median(SCI1/SCI2) flux ratio near 548 nm
+        FR32M548 - median(SCI3/SCI2) flux ratio near 548 nm
+        FR32U548 - uncertainty on median(SCI1/SCI2) flux ratio near 548 nm
+        FRS2M548 - median(SKY/SCI2) flux ratio near 548 nm
+        FRS2U548 - uncertainty on median(SKY/SCI2) flux ratio near 548 nm
+        FRC2M548 - median(CAL/SCI2) flux ratio near 548 nm
+        FRC2U548 - uncertainty on median(CAL/SCI2) flux ratio near 548 nm
+        FR12M661 - median(SCI1/SCI2) flux ratio near 661 nm
+        FR12U661 - uncertainty on median(SCI1/SCI2) flux ratio near 661 nm
+        FR32M661 - median(SCI3/SCI2) flux ratio near 661 nm
+        FR32U661 - uncertainty on median(SCI1/SCI2) flux ratio near 661 nm
+        FRS2M661 - median(SKY/SCI2) flux ratio near 661 nm
+        FRS2U661 - uncertainty on median(SKY/SCI2) flux ratio near 661 nm
+        FRC2M661 - median(CAL/SCI2) flux ratio near 661 nm
+        FRC2U661 - uncertainty on median(CAL/SCI2) flux ratio near 661 nm
+        FR12M747 - median(SCI1/SCI2) flux ratio near 747 nm
+        FR12U747 - uncertainty on median(SCI1/SCI2) flux ratio near 747 nm
+        FR32M747 - median(SCI3/SCI2) flux ratio near 747 nm
+        FR32U747 - uncertainty on median(SCI1/SCI2) flux ratio near 747 nm
+        FRS2M747 - median(SKY/SCI2) flux ratio near 747 nm
+        FRS2U747 - uncertainty on median(SKY/SCI2) flux ratio near 747 nm
+        FRC2M747 - median(CAL/SCI2) flux ratio near 747 nm
+        FRC2U747 - uncertainty on median(CAL/SCI2) flux ratio near 747 nm
+        FR12M865 - median(SCI1/SCI2) flux ratio near 865 nm
+        FR12U865 - uncertainty on median(SCI1/SCI2) flux ratio near 865 nm
+        FR32M865 - median(SCI3/SCI2) flux ratio near 865 nm
+        FR32U865 - uncertainty on median(SCI1/SCI2) flux ratio near 865 nm
+        FRS2M865 - median(SKY/SCI2) flux ratio near 865 nm
+        FRS2U865 - uncertainty on median(SKY/SCI2) flux ratio near 865 nm
+        FRC2M865 - median(CAL/SCI2) flux ratio near 865 nm
+        FRC2U865 - uncertainty on median(CAL/SCI2) flux ratio near 865 nm
 
     Args:
         L1 - a KPF L1 object 
