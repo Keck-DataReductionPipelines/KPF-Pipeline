@@ -221,7 +221,7 @@ FLXECHR   1.00                            Dark current [e-/hr] - Red CCD echelle
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
 
-Keywords related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/Utils/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
+Keywords related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/quicklook/arc/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
 
 .. image:: dark_current_example.png
    :alt: Image of KPF Green CCD showing regions where dark current is measured
@@ -249,9 +249,13 @@ SNRCL661  250.0            SNR of L1 CAL spectrum (95th %ile) near 661 nm; on Re
 SNRSC747  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
 SNRSK747  250.0            SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
 SNRCL747  250.0            SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
-SNRSC865  250.0            SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 865 nm (second reddest order); on Red CCD
-SNRSK865  250.0            SNR of L1 SKY spectrum (95th %ile) near 865 nm (second reddest order); on Red CCD
-SNRCL865  250.0            SNR of L1 CAL spectrum (95th %ile) near 865 nm (second reddest order); on Red CCD
+SNRSC852  250.0            SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
+SNRSK852  250.0            SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+SNRCL852  250.0            SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+FR452661  1.2345           Peak flux ratio between orders (452nm/661nm) using SCI2
+FR548661  1.2345           Peak flux ratio between orders (548nm/661nm) using SCI2
+FR747661  1.2345           Peak flux ratio between orders (747nm/661nm) using SCI2
+FR852661  1.2345           Peak flux ratio between orders (852nm/661nm) using SCI2
 FR12M452  0.9000           median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
 FR12U452  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
 FR32M452  0.9000           median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
@@ -284,19 +288,21 @@ FRS2M747  0.9000           median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
 FRS2U747  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
 FRC2M747  0.9000           median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
 FRC2U747  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
-FR12M865  0.9000           median(SCI1/SCI2) flux ratio near 865 nm; on Red CCD
-FR12U865  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 865 nm; on Red CCD
-FR32M865  0.9000           median(SCI3/SCI2) flux ratio near 865 nm; on Red CCD
-FR32U865  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 865 nm; on Red CCD
-FRS2M865  0.9000           median(SKY/SCI2) flux ratio near 865 nm; on Red CCD
-FRS2U865  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 865 nm; on Red CCD
-FRC2M865  0.9000           median(CAL/SCI2) flux ratio near 865 nm; on Red CCD
-FRC2U865  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 865 nm; on Red CCD
+FR12M852  0.9000           median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FR12U852  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FR32M852  0.9000           median(SCI3/SCI2) flux ratio near 852 nm; on Red CCD
+FR32U852  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FRS2M852  0.9000           median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+FRS2U852  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+FRC2M852  0.9000           median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+FRC2U852  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 ========  ===============  =========
 
-The keywords above related to the signal-to-noise ratio in L1 spectra all start with SNR.  These SNR measurements were made using modules/Utils/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
+The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
 
-Keywords related to orderlet flux ratios are computed in 500-pixel regions in the centers the same spectral orders as are used for the SNR calculations.
+Keywords related to flux ratios between orders (FR452661, FR548661, FR747661, FR852661) are the ratios between the 95th percentile in flux for the spectral orders containing 452 nm, 548 nm, 747 nm, and 852 nm, all normalized by the spectral order containing 661 nm.  These are the same spectral orders used for the SNR calculations and use the SCI2 orderlet.
+
+Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR12U452) are computed in 500-pixel regions in the centers in the same spectral orders as are used for the SNR calculations.
 
 .. image:: KPF_L1_SNR.png
    :alt: L1 Spectrum show wavelengths where SNR is measured
