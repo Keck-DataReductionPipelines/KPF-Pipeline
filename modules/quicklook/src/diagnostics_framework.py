@@ -81,7 +81,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring dark current failed: {e}\n{traceback.format_exc()}")
 
-            # Guider Headers
+            # Guider
             if self.diagnostics_name == 'add_headers_guider':
                 try:
                     self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
@@ -89,6 +89,15 @@ class DiagnosticsFramework(KPF0_Primitive):
                     exit_code = 1
                 except Exception as e:
                     self.logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # Exposure Meter
+            if self.diagnostics_name == 'add_headers_exposure_meter':
+                try:
+                    self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                    self.kpf_object = diagnostics.add_headers_exposure_meter(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring exposure meter diagnostics failed: {e}\n{traceback.format_exc()}")
                         
         elif 'L1' in self.data_level_str:
             # L1 SNR

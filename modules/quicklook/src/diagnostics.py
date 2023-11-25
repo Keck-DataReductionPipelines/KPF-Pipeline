@@ -7,6 +7,7 @@ import traceback
 from modules.Utils.utils import DummyLogger
 from modules.Utils.analyze_2d import Analyze2D
 from modules.Utils.analyze_guider import AnalyzeGuider
+from modules.Utils.analyze_em import AnalyzeEM
 from modules.Utils.analyze_l1 import AnalyzeL1
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
@@ -146,10 +147,10 @@ def add_headers_guider(D2, logger=None):
     # Check that the input object is of the right type
     data_products = get_data_products_2D(D2)
     if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('Guider' in data_products):
-        logger.info('Guider not in the 2D file or not a valid 2D KPF file.')
+        logger.info('Guider not in the 2D file or not a valid 2D KPF file.  Guider data products not added to header.')
         return D2
         
-    # Use the AnalyzeL1 class to compute dark current
+    # Use the AnalyzeGuider class to compute data products
     myGuider = AnalyzeGuider(D2, logger=logger)
     myGuider.measure_seeing()
     try: 
@@ -184,6 +185,71 @@ def add_headers_guider(D2, logger=None):
     except Exception as e:
         logger.error(f"Problem with guider fit: {e}\n{traceback.format_exc()}")
                                            
+    return D2
+
+
+def add_headers_exposure_meter(D2, logger=None):
+    """
+    Computes the SCI/SKY flux ratio in the main spectrometer based on exposure meter data products
+    
+    Keywords:
+        SKYSCIMS - SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+        EMSCCT48 - cumulative EM counts [ADU] in SCI in 445-870 nm
+        EMSCCT45 - cumulative EM counts [ADU] in SCI in 445-551 nm
+        EMSCCT56 - cumulative EM counts [ADU] in SCI in 551-658 nm
+        EMSCCT67 - cumulative EM counts [ADU] in SCI in 658-764 nm
+        EMSCCT78 - cumulative EM counts [ADU] in SCI in 764-870 nm
+        EMSKCT48 - cumulative EM counts [ADU] in SKY in 445-870 nm
+        EMSKCT45 - cumulative EM counts [ADU] in SKY in 445-551 nm
+        EMSKCT56 - cumulative EM counts [ADU] in SKY in 551-658 nm
+        EMSKCT67 - cumulative EM counts [ADU] in SKY in 658-764 nm
+        EMSKCT78 - cumulative EM counts [ADU] in SKY in 764-870 nm
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with headers added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    data_products = get_data_products_2D(D2)
+    if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('ExpMeter' in data_products):
+        logger.info('ExpMeter not in the 2D file or not a valid 2D KPF file.  EM data products not added to header.')
+        return D2
+        
+    # Use the Analyze EM class to data products
+    myEM = AnalyzeEM(D2, logger=logger)
+    try: 
+        D2.header['PRIMARY']['SKYSCIMS'] = (myEM.SKY_SCI_main_spectrometer,
+                                           'SKY/SCI flux ratio in main spectro. based on EM')
+        D2.header['PRIMARY']['EMSCCT48'] = (myEM.counts_SCI.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SCI in 445-870 nm')
+        D2.header['PRIMARY']['EMSCCT45'] = (myEM.counts_SCI_551m.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SCI in 445-551 nm')
+        D2.header['PRIMARY']['EMSCCT56'] = (myEM.counts_SCI_551_658.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SCI in 551-658 nm')
+        D2.header['PRIMARY']['EMSCCT67'] = (myEM.counts_SCI_658_764.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SCI in 658-764 nm')
+        D2.header['PRIMARY']['EMSCCT78'] = (myEM.counts_SCI_764p.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SCI in 764-870 nm')
+        D2.header['PRIMARY']['EMSKCT48'] = (myEM.counts_SKY.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SKY in 445-870 nm')
+        D2.header['PRIMARY']['EMSKCT45'] = (myEM.counts_SKY_551m.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SKY in 445-551 nm')
+        D2.header['PRIMARY']['EMSKCT56'] = (myEM.counts_SKY_551_658.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SKY in 551-658 nm')
+        D2.header['PRIMARY']['EMSKCT67'] = (myEM.counts_SKY_658_764.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SKY in 658-764 nm')
+        D2.header['PRIMARY']['EMSKCT78'] = (myEM.counts_SKY_764p.sum(axis=0),
+                                           'cumulative EM counts [ADU] in SKY in 764-870 nm')
+
+    except Exception as e:
+        logger.error(f"Problem with exposure meter measurements: {e}\n{traceback.format_exc()}")
+
     return D2
 
 
