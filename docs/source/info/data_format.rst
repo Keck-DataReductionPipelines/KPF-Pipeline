@@ -217,11 +217,33 @@ FLXAMP1R  1.00                            Dark current [e-/hr] - Red CCD amplifi
 FLXAMP2R  1.00                            Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
 FLXCOLLR  1.00                            Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
 FLXECHR   1.00                            Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
+GDRXRMS   10.123                          x-coordinate RMS guiding error in milliarcsec (mas)
+GDRYRMS   10.123                          y-coordinate RMS guiding error in milliarcsec (mas)
+GDRRRMS   10.123                          r-coordinate RMS guiding error in milliarcsec (mas)
+GDRXBIAS  0.0010                          x-coordinate bias guiding error in milliarcsec (mas)
+GDRYBIAS  0.0010                          y-coordinate bias guiding error in milliarcsec (mas)
+GDRSEEJZ  0.450                           Seeing (arcsec) in J+Z-band from Moffat func fit
+GDRSEEV   0.450                           Scaled seeing (arcsec) in V-band from J+Z-band
+MOONSEP   55.0                            Separation between Moon and target star (deg)
+SUNALT    -45.0                           Altitude of Sun (deg); negative = below horizon
+SKYSCIMS  0.0000123                       SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+EMSCCT48  100000000.1234                  cumulative EM counts [ADU] in SCI in 445-870 nm
+EMSCCT45  100000000.1234                  cumulative EM counts [ADU] in SCI in 445-551 nm
+EMSCCT56  100000000.1234                  cumulative EM counts [ADU] in SCI in 551-658 nm
+EMSCCT67  100000000.1234                  cumulative EM counts [ADU] in SCI in 658-764 nm
+EMSCCT78  100000000.1234                  cumulative EM counts [ADU] in SCI in 764-870 nm
+EMSKCT48  100000000.1234                  cumulative EM counts [ADU] in SKY in 445-870 nm
+EMSKCT45  100000000.1234                  cumulative EM counts [ADU] in SKY in 445-551 nm
+EMSKCT56  100000000.1234                  cumulative EM counts [ADU] in SKY in 551-658 nm
+EMSKCT67  100000000.1234                  cumulative EM counts [ADU] in SKY in 658-764 nm
+EMSKCT78  100000000.1234                  cumulative EM counts [ADU] in SKY in 764-870 nm
 ========  ==============================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
 
 Keywords related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/quicklook/arc/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
+
+Keywords related to the Guider are only added for 2D files that have Guider data products.  Similar for Exposure Meter data products.
 
 .. image:: dark_current_example.png
    :alt: Image of KPF Green CCD showing regions where dark current is measured
