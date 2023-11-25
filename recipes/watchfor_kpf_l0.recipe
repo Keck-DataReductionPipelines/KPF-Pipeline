@@ -146,13 +146,18 @@ for raw_file_path in file_list:
             pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
             twod = pixels_masked
 
-        # Measure dark current for dark images and write to header
+        # Measure dark current for dark images and add keywords to header
         exit_code, new2D = DiagnosticsFramework('2D', flat_applied, 'add_headers_dark_current_2D')
         if exit_code == 1:  # only wave the results if exit_code = 1 (dark current is only computed for Darks)
             flat_applied = new2D
 
         # Measure Guider performance and add keywords to header
         exit_code, new2D = DiagnosticsFramework('2D', flat_applied, 'add_headers_guider')
+        if exit_code == 1:  # only wave the results if exit_code = 1 
+            flat_applied = new2D
+
+        # Measure Guider performance and add keywords to header
+        exit_code, new2D = DiagnosticsFramework('2D', flat_applied, 'add_headers_exposure_meter')
         if exit_code == 1:  # only wave the results if exit_code = 1 
             flat_applied = new2D
 

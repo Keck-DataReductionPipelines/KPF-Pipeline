@@ -104,13 +104,12 @@ class DiagnosticsFramework(KPF0_Primitive):
             if self.diagnostics_name == 'add_headers_L1_SNR':
                 try:
                     data_products = get_data_products_L1(self.kpf_object )
-                    print('data_products = ' + str(data_products))
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
                             self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
                             self.kpf_object = diagnostics.add_headers_L1_SNR(self.kpf_object, logger=self.logger)
                             exit_code = 1
-                            print('exti_code = ' + str(exit_code))
+                            print('exit_code = ' + str(exit_code))
                         else: 
                             self.logger.info("L1 SNR diagnostics not computed.")
                     else: 
@@ -118,17 +117,33 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
             
-            # Orderlet Flux Ratios
-            if self.diagnostics_name == 'add_headers_flux_ratios':
+            # Order Flux Ratios
+            if self.diagnostics_name == 'add_headers_order_flux_ratios':
                 try:
                     data_products = get_data_products_L1(self.kpf_object )
-                    print('data_products = ' + str(data_products))
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
                             self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
-                            self.kpf_object = diagnostics.add_headers_flux_ratios(self.kpf_object, logger=self.logger)
+                            self.kpf_object = diagnostics.add_headers_order_flux_ratios(self.kpf_object, logger=self.logger)
                             exit_code = 1
-                            print('exti_code = ' + str(exit_code))
+                            print('exit_code = ' + str(exit_code))
+                        else: 
+                            self.logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
+                except Exception as e:
+                    self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
+
+            # Orderlet Flux Ratios
+            if self.diagnostics_name == 'add_headers_orderlet_flux_ratios':
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                            self.kpf_object = diagnostics.add_headers_orderlet_flux_ratios(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                            print('exit_code = ' + str(exit_code))
                         else: 
                             self.logger.info("L1 SNR diagnostics not computed.")
                     else: 

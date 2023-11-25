@@ -530,6 +530,16 @@ if do_spectral_extraction or do_hk or do_bc:
 				if L1_SNR_exit_code == 1:
 					op_data = newL1
 
+				# Measure flux ratios between orders and add keywords to header
+				order_flux_ratio_exit_code, newL1 = DiagnosticsFramework('L1', op_data, 'add_headers_order_flux_ratios')
+				if order_flux_ratio_exit_code == 1:
+					op_data = newL1
+
+				# Measure flux ratios between orderlets and add keywords to header
+				orderlet_flux_ratio_exit_code, newL1 = DiagnosticsFramework('L1', op_data, 'add_headers_orderlet_flux_ratios')
+				if orderlet_flux_ratio_exit_code == 1:
+					op_data = newL1
+
 
 				if op_data != None:
 					result = to_fits(op_data, output_lev1_file)

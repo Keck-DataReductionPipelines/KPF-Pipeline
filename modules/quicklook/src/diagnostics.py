@@ -6,11 +6,11 @@ import numpy as np
 
 # Local dependencies
 from modules.Utils.utils import DummyLogger
-from modules.Utils.analyze_2d import Analyze2D
-from modules.Utils.analyze_guider import AnalyzeGuider
-from modules.Utils.analyze_em import AnalyzeEM
-from modules.Utils.analyze_l1 import AnalyzeL1
-from modules.Utils.analyze_l1 import uncertainty_median
+from modules.quicklook.src.analyze_2d import Analyze2D
+from modules.quicklook.src.analyze_guider import AnalyzeGuider
+from modules.quicklook.src.analyze_em import AnalyzeEM
+from modules.quicklook.src.analyze_l1 import AnalyzeL1
+from modules.quicklook.src.analyze_l1 import uncertainty_median
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.utils import get_moon_sep, get_sun_alt
@@ -266,15 +266,15 @@ def add_headers_L1_SNR(L1, logger=None):
         SNRSC548 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 548 nm; on Green CCD
         SNRSK548 - SNR of L1 SKY spectrum near 548 nm; on Green CCD
         SNRCL548 - SNR of L1 CAL spectrum near 548 nm; on Green CCD
-        SNRSC661 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 661 nm; on Red CCD
-        SNRSK661 - SNR of L1 SKY spectrum near 661 nm; on Red CCD
-        SNRCL661 - SNR of L1 CAL spectrum near 661 nm; on Red CCD
+        SNRSC652 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 652 nm; on Red CCD
+        SNRSK652 - SNR of L1 SKY spectrum near 652 nm; on Red CCD
+        SNRCL652 - SNR of L1 CAL spectrum near 652 nm; on Red CCD
         SNRSC747 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 747 nm; on Red CCD
         SNRSK747 - SNR of L1 SKY spectrum near 747 nm; on Red CCD
         SNRCL747 - SNR of L1 CAL spectrum near 747 nm; on Red CCD
-        SNRSC865 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 865 nm (second reddest order); on Red CCD
-        SNRSK865 - SNR of L1 SKY spectrum near 865 nm (second reddest order); on Red CCD
-        SNRCL865 - SNR of L1 CAL spectrum near 865 nm (second reddest order); on Red CCD
+        SNRSC852 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 852 nm (second reddest order); on Red CCD
+        SNRSK852 - SNR of L1 SKY spectrum near 852 nm (second reddest order); on Red CCD
+        SNRCL852 - SNR of L1 CAL spectrum near 852 nm (second reddest order); on Red CCD
 
     Args:
         L1 - a KPF L1 object 
@@ -318,29 +318,80 @@ def add_headers_L1_SNR(L1, logger=None):
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                L1.header['PRIMARY']['SNRSC661'] = (round(myL1.RED_SNR[8,-1],1),
-                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 661 nm')
-                L1.header['PRIMARY']['SNRSK661'] = (round(myL1.RED_SNR[8,-2],1),
-                                                    'SNR of L1 SKY near 661 nm')
-                L1.header['PRIMARY']['SNRCL661'] = (round(myL1.RED_SNR[8,0],1),
-                                                    'SNR of L1 CAL near 661 nm')
+                L1.header['PRIMARY']['SNRSC652'] = (round(myL1.RED_SNR[8,-1],1),
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 652 nm')
+                L1.header['PRIMARY']['SNRSK652'] = (round(myL1.RED_SNR[8,-2],1),
+                                                    'SNR of L1 SKY near 652 nm')
+                L1.header['PRIMARY']['SNRCL652'] = (round(myL1.RED_SNR[8,0],1),
+                                                    'SNR of L1 CAL near 652 nm')
                 L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
                                                     'SNR of L1 SKY near 747 nm')
                 L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 747 nm')
                 L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
                                                     'SNR of L1 CAL near 747 nm')
-                L1.header['PRIMARY']['SNRSC865'] = (round(myL1.RED_SNR[30,-1],1),
-                                                    'SNR of L1 SKY near 865 nm')
-                L1.header['PRIMARY']['SNRSK865'] = (round(myL1.RED_SNR[30,-2],1),
-                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm')
-                L1.header['PRIMARY']['SNRCL865'] = (round(myL1.RED_SNR[30,0],1),
-                                                    'SNR of L1 CAL near 865 nm')
+                L1.header['PRIMARY']['SNRSC852'] = (round(myL1.RED_SNR[30,-1],1),
+                                                    'SNR of L1 SKY near 852 nm')
+                L1.header['PRIMARY']['SNRSK852'] = (round(myL1.RED_SNR[30,-2],1),
+                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 852 nm')
+                L1.header['PRIMARY']['SNRCL852'] = (round(myL1.RED_SNR[30,0],1),
+                                                    'SNR of L1 CAL near 852 nm')
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
     return L1
 
-def add_headers_flux_ratios(L1, logger=None):
+
+def add_headers_L1_order_ratios(L1, logger=None):
+    """
+    Computes the SNR of L1 spectra and adds keywords to the L1 object headers
+    
+    Keywords:
+        TBDTBDTB - comment
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with headers added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1 KPF file.')
+        return L1
+        
+    # Use the AnalyzeL1 class to compute ratios between spectral orders
+    myL1 = AnalyzeL1(L1, logger=logger)
+    myL1.measure_L1_snr(count_percentile=95, snr_percentile=95)
+    for chip in chips:
+        if chips == ['green', 'red']:
+            try: 
+                L1.header['PRIMARY']['FR452652'] = (round(myL1.GREEN_PEAK_FLUX[1,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                                                    'Peak flux ratio (452nm/652nm) - SCI2')
+                L1.header['PRIMARY']['FR548652'] = (round(myL1.GREEN_PEAK_FLUX[25,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                                                    'Peak flux ratio (548nm/652nm) - SCI2')
+            except Exception as e:
+                logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                L1.header['PRIMARY']['FR747652'] = (round(myL1.RED_PEAK_FLUX[20,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                                                    'Peak flux ratio (747nm/652nm) - SCI2')
+                L1.header['PRIMARY']['FR852652'] = (round(myL1.RED_PEAK_FLUX[30,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                                                    'Peak flux ratio (852nm/652nm) - SCI2')
+            except Exception as e:
+                logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
+    return L1
+
+
+def add_headers_orderlet_flux_ratios(L1, logger=None):
     """
     Computes the orderlet flux ratios of L1 spectra and 
     adds keywords to the L1 object headers
@@ -362,14 +413,14 @@ def add_headers_flux_ratios(L1, logger=None):
         FRS2U548 - uncertainty on median(SKY/SCI2) flux ratio near 548 nm
         FRC2M548 - median(CAL/SCI2) flux ratio near 548 nm
         FRC2U548 - uncertainty on median(CAL/SCI2) flux ratio near 548 nm
-        FR12M661 - median(SCI1/SCI2) flux ratio near 661 nm
-        FR12U661 - uncertainty on median(SCI1/SCI2) flux ratio near 661 nm
-        FR32M661 - median(SCI3/SCI2) flux ratio near 661 nm
-        FR32U661 - uncertainty on median(SCI1/SCI2) flux ratio near 661 nm
-        FRS2M661 - median(SKY/SCI2) flux ratio near 661 nm
-        FRS2U661 - uncertainty on median(SKY/SCI2) flux ratio near 661 nm
-        FRC2M661 - median(CAL/SCI2) flux ratio near 661 nm
-        FRC2U661 - uncertainty on median(CAL/SCI2) flux ratio near 661 nm
+        FR12M652 - median(SCI1/SCI2) flux ratio near 652 nm
+        FR12U652 - uncertainty on median(SCI1/SCI2) flux ratio near 652 nm
+        FR32M652 - median(SCI3/SCI2) flux ratio near 652 nm
+        FR32U652 - uncertainty on median(SCI1/SCI2) flux ratio near 652 nm
+        FRS2M652 - median(SKY/SCI2) flux ratio near 652 nm
+        FRS2U652 - uncertainty on median(SKY/SCI2) flux ratio near 652 nm
+        FRC2M652 - median(CAL/SCI2) flux ratio near 652 nm
+        FRC2U652 - uncertainty on median(CAL/SCI2) flux ratio near 652 nm
         FR12M747 - median(SCI1/SCI2) flux ratio near 747 nm
         FR12U747 - uncertainty on median(SCI1/SCI2) flux ratio near 747 nm
         FR32M747 - median(SCI3/SCI2) flux ratio near 747 nm
@@ -378,14 +429,14 @@ def add_headers_flux_ratios(L1, logger=None):
         FRS2U747 - uncertainty on median(SKY/SCI2) flux ratio near 747 nm
         FRC2M747 - median(CAL/SCI2) flux ratio near 747 nm
         FRC2U747 - uncertainty on median(CAL/SCI2) flux ratio near 747 nm
-        FR12M865 - median(SCI1/SCI2) flux ratio near 865 nm
-        FR12U865 - uncertainty on median(SCI1/SCI2) flux ratio near 865 nm
-        FR32M865 - median(SCI3/SCI2) flux ratio near 865 nm
-        FR32U865 - uncertainty on median(SCI1/SCI2) flux ratio near 865 nm
-        FRS2M865 - median(SKY/SCI2) flux ratio near 865 nm
-        FRS2U865 - uncertainty on median(SKY/SCI2) flux ratio near 865 nm
-        FRC2M865 - median(CAL/SCI2) flux ratio near 865 nm
-        FRC2U865 - uncertainty on median(CAL/SCI2) flux ratio near 865 nm
+        FR12M852 - median(SCI1/SCI2) flux ratio near 852 nm
+        FR12U852 - uncertainty on median(SCI1/SCI2) flux ratio near 852 nm
+        FR32M852 - median(SCI3/SCI2) flux ratio near 852 nm
+        FR32U852 - uncertainty on median(SCI1/SCI2) flux ratio near 852 nm
+        FRS2M852 - median(SKY/SCI2) flux ratio near 852 nm
+        FRS2U852 - uncertainty on median(SKY/SCI2) flux ratio near 852 nm
+        FRC2M852 - median(CAL/SCI2) flux ratio near 852 nm
+        FRC2U852 - uncertainty on median(CAL/SCI2) flux ratio near 852 nm
 
     Args:
         L1 - a KPF L1 object 
@@ -457,26 +508,26 @@ def add_headers_flux_ratios(L1, logger=None):
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                # Order 8 (Red) - 661 nm
+                # Order 8 (Red) - 652 nm
                 o=8
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M661'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FR12U661'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FR32M661'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FR32U661'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FRS2M661'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FRS2U661'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FRC2M661'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 661 nm')
-                L1.header['PRIMARY']['FRC2U661'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 661 nm')
+                L1.header['PRIMARY']['FR12M652'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(SCI1/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FR12U652'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(SCI1/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FR32M652'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(SCI3/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FR32U652'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(SCI3/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FRS2M652'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(SKY/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FRS2U652'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(SKY/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FRC2M652'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(CAL/SCI2) near 652 nm')
+                L1.header['PRIMARY']['FRC2U652'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(CAL/SCI2) near 652 nm')
                 # Order 20 (Red) - 747 nm
                 o=20
                 imin = 2040-250
@@ -497,26 +548,26 @@ def add_headers_flux_ratios(L1, logger=None):
                                                     'median(CAL/SCI2) near 747 nm')
                 L1.header['PRIMARY']['FRC2U747'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(CAL/SCI2) near 747 nm')
-                # Order 30 (Red) - 865 nm
+                # Order 30 (Red) - 852 nm
                 o=20
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M865'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FR12U865'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FR32M865'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FR32U865'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FRS2M865'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FRS2U865'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FRC2M865'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 865 nm')
-                L1.header['PRIMARY']['FRC2U865'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 865 nm')
+                L1.header['PRIMARY']['FR12M852'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(SCI1/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FR12U852'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(SCI1/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FR32M852'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(SCI3/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FR32U852'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(SCI3/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FRS2M852'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(SKY/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FRS2U852'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(SKY/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FRC2M852'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'median(CAL/SCI2) near 852 nm')
+                L1.header['PRIMARY']['FRC2U852'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                                                    'unc. of median(CAL/SCI2) near 852 nm')
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
     return L1

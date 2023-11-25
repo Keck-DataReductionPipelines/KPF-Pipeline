@@ -38,7 +38,6 @@ class AnalyzeL1:
         else:
             self.logger = None
         self.L1 = L1
-        #self.header = L1['PRIMARY'].header
         primary_header = HeaderParse(L1, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -176,7 +175,7 @@ class AnalyzeL1:
             RED_PEAK_FLUX[o,2] = np.nanpercentile(L1['RED_SCI_FLUX2'][o], counts_percentile)
             RED_PEAK_FLUX[o,3] = np.nanpercentile(L1['RED_SCI_FLUX3'][o], counts_percentile)
             RED_PEAK_FLUX[o,4] = np.nanpercentile(L1['RED_SKY_FLUX'][o], counts_percentile)
-            RE_PEAKD_FLUX[o,5] = np.nanpercentile(L1['RED_SCI_FLUX1'][o]+L1['RED_SCI_FLUX2'][o]+L1['RED_SCI_FLUX3'][o], counts_percentile)
+            RED_PEAK_FLUX[o,5] = np.nanpercentile(L1['RED_SCI_FLUX1'][o]+L1['RED_SCI_FLUX2'][o]+L1['RED_SCI_FLUX3'][o], counts_percentile)
 
         # Save SNR and COUNTS arrays to the object
         self.GREEN_SNR       = GREEN_SNR
@@ -217,7 +216,7 @@ class AnalyzeL1:
         ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax1.grid()
         ax2.scatter(self.GREEN_SNR_WAV[1:], self.GREEN_SNR[1:,4], marker="D", color='darkgreen', label='SKY')
-        ax2.scatter(self.RED_SNR_WAV[1:],   self.RED_SNR[1:,4],   marker="D", color='r', label='SKY')
+        ax2.scatter(self.RED_SNR_WAV,       self.RED_SNR[:,4],   marker="D", color='r', label='SKY')
         ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax2.grid()
         ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,0], marker="D", color='darkgreen', label='CAL')
@@ -232,9 +231,9 @@ class AnalyzeL1:
         # Set titles and labels for each subplot
         ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=16)
         ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
-        ax1.set_ylabel('SNR - SCI', fontsize=14)
-        ax2.set_ylabel('SNR - SKY', fontsize=14)
-        ax3.set_ylabel('SNR - CAL', fontsize=14)
+        ax1.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
+        ax2.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
+        ax3.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - CAL', fontsize=14)
         ax3.xaxis.set_tick_params(labelsize=14)
         ax1.yaxis.set_tick_params(labelsize=14)
         ax2.yaxis.set_tick_params(labelsize=14)
@@ -293,7 +292,7 @@ class AnalyzeL1:
         ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax1.grid()
         ax2.scatter(self.GREEN_SNR_WAV[1:], self.GREEN_PEAK_FLUX[1:,4], marker="D", color='darkgreen', label='SKY')
-        ax2.scatter(self.RED_SNR_WAV[1:],   self.RED_PEAK_FLUX[1:,4],   marker="D", color='r', label='SKY')
+        ax2.scatter(self.RED_SNR_WAV,       self.RED_PEAK_FLUX[:,4],   marker="D", color='r', label='SKY')
         ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax2.grid()
         ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,0], marker="D", color='darkgreen', label='CAL')
@@ -306,11 +305,11 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' + self.name, fontsize=16)
+        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal)', fontsize=16)
         ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
-        ax1.set_ylabel(str(self.counts_percentile) + 'th %ile Flux [e-] - SCI', fontsize=14)
-        ax2.set_ylabel(str(self.counts_percentile) + 'th %ile Flux [e-] - SKY', fontsize=14)
-        ax3.set_ylabel(str(self.counts_percentile) + 'th %ile Flux [e-] - CAL', fontsize=14)
+        ax1.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
+        ax2.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
+        ax3.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - CAL', fontsize=14)
         ax3.xaxis.set_tick_params(labelsize=14)
         ax1.yaxis.set_tick_params(labelsize=14)
         ax2.yaxis.set_tick_params(labelsize=14)
@@ -548,13 +547,6 @@ class AnalyzeL1:
 
         Attributes:
             To be added.
-
-Use the same wavelengths and orders as the SNR calculation:
-        SNRSC452 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 452 nm (second bluest order); on Green CCD
-        SNRSC548 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 548 nm; on Green CCD
-        SNRSC661 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 661 nm; on Red CCD
-        SNRSC747 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 747 nm; on Red CCD
-        SNRSC865 - SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm (second reddest order); on Red CCD
 
         Returns:
             None
