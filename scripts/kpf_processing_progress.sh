@@ -11,15 +11,17 @@
 #   KP.YYYYMMDD.NNNNN.NN_L2.fits files in respective directories have a file 
 #   modification date after the L0 file. For any missing 2D, L1, and L2 files, 
 #   the script checks the 'TRIGTARG' keyword in the FITS header of the L0 file 
-#   and excludes the file from the missing count if the keyword does not 
-#   contain 'Green' or 'Red'. The script outputs a summary for each YYYYMMDD 
-#   directory, showing the count of such files and the most recent L0 
-#   modification date. The script takes a starting date (YYYYMMDD) as an 
-#   argument and optionally an end date and a flag to print missing files.
+#   and excludes the file from the missing count if the value of TRIGTARG does 
+#   not contain 'Green' or 'Red'. The script outputs a summary for each 
+#   YYYYMMDD directory, showing the count of such files and the most recent 
+#   L0 modification date. The script takes a starting date (YYYYMMDD) as an 
+#   argument and optionally an end date and flags to print missing files and
+#   touch the base L0 files of missing 2D/L1/L2 files.
 #
 # Options:
 #   --help           Display this message
 #   --print_missing  Display missing file names
+#   --touch_missing  Touch the base L0 files of missing 2D/L1/L2 files
 #
 # Usage:
 #   ./check_fits_files.sh YYYYMMDD [YYYYMMDD] [--print_missing]
@@ -34,8 +36,9 @@ if [[ "$1" == "--help" ]]; then
     exit 0
 fi
 
-# Initialize flag for printing missing files
+# Initialize flags
 print_missing=false
+touch_missing=false
 
 # Check if at least one argument is provided
 if [ $# -lt 1 ]; then
@@ -48,7 +51,11 @@ for arg in "$@"; do
     case $arg in
         --print_missing)
             print_missing=true
-            shift # Remove --print_missing from processing
+            shift
+            ;;
+        --touch_missing)
+            touch_missing=true
+            shift
             ;;
         *)
             # Remaining arguments are assumed to be dates
@@ -65,6 +72,9 @@ end_date=${end_date:-99999999} # Default to a high date if end_date is not set
 
 # Directory path
 base_dir="/data/kpf"
+
+# Array to store base files for touching
+declare -a missing_base_files
 
 # Print header
 printf "%s\n" 
@@ -116,11 +126,25 @@ for dir in "$base_dir/L0/"????????; do
                     fi
                 }
 
+                if [ ! -f "$file_2d" ]; then
+                    if $print_missing && check_trigtarg "$file_2d" "2D"; then
+                        echo "Missing 2D file: $file_2d"
+                        ((match_count_2D++))
+                    fi
+                    if $touch_missing; then
+                        missing_base_files+=("$file")
+                    fi
+                fi                
+
+
                 # Check for missing files and handle TRIGTARG keyword
                 if [ ! -f "$file_2d" ]; then
                     if $print_missing && check_trigtarg "$file_2d" "2D"; then
                         echo "Missing 2D file: $file_2d"
                         ((match_count_2D++))
+                    fi
+                    if $touch_missing; then
+                        missing_base_files+=("$file")
                     fi
                 elif [ $(date -r "$file_2d" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_2D++))
@@ -131,6 +155,9 @@ for dir in "$base_dir/L0/"????????; do
                         echo "Missing L1 file: $file_L1"
                         ((match_count_L1++))
                     fi
+                    if $touch_missing; then
+                        missing_base_files+=("$file")
+                    fi
                 elif [ $(date -r "$file_L1" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_L1++))
                 fi
@@ -140,16 +167,19 @@ for dir in "$base_dir/L0/"????????; do
                         echo "Missing L2 file: $file_L2"
                         ((match_count_L2++))
                     fi
+                    if $touch_missing; then
+                        missing_base_files+=("$file")
+                    fi
                 elif [ $(date -r "$file_L2" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_L2++))
-                fi
+                fi               
             fi
         done
 
         # Format the most recent modification date without seconds
         formatted_recent_mod_date=$(date -d "@$recent_mod_date" "+%Y-%m-%d %H:%M")
 
-        # Calculate percentage and print summary if there are any .fits files
+        # Calculate percentage and print summary
         if [ $total_count -gt 0 ]; then
             percentage_2D=$((match_count_2D * 100 / total_count))
             percentage_L1=$((match_count_L1 * 100 / total_count))
@@ -159,3 +189,19 @@ for dir in "$base_dir/L0/"????????; do
     fi
 done
 printf "%s\n" "------------------------------------------------------------------------------"
+
+# Handle --touch_missing
+if $touch_missing && [ ${#missing_base_files[@]} -gt 0 ]; then
+    uniq_missing_base_files=($(for file in "${missing_base_files[@]}"; do echo "${file}"; done | sort -u))
+    echo "The following base files are missing corresponding 2D, L1, or L2 files:"
+    printf "%s\n" "${uniq_missing_base_files[@]}"
+    read -p "Do you want to touch these files? [y/N] " confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        for file in "${uniq_missing_base_files[@]}"; do
+            echo "touch \"$file\""
+            touch "$file"
+            sleep 0.2
+        done
+    fi
+fi
+
