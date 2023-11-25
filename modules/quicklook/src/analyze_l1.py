@@ -45,15 +45,18 @@ class AnalyzeL1:
         self.ObsID = primary_header.get_obsid()
         
 
-    def measure_L1_snr(self, snr_percentile=95):
+    def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
         """
         Compute the signal-to-noise ratio (SNR) for each spectral order and
         orderlet in an L1 spectrum from KPF.
         SNR is defined as signal / sqrt(abs(variance)) and can be negative.
+        Also, compute the 
 
         Args:
-            snr_percentile: snr_percentile in the SNR distribution for each combination of
-                order and orderlet
+            snr_percentile: percentile in the SNR distribution for each 
+                combination of order and orderlet
+            counts_percentile: percentile in the counts distribution for each 
+                combination of order and orderlet
 
         Attributes:
             GREEN_SNR - Two-dimensional array of SNR values for the Green CCD.
@@ -64,6 +67,9 @@ class AnalyzeL1:
                 For example, GREEN_SNR[1,2] is the SNR for order=1 and the
                 SCI2 orderlet.
             RED_SNR - Similar to GREEN_SNR, but for the Red CCD.
+            GREEN_PEAK_FLUX - Similar to GREEN_SNR, but it is an array of top-
+                percentile counts instead of SNR.
+            RED_PEAK_FLUX - Similar to GREEN_PEAK_FLUX, but for the Red CCD.
             GREEN_SNR_WAV - One-dimensional array of the wavelength of the
                 middle of the spectral orders on the green CCD.
             RED_SNR_WAV - Similar to GREEN_SNR, but for the Red CCD.
@@ -73,6 +79,7 @@ class AnalyzeL1:
         """
         L1 = self.L1
         self.snr_percentile = snr_percentile
+        self.counts_percentile = counts_percentile
 
         # Determine the number of orders
         norders_green = (L1['GREEN_SKY_WAVE']).shape[0]
@@ -96,10 +103,12 @@ class AnalyzeL1:
         RED_SCI_SNR    = 0 * L1['RED_SCI_VAR1']
 
         # Create Arrays
-        GREEN_SNR = np.zeros((norders_green, norderlets+1))
-        RED_SNR   = np.zeros((norders_red, norderlets+1))
-        GREEN_SNR_WAV = np.zeros(norders_green)
-        RED_SNR_WAV   = np.zeros(norders_red)
+        GREEN_SNR       = np.zeros((norders_green, norderlets+1))
+        RED_SNR         = np.zeros((norders_red, norderlets+1))
+        GREEN_PEAK_FLUX = np.zeros((norders_green, norderlets+1))
+        RED_PEAK_FLUX   = np.zeros((norders_red, norderlets+1))
+        GREEN_SNR_WAV   = np.zeros(norders_green)
+        RED_SNR_WAV     = np.zeros(norders_red)
 
         # Compute SNR arrays for each of the orders, orderlets, and CCDs.
         GREEN_SCI_SNR1 = np.divide(L1['GREEN_SCI_FLUX1'],
@@ -148,6 +157,12 @@ class AnalyzeL1:
             GREEN_SNR[o,3] = np.nanpercentile(GREEN_SCI_SNR3[o], snr_percentile)
             GREEN_SNR[o,4] = np.nanpercentile(GREEN_SKY_SNR[o], snr_percentile)
             GREEN_SNR[o,5] = np.nanpercentile(GREEN_SCI_SNR[o], snr_percentile)
+            GREEN_PEAK_FLUX[o,0] = np.nanpercentile(L1['GREEN_CAL_FLUX'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,1] = np.nanpercentile(L1['GREEN_SCI_FLUX1'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,2] = np.nanpercentile(L1['GREEN_SCI_FLUX2'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,3] = np.nanpercentile(L1['GREEN_SCI_FLUX3'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,4] = np.nanpercentile(L1['GREEN_SKY_FLUX'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,5] = np.nanpercentile(L1['GREEN_SCI_FLUX1'][o]+L1['GREEN_SCI_FLUX3'][o]+L1['GREEN_SCI_FLUX3'][o], counts_percentile)
         for o in range(norders_red):
             RED_SNR_WAV[o] = L1['RED_SCI_WAVE1'][o,2040]
             RED_SNR[o,0] = np.nanpercentile(RED_CAL_SNR[o], snr_percentile)
@@ -156,12 +171,20 @@ class AnalyzeL1:
             RED_SNR[o,3] = np.nanpercentile(RED_SCI_SNR3[o], snr_percentile)
             RED_SNR[o,4] = np.nanpercentile(RED_SKY_SNR[o], snr_percentile)
             RED_SNR[o,5] = np.nanpercentile(RED_SCI_SNR[o], snr_percentile)
+            RED_PEAK_FLUX[o,0] = np.nanpercentile(L1['RED_CAL_FLUX'][o], counts_percentile)
+            RED_PEAK_FLUX[o,1] = np.nanpercentile(L1['RED_SCI_FLUX1'][o], counts_percentile)
+            RED_PEAK_FLUX[o,2] = np.nanpercentile(L1['RED_SCI_FLUX2'][o], counts_percentile)
+            RED_PEAK_FLUX[o,3] = np.nanpercentile(L1['RED_SCI_FLUX3'][o], counts_percentile)
+            RED_PEAK_FLUX[o,4] = np.nanpercentile(L1['RED_SKY_FLUX'][o], counts_percentile)
+            RE_PEAKD_FLUX[o,5] = np.nanpercentile(L1['RED_SCI_FLUX1'][o]+L1['RED_SCI_FLUX2'][o]+L1['RED_SCI_FLUX3'][o], counts_percentile)
 
-        # Save SNR arrays to the object
-        self.GREEN_SNR     = GREEN_SNR
-        self.RED_SNR       = RED_SNR
-        self.GREEN_SNR_WAV = GREEN_SNR_WAV
-        self.RED_SNR_WAV   = RED_SNR_WAV
+        # Save SNR and COUNTS arrays to the object
+        self.GREEN_SNR       = GREEN_SNR
+        self.RED_SNR         = RED_SNR
+        self.GREEN_PEAK_FLUX = GREEN_PEAK_FLUX
+        self.RED_PEAK_FLUX   = RED_PEAK_FLUX
+        self.GREEN_SNR_WAV   = GREEN_SNR_WAV
+        self.RED_SNR_WAV     = RED_SNR_WAV
 
 
     def plot_L1_snr(self, fig_path=None, show_plot=False):
@@ -193,8 +216,8 @@ class AnalyzeL1:
         ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,3],   marker="<", color='r', label='SCI3')
         ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax1.grid()
-        ax2.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,4], marker="D", color='darkgreen', label='SKY')
-        ax2.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,4],   marker="D", color='r', label='SKY')
+        ax2.scatter(self.GREEN_SNR_WAV[1:], self.GREEN_SNR[1:,4], marker="D", color='darkgreen', label='SKY')
+        ax2.scatter(self.RED_SNR_WAV[1:],   self.RED_SNR[1:,4],   marker="D", color='r', label='SKY')
         ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax2.grid()
         ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,0], marker="D", color='darkgreen', label='CAL')
@@ -208,7 +231,7 @@ class AnalyzeL1:
 
         # Set titles and labels for each subplot
         ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=16)
-        ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
+        ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
         ax1.set_ylabel('SNR - SCI', fontsize=14)
         ax2.set_ylabel('SNR - SKY', fontsize=14)
         ax3.set_ylabel('SNR - CAL', fontsize=14)
@@ -216,6 +239,15 @@ class AnalyzeL1:
         ax1.yaxis.set_tick_params(labelsize=14)
         ax2.yaxis.set_tick_params(labelsize=14)
         ax3.yaxis.set_tick_params(labelsize=14)
+        ymin, ymax = ax1.get_ylim()
+        if ymin > 0:
+            ax1.set_ylim(bottom=0)
+        ymin, ymax = ax2.get_ylim()
+        if ymin > 0:
+            ax2.set_ylim(bottom=0)
+        ymin, ymax = ax3.get_ylim()
+        if ymin > 0:
+            ax3.set_ylim(bottom=0)
 
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
@@ -229,6 +261,84 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+
+    def plot_L1_peak_flux(self, fig_path=None, show_plot=False):
+        """
+        Generate a plot of peak_counts per order as compuated using the compute_l1_snr
+        function.
+
+        Args:
+            fig_path (string) - set to the path for a peak counts vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        # Make 3-panel plot. First, create the figure and subplots
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,10), tight_layout=True)
+
+        # Plot the data on each subplot
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,5], marker="8", color='darkgreen', label='SCI1+SCI2+SCI3')
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,1], marker=">", color='darkgreen', label='SCI1')
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,2], marker="s", color='darkgreen', label='SCI2')
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,3], marker="<", color='darkgreen', label='SCI3')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,5],   marker="8", color='r', label='SCI1+SCI2+SCI3')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,1],   marker=">", color='r', label='SCI1')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,2],   marker="s", color='r', label='SCI2')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,3],   marker="<", color='r', label='SCI3')
+        ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
+        ax1.grid()
+        ax2.scatter(self.GREEN_SNR_WAV[1:], self.GREEN_PEAK_FLUX[1:,4], marker="D", color='darkgreen', label='SKY')
+        ax2.scatter(self.RED_SNR_WAV[1:],   self.RED_PEAK_FLUX[1:,4],   marker="D", color='r', label='SKY')
+        ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
+        ax2.grid()
+        ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,0], marker="D", color='darkgreen', label='CAL')
+        ax3.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,0],   marker="D", color='r', label='CAL')
+        ax3.yaxis.set_major_locator(MaxNLocator(nbins=12))
+        ax3.grid()
+        ax3.set_xlim(4450,8700)
+
+        # Add legend
+        ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
+
+        # Set titles and labels for each subplot
+        ax1.set_title(self.ObsID + ' - ' + self.name, fontsize=16)
+        ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
+        ax1.set_ylabel(str(self.counts_percentile) + 'th %ile Flux [e-] - SCI', fontsize=14)
+        ax2.set_ylabel(str(self.counts_percentile) + 'th %ile Flux [e-] - SKY', fontsize=14)
+        ax3.set_ylabel(str(self.counts_percentile) + 'th %ile Flux [e-] - CAL', fontsize=14)
+        ax3.xaxis.set_tick_params(labelsize=14)
+        ax1.yaxis.set_tick_params(labelsize=14)
+        ax2.yaxis.set_tick_params(labelsize=14)
+        ax3.yaxis.set_tick_params(labelsize=14)
+        ymin, ymax = ax1.get_ylim()
+        if ymin > 0:
+            ax1.set_ylim(bottom=0)
+        ymin, ymax = ax2.get_ylim()
+        if ymin > 0:
+            ax2.set_ylim(bottom=0)
+        ymin, ymax = ax3.get_ylim()
+        if ymin > 0:
+            ax3.set_ylim(bottom=0)
+
+
+        # Adjust spacing between subplots
+        plt.subplots_adjust(hspace=0)
+        plt.tight_layout()
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
 
     def plot_L1_spectrum(self, orderlet=None, fig_path=None, show_plot=False):
         """
