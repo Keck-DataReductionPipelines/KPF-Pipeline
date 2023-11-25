@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# Script Name: check_fits_files.sh
+# === HELP START ===
+# Script Name: kpf_processing_progress.sh
+#
 # Description:
 #   This script searches through /data/kpf/L0/YYYYMMDD subdirectories for L0 
 #   files matching the pattern KP.YYYYMMDD.NNNNN.NN.fits. It records the most 
@@ -15,11 +17,22 @@
 #   modification date. The script takes a starting date (YYYYMMDD) as an 
 #   argument and optionally an end date and a flag to print missing files.
 #
+# Options:
+#   --help           Display this message
+#   --print_missing  Display missing file names
+#
 # Usage:
 #   ./check_fits_files.sh YYYYMMDD [YYYYMMDD] [--print_missing]
 #
 # Example:
 #   ./check_fits_files.sh 20231114 20231231 --print_missing
+# === HELP END ===
+
+# Check for --help argument
+if [[ "$1" == "--help" ]]; then
+    awk '/^# === HELP START ===/,/^# === HELP END ===/' "$0" | sed -e '1d;$d' -e 's/^#//; s/^ //' 
+    exit 0
+fi
 
 # Initialize flag for printing missing files
 print_missing=false
