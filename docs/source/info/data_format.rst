@@ -243,19 +243,19 @@ SNRCL452  250.0            SNR of L1 CAL spectrum (95th %ile) near 452 nm (secon
 SNRSC548  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
 SNRSK548  250.0            SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
 SNRCL548  250.0            SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
-SNRSC661  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 661 nm; on Red CCD
-SNRSK661  250.0            SNR of L1 SKY spectrum (95th %ile) near 661 nm; on Red CCD
-SNRCL661  250.0            SNR of L1 CAL spectrum (95th %ile) near 661 nm; on Red CCD
+SNRSC652  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 652 nm; on Red CCD
+SNRSK652  250.0            SNR of L1 SKY spectrum (95th %ile) near 652 nm; on Red CCD
+SNRCL652  250.0            SNR of L1 CAL spectrum (95th %ile) near 652 nm; on Red CCD
 SNRSC747  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
 SNRSK747  250.0            SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
 SNRCL747  250.0            SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
 SNRSC852  250.0            SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
 SNRSK852  250.0            SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
 SNRCL852  250.0            SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
-FR452661  1.2345           Peak flux ratio between orders (452nm/661nm) using SCI2
-FR548661  1.2345           Peak flux ratio between orders (548nm/661nm) using SCI2
-FR747661  1.2345           Peak flux ratio between orders (747nm/661nm) using SCI2
-FR852661  1.2345           Peak flux ratio between orders (852nm/661nm) using SCI2
+FR452652  1.2345           Peak flux ratio between orders (452nm/652nm) using SCI2
+FR548652  1.2345           Peak flux ratio between orders (548nm/652nm) using SCI2
+FR747652  1.2345           Peak flux ratio between orders (747nm/652nm) using SCI2
+FR852652  1.2345           Peak flux ratio between orders (852nm/652nm) using SCI2
 FR12M452  0.9000           median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
 FR12U452  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
 FR32M452  0.9000           median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
@@ -272,14 +272,14 @@ FRS2M548  0.9000           median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
 FRS2U548  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
 FRC2M548  0.9000           median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
 FRC2U548  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
-FR12M661  0.9000           median(SCI1/SCI2) flux ratio near 661 nm; on Red CCD
-FR12U661  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 661 nm; on Red CCD
-FR32M661  0.9000           median(SCI3/SCI2) flux ratio near 661 nm; on Red CCD
-FR32U661  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 661 nm; on Red CCD
-FRS2M661  0.9000           median(SKY/SCI2) flux ratio near 661 nm; on Red CCD
-FRS2U661  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 661 nm; on Red CCD
-FRC2M661  0.9000           median(CAL/SCI2) flux ratio near 661 nm; on Red CCD
-FRC2U661  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 661 nm; on Red CCD
+FR12M652  0.9000           median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FR12U652  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FR32M652  0.9000           median(SCI3/SCI2) flux ratio near 652 nm; on Red CCD
+FR32U652  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FRS2M652  0.9000           median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+FRS2U652  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+FRC2M652  0.9000           median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+FRC2U652  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
 FR12M747  0.9000           median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
 FR12U747  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
 FR32M747  0.9000           median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
@@ -300,7 +300,7 @@ FRC2U852  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 8
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
 
-Keywords related to flux ratios between orders (FR452661, FR548661, FR747661, FR852661) are the ratios between the 95th percentile in flux for the spectral orders containing 452 nm, 548 nm, 747 nm, and 852 nm, all normalized by the spectral order containing 661 nm.  These are the same spectral orders used for the SNR calculations and use the SCI2 orderlet.
+Keywords related to flux ratios between orders (FR452652, FR548652, FR747652, FR852652) are the ratios between the 95th percentile in flux for the spectral orders containing 452 nm, 548 nm, 747 nm, and 852 nm, all normalized by the spectral order containing 652 nm.  These are the same spectral orders used for the SNR calculations and use the SCI2 orderlet.
 
 Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR12U452) are computed in 500-pixel regions in the centers in the same spectral orders as are used for the SNR calculations.
 
