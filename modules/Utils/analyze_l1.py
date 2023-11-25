@@ -437,7 +437,14 @@ class AnalyzeL1:
             None
 
         Attributes:
-            To be defined.
+            To be added.
+
+Use the same wavelengths and orders as the SNR calculation:
+        SNRSC452 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 452 nm (second bluest order); on Green CCD
+        SNRSC548 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 548 nm; on Green CCD
+        SNRSC661 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 661 nm; on Red CCD
+        SNRSC747 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 747 nm; on Red CCD
+        SNRSC865 - SNR of L1 SCI (SCI1+SCI2+SCI3) near 865 nm (second reddest order); on Red CCD
 
         Returns:
             None
@@ -522,7 +529,10 @@ class AnalyzeL1:
             self.ratio_r_sci3_sci2[o] = np.nanmedian(self.f_r_sci3_int[o,ind]/self.f_r_sci2[o,ind])
             self.ratio_r_sky_sci2[o]  = np.nanmedian(self.f_r_sky_int[o,ind] /self.f_r_sci2[o,ind])
             self.ratio_r_cal_sci2[o]  = np.nanmedian(self.f_r_cal_int[o,ind] /self.f_r_sci2[o,ind])
-            
+        
+        # Compute median flux ratio per order
+        
+
         # Define central wavelengths per order
         self.w_g_order = np.zeros(35) 
         self.w_r_order = np.zeros(32) 
@@ -599,7 +609,7 @@ class AnalyzeL1:
         plt.close('all')
 
 
-    def plot_orderlet_flux_ratios_grid(self, chip=None, fig_path=None, show_plot=False):
+    def plot_orderlet_flux_ratios_grid(self, orders=[10,20,30], ind_range=[1040,3040], chip=None, fig_path=None, show_plot=False):
         """
         Generate a plot of a orderlet flux ratio as a function of spectral orders.
 
@@ -645,64 +655,125 @@ class AnalyzeL1:
                 axs[i, j].tick_params(axis='both', which='major', labelsize=14)
         
         # orders and pixel ranges to plot (consider making this user configurable)
-        o1 = 10
-        o2 = 20
-        o3 = 30
-        imin1 = 1000; imax1 = 3000
-        imin2 = 1000; imax2 = 3000
-        imin3 = 1000; imax3 = 3000
+        o1 = orders[0]
+        o2 = orders[1]
+        o3 = orders[2]
+        imin1 = ind_range[0]; imax1 = ind_range[1]
+        imin2 = ind_range[0]; imax2 = ind_range[1]
+        imin3 = ind_range[0]; imax3 = ind_range[1]
         
+        sigmas = [50-34.1, 50, 50+34.1]
         # Row 0
         o=o1; imin = imin1; imax = imax1
-        axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='teal') 
+        axs[0,0].legend(loc='upper right')
         axs[0,0].set_ylabel('SCI1 / SCI2', fontsize=18)
         axs[0,0].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='teal') 
+        axs[0,1].legend(loc='upper right')
         axs[0,1].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='teal') 
+        axs[0,2].legend(loc='upper right')
         axs[0,2].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,2].grid()
 
         # Row 1
         o=o1; imin = imin1; imax = imax1
-        axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='tomato') 
+        axs[1,0].legend(loc='upper right')
         axs[1,0].set_ylabel('SCI3 / SCI2', fontsize=18)
         axs[1,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='tomato') 
+        axs[1,1].legend(loc='upper right')
         axs[1,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='tomato') 
+        axs[1,2].legend(loc='upper right')
         axs[1,2].grid()
 
         # Row 2
         o=o1; imin = imin1; imax = imax1
-        axs[2,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[2,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        axs[2,0].legend(loc='upper right')
         axs[2,0].set_ylabel('SKY / SCI2', fontsize=18)
         axs[2,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[2,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[2,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        axs[2,1].legend(loc='upper right')
         axs[2,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[2,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        axs[2,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,0].legend(loc='upper right')
         axs[2,2].grid()
         
         # Row 3
         o=o1; imin = imin1; imax = imax1
-        axs[3,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='turquoise') 
+        axs[3,0].legend(loc='upper right')
         axs[3,0].set_ylabel('CAL / SCI2', fontsize=18)
         axs[3,0].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[3,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[3,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='turquoise') 
+        axs[3,1].legend(loc='upper right')
         axs[3,1].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[3,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[3,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='turquoise') 
+        axs[3,2].legend(loc='upper right')
         axs[3,2].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[3,2].grid()
 
@@ -723,4 +794,22 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+def uncertainty_median(input_data, n_bootstrap=1000):
+    """
+    Estimate the uncertainty of the median of a dataset.
+
+    Args:
+        input_data (array) - 1D array
+        n_bootstrap (int) - number of bootstrap resamplings
+
+    Returns:
+        uncertainty of median of input_data
+    """
+
+    n = len(input_data)
+    indices = np.random.randint(0, n, (n_bootstrap, n))
+    bootstrapped_medians = np.median(input_data[indices], axis=1)
+    median_uncertainty = np.std(bootstrapped_medians)
+    return median_uncertainty
 
