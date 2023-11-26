@@ -10,10 +10,11 @@
 #   KP.YYYYMMDD.NNNNN.NN_2D.fits, KP.YYYYMMDD.NNNNN.NN_L1.fits, and 
 #   KP.YYYYMMDD.NNNNN.NN_L2.fits files in respective directories have a file 
 #   modification date after the L0 file. For any missing 2D, L1, and L2 files, 
-#   the script checks the 'TRIGTARG' keyword in the FITS header of the L0 file 
-#   and excludes the file from the missing count if the value of TRIGTARG does 
-#   not contain 'Green' or 'Red'. The script outputs a summary for each 
-#   YYYYMMDD directory, showing the count of such files and the most recent 
+#   or files of those types with older modification dates, the script checks 
+#   the 'GREEN' and 'RED' keywords in the FITS header of the L0 file 
+#   and excludes files from the missing count if the Green and Red cameras 
+#   are both not selected. The script outputs a summary for each YYYYMMDD 
+#   directory, showing the count of such files and the most recent 
 #   L0 modification date. The script takes a starting date (YYYYMMDD) as an 
 #   argument and optionally an end date and flags to print missing files and
 #   touch the base L0 files of missing 2D/L1/L2 files.
@@ -24,10 +25,10 @@
 #   --touch_missing  Touch the base L0 files of missing 2D/L1/L2 files
 #
 # Usage:
-#   ./check_fits_files.sh YYYYMMDD [YYYYMMDD] [--print_missing]
+#   ./kpf_processing_progress.sh YYYYMMDD [YYYYMMDD] [--print_missing]
 #
 # Example:
-#   ./check_fits_files.sh 20231114 20231231 --print_missing
+#   ./kpf_processing_progress.sh 20231114 20231231 --print_missing
 # === HELP END ===
 
 # Check for --help argument
@@ -108,67 +109,104 @@ for dir in "$base_dir/L0/"????????; do
                     recent_mod_date="$mod_date_L0"
                 fi
 
-                # Construct the corresponding _2D.fits, L1, and L2 filenames
+                # Construct the corresponding 2D, L1, and L2 filenames
                 file_2d="$base_dir/2D/$date_code/$(basename "${file%.fits}")_2D.fits"
                 file_L1="$base_dir/L1/$date_code/$(basename "${file%.fits}")_L1.fits"
                 file_L2="$base_dir/L2/$date_code/$(basename "${file%.fits}")_L2.fits"
 
-                # Function to check TRIGTARG keyword
-                function check_trigtarg {
+                # Function to check GREEN and RED keywords - returns 1 if GREEN and RED are both missing
+                function green_red_missing {
                     local file_path=$1
                     local type=$2
-                    trig_target=$(fitsheader -k TRIGTARG "$file" | awk '{print $3}')
-                    if [[ $trig_target != *"Green"* ]] && [[ $trig_target != *"Red"* ]]; then
-                        echo "Excluded missing $type file (TRIGTARG not Green/Red): $file_path"
+                    green_keyword=$(fitsheader --extension 0 -k GREEN "$file_path" | grep YES | wc -l)
+                    red_keyword=$(fitsheader --extension 0 -k RED "$file_path" | grep YES | wc -l)
+                
+                    if [[ $green_keyword == "0" ]] && [[ $red_keyword == "0" ]]; then
+                        echo "Excluded missing $type file (Neither GREEN nor RED are present): $file_path"
                         return 1
                     else
                         return 0
                     fi
                 }
 
+                # Check for missing files and keywords
+
+                # 2D file logic
                 if [ ! -f "$file_2d" ]; then
-                    if $print_missing && check_trigtarg "$file_2d" "2D"; then
-                        echo "Missing 2D file: $file_2d"
-                        ((match_count_2D++))
+                    if $print_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            echo "Missing 2D file: $file_2d"
+                        fi
                     fi
                     if $touch_missing; then
-                        missing_base_files+=("$file")
+                        if green_red_missing "$file" "L0"; then
+                            missing_base_files+=("$file")
+                        fi
                     fi
-                fi                
-
-
-                # Check for missing files and handle TRIGTARG keyword
-                if [ ! -f "$file_2d" ]; then
-                    if $print_missing && check_trigtarg "$file_2d" "2D"; then
-                        echo "Missing 2D file: $file_2d"
-                        ((match_count_2D++))
+                elif [ $(date -r "$file_2d" "+%s") -lt "$mod_date_L0" ]; then
+                    if $print_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            echo "Old 2D file: $file_2d"
+                        fi
                     fi
                     if $touch_missing; then
-                        missing_base_files+=("$file")
+                        if green_red_missing "$file" "L0"; then
+                            missing_base_files+=("$file")
+                        fi
                     fi
                 elif [ $(date -r "$file_2d" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_2D++))
                 fi
 
+                # L1 file logic
                 if [ ! -f "$file_L1" ]; then
-                    if $print_missing && check_trigtarg "$file_L1" "L1"; then
-                        echo "Missing L1 file: $file_L1"
-                        ((match_count_L1++))
+                    if $print_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            echo "Missing L1 file: $file_L1"
+                        fi
                     fi
                     if $touch_missing; then
-                        missing_base_files+=("$file")
+                        if green_red_missing "$file" "L0"; then
+                            missing_base_files+=("$file")
+                        fi
+                    fi
+                elif [ $(date -r "$file_L1" "+%s") -lt "$mod_date_L0" ]; then
+                    if $print_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            echo "Old L1 file: $file_L1"
+                        fi
+                    fi
+                    if $touch_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            missing_base_files+=("$file")
+                        fi
                     fi
                 elif [ $(date -r "$file_L1" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_L1++))
                 fi
 
+                # L2 file logic
                 if [ ! -f "$file_L2" ]; then
-                    if $print_missing && check_trigtarg "$file_L2" "L2"; then
-                        echo "Missing L2 file: $file_L2"
-                        ((match_count_L2++))
+                    if $print_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            echo "Missing L2 file: $file_L2"
+                        fi
                     fi
                     if $touch_missing; then
-                        missing_base_files+=("$file")
+                        if green_red_missing "$file" "L0"; then
+                            missing_base_files+=("$file")
+                        fi
+                    fi
+                elif [ $(date -r "$file_L2" "+%s") -lt "$mod_date_L0" ]; then
+                    if $print_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            echo "Old L2 file: $file_L2"
+                        fi
+                    fi
+                    if $touch_missing; then
+                        if green_red_missing "$file" "L0"; then
+                            missing_base_files+=("$file")
+                        fi
                     fi
                 elif [ $(date -r "$file_L2" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_L2++))
@@ -190,7 +228,7 @@ for dir in "$base_dir/L0/"????????; do
 done
 printf "%s\n" "------------------------------------------------------------------------------"
 
-# Handle --touch_missing
+# Touch missing files if option set
 if $touch_missing && [ ${#missing_base_files[@]} -gt 0 ]; then
     uniq_missing_base_files=($(for file in "${missing_base_files[@]}"; do echo "${file}"; done | sort -u))
     echo "The following base files are missing corresponding 2D, L1, or L2 files:"
