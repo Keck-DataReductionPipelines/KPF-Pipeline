@@ -284,6 +284,7 @@ if $touch_missing && [ ${#missing_base_files[@]} -gt 0 ]; then
         done
     fi
 else
+    echo
     echo "All files are up to date."
 fi
 
