@@ -77,6 +77,45 @@ base_dir="/data/kpf"
 # Array to store base files for touching
 declare -a missing_base_files
 
+# Function to check GREEN, RED, CA_HK keywords - returns 0 (success) if any camera was used
+# the logic is a bit awkward, but is optimized for (relative) speed; fitsheader is run a minimum number of times
+function green_red_cahk_present {
+    local file_path=$1
+    
+    green_keyword=$(fitsheader --extension 0 -k GREEN "$file_path" | grep YES | wc -l)
+    if [[ $green_keyword == "1" ]] ; then
+        return 0 
+    fi
+    
+    red_keyword=$(fitsheader --extension 0 -k RED "$file_path" | grep YES | wc -l)
+    if [[ $red_keyword == "1" ]] ; then
+        return 0
+    fi
+    
+    cahk_keyword=$(fitsheader --extension 0 -k CA_HK "$file_path" | grep YES | wc -l)
+    if [[ $cahk_keyword == "1" ]] ; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+function not_bias_or_dark {
+    local file_path=$1
+
+    # Get the IMTYPE keyword value
+    imtype_keyword=$(fitsheader --extension 0 -k IMTYPE "$file_path" | awk '{print $3}')
+
+    if [[ $imtype_keyword == *"Dark"* ]]; then
+        return 1 # dark detected
+    elif [[ $imtype_keyword == *"Bias"* ]]; then
+        return 1 # bias detected
+    else
+        return 0 # success - not a dark or bias
+    fi
+}
+
+
 # Print header
 printf "%s\n" 
 printf "%-8s | %-16s | %-14s | %-14s | %-14s\n" "DATECODE" "LAST L0 MOD DATE" "2D PROCESSING" "L1 PROCESSING" "L2 PROCESSING"
@@ -92,16 +131,22 @@ for dir in "$base_dir/L0/"????????; do
 
         # Initialize counters and most recent mod date variable
         total_count=0
+        total_count_2D=0
+        total_count_L1=0
+        total_count_L2=0
         match_count_2D=0
         match_count_L1=0
         match_count_L2=0
         recent_mod_date=0
 
         # Loop through each .fits file in the L0/YYYYMMDD directory
-        for file in "$dir/KP.$date_code."*.fits; do
+        for file in "$dir/KP.$date_code."?????.??.fits; do
             if [ -f "$file" ]; then
                 # Increment total file count
                 ((total_count++))
+                ((total_count_2D++))
+                ((total_count_L1++))
+                ((total_count_L2++))
 
                 # Get the modification date of the L0 file
                 mod_date_L0=$(date -r "$file" "+%s")
@@ -114,46 +159,29 @@ for dir in "$base_dir/L0/"????????; do
                 file_L1="$base_dir/L1/$date_code/$(basename "${file%.fits}")_L1.fits"
                 file_L2="$base_dir/L2/$date_code/$(basename "${file%.fits}")_L2.fits"
 
-                # Function to check GREEN and RED keywords - returns 1 if GREEN and RED are both missing
-                function green_red_missing {
-                    local file_path=$1
-                    local type=$2
-                    green_keyword=$(fitsheader --extension 0 -k GREEN "$file_path" | grep YES | wc -l)
-                    red_keyword=$(fitsheader --extension 0 -k RED "$file_path" | grep YES | wc -l)
-                
-                    if [[ $green_keyword == "0" ]] && [[ $red_keyword == "0" ]]; then
-                        echo "Excluded missing $type file (Neither GREEN nor RED are present): $file_path"
-                        return 1
-                    else
-                        return 0
-                    fi
-                }
-
-                # Check for missing files and keywords
-
                 # 2D file logic
                 if [ ! -f "$file_2d" ]; then
                     if $print_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             echo "Missing 2D file: $file_2d"
                         fi
                     fi
                     if $touch_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             missing_base_files+=("$file")
                         fi
-                    fi
+                    fi 
                 elif [ $(date -r "$file_2d" "+%s") -lt "$mod_date_L0" ]; then
                     if $print_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             echo "Old 2D file: $file_2d"
                         fi
                     fi
                     if $touch_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             missing_base_files+=("$file")
                         fi
-                    fi
+                    fi 
                 elif [ $(date -r "$file_2d" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_2D++))
                 fi
@@ -161,26 +189,29 @@ for dir in "$base_dir/L0/"????????; do
                 # L1 file logic
                 if [ ! -f "$file_L1" ]; then
                     if $print_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             echo "Missing L1 file: $file_L1"
                         fi
                     fi
                     if $touch_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             missing_base_files+=("$file")
                         fi
-                    fi
+                    fi 
+                    if ! green_red_cahk_present "$file"; then
+                        ((total_count_L1--))
+                    fi 
                 elif [ $(date -r "$file_L1" "+%s") -lt "$mod_date_L0" ]; then
                     if $print_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             echo "Old L1 file: $file_L1"
                         fi
                     fi
                     if $touch_missing; then
-                        if green_red_missing "$file" "L0"; then
+                        if green_red_cahk_present "$file"; then
                             missing_base_files+=("$file")
                         fi
-                    fi
+                    fi 
                 elif [ $(date -r "$file_L1" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_L1++))
                 fi
@@ -188,29 +219,40 @@ for dir in "$base_dir/L0/"????????; do
                 # L2 file logic
                 if [ ! -f "$file_L2" ]; then
                     if $print_missing; then
-                        if green_red_missing "$file" "L0"; then
-                            echo "Missing L2 file: $file_L2"
+                        if green_red_cahk_present "$file"; then
+                            if not_bias_or_dark "$file"; then
+                                echo "Missing L2 file: $file_L2"
+                            fi
                         fi
                     fi
                     if $touch_missing; then
-                        if green_red_missing "$file" "L0"; then
-                            missing_base_files+=("$file")
+                        if green_red_cahk_present "$file"; then
+                            if not_bias_or_dark "$file"; then
+                                missing_base_files+=("$file")
+                            fi
                         fi
                     fi
+                    if ! green_red_cahk_present "$file" || ! not_bias_or_dark "$file"; then
+                        ((total_count_L2--))
+                    fi 
                 elif [ $(date -r "$file_L2" "+%s") -lt "$mod_date_L0" ]; then
                     if $print_missing; then
-                        if green_red_missing "$file" "L0"; then
-                            echo "Old L2 file: $file_L2"
+                        if green_red_cahk_present "$file"; then
+                            if not_bias_or_dark "$file"; then
+                                echo "Old L2 file: $file_L2"
+                            fi
                         fi
                     fi
                     if $touch_missing; then
-                        if green_red_missing "$file" "L0"; then
-                            missing_base_files+=("$file")
+                        if green_red_cahk_present "$file"; then
+                            if not_bias_or_dark "$file"; then
+                                missing_base_files+=("$file")
+                            fi
                         fi
-                    fi
+                    fi 
                 elif [ $(date -r "$file_L2" "+%s") -gt "$mod_date_L0" ]; then
                     ((match_count_L2++))
-                fi               
+                fi
             fi
         done
 
@@ -219,10 +261,10 @@ for dir in "$base_dir/L0/"????????; do
 
         # Calculate percentage and print summary
         if [ $total_count -gt 0 ]; then
-            percentage_2D=$((match_count_2D * 100 / total_count))
-            percentage_L1=$((match_count_L1 * 100 / total_count))
-            percentage_L2=$((match_count_L2 * 100 / total_count))
-            printf "%-8s | %-16s | %4d/%-4d %3d%% | %4d/%-4d %3d%% | %4d/%-4d %3d%%\n" "$date_code" "$formatted_recent_mod_date" "$match_count_2D" "$total_count" "$percentage_2D" "$match_count_L1" "$total_count" "$percentage_L1" "$match_count_L2" "$total_count" "$percentage_L2"
+            percentage_2D=$((match_count_2D * 100 / total_count_2D))
+            percentage_L1=$((match_count_L1 * 100 / total_count_L1))
+            percentage_L2=$((match_count_L2 * 100 / total_count_L2))
+            printf "%-8s | %-16s | %4d/%-4d %3d%% | %4d/%-4d %3d%% | %4d/%-4d %3d%%\n" "$date_code" "$formatted_recent_mod_date" "$match_count_2D" "$total_count_2D" "$percentage_2D" "$match_count_L1" "$total_count_L1" "$percentage_L1" "$match_count_L2" "$total_count_L2" "$percentage_L2"
         fi
     fi
 done
@@ -236,10 +278,12 @@ if $touch_missing && [ ${#missing_base_files[@]} -gt 0 ]; then
     read -p "Do you want to touch these files? [y/N] " confirm
     if [[ $confirm =~ ^[Yy]$ ]]; then
         for file in "${uniq_missing_base_files[@]}"; do
-            echo "touch \"$file\""
+            echo "touch $file"
             touch "$file"
             sleep 0.2
         done
     fi
+else
+    echo "All files are up to date."
 fi
 
