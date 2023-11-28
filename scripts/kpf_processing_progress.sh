@@ -31,6 +31,10 @@
 #   ./kpf_processing_progress.sh 20231114 20231231 --print_missing
 # === HELP END ===
 
+# To-do:
+#   * - add a check for software version (require the latest version of master?)
+#   * - have the script ignore files marked as junk
+
 # Check for --help argument
 if [[ "$1" == "--help" ]]; then
     awk '/^# === HELP START ===/,/^# === HELP END ===/' "$0" | sed -e '1d;$d' -e 's/^#//; s/^ //' 
@@ -273,7 +277,7 @@ printf "%s\n" "-----------------------------------------------------------------
 # Touch missing files if option set
 if $touch_missing && [ ${#missing_base_files[@]} -gt 0 ]; then
     uniq_missing_base_files=($(for file in "${missing_base_files[@]}"; do echo "${file}"; done | sort -u))
-    echo "The following base files are missing corresponding 2D, L1, or L2 files:"
+    echo "The following L0 files have missing corresponding 2D, L1, or L2 files:"
     printf "%s\n" "${uniq_missing_base_files[@]}"
     read -p "Do you want to touch these files? [y/N] " confirm
     if [[ $confirm =~ ^[Yy]$ ]]; then
@@ -283,8 +287,10 @@ if $touch_missing && [ ${#missing_base_files[@]} -gt 0 ]; then
             sleep 0.2
         done
     fi
-else
+elif $touch_missing; then
     echo
     echo "All files are up to date."
 fi
+
+echo $missing_base_files
 
