@@ -7,10 +7,10 @@
 # Generate all KPF L0 master calibration files for YYYYMMDD date, given as
 # command-line input parameter.  Input KPF L0 FITS files are copied to
 # sandbox directory KPFCRONJOB_SBX=/data/user/rlaher/sbx, and outputs
-# are written to KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData, and then at
+# are written to /data/user/rlaher/sbx/masters/pool, and then at
 # the end copied to /data/kpf/masters/YYYYMMDD. The following two files
-# must exist in directory KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData:
-# channel_orientation_ref_path_red = kpfsim_ccd_orient_red_2amp.txt
+# must exist in /code/KPF-Pipeline/static:
+# channel_orientation_ref_path_red = kpfsim_ccd_orient_red.txt
 # channel_orientation_ref_path_green = kpfsim_ccd_orient_green.txt
 # KPF 2D FITS files with no master bias subtraction are made as
 # intermediate products in the sandbox.  The master-bias subtraction,
@@ -41,14 +41,6 @@ $checkpoint[$icheckpoint++] = $startscript;
 
 
 # Read KPF-related environment variables.
-
-# Legacy KPF directory for outputs of testing.
-# E.g., /KPF-Pipeline-TestData
-my $testdatadir = $ENV{KPFPIPE_TEST_DATA};
-
-if (! (defined $testdatadir)) {
-    die "*** Env. var. KPFPIPE_TEST_DATA not set; quitting...\n";
-}
 
 # Base directory of master files for permanent storage.
 # E.g., /data/kpf/masters
@@ -95,10 +87,27 @@ my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number o
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
 
+# Database user for connecting to the database to run this script and query CalFiles database table.
+# E.g., kpfporuss
+my $dbuser = $ENV{KPFDBUSER};
+
+if (! (defined $dbuser)) {
+    die "*** Env. var. KPFDBUSER not set; quitting...\n";
+}
+
+# Database name of KPF operations database containing the CalFiles table.
+# E.g., kpfopsdb
+my $dbname = $ENV{KPFDBNAME};
+
+if (! (defined $dbname)) {
+    die "*** Env. var. KPFDBNAME not set; quitting...\n";
+}
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '1.8';
+my $version = '2.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -124,6 +133,32 @@ if (defined $configenvar) {
 }
 
 
+# Get database parameters from ~/.pgpass file.
+
+my ($dbport, $dbpass);
+my @op = `cat ~/.pgpass`;
+foreach my $op (@op) {
+    chomp $op;
+    $op =~ s/^\s+|\s+$//g;  # strip blanks.
+    if (($op =~ /$dbuser/) and ($op =~ /$dbname/)) {
+        my (@f) = split(/\:/, $op);
+        $dbport = $f[1];
+        $dbpass = $f[4];
+    }
+}
+
+my $dbenvfilename = "db";
+$dbenvfilename .= '_' . $$ . '_' . $trunctime . '.env';                   # Augment with unique numbers (process ID and truncated seconds).
+my $dbenvfile = "$codedir/jobs/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
+
+`touch $dbenvfile`;
+`chmod 600 $dbenvfile`;
+open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
+print OUT "export DBPASS=\"$dbpass\"\n";
+close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
+
+
 # Print environment.
 
 print "iam=$iam\n";
@@ -133,11 +168,15 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
-print "KPFPIPE_TEST_DATA=$testdatadir\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
 print "KPFCRONJOB_CODE=$codedir\n";
+print "dbuser=$dbuser\n";
+print "dbname=$dbname\n";
+print "dbport=$dbport\n";
+print "dbenvfile=$dbenvfile\n";
+print "dbenvfileinside=$dbenvfileinside\n";
 print "Docker container name = $containername\n";
 
 
@@ -146,16 +185,16 @@ print "Docker container name = $containername\n";
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
 my $script = "#! /bin/bash\n" .
+             "source $dbenvfileinside\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "rm -rf /data/masters/${procdate}\n" .
+             "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
-             "rm -rf /masters/${procdate}\n" .
-             "sleep 3\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 3\n" .
-             "cp -p /testdata/kpf_${procdate}* /masters/${procdate}\n" .
+             "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
              "exit\n";
@@ -168,7 +207,8 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;

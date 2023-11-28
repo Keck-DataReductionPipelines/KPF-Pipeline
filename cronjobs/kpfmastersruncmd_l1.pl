@@ -39,14 +39,6 @@ $checkpoint[$icheckpoint++] = $startscript;
 
 # Read KPF-related environment variables.
 
-# Legacy KPF directory for outputs of testing.
-# E.g., /KPF-Pipeline-TestData
-my $testdatadir = $ENV{KPFPIPE_TEST_DATA};
-
-if (! (defined $testdatadir)) {
-    die "*** Env. var. KPFPIPE_TEST_DATA not set; quitting...\n";
-}
-
 # Base directory of master files for permanent storage.
 # E.g., /data/kpf/masters
 my $mastersdir = $ENV{KPFPIPE_MASTERS_BASE_DIR};
@@ -112,7 +104,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.8';
+my $version = '1.9';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -159,7 +151,6 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
-print "KPFPIPE_TEST_DATA=$testdatadir\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -193,7 +184,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `chmod +x $dockercmdscript`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
