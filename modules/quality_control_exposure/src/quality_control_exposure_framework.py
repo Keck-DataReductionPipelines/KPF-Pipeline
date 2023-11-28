@@ -57,7 +57,6 @@ class QualityControlExposureFramework(KPF0_Primitive):
         l0_filename (str): Full path and filename of L0 FITS file within container.
         actual_dir (str): Prefix of actual directory outside container that maps to /data (e.g., /data/kpf)
 
-
     """
 
     def __init__(self, action, context):
@@ -77,13 +76,17 @@ class QualityControlExposureFramework(KPF0_Primitive):
 
         print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
 
-        print("Starting logger...")
-        self.logger = start_logger(self.__class__.__name__, self.module_config_path)
+        #print("Starting logger...")
+        #self.logger = start_logger(self.__class__.__name__, self.module_config_path)
+        #Start logger
+        self.logger=None
+        if not self.logger:
+            self.logger=self.context.logger
 
-        if self.logger is not None:
-            print("--->self.logger is not None...")
-        else:
-            print("--->self.logger is None...")
+        #if self.logger is not None:
+        #    print("--->self.logger is not None...")
+        #else:
+        #    print("--->self.logger is None...")
 
         self.logger.info('Started {}'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
@@ -100,9 +103,7 @@ class QualityControlExposureFramework(KPF0_Primitive):
 
         self.logger.info('self.data_type = {}'.format(self.data_type))
         self.logger.info('self.l0_filename = {}'.format(self.l0_filename))
-
         self.logger.info('self.product_level_cfg = {}'.format(self.product_level_cfg))
-
         self.logger.info('Type of self.product_level_cfg = {}'.format(type(self.product_level_cfg)))
 
 

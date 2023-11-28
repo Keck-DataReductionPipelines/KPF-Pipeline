@@ -146,6 +146,11 @@ for raw_file_path in file_list:
             pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
             twod = pixels_masked
 
+        # Measure dark current for dark images and write to header
+        exit_code, new2D = DiagnosticsFramework('2D', flat_applied, 'add_headers_dark_current_2D')
+        if exit_code == 1:  # only wave the results if exit_code = 1 (dark current is only computed for Darks)
+            flat_applied = new2D
+
         recipe_complete = to_fits(flat_applied, output_file_name)
 
 
