@@ -1,3 +1,5 @@
+.. _dictionary_format-label:
+
 .. |br| raw:: html
 
    <br />
