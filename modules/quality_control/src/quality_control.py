@@ -123,56 +123,6 @@ def not_junk_check(kpfobs, junk_ObsIDs_csv='/code/KPF-Pipeline/Junk_Observations
     return QC_pass
 
 
-def L0_data_products_check(L0, debug=False):
-    """
-    This Quality Control function checks if the expected data_products 
-    in an L0 file are present and if their data extensions are populated 
-    with arrays of non-zero size.
-    
-    Args:
-         L0 - an L0 object
-         debug - an optional flag.  If True, missing data products are noted.
-
-     Returns:
-         QC_pass - a boolean signifying that the QC passed (True) for failed (False)
-    """
-    
-    # determine which extensions should be in the L0 file
-    # first add triggrered cameras (Green, Red, CaHK, ExpMeter)
-    trigtarg = L0.header['PRIMARY']['TRIGTARG']
-    if len(trigtarg) > 0:
-        data_products = trigtarg.split(',')
-    # add Guider
-    if hasattr(L0, 'GUIDER_AVG'):
-        data_products.append('Guider')
-    if hasattr(L0, 'guider_avg'):  # some early files had lower case
-        data_products.append('Guider')
-    # add Telemetry
-    if hasattr(L0, 'TELEMETRY'):
-        data_products.append('Telemetry')
-    # add Pyrheliometer
-    if hasattr(L0, 'SOCAL PYRHELIOMETER'):
-        data_products.append('Pyrheliometer')
-    if debug:
-        print('Data products that are supposed to be in this L0 file: ' + str(data_products))
- 
-    # Use helper funtion to get data products and check their characteristics.
-    QC_pass = True
-    data_products_present = get_data_products_L0(L0)
-    if debug:
-        print('Data products in L0 file: ' + str(data_products_present))
-
-    # Check for specific data products
-    possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
-    for dp in possible_data_products:
-        if dp in data_products:
-            if not dp in data_products_present:
-                QC_pass = False
-                if debug:
-                    print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
-    
-    return QC_pass
-
 
 def L0_header_keywords_present_check(L0, essential_keywords=['auto'], debug=False):
     """
@@ -227,7 +177,7 @@ def L0_header_keywords_present_check(L0, essential_keywords=['auto'], debug=Fals
 
     QC_pass = True
     for keyword in essential_keywords:
-        if keyword not in L0.header['PRIMARY']
+        if keyword not in L0.header['PRIMARY']:
             QC_pass = False
             if debug:
                 print('The keyword ' + keyword + ' is missing from the primary header.')
@@ -443,6 +393,70 @@ class QCL0(QC):
     def __init__(self,fits_object):
         super().__init__(fits_object)
 
+
+    def add_qc_keyword_to_header_for_L0_data_products_check(self,qc_name):
+
+        qc_pass = self.monotonic_check()
+
+        if qc_pass:
+            value = 1
+        else:
+            value = 0
+
+        self.add_qc_keyword_to_header(qc_name,value)
+
+
+    def L0_data_products_check(self, debug=False):
+        """
+        This Quality Control function checks if the expected data_products 
+        in an L0 file are present and if their data extensions are populated 
+        with arrays of non-zero size.
+        
+        Args:
+             L0 - an L0 object
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+        
+        L0 = self.fits_object
+        
+        # determine which extensions should be in the L0 file
+        # first add triggrered cameras (Green, Red, CaHK, ExpMeter)
+        trigtarg = L0.header['PRIMARY']['TRIGTARG']
+        if len(trigtarg) > 0:
+            data_products = trigtarg.split(',')
+        # add Guider
+        if hasattr(L0, 'GUIDER_AVG'):
+            data_products.append('Guider')
+        if hasattr(L0, 'guider_avg'):  # some early files had lower case
+            data_products.append('Guider')
+        # add Telemetry
+        if hasattr(L0, 'TELEMETRY'):
+            data_products.append('Telemetry')
+        # add Pyrheliometer
+        if hasattr(L0, 'SOCAL PYRHELIOMETER'):
+            data_products.append('Pyrheliometer')
+        if debug:
+            print('Data products that are supposed to be in this L0 file: ' + str(data_products))
+     
+        # Use helper funtion to get data products and check their characteristics.
+        QC_pass = True
+        data_products_present = get_data_products_L0(L0)
+        if debug:
+            print('Data products in L0 file: ' + str(data_products_present))
+    
+        # Check for specific data products
+        possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
+        for dp in possible_data_products:
+            if dp in data_products:
+                if not dp in data_products_present:
+                    QC_pass = False
+                    if debug:
+                        print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+        
+        return QC_pass
 
 
 #####################################################################
