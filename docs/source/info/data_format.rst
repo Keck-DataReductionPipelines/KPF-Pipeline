@@ -183,61 +183,63 @@ AGITSTA   Running                         Agitator status
 
 All keywords from Level 0 are inherited by the 2D file.  Below are additional keywords.
 
-========  ==============================  =========
-Keyword   Value (example)                 Comment
-========  ==============================  =========
-RNGREEN1  4.85283                         Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
-RNGREEN2  4.14966                         Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
-RNGREEN3  4.85283                         Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
-RNGREEN4  4.14966                         Read noise for GREEN_AMP4 [e-] (fourth amplifier region on Green CCD)
-RNRED1    4.0376                          Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
-RNRED2    4.12717                         Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
-RNRED3    4.0376                          Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
-RNRED4    4.12717                         Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
-GREENTRT  46.804                          Green CCD read time [sec]
-REDTRT    46.839                          Red CCD read time [sec]
-READSPED  'regular '                      Categorization of CCD read speed ('regular' or 'fast')
-FLXREG1G  1.00                            Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
-FLXREG2G  1.00                            Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
-FLXREG3G  1.00                            Dark current [e-/hr] - Green CCD region 3 - coords = [2090:2390,1690:1990]
-FLXREG4G  1.00                            Dark current [e-/hr] - Green CCD region 4 - coords = [2090:2390,2090:2390]
-FLXREG5G  1.00                            Dark current [e-/hr] - Green CCD region 5 - coords = [80:380,3080:3380]
-FLXREG6G  1.00                            Dark current [e-/hr] - Green CCD region 6 - coords = [1690:1990,1690:1990]
-FLXAMP1G  1.00                            Dark current [e-/hr] - Green CCD amplifier region 1 - coords = [3700:4000,700:1000]
-FLXAMP2G  1.00                            Dark current [e-/hr] - Green CCD amplifier region 2 - coords = [3700:4000,3080:3380]
-FLXCOLLG  1.00                            Dark current [e-/hr] - Green CCD collimator-side region = [3700:4000,700:1000]
-FLXECHG   1.00                            Dark current [e-/hr] - Green CCD echelle-side region = [3700:4000,700:1000]
-FLXREG1R  1.00                            Dark current [e-/hr] - Red CCD region 1 - coords = [1690:1990,1690:1990]
-FLXREG2R  1.00                            Dark current [e-/hr] - Red CCD region 2 - coords = [1690:1990,2090:2390]
-FLXREG3R  1.00                            Dark current [e-/hr] - Red CCD region 3 - coords = [2090:2390,1690:1990]
-FLXREG4R  1.00                            Dark current [e-/hr] - Red CCD region 4 - coords = [2090:2390,2090:2390]
-FLXREG5R  1.00                            Dark current [e-/hr] - Red CCD region 5 - coords = [80:380,3080:3380]
-FLXREG6R  1.00                            Dark current [e-/hr] - Red CCD region 6 - coords = [1690:1990,1690:1990]
-FLXAMP1R  1.00                            Dark current [e-/hr] - Red CCD amplifier region 1 = [3700:4000,700:1000]
-FLXAMP2R  1.00                            Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
-FLXCOLLR  1.00                            Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
-FLXECHR   1.00                            Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
-GDRXRMS   10.123                          x-coordinate RMS guiding error in milliarcsec (mas)
-GDRYRMS   10.123                          y-coordinate RMS guiding error in milliarcsec (mas)
-GDRRRMS   10.123                          r-coordinate RMS guiding error in milliarcsec (mas)
-GDRXBIAS  0.0010                          x-coordinate bias guiding error in milliarcsec (mas)
-GDRYBIAS  0.0010                          y-coordinate bias guiding error in milliarcsec (mas)
-GDRSEEJZ  0.450                           Seeing (arcsec) in J+Z-band from Moffat func fit
-GDRSEEV   0.450                           Scaled seeing (arcsec) in V-band from J+Z-band
-MOONSEP   55.0                            Separation between Moon and target star (deg)
-SUNALT    -45.0                           Altitude of Sun (deg); negative = below horizon
-SKYSCIMS  0.0000123                       SKY/SCI flux ratio in main spectrometer scaled from EM data. 
-EMSCCT48  100000000.1234                  cumulative EM counts [ADU] in SCI in 445-870 nm
-EMSCCT45  100000000.1234                  cumulative EM counts [ADU] in SCI in 445-551 nm
-EMSCCT56  100000000.1234                  cumulative EM counts [ADU] in SCI in 551-658 nm
-EMSCCT67  100000000.1234                  cumulative EM counts [ADU] in SCI in 658-764 nm
-EMSCCT78  100000000.1234                  cumulative EM counts [ADU] in SCI in 764-870 nm
-EMSKCT48  100000000.1234                  cumulative EM counts [ADU] in SKY in 445-870 nm
-EMSKCT45  100000000.1234                  cumulative EM counts [ADU] in SKY in 445-551 nm
-EMSKCT56  100000000.1234                  cumulative EM counts [ADU] in SKY in 551-658 nm
-EMSKCT67  100000000.1234                  cumulative EM counts [ADU] in SKY in 658-764 nm
-EMSKCT78  100000000.1234                  cumulative EM counts [ADU] in SKY in 764-870 nm
-========  ==============================  =========
+========  ==========================================  =========
+Keyword   Value (example)                             Comment
+========  ==========================================  =========
+DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
+DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used for processing
+RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
+RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
+RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
+RNGREEN4  4.14966                                     Read noise for GREEN_AMP4 [e-] (fourth amplifier region on Green CCD)
+RNRED1    4.0376                                      Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
+RNRED2    4.12717                                     Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
+RNRED3    4.0376                                      Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
+RNRED4    4.12717                                     Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
+GREENTRT  46.804                                      Green CCD read time [sec]
+REDTRT    46.839                                      Red CCD read time [sec]
+READSPED  'regular '                                  Categorization of CCD read speed ('regular' or 'fast')
+FLXREG1G  1.00                                        Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
+FLXREG2G  1.00                                        Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
+FLXREG3G  1.00                                        Dark current [e-/hr] - Green CCD region 3 - coords = [2090:2390,1690:1990]
+FLXREG4G  1.00                                        Dark current [e-/hr] - Green CCD region 4 - coords = [2090:2390,2090:2390]
+FLXREG5G  1.00                                        Dark current [e-/hr] - Green CCD region 5 - coords = [80:380,3080:3380]
+FLXREG6G  1.00                                        Dark current [e-/hr] - Green CCD region 6 - coords = [1690:1990,1690:1990]
+FLXAMP1G  1.00                                        Dark current [e-/hr] - Green CCD amplifier region 1 - coords = [3700:4000,700:1000]
+FLXAMP2G  1.00                                        Dark current [e-/hr] - Green CCD amplifier region 2 - coords = [3700:4000,3080:3380]
+FLXCOLLG  1.00                                        Dark current [e-/hr] - Green CCD collimator-side region = [3700:4000,700:1000]
+FLXECHG   1.00                                        Dark current [e-/hr] - Green CCD echelle-side region = [3700:4000,700:1000]
+FLXREG1R  1.00                                        Dark current [e-/hr] - Red CCD region 1 - coords = [1690:1990,1690:1990]
+FLXREG2R  1.00                                        Dark current [e-/hr] - Red CCD region 2 - coords = [1690:1990,2090:2390]
+FLXREG3R  1.00                                        Dark current [e-/hr] - Red CCD region 3 - coords = [2090:2390,1690:1990]
+FLXREG4R  1.00                                        Dark current [e-/hr] - Red CCD region 4 - coords = [2090:2390,2090:2390]
+FLXREG5R  1.00                                        Dark current [e-/hr] - Red CCD region 5 - coords = [80:380,3080:3380]
+FLXREG6R  1.00                                        Dark current [e-/hr] - Red CCD region 6 - coords = [1690:1990,1690:1990]
+FLXAMP1R  1.00                                        Dark current [e-/hr] - Red CCD amplifier region 1 = [3700:4000,700:1000]
+FLXAMP2R  1.00                                        Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
+FLXCOLLR  1.00                                        Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
+FLXECHR   1.00                                        Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
+GDRXRMS   10.123                                      x-coordinate RMS guiding error in milliarcsec (mas)
+GDRYRMS   10.123                                      y-coordinate RMS guiding error in milliarcsec (mas)
+GDRRRMS   10.123                                      r-coordinate RMS guiding error in milliarcsec (mas)
+GDRXBIAS  0.0010                                      x-coordinate bias guiding error in milliarcsec (mas)
+GDRYBIAS  0.0010                                      y-coordinate bias guiding error in milliarcsec (mas)
+GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
+GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
+MOONSEP   55.0                                        Separation between Moon and target star (deg)
+SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
+SKYSCIMS  0.0000123                                   SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+EMSCCT48  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-870 nm
+EMSCCT45  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-551 nm
+EMSCCT56  100000000.1234                              cumulative EM counts [ADU] in SCI in 551-658 nm
+EMSCCT67  100000000.1234                              cumulative EM counts [ADU] in SCI in 658-764 nm
+EMSCCT78  100000000.1234                              cumulative EM counts [ADU] in SCI in 764-870 nm
+EMSKCT48  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-870 nm
+EMSKCT45  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-551 nm
+EMSKCT56  100000000.1234                              cumulative EM counts [ADU] in SKY in 551-658 nm
+EMSKCT67  100000000.1234                              cumulative EM counts [ADU] in SKY in 658-764 nm
+EMSKCT78  100000000.1234                              cumulative EM counts [ADU] in SKY in 764-870 nm
+========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
 
