@@ -22,8 +22,6 @@ class QualityControlFramework(KPF0_Primitive):
         fits_filename (str): Input FITS filename.
         fits_object (str):
         actual_dir (str): Prefix of actual directory outside container that maps to /data (e.g., /data/kpf)
-
-
     """
 
     def __init__(self, action, context):

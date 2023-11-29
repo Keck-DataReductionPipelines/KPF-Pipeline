@@ -281,11 +281,15 @@ class QuicklookAlg:
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
-                    # next line not working yet
-                    #Analyze2D.measure_2D_dark_current(self, chip=chip)
+                    if my_2D.name == 'Dark':
+                        my_2D.measure_2D_dark_current(chip=chip)
+                        overplot_dark_current = True
+                    else:
+                        overplot_dark_current = False
                     filename = savedir + self.ObsID + '_2D_image_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
-                    my_2D.plot_2D_image(chip=chip, fig_path=filename, show_plot=False)
+                    my_2D.plot_2D_image(chip=chip, overplot_dark_current=overplot_dark_current, 
+                                        fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")

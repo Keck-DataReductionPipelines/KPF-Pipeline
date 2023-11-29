@@ -197,23 +197,6 @@ class HeaderParse:
                 pass 
             return (read_speed, green_acf, red_acf, green_read_time, red_read_time)
 
-#datetime_format = "%Y-%m-%dT%H:%M:%S.%f"
-#dt1 = datetime.strptime(time1, datetime_format)
-#dt2 = datetime.strptime(time2, datetime_format)
-
-# Compute the difference
-#difference = dt2 - dt1
-    
-# Return the total seconds rounded to 0.1-second precision
-#round(difference.total_seconds(), 1)
-    
-#GRDATE  = '2023-09-10T13:29:09.804475' / FITS file write time Kwd green DATE    
-#GRDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd green DATE-BEG   
-#GRDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd green DATE-END  
-#RDDATE  = '2023-09-10T13:29:09.896907' / FITS file write time Kwd red DATE      
-#RDDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd red DATE-BEG     
-#RDDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd red DATE-END    
-
 
 def get_datecode(ObsID):
     """
