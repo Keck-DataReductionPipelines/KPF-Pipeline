@@ -25,5 +25,10 @@ Here are the steps to adding a new quality control test.
 #. In the ``QualityControlFramework`` class in `KPF-modules/quality_control/src/quality_control_framework.py <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/blob/master/modules/quality_control/src/quality_control_framework.py>`_, add your new method to the appropriate data level in the ``_perform`` method.
 #. Commit the changes to your Git branch and submit a pull request.
 
+Developing Quicklook Plots
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+<AWH to add content here.>
+
 Testing 
 -------
