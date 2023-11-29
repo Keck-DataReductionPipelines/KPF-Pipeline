@@ -7,7 +7,7 @@ Overview
 KPF data products are defined for these data levels:
 
 * **Level 0 (L0)**: Raw data products produced by KPF at the W. M. Keck Observatory
-* **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1, but is not fundamental and is frequently not archived.
+* **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1 but is not fundamental and is frequently not archived.
 * **Level 1 (L1)**: Extracted, wavelength-calibrated spectra
 * **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators
 
@@ -17,7 +17,7 @@ KPF L0 files follow the naming convention: KP.YYYYMMDD.SSSSS.ss.fits, where YYYY
 
 See the section titled :ref:`label-tutorials` for a set of tutorials on the various KPF data files.
 
-In addition, the DRP is able produce WLS Dictionaries that contain detailed diagnostic information about the fits of individual lines, orders, and orderlets for the wavelength solutions.  These are described at the bottom of this page.
+In addition, the DRP is able to produce WLS Dictionaries that contain detailed diagnostic information about the fits of individual lines, orders, and orderlets for the wavelength solutions.  These are described at the bottom of this page.
 
 Data Format of KPF Files
 ------------------------
