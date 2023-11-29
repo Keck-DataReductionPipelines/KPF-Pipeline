@@ -57,132 +57,6 @@ def avg_data_with_clipping(data_array,n_sigma = 3.0):
 
     return avg,std,cnt
 
-#
-# Check whether a file is not junk (i.e., = False if junk)
-#
-def not_junk_check(kpfobs, junk_ObsIDs_csv='/code/KPF-Pipeline/Junk_Observations_for_KPF.csv', debug=False):
-    """
-    This Quality Control function checks if the input (possibly an array) is in the list of junked files.
-
-    Args:
-         kpfobs - possible formats: 1. a single ObsID (string) (e.g. 'KP.20230621.27498.77')
-                                    2. a list of ObsIDs (e.g., ['KP.20230621.27611.73', 'KP.20230621.27498.77])
-                                    3. a single KPF L0/2D/L1/L2 object
-                                    4. a list of KPF L0/2D/L1/L2 objects
-         junk_ObsIDs_csv - a CSV with ObsIDs (e.g., 'KP.20230621.27498.77') in the first column
-                           and a column header of 'observation_id'.
-                           That is, the first few lines of the file will look like this:
-                               observation_id
-                               KP.20230621.27498.77
-                               KP.20230621.27611.73
-                               KP.20220516.57354.11
-
-         debug - an optional flag.  If True, verbose output will be printed.
-
-     Returns:
-         QC_pass - a boolean signifying that the input(s) are not junk (i.e., = False if junk)
-    """
-
-    QC_pass = True                # Assume not junk unless explicitly listed in junk_ObsIDs_csv
-
-    # read list of junk files
-    if os.path.exists(junk_ObsIDs_csv):
-        df_junk = pd.read_csv(junk_ObsIDs_csv)
-        if debug:
-            print(f'Read the junk file {junk_ObsIDs_csv}.')
-    else:
-        print(f"The file {junk_ObsIDs_csv} does not exist.")
-        return QC_pass
-
-    # initialize variables
-    if not type(kpfobs) is list: # convert input to list if necessary
-        kpfobs = [kpfobs]
-        input_not_list = True # note for later that the input was not a list
-    else:
-        input_not_list = False
-
-    # convert inputs to ObsIDs (strings), if needed
-    for i in range(len(kpfobs)):
-        if not (type(kpfobs[i]) is str):
-            kpfobs[i] = (kpfobs[i].filename).replace('.fits', '') # this line assumes that kpfobs[i] is a L0/2D/L1/L2 object
-            kpfobs[i] = kpfobs[i].replace('_2D', '') # drop _2D suffix, if needed
-            kpfobs[i] = kpfobs[i].replace('_L1', '') # drop _L1 suffix, if needed
-            kpfobs[i] = kpfobs[i].replace('_L2', '') # drop _L2 suffix, if needed
-
-    # loop through inputs and determine junk status of each
-    QC_pass = np.ones(len(kpfobs), dtype=bool) # starting QC values
-    for i, obs in enumerate(kpfobs):
-        QC_pass[i] = not (df_junk['observation_id'].isin([obs])).any()
-        if debug:
-            print(f'{obs} is a Junk file: ' + str(not QC_pass[i]))
-
-    # remove list format if input was a single element
-    if input_not_list:
-        QC_pass = QC_pass[0]
-
-    return QC_pass
-
-
-
-def L0_header_keywords_present_check(L0, essential_keywords=['auto'], debug=False):
-    """
-    This Quality Control function checks if a specified set of FITS header keywords are present.
-    
-    Args:
-         L0 - an L0 object
-         essential_keywords - an optional list of keywords to check.  If set to ['auto'], 
-         then a default list of keywords will be checked. 
-         debug - an optional flag.  If True, missing data products are noted.
-
-     Returns:
-         QC_pass - a boolean signifying that the QC passed (True) for failed (False)
-    """
-    
-    if essential_keywords == ['auto']:
-         essential_keywords = [
-             'DATE-BEG',  # Start of exposure from kpfexpose
-             'DATE-MID',  # Halfway point of the exposure (unweighted)
-             'DATE-END',  # End of exposure
-             'EXPTIME',   # Requested exposure time
-             'ELAPSED',   # Actual exposure time
-             'PROGNAME',  # Program name from kpfexpose
-             'OBJECT',    # Object name
-             'TARGRA',    # Right ascension [hr] from DCS
-             'TARGDEC',   # Declination [deg] from DCS
-             'TARGEPOC',  # Target epoch from DCS
-             'TARGEQUI',  # Target equinox from DCS
-             'TARGPLAX',  # Target parallax [arcsec] from DCS
-             'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
-             'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
-             'TARGRADV',  # Target radial velocity [km/s]
-             'AIRMASS',   # Airmass from DCS
-             'PARANTEL',  # Parallactic angle of the telescope from DCS
-             'HA',        # Hour angle
-             'EL',        # Elevation [deg]
-             'AZ',        # Azimuth [deg]
-             'LST',       # Local sidereal time
-             'GAIAID',    # GAIA Target name
-             '2MASSID',   # 2MASS Target name
-             'GAIAMAG',   # GAIA G band magnitude
-             '2MASSMAG',  # 2MASS J band magnitude
-             'TARGTEFF',  # Target effective temperature (K)
-             'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
-             'TRIGTARG',  # Cameras that were sent triggers
-             'IMTYPE',    # Image Type
-             'CAL-OBJ',   # Calibration fiber source
-             'SKY-OBJ',   # Sky fiber source
-             'SCI-OBJ',   # Science fiber source
-             'AGITSTA',   # Agitator status
-         ] 
-
-    QC_pass = True
-    for keyword in essential_keywords:
-        if keyword not in L0.header['PRIMARY']:
-            QC_pass = False
-            if debug:
-                print('The keyword ' + keyword + ' is missing from the primary header.')
-    
-    return QC_pass
 
 #####################################################################
 
@@ -244,7 +118,8 @@ class QCDefinitions:
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
         self.db_columns[name2] = None
-        self.methods[name2] = ["add_qc_keyword_to_header","monotonic_check","add_qc_keyword_to_header_for_monotonic_wls"]
+        #self.methods[name2] = ["add_qc_keyword_to_header","monotonic_wavelength_solution_check","add_qc_keyword_to_header_for_monotonic_wls"]
+        self.methods[name2] = ["monotonic_wavelength_solution_check"]
 
         name3 = 'not_junk_data_check'
         self.names.append(name3)
@@ -266,6 +141,15 @@ class QCDefinitions:
         self.db_columns[name4] = None
         self.methods[name4] = ["add_qc_keyword_to_header"]
 
+        name5 = 'L0_header_keywords_present_check'
+        self.names.append(name5)
+        self.kpf_data_levels[name5] = ['L0']
+        self.descriptions[name5] = 'Check if expected header keywords are present.'
+        self.data_types[name5] = 'int'
+        self.fits_keywords[name5] = 'KWRDPRL0'
+        self.fits_comments[name5] = 'QC: L0 data present check'
+        self.db_columns[name5] = None
+        self.methods[name5] = ["add_qc_keyword_to_header"]
 
         # Integrity checks.
         if len(self.names) != len(self.kpf_data_levels):
@@ -349,6 +233,50 @@ class QC:
         print('---->add_qc_keyword_to_header: qc_name, keyword, value, comment = {}, {}, {}, {}'.format(qc_name,keyword,value,comment))
 
 
+    def not_junk_check(kpfobs, junk_ObsIDs_csv='/code/KPF-Pipeline/Junk_Observations_for_KPF.csv', debug=False):
+        """
+        This Quality Control method can be used in any of the data levels (L0/2D/L1/L2) 
+        so it is included in the superclass. 
+        It checks if the obsID of the input is in the list of junked files.
+    
+        Args:
+             kpfobs - a KPF L0/2D/L1/L2 object
+             junk_ObsIDs_csv - a CSV with ObsIDs in the first column
+                               and a column header of 'observation_id'.
+                               That is, the first few lines of the file will look like this:
+                                   observation_id
+                                   KP.20230621.27498.77
+                                   KP.20230621.27611.73
+                                   KP.20220516.57354.11
+    
+             debug - an optional flag.  If True, verbose output will be printed.
+    
+         Returns:
+             QC_pass - a boolean signifying that the input(s) are not junk (i.e., = False if junk)
+        """
+    
+        QC_pass = True  # Assume not junk unless explicitly listed in junk_ObsIDs_csv
+        
+        #### TO-DO: check if this works
+        filename = kpfobs.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
+        obsID of filename[:20]
+        print('The obsID is ' + obsID)
+    
+        # read list of junk files
+        if os.path.exists(junk_ObsIDs_csv):
+            df_junk = pd.read_csv(junk_ObsIDs_csv)
+            if debug:
+                print(f'Read the junk file {junk_ObsIDs_csv}.')
+        else:
+            print(f"The file {junk_ObsIDs_csv} does not exist.")
+            return QC_pass
+        
+        QC_pass = not (df_junk['observation_id'].isin([obsID])).any()
+        if debug:
+            print(f'{kpfobsobs} is a Junk file: ' + str(not QC_pass[i]))
+    
+    
+        return QC_pass
 
 #####################################################################
 
@@ -389,21 +317,8 @@ class QCL0(QC):
     """
 
     # Call superclass.
-
     def __init__(self,fits_object):
         super().__init__(fits_object)
-
-
-    def add_qc_keyword_to_header_for_L0_data_products_check(self,qc_name):
-
-        qc_pass = self.monotonic_check()
-
-        if qc_pass:
-            value = 1
-        else:
-            value = 0
-
-        self.add_qc_keyword_to_header(qc_name,value)
 
 
     def L0_data_products_check(self, debug=False):
@@ -459,6 +374,66 @@ class QCL0(QC):
         return QC_pass
 
 
+    def L0_header_keywords_present_check(L0, essential_keywords=['auto'], debug=False):
+        """
+        This Quality Control function checks if a specified set of FITS header keywords are present.
+        
+        Args:
+             L0 - an L0 object
+             essential_keywords - an optional list of keywords to check.  If set to ['auto'], 
+             then a default list of keywords will be checked. 
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+        
+        if essential_keywords == ['auto']:
+             essential_keywords = [
+                 'DATE-BEG',  # Start of exposure from kpfexpose
+                 'DATE-MID',  # Halfway point of the exposure (unweighted)
+                 'DATE-END',  # End of exposure
+                 'EXPTIME',   # Requested exposure time
+                 'ELAPSED',   # Actual exposure time
+                 'PROGNAME',  # Program name from kpfexpose
+                 'OBJECT',    # Object name
+                 'TARGRA',    # Right ascension [hr] from DCS
+                 'TARGDEC',   # Declination [deg] from DCS
+                 'TARGEPOC',  # Target epoch from DCS
+                 'TARGEQUI',  # Target equinox from DCS
+                 'TARGPLAX',  # Target parallax [arcsec] from DCS
+                 'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
+                 'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
+                 'TARGRADV',  # Target radial velocity [km/s]
+                 'AIRMASS',   # Airmass from DCS
+                 'PARANTEL',  # Parallactic angle of the telescope from DCS
+                 'HA',        # Hour angle
+                 'EL',        # Elevation [deg]
+                 'AZ',        # Azimuth [deg]
+                 'LST',       # Local sidereal time
+                 'GAIAID',    # GAIA Target name
+                 '2MASSID',   # 2MASS Target name
+                 'GAIAMAG',   # GAIA G band magnitude
+                 '2MASSMAG',  # 2MASS J band magnitude
+                 'TARGTEFF',  # Target effective temperature (K)
+                 'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
+                 'TRIGTARG',  # Cameras that were sent triggers
+                 'IMTYPE',    # Image Type
+                 'CAL-OBJ',   # Calibration fiber source
+                 'SKY-OBJ',   # Sky fiber source
+                 'SCI-OBJ',   # Science fiber source
+                 'AGITSTA',   # Agitator status
+             ] 
+    
+        QC_pass = True
+        for keyword in essential_keywords:
+            if keyword not in L0.header['PRIMARY']:
+                QC_pass = False
+                if debug:
+                    print('The keyword ' + keyword + ' is missing from the primary header.')
+        
+        return QC_pass
+
 #####################################################################
 
 class QC2D(QC):
@@ -474,7 +449,6 @@ class QC2D(QC):
     """
 
     # Call superclass.
-
     def __init__(self,fits_object):
         super().__init__(fits_object)
 
@@ -508,7 +482,6 @@ class QCL1(QC):
     """
 
     # Call superclass.
-
     def __init__(self,fits_object):
         super().__init__(fits_object)
 
@@ -524,7 +497,8 @@ class QCL1(QC):
 
         self.add_qc_keyword_to_header(qc_name,value)
 
-    def monotonic_check(self,debug=False):
+
+    def monotonic_wavelength_solution_check(self,debug=False):
         """
         This Quality Control function checks to see if a wavelength solution is
         monotonic, specifically if wavelength decreases (or stays constant) with
@@ -610,8 +584,6 @@ class QCL1(QC):
         return QC_pass, bad_orders
 
 
-
-
 #####################################################################
 
 class QCL2(QC):
@@ -631,5 +603,4 @@ class QCL2(QC):
 
     def __init__(self,fits_object):
         super().__init__(fits_object)
-
 
