@@ -95,7 +95,7 @@ class QCDefinitions:
         self.db_columns = {}
         self.methods = {}
 
-        # Define the QC metrics here.
+        # Define QC metrics
 
         name0 = 'jarque_bera_test_red_amp1'
         self.names.append(name0)
@@ -206,7 +206,8 @@ class QC:
     """
     Description:
         This superclass defines QC functions in general and has common methods across
-        subclasses QCL0, QC2D, QCL1, and QCL2.
+        subclasses QCL0, QC2D, QCL1, and QCL2.  It also includes QC checks that apply 
+        to all data levels.
 
     Class Attributes:
         kpf_object: Returned from function KPF0.from_fits(fits_filename,data_type),
@@ -297,7 +298,6 @@ class QCL0(QC):
 
     Class Attributes:
         data_type (string): Data type in terms of project (e.g., KPF).
-#        fits_filename (string): Input FITS filename (include absolute path).
         kpf_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
@@ -440,6 +440,7 @@ class QCL0(QC):
         
         return QC_pass
 
+
 #####################################################################
 
 class QC2D(QC):
@@ -459,7 +460,6 @@ class QC2D(QC):
         super().__init__(kpf_object)
 
 
-
 #####################################################################
 
 class QCL1(QC):
@@ -472,19 +472,6 @@ class QCL1(QC):
         kpf_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
-
-    Example python code to illustrate usage of this module in calling program:
-
-        import modules.quality_control as qc
-
-        qc.what_am_i()
-
-        l1_file = '/code/KPF-Pipeline/kpf_20230814_master_arclamp_autocal-une-sky-eve_L1.fits'
-
-        kpf_object = from_fits('KPF',l1_file)
-        qcl1 = qc.QCL1(kpf_object)
-        qcl1.add_qc_keyword_to_header_for_monotonic_wls(qc_name)
-        to_fits(qcl1.kpf_object,l1_file)
     """
 
     # Call superclass.
