@@ -6,7 +6,6 @@ import subprocess
 from astropy.io import fits
 from datetime import datetime
 
-
 # Function to check GREEN, RED, CA_HK keywords - returns True if any camera was used
 def green_red_cahk_present(header):
     if 'GREEN' in header:
@@ -21,6 +20,7 @@ def green_red_cahk_present(header):
     else:
         return False
 
+# Function to check if the exposure is not a Bias or Dark image (which don't produce L2)
 def not_bias_or_dark(header):
     if 'IMTYPE' in header:
         isBias = 'Bias' in header['IMTYPE']
@@ -37,7 +37,6 @@ def main(start_date, end_date, print_missing, touch_missing):
     print()
     print(f"{'DATECODE':<8} | {'LAST L0 MOD DATE':<16} | {'2D PROCESSING':<14} | {'L1 PROCESSING':<14} | {'L2 PROCESSING':<14}")
     print("-" * 78)
-
 
     for dir_path in glob.glob(f"{base_dir}/L0/{start_date[:4]}????"):
         date_code = os.path.basename(dir_path)
@@ -109,7 +108,6 @@ def main(start_date, end_date, print_missing, touch_missing):
                     else:
                         missing_L0.append(date_dict[i]['L0_filename'])
 
-        #print(missing_L0)
         missing_L0_nodupes = []
         for L0 in missing_L0:
             if L0 not in missing_L0_nodupes:
@@ -124,18 +122,17 @@ def main(start_date, end_date, print_missing, touch_missing):
                 processing_info.append(f"{match_count[file_type]:4d}/{total_count[file_type]:<4d} {percentage:3d}%")
     
         print(f"{date_code:<8} | {formatted_recent_mod_date:<16} | {' | '.join(processing_info)}")
-
     print("-" * 78)
 
     if print_missing:
         print("The following L0 files have missing corresponding 2D, L1, or L2 files:")
-        for L0 in missing_L0_nodupes:
+        for L0_file in missing_L0_nodupes:
             print(L0)
 #        confirm = input("Do you want to touch these files? [y/N] ")
 #        if confirm.lower() == 'y':
-#            for file in unique_files:
-#                print(f"touch {file}")
-#                os.utime(file, None)
+#            for L0_file in missing_L0_nodupes:
+#                print(f"touch {L0_file}")
+#                os.utime(L0_file, None)
 #    elif touch_missing:
 #        print("\nAll files are up to date.")
 

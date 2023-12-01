@@ -23,6 +23,7 @@
 #   --help           Display this message
 #   --print_missing  Display missing file names
 #   --touch_missing  Touch the base L0 files of missing 2D/L1/L2 files
+#   --check_version  Checks that each 2D/L1/L2 file has the latest version number in Git for the KPF-Pipeline
 #
 # Usage:
 #   ./kpf_processing_progress.sh YYYYMMDD [YYYYMMDD] [--print_missing]
@@ -44,10 +45,11 @@ fi
 # Initialize flags
 print_missing=false
 touch_missing=false
+check_version=false
 
 # Check if at least one argument is provided
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 YYYYMMDD [YYYYMMDD] [--print_missing]"
+    echo "Usage: $0 YYYYMMDD [YYYYMMDD] [--print_missing] [--touch_missing] [--check_version]"
     exit 1
 fi
 
@@ -59,6 +61,10 @@ for arg in "$@"; do
             shift
             ;;
         --touch_missing)
+            touch_missing=true
+            shift
+            ;;
+        --check_version)
             touch_missing=true
             shift
             ;;
@@ -77,6 +83,15 @@ end_date=${end_date:-99999999} # Default to a high date if end_date is not set
 
 # Directory path
 base_dir="/data/kpf"
+
+# Get the latest Git version number of the KPF-Pipeline repository
+if $check_version; then
+    original_dir=$(pwd)
+    script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+    cd "$script_dir" # Navigate to the script's directory (assumed to be the git repository)
+    latest_version=$(git describe --tags `git rev-list --tags --max-count=1` | sed 's/^v//')
+    cd "$original_dir"
+fi
 
 # Array to store base files for touching
 declare -a missing_base_files
@@ -116,6 +131,59 @@ function not_bias_or_dark {
         return 1 # bias detected
     else
         return 0 # success - not a dark or bias
+    fi
+}
+
+# Returns 0 (pass) if file exists.  
+# If check_version=1, then the script also checks if the version number is equal 
+# to (or greater than) the version_min.
+function file_exists_and_version_check {
+    local file_path=$1
+    local version_min=$2
+    local check_version=$3
+
+    # Check if the file exists
+    if [[ ! -f "$file_path" ]]; then
+        echo "Error: File does not exist."
+        return 1 # File not found
+    fi
+
+    # If check_version is not 1, return success as the file exists
+    if [[ $check_version -ne 1 ]]; then
+        return 0
+    fi
+
+    # Extract the DRPTAG keyword value, assume 0.0.0 if not present
+    raw_version=$(fitsheader --extension 0 -k DRPTAG "$file_path" | awk '{print $3}')
+    # Remove leading '0', non-numeric characters, and non-periods, then trim whitespace
+    version=$(echo $raw_version | cut -c 2- | tr -cd '[:digit:].' | awk '{$1=$1};1')
+    
+    if [[ -z "$version" ]]; then
+        version="0.0.0"
+    fi    
+    
+    # Function to compare version numbers
+    function version_ge {
+        # Split version numbers into an array
+        IFS='.' read -r -a ver1 <<< "$1"
+        IFS='.' read -r -a ver2 <<< "$2"
+
+        # Compare each segment of the version number
+        for ((i=0; i<${#ver1[@]}; i++)); do
+            if [[ ${ver1[i]:-0} -gt ${ver2[i]:-0} ]]; then
+                return 0
+            elif [[ ${ver1[i]:-0} -lt ${ver2[i]:-0} ]]; then
+                return 1
+            fi
+        done
+        return 0 # Return true if versions are equal
+    }
+
+    # Compare versions
+    if version_ge "$version" "$version_min"; then
+        return 0 # version is equal or greater
+    else
+        return 1 # version is lower
     fi
 }
 
@@ -164,7 +232,8 @@ for dir in "$base_dir/L0/"????????; do
                 file_L2="$base_dir/L2/$date_code/$(basename "${file%.fits}")_L2.fits"
 
                 # 2D file logic
-                if [ ! -f "$file_2d" ]; then
+                #if [ ! -f "$file_2d" ]; then
+                if file_exists_and_version_check "$file_2d" "$version_min" "$check_version"; then
                     if $print_missing; then
                         if green_red_cahk_present "$file"; then
                             echo "Missing 2D file: $file_2d"
