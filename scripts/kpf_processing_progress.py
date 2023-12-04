@@ -32,10 +32,6 @@ def not_bias_or_dark(header):
     if 'IMTYPE' in header:
         isBias = 'Bias' in header['IMTYPE']
         isDark = 'Dark' in header['IMTYPE']
-        #print("header['IMTYPE'] = " + str(header['IMTYPE']))
-        #print('Bias = ' + str(isBias))
-        #print('Dark = ' + str(isBias))
-        #print('not (isBias or isDark) = ' + str(not (isBias or isDark)))
     else:
         return True
     return not (isBias or isDark)
@@ -94,21 +90,52 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
     Script Name: kpf_processing_progress.py
    
     Description:
-      This script searches through /data/kpf/L0/YYYYMMDD subdirectories for L0 
-      files matching the pattern KP.YYYYMMDD.NNNNN.NN.fits. It records the most 
-      recent modification date of any L0 file and checks if corresponding 
-      KP.YYYYMMDD.NNNNN.NN_2D.fits, KP.YYYYMMDD.NNNNN.NN_L1.fits, and 
-      KP.YYYYMMDD.NNNNN.NN_L2.fits files in respective directories have a file 
-      modification date after the L0 file. For any missing 2D, L1, and L2 files, 
-      or files of those types with older modification dates, the script checks 
-      the 'GREEN' and 'RED' keywords in the FITS header of the L0 file 
-      and excludes files from the missing count if the Green and Red cameras 
-      are both not selected. The script outputs a summary for each YYYYMMDD 
-      directory, showing the count of such files and the most recent 
-      L0 modification date. The script takes a starting date (YYYYMMDD) as an 
-      argument and optionally an end date and flags to print missing files and
-      touch the base L0 files of missing 2D/L1/L2 files.
-   
+      This script is used to assess the status and progress of processing KPF data.
+      It searches over a range of dates specified by the first two arguments which are 
+      of the form YYYYMMDD.  For each date (with /data/kpf/L0/YYYYMMDD as the 
+      assumed L0 directory), it examines each L0 file and the associated 2D/L1/L2 
+      files in their related directories.  The output of this script is a table with 
+      columns indicating the date for each row, the most recent modification date for 
+      and L0 file in that directory, the fraction of 2D files processed, the fraction 
+      of L1 files processed, and the fraction of L2 files processed.  Sample output 
+      is shown below.
+      
+      > python kpf_processing_progress.py 20231125 20231130
+      
+      DATECODE | LAST L0 MOD DATE | 2D PROCESSING  | L1 PROCESSING  | L2 PROCESSING 
+      ------------------------------------------------------------------------------
+      20231125 | 2023-12-02 14:29 |  513/513  100% |  512/513   99% |  485/486   99%
+      20231126 | 2023-12-02 14:29 |  528/528  100% |  528/528  100% |  501/501  100%
+      20231127 | 2023-12-02 14:29 |  526/526  100% |  525/526   99% |  498/499   99%
+      20231128 | 2023-12-02 14:30 | 1108/1108 100% | 1098/1107  99% | 1054/1063  99%
+      20231129 | 2023-12-02 14:31 |  340/340  100% |  340/340  100% |  313/313  100%
+      20231130 | 2023-12-02 14:32 |  341/341  100% |  339/341   99% |  311/313   99%
+      ------------------------------------------------------------------------------
+      
+      The following criteria are used to determine if 2D/L1/L2 files are "processed":
+      
+          - not in the junk file list ('/data/kpf/reference/Junk_Observations_for_KPF.csv');
+            if the file is missing, all files are assumed to not be junk
+          - have the Green, Red, or CaHK extension present in the L0 file
+          - not a Dark or Bias exposure [only applied to L2 files]
+          - the 2D/L1/L2 exists
+          - the modification time of the 2D/L1/L2 file is later than the 
+            modification time of the associated L0 file
+          - the DRP version number is equal to or greater than the current DRP version 
+            number of the master branch on Github [only if --check_version option 
+            selected]
+      
+                    #    - not junk
+                    #    - Green, Red, or CaHK extension present
+                    #    - not a Dark or Bias exposure
+                    #    - file present
+                    #    - L2 modification time more recent than L0 modification time
+                    #    - current DRP version number (if check_version option selected)
+      
+      Command-line options listed below enable touching of the L0 files associated 
+      with 2D/L1/L2 files that are not present, printing those filenames, printing the 
+      filenames of the 2D/L1/L2 files themselves, and turning on the DRP version check.
+
     Options:
       --help            Display this message
       --print_files     Display missing file names (or files that fail other criteria)
@@ -119,7 +146,7 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
       --check_version   Checks that each 2D/L1/L2 file has the latest Git version number for the KPF-Pipeline
    
     Usage:
-      python kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files]
+      python kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files] [--print_files_2D] [--print_files_L1] [--print_files_L2] [--touch_missing] [--check_version]
    
     Example:
       python kpf_processing_progress.sh 20231114 20231231 --print_files
@@ -183,24 +210,6 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
 
         # Loop over exposures
         for i, obs in enumerate(obs_dict):
-
-#            if obs['obsID'] == 'KP.20231120.12674.58': 
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
-#                print()
             
             # Determine if the file is junk
             if not junk_file_missing: 
