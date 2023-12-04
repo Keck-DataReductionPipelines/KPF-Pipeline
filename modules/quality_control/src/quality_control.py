@@ -106,7 +106,7 @@ class QCDefinitions:
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name0] = None
         self.methods[name0] = ["add_qc_keyword_to_header"]
- 
+
         name1 = 'not_junk_check'
         self.names.append(name1)
         self.descriptions[name1] = 'Check if file is not in list of junk files.'

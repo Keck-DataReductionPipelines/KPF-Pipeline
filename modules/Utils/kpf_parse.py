@@ -222,10 +222,10 @@ def get_data_products_L0(L0):
     Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config
 
     Args:
-        2D - a KPF 2D object 
+        L0 - a KPF L0 object 
 
     Returns:
-        data_products in a 2D file
+        data_products in a L0 file
     """
     data_products = []
     if hasattr(L0, 'GREEN_AMP1'):
