@@ -1,17 +1,20 @@
+import os
 import numpy as np
 import numpy.ma as ma
+import pandas as pd
+from modules.Utils.kpf_parse import get_data_products_L0
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
-class QCDefinitions.  Other classes QCL0, QCL1, and QCL0 contain methods to compute QC values,
+class QCDefinitions.  Other classes QCL0, QC2D, QCL1, and QCL2 contain methods to compute QC values,
 which are with the QC metrics, for specific data products, and then store them in the primary header
-of the corresponding FITS file.  Normally QC values are stored first in the FITS header, but storage
-in the KPF pipeline-operations database may be set up later by the database administrator, depending
-upon the special requirements for some QC metrics.
+of the corresponding KPF object (which will be saved to a FITS file).  Normally QC values are stored 
+headers, but storage in the KPF pipeline-operations database may be set up later by the database 
+administrator, depending upon the special requirements for some QC metrics.
 """
 
 iam = 'quality_control'
-version = '1.2'
+version = '1.3'
 
 """
 The following are methods common across data levels, which are given at the beginning
@@ -24,16 +27,13 @@ Includes helper functions that compute statistics of data of arbitrary shape.
 # Module helper functions.
 #####################################
 
-#
-# Print software version.
-#
 def what_am_i():
     print('Software version:',iam + ' ' + version)
 
-#
-# Statistics with outlier rejection (n-sigma data-trimming), ignoring NaNs, across all data array dimensions.
-#
 def avg_data_with_clipping(data_array,n_sigma = 3.0):
+    """
+    Statistics with outlier rejection (n-sigma data-trimming), ignoring NaNs, across all data array dimensions.
+    """
 
     a = np.array(data_array)
 
@@ -54,75 +54,6 @@ def avg_data_with_clipping(data_array,n_sigma = 3.0):
 
     return avg,std,cnt
 
-#
-# Check whether a file is not junk (i.e., = False if junk)
-#
-def not_junk_check(kpfobs, junk_ObsIDs_csv='/code/KPF-Pipeline/Junk_Observations_for_KPF.csv', debug=False):
-    """
-    This Quality Control function checks if the input (possibly an array) is in the list of junked files.
-
-    Args:
-         kpfobs - possible formats: 1. a single ObsID (string) (e.g. 'KP.20230621.27498.77')
-                                    2. a list of ObsIDs (e.g., ['KP.20230621.27611.73', 'KP.20230621.27498.77])
-                                    3. a single KPF L0/2D/L1/L2 object
-                                    4. a list of KPF L0/2D/L1/L2 objects
-         junk_ObsIDs_csv - a CSV with ObsIDs (e.g., 'KP.20230621.27498.77') in the first column
-                           and a column header of 'observation_id'.
-                           That is, the first few lines of the file will look like this:
-                               observation_id
-                               KP.20230621.27498.77
-                               KP.20230621.27611.73
-                               KP.20220516.57354.11
-
-         debug - an optional flag.  If True, verbose output will be printed.
-
-     Returns:
-         QC_pass - a boolean signifying that the input(s) are not junk (i.e., = False if junk)
-    """
-
-    import os
-    import numpy as np
-    import pandas as pd
-
-    QC_pass = True                # Assume not junk unless explicitly listed in junk_ObsIDs_csv
-
-    # read list of junk files
-    if os.path.exists(junk_ObsIDs_csv):
-        df_junk = pd.read_csv(junk_ObsIDs_csv)
-        if debug:
-            print(f'Read the junk file {junk_ObsIDs_csv}.')
-    else:
-        print(f"The file {junk_ObsIDs_csv} does not exist.")
-        return QC_pass
-
-    # initialize variables
-    if not type(kpfobs) is list: # convert input to list if necessary
-        kpfobs = [kpfobs]
-        input_not_list = True # note for later that the input was not a list
-    else:
-        input_not_list = False
-
-    # convert inputs to ObsIDs (strings), if needed
-    for i in range(len(kpfobs)):
-        if not (type(kpfobs[i]) is str):
-            kpfobs[i] = (kpfobs[i].filename).replace('.fits', '') # this line assumes that kpfobs[i] is a L0/2D/L1/L2 object
-            kpfobs[i] = kpfobs[i].replace('_2D', '') # drop _2D suffix, if needed
-            kpfobs[i] = kpfobs[i].replace('_L1', '') # drop _L1 suffix, if needed
-            kpfobs[i] = kpfobs[i].replace('_L2', '') # drop _L2 suffix, if needed
-
-    # loop through inputs and determine junk status of each
-    QC_pass = np.ones(len(kpfobs), dtype=bool) # starting QC values
-    for i, obs in enumerate(kpfobs):
-        QC_pass[i] = not (df_junk['observation_id'].isin([obs])).any()
-        if debug:
-            print(f'{obs} is a Junk file: ' + str(not QC_pass[i]))
-
-    # remove list format if input was a single element
-    if input_not_list:
-        QC_pass = QC_pass[0]
-
-    return QC_pass
-
 
 #####################################################################
 
@@ -140,6 +71,8 @@ class QCDefinitions:
         names (list of strings): Each element is a unique and descriptive name for the metric.  No spaces allowed.
         descriptions (dictionary of strings): Each dictionary entry specifies a short description of the metric
             Try to keep it under 50 characters for brevity (this is not enforced but recommended).
+        kpf_data_levels (dictionary of lists of strings): Each entry specifies the set of KPF data levels for the test.
+            Possible values in the list: 'L0', '2D', 'L1', 'L2'
         data_types (dictionary of strings): Each entry specifies the Python data type of the metric.
             Only string, int, float are allowed.  Use 0/1 for boolean.
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
@@ -155,54 +88,87 @@ class QCDefinitions:
 
         self.names = []
         self.descriptions = {}
+        self.kpf_data_levels = {} 
         self.data_types = {}
         self.fits_keywords = {}
         self.fits_comments = {}
         self.db_columns = {}
         self.methods = {}
 
-        # Define the QC metrics here.
+        # Define QC metrics
 
-        name1 = 'jarque_bera_test_red_amp1'
+        name0 = 'jarque_bera_test_red_amp1'
+        self.names.append(name0)
+        self.descriptions[name0] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
+        self.kpf_data_levels[name0] = ['L3'] # bogus value L3 to avoid executing
+        self.data_types[name0] = 'float'
+        self.fits_keywords[name0] = 'JBTRED1'
+        self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
+        self.db_columns[name0] = None
+        self.methods[name0] = ["add_qc_keyword_to_header"]
+
+        name1 = 'not_junk_check'
         self.names.append(name1)
-        self.descriptions[name1] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
-        self.data_types[name1] = 'float'
-        self.fits_keywords[name1] = 'JBTRED1'
-        self.fits_comments[name1] = 'QC: J-B test for RED AMP-1 detector'
+        self.descriptions[name1] = 'Check if file is not in list of junk files.'
+        self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
+        self.data_types[name1] = 'int'
+        self.fits_keywords[name1] = 'NOTJUNK'
+        self.fits_comments[name1] = 'QC: Not in list of junk files check'
         self.db_columns[name1] = None
         self.methods[name1] = ["add_qc_keyword_to_header"]
 
         name2 = 'monotonic_wavelength_solution_check'
         self.names.append(name2)
         self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
+        self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
         self.db_columns[name2] = None
-        self.methods[name2] = ["add_qc_keyword_to_header","monotonic_check","add_qc_keyword_to_header_for_monotonic_wls"]
+        #self.methods[name2] = ["add_qc_keyword_to_header","monotonic_wavelength_solution_check","add_qc_keyword_to_header_for_monotonic_wls"]
+        self.methods[name2] = ["add_qc_keyword_to_header"]
 
-        name3 = 'not_junk_data_check'
+        name3 = 'L0_data_products_check'
         self.names.append(name3)
-        self.descriptions[name3] = 'Check if data in file are not junk.'
+        self.kpf_data_levels[name3] = ['L0']
+        self.descriptions[name3] = 'Check if expected data products are present with non-zero array sizes.'
         self.data_types[name3] = 'int'
-        self.fits_keywords[name3] = 'JUNKDATA'
-        self.fits_comments[name3] = 'QC: Not-junk check'
+        self.fits_keywords[name3] = 'DATAPRL0'
+        self.fits_comments[name3] = 'QC: L0 data present check'
         self.db_columns[name3] = None
         self.methods[name3] = ["add_qc_keyword_to_header"]
 
+        name4 = 'L0_header_keywords_present_check'
+        self.names.append(name4)
+        self.kpf_data_levels[name4] = ['L0']
+        self.descriptions[name4] = 'Check if expected header keywords are present.'
+        self.data_types[name4] = 'int'
+        self.fits_keywords[name4] = 'KWRDPRL0'
+        self.fits_comments[name4] = 'QC: L0 keywords present check'
+        self.db_columns[name4] = None
+        self.methods[name4] = ["add_qc_keyword_to_header"]
+
         # Integrity checks.
+        if len(self.names) != len(self.kpf_data_levels):
+            raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
 
         if len(self.names) != len(self.descriptions):
             raise ValueError("Length of names list does not equal number of entries in descriptions dictionary.")
 
         if len(self.names) != len(self.data_types):
-            raise ValueError("Length of names list does not equal number of entries in data_types dictionary.")
+            raise ValueError("Length of data_types list does not equal number of entries in data_types dictionary.")
 
         if len(self.names) != len(self.fits_keywords):
-            raise ValueError("Length of names list does not equal number of entries in fits_keywords dictionary.")
+            raise ValueError("Length of fits_keywords list does not equal number of entries in fits_keywords dictionary.")
+
+        if len(self.names) != len(self.fits_comments):
+            raise ValueError("Length of fits_comments list does not equal number of entries in fits_comments dictionary.")
 
         if len(self.names) != len(self.db_columns):
-            raise ValueError("Length of names list does not equal number of entries in db_columns dictionary.")
+            raise ValueError("Length of db_columns list does not equal number of entries in db_columns dictionary.")
+
+        if len(self.names) != len(self.methods):
+            raise ValueError("Length of methods list does not equal number of entries in methods dictionary.")
 
         keys_list = self.data_types.keys()
         for key in keys_list:
@@ -227,8 +193,7 @@ class QCDefinitions:
             db_column = self.db_columns[qc_name]
             description = self.descriptions[qc_name]
 
-            print(qc_name,"|",data_type,"|",keyword,"|",comment,"|",methods,"|",db_column,"|",description,"|")
-
+            print(qc_name," | ",data_type," | ",keyword," | ",comment," | ",methods," | ",db_column," | ",description)
 
 
 #####################################################################
@@ -241,29 +206,82 @@ class QC:
     """
     Description:
         This superclass defines QC functions in general and has common methods across
-        subclasses QCL0, QC2D, QCL1, and QCL2.
+        subclasses QCL0, QC2D, QCL1, and QCL2.  It also includes QC checks that apply 
+        to all data levels.
 
     Class Attributes:
-        fits_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
+        kpf_object: Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
 
     """
 
-    def __init__(self,fits_object):
-        self.fits_object = fits_object
+    def __init__(self,kpf_object):
+        self.kpf_object = kpf_object
         self.qcdefinitions = QCDefinitions()
 
-    def add_qc_keyword_to_header(self,qc_name,value):
+    def add_qc_keyword_to_header(self, qc_name, value, debug=False):
 
+        if str(type(value)) == "<class 'bool'>":
+            if value == True:
+            	value = 1
+            else:
+            	value = 0
+        
         keyword = self.qcdefinitions.fits_keywords[qc_name]
         comment = self.qcdefinitions.fits_comments[qc_name]
 
-        self.fits_object.header['PRIMARY'][keyword] = (value,comment)
+        self.kpf_object.header['PRIMARY'][keyword] = (value,comment)
+        if debug:
+            print('---->add_qc_keyword_to_header: qc_name, keyword, value, comment = {}, {}, {}, {}'.format(qc_name,keyword,value,comment))
 
-        print('---->add_qc_keyword_to_header: qc_name,keyword,value,comment = {},{},{},{}'.format(qc_name,keyword,value,comment))
 
-
+    def not_junk_check(self, junk_ObsIDs_csv='/data/reference/Junk_Observations_for_KPF.csv', debug=False):
+        """
+        This Quality Control method can be used in any of the data levels (L0/2D/L1/L2) 
+        so it is included in the superclass. 
+        It checks if the obsID of the input is in the list of junked files.
+    
+        Args:
+             kpfobs - a KPF L0/2D/L1/L2 object
+             junk_ObsIDs_csv - a CSV with ObsIDs in the first column
+                               and a column header of 'observation_id'.
+                               That is, the first few lines of the file will look like this:
+                                   observation_id
+                                   KP.20230621.27498.77
+                                   KP.20230621.27611.73
+                                   KP.20220516.57354.11
+    
+             debug - an optional flag.  If True, verbose output will be printed.
+    
+         Returns:
+             QC_pass - a boolean signifying that the input(s) are not junk (i.e., = False if junk)
+        """
+        
+        QC_pass = True  # Assume not junk unless explicitly listed in junk_ObsIDs_csv
+        
+        try:
+            filename = self.kpf_object.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
+        except:
+            filename = 'this file'
+        obsID = filename[:20]
+        print('The obsID is ' + obsID)
+    
+        # read list of junk files
+        if os.path.exists(junk_ObsIDs_csv):
+            df_junk = pd.read_csv(junk_ObsIDs_csv)
+            if debug:
+                print(f'Read the junk file {junk_ObsIDs_csv}.')
+        else:
+            print(f"The file {junk_ObsIDs_csv} does not exist.")
+            return QC_pass
+        
+        QC_pass = not (df_junk['observation_id'].isin([obsID])).any()
+        if debug:
+            print(f'{filename} is a Junk file: ' + str(not QC_pass[i]))
+    
+    
+        return QC_pass
 
 #####################################################################
 
@@ -280,14 +298,13 @@ class QCL0(QC):
 
     Class Attributes:
         data_type (string): Data type in terms of project (e.g., KPF).
-        fits_filename (string): Input FITS filename (include absolute path).
-        fits_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
+        kpf_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
 
     Example python code to illustrate usage of this module in calling program:
 
-        import modules.Utils.quality_control as qc
+        import modules.quality_control.src.quality_control as qc
 
         qc.what_am_i()
 
@@ -295,19 +312,133 @@ class QCL0(QC):
         out_file = '/code/KPF-Pipeline/junk.fits'
 
 
-        fits_object = from_fits('KPF',in_file)
-        qcl0 = qc.QCL0(fits_object)
+        kpf_object = from_fits('KPF',in_file)
+        qcl0 = qc.QCL0(kpf_object)
         name = 'jarque_bera_test_red_amp1'
         value = 3.14159256
         qcl0.add_qc_keyword_to_header(name,value)
-        to_fits(qcl0.fits_object,out_file)
+        to_fits(qcl0.kpf_object,out_file)
     """
 
     # Call superclass.
+    def __init__(self,kpf_object):
+        super().__init__(kpf_object)
 
-    def __init__(self,fits_object):
-        super().__init__(fits_object)
 
+    def L0_data_products_check(self, debug=False):
+        """
+        This Quality Control function checks if the expected data_products 
+        in an L0 file are present and if their data extensions are populated 
+        with arrays of non-zero size.
+        
+        Args:
+             L0 - an L0 object
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+        
+        L0 = self.kpf_object
+        
+        # determine which extensions should be in the L0 file
+        # first add triggrered cameras (Green, Red, CaHK, ExpMeter)
+        trigtarg = L0.header['PRIMARY']['TRIGTARG']
+        if len(trigtarg) > 0:
+            data_products = trigtarg.split(',')
+        # add Guider
+        if hasattr(L0, 'GUIDER_AVG'):
+            data_products.append('Guider')
+        if hasattr(L0, 'guider_avg'):  # some early files had lower case
+            data_products.append('Guider')
+        # add Telemetry
+        if hasattr(L0, 'TELEMETRY'):
+            data_products.append('Telemetry')
+        # add Pyrheliometer
+        if hasattr(L0, 'SOCAL PYRHELIOMETER'):
+            data_products.append('Pyrheliometer')
+        if debug:
+            print('Data products that are supposed to be in this L0 file: ' + str(data_products))
+     
+        # Use helper funtion to get data products and check their characteristics.
+        QC_pass = True
+        data_products_present = get_data_products_L0(L0)
+        if debug:
+            print('Data products in L0 file: ' + str(data_products_present))
+    
+        # Check for specific data products
+        possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
+        for dp in possible_data_products:
+            if dp in data_products:
+                if not dp in data_products_present:
+                    QC_pass = False
+                    if debug:
+                        print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+        
+        return QC_pass
+
+
+    def L0_header_keywords_present_check(self, essential_keywords=['auto'], debug=False):
+        """
+        This Quality Control function checks if a specified set of FITS header keywords are present.
+        
+        Args:
+             L0 - an L0 object
+             essential_keywords - an optional list of keywords to check.  If set to ['auto'], 
+             then a default list of keywords will be checked. 
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+        
+        L0 = self.kpf_object
+
+        if essential_keywords == ['auto']:
+             essential_keywords = [
+                 'DATE-BEG',  # Start of exposure from kpfexpose
+                 'DATE-MID',  # Halfway point of the exposure (unweighted)
+                 'DATE-END',  # End of exposure
+                 'EXPTIME',   # Requested exposure time
+                 'ELAPSED',   # Actual exposure time
+                 'PROGNAME',  # Program name from kpfexpose
+                 'OBJECT',    # Object name
+                 'TARGRA',    # Right ascension [hr] from DCS
+                 'TARGDEC',   # Declination [deg] from DCS
+                 'TARGEPOC',  # Target epoch from DCS
+                 'TARGEQUI',  # Target equinox from DCS
+                 'TARGPLAX',  # Target parallax [arcsec] from DCS
+                 'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
+                 'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
+                 'TARGRADV',  # Target radial velocity [km/s]
+                 'AIRMASS',   # Airmass from DCS
+                 'PARANTEL',  # Parallactic angle of the telescope from DCS
+                 'HA',        # Hour angle
+                 'EL',        # Elevation [deg]
+                 'AZ',        # Azimuth [deg]
+                 'LST',       # Local sidereal time
+                 'GAIAID',    # GAIA Target name
+                 '2MASSID',   # 2MASS Target name
+                 'GAIAMAG',   # GAIA G band magnitude
+                 '2MASSMAG',  # 2MASS J band magnitude
+                 'TARGTEFF',  # Target effective temperature (K)
+                 'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
+                 'TRIGTARG',  # Cameras that were sent triggers
+                 'IMTYPE',    # Image Type
+                 'CAL-OBJ',   # Calibration fiber source
+                 'SKY-OBJ',   # Sky fiber source
+                 'SCI-OBJ',   # Science fiber source
+                 'AGITSTA',   # Agitator status
+             ] 
+    
+        QC_pass = True
+        for keyword in essential_keywords:
+            if keyword not in L0.header['PRIMARY']:
+                QC_pass = False
+                if debug:
+                    print('The keyword ' + keyword + ' is missing from the primary header.')
+        
+        return QC_pass
 
 
 #####################################################################
@@ -319,16 +450,14 @@ class QC2D(QC):
         This class inherits QC superclass and defines QC functions for 2D files.
 
     Class Attributes:
-        fits_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
+        kpf_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
     """
 
     # Call superclass.
-
-    def __init__(self,fits_object):
-        super().__init__(fits_object)
-
+    def __init__(self,kpf_object):
+        super().__init__(kpf_object)
 
 
 #####################################################################
@@ -340,42 +469,17 @@ class QCL1(QC):
         This class inherits QC superclass and defines QC functions for L1 files.
 
     Class Attributes:
-        fits_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
+        kpf_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
-
-    Example python code to illustrate usage of this module in calling program:
-
-        import modules.Utils.quality_control as qc
-
-        qc.what_am_i()
-
-        l1_file = '/code/KPF-Pipeline/kpf_20230814_master_arclamp_autocal-une-sky-eve_L1.fits'
-
-        fits_object = from_fits('KPF',l1_file)
-        qcl1 = qc.QCL1(fits_object)
-        qcl1.add_qc_keyword_to_header_for_monotonic_wls(qc_name)
-        to_fits(qcl1.fits_object,l1_file)
     """
 
     # Call superclass.
+    def __init__(self,kpf_object):
+        super().__init__(kpf_object)
 
-    def __init__(self,fits_object):
-        super().__init__(fits_object)
 
-
-    def add_qc_keyword_to_header_for_monotonic_wls(self,qc_name):
-
-        qc_pass = self.monotonic_check()
-
-        if qc_pass:
-            value = 1
-        else:
-            value = 0
-
-        self.add_qc_keyword_to_header(qc_name,value)
-
-    def monotonic_check(self,debug=False):
+    def monotonic_wavelength_solution_check(self,debug=False):
         """
         This Quality Control function checks to see if a wavelength solution is
         monotonic, specifically if wavelength decreases (or stays constant) with
@@ -390,7 +494,7 @@ class QCL1(QC):
              bad_orders - an array of strings listing the nonmonotonic orders and orderlets
         """
 
-        L1 = self.fits_object
+        L1 = self.kpf_object
 
         if debug:
             print(L1.info())
@@ -456,11 +560,7 @@ class QCL1(QC):
             except:
                 pass
 
-        print("QC_pass = ",QC_pass)
-
-        return QC_pass, bad_orders
-
-
+        return QC_pass #, bad_orders
 
 
 #####################################################################
@@ -472,15 +572,13 @@ class QCL2(QC):
         This class inherits QC superclass and defines QC functions for L2 files.
 
     Class Attributes:
-        fits_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
+        kpf_object (astropy.io object): Returned from function KPF0.from_fits(fits_filename,data_type),
             which is wrapped by function read_fits in this module.
         qcdefinitions (QCDefinitions object): Returned from constructor of QCDefinitions class.
 
     """
 
     # Call superclass.
-
-    def __init__(self,fits_object):
-        super().__init__(fits_object)
-
+    def __init__(self,kpf_object):
+        super().__init__(kpf_object)
 
