@@ -46,8 +46,12 @@ class AnalyzeGuider:
         self.date_mid = Time(self.header['DATE-MID'])
         self.ra  = self.header['RA'] # string
         self.dec = self.header['DEC'] # string
-        self.gmag = float(self.header['GAIAMAG']) # Gaia G magnitude
-        self.jmag = float(self.header['2MASSMAG']) # J magnitude
+        self.gmag = self.header['GAIAMAG'] # Gaia G magnitude
+        self.jmag = self.header['2MASSMAG'] # J magnitude
+        if isinstance(self.gmag, float):
+            self.gmag = float(self.gmag)
+        if isinstance(self.jmag, float):
+            self.jmag = float(self.jmag)
         self.gcfps = self.header['GCFPS'] # frames per second for guide camera
         self.gcgain = self.header['GCGAIN'] # detector gain setting 
         # to-do: set up logic to determine if L0 is a KPF object or a .fits file
@@ -201,7 +205,15 @@ class AnalyzeGuider:
         axs[0].set_xlabel('Arcseconds', fontsize=12)
         axs[0].set_ylabel('Arcseconds', fontsize=12)
         title = str(self.ObsID)+' - ' + self.name 
-        title = title + "\nJ = " + f"{self.jmag:.2f}" + ", G = " + f"{self.gmag:.2f}" + ', ' + str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain'
+        if isinstance(self.jmag, float):
+            title = title + "\nJ = " + f"{self.jmag:.2f}"
+        else:
+            title = title + "\nJ = " + self.jmag
+        if isinstance(self.gmag, float):
+            title = title + ", G = " + f"{self.gmag:.2f}"
+        else:
+            title = title + ", G = " + self.gmag
+        title = title + ', ' + str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain'
         axs[0].set_title(title, fontsize=12)
         axs[0].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         #cmap = plt.get_cmap('viridis')
@@ -472,7 +484,16 @@ class AnalyzeGuider:
 
         # Blank - plot to the right of power spectral density
         strings = []
-        strings.append("J = " + f"{self.jmag:.2f}" + ", G = " + f"{self.gmag:.2f}")
+        mag_string = ''
+        if isinstance(self.jmag, float):
+            mag_string = mag_string + "J = " + f"{self.jmag:.2f}"
+        else:
+            mag_string = mag_string + "\nJ = " + self.jmag
+        if isinstance(self.gmag, float):
+            mag_string = mag_string + ", G = " + f"{self.gmag:.2f}"
+        else:
+            mag_string = mag_string + ", G = " + self.gmag
+        strings.append(mag_string)
         strings.append(str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain')
         strings.append('\n')
         strings.append(str(self.df_GUIDER.shape[0]) + ' guider frames.  Fraction with:')
