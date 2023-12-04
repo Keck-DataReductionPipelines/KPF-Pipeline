@@ -23,7 +23,7 @@ from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_wls import AnalyzeWLS
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
-from modules.quicklook.src.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse
 #import kpfpipe.pipelines.fits_primitives as fits_primitives
 from modules.Utils.kpf_parse import get_data_products_L0
 from modules.Utils.kpf_parse import get_data_products_2D
