@@ -47,11 +47,15 @@ class AnalyzeGuider:
         self.ra  = self.header['RA'] # string
         self.dec = self.header['DEC'] # string
         self.gmag = self.header['GAIAMAG'] # Gaia G magnitude
-        self.jmag = self.header['2MASSMAG'] # J magnitude
-        if isinstance(self.gmag, float):
+        self.jmag = self.header['2MASSMAG'] # 2MASS J magnitude
+        try:
             self.gmag = float(self.gmag)
-        if isinstance(self.jmag, float):
+        except:
+            print('The keyword GAIAMAG is not a float.')
+        try:
             self.jmag = float(self.jmag)
+        except:
+            print('The keyword 2MASSMAG is not a float.')
         self.gcfps = self.header['GCFPS'] # frames per second for guide camera
         self.gcgain = self.header['GCGAIN'] # detector gain setting 
         # to-do: set up logic to determine if L0 is a KPF object or a .fits file
@@ -96,7 +100,7 @@ class AnalyzeGuider:
             self.x_bias = np.nanmean(x_mas)
             self.y_bias = np.nanmean(y_mas)
         except:
-            print(self.logger('Error computing guiding errors'))
+            print('Error computing guiding errors')
             self.x_rms = None
             self.y_rms = None
             self.r_rms = None
@@ -413,7 +417,10 @@ class AnalyzeGuider:
         nframes_1stars = len(np.where(nstars == 1)[0])
         nframes_2stars = len(np.where(nstars == 2)[0])
         nframes_3stars = len(np.where(nstars == 3)[0])
-        median_nstars = int(np.median(nstars))
+        try:
+            median_nstars = int(np.median(nstars))
+        except:
+            median_nstars = 0
         w_extra_detections = np.where(nstars > median_nstars)[0]
         nframes_extra_detections = len(w_extra_detections)
         w_fewer_detections = np.where(nstars < median_nstars)[0]
@@ -421,15 +428,26 @@ class AnalyzeGuider:
 
         # Define datasets and statistics
         nframes = self.df_GUIDER.shape[0]
-        t     =  self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)
-        x_mas = (self.df_GUIDER.target_x - self.df_GUIDER.object1_x) * self.pixel_scale*1000
-        y_mas = (self.df_GUIDER.target_y - self.df_GUIDER.object1_y) * self.pixel_scale*1000
-        r_mas = (x_mas**2+y_mas**2)**0.5
-        x_rms = (np.nanmean(x_mas**2))**0.5
-        y_rms = (np.nanmean(y_mas**2))**0.5
-        r_rms = (np.nanmean(r_mas**2))**0.5
-        x_bias = np.nanmean(x_mas)
-        y_bias = np.nanmean(y_mas)
+        if nframes > 0:
+            t     =  self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)
+            x_mas = (self.df_GUIDER.target_x - self.df_GUIDER.object1_x) * self.pixel_scale*1000
+            y_mas = (self.df_GUIDER.target_y - self.df_GUIDER.object1_y) * self.pixel_scale*1000
+            r_mas = (x_mas**2+y_mas**2)**0.5
+            x_rms = (np.nanmean(x_mas**2))**0.5
+            y_rms = (np.nanmean(y_mas**2))**0.5
+            r_rms = (np.nanmean(r_mas**2))**0.5
+            x_bias = np.nanmean(x_mas)
+            y_bias = np.nanmean(y_mas)
+        else:
+            t     = [0]
+            x_mas = [0]
+            y_mas = [0]
+            r_mas = [0]
+            x_rms = 0
+            y_rms = 0
+            r_rms = 0
+            x_bias = 0
+            y_bias = 0
         
         # Set the number of histogram bins
         if np.sqrt(self.df_GUIDER.shape[0]) < 60:
@@ -470,15 +488,18 @@ class AnalyzeGuider:
 
         # Power spectral density plot
         fps = self.gcfps # my_Guider.guider_header['FPS']  # Sample rate in Hz
-        Pxx, freqs = mlab.psd(x_mas/1000, Fs=fps)
-        Pyy, freqs = mlab.psd(y_mas/1000, Fs=fps)
-        Prr, freqs = mlab.psd(r_mas/1000, Fs=fps)
-        axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding errors', lw=2, alpha=0.5)
-        axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding errors', lw=2, alpha=0.5)
-        axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+        if nframes > 10:
+            Pxx, freqs = mlab.psd(x_mas/1000, Fs=fps)
+            Pyy, freqs = mlab.psd(y_mas/1000, Fs=fps)
+            Prr, freqs = mlab.psd(r_mas/1000, Fs=fps)
+            axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding errors', lw=2, alpha=0.5)
+            axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding errors', lw=2, alpha=0.5)
+            axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+            axes[1,0].set_xlim(min(freqs),max(freqs))
+        else:
+            pass
         axes[1,0].set_xlabel('Frequency [Hz]', fontsize=14)
         axes[1,0].set_ylabel('Guiding Error\n' + r'Power Spectral Density (mas$^2$/Hz)', fontsize=14)
-        axes[1,0].set_xlim(min(freqs),max(freqs))
         axes[1,0].set_yscale('log')
         axes[1,0].legend(fontsize=12)
 
@@ -513,39 +534,50 @@ class AnalyzeGuider:
 
         # Guider FWHM time series plot
         fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
-        axes[2,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue', alpha=0.5)
+        if nframes > 0:
+            axes[2,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue', alpha=0.5)
+            axes[2,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        else:
+            axes[2,0].plot([0.], [0.], color='royalblue', alpha=0.5)        
         axes[2,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
 #        axes[2,0].set_title('Nframes = ' + str(nframes) + '; median number of detected stars/frame=' + str(median_nstars) + ', ' + str(nframes_fewer_detections) + ' w/fewer, ' + str(nframes_extra_detections) + ' w/more', fontsize=14) 
         axes[2,0].set_xlabel("Time (sec)", fontsize=14)
         axes[2,0].set_ylabel("Guider FWHM (mas)", fontsize=14)
-        axes[2,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
         axes[2,0].legend([r'Guider FWHM ($\neq$ seeing)'], fontsize=12, loc='best') 
 
         # Histogram of guider FWHM time series plot
-        axes[2,1].hist(fwhm, bins=30, color='royalblue', alpha=0.5)
+        if nframes > 0:
+            axes[2,1].hist(fwhm, bins=30, color='royalblue', alpha=0.5)
+            axes[2,1].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
         axes[2,1].set_xlabel("Guider FWHM (mas)", fontsize=14)
         axes[2,1].set_ylabel("Samples", fontsize=14)
-        axes[2,1].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
 
         # Guider flux time series plot
         flux      = self.df_GUIDER.object1_flux # /np.nanpercentile(self.df_GUIDER.object1_flux, 95)
         peak_flux = self.df_GUIDER.object1_peak
-        axes[3,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), flux,      color='royalblue', alpha=0.5)
+        if nframes > 0:
+            axes[3,0].plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), flux,      color='royalblue', alpha=0.5)
+        else:
+            axes[3,0].plot([0.], [0.],      color='royalblue', alpha=0.5)
         axesb = axes[3,0].twinx()
         axesb.set_ylabel(r'Peak Flux (DN pixel$^{-1}$)', color='orange', fontsize=14)
-        axesb.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), peak_flux, color='orange',    alpha=0.5)
+        if nframes > 0:
+            axesb.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), peak_flux, color='orange',    alpha=0.5)
+            axes[3,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        else:
+            axesb.plot([0.], [0.], color='orange',    alpha=0.5)
         axesb.grid(False)
         axes[3,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
         axes[3,0].set_xlabel("Time (sec)", fontsize=14)
         axes[3,0].set_ylabel("Integrated Flux (DN)", fontsize=14, color='royalblue')
-        axes[3,0].set_xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
         #axes[3,0].legend(['Guider Flux', 'Peak Guider Flux'], fontsize=12, loc='best') 
 
         # Histogram of guider flux time series plot
-        axes[3,1].hist(flux, bins=30, color='royalblue', alpha=0.5)
-        axes[3,1].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
         axesc = axes[3,1].twiny()
-        axesc.hist(peak_flux, bins=30, color='orange', alpha=0.5)
+        if nframes > 0:
+            axes[3,1].hist(flux, bins=30, color='royalblue', alpha=0.5)
+            axes[3,1].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
+            axesc.hist(peak_flux, bins=30, color='orange', alpha=0.5)
         axesc.set_xlabel(r'Peak Flux (DN pixel$^{-1}$; saturation = 15,830)', color='orange', fontsize=14)
         axesc.grid(False)
         axes[3,1].set_xlabel("Integrated Flux (DN)", fontsize=14, color='royalblue')
@@ -597,14 +629,18 @@ class AnalyzeGuider:
         # Construct plots
         plt.style.use('seaborn-whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
-        plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
+        nframes = self.df_GUIDER.shape[0]
+        if nframes > 0:
+            plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
+            plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        else:
+            plt.plot([0.], [0.], color='royalblue')        
         #plt.plot(time, int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec / max(int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec), marker='o', color='k')
         plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("Flux (fractional)", fontsize=14)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
-        plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
         plt.legend(['Guider Flux', 'Exposure Meter Flux'], fontsize=12, loc='best') 
 
         # Display the plot
@@ -640,13 +676,17 @@ class AnalyzeGuider:
         # Construct plots
         plt.style.use('seaborn-whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
-        plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
+        nframes = self.df_GUIDER.shape[0]
+        if nframes > 0:
+            plt.plot(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp), fwhm, color='royalblue')
+            plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
+        else:
+            plt.plot([0.], [0.], color='royalblue')        
         plt.title("Guider FWHM Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("FWHM (mas)", fontsize=14)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
-        plt.xlim(min(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)), max(self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)))
         plt.legend([r'Guider FWHM ($\neq$ seeing)'], fontsize=12, loc='best') 
 
         # Display the plot
