@@ -517,6 +517,7 @@ class OverscanSubtraction(KPF0_Primitive):
                         data_gain_corr = data * gain
 
                     frames_data.append(data_gain_corr)
+                
                 frames_data = np.array(frames_data)
 
                 for frame in range(len(self.ffi_exts)):

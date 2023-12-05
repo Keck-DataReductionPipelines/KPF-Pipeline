@@ -3,7 +3,6 @@
 from asyncio.log import logger
 import os
 import gc
-import sys
 from copy import copy
 import importlib
 import configparser as cp
@@ -24,6 +23,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.processing_context import ProcessingContext
 
+from pympler import muppy, tracker, summary
 
 class KPFPipeline(BasePipeline):
     """
@@ -47,13 +47,14 @@ class KPFPipeline(BasePipeline):
         action_name: (name_of_callable, current_state, next_event_name)
     """
     event_table = {
-        'start_recipe': ('start_recipe', 'starting recipe', None), 
-        'resume_recipe': ('resume_recipe', 'resuming recipe', None),
-        'next_file': ('next_file', 'updating file name', None),
+        'start_recipe': ('start_recipe', 'starting recipe', 'wait'), 
+        'resume_recipe': ('resume_recipe', 'resuming recipe', 'wait'),
+        'next_file': ('next_file', 'updating file name', 'wait'),
         'to_fits': ('to_fits', 'processing', 'resume_recipe'),
         'kpf0_from_fits': ('kpf0_from_fits', 'processing', 'resume_recipe'),
         'kpf1_from_fits': ('kpf1_from_fits', 'processing', 'resume_recipe'),
         'kpf2_from_fits': ('kpf2_from_fits', 'processing', 'resume_recipe'),
+        'wait': ('wait_for_event', 'waiting...', None),
         'exit': ('exit_loop', 'exiting...', None)
         }
     
@@ -265,7 +266,21 @@ class KPFPipeline(BasePipeline):
                                                    file_path))
 
         self.start_recipe(action, context)
-        
-        gc.collect()
 
         return Arguments(name="next_file")
+
+    def wait_for_event(self, action, context):
+        """
+        Custom no event event
+
+        Args:
+            action (keckdrpframework.models.action.Action): Keck DRPF Action object
+            context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
+        """
+        gc.collect()
+        # objects = muppy.get_objects()
+        # if len(objects):
+        #     s = summary.summarize(objects)
+        #     summary.print_(s)
+
+        return Arguments(name="wait_complete")

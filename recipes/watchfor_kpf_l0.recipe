@@ -92,7 +92,6 @@ if do_quality_control:
 
 
 # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
-
 for raw_file_path in file_list:
     td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
 
