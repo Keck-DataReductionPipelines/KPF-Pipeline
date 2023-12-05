@@ -11,10 +11,6 @@ DEFAULT_CFG_PATH = 'modules/Utils/overscan_subtract.cfg'
 DEFAULT_CFG_PATH_RED = 'modules/Utils/overscan_subtract_red.cfg'
 DEFAULT_CFG_PATH_GREEN = 'modules/Utils/overscan_subtract_green.cfg'
 
-from memory_profiler import profile
-
-fp=open('memory_profiler.log','w+')
-
 
 class OverscanSubtraction(KPF0_Primitive):
 
@@ -368,7 +364,6 @@ class OverscanSubtraction(KPF0_Primitive):
 
         return image_cut
     
-    @profile(stream=fp)
     def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
 
         """
