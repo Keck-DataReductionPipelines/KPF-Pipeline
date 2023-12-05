@@ -38,22 +38,24 @@ class AnalyzeL1:
         else:
             self.logger = None
         self.L1 = L1
-        #self.header = L1['PRIMARY'].header
         primary_header = HeaderParse(L1, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
         
 
-    def measure_L1_snr(self, snr_percentile=95):
+    def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
         """
         Compute the signal-to-noise ratio (SNR) for each spectral order and
         orderlet in an L1 spectrum from KPF.
         SNR is defined as signal / sqrt(abs(variance)) and can be negative.
+        Also, compute the 
 
         Args:
-            snr_percentile: snr_percentile in the SNR distribution for each combination of
-                order and orderlet
+            snr_percentile: percentile in the SNR distribution for each 
+                combination of order and orderlet
+            counts_percentile: percentile in the counts distribution for each 
+                combination of order and orderlet
 
         Attributes:
             GREEN_SNR - Two-dimensional array of SNR values for the Green CCD.
@@ -64,6 +66,9 @@ class AnalyzeL1:
                 For example, GREEN_SNR[1,2] is the SNR for order=1 and the
                 SCI2 orderlet.
             RED_SNR - Similar to GREEN_SNR, but for the Red CCD.
+            GREEN_PEAK_FLUX - Similar to GREEN_SNR, but it is an array of top-
+                percentile counts instead of SNR.
+            RED_PEAK_FLUX - Similar to GREEN_PEAK_FLUX, but for the Red CCD.
             GREEN_SNR_WAV - One-dimensional array of the wavelength of the
                 middle of the spectral orders on the green CCD.
             RED_SNR_WAV - Similar to GREEN_SNR, but for the Red CCD.
@@ -73,6 +78,7 @@ class AnalyzeL1:
         """
         L1 = self.L1
         self.snr_percentile = snr_percentile
+        self.counts_percentile = counts_percentile
 
         # Determine the number of orders
         norders_green = (L1['GREEN_SKY_WAVE']).shape[0]
@@ -96,10 +102,12 @@ class AnalyzeL1:
         RED_SCI_SNR    = 0 * L1['RED_SCI_VAR1']
 
         # Create Arrays
-        GREEN_SNR = np.zeros((norders_green, norderlets+1))
-        RED_SNR   = np.zeros((norders_red, norderlets+1))
-        GREEN_SNR_WAV = np.zeros(norders_green)
-        RED_SNR_WAV   = np.zeros(norders_red)
+        GREEN_SNR       = np.zeros((norders_green, norderlets+1))
+        RED_SNR         = np.zeros((norders_red, norderlets+1))
+        GREEN_PEAK_FLUX = np.zeros((norders_green, norderlets+1))
+        RED_PEAK_FLUX   = np.zeros((norders_red, norderlets+1))
+        GREEN_SNR_WAV   = np.zeros(norders_green)
+        RED_SNR_WAV     = np.zeros(norders_red)
 
         # Compute SNR arrays for each of the orders, orderlets, and CCDs.
         GREEN_SCI_SNR1 = np.divide(L1['GREEN_SCI_FLUX1'],
@@ -148,6 +156,12 @@ class AnalyzeL1:
             GREEN_SNR[o,3] = np.nanpercentile(GREEN_SCI_SNR3[o], snr_percentile)
             GREEN_SNR[o,4] = np.nanpercentile(GREEN_SKY_SNR[o], snr_percentile)
             GREEN_SNR[o,5] = np.nanpercentile(GREEN_SCI_SNR[o], snr_percentile)
+            GREEN_PEAK_FLUX[o,0] = np.nanpercentile(L1['GREEN_CAL_FLUX'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,1] = np.nanpercentile(L1['GREEN_SCI_FLUX1'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,2] = np.nanpercentile(L1['GREEN_SCI_FLUX2'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,3] = np.nanpercentile(L1['GREEN_SCI_FLUX3'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,4] = np.nanpercentile(L1['GREEN_SKY_FLUX'][o], counts_percentile)
+            GREEN_PEAK_FLUX[o,5] = np.nanpercentile(L1['GREEN_SCI_FLUX1'][o]+L1['GREEN_SCI_FLUX3'][o]+L1['GREEN_SCI_FLUX3'][o], counts_percentile)
         for o in range(norders_red):
             RED_SNR_WAV[o] = L1['RED_SCI_WAVE1'][o,2040]
             RED_SNR[o,0] = np.nanpercentile(RED_CAL_SNR[o], snr_percentile)
@@ -156,12 +170,20 @@ class AnalyzeL1:
             RED_SNR[o,3] = np.nanpercentile(RED_SCI_SNR3[o], snr_percentile)
             RED_SNR[o,4] = np.nanpercentile(RED_SKY_SNR[o], snr_percentile)
             RED_SNR[o,5] = np.nanpercentile(RED_SCI_SNR[o], snr_percentile)
+            RED_PEAK_FLUX[o,0] = np.nanpercentile(L1['RED_CAL_FLUX'][o], counts_percentile)
+            RED_PEAK_FLUX[o,1] = np.nanpercentile(L1['RED_SCI_FLUX1'][o], counts_percentile)
+            RED_PEAK_FLUX[o,2] = np.nanpercentile(L1['RED_SCI_FLUX2'][o], counts_percentile)
+            RED_PEAK_FLUX[o,3] = np.nanpercentile(L1['RED_SCI_FLUX3'][o], counts_percentile)
+            RED_PEAK_FLUX[o,4] = np.nanpercentile(L1['RED_SKY_FLUX'][o], counts_percentile)
+            RED_PEAK_FLUX[o,5] = np.nanpercentile(L1['RED_SCI_FLUX1'][o]+L1['RED_SCI_FLUX2'][o]+L1['RED_SCI_FLUX3'][o], counts_percentile)
 
-        # Save SNR arrays to the object
-        self.GREEN_SNR     = GREEN_SNR
-        self.RED_SNR       = RED_SNR
-        self.GREEN_SNR_WAV = GREEN_SNR_WAV
-        self.RED_SNR_WAV   = RED_SNR_WAV
+        # Save SNR and COUNTS arrays to the object
+        self.GREEN_SNR       = GREEN_SNR
+        self.RED_SNR         = RED_SNR
+        self.GREEN_PEAK_FLUX = GREEN_PEAK_FLUX
+        self.RED_PEAK_FLUX   = RED_PEAK_FLUX
+        self.GREEN_SNR_WAV   = GREEN_SNR_WAV
+        self.RED_SNR_WAV     = RED_SNR_WAV
 
 
     def plot_L1_snr(self, fig_path=None, show_plot=False):
@@ -193,8 +215,8 @@ class AnalyzeL1:
         ax1.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,3],   marker="<", color='r', label='SCI3')
         ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax1.grid()
-        ax2.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,4], marker="D", color='darkgreen', label='SKY')
-        ax2.scatter(self.RED_SNR_WAV,   self.RED_SNR[:,4],   marker="D", color='r', label='SKY')
+        ax2.scatter(self.GREEN_SNR_WAV[1:], self.GREEN_SNR[1:,4], marker="D", color='darkgreen', label='SKY')
+        ax2.scatter(self.RED_SNR_WAV,       self.RED_SNR[:,4],   marker="D", color='r', label='SKY')
         ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
         ax2.grid()
         ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_SNR[:,0], marker="D", color='darkgreen', label='CAL')
@@ -208,14 +230,23 @@ class AnalyzeL1:
 
         # Set titles and labels for each subplot
         ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=16)
-        ax3.set_xlabel('Wavelength (Ang)', fontsize=14)
-        ax1.set_ylabel('SNR - SCI', fontsize=14)
-        ax2.set_ylabel('SNR - SKY', fontsize=14)
-        ax3.set_ylabel('SNR - CAL', fontsize=14)
+        ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
+        ax1.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
+        ax2.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
+        ax3.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - CAL', fontsize=14)
         ax3.xaxis.set_tick_params(labelsize=14)
         ax1.yaxis.set_tick_params(labelsize=14)
         ax2.yaxis.set_tick_params(labelsize=14)
         ax3.yaxis.set_tick_params(labelsize=14)
+        ymin, ymax = ax1.get_ylim()
+        if ymin > 0:
+            ax1.set_ylim(bottom=0)
+        ymin, ymax = ax2.get_ylim()
+        if ymin > 0:
+            ax2.set_ylim(bottom=0)
+        ymin, ymax = ax3.get_ylim()
+        if ymin > 0:
+            ax3.set_ylim(bottom=0)
 
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
@@ -229,6 +260,84 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+
+    def plot_L1_peak_flux(self, fig_path=None, show_plot=False):
+        """
+        Generate a plot of peak_counts per order as compuated using the compute_l1_snr
+        function.
+
+        Args:
+            fig_path (string) - set to the path for a peak counts vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        # Make 3-panel plot. First, create the figure and subplots
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(10,10), tight_layout=True)
+
+        # Plot the data on each subplot
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,5], marker="8", color='darkgreen', label='SCI1+SCI2+SCI3')
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,1], marker=">", color='darkgreen', label='SCI1')
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,2], marker="s", color='darkgreen', label='SCI2')
+        ax1.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,3], marker="<", color='darkgreen', label='SCI3')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,5],   marker="8", color='r', label='SCI1+SCI2+SCI3')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,1],   marker=">", color='r', label='SCI1')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,2],   marker="s", color='r', label='SCI2')
+        ax1.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,3],   marker="<", color='r', label='SCI3')
+        ax1.yaxis.set_major_locator(MaxNLocator(nbins=12))
+        ax1.grid()
+        ax2.scatter(self.GREEN_SNR_WAV[1:], self.GREEN_PEAK_FLUX[1:,4], marker="D", color='darkgreen', label='SKY')
+        ax2.scatter(self.RED_SNR_WAV,       self.RED_PEAK_FLUX[:,4],   marker="D", color='r', label='SKY')
+        ax2.yaxis.set_major_locator(MaxNLocator(nbins=12))
+        ax2.grid()
+        ax3.scatter(self.GREEN_SNR_WAV, self.GREEN_PEAK_FLUX[:,0], marker="D", color='darkgreen', label='CAL')
+        ax3.scatter(self.RED_SNR_WAV,   self.RED_PEAK_FLUX[:,0],   marker="D", color='r', label='CAL')
+        ax3.yaxis.set_major_locator(MaxNLocator(nbins=12))
+        ax3.grid()
+        ax3.set_xlim(4450,8700)
+
+        # Add legend
+        ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
+
+        # Set titles and labels for each subplot
+        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal)', fontsize=16)
+        ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
+        ax1.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
+        ax2.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
+        ax3.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - CAL', fontsize=14)
+        ax3.xaxis.set_tick_params(labelsize=14)
+        ax1.yaxis.set_tick_params(labelsize=14)
+        ax2.yaxis.set_tick_params(labelsize=14)
+        ax3.yaxis.set_tick_params(labelsize=14)
+        ymin, ymax = ax1.get_ylim()
+        if ymin > 0:
+            ax1.set_ylim(bottom=0)
+        ymin, ymax = ax2.get_ylim()
+        if ymin > 0:
+            ax2.set_ylim(bottom=0)
+        ymin, ymax = ax3.get_ylim()
+        if ymin > 0:
+            ax3.set_ylim(bottom=0)
+
+
+        # Adjust spacing between subplots
+        plt.subplots_adjust(hspace=0)
+        plt.tight_layout()
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
 
     def plot_L1_spectrum(self, orderlet=None, fig_path=None, show_plot=False):
         """
@@ -437,7 +546,7 @@ class AnalyzeL1:
             None
 
         Attributes:
-            To be defined.
+            To be added.
 
         Returns:
             None
@@ -522,7 +631,10 @@ class AnalyzeL1:
             self.ratio_r_sci3_sci2[o] = np.nanmedian(self.f_r_sci3_int[o,ind]/self.f_r_sci2[o,ind])
             self.ratio_r_sky_sci2[o]  = np.nanmedian(self.f_r_sky_int[o,ind] /self.f_r_sci2[o,ind])
             self.ratio_r_cal_sci2[o]  = np.nanmedian(self.f_r_cal_int[o,ind] /self.f_r_sci2[o,ind])
-            
+        
+        # Compute median flux ratio per order
+        
+
         # Define central wavelengths per order
         self.w_g_order = np.zeros(35) 
         self.w_r_order = np.zeros(32) 
@@ -599,7 +711,7 @@ class AnalyzeL1:
         plt.close('all')
 
 
-    def plot_orderlet_flux_ratios_grid(self, chip=None, fig_path=None, show_plot=False):
+    def plot_orderlet_flux_ratios_grid(self, orders=[10,20,30], ind_range=[1040,3040], chip=None, fig_path=None, show_plot=False):
         """
         Generate a plot of a orderlet flux ratio as a function of spectral orders.
 
@@ -645,64 +757,125 @@ class AnalyzeL1:
                 axs[i, j].tick_params(axis='both', which='major', labelsize=14)
         
         # orders and pixel ranges to plot (consider making this user configurable)
-        o1 = 10
-        o2 = 20
-        o3 = 30
-        imin1 = 1000; imax1 = 3000
-        imin2 = 1000; imax2 = 3000
-        imin3 = 1000; imax3 = 3000
+        o1 = orders[0]
+        o2 = orders[1]
+        o3 = orders[2]
+        imin1 = ind_range[0]; imax1 = ind_range[1]
+        imin2 = ind_range[0]; imax2 = ind_range[1]
+        imin3 = ind_range[0]; imax3 = ind_range[1]
         
+        sigmas = [50-34.1, 50, 50+34.1]
         # Row 0
         o=o1; imin = imin1; imax = imax1
-        axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='teal') 
+        axs[0,0].legend(loc='upper right')
         axs[0,0].set_ylabel('SCI1 / SCI2', fontsize=18)
         axs[0,0].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='teal') 
+        axs[0,1].legend(loc='upper right')
         axs[0,1].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='teal') 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='teal') 
+        axs[0,2].legend(loc='upper right')
         axs[0,2].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,2].grid()
 
         # Row 1
         o=o1; imin = imin1; imax = imax1
-        axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='tomato') 
+        axs[1,0].legend(loc='upper right')
         axs[1,0].set_ylabel('SCI3 / SCI2', fontsize=18)
         axs[1,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='tomato') 
+        axs[1,1].legend(loc='upper right')
         axs[1,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='tomato') 
+        med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='tomato') 
+        axs[1,2].legend(loc='upper right')
         axs[1,2].grid()
 
         # Row 2
         o=o1; imin = imin1; imax = imax1
-        axs[2,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[2,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        axs[2,0].legend(loc='upper right')
         axs[2,0].set_ylabel('SKY / SCI2', fontsize=18)
         axs[2,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[2,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[2,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        axs[2,1].legend(loc='upper right')
         axs[2,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[2,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='orchid') 
+        axs[2,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[0,0].legend(loc='upper right')
         axs[2,2].grid()
         
         # Row 3
         o=o1; imin = imin1; imax = imax1
-        axs[3,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='turquoise') 
+        axs[3,0].legend(loc='upper right')
         axs[3,0].set_ylabel('CAL / SCI2', fontsize=18)
         axs[3,0].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[3,0].grid()
         o=o2; imin = imin2; imax = imax2
-        axs[3,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='turquoise') 
+        axs[3,1].legend(loc='upper right')
         axs[3,1].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[3,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[3,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], linewidth=0.3, color='turquoise') 
+        med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='turquoise') 
+        axs[3,2].legend(loc='upper right')
         axs[3,2].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[3,2].grid()
 
@@ -723,4 +896,22 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+def uncertainty_median(input_data, n_bootstrap=1000):
+    """
+    Estimate the uncertainty of the median of a dataset.
+
+    Args:
+        input_data (array) - 1D array
+        n_bootstrap (int) - number of bootstrap resamplings
+
+    Returns:
+        uncertainty of median of input_data
+    """
+
+    n = len(input_data)
+    indices = np.random.randint(0, n, (n_bootstrap, n))
+    bootstrapped_medians = np.median(input_data[indices], axis=1)
+    median_uncertainty = np.std(bootstrapped_medians)
+    return median_uncertainty
 

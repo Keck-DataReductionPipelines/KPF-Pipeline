@@ -72,7 +72,7 @@ class QualityControlFramework(KPF0_Primitive):
         Returns exitcode:
             0 = Normal
         """
-
+ 
         quality_control_exit_code = 0
 
         # Define QC object
