@@ -117,7 +117,6 @@ class FileAlarm(PatternMatchingEventHandler):
         return True            
 
     def process(self, event):
-        gc.collect()
         if os.path.basename(event.src_path).startswith('.'):
             final_file = os.path.dirname(event.src_path) + "/" + \
                 '.'.join(os.path.basename(event.src_path).split('.')[1:-1])
