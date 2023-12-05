@@ -23,7 +23,6 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.action import Action
 from keckdrpframework.models.processing_context import ProcessingContext
 
-from pympler import muppy, tracker, summary
 
 class KPFPipeline(BasePipeline):
     """
@@ -278,9 +277,5 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         gc.collect()
-        # objects = muppy.get_objects()
-        # if len(objects):
-        #     s = summary.summarize(objects)
-        #     summary.print_(s)
 
         return Arguments(name="wait_complete")

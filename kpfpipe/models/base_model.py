@@ -212,7 +212,7 @@ class KPFDataModel(object):
             raise IOError('Cannot overwrite existing data')
 
         self.filename = os.path.basename(fn)
-        with fits.open(fn, memmap=True) as hdu_list:
+        with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
