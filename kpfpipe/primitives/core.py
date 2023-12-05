@@ -27,10 +27,6 @@ class KPF_Primitive(BasePrimitive):
             if self._pre_condition():
                 self.output = self._perform()
                 if self._post_condition():
-                    # self.context = None
-                    # self.action = None
-                    # self.logger = None
-
                     return self.output
         except Exception as e:
             self.logger.error(f"Failed executing primitive {self.__class__.__name__}: {e}\n{traceback.format_exc()}")

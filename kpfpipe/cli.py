@@ -177,9 +177,9 @@ def main():
         frame_config.set('DEFAULT', 'no_event_event', 'exit')
         frame_config.set('DEFAULT', 'no_event_wait_time', '5')
     elif args.watch:
-        frame_config.set('DEFAULT', 'event_timeout', '3600')
+        frame_config.set('DEFAULT', 'event_timeout', '1200')
         frame_config.set('DEFAULT', 'no_event_event', 'Event("wait", None)')
-        frame_config.set('DEFAULT', 'no_event_wait_time', '3695')
+        frame_config.set('DEFAULT', 'no_event_wait_time', '900')
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='cfg') as tp:
         frame_config.write(tp)
@@ -233,11 +233,7 @@ def main():
                 time.sleep(0.1)
 
         else:
-            if args.ncpus > 1:
-                framework.start(qm_only=True)
-            else:
-                framework.start(wait_for_event=True, continuous=True)
-
+            framework.start(qm_only=True)
     else:
         arg.watch = False
         if hasattr(args, 'date') and args.date:

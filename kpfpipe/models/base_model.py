@@ -286,8 +286,6 @@ class KPFDataModel(object):
         with open(fn, 'wb') as f:
             hdul.writeto(f, overwrite=True, output_verify='silentfix')
 
-        del hdul
-
 # =============================================================================
 # Receipt related members
     def receipt_add_entry(self, module, mod_path, param, status, chip='all'):
