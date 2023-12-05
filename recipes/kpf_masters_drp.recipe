@@ -104,22 +104,80 @@ for raw_file_path in file_list:
         oscan_complete = to_fits(L0_with_ffi, output_file_name)
 
 ########################
+# Get config parameters so that they are defined regardless of logic branches.
+########################
+
+bias_n_sigma = config.BIAS.n_sigma
+bias_lev0_ffi_exts = config.BIAS.lev0_ffi_exts
+
+bias_objects_config = config.BIAS.bias_objects
+
+if len(bias_objects_config) == 0:
+    bias_objects = bias_objects_auto
+else:
+    bias_objects = bias_objects_config
+
+masterbias_path = config.BIAS.masterbias_path
+
+
+
+dark_n_sigma = config.DARK.n_sigma
+dark_lev0_ffi_exts = config.DARK.lev0_ffi_exts
+
+dark_objects_config = config.DARK.dark_objects
+
+if len(dark_objects_config) == 0:
+    dark_objects = dark_objects_auto
+else:
+    dark_objects = dark_objects_config
+
+masterdark_path = config.DARK.masterdark_path
+
+
+
+flat_n_sigma = config.FLAT.n_sigma
+flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
+masterflat_path = config.FLAT.masterflat_path
+smoothlamppattern_path = config.FLAT.smoothlamppattern_path
+ordermask_path = config.FLAT.ordermask_path
+
+
+
+standard_bias_object = "autocal-bias"
+standard_dark_object = "autocal-dark"
+standard_flat_object = "autocal-flat-all"
+
+
+if date_dir:
+    standard_masterbias_path = str_replace(masterbias_path,\
+                             '_master_bias.fits',\
+                             '_' + date_dir + '_master_bias_' + standard_bias_object + '.fits')
+else:
+    standard_masterbias_path = str_replace(masterbias_path,\
+                             '_master_bias.fits',\
+                             '_master_bias_' + standard_bias_object + '.fits')
+
+if date_dir:
+    standard_masterdark_path = str_replace(masterdark_path,\
+                             '_master_dark.fits',\
+                             '_' + date_dir + '_master_dark_' + standard_dark_object + '.fits')
+else:
+    standard_masterdark_path = str_replace(masterdark_path,\
+                             '_master_dark.fits',\
+                             '_master_dark_' + standard_dark_object + '.fits')
+
+if date_dir:
+    standard_masterflat_path = str_replace(masterflat_path, '_master_flat.fits', '_' + date_dir + '_master_flat.fits')
+else:
+    standard_masterflat_path = masterflat_path
+
+
+########################
 # Generate master bias.
 ########################
 
 if all_bias_files_list:
-    bias_n_sigma = config.BIAS.n_sigma
-    bias_lev0_ffi_exts = config.BIAS.lev0_ffi_exts
 
-
-    bias_objects_config = config.BIAS.bias_objects
-
-    if len(bias_objects_config) == 0:
-        bias_objects = bias_objects_auto
-    else:
-        bias_objects = bias_objects_config
-
-    masterbias_path = config.BIAS.masterbias_path
     bias_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
     for bias_object in bias_objects:
@@ -140,113 +198,102 @@ if all_bias_files_list:
                                              bias_object,
                                              new_masterbias_path)
 
+new_masterbias_path = standard_masterbias_path
 
 
 ########################
 # Generate master dark.
 ########################
 
-    if all_dark_files_list:
-        dark_n_sigma = config.DARK.n_sigma
-        dark_lev0_ffi_exts = config.DARK.lev0_ffi_exts
+if all_dark_files_list:
 
+    dark_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
+    for dark_object in dark_objects:
 
-
-        dark_objects_config = config.DARK.dark_objects
-
-        if len(dark_objects_config) == 0:
-            dark_objects = dark_objects_auto
+        if date_dir:
+            new_masterdark_path = str_replace(masterdark_path,\
+                                     '_master_dark.fits',\
+                                     '_' + date_dir + '_master_dark_' + dark_object + '.fits')
         else:
-            dark_objects = dark_objects_config
+            new_masterdark_path = str_replace(masterdark_path,\
+                                     '_master_dark.fits',\
+                                     '_master_dark_' + dark_object + '.fits')
 
-        masterdark_path = config.DARK.masterdark_path
-        dark_input_files = overscan_output_dir + "/" + "*_2D.fits"
+        exit_list_dark = MasterDarkFramework(data_type,
+                                             dark_n_sigma,
+                                             dark_input_files,
+                                             dark_lev0_ffi_exts,
+                                             dark_object,
+                                             new_masterbias_path,
+                                             new_masterdark_path)
 
-        for dark_object in dark_objects:
-
-            if date_dir:
-                new_masterdark_path = str_replace(masterdark_path,\
-                                         '_master_dark.fits',\
-                                         '_' + date_dir + '_master_dark_' + dark_object + '.fits')
-            else:
-                new_masterdark_path = str_replace(masterdark_path,\
-                                         '_master_dark.fits',\
-                                         '_master_dark_' + dark_object + '.fits')
-
-            exit_list_dark = MasterDarkFramework(data_type,
-                                                 dark_n_sigma,
-                                                 dark_input_files,
-                                                 dark_lev0_ffi_exts,
-                                                 dark_object,
-                                                 new_masterbias_path,
-                                                 new_masterdark_path)
+new_masterdark_path = standard_masterdark_path
 
 
 ########################
 # Generate master flat.
 ########################
 
-        if all_flat_files_list:
-            flat_n_sigma = config.FLAT.n_sigma
-            flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
-            masterflat_path = config.FLAT.masterflat_path
-            smoothlamppattern_path = config.FLAT.smoothlamppattern_path
-            ordermask_path = config.FLAT.ordermask_path
-            flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
+if all_flat_files_list:
 
-            if date_dir:
-                new_masterflat_path = str_replace(masterflat_path, '_master_flat.fits', '_' + date_dir + '_master_flat.fits')
-            else:
-                new_masterflat_path = masterflat_path
+    flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
-            exit_list_flat = MasterFlatFramework(data_type,
-                                                 flat_n_sigma,
-                                                 flat_input_files,
-                                                 flat_lev0_ffi_exts,
-                                                 new_masterbias_path,
-                                                 new_masterdark_path,
-                                                 new_masterflat_path,
-                                                 smoothlamppattern_path,
-                                                 ordermask_path)
+    if date_dir:
+        new_masterflat_path = str_replace(masterflat_path, '_master_flat.fits', '_' + date_dir + '_master_flat.fits')
+    else:
+        new_masterflat_path = masterflat_path
+
+    exit_list_flat = MasterFlatFramework(data_type,
+                                         flat_n_sigma,
+                                         flat_input_files,
+                                         flat_lev0_ffi_exts,
+                                         new_masterbias_path,
+                                         new_masterdark_path,
+                                         new_masterflat_path,
+                                         smoothlamppattern_path,
+                                         ordermask_path)
+
+new_masterflat_path = standard_masterflat_path
+
 
 ####################################
 # Generate master-arclamp products.
 ####################################
 
-        skip_flattening = config.ARCLAMP.skip_flattening
-        make_arclamp_stacks = config.ARCLAMP.make_arclamp_stacks
+skip_flattening = config.ARCLAMP.skip_flattening
+make_arclamp_stacks = config.ARCLAMP.make_arclamp_stacks
 
-        if all_arclamp_files_list and make_arclamp_stacks:
-            arclamp_n_sigma = config.ARCLAMP.n_sigma
-            arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
-            arclamp_objects_config = config.ARCLAMP.arclamp_objects
+if all_arclamp_files_list and make_arclamp_stacks:
+    arclamp_n_sigma = config.ARCLAMP.n_sigma
+    arclamp_lev0_ffi_exts = config.ARCLAMP.lev0_ffi_exts
+    arclamp_objects_config = config.ARCLAMP.arclamp_objects
 
-            if len(arclamp_objects_config) == 0:
-                arclamp_objects = arclamp_objects_auto
-            else:
-                arclamp_objects = arclamp_objects_config
+    if len(arclamp_objects_config) == 0:
+        arclamp_objects = arclamp_objects_auto
+    else:
+        arclamp_objects = arclamp_objects_config
 
-            masterarclamp_path = config.ARCLAMP.masterarclamp_path
-            arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
+    masterarclamp_path = config.ARCLAMP.masterarclamp_path
+    arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
 
-            for arclamp_object in arclamp_objects:
+    for arclamp_object in arclamp_objects:
 
-                if date_dir:
-                    new_masterarclamp_path = str_replace(masterarclamp_path,\
-                                             '_master_arclamp.fits',\
-                                             '_' + date_dir + '_master_arclamp_' + arclamp_object + '.fits')
-                else:
-                    new_masterarclamp_path = str_replace(masterarclamp_path,\
-                                             '_master_arclamp.fits',\
-                                             '_master_arclamp_' + arclamp_object + '.fits')
+        if date_dir:
+            new_masterarclamp_path = str_replace(masterarclamp_path,\
+                                     '_master_arclamp.fits',\
+                                     '_' + date_dir + '_master_arclamp_' + arclamp_object + '.fits')
+        else:
+            new_masterarclamp_path = str_replace(masterarclamp_path,\
+                                     '_master_arclamp.fits',\
+                                     '_master_arclamp_' + arclamp_object + '.fits')
 
-                exit_list_arclamp = MasterArclampFramework(data_type,
-                                                           arclamp_n_sigma,
-                                                           arclamp_input_files,
-                                                           arclamp_lev0_ffi_exts,
-                                                           arclamp_object,
-                                                           new_masterbias_path,
-                                                           new_masterdark_path,
-                                                           new_masterflat_path,
-                                                           new_masterarclamp_path)
+        exit_list_arclamp = MasterArclampFramework(data_type,
+                                                   arclamp_n_sigma,
+                                                   arclamp_input_files,
+                                                   arclamp_lev0_ffi_exts,
+                                                   arclamp_object,
+                                                   new_masterbias_path,
+                                                   new_masterdark_path,
+                                                   new_masterflat_path,
+                                                   new_masterarclamp_path)

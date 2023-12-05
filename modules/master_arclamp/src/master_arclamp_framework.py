@@ -2,8 +2,9 @@ from os.path import exists
 import numpy as np
 import configparser as cp
 from datetime import datetime, timezone
-from scipy.ndimage import gaussian_filter
+import re
 
+import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -84,8 +85,8 @@ class MasterArclampFramework(KPF0_Primitive):
         self.masterflat_path = self.action.args[7]
         self.masterarclamp_path = self.action.args[8]
 
-        self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
-        self.imtype_values_str = 'Arclamp'
+        self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
+        self.imtype_values_str = ['Arclamp',self.arclamp_object]
 
         try:
             self.module_config_path = context.config_path['master_arclamp']
@@ -118,47 +119,141 @@ class MasterArclampFramework(KPF0_Primitive):
 
         self.logger.info('self.skip_flattening = {}'.format(self.skip_flattening))
 
+
     def _perform(self):
 
         """
-        Returns [exitcode, infobits] after computing and writing master-arclamp FITS file.
+        Returns [exitcode, infobits] after computing and writing master-arclamp FITS file.  See below for possible exitcodes.
 
+        Exitcode      Comment
+        ----------------------------------------
+          0           Normal execution
+          5           Could not query database for fallback input master file
+          6           tester_object != self.arclamp_object (unlikely with pre-checking added later)
+          7           Number of input files < 2 for given valid FITS extension (ffi == 'GREEN_CCD' or ffi == 'RED_CCD')
+          8           Number of input files = 0
+         10           Observation date not available to query database for fallback input master file
         """
 
+
+        # Initialization.
+
+        master_arclamp_exit_code = 0
+        master_arclamp_infobits = 0
+
+
+        # Filter arclamp files with IMTYPE=‘arclamp’ and that match the input object specification with OBJECT.
+        # Parse obsdate
+
+        self.logger.info('self.arclamp_object = {}'.format(self.arclamp_object))
+
+        fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
+        all_arclamp_files = fh.match_headers_string_lower()
+        n_all_arclamp_files = len(all_arclamp_files)
+
+        if n_all_arclamp_files == 0:
+            self.logger.info('n_all_arclamp_files = {}'.format(n_all_arclamp_files))
+            master_arclamp_exit_code = 8
+            exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+            return Arguments(exit_list)
+
+        obsdate_match = re.match(r".*(\d\d\d\d\d\d\d\d).*", all_arclamp_files[0])
+        try:
+            obsdate = obsdate_match.group(1)
+            self.logger.info('obsdate = {}'.format(obsdate))
+        except:
+            self.logger.info("obsdate not parsed from input filename")
+            obsdate = None
+
+
+        # Get master calibration files.
+
+        dbh = db.KPFDB()             # Open database connection (if needed for fallback master calibration file)
+
+        cal_file_level = 0           # Parameters for querying database fallback master calibration file.
+        contentbitmask = 3
+
         masterbias_path_exists = exists(self.masterbias_path)
-        if not masterbias_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.masterbias_path))
-        self.logger.info('self.masterbias_path = {}'.format(self.masterbias_path))
+
         self.logger.info('masterbias_path_exists = {}'.format(masterbias_path_exists))
 
+        if not masterbias_path_exists:
+            if obsdate != None:
+                cal_type_pair = ['bias','autocal-bias']                    # Query database for fallback master bias.
+                dbh.get_nearest_master_file(obsdate,cal_file_level,contentbitmask,cal_type_pair)
+                self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+                self.logger.info('Master dark database-query filename = {}'.format(dbh.filename))
+                if dbh.exit_code == 0:
+                    self.masterbias_path = dbh.filename
+                else:
+                     self.logger.info('Master bias file cannot be queried from database; returning...')
+                     master_arclamp_exit_code = 5
+                     exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                     return Arguments(exit_list)
+            else:
+                self.logger.info('Observation date not available so master bias file cannot be queried from database; returning...')
+                master_arclamp_exit_code = 10
+                exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                return Arguments(exit_list)
+
+        self.logger.info('self.masterbias_path = {}'.format(self.masterbias_path))
+
         masterdark_path_exists = exists(self.masterdark_path)
-        if not masterdark_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.masterdark_path))
-        self.logger.info('self.masterdark_path = {}'.format(self.masterdark_path))
         self.logger.info('masterdark_path_exists = {}'.format(masterdark_path_exists))
+
+        if not masterdark_path_exists:
+            if obsdate != None:
+                cal_type_pair = ['dark','autocal-dark']                    # Query database for fallback master dark.
+                dbh.get_nearest_master_file(obsdate,cal_file_level,contentbitmask,cal_type_pair)
+                self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+                self.logger.info('Master dark database-query filename = {}'.format(dbh.filename))
+                if dbh.exit_code == 0:
+                     self.masterdark_path = dbh.filename
+                else:
+                     self.logger.info('Master dark file cannot be queried from database; returning...')
+                     master_arclamp_exit_code = 5
+                     exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                     return Arguments(exit_list)
+            else:
+                self.logger.info('Observation date not available so master dark file cannot be queried from database; returning...')
+                master_arclamp_exit_code = 10
+                exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                return Arguments(exit_list)
+
+        self.logger.info('self.masterdark_path = {}'.format(self.masterdark_path))
 
         if self.skip_flattening == 0:
             masterflat_path_exists = exists(self.masterflat_path)
-            if not masterflat_path_exists:
-                raise FileNotFoundError('File does not exist: {}'.format(self.masterflat_path))
-            self.logger.info('self.masterflat_path = {}'.format(self.masterflat_path))
             self.logger.info('masterflat_path_exists = {}'.format(masterflat_path_exists))
+
+            if not masterflat_path_exists:
+                if obsdate != None:
+                    cal_type_pair = ['flat','autocal-flat-all']                    # Query database for fallback master flat.
+                    dbh.get_nearest_master_file(obsdate,cal_file_level,contentbitmask,cal_type_pair)
+                    self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+                    self.logger.info('Master dark database-query filename = {}'.format(dbh.filename))
+                    if dbh.exit_code == 0:
+                        self.masterflat_path = dbh.filename
+                    else:
+                        self.logger.info('Master flat file cannot be queried from database; returning...')
+                        master_arclamp_exit_code = 5
+                        exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                        return Arguments(exit_list)
+                else:
+                    self.logger.info('Observation date not available so master flat file cannot be queried from database; returning...')
+                    master_arclamp_exit_code = 10
+                    exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+                    return Arguments(exit_list)
+
+            self.logger.info('self.masterflat_path = {}'.format(self.masterflat_path))
+
+        dbh.close()      # Close database connection.
 
         master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
         master_dark_data = KPF0.from_fits(self.masterdark_path,self.data_type)
 
         if self.skip_flattening == 0:
             master_flat_data = KPF0.from_fits(self.masterflat_path,self.data_type)
-
-        master_arclamp_exit_code = 0
-        master_arclamp_infobits = 0
-
-        # Filter arclamp files with IMTYPE=‘arclamp’ for now.  Later in this class, exclude
-        # those FITS-image extensions that don't match the input object specification
-        # with OBJECT.
-
-        fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
-        all_arclamp_files = fh.match_headers_string_lower()
 
         mjd_obs_list = []
         exp_time_list = []
@@ -226,7 +321,6 @@ class MasterArclampFramework(KPF0_Primitive):
             frames_data_exptimes = []
             frames_data_mjdobs = []
             frames_data_path = []
-            n_all_arclamp_files = len(all_arclamp_files)
             n = 0
             for i in range(0, n_all_arclamp_files):
                 exp_time = exp_time_list[i]

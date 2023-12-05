@@ -38,6 +38,10 @@ class FitsHeaders:
             self.logger = None
             print('---->FitsHeaders class constructor: self.input_fits_files = {}'.format(self.input_fits_files))
 
+        n_input_fits_files = len(self.input_fits_files)
+
+        self.logger.info('FitsHeaders constructor: n_input_fits_files = {}'.format(n_input_fits_files))
+
     def match_headers_string_lower(self):
 
         """
@@ -48,6 +52,8 @@ class FitsHeaders:
         matched_fits_files = []
         for fits_file in self.input_fits_files:
 
+            hdul = fits.open(fits_file)
+
             match_count = 0
             for i in range(self.n_header_keywords):
 
@@ -55,7 +61,7 @@ class FitsHeaders:
 
                 try:
 
-                    val = fits.getval(fits_file, self.header_keywords[i])
+                    val = hdul[0].header[self.header_keywords[i]]
                     fits_value = (val).lower()
                     if (fits_value == input_value):
                         match_count += 1
@@ -76,6 +82,8 @@ class FitsHeaders:
 
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
+
+            hdul.close()
 
         if self.logger:
              self.logger.debug('FitsHeaders.match_headers_string_lower(): matched_fits_files = {}'.\
