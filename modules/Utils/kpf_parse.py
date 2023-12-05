@@ -197,23 +197,6 @@ class HeaderParse:
                 pass 
             return (read_speed, green_acf, red_acf, green_read_time, red_read_time)
 
-#datetime_format = "%Y-%m-%dT%H:%M:%S.%f"
-#dt1 = datetime.strptime(time1, datetime_format)
-#dt2 = datetime.strptime(time2, datetime_format)
-
-# Compute the difference
-#difference = dt2 - dt1
-    
-# Return the total seconds rounded to 0.1-second precision
-#round(difference.total_seconds(), 1)
-    
-#GRDATE  = '2023-09-10T13:29:09.804475' / FITS file write time Kwd green DATE    
-#GRDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd green DATE-BEG   
-#GRDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd green DATE-END  
-#RDDATE  = '2023-09-10T13:29:09.896907' / FITS file write time Kwd red DATE      
-#RDDATE-B= '2023-09-10T13:26:56.365516' / Shutter-open time Kwd red DATE-BEG     
-#RDDATE-E= '2023-09-10T13:28:56.398782' / Shutter-close time Kwd red DATE-END    
-
 
 def get_datecode(ObsID):
     """
@@ -239,10 +222,10 @@ def get_data_products_L0(L0):
     Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config
 
     Args:
-        2D - a KPF 2D object 
+        L0 - a KPF L0 object 
 
     Returns:
-        data_products in a 2D file
+        data_products in a L0 file
     """
     data_products = []
     if hasattr(L0, 'GREEN_AMP1'):

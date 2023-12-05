@@ -42,7 +42,6 @@ class Analyze2D:
 
     def __init__(self, D2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
-        self.logger.debug('Initializing Analyze2D object')
         self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
         self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
         primary_header = HeaderParse(D2, 'PRIMARY')
@@ -87,9 +86,6 @@ class Analyze2D:
                 self.df_telemetry[column] = self.df_telemetry[column].astype(str)
         self.df_telemetry.set_index("keyword", inplace=True)
 
-        #with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-        #    print(df_telemetry)
-
         reg = {'ref1': {'name': 'Reference Region 1',         'x1': 1690, 'x2': 1990, 'y1': 1690, 'y2': 1990, 'short':'ref1', 'med_elec':0, 'label':''},
                'ref2': {'name': 'Reference Region 2',         'x1': 1690, 'x2': 1990, 'y1': 2090, 'y2': 2390, 'short':'ref2', 'med_elec':0, 'label':''},
                'ref3': {'name': 'Reference Region 3',         'x1': 2090, 'x2': 2390, 'y1': 1690, 'y2': 1990, 'short':'ref3', 'med_elec':0, 'label':''},
@@ -102,14 +98,14 @@ class Analyze2D:
                'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
               }
 #       to-do: fix commented-out code below
-        if (chip == 'green'): #and ('GREEN_CCD' in D2):
-            frame = D2['GREEN_CCD'].data
+        if (chip.lower() == 'green'): #and ('GREEN_CCD' in D2):
+            frame = np.array(D2['GREEN_CCD'].data)
             self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
             self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
             self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
             self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
-        if (chip == 'red'): #and ('RED_CCD' in D2):
-            frame = D2['RED_CCD'].data
+        if (chip.lower() == 'red'): #and ('RED_CCD' in D2):
+            frame = np.array(D2['RED_CCD'].data)
             self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
             self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
             self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
@@ -124,7 +120,7 @@ class Analyze2D:
             self.red_dark_current_regions = reg
 
 
-    def plot_2D_image(self, chip=None, overplot_dark_current=False, 
+    def plot_2D_image(self, chip=None, overplot_dark_current=False, blur_size=None, 
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -163,15 +159,19 @@ class Analyze2D:
                     ech_pressure_torr = self.red_ech_pressure_torr
                     coll_current_a = self.red_coll_current_a
                     ech_current_a = self.red_ech_current_a
-            image = self.D2[CHIP + '_CCD'].data
+            image = np.array(self.D2[CHIP + '_CCD'].data)
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
             return
-        
+            
+        if blur_size != None:
+            from scipy import ndimage
+            image = ndimage.median_filter(image, size=blur_size)
+
         # Generate 2D image
         plt.figure(figsize=(10,8), tight_layout=True)
-        plt.imshow(image, vmin = np.nanpercentile(image,0.1), 
-                          vmax = np.nanpercentile(image,99.9), 
+        plt.imshow(image, vmin = np.nanpercentile(image[100:-100,100:-100],0.1), 
+                          vmax = np.nanpercentile(image[100:-100,100:-100],99), 
                           interpolation = 'None', 
                           origin = 'lower', 
                           cmap='viridis')
@@ -274,7 +274,7 @@ class Analyze2D:
                 CHIP = 'RED'
                 chip_title = 'Red'
                 reg = self.red_dark_current_regions
-            image = self.D2[CHIP + '_CCD'].data
+            image = np.array(self.D2[CHIP + '_CCD'].data)
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
             return
@@ -333,7 +333,6 @@ class Analyze2D:
                 CHIP = 'RED'
                 chip_title = 'Red'
                 #reg = self.red_dark_current_regions
-            #image = self.D2[CHIP + '_CCD'].data
             image = np.array(self.D2[CHIP + '_CCD'].data)
         else:
             self.logger.info('chip not supplied.  Exiting plot_2D_image')
@@ -616,7 +615,6 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-            #image = self.D2[CHIP + '_CCD'].data
             image = np.array(self.D2[CHIP + '_CCD'].data)
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
@@ -686,7 +684,6 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-            #image = self.D2[CHIP + '_CCD'].data
             image = np.array(self.D2[CHIP + '_CCD'].data)
             column_sum = np.nansum(image, axis = 0)
             p_10 = np.nanpercentile(column_sum, 10) # 10th percentile

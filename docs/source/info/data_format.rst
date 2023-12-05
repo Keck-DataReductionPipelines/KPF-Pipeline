@@ -7,7 +7,7 @@ Overview
 KPF data products are defined for these data levels:
 
 * **Level 0 (L0)**: Raw data products produced by KPF at the W. M. Keck Observatory
-* **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1, but is not fundamental and is frequently not archived.
+* **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1 but is not fundamental and is frequently not archived.
 * **Level 1 (L1)**: Extracted, wavelength-calibrated spectra
 * **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators
 
@@ -17,7 +17,7 @@ KPF L0 files follow the naming convention: KP.YYYYMMDD.SSSSS.ss.fits, where YYYY
 
 See the section titled :ref:`label-tutorials` for a set of tutorials on the various KPF data files.
 
-In addition, the DRP is able produce WLS Dictionaries that contain detailed diagnostic information about the fits of individual lines, orders, and orderlets for the wavelength solutions.  These are described at the bottom of this page.
+In addition, the DRP is able to produce WLS Dictionaries that contain detailed diagnostic information about the fits of individual lines, orders, and orderlets for the wavelength solutions.  These are described at the bottom of this page.
 
 Data Format of KPF Files
 ------------------------
@@ -178,10 +178,167 @@ SCI-OBJ   Target                          Science fiber source
 AGITSTA   Running                         Agitator status
 ========  ==============================  =========
 
-*To-do: add a list of important Level 1 and Level 2 primary keywords.*
+2D Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All keywords from Level 0 are inherited by the 2D file.  Below are additional keywords.
+
+========  ==========================================  =========
+Keyword   Value (example)                             Comment
+========  ==========================================  =========
+DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
+DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used for processing
+RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
+RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
+RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
+RNGREEN4  4.14966                                     Read noise for GREEN_AMP4 [e-] (fourth amplifier region on Green CCD)
+RNRED1    4.0376                                      Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
+RNRED2    4.12717                                     Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
+RNRED3    4.0376                                      Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
+RNRED4    4.12717                                     Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
+GREENTRT  46.804                                      Green CCD read time [sec]
+REDTRT    46.839                                      Red CCD read time [sec]
+READSPED  'regular '                                  Categorization of CCD read speed ('regular' or 'fast')
+FLXREG1G  1.00                                        Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
+FLXREG2G  1.00                                        Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
+FLXREG3G  1.00                                        Dark current [e-/hr] - Green CCD region 3 - coords = [2090:2390,1690:1990]
+FLXREG4G  1.00                                        Dark current [e-/hr] - Green CCD region 4 - coords = [2090:2390,2090:2390]
+FLXREG5G  1.00                                        Dark current [e-/hr] - Green CCD region 5 - coords = [80:380,3080:3380]
+FLXREG6G  1.00                                        Dark current [e-/hr] - Green CCD region 6 - coords = [1690:1990,1690:1990]
+FLXAMP1G  1.00                                        Dark current [e-/hr] - Green CCD amplifier region 1 - coords = [3700:4000,700:1000]
+FLXAMP2G  1.00                                        Dark current [e-/hr] - Green CCD amplifier region 2 - coords = [3700:4000,3080:3380]
+FLXCOLLG  1.00                                        Dark current [e-/hr] - Green CCD collimator-side region = [3700:4000,700:1000]
+FLXECHG   1.00                                        Dark current [e-/hr] - Green CCD echelle-side region = [3700:4000,700:1000]
+FLXREG1R  1.00                                        Dark current [e-/hr] - Red CCD region 1 - coords = [1690:1990,1690:1990]
+FLXREG2R  1.00                                        Dark current [e-/hr] - Red CCD region 2 - coords = [1690:1990,2090:2390]
+FLXREG3R  1.00                                        Dark current [e-/hr] - Red CCD region 3 - coords = [2090:2390,1690:1990]
+FLXREG4R  1.00                                        Dark current [e-/hr] - Red CCD region 4 - coords = [2090:2390,2090:2390]
+FLXREG5R  1.00                                        Dark current [e-/hr] - Red CCD region 5 - coords = [80:380,3080:3380]
+FLXREG6R  1.00                                        Dark current [e-/hr] - Red CCD region 6 - coords = [1690:1990,1690:1990]
+FLXAMP1R  1.00                                        Dark current [e-/hr] - Red CCD amplifier region 1 = [3700:4000,700:1000]
+FLXAMP2R  1.00                                        Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
+FLXCOLLR  1.00                                        Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
+FLXECHR   1.00                                        Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
+GDRXRMS   10.123                                      x-coordinate RMS guiding error in milliarcsec (mas)
+GDRYRMS   10.123                                      y-coordinate RMS guiding error in milliarcsec (mas)
+GDRRRMS   10.123                                      r-coordinate RMS guiding error in milliarcsec (mas)
+GDRXBIAS  0.0010                                      x-coordinate bias guiding error in milliarcsec (mas)
+GDRYBIAS  0.0010                                      y-coordinate bias guiding error in milliarcsec (mas)
+GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
+GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
+MOONSEP   55.0                                        Separation between Moon and target star (deg)
+SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
+SKYSCIMS  0.0000123                                   SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+EMSCCT48  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-870 nm
+EMSCCT45  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-551 nm
+EMSCCT56  100000000.1234                              cumulative EM counts [ADU] in SCI in 551-658 nm
+EMSCCT67  100000000.1234                              cumulative EM counts [ADU] in SCI in 658-764 nm
+EMSCCT78  100000000.1234                              cumulative EM counts [ADU] in SCI in 764-870 nm
+EMSKCT48  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-870 nm
+EMSKCT45  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-551 nm
+EMSKCT56  100000000.1234                              cumulative EM counts [ADU] in SKY in 551-658 nm
+EMSKCT67  100000000.1234                              cumulative EM counts [ADU] in SKY in 658-764 nm
+EMSKCT78  100000000.1234                              cumulative EM counts [ADU] in SKY in 764-870 nm
+========  ==========================================  =========
+
+Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
+
+Keywords related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/quicklook/arc/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
+
+Keywords related to the Guider are only added for 2D files that have Guider data products.  Similar for Exposure Meter data products.
+
+.. image:: dark_current_example.png
+   :alt: Image of KPF Green CCD showing regions where dark current is measured
+   :align: center
+   :height: 400px
+   :width: 500px
+
+L1 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All keywords from Level 0 and 2D are inherited by the L1 file.  Below are additional keywords.
+
+========  ===============  =========
+Keyword   Value (example)  Comment
+========  ===============  =========
+SNRSC452  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRSK452  250.0            SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRCL452  250.0            SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRSC548  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
+SNRSK548  250.0            SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
+SNRCL548  250.0            SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
+SNRSC652  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 652 nm; on Red CCD
+SNRSK652  250.0            SNR of L1 SKY spectrum (95th %ile) near 652 nm; on Red CCD
+SNRCL652  250.0            SNR of L1 CAL spectrum (95th %ile) near 652 nm; on Red CCD
+SNRSC747  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
+SNRSK747  250.0            SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
+SNRCL747  250.0            SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
+SNRSC852  250.0            SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
+SNRSK852  250.0            SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+SNRCL852  250.0            SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+FR452652  1.2345           Peak flux ratio between orders (452nm/652nm) using SCI2
+FR548652  1.2345           Peak flux ratio between orders (548nm/652nm) using SCI2
+FR747652  1.2345           Peak flux ratio between orders (747nm/652nm) using SCI2
+FR852652  1.2345           Peak flux ratio between orders (852nm/652nm) using SCI2
+FR12M452  0.9000           median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FR12U452  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FR32M452  0.9000           median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
+FR32U452  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FRS2M452  0.9000           median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+FRS2U452  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+FRC2M452  0.9000           median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+FRC2U452  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+FR12M548  0.9000           median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FR12U548  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FR32M548  0.9000           median(SCI3/SCI2) flux ratio near 548 nm; on Green CCD
+FR32U548  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FRS2M548  0.9000           median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+FRS2U548  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+FRC2M548  0.9000           median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+FRC2U548  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+FR12M652  0.9000           median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FR12U652  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FR32M652  0.9000           median(SCI3/SCI2) flux ratio near 652 nm; on Red CCD
+FR32U652  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FRS2M652  0.9000           median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+FRS2U652  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+FRC2M652  0.9000           median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+FRC2U652  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+FR12M747  0.9000           median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FR12U747  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FR32M747  0.9000           median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
+FR32U747  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FRS2M747  0.9000           median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+FRS2U747  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+FRC2M747  0.9000           median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+FRC2U747  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+FR12M852  0.9000           median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FR12U852  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FR32M852  0.9000           median(SCI3/SCI2) flux ratio near 852 nm; on Red CCD
+FR32U852  0.0010           uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FRS2M852  0.9000           median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+FRS2U852  0.0010           uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+FRC2M852  0.9000           median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+FRC2U852  0.0010           uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+========  ===============  =========
+
+The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
+
+Keywords related to flux ratios between orders (FR452652, FR548652, FR747652, FR852652) are the ratios between the 95th percentile in flux for the spectral orders containing 452 nm, 548 nm, 747 nm, and 852 nm, all normalized by the spectral order containing 652 nm.  These are the same spectral orders used for the SNR calculations and use the SCI2 orderlet.
+
+Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR12U452) are computed in 500-pixel regions in the centers in the same spectral orders as are used for the SNR calculations.
+
+.. image:: KPF_L1_SNR.png
+   :alt: L1 Spectrum show wavelengths where SNR is measured
+   :align: center
+   :height: 400px
+   :width: 600px
+
+
+*To-do: add a list of additional 2D, Level 1, and Level 2 primary keywords.*
 
 
 WLS Dictionaries
 ----------------
 
-Andrew H. to add a description of the WLS dictionaries here.
+See :doc:`../analysis/dictonary_format` for details.
