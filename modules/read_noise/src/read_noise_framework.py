@@ -8,7 +8,7 @@ import re
 import hashlib
 import ast
 
-from modules.Utils.analyze_l0 import AnalyzeL0
+from modules.quicklook.src.analyze_l0 import AnalyzeL0
 
 # Pipeline dependencies
 from kpfpipe.logger import *
