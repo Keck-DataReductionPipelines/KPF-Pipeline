@@ -77,7 +77,7 @@ lev0_ffi_exts_full = config.WATCHFOR_L0.lev0_ffi_exts_full
 actual_dir = config.WATCHFOR_L0.actual_dir
 
 do_quality_control = True
-
+ 
 if do_quality_control:
 
     for l0_filename in file_list:

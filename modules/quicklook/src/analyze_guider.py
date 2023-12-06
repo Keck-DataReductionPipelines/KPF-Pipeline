@@ -21,13 +21,16 @@ class AnalyzeGuider:
         L0 - an L0 object (or a 2D object -- to be tested)
 
     Attributes:
-        None so far
+        x_rms  - x-coordinate RMS guiding error in milliarcsec (mas)
+        y_rms  - y-coordinate RMS guiding error in milliarcsec (mas)
+        r_rms  - r-coordinate RMS guiding error in milliarcsec (mas)
+        x_bias - x-coordinate bias guiding error in milliarcsec (mas)
+        y_bias - y-coordinate bias guiding error in milliarcsec (mas)
     """
 
     def __init__(self, L0, logger=None):
         if logger:
             self.logger = logger
-            self.logger.debug('Initiating AnanalyzeGuider object')
         else:
             self.logger = None
         self.L0 = L0
@@ -55,6 +58,46 @@ class AnalyzeGuider:
         self.df_GUIDER = self.df_GUIDER[self.df_GUIDER.timestamp != 0.0]    # remove bogus lines
         self.df_GUIDER = self.df_GUIDER[self.df_GUIDER.object1_flux != 0.0] # remove bogus lines
         self.good_fit = None
+        self.measure_guider_errors() # add guiding keywords
+
+
+    def measure_guider_errors(self):
+
+        """
+        Compute the guiding error RMS for X/Y/R and the bias (offset) for X/Y. 
+
+        Args:
+            None
+
+        Attributes:
+            x_rms  - x-coordinate RMS guiding error in milliarcsec (mas)
+            y_rms  - y-coordinate RMS guiding error in milliarcsec (mas)
+            r_rms  - r-coordinate RMS guiding error in milliarcsec (mas)
+            x_bias - x-coordinate bias guiding error in milliarcsec (mas)
+            y_bias - y-coordinate bias guiding error in milliarcsec (mas)
+
+        Returns:
+            None
+        """
+
+        try:
+            nframes = self.df_GUIDER.shape[0]
+            t     =  self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)
+            x_mas = (self.df_GUIDER.target_x - self.df_GUIDER.object1_x) * self.pixel_scale*1000
+            y_mas = (self.df_GUIDER.target_y - self.df_GUIDER.object1_y) * self.pixel_scale*1000
+            r_mas = (x_mas**2+y_mas**2)**0.5
+            self.x_rms = (np.nanmean(x_mas**2))**0.5
+            self.y_rms = (np.nanmean(y_mas**2))**0.5
+            self.r_rms = (np.nanmean(r_mas**2))**0.5
+            self.x_bias = np.nanmean(x_mas)
+            self.y_bias = np.nanmean(y_mas)
+        except:
+            print(self.logger('Error computing guiding errors'))
+            self.x_rms = None
+            self.y_rms = None
+            self.r_rms = None
+            self.x_bias = None
+            self.y_bias = None
 
 
     def measure_seeing(self):
@@ -100,7 +143,6 @@ class AnalyzeGuider:
             popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0)
             amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = popt
             alpha_fit = abs(alpha_fit)
-            self.good_fit = True
             self.image_fit = moffat_2D((X, Y), amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit)
             self.amplitude = amplitude_fit
             self.seeing = alpha_fit
@@ -108,9 +150,10 @@ class AnalyzeGuider:
             self.beta = beta_fit
             self.x0 = x0_fit
             self.y0 = y0_fit
+            self.good_fit = True
         except:
             self.good_fit = False
-        
+
 
     def plot_guider_image(self, fig_path=None, show_plot=False):
 
@@ -127,11 +170,9 @@ class AnalyzeGuider:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment 
             (e.g., in a Jupyter Notebook).
-
         """
 
         # Plot the original image and residuals
-        #guider_im_zoom = self.guider_image[255-38:255+38, 320-38:320+38] # 4 arcsec x 4 arcsec
         guider_im_zoom = self.guider_image[255-50:255+50, 320-50:320+50]
         if self.good_fit:
             resid_im = self.guider_image - self.image_fit
@@ -250,22 +291,6 @@ class AnalyzeGuider:
         plt.close('all')
 
 
-    def measure_guider_errors(self):
-
-        """
-        Compute the guiding error RMS for X/Y/R errors. -- TO BE WRITTEN!
-
-        Args:
-            None
-
-        Attributes:
-            TBD
-
-        Returns:
-            None
-        """
-
-
     def plot_guider_error_time_series_simple(self, fig_path=None, show_plot=False):
 
         """
@@ -279,8 +304,7 @@ class AnalyzeGuider:
 
         Returns:
             PNG plot in fig_path or shows the plot it the current environment 
-            (e.g., in a Jupyter Notebook).
-
+            (e.g., in a Jupyter Notebook)
         """
         
         if np.sqrt(self.df_GUIDER.shape[0]) < 60:
@@ -358,7 +382,6 @@ class AnalyzeGuider:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment 
             (e.g., in a Jupyter Notebook).
-
         """
         
         # Create the figure and subplots
@@ -548,7 +571,6 @@ class AnalyzeGuider:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment 
             (e.g., in a Jupyter Notebook).
-
         """
 
         # Construct plots

@@ -30,7 +30,6 @@ docker:
 	docker run -it -p ${KPFPIPE_PORT}:${KPFPIPE_PORT} --network=host \
 			   -e KPFPIPE_PORT=${KPFPIPE_PORT} -e DBPORT=6125 -e DBNAME=kpfopsdb -e DBUSER=${KPFPIPE_DB_USER} -e DBPASS="${KPFPIPE_DB_PASS}" -e DBSERVER=127.0.0.1 \
 			   -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data -v ${KPFPIPE_DATA}/masters:/masters kpf-drp:latest bash
-	
 
 regression_tests:
 	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
