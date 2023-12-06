@@ -1,6 +1,7 @@
 import glob
 import numpy as np
 from astropy.io import fits
+from kpfpipe.logger import start_logger
 
 class FitsHeaders:
 
@@ -35,7 +36,8 @@ class FitsHeaders:
             self.logger = logger
             self.logger.debug('FitsHeaders class constructor: self.input_fits_files = {}'.format(self.input_fits_files))
         else:
-            self.logger = None
+            print("Starting logger...")
+            self.logger = start_logger(self.__class__.__name__, 'configs/framework_logger.cfg')
             print('---->FitsHeaders class constructor: self.input_fits_files = {}'.format(self.input_fits_files))
 
         n_input_fits_files = len(self.input_fits_files)
