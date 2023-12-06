@@ -3,8 +3,8 @@
 
 import sys
 import os
+import gc
 from glob import glob
-from copy import copy
 import argparse
 import traceback
 import random
@@ -85,7 +85,8 @@ def worker(worker_num, pipeline_config, framework_logcfg_file, framework_config_
     # tells this instance to wait for something to happen, forever
     # qm_only=False, ingest_data_only=False,
     framework.pipeline.start(pipeline_config)
-    framework.start(wait_for_event=True, continuous=True)
+    # framework.start(wait_for_event=True, continuous=True)
+    framework.start()
 
 
 class FileAlarm(PatternMatchingEventHandler):
@@ -172,9 +173,13 @@ def main():
 
     if args.reprocess:
         print(f"Setting queue manager to shutdown after reprocessing.")
-        frame_config.set('DEFAULT', 'event_timeout', '5')
+        frame_config.set('DEFAULT', 'event_timeout', '10')
         frame_config.set('DEFAULT', 'no_event_event', 'exit')
-        frame_config.set('DEFAULT', 'no_event_wait_time', '60')
+        frame_config.set('DEFAULT', 'no_event_wait_time', '5')
+    elif args.watch:
+        frame_config.set('DEFAULT', 'event_timeout', '1200')
+        frame_config.set('DEFAULT', 'no_event_event', 'Event("wait", None)')
+        frame_config.set('DEFAULT', 'no_event_wait_time', '900')
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='cfg') as tp:
         frame_config.write(tp)
@@ -225,19 +230,10 @@ def main():
                 arg.file_path = fname
                 arg.watch = True
                 framework.append_event('next_file', arg)
-                time.sleep(0.2)
-                            
-            while len(framework.get_pending_events()[0]) > 0:
-                framework.pipeline.logger.debug("Waiting for event queue to clear {}".format(framework.get_pending_events()[0]))
-                time.sleep(3)
+                time.sleep(0.1)
 
-            framework.append_event('exit', arg)
-
-        if args.ncpus > 1:
-            framework.start(qm_only=True)
         else:
-            framework.start(wait_for_event=True, continuous=True)
-
+            framework.start(qm_only=True)
     else:
         arg.watch = False
         if hasattr(args, 'date') and args.date:
