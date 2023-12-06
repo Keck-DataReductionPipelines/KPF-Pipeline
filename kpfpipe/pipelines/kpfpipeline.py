@@ -3,6 +3,7 @@
 from asyncio.log import logger
 import os
 import gc
+import time
 from copy import copy
 import importlib
 import configparser as cp
@@ -277,5 +278,6 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         gc.collect()
+        time.sleep(1)
 
         return Arguments(name="wait_complete")

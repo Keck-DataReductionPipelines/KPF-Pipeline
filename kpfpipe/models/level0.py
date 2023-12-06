@@ -140,7 +140,12 @@ class KPF0(KPFDataModel):
             elif isinstance(hdu, fits.ImageHDU):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, np.array)
-                setattr(self, hdu.name, hdu.data)
+
+                try:
+                    setattr(self, hdu.name, hdu.data)
+                except TypeError:  # buffer too small for requested array
+                    setattr(self, hdu.name, np.array([]))
+                    
             elif isinstance(hdu, fits.BinTableHDU):
                 if hdu.name not in self.extensions.keys():
                     self.create_extension(hdu.name, pd.DataFrame)
