@@ -35,6 +35,7 @@ class KPFDB:
 
         self.exit_code = 0
         self.filename = None
+        self.conn = None
 
         # Get database connection parameters from environment.
 
