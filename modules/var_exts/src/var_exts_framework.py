@@ -362,7 +362,7 @@ class VarExtsFramework(KPF0_Primitive):
             except:
                 continue
 
-            ccd_img = np.where(ccd_img >= 0.0, ccd_img, 0.0)     # Ensure the photon noise is positive.
+            ccd_img = np.where(ccd_img >= 0.0, ccd_img, 0.0)        # Ensure the photon noise is positive.
 
             if 'GREEN' in ext:
                 greenccdimg = ccd_img
