@@ -74,7 +74,7 @@ class AnalyzeGuider:
         self.y_mas = (self.df_GUIDER.target_y - self.df_GUIDER.object1_y) * self.pixel_scale*1000
         self.r_mas = (self.x_mas**2+self.y_mas**2)**0.5
         self.nframes = self.df_GUIDER.shape[0]
-        self.nframes_uniq_mas = min(np.unique(self.x_mas).size, np.unique(self.y_mas).size)
+        self.nframes_uniq_mas = min(np.unique(self.df_GUIDER.object1_x).size, np.unique(self.df_GUIDER.object1_y).size)
         print('Number of Guider frames = ' + str(self.nframes))
         print('Number of Guider frames with unique offsets = ' + str(self.nframes_uniq_mas))
         
@@ -149,34 +149,57 @@ class AnalyzeGuider:
         def moffat_2D(xy, amplitude, x0, y0, alpha, beta):
             x, y = xy
             return amplitude * (1 + ((x - x0) ** 2 + (y - y0) ** 2) / alpha ** 2) ** -beta
-
+        
         x = np.arange(self.guider_image.shape[1])
         y = np.arange(self.guider_image.shape[0])
         X, Y = np.meshgrid(x, y)
         x_flat = X.flatten()
         y_flat = Y.flatten()
         image_data_flat = self.guider_image.flatten()
-        print("Initial position guess: " + str(self.guider_header['CRPIX1']*self.pixel_scale) + ", " + str(self.guider_header['CRPIX2']*self.pixel_scale))
-        p0 = [1, self.guider_header['CRPIX1'], self.guider_header['CRPIX2'], 1.0/0.056, 2.5]  # Initial guess for the parameters
-        #p0 = [1, self.guider_image.shape[1] / 2, self.guider_image.shape[0] / 2, 2/0.056, 2]  # Initial guess for the parameters
         
-        try:
-            popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0, maxfev=10000)
-            amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = popt
+        # Define the range of initial guesses for the fourth parameter
+        alpha_initial_guesses = [0.4/0.056, 1.0/0.056, 2.5/0.056]
+        
+        best_fit = None
+        smallest_residuals = np.inf
+        
+        for alpha_guess in alpha_initial_guesses:
+            try:
+                print(f"Trying to fit Guider image with alpha guess = {alpha_guess*0.056} arcsec.")
+                # Update the initial guess with the current alpha value
+                p0 = [1, self.guider_header['CRPIX1'], self.guider_header['CRPIX2'], alpha_guess, 2.5]
+        
+                # Attempt to fit the model
+                popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0) #, maxfev=10000)
+        
+                # Calculate the residuals
+                residuals = image_data_flat - moffat_2D((x_flat, y_flat), *popt)
+                sum_of_squares = np.sum(residuals**2)
+        
+                # Check if this fit is better than previous ones
+                if sum_of_squares < smallest_residuals:
+                    smallest_residuals = sum_of_squares
+                    best_fit = popt
+        
+            except Exception as e:
+                print(f"Fit failed for alpha guess = {alpha_guess*0.056} arcsec. Error: {e}")
+        
+        if best_fit is not None:
+            amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit = best_fit
             alpha_fit = abs(alpha_fit)
             self.image_fit = moffat_2D((X, Y), amplitude_fit, x0_fit, y0_fit, alpha_fit, beta_fit)
             self.amplitude = amplitude_fit
             self.seeing = alpha_fit
-            self.seeing_550nm = self.seeing*(((1200+950)/2)/550)**0.2  # seeing scales with wavelength^0.2
+            self.seeing_550nm = self.seeing * (((1200+950)/2)/550)**0.2
             self.beta = beta_fit
             self.x0 = x0_fit
             self.y0 = y0_fit
             self.good_fit = True
+            print(f"Best fit found with alpha = {alpha_fit*0.056} arcsec.")
             print("Fitted positions: " + str(self.x0*self.pixel_scale) + ", " + str(self.y0*self.pixel_scale))
-            print("Guider image fit succeeded")
-        except Exception as e:
+        else:
             self.good_fit = False
-            print("Guider image fit failed. Error: " +  str(e))
+            print("No successful fit found.")
 
 
     def plot_guider_image(self, fig_path=None, show_plot=False):
@@ -297,8 +320,6 @@ class AnalyzeGuider:
         yticks = axs[2].get_yticks()
         #axs[2].set_xticks(xticks)  # Set the x-ticks explicitly
         #axs[2].set_yticks(yticks)  # Set the y-ticks explicitly
-        #axs[2].set_xticklabels([f'{int(x * self.pixel_scale*10)/10}' for x in xticks])
-        #axs[2].set_yticklabels([f'{int(y * self.pixel_scale*10)/10}' for y in yticks])
         axs[2].set_xticklabels([f'{x * self.pixel_scale:.1f}' for x in xticks])
         axs[2].set_yticklabels([f'{y * self.pixel_scale:.1f}' for y in yticks])
         axs[2].set_xlabel('Arcseconds', fontsize=12)
@@ -351,27 +372,29 @@ class AnalyzeGuider:
         plt.style.use('seaborn-whitegrid')
 
         # Plot the data
-        im1 = axes[1].hist2d(self.x_mas, self.y_mas, bins=hist_bins, cmap='viridis')
+        if self.nframes_uniq_mas > 10:
+            im1 = axes[1].hist2d(self.x_mas, self.y_mas, bins=hist_bins, cmap='viridis')
         cmap = plt.get_cmap('viridis')
         axes[1].set_facecolor(cmap(0))
-        xylim = round(np.nanpercentile(r_mas, 99)*1.4 / 5.0) * 5
+        xylim = round(np.nanpercentile(self.r_mas, 99)*1.4 / 5.0) * 5
         axes[1].set_xlim(-xylim, xylim) # set symmetric limits for x and y
         axes[1].set_ylim(-xylim, xylim)
         axes[1].set_aspect('equal')
-        axes[1].set_title('r: ' + f'{int(r_rms*10)/10}' + ' mas (RMS)', fontsize=14)
+        axes[1].set_title('r: ' + f'{int(self.r_rms*10)/10}' + ' mas (RMS)', fontsize=14)
         axes[1].set_xlabel('Guiding Error - x (mas)', fontsize=14, alpha=0.5)
         axes[1].set_ylabel('Guiding Error - y (mas)', fontsize=14, alpha=0.5)
         axes[1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
         cbar = plt.colorbar(im1[3])
         cbar.set_label('Samples', fontsize=12)
-
-        axes[0].plot(self.t, self.x_mas, color='royalblue', alpha=0.5)
-        axes[0].plot(self.t, self.y_mas, color='orange', alpha=0.5)
+        
+        if self.nframes_uniq_mas > 1:
+            axes[0].plot(self.t, self.x_mas, color='royalblue', alpha=0.5)
+            axes[0].plot(self.t, self.y_mas, color='orange', alpha=0.5)
         axes[0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         axes[0].set_xlabel("Time (sec)", fontsize=14)
         axes[0].set_ylabel("Guiding Error (mas)", fontsize=14)
-        axes[0].legend(['Guiding error - x: ' + f'{int(x_rms*10)/10}' + ' mas (RMS),' + f'{int(x_bias*100)/100}' + ' mas (bias)', 
-                        'Guiding error - y: ' + f'{int(y_rms*10)/10}' + ' mas (RMS),' + f'{int(y_bias*100)/100}' + ' mas (bias)'], 
+        axes[0].legend(['Guiding error - x: ' + f'{int(self.x_rms*10)/10}' + ' mas (RMS),' + f'{int(self.x_bias*100)/100}' + ' mas (bias)', 
+                        'Guiding error - y: ' + f'{int(self.y_rms*10)/10}' + ' mas (RMS),' + f'{int(self.y_bias*100)/100}' + ' mas (bias)'], 
                        fontsize=12, 
                        loc='best') 
 
@@ -431,29 +454,6 @@ class AnalyzeGuider:
         #nframes_extra_detections = len(w_extra_detections)
         #w_fewer_detections = np.where(nstars < median_nstars)[0]
         #nframes_fewer_detections = len(w_fewer_detections)
-
-#        # Define datasets and statistics
-#        nframes = self.df_GUIDER.shape[0]
-#        if nframes > 0:
-#            t     =  self.df_GUIDER.timestamp-min(self.df_GUIDER.timestamp)
-#            x_mas = (self.df_GUIDER.target_x - self.df_GUIDER.object1_x) * self.pixel_scale*1000
-#            y_mas = (self.df_GUIDER.target_y - self.df_GUIDER.object1_y) * self.pixel_scale*1000
-#            r_mas = (x_mas**2+y_mas**2)**0.5
-#            x_rms = (np.nanmean(x_mas**2))**0.5
-#            y_rms = (np.nanmean(y_mas**2))**0.5
-#            r_rms = (np.nanmean(r_mas**2))**0.5
-#            x_bias = np.nanmean(x_mas)
-#            y_bias = np.nanmean(y_mas)
-#        else:
-#            t     = [0]
-#            x_mas = [0]
-#            y_mas = [0]
-#            r_mas = [0]
-#            x_rms = 0
-#            y_rms = 0
-#            r_rms = 0
-#            x_bias = 0
-#            y_bias = 0
         
         # Set the number of histogram bins
         if np.sqrt(self.nframes) < 60:
@@ -464,25 +464,25 @@ class AnalyzeGuider:
             hist_bins = 2 * int(max(max(self.x_mas), abs(min(self.x_mas)), max(self.y_mas), abs(min(self.y_mas))) / 3)
 
         # Histogram of guider errors
-        hist = axes[0,1].hist2d(self.x_mas, self.y_mas, bins=hist_bins, cmap='viridis')
-        cbar_ax = fig.add_axes([0.95, 0.775, 0.01, 0.20])  # Adjust these values to properly position your colorbar
-        fig.colorbar(hist[3], cax=cbar_ax, label='Samples', shrink=0.6)#, fontsize=12)
-        #cbar = plt.colorbar(hist[3])
-        #cbar_ax.set_label('Samples', fontsize=12)
-        cmap = plt.get_cmap('viridis')
-        axes[0,1].set_facecolor(cmap(0))
-        xylim = round(np.nanpercentile(self.r_mas, 95)*1.4 / 5.0) * 5
-        axes[0,1].set_xlim(-xylim, xylim) # set symmetric limits for x and y
-        axes[0,1].set_ylim(-xylim, xylim)
+        if self.nframes_uniq_mas > 1:
+            cbar_ax = fig.add_axes([0.95, 0.775, 0.01, 0.20])  # Adjust these values to properly position your colorbar
+            hist = axes[0,1].hist2d(self.x_mas, self.y_mas, bins=hist_bins, cmap='viridis')
+            fig.colorbar(hist[3], cax=cbar_ax, label='Samples', shrink=0.6)#, fontsize=12)
+            cmap = plt.get_cmap('viridis')
+            axes[0,1].set_facecolor(cmap(0))
+            xylim = round(np.nanpercentile(self.r_mas, 95)*1.4 / 5.0) * 5
+            axes[0,1].set_xlim(-xylim, xylim) # set symmetric limits for x and y
+            axes[0,1].set_ylim(-xylim, xylim)
+            axes[0,1].set_title('r: ' + f'{int(self.r_rms*10)/10}' + ' mas (RMS)', fontsize=14)
         axes[0,1].set_aspect('equal')
-        axes[0,1].set_title('r: ' + f'{int(self.r_rms*10)/10}' + ' mas (RMS)', fontsize=14)
         axes[0,1].set_xlabel('Guiding Error - x (mas)', fontsize=14)
         axes[0,1].set_ylabel('Guiding Error - y (mas)', fontsize=14)
         axes[0,1].grid(True, linestyle='solid', linewidth=0.5, alpha=0.5)
 
         # Time series plot of guider errors
-        axes[0,0].plot(self.t, self.x_mas, color='royalblue', alpha=0.5)
-        axes[0,0].plot(self.t, self.y_mas, color='orange',    alpha=0.5)
+        if self.nframes_uniq_mas > 1:
+            axes[0,0].plot(self.t, self.x_mas, color='royalblue', alpha=0.5)
+            axes[0,0].plot(self.t, self.y_mas, color='orange',    alpha=0.5)
         axes[0,0].set_title("Guiding Error Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         axes[0,0].set_xlabel("Time (sec)", fontsize=14)
         axes[0,0].set_ylabel("Guiding Error (mas)", fontsize=14)
@@ -494,19 +494,19 @@ class AnalyzeGuider:
 
         # Power spectral density plot
         fps = self.gcfps # my_Guider.guider_header['FPS']  # Sample rate in Hz
-        if self.nframes > 10:
+        if self.nframes > 10 and self.nframes_uniq_mas > 100:
             Pxx, freqs = mlab.psd(self.x_mas/1000, Fs=fps)
             Pyy, freqs = mlab.psd(self.y_mas/1000, Fs=fps)
             axes[1,0].step(freqs, Pxx*1e6, where='mid', color='royalblue', label='X - Guiding errors', lw=2, alpha=0.5)
             axes[1,0].step(freqs, Pyy*1e6, where='mid', color='orange',    label='Y - Guiding errors', lw=2, alpha=0.5)
             axes[1,0].grid(True, linestyle='dashed', linewidth=1, alpha=0.5)
             axes[1,0].set_xlim(min(freqs),max(freqs))
+            axes[1,0].legend(fontsize=12)
         else:
             pass
         axes[1,0].set_xlabel('Frequency [Hz]', fontsize=14)
         axes[1,0].set_ylabel('Guiding Error\n' + r'Power Spectral Density (mas$^2$/Hz)', fontsize=14)
         axes[1,0].set_yscale('log')
-        axes[1,0].legend(fontsize=12)
 
         # Blank - plot to the right of power spectral density
         strings = []
@@ -639,7 +639,6 @@ class AnalyzeGuider:
             plt.xlim(min(self.t-min(self.t)), max(self.t-min(self.t)))
         else:
             plt.plot([0.], [0.], color='royalblue')        
-        #plt.plot(time, int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec / max(int_SCI_flux / ((847+4.8/2)-(450.1-0.4/2)) / tdur_sec), marker='o', color='k')
         plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
         plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
         plt.ylabel("Flux (fractional)", fontsize=14)
