@@ -84,6 +84,7 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     plt.title('{} Bias Histogram'.format(color))
                     plt.legend()
                     plt.savefig('outputs/Bias_histo_{a}_{b}.png'.format(a=color.lower(),b=no))
+                    plt.close()
         #####     
                 
         if self.frame_type == 'flat':
@@ -144,7 +145,8 @@ class FrameCombinePrimitive(KPF0_Primitive):
                     plt.title('{} Flat Histogram'.format(color))
                     plt.legend()
                     plt.savefig('outputs/Flat_histo_{a}_{b}.png'.format(a=color.lower(),b=no))
-                    
+                    plt.close()
+
             # for ffi in self.ffi_ext:
             #     frames_data=[]
             #     for path in self.L0_names:

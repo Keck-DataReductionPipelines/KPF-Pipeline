@@ -212,7 +212,7 @@ class KPFDataModel(object):
             raise IOError('Cannot overwrite existing data')
 
         self.filename = os.path.basename(fn)
-        with fits.open(fn) as hdu_list:
+        with fits.open(fn, do_not_scale_image_data=True) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
@@ -283,7 +283,8 @@ class KPFDataModel(object):
         hdul = fits.HDUList(hdu_list)
         if not os.path.isdir(os.path.dirname(fn)):
             os.makedirs(os.path.dirname(fn), exist_ok=True)
-        hdul.writeto(fn, overwrite=True, output_verify='silentfix')
+        with open(fn, 'wb') as f:
+            hdul.writeto(f, overwrite=True, output_verify='silentfix')
 
 # =============================================================================
 # Receipt related members
@@ -334,7 +335,7 @@ class KPFDataModel(object):
         self.receipt = self.receipt.append(row, ignore_index=True)
         self.RECEIPT = self.receipt
 
-        # add SWVERSION and SWHASH to primary header
+        # add DRPTAG and DRPHASH to primary header
         self.header['PRIMARY']['DRPTAG'] = git_tag
         self.header['PRIMARY']['DRPHASH'] = git_commit_hash
 

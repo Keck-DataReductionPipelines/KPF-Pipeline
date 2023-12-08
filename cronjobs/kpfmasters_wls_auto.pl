@@ -36,14 +36,6 @@ $checkpoint[$icheckpoint++] = $startscript;
 
 # Read KPF-related environment variables.
 
-# Legacy KPF directory for outputs of testing.
-# E.g., /KPF-Pipeline-TestData
-my $testdatadir = $ENV{KPFPIPE_TEST_DATA};
-
-if (! (defined $testdatadir)) {
-    die "*** Env. var. KPFPIPE_TEST_DATA not set; quitting...\n";
-}
-
 # Base directory of master files for permanent storage.
 # E.g., /data/kpf/masters
 my $mastersdir = $ENV{KPFPIPE_MASTERS_BASE_DIR};
@@ -92,7 +84,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.6';
+my $version = '1.8';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -117,7 +109,6 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
-print "KPFPIPE_TEST_DATA=$testdatadir\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -140,6 +131,7 @@ my $script = "#! /bin/bash\n" .
              "mkdir -p /masters/${procdate}/wlpixelfiles\n" .
              "cp -p /data/masters/wlpixelfiles/*kpf_${procdate}* /masters/${procdate}/wlpixelfiles\n" .
              "cp -p /code/KPF-Pipeline/pipeline_${procdate}.log /masters/${procdate}/pipeline_wls_auto_${procdate}.log\n" .
+             "find /masters/${procdate}/* -type f -mtime +7 -exec rm {} +\n" .
              "rm /code/KPF-Pipeline/pipeline_${procdate}.log\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
@@ -147,7 +139,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `chmod +x $dockercmdscript`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v ${testdatadir}:/testdata -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
