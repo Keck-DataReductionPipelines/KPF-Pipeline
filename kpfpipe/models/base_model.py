@@ -283,8 +283,7 @@ class KPFDataModel(object):
         hdul = fits.HDUList(hdu_list)
         if not os.path.isdir(os.path.dirname(fn)):
             os.makedirs(os.path.dirname(fn), exist_ok=True)
-        with open(fn, 'wb') as f:
-            hdul.writeto(f, overwrite=True, output_verify='silentfix')
+        hdul.writeto(fn, overwrite=True, output_verify='silentfix')
 
 # =============================================================================
 # Receipt related members
