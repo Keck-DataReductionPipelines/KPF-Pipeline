@@ -22,11 +22,17 @@ class AnalyzeGuider:
         L0 - an L0 object (or a 2D object -- to be tested)
 
     Attributes:
-        x_rms  - x-coordinate RMS guiding error in milliarcsec (mas)
-        y_rms  - y-coordinate RMS guiding error in milliarcsec (mas)
-        r_rms  - r-coordinate RMS guiding error in milliarcsec (mas)
-        x_bias - x-coordinate bias guiding error in milliarcsec (mas)
-        y_bias - y-coordinate bias guiding error in milliarcsec (mas)
+        x_rms   - x-coordinate RMS guiding error in milliarcsec (mas)
+        y_rms   - y-coordinate RMS guiding error in milliarcsec (mas)
+        r_rms   - r-coordinate RMS guiding error in milliarcsec (mas)
+        x_bias  - x-coordinate bias guiding error in milliarcsec (mas)
+        y_bias  - y-coordinate bias guiding error in milliarcsec (mas)
+        t       - time array of guider frames
+        x_mas   - x-coordinate array of measured guider errors
+        y_mas   - y-coordinate array of measured guider errors
+        r_mas   - radial coordinate array of measured guider errors
+        nframes - number of frames in guider time series
+        nframes_uniq_mas - number of frames in guider time series with detected objects
     """
 
     def __init__(self, L0, logger=None):
@@ -38,8 +44,12 @@ class AnalyzeGuider:
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
 
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
-        header_guider_obj  = HeaderParse(L0, 'GUIDER_AVG')
-        #header_guider_obj  = HeaderParse(L0, 'guider_avg')
+        if hasattr(L0, 'guider_avg'):
+            header_guider_obj = HeaderParse(L0, 'guider_avg')
+        elif hasattr(L0, 'GUIDER_AVG'):
+            header_guider_obj = HeaderParse(L0, 'GUIDER_AVG')
+        else:
+            print("Guider image not in file.")
         self.guider_header = header_guider_obj.header
         self.header = header_primary_obj.header
         self.name = header_primary_obj.get_name()
@@ -59,8 +69,12 @@ class AnalyzeGuider:
             print('The keyword 2MASSMAG is not a float.')
         self.gcfps = self.header['GCFPS'] # frames per second for guide camera
         self.gcgain = self.header['GCGAIN'] # detector gain setting 
-        #self.df_GUIDER = self.L0['guider_cube_origins']
-        self.df_GUIDER = self.L0['GUIDER_CUBE_ORIGINS']
+        if hasattr(L0, 'guider_cube_origins'):
+            self.df_GUIDER = self.L0['guider_cube_origins']
+        elif hasattr(L0, 'GUIDER_CUBE_ORIGINS'):
+            self.df_GUIDER = self.L0['GUIDER_CUBE_ORIGINS']
+        else:
+            print("Guider table not in file.")
         # only drop bogus rows if the array has non-zero values for flux (i.e., the guide camera was used)
         self.nframes = self.df_GUIDER.shape[0]
         if not (self.df_GUIDER['object1_flux'] == 0.0).all() and self.nframes > 1:
