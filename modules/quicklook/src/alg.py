@@ -144,6 +144,40 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Make Guider images
+        if 'Guider' in self.data_products:
+            try:
+                savedir = L0_QLP_file_base +'Guider/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+                myGuider = AnalyzeGuider(kpf0, logger=self.logger)
+                myGuider.measure_seeing()
+
+                # Guider image plot
+                filename = savedir + self.ObsID + '_guider_image_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myGuider.plot_guider_image(fig_path=filename, show_plot=False)
+
+                # Guider error time series, PSD, and other time series
+                filename = savedir + self.ObsID + '_error_time_series_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make stitched L0 images
+        if chips != []:    
+            try:
+                myL0 = AnalyzeL0(kpf0, logger=self.logger)
+                for chip in chips:
+                    savedir = L0_QLP_file_base +'L0/'
+                    os.makedirs(savedir, exist_ok=True) # make directories if needed
+                    filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL0.plot_L0_stitched_image(fig_path=filename, chip=chip, show_plot=False)
+            except Exception as e:
+                self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
+
         # Make CaHK plots
         if 'HK' in self.data_products:    
             try:    
@@ -162,19 +196,6 @@ class QuicklookAlg:
 
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
-
-        # Make stitched L0 images
-        if chips != []:    
-            try:
-                myL0 = AnalyzeL0(kpf0, logger=self.logger)
-                for chip in chips:
-                    savedir = L0_QLP_file_base +'L0/'
-                    os.makedirs(savedir, exist_ok=True) # make directories if needed
-                    filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    myL0.plot_L0_stitched_image(fig_path=filename, chip=chip, show_plot=False)
-            except Exception as e:
-                self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
 
     ##################
@@ -214,28 +235,6 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
-
-        # Make Guider images
-        if 'Guider' in self.data_products:
-            try:
-                savedir = D2_QLP_file_base +'Guider/'
-                os.makedirs(savedir, exist_ok=True) # make directories if needed
-                myGuider = AnalyzeGuider(kpf2d, logger=self.logger)
-                myGuider.measure_seeing()
-
-                # Guider image plot
-                filename = savedir + self.ObsID + '_guider_image_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                myGuider.plot_guider_image(fig_path=filename, show_plot=False)
-
-                # Guider error time series, PSD, and other time series
-                filename = savedir + self.ObsID + '_error_time_series_zoomable.png'
-                self.logger.info('Generating QLP image ' + filename)
-                #myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
-                myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
-
-            except Exception as e:
-                self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make CaHK plots
         if 'HK' in self.data_products:    
@@ -294,7 +293,6 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
-
         # Make 2D images - 3x3 arrays
         if chips != []:    
             try:
@@ -309,9 +307,7 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
-
         # TO-DO Add bias histogram
-
 
         # Make 2D image histograms
         if chips != []:    
