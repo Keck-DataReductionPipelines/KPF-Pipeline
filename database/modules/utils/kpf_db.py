@@ -35,6 +35,7 @@ class KPFDB:
 
         self.exit_code = 0
         self.filename = None
+        self.conn = None
 
         # Get database connection parameters from environment.
 
@@ -134,7 +135,7 @@ class KPFDB:
             db_level = record[1]
             db_cal_type = record[2]
             db_object = record[3]
-            filename = '/' + record[4]        # docker run has -v /data/kpf/masters:/masters
+            filename = '/' + record[4]         # docker run has -v /data/kpf/masters:/masters
             checksum = record[5]
             infobits = record[6]
 
