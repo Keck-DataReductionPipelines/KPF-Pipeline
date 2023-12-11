@@ -148,6 +148,16 @@ class QCDefinitions:
         self.db_columns[name4] = None
         self.methods[name4] = ["add_qc_keyword_to_header"]
 
+        name5 = 'exposure_meter_not_saturated_check'
+        self.names.append(name5)
+        self.kpf_data_levels[name5] = ['L0']
+        self.descriptions[name5] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.data_types[name5] = 'int'
+        self.fits_keywords[name5] = 'EMSAT'
+        self.fits_comments[name5] = 'QC: EM not saturated check'
+        self.db_columns[name5] = None
+        self.methods[name5] = ["add_qc_keyword_to_header"]
+
         # Integrity checks.
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -440,6 +450,73 @@ class QCL0(QC):
         
         return QC_pass
 
+
+    def exposure_meter_not_saturated_check(self, debug=False):
+        """
+        This Quality Control function checks if 2 or more reduced pixels in an exposure
+        meter spectrum is within 90% of saturated.  The check is applied to the EM-SCI 
+        and EM-SKY fibers and returns False if saturation is detected in either.  
+        Note that this check only works for L0 files with the EXPMETER_SCI and 
+        EXPMETER_SKY extensions present.
+        
+        Args:
+             L0 - an L0 object
+             fiber ('SCI' [default value] or 'SKY) - the EM fiber output to be tested
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+
+        saturation_level = 1.93e6 # saturation level in reduced EM spectra (in data frame)
+        saturation_fraction = 0.9 
+        
+        # Read and condition the table of Exposure Meter Data
+        L0 = self.kpf_object
+        if hasattr(L0, 'EXPMETER_SCI') and hasattr(L0, 'EXPMETER_SKY'):
+            if (L0['EXPMETER_SCI'].size > 1) and (L0['EXPMETER_SKY'].size > 1):
+                pass
+            else:
+                return False
+        else:
+            return True # pass test if no exposure meter data present
+        EM_sat_SCI = L0['EXPMETER_SCI'].copy()
+        EM_sat_SKY = L0['EXPMETER_SKY'].copy()
+        columns_to_drop_SCI = [col for col in EM_sat_SCI.columns if col.startswith('Date')]
+        columns_to_drop_SKY = [col for col in EM_sat_SKY.columns if col.startswith('Date')]
+        EM_sat_SCI.drop(columns_to_drop_SCI, axis=1, inplace=True)
+        EM_sat_SKY.drop(columns_to_drop_SKY, axis=1, inplace=True)
+        if len(EM_sat_SCI) >= 3:  # drop first and last rows if nrows >= 3
+            EM_sat_SCI = EM_sat_SCI.iloc[1:-1]
+            EM_sat_SKY = EM_sat_SKY.iloc[1:-1]
+        
+        # Determine the saturation fraction
+        for col in EM_sat_SCI.columns:
+            try: # only apply to columns with wavelengths as headers
+                float_col_title = float(col)
+                EM_sat_SCI[col] = EM_sat_SCI[col] / saturation_level 
+            except ValueError:
+                pass 
+        for col in EM_sat_SKY.columns:
+            try: 
+                float_col_title = float(col)
+                EM_sat_SKY[col] = EM_sat_SKY[col] / saturation_level 
+            except ValueError:
+                pass 
+
+        saturated_elements_SCI = (EM_sat_SCI > saturation_fraction).sum().sum()
+        saturated_elements_SKY = (EM_sat_SKY > saturation_fraction).sum().sum()
+        total_elements = EM_sat_SCI.shape[0] * EM_sat_SCI.shape[1]
+        saturated_fraction_threshold = 1.5 / EM_sat_SCI.shape[1]
+        
+        if saturated_elements_SCI / total_elements > saturated_fraction_threshold:
+            QC_pass = False
+        elif saturated_elements_SKY / total_elements > saturated_fraction_threshold:
+            QC_pass = False
+        else: 
+        	QC_pass = True
+            
+        return QC_pass
 
 #####################################################################
 
