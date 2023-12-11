@@ -22,7 +22,7 @@ RUN mkdir /code && \
     mkdir /outputs && \
     apt-get --yes update && \
     apt install build-essential -y --no-install-recommends && \
-    apt-get install --yes git vim emacs nano && \
+    apt-get install --yes git vim emacs nano parallel && \
     /usr/local/bin/python -m pip install --upgrade pip && \
     cd /code/KPF-Pipeline && \
     mkdir -p logs && \
@@ -31,9 +31,6 @@ RUN mkdir /code && \
 # Set the working directory to KPF-Pipeline
 WORKDIR /code/KPF-Pipeline
 RUN git config --global --add safe.directory /code/KPF-Pipeline
-
-# Install GNU Parallel
-RUN apt-get update && apt-get install -y parallel
 
 ADD requirements.txt /code/KPF-Pipeline/
 RUN pip3 install -r requirements.txt
