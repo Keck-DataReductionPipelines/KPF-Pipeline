@@ -32,5 +32,8 @@ RUN mkdir /code && \
 WORKDIR /code/KPF-Pipeline
 RUN git config --global --add safe.directory /code/KPF-Pipeline
 
+# Install GNU Parallel
+RUN apt-get update && apt-get install -y parallel
+
 ADD requirements.txt /code/KPF-Pipeline/
 RUN pip3 install -r requirements.txt
