@@ -179,7 +179,7 @@ class KPFDataModel(object):
         """
         this_data = cls()
         if not os.path.isfile(fn):
-            raise(IOError, f'{fn} does not exist.')
+            raise IOError(f'{fn} does not exist.')
             # this_data.to_fits(fn)
         # populate it with self.read()
         this_data.read(fn, data_type=data_type)
