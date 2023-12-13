@@ -25,7 +25,7 @@ for cal_type in ['ThAr', 'LFC','Etalon']:
         # else:
         full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
     
-    file_list = find_files(masters_dir + date_dir + '/*' + search_string + '*')
+    file_list = find_files(masters_dir + date_dir + '/*' + search_string + '*.fits')
 
     for L1_file in file_list:
         if 'WLS' in L1_file:

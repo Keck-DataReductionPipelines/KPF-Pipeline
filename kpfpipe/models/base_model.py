@@ -179,7 +179,8 @@ class KPFDataModel(object):
         """
         this_data = cls()
         if not os.path.isfile(fn):
-            this_data.to_fits(fn)
+            raise(IOError, f'{fn} does not exist.')
+            # this_data.to_fits(fn)
         # populate it with self.read()
         this_data.read(fn, data_type=data_type)
         # Return this instance
@@ -284,6 +285,7 @@ class KPFDataModel(object):
         if not os.path.isdir(os.path.dirname(fn)):
             os.makedirs(os.path.dirname(fn), exist_ok=True)
         hdul.writeto(fn, overwrite=True, output_verify='silentfix')
+        hdul.close()
 
 # =============================================================================
 # Receipt related members
