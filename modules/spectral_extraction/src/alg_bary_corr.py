@@ -142,8 +142,9 @@ class BaryCorrTableAlg(ModuleAlgBase):
         Returns:
             tuple: two arrays containing minimum and maximum wavelength for each order
         """
-        if self.wls_data is None:
+        if self.wls_data is None or len(self.wls_data) == 0:
             return None, None
+        
         wls_h, wls_w = np.shape(self.wls_data)
         seg_min = list()
         seg_max = list()
