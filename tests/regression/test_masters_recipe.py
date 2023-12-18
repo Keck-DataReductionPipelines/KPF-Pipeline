@@ -21,7 +21,7 @@ master_wls_config = 'configs/wls_auto.cfg'
 def test_master_stacks():
     # os.system(f'rm -vf /data/2D/{masters_test_date}/*.fits')
     recipe_test(master_stacks_recipe, master_stacks_config, date_dir=masters_test_date)
-    os.system(f'mkdir /data/masters/{masters_test_date}; mv -v /testdata/kpf_{masters_test_date}_master_*.fits /data/masters/{masters_test_date}/')
+    os.system(f'mkdir /data/masters/{masters_test_date}; mv -v /data/masters/pool/kpf_{masters_test_date}_master_*.fits /data/masters/{masters_test_date}/')
 
 def test_master_l1l2():
     recipe_test(master_l1l2_recipe, master_l1l2_config,

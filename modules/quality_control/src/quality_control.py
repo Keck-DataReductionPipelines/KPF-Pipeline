@@ -518,13 +518,16 @@ class QCL1(QC):
 
             if debug:
                 print("ext = ",ext)
+            
+            extname = ext
+            # try:
+            #     naxis1 = L1.header[ext]["NAXIS1"]
+            #     naxis2 = L1.header[ext]["NAXIS2"]
+            # except KeyError:
+            #     import pdb; pdb.set_trace()
 
-            naxis1 = L1.header[ext]["NAXIS1"]
-            naxis2 = L1.header[ext]["NAXIS2"]
-            extname = L1.header[ext]["EXTNAME"]
-
-            if debug:
-                print("naxis1,naxis2,extname = ",naxis1,naxis2,extname)
+            # if debug:
+            #     print("naxis1,naxis2,extname = ",naxis1,naxis2,extname)
 
             if ext == extname:  # Check if extension exists (e.g., if RED isn't processed)
 
