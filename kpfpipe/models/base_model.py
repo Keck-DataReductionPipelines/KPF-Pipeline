@@ -179,7 +179,8 @@ class KPFDataModel(object):
         """
         this_data = cls()
         if not os.path.isfile(fn):
-            this_data.to_fits(fn)
+            raise IOError(f'{fn} does not exist.')
+            # this_data.to_fits(fn)
         # populate it with self.read()
         this_data.read(fn, data_type=data_type)
         # Return this instance
@@ -212,7 +213,7 @@ class KPFDataModel(object):
             raise IOError('Cannot overwrite existing data')
 
         self.filename = os.path.basename(fn)
-        with fits.open(fn, do_not_scale_image_data=True) as hdu_list:
+        with fits.open(fn) as hdu_list:
             # Handles the Receipt and the auxilary HDUs 
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
@@ -283,8 +284,8 @@ class KPFDataModel(object):
         hdul = fits.HDUList(hdu_list)
         if not os.path.isdir(os.path.dirname(fn)):
             os.makedirs(os.path.dirname(fn), exist_ok=True)
-        with open(fn, 'wb') as f:
-            hdul.writeto(f, overwrite=True, output_verify='silentfix')
+        hdul.writeto(fn, overwrite=True, output_verify='silentfix')
+        hdul.close()
 
 # =============================================================================
 # Receipt related members
