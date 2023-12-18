@@ -88,13 +88,14 @@ def test_exceptions():
     f_naught = f.split('.')[0] # same file without .fits file extension
     data = KPF0.from_fits(os.path.join(fpath, f), 'NEID')
     
-    with pytest.raises(NameError):
+    # test from_fits where file does not exist
+    with pytest.raises(IOError):
         data2 = KPF0()
         # Invalid file extension
         data2.from_fits(os.path.join(fpath, f_naught), 'NEID')
 
+    # overwriting without setting overwrite to True
     with pytest.raises(IOError):
-        # overwriting without setting overwrite to True
         data.read(os.path.join(fpath, f), 'NEID')
         
 if __name__ == '__main__':
