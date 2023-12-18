@@ -192,7 +192,7 @@ class WaveCalibrate(KPF1_Primitive):
 
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
-                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
+                    if 'Etalon' not in self.l1_obj.header['PRIMARY']['CAL-OBJ']:
                         raise ValueError('Not an Etalon file!')
                     
                     peak_wavelengths_ang = None
