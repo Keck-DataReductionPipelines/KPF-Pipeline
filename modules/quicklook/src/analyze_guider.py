@@ -96,8 +96,6 @@ class AnalyzeGuider:
         self.r_mas = (self.x_mas**2+self.y_mas**2)**0.5
         self.nframes = self.df_GUIDER.shape[0]
         self.nframes_uniq_mas = min(np.unique(self.df_GUIDER.object1_x).size, np.unique(self.df_GUIDER.object1_y).size)
-        print('Number of Guider frames = ' + str(self.nframes))
-        print('Number of Guider frames with unique offsets = ' + str(self.nframes_uniq_mas))
         
         # Measure FWHM, flux, peak flux, etc.
         if not (self.df_GUIDER['object1_flux'] == 0.0).all() and self.nframes > 2:
