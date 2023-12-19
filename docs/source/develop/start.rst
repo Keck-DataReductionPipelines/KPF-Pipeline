@@ -17,7 +17,7 @@ Continuous Integration (CI)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 <add general statements about how CI works>
 
-The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within docker with commands like: ``> pytest tests/regression/test_init.py``
+The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within docker with commands like: ``> pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` (see the makefile for examples of performance and validation tests).
 
 Developing Quality Control (QC) Metrics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
