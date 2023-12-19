@@ -180,3 +180,37 @@ class level_from_kpffile(KPF_Primitive):
             format_type = None
         
         return Arguments(format_type) # returns 'L0', '2D', 'L1', 'L2', None
+
+
+
+class filename_from_fullfile(KPF_Primitive):
+    """
+    This primitive determines the file name from a full path.
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains 
+                  positional arguments and  keyword arguments passed by the 
+                  `file_from_kpffile` event issued in the recipe:
+
+            - `action.args[0] (string)`: filename in kpf format
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) == 1 and isinstance(self.action.args[0], str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        fullpath = self.action.args[0]  # e.g. '/data/L0/20230724/KP.20230720.12345.67.fits'
+        filename = fullpath.rsplit('/', 1)[-1]  # e.g., 'KP.20230720.12345.67.fits'
+        
+        return Arguments(filename) 

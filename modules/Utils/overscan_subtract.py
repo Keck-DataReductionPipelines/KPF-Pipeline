@@ -1,11 +1,8 @@
 import numpy as np
 import numpy.ma as ma
-from astropy.io import fits
-import matplotlib.pyplot as plt
 
 # Pipeline dependencies
 from kpfpipe.logger import *
-from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
 
@@ -13,6 +10,7 @@ from keckdrpframework.models.arguments import Arguments
 DEFAULT_CFG_PATH = 'modules/Utils/overscan_subtract.cfg'
 DEFAULT_CFG_PATH_RED = 'modules/Utils/overscan_subtract_red.cfg'
 DEFAULT_CFG_PATH_GREEN = 'modules/Utils/overscan_subtract_green.cfg'
+
 
 class OverscanSubtraction(KPF0_Primitive):
 
@@ -365,7 +363,7 @@ class OverscanSubtraction(KPF0_Primitive):
         image_cut = image_cut[0:channel_datasec_nrows,:]
 
         return image_cut
-
+    
     def run_oscan_subtraction(self,channel_imgs,channels,channel_keys,channel_rows,channel_cols,channel_exts):
 
         """
@@ -422,7 +420,6 @@ class OverscanSubtraction(KPF0_Primitive):
 
             # put img back into original orientation
             og_oriented_img = self.orientation_adjust(new_img,key)
-            plt.imshow(og_oriented_img)
 
             no_overscan_imgs.append(og_oriented_img)
 
@@ -517,6 +514,7 @@ class OverscanSubtraction(KPF0_Primitive):
                         data_gain_corr = data * gain
 
                     frames_data.append(data_gain_corr)
+                
                 frames_data = np.array(frames_data)
 
                 for frame in range(len(self.ffi_exts)):
