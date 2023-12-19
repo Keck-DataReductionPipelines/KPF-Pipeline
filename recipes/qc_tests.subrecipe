@@ -1,0 +1,19 @@
+# This subrecipe executes the standard quality control tests that are defined in 
+# QCDefinitions in modules/quality_control/src/quality_control.py
+#
+# It expects that the following variables were defined by the recipe that called it
+#     data_type - e.g. 'KPF'
+#     data_level_str - 'L0' or '2D' or 'L1' or 'L2'
+#     kpf_object - a KPF object of the level specified by data_level_str
+
+from modules.quality_control.src.quality_control_framework import QualityControlFramework
+
+qc_list_flag = 0
+
+quality_control_return_list = QualityControlFramework(data_type,
+                                                      data_level_str,
+                                                      kpf_object,
+                                                      qc_list_flag)
+
+exit_code = quality_control_return_list[0]
+kpf_object = quality_control_return_list[1]

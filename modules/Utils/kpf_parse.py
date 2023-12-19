@@ -222,10 +222,10 @@ def get_data_products_L0(L0):
     Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config
 
     Args:
-        2D - a KPF 2D object 
+        L0 - a KPF L0 object 
 
     Returns:
-        data_products in a 2D file
+        data_products in a L0 file
     """
     data_products = []
     if hasattr(L0, 'GREEN_AMP1'):
@@ -243,9 +243,9 @@ def get_data_products_L0(L0):
     if hasattr(L0, 'GUIDER_AVG'):
         if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
-#    if hasattr(L0, 'guider_avg'):
-#        if (L0['guider_avg'].size > 1):
-#            data_products.append('Guider')
+    elif hasattr(L0, 'guider_avg'): # Early KPF files used lower case guider_avg
+        if (L0['guider_avg'].size > 1):
+            data_products.append('Guider')
     if hasattr(L0, 'TELEMETRY'):
         if L0['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
@@ -282,9 +282,9 @@ def get_data_products_2D(D2):
     if hasattr(D2, 'GUIDER_AVG'):
         if (D2['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
-#    if hasattr(D2, 'guider_avg'):
-#        if (D2['guider_avg'].size > 1):
-#            data_products.append('Guider')
+    elif hasattr(D2, 'guider_avg'): # Early KPF files used lower case guider_avg
+        if (D2['guider_avg'].size > 1):
+            data_products.append('Guider')
     if hasattr(D2, 'TELEMETRY'):
         if D2['TELEMETRY'].size > 1:
             data_products.append('Telemetry')

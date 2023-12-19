@@ -172,6 +172,7 @@ class WaveCalibration:
                         '{}/all_wls.png'.format(self.save_diagnostics_dir), 
                         dpi=250
                     )
+                    plt.close()
 
         if self.quicklook == True:
             #TODO
