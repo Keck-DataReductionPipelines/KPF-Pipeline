@@ -355,7 +355,7 @@ def add_headers_L1_SNR(L1, logger=None):
     return L1
 
 
-def add_headers_L1_order_ratios(L1, logger=None):
+def add_headers_L1_order_flux_ratios(L1, logger=None):
     """
     Computes the SNR of L1 spectra and adds keywords to the L1 object headers
     
@@ -384,7 +384,7 @@ def add_headers_L1_order_ratios(L1, logger=None):
         
     # Use the AnalyzeL1 class to compute ratios between spectral orders
     myL1 = AnalyzeL1(L1, logger=logger)
-    myL1.measure_L1_snr(count_percentile=95, snr_percentile=95)
+    myL1.measure_L1_snr(counts_percentile=95, snr_percentile=95)
     for chip in chips:
         if chips == ['green', 'red']:
             try: 
@@ -405,7 +405,7 @@ def add_headers_L1_order_ratios(L1, logger=None):
     return L1
 
 
-def add_headers_orderlet_flux_ratios(L1, logger=None):
+def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     """
     Computes the orderlet flux ratios of L1 spectra and 
     adds keywords to the L1 object headers
