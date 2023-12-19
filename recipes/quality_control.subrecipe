@@ -7,7 +7,7 @@
 
 from modules.quality_control.src.quality_control_framework import QualityControlFramework
 
-qc_output_list == QualityControlFramework('KPF', data_level_str, kpf_object, 0)
+qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
 exit_code      = qc_output_list[0]
 new_kpf_object = qc_output_list[1]
 if exit_code == 1:
