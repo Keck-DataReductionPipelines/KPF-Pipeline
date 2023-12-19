@@ -13,6 +13,12 @@ Development Strategy
 
 <add content here about many topics>
 
+Continuous Integration (CI)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<add general statements about how CI works>
+
+The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within docker with commands like: ``> pytest tests/regression/test_init.py``
+
 Developing Quality Control (QC) Metrics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Here are the steps to adding a new quality control test.
