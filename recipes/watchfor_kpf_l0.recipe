@@ -152,7 +152,7 @@ for raw_file_path in file_list:
         kpf_object = flat_applied
         data_level_str = '2D'
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
-        invoke_subrecipe("./recipes/qc_tests.subrecipe")
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
                     
         # Write file
         recipe_complete = to_fits(flat_applied, output_file_name)
