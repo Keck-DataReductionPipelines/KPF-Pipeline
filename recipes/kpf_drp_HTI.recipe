@@ -65,19 +65,19 @@ if context.watch:
 	sel_obsid = context.date_dir
 	file_path = context.file_path
 
-# 	# do spectral extraction if 2D data is made after watching L0, then do 2D->l1->l2
-# 	if 'L0' in file_path:
-# 		lev0_file_path = str_replace(file_path, 'L0', '2D')
-# 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
-# 		lev1_file_path = str_replace(file_path, 'L0', 'L1')
-# 		# do_order_trace = False
+	# do spectral extraction if 2D data is made after watching L0, then do 2D->l1->l2
+	if 'L0' in file_path:
+		lev0_file_path = str_replace(file_path, 'L0', '2D')
+		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
+		lev1_file_path = str_replace(file_path, 'L0', 'L1')
+		# do_order_trace = False
 
-# 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
-# 	if '2D' in file_path:
-# 		lev0_file_path = file_path
-# 		lev1_file_path = str_replace(file_path, '2D', 'L1')
-# 		do_l0_to_2d = False
-# 		do_order_trace = False
+	# do spectral extraction if 2D data is watched, do 2D->l1->l2
+	if '2D' in file_path:
+		lev0_file_path = file_path
+		lev1_file_path = str_replace(file_path, '2D', 'L1')
+		do_l0_to_2d = False
+		do_order_trace = False
 
 	# do rv if L1 data is watched, do l1->l2
 	if 'L1' in file_path:
@@ -95,11 +95,11 @@ else:
 
 	# if not including 2D or L1, the flag is set as what kpf_drp.cfg sets.
 	# if including 2D, do l0->l1->l2
-	#if '2D' in file_path:
-	#	do_order_trace = False
-	#	do_spectral_extraction = True
-	#	do_rv = True
-	#	# do_rv_reweighting = True
+	if '2D' in file_path:
+		do_order_trace = False
+		do_spectral_extraction = True
+		do_rv = True
+		# do_rv_reweighting = True
 
 	# if including L1, do l1->l2
 	if 'L1' in file_path:
@@ -162,8 +162,8 @@ for wls in wls_list:
 
 
 ## do L0->2D conversion for watch mode
-# if do_l0_to_2d:
-#    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
+if do_l0_to_2d:
+    invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
 
 # Override wave_fits list with optional database query for nearest WLS master file.
@@ -174,27 +174,26 @@ contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
-# HTI: I cannot get a different WLS to be used when calling from the recipe.
-# if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
-# 	db_wls_exit_code = 1
-# 	for cal_type_pair in cal_type_pairs:
-# 		if db_wls_exit_code != 0:
-# 			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-#                                                                                                   date_dir_db_query,
-#                                                                                                   cal_file_level,
-#                                                                                                   contentbitmask,
-#                                                                                                   cal_type_pair,
-#                                                                                                   max_cal_file_age)
-# 
-# 			db_wls_exit_code = query_one_nearest_master_file_list[0]
-# 			if db_wls_exit_code == 0:
-# 
-# 				db_wls_rec = query_one_nearest_master_file_list[1]
-# 				db_wls_master_file = db_wls_rec[6]
-# 				wave_fits = []
-# 				for wls in wls_list:
-#                                     wave_fits = wave_fits + [db_wls_master_file]
-wave_fits=['/data/reference_fits/kpf_20230531_master_WLS_autocal-thar-all-eve_L1.fits']
+if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+	db_wls_exit_code = 1
+	for cal_type_pair in cal_type_pairs:
+		if db_wls_exit_code != 0:
+			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+                                                                                                  date_dir_db_query,
+                                                                                                  cal_file_level,
+                                                                                                  contentbitmask,
+                                                                                                  cal_type_pair,
+                                                                                                  max_cal_file_age)
+
+			db_wls_exit_code = query_one_nearest_master_file_list[0]
+			if db_wls_exit_code == 0:
+
+				db_wls_rec = query_one_nearest_master_file_list[1]
+				db_wls_master_file = db_wls_rec[6]
+				wave_fits = []
+				for wls in wls_list:
+                                    wave_fits = wave_fits + [db_wls_master_file]
+
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv
 
@@ -440,169 +439,169 @@ if do_spectral_extraction or do_hk or do_bc:
 				trace_list = trace_list + [lev0_trace_csv]
 				b_all_traces = b_all_traces and exists(lev0_trace_csv)
 
-	## prepare bias, dark data for ca_hk
-	#if do_hk:
-	#	hk_dark_data = config.ARGUMENT.hk_dark_fits
-	#	hk_bias_data = config.ARGUMENT.hk_bias_fits
-	#	if hk_dark_data:
-	#		hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
-	#	else:
-	#		hk_dark_data = None
-#
-	#	if hk_bias_data:
-	#		hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
-	#	else:
-	#		hk_bias_data = None
+	# prepare bias, dark data for ca_hk
+	if do_hk:
+		hk_dark_data = config.ARGUMENT.hk_dark_fits
+		hk_bias_data = config.ARGUMENT.hk_bias_fits
+		if hk_dark_data:
+			hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
+		else:
+			hk_dark_data = None
+
+		if hk_bias_data:
+			hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
+		else:
+			hk_bias_data = None
 
 	# loop through ccd and L0 to do spectral extraction
 	lev0_files = find_files(lev0_science_pattern)
-	#for input_lev0_file in lev0_files:
-	#	# lev0_data is KPF0 instance for input_lev0_file
-	#	lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-	#	_, short_lev0_file = split(input_lev0_file)
-	#	lev1_stem, lev1_ext = splitext(short_lev0_file)
-#
-	#	# lev1_stem is w/o "_2D" suffix
-	#	if lev0_stem_suffix != None:
-	#		if lev0_stem_suffix in lev1_stem:
-	#			lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
-	#	output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
-	#	is_raw = 1
-	#	if rect_method in input_lev0_file:
-	#	   is_raw = 0
-	#	if lev1_stem_suffix in input_lev0_file:
-	#	   is_raw = 0
-	#	if lev2_stem_suffix in input_lev0_file:
-	#	   is_raw = 0
-#
-	#	# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
-	#	if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
-	#		b_level1_sp = False
-#
-	#		# do spectral extraction if do_spectral_extraction, rectified flat data existing and all trace results exist.
-	#		if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
-	#			b_level1_sp = True
-#
-	#		# loop through ccd to do spectral extraction
-	#		if b_level1_sp:
-	#			# do background subtraction
-	#			if do_bk_subtraction:
-	#				order_mask = None
-	#				# create order mask for background subtraction
-	#				for idx in ccd_idx:
-	#					if orderlet_widths_ccds:
-	#						orderlet_widths = orderlet_widths_ccds[idx]
-	#					else:
-	#						orderlet_widths = []
-	#					order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
-	#							start_order=start_order[idx], trace_file=trace_list[idx],
-	#							data_extension=ccd_list[idx],
-	#							orderlet_widths=orderlet_widths, full_coverage=1)
-	#				# update L0 by background subtraction
-	#				if order_mask != None:
-	#					lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
-#
-	#			op_data = None
-	#			if outlier_mask_path == None:
-	#				outlier_mask_file = ''
-	#			else:
-	#				outlier_mask_file = outlier_mask_path + short_lev0_file
-#
-	#			for idx in ccd_idx:
-	#				ccd = ccd_list[idx]
-	#				order_names = orderlet_names[idx]
-	#				trace_file = trace_list[idx]
-#
-	#				clip_file = None
-#
-	#				op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
-	#							orderlet_names=order_names,
-	#							orderlets_on_image=order_names,
-	#							total_order_per_ccd=orders_per_ccd,
-	#							start_order=start_order[idx],
-	#							ccd_index = idx,
-	#							rectification_method=rect_method, extraction_method=extract_method,
-	#							clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
-	#							flat_extension=ccd+ccd_stack,
-	#							do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file)
-#
-	#			if op_data != None:
-	#			
-	#				# Quality Control - L1 level
-	#				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
-	#				data_level_str = 'L1'
-	#				kpf_object = op_data
-	#				invoke_subrecipe("./recipes/qc_tests.subrecipe")
-	#				op_data = kpf_object
-#
-	#				result = to_fits(op_data, output_lev1_file)
-#
-	#		# copy wls to the proper extension of lev1 data
-	#		if do_sp_wavecopy and exists(output_lev1_file):
-	#			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-	#			for idx in ccd_idx:
-	#				if wave_fits[idx] != None and exists(wave_fits[idx]):
-	#					wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
-	#					for ext in wave_to_ext[idx]:
-	#						ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
-#
-	#			SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
-#
-	#			# Quality Control - L1 level
-	#			# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
-	#			data_level_str = 'L1'
-	#			kpf_object = output_data
-	#			invoke_subrecipe("./recipes/qc_tests.subrecipe")
-	#			output_data = kpf_object
-#
-	#			result = to_fits(output_data, output_lev1_file)
-#
-	#		if do_bc and exists(output_lev1_file):
-	#			# add bary correction result to existing L1 file
-	#			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-	#			t_order = 0
-	#			for idx in ccd_idx:
-	#				t_order = t_order + orders_per_ccd[idx]
-#
-	#			# all extensions of same ccd in wls has the same data
-	#			for idx in ccd_idx:
-	#				output_data = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx],
-	#							start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
-#
-	#			# Quality Control - L1 level
-	#			# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
-	#			data_level_str = 'L1'
-	#			kpf_object = output_data
-	#			invoke_subrecipe("./recipes/qc_tests.subrecipe")
-	#			output_data = kpf_object
-#
-	#			result = to_fits(output_data, output_lev1_file)
-#
-#			# do ca_hk extraction
-#			if do_hk:
-#				# add ca_hk extraction result to existing L1 file or create a new L1 file if L1 file doesn't exist
-#				if not exists(output_lev1_file):
-#					output_data = None
-#				else:
-#					output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-#
-#				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
-#						output_wave_exts=hk_wave_exts,
-#						dark=hk_dark_data, wave_files=hk_wavelength_tables)
-#
-#				if output_data != None:
-#
-#					# Quality Control - L1 level
-#					# (this should be consolidated with QC above, but there are several to_fits calls for L1 -- let's fix this)
-#					data_level_str = 'L1'
-#					kpf_object = output_data
-#					invoke_subrecipe("./recipes/qc_tests.subrecipe")
-#					output_data = kpf_object
-#
-#					result = to_fits(output_data, output_lev1_file)
-#
-#			if exists(output_lev1_file):
-#				lev1_list = lev1_list + [output_lev1_file]
+	for input_lev0_file in lev0_files:
+		# lev0_data is KPF0 instance for input_lev0_file
+		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+		_, short_lev0_file = split(input_lev0_file)
+		lev1_stem, lev1_ext = splitext(short_lev0_file)
+
+		# lev1_stem is w/o "_2D" suffix
+		if lev0_stem_suffix != None:
+			if lev0_stem_suffix in lev1_stem:
+				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
+		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
+		is_raw = 1
+		if rect_method in input_lev0_file:
+		   is_raw = 0
+		if lev1_stem_suffix in input_lev0_file:
+		   is_raw = 0
+		if lev2_stem_suffix in input_lev0_file:
+		   is_raw = 0
+
+		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
+		if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
+			b_level1_sp = False
+
+			# do spectral extraction if do_spectral_extraction, rectified flat data existing and all trace results exist.
+			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
+				b_level1_sp = True
+
+			# loop through ccd to do spectral extraction
+			if b_level1_sp:
+				# do background subtraction
+				if do_bk_subtraction:
+					order_mask = None
+					# create order mask for background subtraction
+					for idx in ccd_idx:
+						if orderlet_widths_ccds:
+							orderlet_widths = orderlet_widths_ccds[idx]
+						else:
+							orderlet_widths = []
+						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
+								start_order=start_order[idx], trace_file=trace_list[idx],
+								data_extension=ccd_list[idx],
+								orderlet_widths=orderlet_widths, full_coverage=1)
+					# update L0 by background subtraction
+					if order_mask != None:
+						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
+
+				op_data = None
+				if outlier_mask_path == None:
+					outlier_mask_file = ''
+				else:
+					outlier_mask_file = outlier_mask_path + short_lev0_file
+
+				for idx in ccd_idx:
+					ccd = ccd_list[idx]
+					order_names = orderlet_names[idx]
+					trace_file = trace_list[idx]
+
+					clip_file = None
+
+					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
+								orderlet_names=order_names,
+								orderlets_on_image=order_names,
+								total_order_per_ccd=orders_per_ccd,
+								start_order=start_order[idx],
+								ccd_index = idx,
+								rectification_method=rect_method, extraction_method=extract_method,
+								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
+								flat_extension=ccd+ccd_stack,
+								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file)
+
+				if op_data != None:
+				
+					# Quality Control - L1 level
+					# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
+					data_level_str = 'L1'
+					kpf_object = op_data
+					invoke_subrecipe("./recipes/qc_tests.subrecipe")
+					op_data = kpf_object
+
+					result = to_fits(op_data, output_lev1_file)
+
+			# copy wls to the proper extension of lev1 data
+			if do_sp_wavecopy and exists(output_lev1_file):
+				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				for idx in ccd_idx:
+					if wave_fits[idx] != None and exists(wave_fits[idx]):
+						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+						for ext in wave_to_ext[idx]:
+							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
+
+				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+
+				# Quality Control - L1 level
+				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
+				data_level_str = 'L1'
+				kpf_object = output_data
+				invoke_subrecipe("./recipes/qc_tests.subrecipe")
+				output_data = kpf_object
+
+				result = to_fits(output_data, output_lev1_file)
+
+			if do_bc and exists(output_lev1_file):
+				# add bary correction result to existing L1 file
+				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				t_order = 0
+				for idx in ccd_idx:
+					t_order = t_order + orders_per_ccd[idx]
+
+				# all extensions of same ccd in wls has the same data
+				for idx in ccd_idx:
+					output_data = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx],
+								start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
+
+				# Quality Control - L1 level
+				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
+				data_level_str = 'L1'
+				kpf_object = output_data
+				invoke_subrecipe("./recipes/qc_tests.subrecipe")
+				output_data = kpf_object
+
+				result = to_fits(output_data, output_lev1_file)
+
+			# do ca_hk extraction
+			if do_hk:
+				# add ca_hk extraction result to existing L1 file or create a new L1 file if L1 file doesn't exist
+				if not exists(output_lev1_file):
+					output_data = None
+				else:
+					output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+
+				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
+						output_wave_exts=hk_wave_exts,
+						dark=hk_dark_data, wave_files=hk_wavelength_tables)
+
+				if output_data != None:
+
+					# Quality Control - L1 level
+					# (this should be consolidated with QC above, but there are several to_fits calls for L1 -- let's fix this)
+					data_level_str = 'L1'
+					kpf_object = output_data
+					invoke_subrecipe("./recipes/qc_tests.subrecipe")
+					output_data = kpf_object
+
+					result = to_fits(output_data, output_lev1_file)
+
+			if exists(output_lev1_file):
+				lev1_list = lev1_list + [output_lev1_file]
 
 ## do radial velocity or rv reweighting:
 #  description: do radial velocity on the specified extensions of L1 data and produce L2 data.
