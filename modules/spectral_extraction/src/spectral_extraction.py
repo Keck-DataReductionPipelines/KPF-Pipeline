@@ -243,7 +243,7 @@ class SpectralExtraction(KPF0_Primitive):
         outlier_flux = self.outlier_lev0[self.data_ext] \
             if self.outlier_lev0 is not None and hasattr(self.outlier_lev0, data_ext) else None
 
-        if spec_no_bk is not None and hasattr(spec_no_bk, var_ext):
+        if spec_no_bk is not None and hasattr(spec_no_bk, var_ext) and spec_no_bk[var_ext].size > 0:
             var_data = spec_no_bk[var_ext]
         else:
             var_data = None
