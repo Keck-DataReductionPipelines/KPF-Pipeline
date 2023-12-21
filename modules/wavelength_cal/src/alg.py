@@ -8,11 +8,12 @@ import pandas as pd
 import scipy
 from scipy import signal
 from scipy.special import erf
-from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline
+from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline, interp1d
 from scipy.optimize.minpack import curve_fit
 from modules.Utils.config_parser import ConfigHandler
 import modules.Utils.utils
 import warnings
+from numpy.polynomial.polynomial import Polynomial
 
 class WaveCalibration:
     """
@@ -67,7 +68,7 @@ class WaveCalibration:
         self.etalon_mask_in = configpull.get_config_value('master_etalon_file',None)
  
     def run_wavelength_cal(
-        self, calflux, rough_wls=None, 
+        self, calflux, rough_wls=None, our_wavelength_solution_for_order=None,
         peak_wavelengths_ang=None, lfc_allowed_wls=None,input_filename=None):
         """ Runs all wavelength calibration algorithm steps in order.
         Args:
@@ -142,7 +143,7 @@ class WaveCalibration:
                 masked_calflux, order_list, rough_wls=rough_wls, 
                 comb_lines_angstrom=lfc_allowed_wls,
                 expected_peak_locs=peak_wavelengths_ang, peak_wavelengths_ang=peak_wavelengths_ang,
-                print_update=True, plt_path=self.save_diagnostics_dir   
+                our_wavelength_solution_for_order=our_wavelength_solution_for_order, print_update=True, plt_path=self.save_diagnostics_dir   
             )
 
             # make a plot of all of the precise new wls minus the rough input  wls
@@ -233,7 +234,7 @@ class WaveCalibration:
 
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
-        expected_peak_locs=None,peak_wavelengths_ang=None, plt_path=None, print_update=False):
+        expected_peak_locs=None,peak_wavelengths_ang=None, our_wavelength_solution_for_order=None, plt_path=None, print_update=False):
         """
         Iteratively performs wavelength calibration for all orders.
         Args:
@@ -473,7 +474,7 @@ class WaveCalibration:
 
                 # compute various RV precision values for order
                 rel_precision, abs_precision = self.calculate_rv_precision(
-                    fitted_peak_pixels, wls, leg_out, rough_wls_order, plot_path=order_plt_path, 
+                    fitted_peak_pixels, wls, leg_out, rough_wls_order, our_wavelength_solution_for_order, rough_wls_order, plot_path=order_plt_path, 
                     print_update=print_update
                 )
                 order_precisions.append(abs_precision)
@@ -1456,64 +1457,81 @@ class WaveCalibration:
             for i in range(fit_iterations):
                 if self.fit_type.lower() == 'legendre':
                     if self.cal_type == 'ThAr':
-                        leg_out = Legendre.fit(x, y, 9, w=w)
-                        our_wavelength_solution_for_order = rough_wls_order # + 1D polynomial, to be added
-                    if self.cal_type == 'lfc':
+                        # fit ThAr based on 4/30 WLS
+                        rough_wls_int = interp1d(np.arange(n_pixels), rough_wls_order, kind='linear', fill_value="extrapolate")
+                        
+                        def polynomial_func(x, c0, c1):
+                            """
+                            Polynomial function to fit.
+                            Args:
+                                x (np.array): Pixel values.
+                                c0, c1, c2 (float): Coefficients of the polynomial.
+                            Returns:
+                                np.array: Evaluated polynomial.
+                            """
+                            return rough_wls_int(x) + c0 + c1 * x 
+                        
+                        # Using curve_fit to find the best-fit values of {c0, c1}
+                        popt, _ = curve_fit(polynomial_func, x, y)
+
+                        # Create the wavelength solution for the order
+                        our_wavelength_solution_for_order = polynomial_func(np.arange(len(rough_wls_order)), *popt)
+                        leg_out = Legendre.fit(np.arange(n_pixels), our_wavelength_solution_for_order, 9)
+
+                    if self.cal_type == 'LFC':
                         leg_out = Legendre.fit(x, y, 9, w=w)
                         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-                    
-                        
                 if self.fit_type == 'spline':
                     leg_out = UnivariateSpline(x, y, w, k=5)
                     our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
                 
-
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))
                 x = x[good]
                 y = y[good]
                 w = w[good]
                 res = res[good]
-            # plt.plot(x, res, 'k.')
-            # plt.axhline(0, color='b', lw=2)
-            # plt.xlabel('Pixel')
-            # plt.ylabel('Fit residuals [$\AA$]')
-            # plt.tight_layout()
-            # plt.savefig('polyfit//polyfit_{}.png'.format(wls[0]))
-            # plt.close()
-
-            #if plot_path is not None:
+            
+            plt.plot(x, res, 'k.')
+            plt.axhline(0, color='b', lw=2)
+            plt.xlabel('Pixel')
+            plt.ylabel('Fit residuals [$\AA$]')
+            plt.tight_layout()
+            plt.savefig('{}/polyfit.png'.format(plot_path))
+            plt.close()
+            
+            if plot_path is not None and self.cal_type =='ThAr':
+                approx_dispersion = (our_wavelength_solution_for_order[2000] - our_wavelength_solution_for_order[2100])/100
+                fig, ax1 = plt.subplots(tight_layout=True, figsize=(8, 4))
                 
-            #    sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
-            #    s = InterpolatedUnivariateSpline(fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx])
-            #    interpolated_ground_truth = s(np.arange(n_pixels))
-                
-            #    approx_dispersion = (our_wavelength_solution_for_order[2000] - our_wavelength_solution_for_order[2100])/100
+                # Range of interest b/c CCF chops off first/last 500 pixels
+                pixel_range = np.arange(500, 3500)
+                rough_wls_int_range = rough_wls_int(pixel_range)
+                wavelength_solution_range = our_wavelength_solution_for_order[500:3500]
 
-                # plot ground truth wls vs our wls
-            #    fig, ax1 = plt.subplots(tight_layout=True, figsize=(8, 4))
-            #    ax1.plot(
-            #        np.arange(n_pixels), 
-            #        interpolated_ground_truth - our_wavelength_solution_for_order, 
-            #        color='k'
-            #    )
-            #    ax1.set_xlabel('Pixel')
-            #    ax1.set_ylabel(r'Wavelength Difference ($\AA$)')
-            #    ax2 = ax1.twinx()
-            #    warnings.filterwarnings("ignore", "FixedFormatter should only be used together with FixedLocator")
-            #    ax2.set_ylabel("Difference (pixels) \nusing dispersion " + r'$\approx$' + '{0:.2}'.format(approx_dispersion) + r' $\AA$/pixel')
-            #    ax2.set_ylim(ax1.get_ylim())
-            #    ax1_ticks = ax1.get_yticks()
-            #    ax2.set_yticklabels([str(round(tick / approx_dispersion, 2)) for tick in ax1_ticks])
-            #    plt.savefig('{}/interp_vs_our_wls.png'.format(plot_path))
-            #    plt.close()
+                # Create the plot
+                fig, ax1 = plt.subplots(tight_layout=True, figsize=(8, 4))
+                ax1.plot(
+                    pixel_range, 
+                    rough_wls_int_range - wavelength_solution_range, 
+                    color='k'
+                )
+                ax1.set_xlabel('Pixel')
+                ax1.set_ylabel(r'Wavelength Difference ($\AA$)')
+                ax2 = ax1.twinx()
+                ax2.set_ylabel("Difference (pixels) \nusing dispersion " + r'$\approx$' + '{0:.2}'.format(approx_dispersion) + r' $\AA$/pixel')
+                ax2.set_ylim(ax1.get_ylim())
+                ax1_ticks = ax1.get_yticks()
+                ax2.set_yticklabels([str(round(tick / approx_dispersion, 2)) for tick in ax1_ticks])
+                plt.savefig('{}/interp_vs_our_wls.png'.format(plot_path))
+                plt.close()
         else:
             raise ValueError('Only set up to perform Legendre fits currently! Please set fit_type to "Legendre"')
 
         return our_wavelength_solution_for_order, leg_out
 
     def calculate_rv_precision(
-        self, fitted_peak_pixels, wls, leg_out, rough_wls,
+        self, fitted_peak_pixels, wls, leg_out, rough_wls, our_wavelength_solution_for_order, rough_wls_order, 
         print_update=True, plot_path=None
     ):
         """
@@ -1541,7 +1559,6 @@ class WaveCalibration:
                 float: relative RV precision in cm/s
         """
         our_wls_peak_pos = leg_out(fitted_peak_pixels) 
-
         # absolute/polynomial precision of order = difference between fundemental wavelengths
         # and our wavelength solution wavelengths for (fractional) peak pixels
         abs_residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
@@ -1551,9 +1568,9 @@ class WaveCalibration:
         # relative RV precision of order = difference between rough wls wavelengths
         # and our wavelength solution wavelengths for all pixels
         n_pixels = len(rough_wls)
-        rel_residual = (leg_out(np.arange(n_pixels)[rough_wls>0]) -  rough_wls[rough_wls>0]) * scipy.constants.c /rough_wls[rough_wls>0]
+        our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+        rel_residual = (our_wavelength_solution_for_order[rough_wls>0] -  rough_wls[rough_wls>0]) * scipy.constants.c /rough_wls[rough_wls>0]
         rel_precision_cm_s = 100 * np.std(rel_residual)/np.sqrt(len(rough_wls[rough_wls>0]))
-
         if print_update:
             print('Absolute standard error (this order): {:.2f} cm/s'.format(abs_precision_cm_s))
             print('Relative standard error (this order): {:.2f} cm/s'.format(rel_precision_cm_s))
