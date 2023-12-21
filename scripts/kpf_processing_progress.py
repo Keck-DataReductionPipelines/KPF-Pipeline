@@ -185,7 +185,7 @@ def main(start_date, end_date, print_files, touch_files, check_version, current_
     print("-" * 78)
 
     # Loop over dates
-    dir_paths = glob.glob(f"{base_dir}/L0/{start_date[:4]}????")
+    dir_paths = glob.glob(f"{base_dir}/L0/????????")
     sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date > end_date)
     for dir_path in sorted_dir_paths:
         datecode = os.path.basename(dir_path)
