@@ -1,8 +1,8 @@
 # This recipe is run in non-watch mode and is useful for bulk (re)processing 
 # of QLP data products.  It computes all QLP data products (from L0, 2D, L1, and L2) 
 # for a given datecode (e.g., 20230711).  Data products are put into standard 
-# locations in /data/QLP/<datecode>/<L0/2D/L1/L2/>/.  Bulk reprocessing can be 
-# done using 'parallel', e.g. a command like > cat <script> | parallel -j <ncpus>
+# locations in /data/QLP/<datecode>/<L0/2D/L1/L2/>/.  Bulk reprocessing can be done
+# with 'parallel', e.g. a command like > cat <script> | parallel -j <ncpus> -v --bars
 #
 # Example:
 #    > kpf --date 20230711 -c configs/quicklook_date.cfg -r recipes/quicklook_date.recipe

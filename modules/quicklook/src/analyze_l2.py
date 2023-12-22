@@ -93,19 +93,47 @@ class AnalyzeL2:
             ax = axes[oo]
             
             # Plot vertical lines for RVs and add top annotations
-            if   oo == 0: 
-                this_RV = self.rv_header['CCD1RV1']
-                this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
+            if   oo == 0:
+                try:
+                    this_RV = self.rv_header['CCD1RV1']
+                    this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
+                    data_present = True
+                except:
+                    this_RV = 0.
+                    this_RV_text = 'No RV reported - CCD1RV1 missing from header'
+                    data_present = False
             elif oo == 1: 
-                this_RV = self.rv_header['CCD1RV2']
-                this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
+                try:
+                    this_RV = self.rv_header['CCD1RV2']
+                    this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
+                    data_present = True
+                except:
+                    this_RV = 0.
+                    this_RV_text = 'No RV reported - CCD1RV1 missing from header'
+                    data_present = False
             elif oo == 2: 
-                this_RV = self.rv_header['CCD1RV3']
-                this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
+                try:
+                    this_RV = self.rv_header['CCD1RV3']
+                    this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
+                    data_present = True
+                except:
+                    this_RV = 0.
+                    this_RV_text = 'No RV reported - CCD1RV1 missing from header'
+                    data_present = False
             elif oo == 3: 
-                this_RV = self.rv_header['CCD1RVC'] 
+                try:
+                    this_RV = self.rv_header['CCD1RVC'] 
+                    data_present = True
+                except:
+                    this_RV = 0
+                    data_present = False
             elif oo == 4: 
-                this_RV = self.rv_header['CCD1RVS'] 
+                try:
+                    this_RV = self.rv_header['CCD1RVS'] 
+                    data_present = True
+                except:
+                    this_RV = 0.
+                    data_present = False
             if oo < 3: 
                 # Annotation and line for orderlet-averaged RV
                 ax.plot([this_RV, this_RV], [0, n_orders*0.5+0.5], color='k')
@@ -127,28 +155,31 @@ class AnalyzeL2:
             # Iterate over orders
             for o in range(n_orders):
                 if orderlet == 'CAL':
-                    this_CCF = CCF_data[oo, o, :]
-                    if np.nanpercentile(this_CCF,99) < 0:
-                        norm_CCF = np.divide(this_CCF+np.nanpercentile(this_CCF,0.1), 
-                                             np.nanpercentile(this_CCF+np.nanpercentile(this_CCF,0.1),90))
-                    else:
-                        if np.nanpercentile(this_CCF,[90]) == 0:
-                            norm_CCF = this_CCF
+                    if data_present:
+                        this_CCF = CCF_data[oo, o, :]
+                        if np.nanpercentile(this_CCF,99) < 0:
+                            norm_CCF = np.divide(this_CCF+np.nanpercentile(this_CCF,0.1), 
+                                                 np.nanpercentile(this_CCF+np.nanpercentile(this_CCF,0.1),90))
                         else:
-                            norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[90]))
+                            if np.nanpercentile(this_CCF,[90]) == 0:
+                                norm_CCF = this_CCF
+                            else:
+                                norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[90]))
                 elif orderlet == 'SKY':
-                    this_CCF = CCF_data[oo, o, :]
-                    if np.nanpercentile(this_CCF,99) < 0:
-                        norm_CCF = np.divide(this_CCF+np.nanpercentile(this_CCF,0.1), 
-                                             np.nanpercentile(this_CCF+np.nanpercentile(this_CCF,0.1),90))
-                    else:
-                        if np.nanpercentile(this_CCF,[90]) == 0:
-                            norm_CCF = this_CCF
+                    if data_present:
+                        this_CCF = CCF_data[oo, o, :]
+                        if np.nanpercentile(this_CCF,99) < 0:
+                            norm_CCF = np.divide(this_CCF+np.nanpercentile(this_CCF,0.1), 
+                                                 np.nanpercentile(this_CCF+np.nanpercentile(this_CCF,0.1),90))
                         else:
-                            norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[90]))
+                            if np.nanpercentile(this_CCF,[90]) == 0:
+                                norm_CCF = this_CCF
+                            else:
+                                norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[90]))
                 elif (np.sum(CCF_data[oo, o, :]) != 0): # SCI1/SCI2/SCI3 - only show if CCF was computed
-                    this_CCF = CCF_data[oo, o, :]
-                    norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[99]))
+                    if data_present:
+                        this_CCF = CCF_data[oo, o, :]
+                        norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[99]))
                 # The zoom feature is not yet implemented
                 #if zoom:
                 #    middle = len(RVgrid) // 4
@@ -160,8 +191,9 @@ class AnalyzeL2:
                 # Plot CCF for this order and orderlet
                 ax.plot([min(RVgrid)], [0])  # make a dot in the corner to insure that the colors are different on each row
                 current_color = ax.lines[-1].get_color()
-                if np.sum(CCF_data[oo, o, :]) != 0:
-                    ax.plot(RVgrid, norm_CCF + o*0.5, color=current_color)
+                if data_present:
+                    if np.sum(CCF_data[oo, o, :]) != 0:
+                        ax.plot(RVgrid, norm_CCF + o*0.5, color=current_color)
                 
                 # Add additional annotations
                 ax.text(RVgrid[-1]+0.75,  1+o*0.5-0.10, str(o), color=current_color, verticalalignment='center', horizontalalignment='left', fontsize=11)
@@ -181,15 +213,16 @@ class AnalyzeL2:
 #                            color=current_color, verticalalignment='center', horizontalalignment='right', fontsize=11)
                 
             # Determine mask per order and include in title
-            if (oo == 0) or (oo == 1) or (oo == 2): 
-                this_mask = ' (' + CCF_header['SCI_MASK'] + ' mask)'
-            if  oo == 3:
-                this_mask = ' (' + CCF_header['CAL_MASK'] + ' mask)'
-            if  oo == 4:
-                this_mask = ' (' + CCF_header['SKY_MASK'] + ' mask)'
-            ax.grid(False)
-            ax.set_title(orderlet + ' CCF' + this_mask, fontsize=18)
+            if data_present:
+                if (oo == 0) or (oo == 1) or (oo == 2): 
+                    this_mask = ' (' + CCF_header['SCI_MASK'] + ' mask)'
+                if  oo == 3:
+                    this_mask = ' (' + CCF_header['CAL_MASK'] + ' mask)'
+                if  oo == 4:
+                    this_mask = ' (' + CCF_header['SKY_MASK'] + ' mask)'
+                ax.set_title(orderlet + ' CCF' + this_mask, fontsize=18)
             ax.set_xlabel('RV (km/s)', fontsize=18)
+            ax.grid(False)
 
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)

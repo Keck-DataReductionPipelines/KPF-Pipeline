@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 import glob
@@ -10,7 +12,7 @@ from datetime import datetime
 
 def green_red_cahk_present(header):
     """
-    # Function to check GREEN, RED, CA_HK keywords - returns True if any camera was used
+    Function to check GREEN, RED, CA_HK keywords - returns True if any camera was used
     """
     if 'GREEN' in header:
         if 'YES' in header['GREEN']:
@@ -85,7 +87,7 @@ def get_latest_git_version():
     return latest_version
 
 
-def main(start_date, end_date, print_files, touch_missing, check_version, print_files_2D, print_files_L1, print_files_L2):
+def main(start_date, end_date, print_files, touch_files, check_version, current_version, print_files_2D, print_files_L1, print_files_L2):
     """
     Script Name: kpf_processing_progress.py
    
@@ -94,23 +96,24 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
       It searches over a range of dates specified by the first two arguments which are 
       of the form YYYYMMDD.  For each date (with /data/kpf/L0/YYYYMMDD as the 
       assumed L0 directory), it examines each L0 file and the associated 2D/L1/L2 
-      files in their related directories.  The output of this script is a table with 
-      columns indicating the date for each row, the most recent modification date for 
-      and L0 file in that directory, the fraction of 2D files processed, the fraction 
-      of L1 files processed, and the fraction of L2 files processed.  Sample output 
-      is shown below.
+      files in their related directories.  If the first argument is a date after the 
+      second argument, then the dates are printed in reverse chronological order (later 
+      dates first).  The output of this script is a table with columns indicating the 
+      date for each row, the most recent modification date for and L0 file in that 
+      directory, the fraction of 2D files processed, the fraction of L1 files processed, 
+      and the fraction of L2 files processed.  Sample output is shown below.
       
-      > python kpf_processing_progress.py 20231125 20231130
+      > ./scripts/kpf_processing_progress.py 20231231 20230101 --current_version 2.5
+
       
       DATECODE | LAST L0 MOD DATE | 2D PROCESSING  | L1 PROCESSING  | L2 PROCESSING 
       ------------------------------------------------------------------------------
-      20231125 | 2023-12-02 14:29 |  513/513  100% |  512/513   99% |  485/486   99%
-      20231126 | 2023-12-02 14:29 |  528/528  100% |  528/528  100% |  501/501  100%
-      20231127 | 2023-12-02 14:29 |  526/526  100% |  525/526   99% |  498/499   99%
-      20231128 | 2023-12-02 14:30 | 1108/1108 100% | 1098/1107  99% | 1054/1063  99%
-      20231129 | 2023-12-02 14:31 |  340/340  100% |  340/340  100% |  313/313  100%
-      20231130 | 2023-12-02 14:32 |  341/341  100% |  339/341   99% |  311/313   99%
-      ------------------------------------------------------------------------------
+      20231221 | 2023-12-21 10:18 |  256/256  100% |  254/256   99% |  229/230   99%
+      20231220 | 2023-12-20 16:00 |  342/342  100% |  342/342  100% |  315/315  100%
+      20231219 | 2023-12-19 16:00 |  406/406  100% |  406/406  100% |  377/379   99%
+      20231218 | 2023-12-18 16:00 |  531/531  100% |  528/531   99% |  501/504   99%
+      20231217 | 2023-12-17 16:00 |  524/524  100% |  524/524  100% |  497/497  100%
+      20231216 | 2023-12-16 16:00 |  527/527  100% |  524/527   99% |  497/500   99%
       
       The following criteria are used to determine if 2D/L1/L2 files are "processed":
       
@@ -137,16 +140,17 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
       filenames of the 2D/L1/L2 files themselves, and turning on the DRP version check.
 
     Options:
-      --help            Display this message
-      --print_files     Display missing file names (or files that fail other criteria)
-      --print_files_2D  Display missing 2D file names (or files that fail other criteria)
-      --print_files_L1  Display missing L1 file names (or files that fail other criteria)
-      --print_files_L2  Display missing L2 file names (or files that fail other criteria)
-      --touch_missing   Touch the base L0 files of missing 2D/L1/L2 files
-      --check_version   Checks that each 2D/L1/L2 file has the latest Git version number for the KPF-Pipeline
+      --help             Display this message
+      --print_files      Display missing file names (or files that fail other criteria)
+      --print_files_2D   Display missing 2D file names (or files that fail other criteria)
+      --print_files_L1   Display missing L1 file names (or files that fail other criteria)
+      --print_files_L2   Display missing L2 file names (or files that fail other criteria)
+      --touch_files      Touch the base L0 files of missing 2D/L1/L2 files
+      --check_version    Checks that each 2D/L1/L2 file has the current Git version for the KPF-Pipeline
+      --current_version  The current version of determining completion status; e.g. --current version 2.5
    
     Usage:
-      python kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files] [--print_files_2D] [--print_files_L1] [--print_files_L2] [--touch_missing] [--check_version]
+      python kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files] [--print_files_2D] [--print_files_L1] [--print_files_L2] [--touch_files] [--check_version]
    
     Example:
       python kpf_processing_progress.sh 20231114 20231231 --print_files
@@ -155,12 +159,14 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
     base_dir = "/data/kpf"
     missing_L0 = []
 
-    if check_version:
-        try: 
-            current_version = get_latest_git_version()
-        except Exception as e:
-            print('Failed to determine latest version of KPF-DRP: ' + str(e))
-            current_version = '0.0.0'
+    if check_version or current_version != None:
+        if not current_version: # if the current version wasn't specified on the command line
+            try: 
+                current_version = get_latest_git_version()
+            except Exception as e:
+                print('Failed to determine latest version of KPF-DRP: ' + str(e))
+                current_version = '0.0.0'
+        print('\nChecking for KPF-Pipeline v' + str(current_version))
 
     junk_file_csv = '/data/kpf/reference/Junk_Observations_for_KPF.csv'
     ignore_junk = True
@@ -179,13 +185,19 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
     print("-" * 78)
 
     # Loop over dates
-    dir_paths = glob.glob(f"{base_dir}/L0/{start_date[:4]}????")
-    sorted_dir_paths = sorted(dir_paths, key=lambda x: int(x.split('/')[-1]))
+    dir_paths = glob.glob(f"{base_dir}/L0/????????")
+    sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date > end_date)
     for dir_path in sorted_dir_paths:
         datecode = os.path.basename(dir_path)
-        if not datecode.isdigit() or not start_date <= datecode <= end_date:
+        if not datecode.isdigit():
             continue
 
+        # Check date range based on the order of start_date and end_date
+        if start_date <= end_date and not start_date <= datecode <= end_date:
+            continue
+        elif start_date > end_date and not end_date <= datecode <= start_date:
+            continue
+    
         total_count = {"2D": 0, "L1": 0, "L2": 0}
         match_count = {"2D": 0, "L1": 0, "L2": 0}
         recent_mod_date = 0
@@ -347,7 +359,7 @@ def main(start_date, end_date, print_files, touch_missing, check_version, print_
         else:
             print("All files are up to date.")
 
-    if touch_missing:
+    if touch_files:
         if len(missing_L0_nodupes) > 0:
             print("These L0 files have corresponding 2D, L1, or L2 files that are missing or old:")
             for L0_file in missing_L0_nodupes:
@@ -371,12 +383,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process KPF files.')
     parser.add_argument('start_date', type=str, help='Start date in YYYYMMDD format')
     parser.add_argument('end_date', type=str, help='End date in YYYYMMDD format')
-    parser.add_argument('--print_files',    action='store_true', help='Print file L0 names of missing 2D/L1/L2 files')
-    parser.add_argument('--touch_missing',  action='store_true', help='Touch the base L0 files of missing 2D/L1/L2 files')
-    parser.add_argument('--check_version',  action='store_true', help='Check 2D/L1/L2 files for latest Git version of DRP processing')
-    parser.add_argument('--print_files_2D', action='store_true', help='Print 2D file names where missing and not junk')
-    parser.add_argument('--print_files_L1', action='store_true', help='Print L1 file names where missing and not junk')
-    parser.add_argument('--print_files_L2', action='store_true', help='Print L2 file names where missing and not junk')
+    parser.add_argument('--print_files',     action='store_true', help='Print file L0 names of missing 2D/L1/L2 files')
+    parser.add_argument('--touch_files',     action='store_true', help='Touch the base L0 files of missing 2D/L1/L2 files')
+    parser.add_argument('--check_version',   action='store_true', help='Check 2D/L1/L2 files for latest Git version of DRP processing')
+    parser.add_argument('--current_version', type=str, default=None, help='Current Git version to use for checking, e.g. 2.5.3 or 2.5')
+    parser.add_argument('--print_files_2D',  action='store_true', help='Print 2D file names where missing and not junk')
+    parser.add_argument('--print_files_L1',  action='store_true', help='Print L1 file names where missing and not junk')
+    parser.add_argument('--print_files_L2',  action='store_true', help='Print L2 file names where missing and not junk')
 
     args = parser.parse_args()
-    main(args.start_date, args.end_date, args.print_files, args.touch_missing, args.check_version, args.print_files_2D, args.print_files_L1, args.print_files_L2)
+    main(args.start_date, args.end_date, args.print_files, args.touch_files, args.check_version, args.current_version, args.print_files_2D, args.print_files_L1, args.print_files_L2)
