@@ -60,8 +60,8 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   ``lambda_fit``: best-fit wavelength (Ang), |br|
   }
 
-Accessing parts WLS Dictionaries
---------------------------------
+Accessing parts of WLS Dictionaries
+-----------------------------------
 Below are examples of accessing the hierarchical structure of a WLS dictionary.
 
 To print the number of type of calibration spectrum (LFC or ThAr): |br|

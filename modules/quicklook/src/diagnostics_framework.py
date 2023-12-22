@@ -24,7 +24,8 @@ class DiagnosticsFramework(KPF0_Primitive):
     Arguments:
         kpf_object (obj):
         data_level_str (str): L0, 2D, L1, L2 are possible choices.
-        diagnostics_name (str): name of diagnostics to add to headers
+        diagnostics_name (str): 'all' or name of diagnostics to add to headers; 
+                                if 'all', then all diagnostics associated with data level are computed
     """
 
     def __init__(self, action, context):
@@ -35,7 +36,6 @@ class DiagnosticsFramework(KPF0_Primitive):
         self.data_level_str   = self.action.args[0]
         self.kpf_object       = self.action.args[1]
         self.diagnostics_name = self.action.args[2]
-
         #Input configuration
         self.config = cp.ConfigParser()
         try:
@@ -61,19 +61,20 @@ class DiagnosticsFramework(KPF0_Primitive):
         """
 
         exit_code = 0
-
+        
         # Measure Diagnostics.
         if 'L0' in self.data_level_str:
             pass
             
         elif '2D' in self.data_level_str:
             # Dark Current
-            if self.diagnostics_name == 'add_headers_dark_current_2D':
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_dark_current_2D'):
                 try:
                     primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
                     name = primary_header.get_name()
                     if name == 'Dark':
-                        self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                        self.logger.info('Measuring diagnostics: add_headers_dark_current_2D')
                         self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=self.logger)
                         exit_code = 1
                     else: 
@@ -82,18 +83,20 @@ class DiagnosticsFramework(KPF0_Primitive):
                     self.logger.error(f"Measuring dark current failed: {e}\n{traceback.format_exc()}")
 
             # Guider
-            if self.diagnostics_name == 'add_headers_guider':
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_guider'):
                 try:
-                    self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                    self.logger.info('Measuring diagnostics: add_headers_guider')
                     self.kpf_object = diagnostics.add_headers_guider(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
                     self.logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
 
             # Exposure Meter
-            if self.diagnostics_name == 'add_headers_exposure_meter':
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_exposure_meter'):
                 try:
-                    self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                    self.logger.info('Measuring diagnostics: add_headers_exposure_meter')
                     self.kpf_object = diagnostics.add_headers_exposure_meter(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
@@ -101,15 +104,15 @@ class DiagnosticsFramework(KPF0_Primitive):
                         
         elif 'L1' in self.data_level_str:
             # L1 SNR
-            if self.diagnostics_name == 'add_headers_L1_SNR':
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L1_SNR'):
                 try:
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
+                            self.logger.info('Measuring diagnostics: add_headers_L1_SNR')
                             self.kpf_object = diagnostics.add_headers_L1_SNR(self.kpf_object, logger=self.logger)
                             exit_code = 1
-                            print('exit_code = ' + str(exit_code))
                         else: 
                             self.logger.info("L1 SNR diagnostics not computed.")
                     else: 
@@ -118,15 +121,15 @@ class DiagnosticsFramework(KPF0_Primitive):
                     self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
             
             # Order Flux Ratios
-            if self.diagnostics_name == 'add_headers_order_flux_ratios':
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L1_order_flux_ratios'):
                 try:
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
-                            self.kpf_object = diagnostics.add_headers_order_flux_ratios(self.kpf_object, logger=self.logger)
+                            self.logger.info('Measuring diagnostics: add_headers_L1_order_flux_ratios')
+                            self.kpf_object = diagnostics.add_headers_L1_order_flux_ratios(self.kpf_object, logger=self.logger)
                             exit_code = 1
-                            print('exit_code = ' + str(exit_code))
                         else: 
                             self.logger.info("L1 SNR diagnostics not computed.")
                     else: 
@@ -135,15 +138,15 @@ class DiagnosticsFramework(KPF0_Primitive):
                     self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
 
             # Orderlet Flux Ratios
-            if self.diagnostics_name == 'add_headers_orderlet_flux_ratios':
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L1_orderlet_flux_ratios'):
                 try:
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info('Measuring diagnostics: {}'.format(self.diagnostics_name))
-                            self.kpf_object = diagnostics.add_headers_orderlet_flux_ratios(self.kpf_object, logger=self.logger)
+                            self.logger.info('Measuring diagnostics: add_headers_orderlet_flux_ratios')
+                            self.kpf_object = diagnostics.add_headers_L1_orderlet_flux_ratios(self.kpf_object, logger=self.logger)
                             exit_code = 1
-                            print('exit_code = ' + str(exit_code))
                         else: 
                             self.logger.info("L1 SNR diagnostics not computed.")
                     else: 
@@ -154,7 +157,6 @@ class DiagnosticsFramework(KPF0_Primitive):
         elif 'L2' in self.data_level_str:
             pass
 
-        # Finish.
+        # Finish
         self.logger.info('Finished {}'.format(self.__class__.__name__))
-
-        return Arguments(exit_code, self.kpf_object)
+        return Arguments([exit_code, self.kpf_object])
