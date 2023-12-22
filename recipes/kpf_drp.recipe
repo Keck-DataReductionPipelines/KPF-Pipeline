@@ -160,7 +160,6 @@ wave_fits = []
 for wls in wls_list:
 	wave_fits = wave_fits + [output_dir + wls]
 
-
 ## do L0->2D conversion for watch mode
 if do_l0_to_2d:
     invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
@@ -419,6 +418,7 @@ if do_order_trace:
 
 lev1_list = []
 outlier_mask_path = config.ARGUMENT.outlier_mask_path
+
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
 	trace_list = []
@@ -458,6 +458,9 @@ if do_spectral_extraction or do_hk or do_bc:
 	for input_lev0_file in lev0_files:
 		# lev0_data is KPF0 instance for input_lev0_file
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+		# this used to denote the level 0 data before background subtraction
+		lev0_data_no_bk = kpf0_from_fits(input_lev0_file, data_type=data_type)
+
 		_, short_lev0_file = split(input_lev0_file)
 		lev1_stem, lev1_ext = splitext(short_lev0_file)
 
@@ -500,7 +503,8 @@ if do_spectral_extraction or do_hk or do_bc:
 					# update L0 by background subtraction
 					if order_mask != None:
 						lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
-
+						#output_lev0_bk = input_2d_dir + '/bk/' + lev1_stem + fits_ext
+						#to_fits(lev0_data, output_lev0_bk)
 				op_data = None
 				if outlier_mask_path == None:
 					outlier_mask_file = ''
@@ -511,7 +515,7 @@ if do_spectral_extraction or do_hk or do_bc:
 					ccd = ccd_list[idx]
 					order_names = orderlet_names[idx]
 					trace_file = trace_list[idx]
-
+					var_ccd = str_replace(ccd, '_CCD', '_VAR')
 					clip_file = None
 
 					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
@@ -523,7 +527,9 @@ if do_spectral_extraction or do_hk or do_bc:
 								rectification_method=rect_method, extraction_method=extract_method,
 								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
 								flat_extension=ccd+ccd_stack,
-								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file)
+								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file,
+								var_extension=var_ccd,
+								spec_no_bk = lev0_data_no_bk)
 
 				if op_data != None:
 				
