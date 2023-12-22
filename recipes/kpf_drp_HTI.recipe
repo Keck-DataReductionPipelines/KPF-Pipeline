@@ -174,25 +174,26 @@ contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
-if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
-	db_wls_exit_code = 1
-	for cal_type_pair in cal_type_pairs:
-		if db_wls_exit_code != 0:
-			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-                                                                                                  date_dir_db_query,
-                                                                                                  cal_file_level,
-                                                                                                  contentbitmask,
-                                                                                                  cal_type_pair,
-                                                                                                  max_cal_file_age)
-
-			db_wls_exit_code = query_one_nearest_master_file_list[0]
-			if db_wls_exit_code == 0:
-
-				db_wls_rec = query_one_nearest_master_file_list[1]
-				db_wls_master_file = db_wls_rec[6]
-				wave_fits = []
-				for wls in wls_list:
-                                    wave_fits = wave_fits + [db_wls_master_file]
+# HTI: Why is the WLS query tied to do_spectral_extraction?
+# HTI if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+# HTI	db_wls_exit_code = 1
+# HTI	for cal_type_pair in cal_type_pairs:
+# HTI		if db_wls_exit_code != 0:
+# HTI			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+# HTI                                                                                                  date_dir_db_query,
+# HTI                                                                                                  cal_file_level,
+# HTI                                                                                                  contentbitmask,
+# HTI                                                                                                  cal_type_pair,
+# HTI                                                                                                  max_cal_file_age)
+# HTI
+# HTI			db_wls_exit_code = query_one_nearest_master_file_list[0]
+# HTI			if db_wls_exit_code == 0:
+# HTI
+# HTI				db_wls_rec = query_one_nearest_master_file_list[1]
+# HTI				db_wls_master_file = db_wls_rec[6]
+# HTI				wave_fits = []
+# HTI				for wls in wls_list:
+# HTI                                    wave_fits = wave_fits + [db_wls_master_file]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv
@@ -281,18 +282,18 @@ rv_end_x = config.ARGUMENT.rv_end_x
 #    hk_wave_exts: extensions containing wavelength solution for the fibers in hk_fiber_list
 #    hk_trace_table: CA-HK trace file for spectrum extraction, /data/masters/<xxx.csv>
 #    hk_wavelength_tables: wavelength solution files for each fiber, [/data/masters/<xxx.csv>,...]
-input_hk_pattern = lev0_science_pattern
-
-## path containing ca_hk trace file and wavelength table
-input_hk_data_dir = output_dir
-hk_fiber_list = config.ARGUMENT.hk_fiber_list
-hk_spec_exts = config.ARGUMENT.hk_extract_exts
-hk_wave_exts = config.ARGUMENT.hk_wave_exts
-hk_trace_table = input_hk_data_dir + config.ARGUMENT.hk_trace_path
-hk_wavelength_csvs = config.ARGUMENT.hk_wavelength_path
-hk_wavelength_tables = []
-for hk_w in hk_wavelength_csvs:
-	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
+# HTI input_hk_pattern = lev0_science_pattern
+# HTI 
+# HTI ## path containing ca_hk trace file and wavelength table
+# HTI input_hk_data_dir = output_dir
+# HTI hk_fiber_list = config.ARGUMENT.hk_fiber_list
+# HTI hk_spec_exts = config.ARGUMENT.hk_extract_exts
+# HTI hk_wave_exts = config.ARGUMENT.hk_wave_exts
+# HTI hk_trace_table = input_hk_data_dir + config.ARGUMENT.hk_trace_path
+# HTI hk_wavelength_csvs = config.ARGUMENT.hk_wavelength_path
+# HTI hk_wavelength_tables = []
+# HTI for hk_w in hk_wavelength_csvs:
+# HTI 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
 
 ## do order trace
 #  description: find traces from L0 flat data for each ccd, and produce rectified L0 flat data.
@@ -324,7 +325,7 @@ b_all_traces = False
 lev0_flat_rect = None
 ccd_stack = '_STACK'
 
-if do_order_trace:
+if do_order_trace: #HTI: required for spectralextraction.
 	trace_list = []
 	flat_data = None
 
@@ -439,20 +440,20 @@ if do_spectral_extraction or do_hk or do_bc:
 				trace_list = trace_list + [lev0_trace_csv]
 				b_all_traces = b_all_traces and exists(lev0_trace_csv)
 
-	# prepare bias, dark data for ca_hk
-	if do_hk:
-		hk_dark_data = config.ARGUMENT.hk_dark_fits
-		hk_bias_data = config.ARGUMENT.hk_bias_fits
-		if hk_dark_data:
-			hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
-		else:
-			hk_dark_data = None
-
-		if hk_bias_data:
-			hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
-		else:
-			hk_bias_data = None
-
+	# HTI # prepare bias, dark data for ca_hk
+	# HTI if do_hk:
+	# HTI 	hk_dark_data = config.ARGUMENT.hk_dark_fits
+	# HTI 	hk_bias_data = config.ARGUMENT.hk_bias_fits
+	# HTI 	if hk_dark_data:
+	# HTI 		hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
+	# HTI 	else:
+	# HTI 		hk_dark_data = None
+    # HTI 
+	# HTI 	if hk_bias_data:
+	# HTI 		hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
+	# HTI 	else:
+	# HTI 		hk_bias_data = None
+    
 	# loop through ccd and L0 to do spectral extraction
 	lev0_files = find_files(lev0_science_pattern)
 	for input_lev0_file in lev0_files:
@@ -481,7 +482,6 @@ if do_spectral_extraction or do_hk or do_bc:
 			# do spectral extraction if do_spectral_extraction, rectified flat data existing and all trace results exist.
 			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
 				b_level1_sp = True
-
 			# loop through ccd to do spectral extraction
 			if b_level1_sp:
 				# do background subtraction
