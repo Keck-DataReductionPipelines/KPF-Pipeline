@@ -55,7 +55,8 @@
                       data. Defaults to False.
                     - `action.args['outlier_file']: (str, optional)`: L0 file with outlier rejection results. Defaults
                       to None.
-
+                    - `action.args['spec_no_bk']: (str, optional)`: L0 file before background subtraction. Defaults
+                      to None.
 
                 - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
                   contains the path of the config file defined for the module of spectral extraction in the master
@@ -144,6 +145,7 @@ class SpectralExtraction(KPF0_Primitive):
                     'clip_file': None,
                     'data_extension': 'DATA',
                     'flat_extension': 'DATA',
+                    'var_extension': 'VAR',
                     'poly_degree': 3,
                     'origin': [0, 0],
                     'trace_extension': None,
@@ -153,7 +155,8 @@ class SpectralExtraction(KPF0_Primitive):
                     'total_order_per_ccd': None,
                     'orderlets_on_image': None,
                     'do_outlier_rejection': False,
-                    'outlier_file': ''
+                    'outlier_file': '',
+                    'spec_no_bk': None
                 }
 
     NORMAL = 0
@@ -186,6 +189,7 @@ class SpectralExtraction(KPF0_Primitive):
         self.total_order_per_ccd = self.get_args_value('total_order_per_ccd', action.args, args_keys)
 
         data_ext = self.get_args_value('data_extension', action.args, args_keys)
+        var_ext = self.get_args_value('var_extension', action.args, args_keys)
         flat_ext = self.get_args_value('flat_extension', action.args, args_keys)
         self.data_ext = data_ext
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
@@ -194,7 +198,7 @@ class SpectralExtraction(KPF0_Primitive):
         self.outlier_rejection = self.get_args_value('do_outlier_rejection', action.args, args_keys)
         self.outlier_file = self.get_args_value("outlier_file", action.args, args_keys) if self.outlier_rejection \
             else ''
-
+        spec_no_bk = self.get_args_value('spec_no_bk', action.args, args_keys)
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -239,6 +243,11 @@ class SpectralExtraction(KPF0_Primitive):
         outlier_flux = self.outlier_lev0[self.data_ext] \
             if self.outlier_lev0 is not None and hasattr(self.outlier_lev0, data_ext) else None
 
+        if spec_no_bk is not None and hasattr(spec_no_bk, var_ext) and spec_no_bk[var_ext].size > 0:
+            var_data = spec_no_bk[var_ext]
+        else:
+            var_data = None
+
         try:
             self.alg = SpectralExtractionAlg(self.input_flat[flat_ext] if hasattr(self.input_flat, flat_ext) else None,
                                         self.input_flat.header[flat_ext] if hasattr(self.input_flat, flat_ext) else None,
@@ -254,7 +263,8 @@ class SpectralExtraction(KPF0_Primitive):
                                         total_order_per_ccd=self.total_order_per_ccd,
                                         clip_file=self.clip_file,
                                         do_outlier_rejection = self.outlier_rejection,
-                                        outlier_flux=outlier_flux)
+                                        outlier_flux=outlier_flux,
+                                        var_data=var_data)
         except Exception as e:
             self.alg = None
 
@@ -539,6 +549,8 @@ class SpectralExtraction(KPF0_Primitive):
             if v is not None and isinstance(v, str):
                 if 'summ' in v.lower():
                     method = SpectralExtractionAlg.SUM
+                elif 'fox' in v.lower():
+                    method = SpectralExtractionAlg.FOX
                 else:
                     method = SpectralExtractionAlg.OPTIMAL
             else:
