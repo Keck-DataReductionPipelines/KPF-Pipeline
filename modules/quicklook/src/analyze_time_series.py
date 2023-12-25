@@ -1,12 +1,11 @@
 import os
+import time
 import glob
 import sqlite3
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-
+#from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
-import time
 
 from astropy.io import fits
 from datetime import datetime
@@ -74,7 +73,7 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def add_to_db(self, start_date, end_date):
+    def add_dates_to_db(self, start_date, end_date):
         self.logger.info("Adding to database between " + start_date + " to " + end_date)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date > end_date)
@@ -94,6 +93,33 @@ class AnalyzeTimeSeries:
                     t2.set_description(base_filename)
                     t2.refresh() 
                     self.ingest_one_observation(dir_path, L0_filename) 
+
+    def add_ObsID_list_to_db(self, ObsID_filename):
+        if os.path.isfile(ObsID_filename):
+            try:
+                df = pd.read_csv(ObsID_filename)
+            except Exception as e:
+                self.logger.info(f'Problem reading {ObsID_filename}: ' + e)
+        else:
+            self.logger.info('File missing: ObsID_filename')
+        
+        ObsID_pattern = r'KP\.20\d{6}\.\d{5}\.\d{2}'
+        first_column = df.iloc[:, 0]
+        filtered_column = first_column[first_column.str.match(ObsID_pattern)]
+        result_df = filtered_column.to_frame()
+        self.logger.info('ObsID_filename read with ' + str(len(result_df)) + ' properly formatted ObsIDs.')
+
+        t = tqdm_notebook(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        for ObsID in t:
+            L0_filename = ObsID + '.fits'
+            dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
+            file_path = os.path.join(dir_path, L0_filename)
+            base_filename = L0_filename.split('.fits')[0]
+            t.set_description(base_filename)
+            t.refresh() 
+            #print('dir_path = ' + dir_path)
+            #print('L0_filename = ' + L0_filename)
+            self.ingest_one_observation(dir_path, L0_filename) 
 
 
     def ingest_one_observation(self, dir_path, L0_filename):        
@@ -192,9 +218,9 @@ class AnalyzeTimeSeries:
         if result:
             stored_mod_time = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
             current_mod_time = datetime.strptime(file_mod_time, "%Y-%m-%d %H:%M:%S")
-            print('current_mod_time  = ' + current_mod_time)
-            print('stored_mod_time  = ' + stored_mod_time)
-            print(current_mod_time > stored_mod_time)
+            #print('current_mod_time  = ' + str(current_mod_time))
+            #print('stored_mod_time  = ' + str(stored_mod_time))
+            #print(current_mod_time > stored_mod_time)
             return current_mod_time > stored_mod_time
         
         return True  # Process if file is not in the database
@@ -256,6 +282,11 @@ class AnalyzeTimeSeries:
         
     def dataframe_from_db(self, columns, only_object=None):
         conn = sqlite3.connect(self.db_path)
+        
+        # Append WHERE clause if only_object is not None
+        if only_object is not None:
+            # Use parameterized queries to prevent SQL injection
+            query += " WHERE OBJECT = ?"
         
         # Enclose column names in double quotes
         quoted_columns = [f'"{column}"' for column in columns]
