@@ -280,20 +280,58 @@ class AnalyzeTimeSeries:
         print(df)
 
    
-    def dataframe_from_db(self, columns, only_object=None):
-        conn = sqlite3.connect(self.db_path)
+    def dataframe_from_db(self, columns, only_object=None, object_like=None, 
+                          start_date=None, end_date=None, verbose=False):
+        '''
+        Returns a pandas dataframe of attributes (specified by column names) for all 
+        observations in the DB. The query can be restricted to observations matching a 
+        particular object name(s).  The query can also be restricted to observations 
+        after start_date and/or before end_date. 
+
+        Args:
+            columns (string or list of strings) - database columns to query
+            only_object (string or list of strings) - object names to include in query
+            object_like (string or list of strings) - partial object names to search for
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
+            false (boolean) - if True, prints the SQL query
+
+        Returns:
+            Pandas dataframe of the specified columns matching the object name and 
+            start_time/end_time constraints.
+        '''
         
-        # Append WHERE clause if only_object is not None
-        if only_object is not None:
-            # Use parameterized queries to prevent SQL injection
-            query += " WHERE OBJECT = ?"
+        conn = sqlite3.connect(self.db_path)
         
         # Enclose column names in double quotes
         quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
-        
+
+        # Append WHERE clauses
+        where_queries = []
+        if only_object is not None:
+            only_object = [f"OBJECT = '{obj}'" for obj in only_object]
+            or_objects = ' OR '.join(only_object)
+            where_queries.append(f'({or_objects})')
+        if object_like is not None:
+            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
+            or_objects = ' OR '.join(object_like)
+            where_queries.append(f'({or_objects})')
+        if start_date is not None:
+            start_date_txt = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            where_queries.append(f' ("DATE-MID" > "{start_date_txt}")')
+        if end_date is not None:
+            end_date_txt = end_date.strftime('%Y-%m-%d %H:%M:%S')
+            where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
+        if where_queries != []:
+            query += " WHERE " + ' AND '.join(where_queries)
+
+        if verbose:
+            print('query = ' + query)
+
         df = pd.read_sql_query(query, conn)
         conn.close()
+
         return df
 
 
@@ -306,7 +344,7 @@ class AnalyzeTimeSeries:
             'string': 'TEXT'
         }.get(dtype, 'TEXT')
 
-   
+
     def get_keyword_types(self, level):
     
         if level == 'L0':
@@ -468,6 +506,7 @@ class AnalyzeTimeSeries:
        
  
     def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
+                                    only_object=None, object_like=None, 
                                     fig_path=None, show_plot=False):
         """
         Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
@@ -482,6 +521,8 @@ class AnalyzeTimeSeries:
                     col: name of DB column to plot
                     plot_attr: a dictionary containing plot attributes for a scatter plot, 
                         including 'label', 'marker', 'color'
+            only_object (string or list of strings) - object names to include in query
+            object_like (string or list of strings) - partial object names to search for
             start_date (datetime object) - start date for plot
             end_date (datetime object) - end date for plot
             fig_path (string) - set to the path for a SNR vs. wavelength file
@@ -493,22 +534,23 @@ class AnalyzeTimeSeries:
             (e.g., in a Jupyter Notebook).
         
         Example:
+            myTS = AnalyzeTimeSeries()
+            
             # Green CCD panel
-            dict1 = {'col': 'FLXCOLLG', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXECHG',  'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'forestgreen'}}
-            dict3 = {'col': 'FLXREG1G', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightgreen'}}
-            dict4 = {'col': 'FLXREG2G', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightgreen'}}
-            thispanelvars = [dict3, dict4, dict1, dict2]
+            dict1 = {'col': 'FLXCOLLG', 'plot_type' 'scatter', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkgreen'}}
+            dict2 = {'col': 'FLXECHG',  'plot_type' 'scatter', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'forestgreen'}}
+            dict3 = {'col': 'FLXREG1G', 'plot_type' 'scatter', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightgreen'}}
+            dict4 = {'col': 'FLXREG2G', 'plot_type' 'scatter', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightgreen'}}
+            thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]'}
             greenpanel = {'panelnum': 1, 
                           'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
-            
             # Red CCD panel
-            dict1 = {'col': 'FLXCOLLR', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkred'}}
-            dict2 = {'col': 'FLXECHR',  'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'firebrick'}}
-            dict3 = {'col': 'FLXREG1R', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightcoral'}}
-            dict4 = {'col': 'FLXREG2R', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightcoral'}}
+            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'scatter', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkred'}}
+            dict2 = {'col': 'FLXECHR',  'plot_type': 'scatter', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'firebrick'}}
+            dict3 = {'col': 'FLXREG1R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightcoral'}}
+            dict4 = {'col': 'FLXREG2R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightcoral'}}
             thispanelvars = [dict3, dict4, dict1, dict2]
             thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]'}
             redpanel = {'panelnum': 2, 
@@ -519,14 +561,14 @@ class AnalyzeTimeSeries:
             end_date   = datetime(2023,12, 1)
             myTS.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, show_plot=True)        
         """
-        
-        # to do: add the ability to do scatter plots, point plots, etc.
-        #        only object from a list
 
         if start_date == None:
             start_date = max(df['DATE-MID'])
         if end_date == None:
             end_date = max(df['DATE-MID'])
+            
+        start = start_date
+        end = end_date
             
         npanels = len(panel_arr)
         unique_cols = set()
@@ -535,11 +577,11 @@ class AnalyzeTimeSeries:
             for d in panel['panelvars']:
                 col_value = d['col']
                 unique_cols.add(col_value)
-        df = self.dataframe_from_db(unique_cols)
+        df = self.dataframe_from_db(unique_cols, object_like=object_like, only_object=only_object, start_date=start_date, end_date=end_date, verbose=False)
         df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
-        df[df['DATE-MID'] > start_date]
-        df[df['DATE-MID'] < end_date]
 
+        #nrow = len(df)
+        #self.logger.info('Plotting')
         fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(12, npanels*2.5), tight_layout=True)
         if npanels > 1:
             plt.subplots_adjust(hspace=0)
@@ -547,7 +589,7 @@ class AnalyzeTimeSeries:
 
         for p in np.arange(npanels):
             thispanel = panel_arr[p]
-            time = df['DATE-MID'], 
+            time = df['DATE-MID']
             if p == 0: 
                 axs[p].set_title('Dark Current Measurements', fontsize=14)
             if p == npanels-1: 
@@ -561,11 +603,20 @@ class AnalyzeTimeSeries:
             nvars = len(thispanel['panelvars'])
             for i in np.arange(nvars):
                 data = df[thispanel['panelvars'][i]['col']]
+                if 'plot_type' in thispanel['panelvars'][i]:
+                    plot_type = thispanel['panelvars'][i]['plot_type']
+                else:
+                    plot_type = 'scatter'
                 if 'plot_attr' in thispanel['panelvars'][i]:
                     plot_attributes = thispanel['panelvars'][i]['plot_attr']
                 else:
                    plot_attributes = {}
-                axs[p].scatter(time, data, **plot_attributes)
+                if plot_type == 'scatter':
+                    axs[p].scatter(time, data, **plot_attributes)
+                if plot_type == 'plot':
+                    axs[p].plot(time, data, **plot_attributes)
+                if plot_type == 'step':
+                    axs[p].step(time, data, **plot_attributes)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
             axs[p].legend()
@@ -585,5 +636,3 @@ class AnalyzeTimeSeries:
         if show_plot == True:
             plt.show()
         plt.close('all')
-
-    
