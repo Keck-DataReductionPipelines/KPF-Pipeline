@@ -5,6 +5,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 #from tqdm import tqdm
+import matplotlib.dates as mdates
 from tqdm.notebook import tqdm_notebook
 
 from astropy.io import fits
@@ -64,8 +65,8 @@ class AnalyzeTimeSeries:
         L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_keyword_types.items()]
     
         columns = L0_columns + D2_columns + L1_columns + L2_columns
-        columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
+        columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
         create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
@@ -94,6 +95,7 @@ class AnalyzeTimeSeries:
                     t2.refresh() 
                     self.ingest_one_observation(dir_path, L0_filename) 
 
+
     def add_ObsID_list_to_db(self, ObsID_filename):
         if os.path.isfile(ObsID_filename):
             try:
@@ -117,8 +119,6 @@ class AnalyzeTimeSeries:
             base_filename = L0_filename.split('.fits')[0]
             t.set_description(base_filename)
             t.refresh() 
-            #print('dir_path = ' + dir_path)
-            #print('L0_filename = ' + L0_filename)
             self.ingest_one_observation(dir_path, L0_filename) 
 
 
@@ -156,7 +156,7 @@ class AnalyzeTimeSeries:
             if self.is_file_updated(L2_file_path, L2_filename, 'L2'):
                 L2_updated = True
 
-		# update the DB if necessary        
+        # update the DB if necessary        
         if L0_updated or D2_updated or L1_updated or L2_updated:
         
             L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) if L0_exists else {}
@@ -175,6 +175,8 @@ class AnalyzeTimeSeries:
             header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Check that DATE-MID not None
         
             # Insert into database
             conn = sqlite3.connect(self.db_path)
@@ -218,9 +220,6 @@ class AnalyzeTimeSeries:
         if result:
             stored_mod_time = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
             current_mod_time = datetime.strptime(file_mod_time, "%Y-%m-%d %H:%M:%S")
-            #print('current_mod_time  = ' + str(current_mod_time))
-            #print('stored_mod_time  = ' + str(stored_mod_time))
-            #print(current_mod_time > stored_mod_time)
             return current_mod_time > stored_mod_time
         
         return True  # Process if file is not in the database
@@ -279,7 +278,8 @@ class AnalyzeTimeSeries:
         df = pd.read_sql_query(query, conn, params=(only_object,) if only_object is not None else None)
         conn.close()
         print(df)
-        
+
+   
     def dataframe_from_db(self, columns, only_object=None):
         conn = sqlite3.connect(self.db_path)
         
@@ -295,7 +295,8 @@ class AnalyzeTimeSeries:
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df
-    
+
+
     def map_data_type_to_sql(self, dtype):
         return {
             'int': 'INTEGER',
@@ -304,26 +305,45 @@ class AnalyzeTimeSeries:
             'datetime': 'TEXT',  # SQLite does not have a native datetime type
             'string': 'TEXT'
         }.get(dtype, 'TEXT')
-        
+
+   
     def get_keyword_types(self, level):
     
         if level == 'L0':
             keyword_types = {
                 'DATE-MID': 'datetime',
+                'MJD-OBS':  'float',
                 'EXPTIME':  'float',
                 'ELAPSED':  'float',
+                'FRAMENO':  'int',
                 'PROGNAME': 'string',
                 'TARGRA':   'string',
                 'TARGDEC':  'string',
+                'EL':       'float',
+                'AZ':       'float',
                 'OBJECT':   'string',
                 'GAIAMAG':  'float',
                 '2MASSMAG': 'float',
                 'AIRMASS':  'float',
                 'IMTYPE':   'string',
-                'CAL-OBJ':  'string',
+                'GREEN':    'string',
+                'RED':      'string',
+                'GREEN':    'string',
+                'CA_HK':    'string',
+                'EXPMETER': 'string',
+                'GUIDE':    'string',
                 'SKY-OBJ':  'string',
                 'SCI-OBJ':  'string',
                 'AGITSTA':  'string',
+                'ETAV1C1T': 'float',
+                'ETAV1C2T': 'float',
+                'ETAV1C3T': 'float',
+                'ETAV1C4T': 'float',
+                'ETAV2C3T': 'float',
+                'TOTCORR':  'string', # need to correct this to split into four bins
+                'USTHRSH':  'string', 
+                'THRSHLD': 'float',
+                'THRSBIN': 'float',
             }
         elif level == '2D':
             keyword_types = {
@@ -445,3 +465,125 @@ class AnalyzeTimeSeries:
             keyword_types = {}
         
         return keyword_types
+       
+ 
+    def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
+                                    fig_path=None, show_plot=False):
+        """
+        Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
+        attributes are stored in an array of dictionaries called 'panel_arr'.
+
+        Args:
+            panel_dict (array of dictionaries) - each dictionary in the array has keys:
+                panelnum - panel index number
+                panelvars: a dictionary of matplotlib attributes including:
+                    ylabel - text for y-axis label
+                paneldict: a dictionary containing:
+                    col: name of DB column to plot
+                    plot_attr: a dictionary containing plot attributes for a scatter plot, 
+                        including 'label', 'marker', 'color'
+            start_date (datetime object) - start date for plot
+            end_date (datetime object) - end date for plot
+            fig_path (string) - set to the path for a SNR vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+        
+        Example:
+            # Green CCD panel
+            dict1 = {'col': 'FLXCOLLG', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkgreen'}}
+            dict2 = {'col': 'FLXECHG',  'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'forestgreen'}}
+            dict3 = {'col': 'FLXREG1G', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightgreen'}}
+            dict4 = {'col': 'FLXREG2G', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightgreen'}}
+            thispanelvars = [dict3, dict4, dict1, dict2]
+            thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]'}
+            greenpanel = {'panelnum': 1, 
+                          'panelvars': thispanelvars,
+                          'paneldict': thispaneldict}
+            
+            # Red CCD panel
+            dict1 = {'col': 'FLXCOLLR', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkred'}}
+            dict2 = {'col': 'FLXECHR',  'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'firebrick'}}
+            dict3 = {'col': 'FLXREG1R', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightcoral'}}
+            dict4 = {'col': 'FLXREG2R', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightcoral'}}
+            thispanelvars = [dict3, dict4, dict1, dict2]
+            thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]'}
+            redpanel = {'panelnum': 2, 
+                        'panelvars': thispanelvars,
+                        'paneldict': thispaneldict}
+            panel_arr = [greenpanel, redpanel]
+            start_date = datetime(2023,11, 1)
+            end_date   = datetime(2023,12, 1)
+            myTS.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, show_plot=True)        
+        """
+        
+        # to do: add the ability to do scatter plots, point plots, etc.
+        #        only object from a list
+
+        if start_date == None:
+            start_date = max(df['DATE-MID'])
+        if end_date == None:
+            end_date = max(df['DATE-MID'])
+            
+        npanels = len(panel_arr)
+        unique_cols = set()
+        unique_cols.add('DATE-MID')
+        for panel in panel_arr:
+            for d in panel['panelvars']:
+                col_value = d['col']
+                unique_cols.add(col_value)
+        df = self.dataframe_from_db(unique_cols)
+        df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+        df[df['DATE-MID'] > start_date]
+        df[df['DATE-MID'] < end_date]
+
+        fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(12, npanels*2.5), tight_layout=True)
+        if npanels > 1:
+            plt.subplots_adjust(hspace=0)
+        plt.tight_layout()
+
+        for p in np.arange(npanels):
+            thispanel = panel_arr[p]
+            time = df['DATE-MID'], 
+            if p == 0: 
+                axs[p].set_title('Dark Current Measurements', fontsize=14)
+            if p == npanels-1: 
+                axs[p].set_xlabel('Date', fontsize=14)
+                if abs((end_date - start_date).days) > 3:
+                    axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+                else:
+                    axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%Y-%m-%d'))
+            if 'ylabel' in thispanel['paneldict']:
+                axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
+            nvars = len(thispanel['panelvars'])
+            for i in np.arange(nvars):
+                data = df[thispanel['panelvars'][i]['col']]
+                if 'plot_attr' in thispanel['panelvars'][i]:
+                    plot_attributes = thispanel['panelvars'][i]['plot_attr']
+                else:
+                   plot_attributes = {}
+                axs[p].scatter(time, data, **plot_attributes)
+                axs[p].xaxis.set_tick_params(labelsize=10)
+                axs[p].yaxis.set_tick_params(labelsize=10)
+            axs[p].legend()
+            axs[p].grid(color='lightgray')
+            axs[p].set_xlim(start_date, end_date)
+
+        # possibly add this to put set the lower limit of y to 0
+        #ymin, ymax = ax1.get_ylim()
+        #if ymin > 0:
+        #    ax1.set_ylim(bottom=0)
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+    
