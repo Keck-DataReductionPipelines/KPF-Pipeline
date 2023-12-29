@@ -4,10 +4,9 @@ import glob
 import sqlite3
 import numpy as np
 import pandas as pd
-#from tqdm import tqdm
 import matplotlib.dates as mdates
 from tqdm.notebook import tqdm_notebook
-
+from astropy.table import Table
 from astropy.io import fits
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -33,11 +32,12 @@ class AnalyzeTimeSeries:
         self.logger.info('Initializing database')
         self.db_path = db_path
         self.base_dir = base_dir
-        self.L0_keyword_types = self.get_keyword_types(level='L0')
-        self.D2_keyword_types = self.get_keyword_types(level='2D')
-        self.L1_keyword_types = self.get_keyword_types(level='L1')
-        self.L2_keyword_types = self.get_keyword_types(level='L2')
-
+        self.L0_keyword_types   = self.get_keyword_types(level='L0')
+        self.D2_keyword_types   = self.get_keyword_types(level='2D')
+        self.L1_keyword_types   = self.get_keyword_types(level='L1')
+        self.L2_keyword_types   = self.get_keyword_types(level='L2')
+        self.L0_telemetry_types = self.get_keyword_types(level='L0_telemetry')
+        
         if drop:
             self.drop_table()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
@@ -63,8 +63,9 @@ class AnalyzeTimeSeries:
         D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_keyword_types.items()]
         L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_keyword_types.items()]
         L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_keyword_types.items()]
+        L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
     
-        columns = L0_columns + D2_columns + L1_columns + L2_columns
+        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -156,15 +157,16 @@ class AnalyzeTimeSeries:
             if self.is_file_updated(L2_file_path, L2_filename, 'L2'):
                 L2_updated = True
 
-        # update the DB if necessary        
+        # update the DB if necessary
         if L0_updated or D2_updated or L1_updated or L2_updated:
         
             L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) if L0_exists else {}
             D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) if D2_exists else {}
             L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) if L1_exists else {}
             L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) if L2_exists else {}
+            L0_telemetry   = self.extract_kwd(L0_file_path, self.L0_telemetry_types) if L0_exists else {}
 
-            header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data}
+            header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
             header_data['L0_filename'] = L0_filename
@@ -176,7 +178,8 @@ class AnalyzeTimeSeries:
             header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # Check that DATE-MID not None
+            # To-do: Data quality checks: DATE-MID not None
+            #                             ObsID matches DATE-MID (a few observations have bad times)
         
             # Insert into database
             conn = sqlite3.connect(self.db_path)
@@ -199,6 +202,26 @@ class AnalyzeTimeSeries:
                 else:
                     header_data[key] = None 
             return header_data
+
+    def extract_telemetry(self, file_path, keyword_types):
+        df = Table.read(L0_file, format='fits', hdu='TELEMETRY').to_pandas()
+        num_columns = ['average', 'stddev', 'min', 'max']
+        for column in df_telemetry:
+            df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
+            df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
+            if column in num_columns:
+                df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
+            else:
+                df_telemetry[column] = df_telemetry[column].astype(str)
+        df_telemetry.set_index("keyword", inplace=True)
+        telemetry_data = {}
+        for key in keyword_types.keys():
+            if key in df_telemetry.index:
+                telemetry_data[key] = df_telemetry.loc[key, 'average']
+            else:
+                telemetry_data[key] = None 
+        
+        return telemetry_data
 
 
     def is_file_updated(self, file_path, filename, level):
@@ -241,7 +264,7 @@ class AnalyzeTimeSeries:
         cursor.execute('SELECT COUNT(DISTINCT datecode) FROM kpfdb')
         unique_datecodes_count = cursor.fetchone()[0]
         conn.close()
-        self.logger.info(f"Summary: {nrows} obs x {ncolumns} colns over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
+        self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
 
 
     def print_selected_columns(self, columns):
@@ -499,6 +522,133 @@ class AnalyzeTimeSeries:
             keyword_types = {
                 'ABCDEFGH': 'string', #placeholder for now
             }
+        elif level == 'L0_telemetry':
+            keyword_types = {
+                'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS': 'float',  # degC    Bench Bottom Between Cameras C2 c- double degC...
+                'kpfmet.BENCH_BOTTOM_COLLIMATOR':      'float',  # degC    Bench Bottom Coll C3 c- double degC {%.3f}
+                'kpfmet.BENCH_BOTTOM_DCUT':            'float',  # degC    Bench Bottom D-cut C4 c- double degC {%.3f}
+                'kpfmet.BENCH_BOTTOM_ECHELLE ':        'float',  # degC    Bench Bottom Echelle Cam B c- double degC {%.3f}
+                'kpfmet.BENCH_TOP_BETWEEN_CAMERAS':    'float',  # degC    Bench Top Between Cameras D4 c- double degC {%...
+                'kpfmet.BENCH_TOP_COLL':               'float',  # degC    Bench Top Coll D5 c- double degC {%.3f}
+                'kpfmet.BENCH_TOP_DCUT':               'float',  # degC    Bench Top D-cut D3 c- double degC {%.3f}
+                'kpfmet.BENCH_TOP_ECHELLE_CAM':        'float',  # degC    Bench Top Echelle Cam D1 c- double degC {%.3f}
+                'kpfmet.CALEM_SCMBLR_CHMBR_END':       'float',  # degC    Cal EM Scrammbler Chamber End C1 c- double deg...
+                'kpfmet.CALEM_SCMBLR_FIBER_END':       'float',  # degC    Cal EM Scrambler Fiber End D1 c- double degC {...
+                'kpfmet.CAL_BENCH':                    'float',  # degC    Cal_Bench temperature c- double degC {%.1f}
+                'kpfmet.CAL_BENCH_BB_SRC':             'float',  # degC    CAL_Bench_BB_Src temperature c- double degC {%...
+                'kpfmet.CAL_BENCH_BOT':                'float',  # degC    Cal_Bench_Bot temperature c- double degC {%.1f}
+                'kpfmet.CAL_BENCH_ENCL_AIR':           'float',  # degC    Cal_Bench_Encl_Air temperature c- double degC ...
+                'kpfmet.CAL_BENCH_OCT_MOT':            'float',  # degC    Cal_Bench_Oct_Mot temperature c- double degC {...
+                'kpfmet.CAL_BENCH_TRANS_STG_MOT':      'float',  # degC    Cal_Bench_Trans_Stg_Mot temperature c- double ...
+                'kpfmet.CAL_RACK_TOP':                 'float',  # degC    Cal_Rack_Top temperature c- double degC {%.1f}
+                'kpfmet.CHAMBER_EXT_BOTTOM':           'float',  # degC    Chamber Exterior Bottom B c- double degC {%.3f}
+                'kpfmet.CHAMBER_EXT_TOP':              'float',  # degC    Chamber Exterior Top C1 c- double degC {%.3f}
+                'kpfmet.CRYOSTAT_G1':                  'float',  # degC    Within cryostat green D2 c- double degC {%.3f}
+                'kpfmet.CRYOSTAT_G2':                  'float',  # degC    Within cryostat green D3 c- double degC {%.3f}
+                'kpfmet.CRYOSTAT_G3':                  'float',  # degC    Within cryostat green D4 c- double degC {%.3f}
+                'kpfmet.CRYOSTAT_R1':                  'float',  # degC    Within Cryostat red D2 c- double degC {%.3f}
+                'kpfmet.CRYOSTAT_R2':                  'float',  # degC    Within Cryostat red D3 c- double degC {%.3f}
+                'kpfmet.CRYOSTAT_R3':                  'float',  # degC    Within Cryostat red D4 c- double degC {%.3f}
+                'kpfmet.ECHELLE_BOTTOM':               'float',  # degC    Echelle Bottom D1 c- double degC {%.3f}
+                'kpfmet.ECHELLE_TOP':                  'float',  # degC    Echelle Top C1 c- double degC {%.3f}
+                'kpfmet.FF_SRC':                       'float',  # degC    FF_Src temperature c- double degC {%.1f}
+                'kpfmet.GREEN_CAMERA_BOTTOM':          'float',  # degC    Green Camera Bottom C3 c- double degC {%.3f}
+                'kpfmet.GREEN_CAMERA_COLLIMATOR':      'float',  # degC    Green Camera Collimator C4 c- double degC {%.3f}
+                'kpfmet.GREEN_CAMERA_ECHELLE':         'float',  # degC    Green Camera Echelle D5 c- double degC {%.3f}
+                'kpfmet.GREEN_CAMERA_TOP':             'float',  # degC    Green Camera Top C2 c- double degC {%.3f}
+                'kpfmet.GREEN_GRISM_TOP':              'float',  # degC    Green Grism Top C5 c- double degC {%.3f}
+                'kpfmet.GREEN_LN2_FLANGE':             'float',  # degC    Green LN2 Flange A c- double degC {%.3f}
+                'kpfmet.PRIMARY_COLLIMATOR_TOP':       'float',  # degC    Primary Col Top D2 c- double degC {%.3f}
+                'kpfmet.RED_CAMERA_BOTTOM':            'float',  # degC    Red Camera Bottom D5 c- double degC {%.3f}
+                'kpfmet.RED_CAMERA_COLLIMATOR':        'float',  # degC    Red Camera Coll C3 c- double degC {%.3f}
+                'kpfmet.RED_CAMERA_ECHELLE':           'float',  # degC    Red Camera Ech C4 c- double degC {%.3f}
+                'kpfmet.RED_CAMERA_TOP':               'float',  # degC    Red Camera Top C5 c- double degC {%.3f}
+                'kpfmet.RED_GRISM_TOP':                'float',  # degC    Red Grism Top C2 c- double degC {%.3f}
+                'kpfmet.RED_LN2_FLANGE':               'float',  # degC    Red LN2 Flange D1 c- double degC {%.3f}
+                'kpfmet.REFORMATTER':                  'float',  # degC    Reformatter A c- double degC {%.3f}
+                'kpfmet.SCIENCE_CAL_FIBER_STG':        'float',  # degC    Science_Cal_Fiber_Stg temperature c- double de...
+                'kpfmet.SCISKY_SCMBLR_CHMBR_EN':       'float',  # degC    SciSky Scrambler Chamber End A c- double degC ...
+                'kpfmet.SCISKY_SCMBLR_FIBER_EN':       'float',  # degC    SciSky Scrammbler Fiber End B c- double degC {...
+                'kpfmet.SIMCAL_FIBER_STG':             'float',  # degC    SimCal_Fiber_Stg temperature c- double degC {%...
+                'kpfmet.SKYCAL_FIBER_STG':             'float',  # degC    SkyCal_Fiber_Stg temperature c- double degC {%...
+                'kpfmet.TEMP':                         'float',  # degC    Vaisala Temperature c- double degC {%.3f}
+                'kpfmet.TH_DAILY':                     'float',  # degC    Th_daily temperature c- double degC {%.1f}
+                'kpfmet.TH_GOLD':                      'float',  # degC    Th_gold temperature c- double degC {%.1f}
+                'kpfmet.U_DAILY':                      'float',  # degC    U_daily temperature c- double degC {%.1f}
+                'kpfmet.U_GOLD':                       'float',  # degC    U_gold temperature c- double degC {%.1f}
+                'kpfgreen.BPLANE_TEMP':                'float',  # degC    Backplane temperature c- double degC {%.3f}
+                'kpfgreen.BRD10_DRVR_T':               'float',  # degC    Board 10 (Driver) temperature c- double degC {...
+                'kpfgreen.BRD11_DRVR_T':               'float',  # degC    Board 11 (Driver) temperature c- double degC {...
+                'kpfgreen.BRD12_LVXBIAS_T':            'float',  # degC    Board 12 (LVxBias) temperature c- double degC ...
+                'kpfgreen.BRD1_HTRX_T':                'float',  # degC    Board 1 (HeaterX) temperature c- double degC {...
+                'kpfgreen.BRD2_XVBIAS_T':              'float',  # degC    Board 2 (XV Bias) temperature c- double degC {...
+                'kpfgreen.BRD3_LVDS_T':                'float',  # degC    Board 3 (LVDS) temperature c- double degC {%.3f}
+                'kpfgreen.BRD4_DRVR_T':                'float',  # degC    Board 4 (Driver) temperature c- double degC {%...
+                'kpfgreen.BRD5_AD_T':                  'float',  # degC    Board 5 (AD) temperature c- double degC {%.3f}
+                'kpfgreen.BRD7_HTRX_T':                'float',  # degC    Board 7 (HeaterX) temperature c- double degC {...
+                'kpfgreen.BRD9_HVXBIAS_T':             'float',  # degC    Board 9 (HVxBias) temperature c- double degC {...
+                'kpfgreen.CF_BASE_2WT':                'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
+                'kpfgreen.CF_BASE_T':                  'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
+                'kpfgreen.CF_BASE_TRG':                'float',  # degC    base cold finger heater 1A, target temp c2 dou...
+                'kpfgreen.CF_TIP_T':                   'float',  # degC    tip cold finger c- double degC {%.3f}
+                'kpfgreen.CF_TIP_TRG':                 'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
+                'kpfgreen.COL_PRESS':                  'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
+                'kpfgreen.CRYOBODY_T':                 'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
+                'kpfgreen.CRYOBODY_TRG':               'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
+                'kpfgreen.CURRTEMP':                   'float',  # degC    Current cold head temperature c- double degC {...
+                'kpfgreen.ECH_PRESS':                  'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
+                'kpfgreen.KPF_CCD_T':                  'float',  # degC    SSL Detector temperature c- double degC {%.3f}
+                'kpfgreen.STA_CCD_T':                  'float',  # degC    STA Detector temperature c- double degC {%.3f}
+                'kpfgreen.STA_CCD_TRG':                'float',  # degC    Detector heater 7A, target temp c2 double degC...
+                'kpfgreen.TEMPSET':                    'float',  # degC    Set point for the cold head temperature c2 dou...
+                'kpfred.BPLANE_TEMP':                  'float',  # degC    Backplane temperature c- double degC {%.3f}
+                'kpfred.BRD10_DRVR_T':                 'float',  # degC    Board 10 (Driver) temperature c- double degC {...
+                'kpfred.BRD11_DRVR_T':                 'float',  # degC    Board 11 (Driver) temperature c- double degC {...
+                'kpfred.BRD12_LVXBIAS_T':              'float',  # degC    Board 12 (LVxBias) temperature c- double degC ...
+                'kpfred.BRD1_HTRX_T':                  'float',  # degC    Board 1 (HeaterX) temperature c- double degC {...
+                'kpfred.BRD2_XVBIAS_T':                'float',  # degC    Board 2 (XV Bias) temperature c- double degC {...
+                'kpfred.BRD3_LVDS_T':                  'float',  # degC    Board 3 (LVDS) temperature c- double degC {%.3f}
+                'kpfred.BRD4_DRVR_T':                  'float',  # degC    Board 4 (Driver) temperature c- double degC {%...
+                'kpfred.BRD5_AD_T':                    'float',  # degC    Board 5 (AD) temperature c- double degC {%.3f}
+                'kpfred.BRD7_HTRX_T':                  'float',  # degC    Board 7 (HeaterX) temperature c- double degC {...
+                'kpfred.BRD9_HVXBIAS_T':               'float',  # degC    Board 9 (HVxBias) temperature c- double degC {...
+                'kpfred.CF_BASE_2WT':                  'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
+                'kpfred.CF_BASE_T':                    'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
+                'kpfred.CF_BASE_TRG':                  'float',  # degC    base cold finger heater 1A, target temp c2 dou...
+                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
+                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
+                'kpfred.COL_PRESS':                    'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
+                'kpfred.CRYOBODY_T':                   'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
+                'kpfred.CRYOBODY_TRG':                 'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
+                'kpfred.CURRTEMP':                     'float',  # degC    Current cold head temperature c- double degC {...
+                'kpfred.ECH_PRESS':                    'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
+                'kpfred.KPF_CCD_T':                    'float',  # degC    SSL Detector temperature c- double degC {%.3f}
+                'kpfred.STA_CCD_T':                    'float',  # degC    STA Detector temperature c- double degC {%.3f}
+                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
+                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
+                'kpfexpose.BENCH_C':                   'float',  # degC    rtd bench c- double degC {%.1f} { -100.0 .. 10...
+                'kpfexpose.CAMBARREL_C':               'float',  # degC    rtd camera barrel c- double degC {%.1f} { -100...
+                'kpfexpose.DET_XTRN_C':                'float',  # degC    rtd detector extermal c- double degC {%.1f} { ...
+                'kpfexpose.ECHELLE_C':                 'float',  # degC    rtd echelle c- double degC {%.1f} { -100.0 .. ...
+                'kpfexpose.ENCLOSURE_C':               'float',  # degC    rtd enclosure c- double degC {%.1f} { -100.0 ....
+                'kpfexpose.RACK_AIR_C':                'float',  # degC    rtd rack air c- double degC {%.1f} { -100.0 .....
+                'kpfvac.PUMP_TEMP':                    'float',  # degC    Motor temperature c- double degC {%.2f}
+                'kpf_hk.COOLTARG':                     'float',  # degC    temperature target c2 int degC
+                'kpf_hk.CURRTEMP':                     'float',  # degC    current temperature c- double degC {%.2f}
+                'kpfgreen.COL_CURR':                   'float',  # A       Current ion pump current c- double A {%.3e}
+                'kpfgreen.ECH_CURR':                   'float',  # A       Current ion pump current c- double A {%.3e}
+                'kpfred.COL_CURR':                     'float',  # A       Current ion pump current c- double A {%.3e}
+                'kpfred.ECH_CURR':                     'float',  # A       Current ion pump current c- double A {%.3e}
+                'kpfcal.IRFLUX':                       'float',  # Counts  LFC Fiberlock IR Intensity c- int Counts {%d}
+                'kpfcal.VISFLUX':                      'float',  # Counts  LFC Fiberlock Vis Intensity c- int Counts {%d}
+                'kpfcal.BLUECUTIACT':                  'float',  # A       Blue cut amplifier 0 measured current c- doubl...
+                'kpfmot.AGITSPD':                      'float',  # motor_counts/s agit raw velocity c2 int motor counts/s { -750...
+                'kpfmot.AGITTOR':                      'float',  # V       agit motor torque c- double V {%.3f}
+                'kpfmot.AGITAMBI_T':                   'float',  # degC    Agitator ambient temperature c- double degC {%...
+                'kpfmot.AGITMOT_T':                    'float',  # degC    Agitator motor temperature c- double degC {%.2...
+                'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
+            }
+
         else:
             keyword_types = {}
         
