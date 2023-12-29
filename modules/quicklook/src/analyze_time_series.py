@@ -110,7 +110,7 @@ class AnalyzeTimeSeries:
         first_column = df.iloc[:, 0]
         filtered_column = first_column[first_column.str.match(ObsID_pattern)]
         result_df = filtered_column.to_frame()
-        self.logger.info('ObsID_filename read with ' + str(len(result_df)) + ' properly formatted ObsIDs.')
+        self.logger.info('{ObsID_filename} read with ' + str(len(result_df)) + ' properly formatted ObsIDs.')
 
         t = tqdm_notebook(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:
@@ -164,7 +164,7 @@ class AnalyzeTimeSeries:
             D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) if D2_exists else {}
             L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) if L1_exists else {}
             L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) if L2_exists else {}
-            L0_telemetry   = self.extract_kwd(L0_file_path, self.L0_telemetry_types) if L0_exists else {}
+            L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) if L0_exists else {}
 
             header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
@@ -203,8 +203,9 @@ class AnalyzeTimeSeries:
                     header_data[key] = None 
             return header_data
 
+
     def extract_telemetry(self, file_path, keyword_types):
-        df = Table.read(L0_file, format='fits', hdu='TELEMETRY').to_pandas()
+        df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
         num_columns = ['average', 'stddev', 'min', 'max']
         for column in df_telemetry:
             df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
@@ -214,14 +215,13 @@ class AnalyzeTimeSeries:
             else:
                 df_telemetry[column] = df_telemetry[column].astype(str)
         df_telemetry.set_index("keyword", inplace=True)
-        telemetry_data = {}
+        telemetry_dict = {}
         for key in keyword_types.keys():
             if key in df_telemetry.index:
-                telemetry_data[key] = df_telemetry.loc[key, 'average']
+                telemetry_dict[key] = float(df_telemetry.loc[key, 'average'])
             else:
-                telemetry_data[key] = None 
-        
-        return telemetry_data
+                telemetry_dict[key] = None 
+        return telemetry_dict
 
 
     def is_file_updated(self, file_path, filename, level):
@@ -273,12 +273,8 @@ class AnalyzeTimeSeries:
         query = f"SELECT {', '.join(columns)} FROM kpfdb"
         cursor.execute(query)
         rows = cursor.fetchall()
-    
-        # Print column headers
         print(' | '.join(columns))
         print('-' * (len(columns) * 10))  # Adjust the number for formatting
-    
-        # Print each row
         for row in rows:
             print(' | '.join(str(item) for item in row))
     
@@ -369,7 +365,6 @@ class AnalyzeTimeSeries:
 
 
     def get_keyword_types(self, level):
-    
         if level == 'L0':
             keyword_types = {
                 'DATE-MID': 'datetime',
@@ -527,7 +522,7 @@ class AnalyzeTimeSeries:
                 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS': 'float',  # degC    Bench Bottom Between Cameras C2 c- double degC...
                 'kpfmet.BENCH_BOTTOM_COLLIMATOR':      'float',  # degC    Bench Bottom Coll C3 c- double degC {%.3f}
                 'kpfmet.BENCH_BOTTOM_DCUT':            'float',  # degC    Bench Bottom D-cut C4 c- double degC {%.3f}
-                'kpfmet.BENCH_BOTTOM_ECHELLE ':        'float',  # degC    Bench Bottom Echelle Cam B c- double degC {%.3f}
+                'kpfmet.BENCH_BOTTOM_ECHELLE':         'float',  # degC    Bench Bottom Echelle Cam B c- double degC {%.3f}
                 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS':    'float',  # degC    Bench Top Between Cameras D4 c- double degC {%...
                 'kpfmet.BENCH_TOP_COLL':               'float',  # degC    Bench Top Coll D5 c- double degC {%.3f}
                 'kpfmet.BENCH_TOP_DCUT':               'float',  # degC    Bench Top D-cut D3 c- double degC {%.3f}
