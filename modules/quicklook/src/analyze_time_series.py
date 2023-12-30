@@ -209,7 +209,10 @@ class AnalyzeTimeSeries:
         num_columns = ['average', 'stddev', 'min', 'max']
         for column in df_telemetry:
             df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-            df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
+            #df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
+            df_telemetry = df_telemetry.replace('-nan', np.nan)
+            df_telemetry = df_telemetry.replace('nan', np.nan)
+            df_telemetry = df_telemetry.replace(-999, np.nan)
             if column in num_columns:
                 df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
             else:
@@ -735,19 +738,43 @@ class AnalyzeTimeSeries:
         for p in np.arange(npanels):
             thispanel = panel_arr[p]
             time = df['DATE-MID']
-            if p == 0: 
-                axs[p].set_title('Dark Current Measurements', fontsize=14)
             if p == npanels-1: 
                 axs[p].set_xlabel('Date', fontsize=14)
+                locator = mdates.AutoDateLocator(minticks=5, maxticks=12)
+                formatter = mdates.ConciseDateFormatter(locator)
+                axs[p].xaxis.set_major_locator(locator)
+                axs[p].xaxis.set_major_formatter(formatter)
+
                 if abs((end_date - start_date).days) > 3:
                     axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                 else:
                     axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%Y-%m-%d'))
+
+                for label in axs[p].get_xticklabels():
+                    label.set_rotation(15)
+
+            if 'title' in thispanel['paneldict']:
+                axs[0].set_title(thispanel['paneldict']['title'], fontsize=14)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
+            makelegend = True
+            if 'nolegend' in thispanel['paneldict']:
+                if (thispanel['paneldict']['nolegend']).lower() == 'true':
+                    makelegend = False
+            subtractmedian = False
+            if 'subtractmedian' in thispanel['paneldict']:
+                if (thispanel['paneldict']['subtractmedian']).lower() == 'true':
+                    subtractmedian = True
+            if 'padright' in thispanel['paneldict']:
+                padright = thispanel['paneldict']['padright'] # 0.2 for 20% padding on the right side
+                axs[p].set_xlim(start_date, end_date + (end_date-start_date)*padright)
+            else:
+                axs[p].set_xlim(start_date, end_date)
             nvars = len(thispanel['panelvars'])
             for i in np.arange(nvars):
-                data = df[thispanel['panelvars'][i]['col']]
+                data = np.array(df[thispanel['panelvars'][i]['col']], dtype='float')
+                if subtractmedian:
+                    data -= np.nanmedian(data)
                 if 'plot_type' in thispanel['panelvars'][i]:
                     plot_type = thispanel['panelvars'][i]['plot_type']
                 else:
@@ -764,9 +791,9 @@ class AnalyzeTimeSeries:
                     axs[p].step(time, data, **plot_attributes)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
-            axs[p].legend()
+            if makelegend:
+                axs[p].legend()
             axs[p].grid(color='lightgray')
-            axs[p].set_xlim(start_date, end_date)
 
         # possibly add this to put set the lower limit of y to 0
         #ymin, ymax = ax1.get_ylim()
