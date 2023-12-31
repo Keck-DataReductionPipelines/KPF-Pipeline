@@ -5,6 +5,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 import matplotlib.dates as mdates
+from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from astropy.table import Table
 from astropy.io import fits
@@ -30,11 +31,13 @@ class AnalyzeTimeSeries:
         * command-line option for ingestion
         * optimize ingestion efficiency
         * standard plotting routines for daily, weekly, monthly, yearly, all
-        * move AWH's installation to /scr
     """
 
-    def __init__(self, db_path='kpfdb.db', base_dir='/data/L0', logger=None, drop=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
        
+        if self.is_notebook():
+            tqdm = tqdm_notebook
+
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Initializing database')
         self.db_path = db_path
@@ -90,11 +93,13 @@ class AnalyzeTimeSeries:
             dir_path for dir_path in sorted_dir_paths
             if start_date <= os.path.basename(dir_path) <= end_date
         ]
-        t1 = tqdm_notebook(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
+        #t1 = tqdm_notebook(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
+        t1 = tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         for dir_path in t1:
             t1.set_description(dir_path.split('/')[-1])
             t1.refresh() 
-            t2 = tqdm_notebook(os.listdir(dir_path), desc=f'Files', leave=False)
+            #t2 = tqdm_notebook(os.listdir(dir_path), desc=f'Files', leave=False)
+            t2 = tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
             for L0_filename in t2:
                 if L0_filename.endswith(".fits"):
                     file_path = os.path.join(dir_path, L0_filename)
@@ -119,7 +124,8 @@ class AnalyzeTimeSeries:
         result_df = filtered_column.to_frame()
         self.logger.info('{ObsID_filename} read with ' + str(len(result_df)) + ' properly formatted ObsIDs.')
 
-        t = tqdm_notebook(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        #t = tqdm_notebook(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        t = tqdm(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:
             L0_filename = ObsID + '.fits'
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
@@ -235,6 +241,21 @@ class AnalyzeTimeSeries:
             else:
                 telemetry_dict[key] = None 
         return telemetry_dict
+
+
+    def is_notebook(self):
+        """
+        Determine if the code is being executed in a Jupyter Notebook.  
+        This is useful for tqdm.
+        """
+        try:
+            from IPython import get_ipython
+            if 'IPKernelApp' not in get_ipython().config:  # Notebook not running
+                return False
+        except (ImportError, AttributeError):
+            return False  # IPython not installed
+        return True
+
 
 
     def is_file_updated(self, file_path, filename, level):
