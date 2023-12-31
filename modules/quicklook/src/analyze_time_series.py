@@ -24,6 +24,13 @@ class AnalyzeTimeSeries:
 
     Attributes:
         TBD
+        
+    To-do:
+        * documentation
+        * command-line option for ingestion
+        * optimize ingestion efficiency
+        * standard plotting routines for daily, weekly, monthly, yearly, all
+        * move AWH's installation to /scr
     """
 
     def __init__(self, db_path='kpfdb.db', base_dir='/data/L0', logger=None, drop=False):
@@ -120,7 +127,10 @@ class AnalyzeTimeSeries:
             base_filename = L0_filename.split('.fits')[0]
             t.set_description(base_filename)
             t.refresh() 
-            self.ingest_one_observation(dir_path, L0_filename) 
+            try:
+                self.ingest_one_observation(dir_path, L0_filename) 
+            except Exception as e:
+                self.logger.error(e)
 
 
     def ingest_one_observation(self, dir_path, L0_filename):        
