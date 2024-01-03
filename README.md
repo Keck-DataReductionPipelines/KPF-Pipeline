@@ -1,4 +1,4 @@
-# Data Reduction Pipeline (DRP) for the Keck Planet Finder (KPF)
+# Data Reduction Pipeline (DRP) for the Keck Planet Finder (KPF) 
 
 [![Build Status](http://shrek.caltech.edu:4444/buildStatus/icon?job=KPF+CI)](http://shrek.caltech.edu:4444/job/KPF%20CI/)
 [![Documentation Status](https://readthedocs.org/projects/kpf-pipeline/badge/?version=latest)](https://kpf-pipeline.readthedocs.io/en/latest/)
