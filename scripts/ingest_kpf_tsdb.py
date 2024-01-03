@@ -30,7 +30,7 @@ def main():
 
     myTS = AnalyzeTimeSeries(db_path=db_path)
     myTS.print_db_status()
-    myTS.add_dates_to_db(start_date, end_date)
+    myTS.ingest_dates_to_db(start_date, end_date)
     myTS.print_db_status()
 
 if __name__ == "__main__":

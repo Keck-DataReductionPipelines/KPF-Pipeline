@@ -58,7 +58,7 @@ class AnalyzeTimeSeries:
             self.drop_table()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
 
-        # the line below should be modified so that if the database exists, then the columns are read from it
+        # the line below might be modified so that if the database exists, then the columns are read from it
         self.create_database()
         self.logger.info('Initialization complete')
         self.print_db_status()
@@ -82,19 +82,21 @@ class AnalyzeTimeSeries:
         L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_keyword_types.items()]
         L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-    
         columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
-        print(len(columns))
         create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
         conn.commit()
         conn.close()
 
 
-    def add_dates_to_db(self, start_date, end_date, batch_size=50):
+    def ingest_dates_to_db(self, start_date, end_date, batch_size=10):
+        """
+        Ingest KPF data for the date range start_date to end_date, inclusive.
+        batch_size refers to the number of observations per DB insertion.
+        """
         self.logger.info("Adding to database between " + start_date + " to " + end_date)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date > end_date)
@@ -163,8 +165,10 @@ class AnalyzeTimeSeries:
                 self.logger.error(e)
 
 
-    def ingest_one_observation(self, dir_path, L0_filename):        
-
+    def ingest_one_observation(self, dir_path, L0_filename):
+        """
+        Ingest a single observation into the database.
+        """
         base_filename = L0_filename.split('.fits')[0]
         L0_file_path = f"{dir_path}/{base_filename}.fits"
         D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
@@ -233,6 +237,9 @@ class AnalyzeTimeSeries:
 
 
     def ingest_batch_observation(self, batch):
+        """
+        Ingest a set of observations into the database.
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         batch_data = []
@@ -309,6 +316,9 @@ class AnalyzeTimeSeries:
 
 
     def extract_kwd(self, file_path, keyword_types):
+        """
+        Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
+        """
         header_data = {}
         if os.path.isfile(file_path):
             with fits.open(file_path, memmap=True) as hdul: # memmap=True minimizes RAM usage
@@ -325,6 +335,9 @@ class AnalyzeTimeSeries:
 
 
     def extract_telemetry(self, file_path, keyword_types):
+        """
+        Extract telemetry from the 'TELEMETRY' extension in KPF L0 files.
+        """
         df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
         num_columns = ['average', 'stddev', 'min', 'max']
         for column in df_telemetry:
@@ -385,6 +398,10 @@ class AnalyzeTimeSeries:
 
 
     def is_file_updated(self, file_path, filename, level):
+        """
+        Determines if an L0/2D/L1/L2 has been updated since the last noted modification
+        in the database.  Returns True if is has been modified.
+        """
         file_mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -409,6 +426,9 @@ class AnalyzeTimeSeries:
            
 
     def print_db_status(self):
+        """
+        Prints a brief summary of the database status.
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM kpfdb')
@@ -428,6 +448,10 @@ class AnalyzeTimeSeries:
 
 
     def print_selected_columns(self, columns):
+        """
+        Prints specified columns from the database.
+        To-do: add "only_object" and other ways of narrowing the query
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         query = f"SELECT {', '.join(columns)} FROM kpfdb"
@@ -515,6 +539,10 @@ class AnalyzeTimeSeries:
 
 
     def map_data_type_to_sql(self, dtype):
+        """
+        Function to map the data types specified in get_keyword_types to sqlite3
+        data types.
+        """
         return {
             'int': 'INTEGER',
             'float': 'REAL',
@@ -525,6 +553,10 @@ class AnalyzeTimeSeries:
 
 
     def get_keyword_types(self, level):
+        """
+        Returns a dictionary of the data types for keywords at the L0/2D/L1/L2 or 
+        L0_telemetry level.
+        """
         if level == 'L0':
             keyword_types = {
                 'DATE-MID': 'datetime',
