@@ -28,7 +28,7 @@ class AnalyzeTimeSeries:
         
     To-do:
         * documentation
-        * command-line option for ingestion
+        * check that updated files are overwritten old results
         * optimize ingestion efficiency
         * standard plotting routines for daily, weekly, monthly, yearly, all
         * determine file modification times with a single call, if possible
@@ -38,7 +38,7 @@ class AnalyzeTimeSeries:
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
        
         self.logger = logger if logger is not None else DummyLogger()
-        self.logger.info('Initializing database')
+        self.logger.info('Starting AnalyzeTimeSeries')
         if self.is_notebook():
             self.tqdm = tqdm_notebook
             self.logger.info('Jupyter Notebook environment detected.')
@@ -58,6 +58,7 @@ class AnalyzeTimeSeries:
             self.drop_table()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
 
+        # the line below should be modified so that if the database exists, then the columns are read from it
         self.create_database()
         self.logger.info('Initialization complete')
         self.print_db_status()
@@ -86,13 +87,14 @@ class AnalyzeTimeSeries:
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
+        print(len(columns))
         create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
         conn.commit()
         conn.close()
 
 
-    def add_dates_to_db(self, start_date, end_date):
+    def add_dates_to_db(self, start_date, end_date, batch_size=50):
         self.logger.info("Adding to database between " + start_date + " to " + end_date)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date > end_date)
@@ -107,16 +109,24 @@ class AnalyzeTimeSeries:
             t1.refresh() 
             #t2 = tqdm_notebook(os.listdir(dir_path), desc=f'Files', leave=False)
             t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
+            batch = []
             for L0_filename in t2:
                 if L0_filename.endswith(".fits"):
                     file_path = os.path.join(dir_path, L0_filename)
-                    base_filename = L0_filename.split('.fits')[0]
-                    t2.set_description(base_filename)
-                    t2.refresh() 
-                    self.ingest_one_observation(dir_path, L0_filename) 
+                    batch.append(file_path)
+                    if len(batch) >= batch_size:
+                        self.ingest_batch_observation(batch)
+                        batch = []
+            if batch:
+                self.ingest_batch_observation(batch)
 
 
-    def add_ObsID_list_to_db(self, ObsID_filename):
+    def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
+        """
+        Read a CSV file with ObsID values in the first column and ingest those files
+        into the database.  If reverse=True, then they will be ingested in reverse
+        chronological order.
+        """
         if os.path.isfile(ObsID_filename):
             try:
                 df = pd.read_csv(ObsID_filename)
@@ -128,11 +138,18 @@ class AnalyzeTimeSeries:
         ObsID_pattern = r'KP\.20\d{6}\.\d{5}\.\d{2}'
         first_column = df.iloc[:, 0]
         filtered_column = first_column[first_column.str.match(ObsID_pattern)]
-        result_df = filtered_column.to_frame()
-        self.logger.info('{ObsID_filename} read with ' + str(len(result_df)) + ' properly formatted ObsIDs.')
+        df = filtered_column.to_frame()
+        column_name = df.columns[0]
+        df.rename(columns={column_name: 'ObsID'}, inplace=True)
+        if reverse:
+            df = df.sort_values(by='ObsID', ascending=False)
+        else:
+            df = df.sort_values(by='ObsID', ascending=True)
 
-        #t = tqdm_notebook(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
-        t = self.tqdm(result_df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        self.logger.info('{ObsID_filename} read with ' + str(len(df)) + ' properly formatted ObsIDs.')
+
+        #t = tqdm_notebook(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        t = self.tqdm(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:
             L0_filename = ObsID + '.fits'
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
@@ -183,10 +200,10 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if L0_updated or D2_updated or L1_updated or L2_updated:
         
-            L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) if L0_exists else {}
-            D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) if D2_exists else {}
-            L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) if L1_exists else {}
-            L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) if L2_exists else {}
+            L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
+            D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
+            L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
+            L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
             L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) if L0_exists else {}
 
             header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
@@ -215,16 +232,96 @@ class AnalyzeTimeSeries:
             conn.close()
 
 
+    def ingest_batch_observation(self, batch):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        batch_data = []
+    
+        for file_path in batch:
+            base_filename = os.path.basename(file_path).split('.fits')[0]
+            L0_filename = base_filename.split('.fits')[0]
+            L0_filename = L0_filename.split('/')[-1]
+            
+            L0_file_path = file_path
+            D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
+            L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
+            L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
+    
+            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+        
+            L0_exists = os.path.isfile(L0_file_path)
+            D2_exists = os.path.isfile(D2_file_path)
+            L1_exists = os.path.isfile(L1_file_path)
+            L2_exists = os.path.isfile(L2_file_path)
+    
+            # determine if any associated file has been updated - more efficient logic could be written that only accesses filesystem when needed
+            L0_updated = False
+            D2_updated = False
+            L1_updated = False
+            L2_updated = False
+            if L0_exists:
+                if self.is_file_updated(L0_file_path, L0_filename, 'L0'):
+                    L0_updated = True
+            if D2_exists:
+                if self.is_file_updated(D2_file_path, D2_filename, '2D'):
+                    D2_updated = True
+            if L1_exists:
+                if self.is_file_updated(L1_file_path, L1_filename, 'L1'):
+                    L1_updated = True
+            if L2_exists:
+                if self.is_file_updated(L2_file_path, L2_filename, 'L2'):
+                    L2_updated = True
+    
+            # If any associated file has been updated, proceed
+            if L0_updated or D2_updated or L1_updated or L2_updated:
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_keyword_types)   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_keyword_types)   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_keyword_types)   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_keyword_types)   
+                L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
+
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+                header_data['ObsID'] = base_filename
+                header_data['datecode'] = get_datecode(base_filename)
+                header_data['L0_filename'] = os.path.basename(L0_file_path)
+                header_data['D2_filename'] = os.path.basename(D2_file_path)
+                header_data['L1_filename'] = os.path.basename(L1_file_path)
+                header_data['L2_filename'] = os.path.basename(L2_file_path)
+                header_data['L0_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+                batch_data.append(header_data)
+    
+        # Perform batch insertion/update in the database
+        if batch_data:
+            columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
+            placeholders = ', '.join(['?'] * len(batch_data[0]))
+            insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
+            data_tuples = [tuple(data.values()) for data in batch_data]
+            cursor.executemany(insert_query, data_tuples)
+            conn.commit()
+    
+        conn.close()
+
+
     def extract_kwd(self, file_path, keyword_types):
-        with fits.open(file_path, memmap=True) as hdul: # memmap=True minimizes RAM usage
-            header = hdul[0].header
-            header_data = {}
+        header_data = {}
+        if os.path.isfile(file_path):
+            with fits.open(file_path, memmap=True) as hdul: # memmap=True minimizes RAM usage
+                header = hdul[0].header
+                for key in keyword_types.keys():
+                    if key in header:
+                        header_data[key] = header[key]
+                    else:
+                        header_data[key] = None 
+        else:
             for key in keyword_types.keys():
-                if key in header:
-                    header_data[key] = header[key]
-                else:
-                    header_data[key] = None 
-            return header_data
+                header_data[key] = None 
+        return header_data
 
 
     def extract_telemetry(self, file_path, keyword_types):
@@ -804,7 +901,7 @@ class AnalyzeTimeSeries:
             time = df['DATE-MID']
             if p == npanels-1: 
                 axs[p].set_xlabel('Date', fontsize=14)
-                locator = mdates.AutoDateLocator(minticks=5, maxticks=12)
+                locator = mdates.AutoDateLocator(minticks=5, maxticks=8)
                 formatter = mdates.ConciseDateFormatter(locator)
                 axs[p].xaxis.set_major_locator(locator)
                 axs[p].xaxis.set_major_formatter(formatter)
@@ -853,7 +950,7 @@ class AnalyzeTimeSeries:
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
             if makelegend:
-                axs[p].legend(bbox_to_anchor=(1.15, 1))
+                axs[p].legend(bbox_to_anchor=(1.16, 1))
             axs[p].grid(color='lightgray')
 
         # possibly add this to put set the lower limit of y to 0
@@ -899,17 +996,24 @@ class AnalyzeTimeSeries:
             dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'kpfmet.CHAMBER_EXT_BOTTOM','plot_type': 'scatter', 'plot_attr': {'label': r'Chamber Ext Bot',      'marker': '.', 'linewidth': 0.5}}
             dict5 = {'col': 'kpfmet.CHAMBER_EXT_TOP',   'plot_type': 'plot',    'plot_attr': {'label': r'Chamber Exterior Top', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict2, dict3, dict4, dict1]
-            thispaneldict = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)',
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
                              'title': 'KPF Temperatures'}
             halltemppanel = {'panelnum': 0, 
+                             'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            
+            
+            thispanelvars = [dict2, dict3, dict4, dict1]
+            thispaneldict = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)'}
+            halltemppanel2 = {'panelnum': 1, 
                              'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
             
             thispaneldict = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
                              'title': 'KPF Temperatures',
                              'subtractmedian': 'true'}
-            halltemppanel2 = {'panelnum': 1, 
+            halltemppanel3 = {'panelnum': 2, 
                               'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
             
@@ -941,7 +1045,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict5, dict10, dict14, dict20, dict15, dict21, dict22]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperatures' + ' ($^{\circ}$C)',
                              'nolegend': 'false'}
-            chambertemppanel = {'panelnum': 2, 
+            chambertemppanel = {'panelnum': 3, 
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             
@@ -949,7 +1053,7 @@ class AnalyzeTimeSeries:
                              'title': 'KPF Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true'}
-            chambertemppanel2 = {'panelnum': 3, 
+            chambertemppanel2 = {'panelnum': 4, 
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             
@@ -960,11 +1064,11 @@ class AnalyzeTimeSeries:
             dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)'}
-            fibertemps = {'panelnum': 4, 
+            fibertemps = {'panelnum': 5, 
                           'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
-            panel_arr = [halltemppanel, halltemppanel2, chambertemppanel, chambertemppanel2] #, fibertemps]
+            panel_arr = [halltemppanel, halltemppanel2, halltemppanel3, chambertemppanel, chambertemppanel2] #, fibertemps]
 
         elif plot_name=='ccd_bias':
             dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
@@ -973,7 +1077,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Read Noise [e-]',
-                             'title': 'Read Noise Measurements'}
+                             'title': 'Read Noise'}
             readnoisepanel = {'panelnum': 0, 
                               'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
@@ -992,7 +1096,7 @@ class AnalyzeTimeSeries:
             #thispanelvars = [dict3, dict4, dict5, dict6, dict7, dict8, dict1, dict2, ]
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]',
-                             'title': 'Dark Current Measurements'}
+                             'title': 'Dark Current'}
             greenpanel = {'panelnum': 0, 
                           'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
@@ -1014,10 +1118,14 @@ class AnalyzeTimeSeries:
                         'paneldict': thispaneldict}
             
             # Amplifier glow panel
-            dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'plot_attr': {'label': 'Green Amp Region 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot', 'plot_attr': {'label': 'Green Amp Region 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'plot_attr': {'label': 'Red Amp Region 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'plot_attr': {'label': 'Red Amp Region 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot',    'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot',    'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            #dict3 = {'col': 'FLXAMP3G', 'plot_type': 'scatter', 'plot_attr': {'label': 'Green Amp Reg 3', 'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            #dict4 = {'col': 'FLXAMP4G', 'plot_type': 'scatter', 'plot_attr': {'label': 'Green Amp Reg 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot',    'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot',    'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            #dict7 = {'col': 'FLXAMP3R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Red Amp Reg 3',   'marker': '.', 'linewidth': 0.5, 'color': 'lightred'}}
+            #dict8 = {'col': 'FLXAMP4R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Red Amp Reg 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightred'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'CCD Amplifier\nDark current [e-/hr]'}
             amppanel = {'panelnum': 2, 
