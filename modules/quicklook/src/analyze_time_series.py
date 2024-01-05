@@ -1083,7 +1083,7 @@ class AnalyzeTimeSeries:
                              'paneldict': thispaneldict2}
             
             thispanelvars3 = [dict2, dict3, dict4]
-            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures (K)',
                              'title': 'KPF Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1123,7 +1123,7 @@ class AnalyzeTimeSeries:
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             
-            thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+            thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperatures (K)',
                              'title': 'KPF Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
@@ -1148,41 +1148,71 @@ class AnalyzeTimeSeries:
             panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)] #, fibertemps]
 
         elif plot_name=='chamber_temp_detail':
+            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
+            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
+            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
+            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
+            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
             dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
             dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
             dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
             dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
             dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
+            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
             dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
             dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
             dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
             dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
             dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
+                
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, ]
+            thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperatures (K)',
+                             'nolegend': 'false', 
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.3}
+            chambertemppanel1 = {'panelnum': 4, 
+                                'panelvars': thispanelvars,
+                                'paneldict': thispaneldict}
             
-            thispanelvars = [dict14, dict11, dict12, dict13]
-            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+            thispanelvars = [dict15, dict14, dict11, dict12, dict13, ]
+            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperatures (K)',
+                             'nolegend': 'false', 
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.3}
+            chambertemppanel2 = {'panelnum': 4, 
+                                'panelvars': thispanelvars,
+                                'paneldict': thispaneldict}
+            
+            thispanelvars = [dict21, dict20, dict17, dict18, dict19, ]
+            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperatures (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
             chambertemppanel3 = {'panelnum': 4, 
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
-            
-            thispanelvars = [dict20, dict17, dict18, dict19]
-            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+                
+            thispanelvars = [dict10, dict9, ]
+            thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperatures (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
             chambertemppanel4 = {'panelnum': 4, 
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
-            panel_arr = [copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)] #, fibertemps]
+            panel_arr = [copy.deepcopy(chambertemppanel1), copy.deepcopy(chambertemppanel2), copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)]
 
         elif plot_name=='ccd_readnoise':
-            dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Read Noise [e-]',
                              'title': 'Read Noise',
