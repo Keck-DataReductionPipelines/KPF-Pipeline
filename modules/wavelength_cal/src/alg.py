@@ -1484,7 +1484,7 @@ class WaveCalibration:
                         # fit ThAr based on 4/30 WLS
                         rough_wls_int = interp1d(np.arange(n_pixels), rough_wls_order, kind='linear', fill_value="extrapolate")
                         
-                        def polynomial_func(x, c0):
+                        def polynomial_func(x, c0, c1, c2):
                             """
                             Polynomial function to fit.
                             Args:
@@ -1493,7 +1493,7 @@ class WaveCalibration:
                             Returns:
                                 np.array: Evaluated polynomial.
                             """
-                            return rough_wls_int(x) + c0
+                            return rough_wls_int(x) + c0 + c1 * x + c2 * x**2
                         
                         # Using curve_fit to find the best-fit values of {c0, c1}
                         popt, _ = curve_fit(polynomial_func, x, y)
