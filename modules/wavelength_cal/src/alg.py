@@ -383,7 +383,7 @@ class WaveCalibration:
                     good_peak_idx = np.arange(len(detected_peak_pixels))
 
                 if self.cal_type == 'LFC':
-                    wls, _ = self.mode_match(
+                    wls, _, good_peak_idx = self.mode_match(
                         order_flux, fitted_peak_pixels, good_peak_idx, 
                         rough_wls_order, comb_lines_angstrom, 
                         print_update=print_update, plot_path=order_plt_path
@@ -401,6 +401,7 @@ class WaveCalibration:
                 fitted_peak_pixels = fitted_peak_pixels[good_peak_idx]
 
                 # Mark lines with bad fits and lambda_fit for each line in dictionary:
+                '''
                 good_line_ind = 0
                 for l in np.arange(len(lines_dict)):
                     if l not in good_peak_idx:
@@ -408,7 +409,7 @@ class WaveCalibration:
                     else:
                         orderlet_dict[order_num]['lines'][l]['lambda_fit'] = wls[good_line_ind]
                         good_line_ind += 1
-
+                '''
             # use expected peak locations to compute updated precise wavelengths for each pixel
             # (only ThAr)
             else:
@@ -666,7 +667,7 @@ class WaveCalibration:
         valid_peak_indices = np.where(peak_heights > 500)[0]
         detected_peaks = detected_peaks[valid_peak_indices]
         peak_heights = peak_heights[valid_peak_indices]
-        
+
         # fit peaks with Gaussian to get accurate position
         fitted_peaks = detected_peaks.astype(float)
         gauss_coeffs = np.empty((4, len(detected_peaks)))
@@ -1061,7 +1062,32 @@ class WaveCalibration:
                 np.array: the mode numbers of the LFC modes to be used for 
                     wavelength calibration
         """
+        
+        # Calculate the peak differences
+        peak_diffs = np.diff(fitted_peak_pixels[good_peak_idx])
+        peaks_to_keep = [good_peak_idx[0]]  # Always keep the first peak
 
+        # Iterate over the peak differences, starting from the second peak
+        for i in range(1, len(good_peak_idx) - 1):
+            if i < 8:
+                nearest_peak_diffs = peak_diffs[i+1:i+9]
+            elif i > len(peak_diffs) - 8:
+                nearest_peak_diffs = peak_diffs[i-9:i-1]
+            else:
+                nearest_peak_diffs_before = peak_diffs[i-7:i-3]
+                nearest_peak_diffs_after = peak_diffs[i+3:i+7]
+                nearest_peak_diffs = np.concatenate((nearest_peak_diffs_before, nearest_peak_diffs_after))
+    
+            # Find the minimum of the nearest peak differences
+            min_nearest_peak_diff = np.min(nearest_peak_diffs)           
+            # If the current peak difference is not less than 0.9 times the minimum, keep it
+            if peak_diffs[i - 1] >= 0.9 * min_nearest_peak_diff:
+                peaks_to_keep.append(good_peak_idx[i])
+        
+        # Always keep the last peak
+        peaks_to_keep.append(good_peak_idx[-1])
+        good_peak_idx = np.array(peaks_to_keep)
+        
         n_pixels = len(order_flux)
         s = InterpolatedUnivariateSpline(np.arange(n_pixels)[rough_wls_order>0], rough_wls_order[rough_wls_order>0])
         approx_peaks_lambda = s(fitted_peak_pixels[good_peak_idx])
@@ -1086,7 +1112,7 @@ class WaveCalibration:
 
         peak_mode_num = 0
         
-	      # Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
+	    # Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
         peak_diff = fitted_peak_pixels[good_peak_idx][1:] - fitted_peak_pixels[good_peak_idx][:-1]
 
         # Calculate the difference between the peak indices
@@ -1161,9 +1187,8 @@ class WaveCalibration:
             plt.legend()
             plt.savefig('{}/peak_diff.png'.format(plot_path), dpi=250)
             plt.close()
-                
-        
-        for i in range(n_clipped_peaks):
+                    
+        for i in range(len(good_peak_idx)):
             # estimate local peak diff from SPLINE fit function
             running_peak_diff = peak_diff_spline(fitted_peak_pixels[good_peak_idx][i])
 
@@ -1257,9 +1282,8 @@ class WaveCalibration:
             plt.tight_layout()
             plt.savefig('{}/labeled_line_locs.png'.format(plot_path), dpi=250)
             plt.close()
-
         wls = comb_lines_angstrom[mode_nums.astype(int)]
-        return wls, mode_nums
+        return wls, mode_nums, peaks_to_keep
     
     def fit_gaussian(self,x,y):
         """
@@ -1460,7 +1484,7 @@ class WaveCalibration:
                         # fit ThAr based on 4/30 WLS
                         rough_wls_int = interp1d(np.arange(n_pixels), rough_wls_order, kind='linear', fill_value="extrapolate")
                         
-                        def polynomial_func(x, c0, c1):
+                        def polynomial_func(x, c0):
                             """
                             Polynomial function to fit.
                             Args:
@@ -1469,7 +1493,7 @@ class WaveCalibration:
                             Returns:
                                 np.array: Evaluated polynomial.
                             """
-                            return rough_wls_int(x) + c0 + c1 * x 
+                            return rough_wls_int(x) + c0
                         
                         # Using curve_fit to find the best-fit values of {c0, c1}
                         popt, _ = curve_fit(polynomial_func, x, y)
@@ -1477,7 +1501,7 @@ class WaveCalibration:
                         # Create the wavelength solution for the order
                         our_wavelength_solution_for_order = polynomial_func(np.arange(len(rough_wls_order)), *popt)
                         leg_out = Legendre.fit(np.arange(n_pixels), our_wavelength_solution_for_order, 9)
-
+                    
                     if self.cal_type == 'LFC':
                         leg_out = Legendre.fit(x, y, 9, w=w)
                         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
