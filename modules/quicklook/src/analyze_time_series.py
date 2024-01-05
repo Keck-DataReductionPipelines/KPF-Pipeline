@@ -1,6 +1,7 @@
 import os
 import time
 import glob
+import copy
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ class AnalyzeTimeSeries:
         
     To-do:
         * documentation
+        * add statistics to legends
         * check that updated files are overwritten old results
         * optimize ingestion efficiency
         * standard plotting routines for daily, weekly, monthly, yearly, all
@@ -96,6 +98,7 @@ class AnalyzeTimeSeries:
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
+        To-do: scan for observations that have already been ingested at a higher level.
         """
         self.logger.info("Adding to database between " + start_date + " to " + end_date)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
@@ -921,7 +924,6 @@ class AnalyzeTimeSeries:
             df = self.clean_df(df)
         
         fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(15, npanels*2.5), tight_layout=True)
-
         if npanels == 1:
             axs = [axs]  # Make axs iterable even when there's only one panel
         if npanels > 1:
@@ -962,17 +964,50 @@ class AnalyzeTimeSeries:
                 axs[p].set_xlim(start_date, end_date)
             nvars = len(thispanel['panelvars'])
             for i in np.arange(nvars):
-                data = np.array(df[thispanel['panelvars'][i]['col']], dtype='float')
-                if subtractmedian:
-                    data -= np.nanmedian(data)
                 if 'plot_type' in thispanel['panelvars'][i]:
                     plot_type = thispanel['panelvars'][i]['plot_type']
                 else:
                     plot_type = 'scatter'
-                if 'plot_attr' in thispanel['panelvars'][i]:
-                    plot_attributes = thispanel['panelvars'][i]['plot_attr']
-                else:
-                   plot_attributes = {}
+                col_data = df[thispanel['panelvars'][i]['col']]
+                col_data_replaced = col_data.replace('NaN', np.nan)
+                data = np.array(col_data_replaced, dtype='float')
+                plot_attributes = {}
+                if np.count_nonzero(~np.isnan(data)) > 0:
+                    if subtractmedian:
+                        data -= np.nanmedian(data)
+                    if 'plot_attr' in thispanel['panelvars'][i]:
+                        if 'label' in thispanel['panelvars'][i]['plot_attr']:
+                            label = thispanel['panelvars'][i]['plot_attr']['label']
+                            try:
+                                if makelegend:
+                                    if len(~np.isnan(data)) > 0:
+                                        median = np.nanmedian(data)
+                                    else:
+                                        median = 0.
+                                    if len(~np.isnan(data)) > 2:
+                                        std_dev = np.nanstd(data)
+                                        if std_dev != 0 and not np.isnan(std_dev):
+                                            decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                                        else:
+                                            decimal_places = 1
+                                    else:
+                                        decimal_places = 1
+                                        std_dev = 0.
+                                    formatted_median = f"{median:.{decimal_places}f}"
+                                    #label += '\n' + formatted_median 
+                                    if len(~np.isnan(data)) > 2:
+                                        formatted_std_dev = f"{std_dev:.{decimal_places}f}"
+                                        label += ' (' + formatted_std_dev 
+                                        if 'unit' in thispanel['panelvars'][i]:
+                                            label += ' ' + thispanel['panelvars'][i]['unit']
+                                        label += ' rms)'
+                            except Exception as e:
+                                self.logger.error(e)
+                        plot_attributes = thispanel['panelvars'][i]['plot_attr']
+                        if 'label' in plot_attributes:
+                            plot_attributes['label'] = label
+                    else:
+                       plot_attributes = {}
                 if plot_type == 'scatter':
                     axs[p].scatter(time, data, **plot_attributes)
                 if plot_type == 'plot':
@@ -981,8 +1016,12 @@ class AnalyzeTimeSeries:
                     axs[p].step(time, data, **plot_attributes)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
-            if makelegend:
-                axs[p].legend(bbox_to_anchor=(1.16, 1))
+                if makelegend:
+                    if 'legend_frac_size' in thispanel['paneldict']:
+                        legend_frac_size = thispanel['paneldict']['legend_frac_size']
+                    else:
+                        legend_frac_size = 0.20
+                    axs[p].legend(loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
             axs[p].grid(color='lightgray')
 
         # possibly add this to put set the lower limit of y to 0
@@ -1023,60 +1062,63 @@ class AnalyzeTimeSeries:
         """
         
         if plot_name == 'chamber_temp':
-            dict1 = {'col': 'kpfmet.TEMP',              'plot_type': 'scatter', 'plot_attr': {'label':  'Hallway',              'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.GREEN_LN2_FLANGE',  'plot_type': 'scatter', 'plot_attr': {'label': r'Green LN$_2$ Flng',    'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'kpfmet.CHAMBER_EXT_BOTTOM','plot_type': 'scatter', 'plot_attr': {'label': r'Chamber Ext Bot',      'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.CHAMBER_EXT_TOP',   'plot_type': 'plot',    'plot_attr': {'label': r'Chamber Exterior Top', 'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfmet.TEMP',              'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway',              'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.GREEN_LN2_FLANGE',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Green LN$_2$ Flng',    'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict4 = {'col': 'kpfmet.CHAMBER_EXT_BOTTOM','plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Chamber Ext Bot',      'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.CHAMBER_EXT_TOP',   'plot_type': 'plot',    'unit': 'K', 'plot_attr': {'label': r'Chamber Exterior Top', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
-                             'title': 'KPF Temperatures'}
+                             'title': 'KPF Temperatures',
+                             'legend_frac_size': 0.3}
             halltemppanel = {'panelnum': 0, 
                              'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
-            
-            
-            thispanelvars = [dict2, dict3, dict4, dict1]
-            thispaneldict = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)'}
+
+            thispanelvars2 = [dict2, dict3, dict4]
+            thispaneldict2 = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)',
+                             'legend_frac_size': 0.3}
             halltemppanel2 = {'panelnum': 1, 
-                             'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
+                             'panelvars': thispanelvars2,
+                             'paneldict': thispaneldict2}
             
-            thispaneldict = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+            thispanelvars3 = [dict2, dict3, dict4]
+            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
                              'title': 'KPF Temperatures',
-                             'subtractmedian': 'true'}
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.3}
             halltemppanel3 = {'panelnum': 2, 
-                              'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
+                              'panelvars': thispanelvars3,
+                              'paneldict': thispaneldict3}
             
-            # Read noise CCD panel
-            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
-            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
-            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
-            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
-            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
-            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
-            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'plot_attr': {'label': r'Green Cam Echelle',        'marker': '.', 'linewidth': 0.5}}
-            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
-            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
-            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
-            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'plot_attr': {'label': r'Red Cam Echelle',          'marker': '.', 'linewidth': 0.5}}
-            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
-            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
+            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
+            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
+            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
+            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
+            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
+            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
+            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
+            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
+            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
+            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
+            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
             #thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18, dict19, dict20, dict21, dict22]
             #thispanelvars = [dict1, dict5, dict6, dict8, dict10, dict14, dict15, dict16, dict20, dict21, dict22]
             thispanelvars = [dict1, dict5, dict10, dict14, dict20, dict15, dict21, dict22]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperatures' + ' ($^{\circ}$C)',
-                             'nolegend': 'false'}
+                             'nolegend': 'false',
+                             'legend_frac_size': 0.3}
             chambertemppanel = {'panelnum': 3, 
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
@@ -1084,32 +1126,67 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
                              'title': 'KPF Temperatures', 
                              'nolegend': 'false', 
-                             'subtractmedian': 'true'}
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.3}
             chambertemppanel2 = {'panelnum': 4, 
                                 'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
+
             
-            dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)'}
+            thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)',
+                             'legend_frac_size': 0.25}
             fibertemps = {'panelnum': 5, 
                           'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
-            panel_arr = [halltemppanel, halltemppanel2, halltemppanel3, chambertemppanel, chambertemppanel2] #, fibertemps]
+            panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)] #, fibertemps]
 
-        elif plot_name=='ccd_bias':
-            dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+        elif plot_name=='chamber_temp_detail':
+            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
+            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
+            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
+            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
+            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
+            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
+            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+            
+            thispanelvars = [dict14, dict11, dict12, dict13]
+            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+                             'nolegend': 'false', 
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.3}
+            chambertemppanel3 = {'panelnum': 4, 
+                                'panelvars': thispanelvars,
+                                'paneldict': thispaneldict}
+            
+            thispanelvars = [dict20, dict17, dict18, dict19]
+            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperatures ($^{\circ}$C)',
+                             'nolegend': 'false', 
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.3}
+            chambertemppanel4 = {'panelnum': 4, 
+                                'panelvars': thispanelvars,
+                                'paneldict': thispaneldict}
+            panel_arr = [copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)] #, fibertemps]
+
+        elif plot_name=='ccd_readnoise':
+            dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Read Noise [e-]',
-                             'title': 'Read Noise'}
+                             'title': 'Read Noise',
+                             'legend_frac_size': 0.25}
             readnoisepanel = {'panelnum': 0, 
                               'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
@@ -1117,49 +1194,48 @@ class AnalyzeTimeSeries:
         
         elif plot_name=='ccd_dark_current':
             # Green CCD panel
-            dict1 = {'col': 'FLXCOLLG', 'plot_type': 'plot', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXECHG',  'plot_type': 'plot', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict3 = {'col': 'FLXREG1G', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict4 = {'col': 'FLXREG2G', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict5 = {'col': 'FLXREG3G', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict6 = {'col': 'FLXREG4G', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict7 = {'col': 'FLXREG5G', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict1 = {'col': 'FLXCOLLG', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'FLXECHG',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict3 = {'col': 'FLXREG1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict4 = {'col': 'FLXREG2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict5 = {'col': 'FLXREG3G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict6 = {'col': 'FLXREG4G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict7 = {'col': 'FLXREG5G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+            dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
             #thispanelvars = [dict3, dict4, dict5, dict6, dict7, dict8, dict1, dict2, ]
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]',
-                             'title': 'Dark Current'}
+                             'title': 'Dark Current',
+                             'legend_frac_size': 0.30}
             greenpanel = {'panelnum': 0, 
                           'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
             # Red CCD panel
-            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             #thispanelvars = [dict3, dict4, dict5, dict6, dict7, dict8, dict1, dict2, ]
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]'}
+            thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]',
+                             'legend_frac_size': 0.30}
             redpanel = {'panelnum': 1, 
                         'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             
             # Amplifier glow panel
-            dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot',    'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot',    'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            #dict3 = {'col': 'FLXAMP3G', 'plot_type': 'scatter', 'plot_attr': {'label': 'Green Amp Reg 3', 'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            #dict4 = {'col': 'FLXAMP4G', 'plot_type': 'scatter', 'plot_attr': {'label': 'Green Amp Reg 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot',    'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot',    'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            #dict7 = {'col': 'FLXAMP3R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Red Amp Reg 3',   'marker': '.', 'linewidth': 0.5, 'color': 'lightred'}}
-            #dict8 = {'col': 'FLXAMP4R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Red Amp Reg 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightred'}}
+            dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'CCD Amplifier\nDark current [e-/hr]'}
+            thispaneldict = {'ylabel': 'CCD Amplifier\nDark current [e-/hr]',
+                             'legend_frac_size': 0.30}
             amppanel = {'panelnum': 2, 
                         'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
