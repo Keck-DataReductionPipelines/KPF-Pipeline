@@ -3,9 +3,11 @@ import time
 import glob
 import copy
 import sqlite3
+import calendar
 import numpy as np
 import pandas as pd
 import matplotlib.dates as mdates
+import matplotlib.ticker as ticker
 from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from astropy.table import Table
@@ -28,12 +30,13 @@ class AnalyzeTimeSeries:
         TBD
         
     To-do:
-        * documentation
-        * add statistics to legends
-        * check that updated files are overwritten old results
-        * optimize ingestion efficiency
+        * time on the horizontal axis: dates, days since, other?
         * standard plotting routines for daily, weekly, monthly, yearly, all
+        * documentation
+        * augment statistics in legends (median and stddev upon request)
+        * optimize ingestion efficiency
         * determine file modification times with a single call, if possible
+        * check that updated rows overwrite old results
         * use Jump queries to find files of certain types for ingestion
     """
 
@@ -854,7 +857,6 @@ class AnalyzeTimeSeries:
 
         Args:
             panel_dict (array of dictionaries) - each dictionary in the array has keys:
-                panelnum - panel index number
                 panelvars: a dictionary of matplotlib attributes including:
                     ylabel - text for y-axis label
                 paneldict: a dictionary containing:
@@ -883,8 +885,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'FLXREG2G', 'plot_type' 'scatter', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightgreen'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]'}
-            greenpanel = {'panelnum': 1, 
-                          'panelvars': thispanelvars,
+            greenpanel = {'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             # Red CCD panel
             dict1 = {'col': 'FLXCOLLR', 'plot_type': 'scatter', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkred'}}
@@ -893,8 +894,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'FLXREG2R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightcoral'}}
             thispanelvars = [dict3, dict4, dict1, dict2]
             thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]'}
-            redpanel = {'panelnum': 2, 
-                        'panelvars': thispanelvars,
+            redpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             panel_arr = [greenpanel, redpanel]
             start_date = datetime(2023,11, 1)
@@ -932,22 +932,28 @@ class AnalyzeTimeSeries:
 
         for p in np.arange(npanels):
             thispanel = panel_arr[p]
-            time = df['DATE-MID']
+            if abs((end_date - start_date).days) <= 1.2:
+                time = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
+                xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4))
+            elif abs((end_date - start_date).days) <= 3:
+                time = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4))
+            elif abs((end_date - start_date).days) < 32:
+                time = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=9, min_n_ticks=4))
+            else:
+                time = df['DATE-MID'] # dates
+                xtitle = 'Date'
+                axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=4, min_n_ticks=9))
             if p == npanels-1: 
-                axs[p].set_xlabel('Date', fontsize=14)
-                locator = mdates.AutoDateLocator(minticks=5, maxticks=8)
-                formatter = mdates.ConciseDateFormatter(locator)
-                axs[p].xaxis.set_major_locator(locator)
-                axs[p].xaxis.set_major_formatter(formatter)
-
-                if abs((end_date - start_date).days) > 3:
-                    axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-                else:
-                    axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M\n%Y-%m-%d'))
-#
-                #for label in axs[p].get_xticklabels():
-                #    label.set_rotation(15)
-
+                axs[p].set_xlabel(xtitle, fontsize=14)
             if 'title' in thispanel['paneldict']:
                 axs[0].set_title(thispanel['paneldict']['title'], fontsize=14)
             if 'ylabel' in thispanel['paneldict']:
@@ -960,8 +966,6 @@ class AnalyzeTimeSeries:
             if 'subtractmedian' in thispanel['paneldict']:
                 if (thispanel['paneldict']['subtractmedian']).lower() == 'true':
                     subtractmedian = True
-            else:
-                axs[p].set_xlim(start_date, end_date)
             nvars = len(thispanel['panelvars'])
             for i in np.arange(nvars):
                 if 'plot_type' in thispanel['panelvars'][i]:
@@ -1024,11 +1028,6 @@ class AnalyzeTimeSeries:
                     axs[p].legend(loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
             axs[p].grid(color='lightgray')
 
-        # possibly add this to put set the lower limit of y to 0
-        #ymin, ymax = ax1.get_ylim()
-        #if ymin > 0:
-        #    ax1.set_ylim(bottom=0)
-
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -1071,24 +1070,21 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
                              'title': 'KPF Temperatures',
                              'legend_frac_size': 0.3}
-            halltemppanel = {'panelnum': 0, 
-                             'panelvars': thispanelvars,
+            halltemppanel = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
 
             thispanelvars2 = [dict2, dict3, dict4]
             thispaneldict2 = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)',
                              'legend_frac_size': 0.3}
-            halltemppanel2 = {'panelnum': 1, 
-                             'panelvars': thispanelvars2,
-                             'paneldict': thispaneldict2}
+            halltemppanel2 = {'panelvars': thispanelvars2,
+                              'paneldict': thispaneldict2}
             
             thispanelvars3 = [dict2, dict3, dict4]
             thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures (K)',
                              'title': 'KPF Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
-            halltemppanel3 = {'panelnum': 2, 
-                              'panelvars': thispanelvars3,
+            halltemppanel3 = {'panelvars': thispanelvars3,
                               'paneldict': thispaneldict3}
             
             dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
@@ -1113,14 +1109,11 @@ class AnalyzeTimeSeries:
             dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
             dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
             dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
-            #thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18, dict19, dict20, dict21, dict22]
-            #thispanelvars = [dict1, dict5, dict6, dict8, dict10, dict14, dict15, dict16, dict20, dict21, dict22]
             thispanelvars = [dict1, dict5, dict10, dict14, dict20, dict15, dict21, dict22]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperatures' + ' ($^{\circ}$C)',
                              'nolegend': 'false',
                              'legend_frac_size': 0.3}
-            chambertemppanel = {'panelnum': 3, 
-                                'panelvars': thispanelvars,
+            chambertemppanel = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             
             thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperatures (K)',
@@ -1128,9 +1121,8 @@ class AnalyzeTimeSeries:
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
-            chambertemppanel2 = {'panelnum': 4, 
-                                'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
+            chambertemppanel2 = {'panelvars': thispanelvars,
+                                 'paneldict': thispaneldict}
 
             
             dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
@@ -1141,8 +1133,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)',
                              'legend_frac_size': 0.25}
-            fibertemps = {'panelnum': 5, 
-                          'panelvars': thispanelvars,
+            fibertemps = {'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
             panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)] #, fibertemps]
@@ -1176,36 +1167,32 @@ class AnalyzeTimeSeries:
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
-            chambertemppanel1 = {'panelnum': 4, 
-                                'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
+            chambertemppanel1 = {'panelvars': thispanelvars,
+                                 'paneldict': thispaneldict}
             
             thispanelvars = [dict15, dict14, dict11, dict12, dict13, ]
             thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperatures (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
-            chambertemppanel2 = {'panelnum': 4, 
-                                'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
+            chambertemppanel2 = {'panelvars': thispanelvars,
+                                 'paneldict': thispaneldict}
             
             thispanelvars = [dict21, dict20, dict17, dict18, dict19, ]
             thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperatures (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
-            chambertemppanel3 = {'panelnum': 4, 
-                                'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
+            chambertemppanel3 = {'panelvars': thispanelvars,
+                                 'paneldict': thispaneldict}
                 
             thispanelvars = [dict10, dict9, ]
             thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperatures (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
-            chambertemppanel4 = {'panelnum': 4, 
-                                'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
+            chambertemppanel4 = {'panelvars': thispanelvars,
+                                 'paneldict': thispaneldict}
             panel_arr = [copy.deepcopy(chambertemppanel1), copy.deepcopy(chambertemppanel2), copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)]
 
         elif plot_name=='ccd_readnoise':
@@ -1217,8 +1204,7 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Read Noise [e-]',
                              'title': 'Read Noise',
                              'legend_frac_size': 0.25}
-            readnoisepanel = {'panelnum': 0, 
-                              'panelvars': thispanelvars,
+            readnoisepanel = {'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
             panel_arr = [readnoisepanel]#, readnoisepanel]
         
@@ -1232,13 +1218,11 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'FLXREG4G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
             dict7 = {'col': 'FLXREG5G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
             dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            #thispanelvars = [dict3, dict4, dict5, dict6, dict7, dict8, dict1, dict2, ]
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]',
                              'title': 'Dark Current',
                              'legend_frac_size': 0.30}
-            greenpanel = {'panelnum': 0, 
-                          'panelvars': thispanelvars,
+            greenpanel = {'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
             # Red CCD panel
@@ -1250,12 +1234,10 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            #thispanelvars = [dict3, dict4, dict5, dict6, dict7, dict8, dict1, dict2, ]
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]',
                              'legend_frac_size': 0.30}
-            redpanel = {'panelnum': 1, 
-                        'panelvars': thispanelvars,
+            redpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             
             # Amplifier glow panel
@@ -1266,8 +1248,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'CCD Amplifier\nDark current [e-/hr]',
                              'legend_frac_size': 0.30}
-            amppanel = {'panelnum': 2, 
-                        'panelvars': thispanelvars,
+            amppanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             
             panel_arr = [greenpanel, redpanel, amppanel]        
