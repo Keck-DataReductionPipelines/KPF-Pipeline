@@ -12,7 +12,7 @@ from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from astropy.table import Table
 from astropy.io import fits
-from datetime import datetime
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
@@ -30,8 +30,8 @@ class AnalyzeTimeSeries:
         TBD
         
     To-do:
-        * time on the horizontal axis: dates, days since, other?
-        * standard plotting routines for daily, weekly, monthly, yearly, all
+        * add check for >0 data points
+        * add titles to plots
         * documentation
         * augment statistics in legends (median and stddev upon request)
         * optimize ingestion efficiency
@@ -589,127 +589,132 @@ class AnalyzeTimeSeries:
                 'SKY-OBJ':  'string',
                 'SCI-OBJ':  'string',
                 'AGITSTA':  'string',
-                'ETAV1C1T': 'float',
-                'ETAV1C2T': 'float',
-                'ETAV1C3T': 'float',
-                'ETAV1C4T': 'float',
-                'ETAV2C3T': 'float',
-                'TOTCORR':  'string', # need to correct this to split into four bins
+                'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
+                'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
+                'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
+                'ETAV1C4T': 'float', # Etalon Vescent 1 Channel 4 temperature
+                'ETAV2C3T': 'float', # Etalon Vescent 2 Channel 3 temperature
+                'TOTCORR':  'string', # need to correct this to split  '498.12 604.38 710.62 816.88' / Wavelength of EM bins in nm
                 'USTHRSH':  'string', 
                 'THRSHLD': 'float',
                 'THRSBIN': 'float',
             }
+     
         elif level == '2D':
             keyword_types = {
-                'DRPTAG':   'string',
-                'RNRED1':   'float',
-                'RNRED2':   'float',
-                'RNGREEN1': 'float',
-                'RNGREEN2': 'float',
-                'READSPED': 'string',
-                'FLXREG1G': 'float',
-                'FLXREG2G': 'float',
-                'FLXREG3G': 'float',
-                'FLXREG4G': 'float',
-                'FLXREG5G': 'float',
-                'FLXREG6G': 'float',
-                'FLXAMP1G': 'float',
-                'FLXAMP2G': 'float',
-                'FLXCOLLG': 'float',
-                'FLXECHG':  'float',
-                'FLXREG1R': 'float',
-                'FLXREG2R': 'float',
-                'FLXREG3R': 'float',
-                'FLXREG4R': 'float',
-                'FLXREG5R': 'float',
-                'FLXREG6R': 'float',
-                'FLXAMP1R': 'float',
-                'FLXAMP2R': 'float',
-                'FLXCOLLR': 'float',
-                'FLXECHR':  'float',
-                'GDRXRMS':  'float',
-                'GDRYRMS':  'float',
-                'GDRRRMS':  'float',
-                'GDRXBIAS': 'float',
-                'GDRYBIAS': 'float',
-                'GDRSEEJZ': 'float',
-                'GDRSEEV':  'float',
-                'MOONSEP':  'float',
-                'SUNALT':   'float',
-                'SKYSCIMS': 'float',
-                'EMSCCT48': 'float',
-                'EMSCCT45': 'float',
-                'EMSCCT56': 'float',
-                'EMSCCT67': 'float',
-                'EMSCCT78': 'float',
-                'EMSKCT48': 'float',
-                'EMSKCT45': 'float',
-                'EMSKCT56': 'float',
-                'EMSKCT67': 'float',
-                'EMSKCT78': 'float',
+                'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
+                'RNRED1':   'float',  # Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
+                'RNRED2':   'float',  # Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
+                'RNGREEN1': 'float',  # Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
+                'RNGREEN2': 'float',  # Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
+#                'REENTRT':  'float',  # Green CCD read time [sec]
+#                'REDTRT':   'float',  # Red CCD read time [sec]
+                'READSPED': 'string', # Categorization of CCD read speed ('regular' or 'fast')
+                'FLXREG1G': 'float',  # Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
+                'FLXREG2G': 'float',  # Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
+                'FLXREG3G': 'float',  # Dark current [e-/hr] - Green CCD region 3 - coords = [2090:2390,1690:1990]
+                'FLXREG4G': 'float',  # Dark current [e-/hr] - Green CCD region 4 - coords = [2090:2390,2090:2390]
+                'FLXREG5G': 'float',  # Dark current [e-/hr] - Green CCD region 5 - coords = [80:380,3080:3380]
+                'FLXREG6G': 'float',  # Dark current [e-/hr] - Green CCD region 6 - coords = [1690:1990,1690:1990]
+                'FLXAMP1G': 'float',  # Dark current [e-/hr] - Green CCD amplifier region 1 - coords = [3700:4000,700:1000]
+                'FLXAMP2G': 'float',  # Dark current [e-/hr] - Green CCD amplifier region 2 - coords = [3700:4000,3080:3380]
+                'FLXCOLLG': 'float',  # Dark current [e-/hr] - Green CCD collimator-side region = [3700:4000,700:1000]
+                'FLXECHG':  'float',  # Dark current [e-/hr] - Green CCD echelle-side region = [3700:4000,700:1000]
+                'FLXREG1R': 'float',  # Dark current [e-/hr] - Red CCD region 1 - coords = [1690:1990,1690:1990]
+                'FLXREG2R': 'float',  # Dark current [e-/hr] - Red CCD region 2 - coords = [1690:1990,2090:2390]
+                'FLXREG3R': 'float',  # Dark current [e-/hr] - Red CCD region 3 - coords = [2090:2390,1690:1990]
+                'FLXREG4R': 'float',  # Dark current [e-/hr] - Red CCD region 4 - coords = [2090:2390,2090:2390]
+                'FLXREG5R': 'float',  # Dark current [e-/hr] - Red CCD region 5 - coords = [80:380,3080:3380]
+                'FLXREG6R': 'float',  # Dark current [e-/hr] - Red CCD region 6 - coords = [1690:1990,1690:1990]
+                'FLXAMP1R': 'float',  # Dark current [e-/hr] - Red CCD amplifier region 1 = [3700:4000,700:1000]
+                'FLXAMP2R': 'float',  # Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
+                'FLXCOLLR': 'float',  # Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
+                'FLXECHR':  'float',  # Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
+                'GDRXRMS':  'float',  # x-coordinate RMS guiding error in milliarcsec (mas)
+                'GDRYRMS':  'float',  # y-coordinate RMS guiding error in milliarcsec (mas)
+                'GDRRRMS':  'float',  # r-coordinate RMS guiding error in milliarcsec (mas)
+                'GDRXBIAS': 'float',  # x-coordinate bias guiding error in milliarcsec (mas)
+                'GDRYBIAS': 'float',  # y-coordinate bias guiding error in milliarcsec (mas)
+                'GDRSEEJZ': 'float',  # Seeing (arcsec) in J+Z-band from Moffat func fit
+                'GDRSEEV':  'float',  # Scaled seeing (arcsec) in V-band from J+Z-band
+                'MOONSEP':  'float',  # Separation between Moon and target star (deg)
+                'SUNALT':   'float',  # Altitude of Sun (deg); negative = below horizon
+                'SKYSCIMS': 'float',  # SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+                'EMSCCT48': 'float',  # cumulative EM counts [ADU] in SCI in 445-870 nm
+                'EMSCCT45': 'float',  # cumulative EM counts [ADU] in SCI in 445-551 nm
+                'EMSCCT56': 'float',  # cumulative EM counts [ADU] in SCI in 551-658 nm
+                'EMSCCT67': 'float',  # cumulative EM counts [ADU] in SCI in 658-764 nm
+                'EMSCCT78': 'float',  # cumulative EM counts [ADU] in SCI in 764-870 nm
+                'EMSKCT48': 'float',  # cumulative EM counts [ADU] in SKY in 445-870 nm
+                'EMSKCT45': 'float',  # cumulative EM counts [ADU] in SKY in 445-551 nm
+                'EMSKCT56': 'float',  # cumulative EM counts [ADU] in SKY in 551-658 nm
+                'EMSKCT67': 'float',  # cumulative EM counts [ADU] in SKY in 658-764 nm
+                'EMSKCT78': 'float',  # cumulative EM counts [ADU] in SKY in 764-870 nm
             }
         elif level == 'L1':
             keyword_types = {
                 'MONOTWLS': 'bool',
-                'SNRSC452': 'float',
-                'SNRSK452': 'float',
-                'SNRCL452': 'float',
-                'SNRSC548': 'float',
-                'SNRSK548': 'float',
-                'SNRCL548': 'float',
-                'SNRSC652': 'float',
-                'SNRSK652': 'float',
-                'SNRCL652': 'float',
-                'SNRSC747': 'float',
-                'SNRSK747': 'float',
-                'SNRCL747': 'float',
-                'SNRSC852': 'float',
-                'SNRSK852': 'float',
-                'SNRCL852': 'float',
-                'FR452652': 'float',
-                'FR548652': 'float',
-                'FR747652': 'float',
-                'FR852652': 'float',
-                'FR12M452': 'float',
-                'FR12U452': 'float',
-                'FR32M452': 'float',
-                'FR32U452': 'float',
-                'FRS2M452': 'float',
-                'FRS2U452': 'float',
-                'FRC2M452': 'float',
-                'FRC2U452': 'float',
-                'FR12M548': 'float',
-                'FR12U548': 'float',
-                'FR32M548': 'float',
-                'FR32U548': 'float',
-                'FRS2M548': 'float',
-                'FRS2U548': 'float',
-                'FRC2M548': 'float',
-                'FRC2U548': 'float',
-                'FR12M652': 'float',
-                'FR12U652': 'float',
-                'FR32M652': 'float',
-                'FR32U652': 'float',
-                'FRS2M652': 'float',
-                'FRS2U652': 'float',
-                'FRC2M652': 'float',
-                'FRC2U652': 'float',
-                'FR12M747': 'float',
-                'FR12U747': 'float',
-                'FR32M747': 'float',
-                'FR32U747': 'float',
-                'FRS2M747': 'float',
-                'FRS2U747': 'float',
-                'FRC2M747': 'float',
-                'FRC2U747': 'float',
-                'FR12M852': 'float',
-                'FR12U852': 'float',
-                'FR32M852': 'float',
-                'FR32U852': 'float',
-                'FRS2M852': 'float',
-                'FRS2U852': 'float',
-                'FRC2M852': 'float',
-                'FRC2U852': 'float',
+                'SNRSC452': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
+                'SNRSK452': 'float', # SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+                'SNRCL452': 'float', # SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+                'SNRSC548': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
+                'SNRSK548': 'float', # SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
+                'SNRCL548': 'float', # SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
+                'SNRSC652': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 652 nm; on Red CCD
+                'SNRSK652': 'float', # SNR of L1 SKY spectrum (95th %ile) near 652 nm; on Red CCD
+                'SNRCL652': 'float', # SNR of L1 CAL spectrum (95th %ile) near 652 nm; on Red CCD
+                'SNRSC747': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
+                'SNRSK747': 'float', # SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
+                'SNRCL747': 'float', # SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
+                'SNRSC852': 'float', # SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
+                'SNRSK852': 'float', # SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+                'SNRCL852': 'float', # SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+                'FR452652': 'float', # Peak flux ratio between orders (452nm/652nm) using SCI2
+                'FR548652': 'float', # Peak flux ratio between orders (548nm/652nm) using SCI2
+                'FR747652': 'float', # Peak flux ratio between orders (747nm/652nm) using SCI2
+                'FR852652': 'float', # Peak flux ratio between orders (852nm/652nm) using SCI2
+                'FR12M452': 'float', # median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+                'FR12U452': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+                'FR32M452': 'float', # median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
+                'FR32U452': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+                'FRS2M452': 'float', # median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+                'FRS2U452': 'float', # uncertainty on the median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+                'FRC2M452': 'float', # median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+                'FRC2U452': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+                'FR12M548': 'float', # median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+                'FR12U548': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+                'FR32M548': 'float', # median(SCI3/SCI2) flux ratio near 548 nm; on Green CCD
+                'FR32U548': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+                'FRS2M548': 'float', # median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+                'FRS2U548': 'float', # uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+                'FRC2M548': 'float', # median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+                'FRC2U548': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+                'FR12M652': 'float', # median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+                'FR12U652': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+                'FR32M652': 'float', # median(SCI3/SCI2) flux ratio near 652 nm; on Red CCD
+                'FR32U652': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+                'FRS2M652': 'float', # median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+                'FRS2U652': 'float', # uncertainty on the median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+                'FRC2M652': 'float', # median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+                'FRC2U652': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+                'FR12M747': 'float', # median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+                'FR12U747': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+                'FR32M747': 'float', # median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
+                'FR32U747': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+                'FRS2M747': 'float', # median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+                'FRS2U747': 'float', # uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+                'FRC2M747': 'float', # median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+                'FRC2U747': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+                'FR12M852': 'float', # median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+                'FR12U852': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+                'FR32M852': 'float', # median(SCI3/SCI2) flux ratio near 852 nm; on Red CCD
+                'FR32U852': 'float', # uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+                'FRS2M852': 'float', # median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+                'FRS2U852': 'float', # uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+                'FRC2M852': 'float', # median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+                'FRC2U852': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+#                'GREENTRT': 'float', # Green CCD read time [sec]
+#                'REDTRT'  : 'float', # Red CCD read time [sec]
             }
         elif level == 'L2':
             keyword_types = {
@@ -867,9 +872,8 @@ class AnalyzeTimeSeries:
             object_like (string or list of strings) - partial object names to search for
             start_date (datetime object) - start date for plot
             end_date (datetime object) - end date for plot
-            fig_path (string) - set to the path for a SNR vs. wavelength file
-                to be generated.
-            show_plot (boolean) - show the plot in the current environment.
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
 
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
@@ -906,10 +910,6 @@ class AnalyzeTimeSeries:
             start_date = max(df['DATE-MID'])
         if end_date == None:
             end_date = max(df['DATE-MID'])
-            
-        start = start_date
-        end = end_date
-            
         npanels = len(panel_arr)
         unique_cols = set()
         unique_cols.add('DATE-MID')
@@ -933,22 +933,22 @@ class AnalyzeTimeSeries:
         for p in np.arange(npanels):
             thispanel = panel_arr[p]
             if abs((end_date - start_date).days) <= 1.2:
-                time = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4))
             elif abs((end_date - start_date).days) <= 3:
-                time = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4))
             elif abs((end_date - start_date).days) < 32:
-                time = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
-                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=9, min_n_ticks=4))
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=5, min_n_ticks=4))
             else:
-                time = df['DATE-MID'] # dates
+                t = df['DATE-MID'] # dates
                 xtitle = 'Date'
                 axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=4, min_n_ticks=9))
@@ -1013,11 +1013,11 @@ class AnalyzeTimeSeries:
                     else:
                        plot_attributes = {}
                 if plot_type == 'scatter':
-                    axs[p].scatter(time, data, **plot_attributes)
+                    axs[p].scatter(t, data, **plot_attributes)
                 if plot_type == 'plot':
-                    axs[p].plot(time, data, **plot_attributes)
+                    axs[p].plot(t, data, **plot_attributes)
                 if plot_type == 'step':
-                    axs[p].step(time, data, **plot_attributes)
+                    axs[p].step(t, data, **plot_attributes)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
                 if makelegend:
@@ -1206,7 +1206,7 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.25}
             readnoisepanel = {'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
-            panel_arr = [readnoisepanel]#, readnoisepanel]
+            panel_arr = [readnoisepanel]
         
         elif plot_name=='ccd_dark_current':
             # Green CCD panel
@@ -1252,6 +1252,137 @@ class AnalyzeTimeSeries:
                         'paneldict': thispaneldict}
             
             panel_arr = [greenpanel, redpanel, amppanel]        
+
+        elif plot_name=='ccd_controller':
+            dict1 = {'col': 'kpfred.BPLANE_TEMP',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Backplane',          'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfred.BRD10_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 10 (Driver)',  'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfred.BRD11_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 11 (Driver)',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfred.BRD12_LVXBIAS_T', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 12 (LVxBias)', 'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfred.BRD1_HTRX_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 1 (HeaterX)',  'marker': '.', 'linewidth': 0.5}}
+            dict6 = {'col': 'kpfred.BRD2_XVBIAS_T',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 2 (XV Bias)',  'marker': '.', 'linewidth': 0.5}}
+            dict7 = {'col': 'kpfred.BRD3_LVDS_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 3 (LVDS)',     'marker': '.', 'linewidth': 0.5}}
+            dict8 = {'col': 'kpfred.BRD4_DRVR_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 4 (Driver)',   'marker': '.', 'linewidth': 0.5}}
+            dict9 = {'col': 'kpfred.BRD5_AD_T',       'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 5 (AD)',       'marker': '.', 'linewidth': 0.5}}
+            dict10= {'col': 'kpfred.BRD7_HTRX_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 7 (HeaterX)',  'marker': '.', 'linewidth': 0.5}}
+            dict11= {'col': 'kpfred.BRD9_HVXBIAS_T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 9 (HVxBias)',  'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
+            thispaneldict = {'ylabel': 'Temperatures (C)',
+                             'title': 'CCD Controllers',
+                             'legend_frac_size': 0.35}
+            controller1 = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+
+            thispanelvars2 = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
+            thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
+                             'title': 'CCD Controllers',
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.35}
+            controller2 = {'panelvars': thispanelvars2,
+                           'paneldict': thispaneldict2}
+            panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
+
+        elif plot_name=='lfc':
+            dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'plot', 'unit': 'counts', 'plot_attr': {'label': 'LFC Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfcal.VISFLUX', 'plot_type': 'plot', 'unit': 'counts', 'plot_attr': {'label': 'LFC Fiberlock Vis', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Intensity (counts)',
+                             'title': 'LFC Diagnostics',
+                             'legend_frac_size': 0.35}
+            lfcpanel = {'panelvars': thispanelvars,
+                        'paneldict': thispaneldict}
+            panel_arr = [lfcpanel]
+
+        elif plot_name=='hk_temp':
+            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK BENCH_C',         'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfexpose.CAMBARREL_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK CAMBARREL_C', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK DET_XTRN_C',    'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ECHELLE_C',       'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ENCLOSURE_C',     'marker': '.', 'linewidth': 0.5}}
+            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK RACK_AIR_C',      'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2, dict3, dict5, dict6, ] #dict4
+            thispaneldict = {'ylabel': 'Temperatures (K)',
+                             'title': 'HK Temperatures',
+                             'legend_frac_size': 0.35}
+            lfcpanel1 = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict}
+
+            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, ] #dict4
+            thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
+                             'title': 'HK Temperatures',
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.35}
+            lfcpanel2 = {'panelvars': thispanelvars2,
+                         'paneldict': thispaneldict2}
+
+            panel_arr = [copy.deepcopy(lfcpanel1), copy.deepcopy(lfcpanel2)]
+
+
+#LFC
+#                'kpfcal.BLUECUTIACT':                  'float',  # A       Blue cut amplifier 0 measured current c- doubl...
+
+#                'kpfgreen.COL_CURR':                   'float',  # A       Current ion pump current c- double A {%.3e}
+#                'kpfgreen.ECH_CURR':                   'float',  # A       Current ion pump current c- double A {%.3e}
+#                'kpfred.COL_CURR':                     'float',  # A       Current ion pump current c- double A {%.3e}
+#                'kpfred.ECH_CURR':                     'float',  # A       Current ion pump current c- double A {%.3e}
+
+#                'kpf_hk.COOLTARG':                     'float',  # degC    temperature target c2 int degC
+#                'kpf_hk.CURRTEMP':                     'float',  # degC    current temperature c- double degC {%.2f}
+
+#                'kpfmot.AGITSPD':                      'float',  # motor_counts/s agit raw velocity c2 int motor counts/s { -750...
+#                'kpfmot.AGITTOR':                      'float',  # V       agit motor torque c- double V {%.3f}
+#                'kpfmot.AGITAMBI_T':                   'float',  # degC    Agitator ambient temperature c- double degC {%...
+#                'kpfmot.AGITMOT_T':                    'float',  # degC    Agitator motor temperature c- double degC {%.2...
+#                'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
+
+#                'kpfred.CF_BASE_2WT':                  'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
+#                'kpfred.CF_BASE_T':                    'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
+#                'kpfred.CF_BASE_TRG':                  'float',  # degC    base cold finger heater 1A, target temp c2 dou...
+#                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
+#                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
+
+#                'kpfred.COL_PRESS':                    'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
+#                'kpfred.CRYOBODY_T':                   'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
+#                'kpfred.CRYOBODY_TRG':                 'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
+#                'kpfred.CURRTEMP':                     'float',  # degC    Current cold head temperature c- double degC {...
+#                'kpfred.ECH_PRESS':                    'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
+#                'kpfred.KPF_CCD_T':                    'float',  # degC    SSL Detector temperature c- double degC {%.3f}
+#                'kpfred.STA_CCD_T':                    'float',  # degC    STA Detector temperature c- double degC {%.3f}
+#                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
+#                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
+
+#                'kpfmet.SCIENCE_CAL_FIBER_STG':        'float',  # degC    Science_Cal_Fiber_Stg temperature c- double de...
+#                'kpfmet.SCISKY_SCMBLR_CHMBR_EN':       'float',  # degC    SciSky Scrambler Chamber End A c- double degC ...
+#                'kpfmet.SCISKY_SCMBLR_FIBER_EN':       'float',  # degC    SciSky Scrammbler Fiber End B c- double degC {...
+#                'kpfmet.SIMCAL_FIBER_STG':             'float',  # degC    SimCal_Fiber_Stg temperature c- double degC {%...
+#                'kpfmet.SKYCAL_FIBER_STG':             'float',  # degC    SkyCal_Fiber_Stg temperature c- double degC {%...
+#                'kpfmet.TEMP':                         'float',  # degC    Vaisala Temperature c- double degC {%.3f}
+#                'kpfmet.TH_DAILY':                     'float',  # degC    Th_daily temperature c- double degC {%.1f}
+#                'kpfmet.TH_GOLD':                      'float',  # degC    Th_gold temperature c- double degC {%.1f}
+#                'kpfmet.U_DAILY':                      'float',  # degC    U_daily temperature c- double degC {%.1f}
+#                'kpfmet.U_GOLD':                       'float',  # degC    U_gold temperature c- double degC {%.1f}
+
+#                'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
+#                'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
+#                'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
+#                'ETAV1C4T': 'float', # Etalon Vescent 1 Channel 4 temperature
+#                'ETAV2C3T': 'float', # Etalon Vescent 2 Channel 3 temperature
+
+#DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
+
+#GREENTRT  46.804                                      Green CCD read time [sec]
+#REDTRT    46.839                                      Red CCD read time [sec]
+
+#GDRXRMS   10.123                                      x-coordinate RMS guiding error in milliarcsec (mas)
+#GDRYRMS   10.123                                      y-coordinate RMS guiding error in milliarcsec (mas)
+#GDRXBIAS  0.0010                                      x-coordinate bias guiding error in milliarcsec (mas)
+#GDRYBIAS  0.0010                                      y-coordinate bias guiding error in milliarcsec (mas)
+
+#GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
+#GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
+
+#MOONSEP   55.0                                        Separation between Moon and target star (deg)
+#SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
+
         else:
             self.logger.info('Error: plot_name not specified')
             return
@@ -1259,4 +1390,156 @@ class AnalyzeTimeSeries:
         self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
                                          only_object=only_object, object_like=object_like,
                                          fig_path=fig_path, show_plot=show_plot, clean=clean)        
+
+
+    def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
+                                 fig_dir=None, show_plot=False):
+        """
+        Generate all of the standard time series plots for the quicklook.  
+        Depending on the value of the input 'interval', the plots have time ranges 
+        that are daily, weekly, yearly, or decadal.
+
+        Args:
+            start_date (datetime object) - start date for plot
+            interval (string) - 'day', 'week', 'year', or 'decade'
+            fig_path (string) - set to the path for the files to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plots it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
         
+        if not isinstance(start_date, datetime):
+            self.logger.error("'start_date' must be a datetime object.")
+            return        
+        
+        plots = {
+            "p1": {"plot_name": "chamber_temp",        "subdir": "Chamber", },
+            "p2": {"plot_name": "chamber_temp_detail", "subdir": "Chamber", },
+            "p3": {"plot_name": "ccd_readnoise",       "subdir": "CCDs",    },
+            "p4": {"plot_name": "ccd_dark_current",    "subdir": "CCDs",    },
+            "p5": {"plot_name": "lfc",                 "subdir": "Cal",     },
+            "p6": {"plot_name": "hk_temp",             "subdir": "HK",     },
+            "p7": {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
+        }
+        for p in plots:
+            plot_name = plots[p]["plot_name"]
+            if interval == 'day':
+                end_date = start_date + timedelta(days=1)
+                filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
+            elif interval == 'month':
+                end_date = add_one_month(start_date)
+                filename = 'kpf_' + start_date.strftime("%Y%m") + '_telemetry_' + plot_name + '.png' 
+            elif interval == 'year':
+                end_date = datetime(start_date.year+1, start_date.month, start_date.day)
+                filename = 'kpf_' + start_date.strftime("%Y") + '_telemetry_' + plot_name + '.png' 
+            elif interval == 'decade':
+                end_date = datetime(start_date.year+10, start_date.month, start_date.day)
+                filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+            else:
+                self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
+                return
+
+            if fig_dir != None:
+                if not fig_dir.endswith('/'):
+                    fig_dir += '/'
+                savedir = fig_dir + plots[p]["subdir"] + '/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+                fig_path = savedir + filename
+            else:
+                fig_path = None
+            self.logger.info('Making QL time series plot ' + fig_path)
+            self.plot_standard_time_series(plot_name, start_date=start_date, end_date=end_date, 
+                                           fig_path=fig_path, show_plot=show_plot, clean=clean)
+
+
+    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, clean=True, 
+                                     base_dir=None, show_plot=False):
+        """
+        Generate all of the standard time series plots for the quicklook for a date 
+        range.  Every unique day, month, year, and decade between start_date and end_date 
+        will have a full set of plots produced using plot_all_quicklook().
+
+        Args:
+            start_date (datetime object) - start date for plot
+            end_date (datetime object) - start date for plot
+            fig_path (string) - set to the path for the files to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plots in fig_path or shows the plots it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        days = []
+        months = []
+        years = []
+        decades = []
+        current_date = start_date
+        while current_date <= end_date:
+            days.append(current_date)
+            months.append(datetime(current_date.year,current_date.month,1))
+            years.append(datetime(current_date.year,1,1))
+            decades.append(datetime(int(str(current_date.year)[0:3])*10,1,1))
+            current_date += timedelta(days=1)
+        days    = sorted(set(days),    reverse=True)
+        months  = sorted(set(months),  reverse=True)
+        years   = sorted(set(years),   reverse=True)
+        decades = sorted(set(decades), reverse=True)
+
+        self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
+        for day in days:
+            try:
+                savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
+                self.plot_all_quicklook(day, interval='day', fig_dir=savedir)
+            except Exception as e:
+                self.logger.error(e)
+
+        self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
+        for month in months:
+            try:
+                savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
+                self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
+            except Exception as e:
+                self.logger.error(e)
+
+        self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
+        for year in years:
+            try:
+                savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
+                self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
+            except Exception as e:
+                self.logger.error(e)
+
+        self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
+        for decade in decades:
+            try:
+                savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
+                self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
+            except Exception as e:
+                self.logger.error(e)
+
+
+def add_one_month(inputdate):
+    """
+    Add one month to a datetime object, accounting for the different number of days per month.
+    """
+    year, month, day = inputdate.year, inputdate.month, inputdate.day
+    if month == 12:
+        month = 1
+        year += 1
+    else:
+        month += 1
+    if month in [4, 6, 9, 11] and day > 30:
+        day = 30
+    elif month == 2:
+        if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0):
+            if day > 29:
+                day = 29
+        else:
+            if day > 28:
+                day = 28
+    
+    outputdate = datetime(year, month, day)
+    return outputdate
