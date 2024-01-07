@@ -1301,21 +1301,39 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK RACK_AIR_C',      'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, ] #dict4
             thispaneldict = {'ylabel': 'Temperatures (K)',
-                             'title': 'HK Temperatures',
+                             'title': 'HK Temperatures?',
                              'legend_frac_size': 0.35}
-            lfcpanel1 = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict}
+            hkpanel1 = {'panelvars': thispanelvars,
+                        'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, ] #dict4
             thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
-                             'title': 'HK Temperatures',
+                             'title': 'HK Temperatures?',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
-            lfcpanel2 = {'panelvars': thispanelvars2,
-                         'paneldict': thispaneldict2}
+            hkpanel2 = {'panelvars': thispanelvars2,
+                        'paneldict': thispaneldict2}
+            panel_arr = [copy.deepcopy(hkpanel1), copy.deepcopy(hkpanel2)]
 
-            panel_arr = [copy.deepcopy(lfcpanel1), copy.deepcopy(lfcpanel2)]
+        elif plot_name=='guiding':
+            dict1 = {'col': 'GDRXRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (X)', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'GDRYRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (Y)', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (X)',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Guiding Errors (mas)',
+                             'title': 'Guiding',
+                             'legend_frac_size': 0.35}
+            guidingpanel1 = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
 
+            thispanelvars2 = [dict3, dict4]
+            thispaneldict2 = {'ylabel': 'Guiding Bias (mas)',
+                             'title': 'Guiding',
+                             'legend_frac_size': 0.35}
+            guidingpanel2 = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            panel_arr = [guidingpanel1, guidingpanel2]
 
 #LFC
 #                'kpfcal.BLUECUTIACT':                  'float',  # A       Blue cut amplifier 0 measured current c- doubl...
@@ -1372,11 +1390,6 @@ class AnalyzeTimeSeries:
 #GREENTRT  46.804                                      Green CCD read time [sec]
 #REDTRT    46.839                                      Red CCD read time [sec]
 
-#GDRXRMS   10.123                                      x-coordinate RMS guiding error in milliarcsec (mas)
-#GDRYRMS   10.123                                      y-coordinate RMS guiding error in milliarcsec (mas)
-#GDRXBIAS  0.0010                                      x-coordinate bias guiding error in milliarcsec (mas)
-#GDRYBIAS  0.0010                                      y-coordinate bias guiding error in milliarcsec (mas)
-
 #GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
 #GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
 
@@ -1415,13 +1428,14 @@ class AnalyzeTimeSeries:
             return        
         
         plots = {
-            "p1": {"plot_name": "chamber_temp",        "subdir": "Chamber", },
-            "p2": {"plot_name": "chamber_temp_detail", "subdir": "Chamber", },
-            "p3": {"plot_name": "ccd_readnoise",       "subdir": "CCDs",    },
-            "p4": {"plot_name": "ccd_dark_current",    "subdir": "CCDs",    },
-            "p5": {"plot_name": "lfc",                 "subdir": "Cal",     },
-            "p6": {"plot_name": "hk_temp",             "subdir": "HK",     },
+            "p1": {"plot_name": "chamber_temp",        "subdir": "Chamber",  },
+            "p2": {"plot_name": "chamber_temp_detail", "subdir": "Chamber",  },
+            "p3": {"plot_name": "ccd_readnoise",       "subdir": "CCDs",     },
+            "p4": {"plot_name": "ccd_dark_current",    "subdir": "CCDs",     },
+            "p5": {"plot_name": "lfc",                 "subdir": "Cal",      },
+            "p6": {"plot_name": "hk_temp",             "subdir": "HK",       },
             "p7": {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
+            "p8": {"plot_name": "guiding",             "subdir": "Observing",},
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
