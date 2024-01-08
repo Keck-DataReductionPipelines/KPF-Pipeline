@@ -2,7 +2,7 @@
 
 # This script is designed to launch the 5 QLP instances with a single command
 
-ncpus=4
+ncpus=10
 data_levels=("L0" "2D" "L1" "L2" "masters")
 
 for lvl in "${data_levels[@]}"; do

@@ -245,8 +245,15 @@ class VarExtsFramework(KPF0_Primitive):
 
         for ext in exts:
 
-            naxis1 = hdul_input.header[ext]["NAXIS1"]
-            naxis2 = hdul_input.header[ext]["NAXIS2"]
+            try:
+                naxis1 = hdul_input.header[ext]["NAXIS1"]
+            except:
+                continue
+
+            try:
+                naxis2 = hdul_input.header[ext]["NAXIS2"]
+            except:
+                continue
 
             if debug == 1:
                 print("ext,naxis1,naxis2 = {},{},{}".\
@@ -314,7 +321,10 @@ class VarExtsFramework(KPF0_Primitive):
 
         for ext in exts:
 
-            unc_img = np.array(hdul_input[ext])
+            try:
+                unc_img = np.array(hdul_input[ext])
+            except:
+                continue
 
             var_img = unc_img * unc_img
 
@@ -347,7 +357,12 @@ class VarExtsFramework(KPF0_Primitive):
 
         for ext in exts:
 
-            ccd_img = np.array(hdul_input[ext])
+            try:
+                ccd_img = np.array(hdul_input[ext])
+            except:
+                continue
+
+            ccd_img = np.where(ccd_img >= 0.0, ccd_img, 0.0)        # Ensure the photon noise is positive.
 
             if 'GREEN' in ext:
                 greenccdimg = ccd_img
@@ -375,9 +390,15 @@ class VarExtsFramework(KPF0_Primitive):
         for ext in exts:
 
             if 'GREEN' in ext:
-                img = np.array(greenvarimg)
+                if greenvarimg is None:
+                    continue
+                else:
+                    img = np.array(greenvarimg)
             else:
-                img = np.array(redvarimg)
+                if redvarimg is None:
+                    continue
+                else:
+                    img = np.array(redvarimg)
 
             img_shape = np.shape(img)
             self.logger.info('--->ext,img_shape = {},{}'.format(ext,img_shape))
@@ -498,23 +519,32 @@ class VarExtsFramework(KPF0_Primitive):
         # 5. Photon-noise variance
 
         # GREEN
-        greenvarimg = rn_greenvarimg +\
-            bias_greenvarimg +\
-            dark_greenvarimg * exp_time +\
-            flat_greenvarimg * greenccdimg +\
-            greenccdimg
+        try:
+            greenvarimg = rn_greenvarimg +\
+                bias_greenvarimg +\
+                dark_greenvarimg * exp_time +\
+                flat_greenvarimg * greenccdimg +\
+                greenccdimg
+        except Exception as e:
+            print("Exception raised [",e,"]; continuing...")
+            greenvarimg = None
 
         # RED
-        redvarimg = rn_redvarimg +\
-            bias_redvarimg +\
-            dark_redvarimg * exp_time +\
-            flat_redvarimg * redccdimg +\
-            redccdimg
+        try:
+            redvarimg = rn_redvarimg +\
+                bias_redvarimg +\
+                dark_redvarimg * exp_time +\
+                flat_redvarimg * redccdimg +\
+                redccdimg
+        except Exception as e:
+            print("Exception raised [",e,"]; continuing...")
+            redvarimg = None
 
         # Write variance FITS-extensions.
 
-        self.write_var_exts(greenvarimg,redvarimg)
+        if (greenvarimg is not None) or (redvarimg is not None):
 
+            self.write_var_exts(greenvarimg,redvarimg)
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
