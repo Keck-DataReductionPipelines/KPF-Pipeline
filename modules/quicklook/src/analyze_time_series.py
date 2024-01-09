@@ -80,6 +80,8 @@ class AnalyzeTimeSeries:
     def create_database(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA wal_autocheckpoint")
     
         # Define columns for each file type
         L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_keyword_types.items()]
@@ -97,7 +99,7 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date, end_date, batch_size=10):
+    def ingest_dates_to_db(self, start_date, end_date, batch_size=25):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
@@ -607,8 +609,8 @@ class AnalyzeTimeSeries:
                 'RNRED2':   'float',  # Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
                 'RNGREEN1': 'float',  # Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
                 'RNGREEN2': 'float',  # Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
-#                'REENTRT':  'float',  # Green CCD read time [sec]
-#                'REDTRT':   'float',  # Red CCD read time [sec]
+                'GREENTRT': 'float',  # Green CCD read time [sec]
+                'REDTRT':   'float',  # Red CCD read time [sec]
                 'READSPED': 'string', # Categorization of CCD read speed ('regular' or 'fast')
                 'FLXREG1G': 'float',  # Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
                 'FLXREG2G': 'float',  # Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
@@ -713,8 +715,6 @@ class AnalyzeTimeSeries:
                 'FRS2U852': 'float', # uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
                 'FRC2M852': 'float', # median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
                 'FRC2U852': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-#                'GREENTRT': 'float', # Green CCD read time [sec]
-#                'REDTRT'  : 'float', # Red CCD read time [sec]
             }
         elif level == 'L2':
             keyword_types = {
@@ -978,6 +978,7 @@ class AnalyzeTimeSeries:
                     plot_type = 'scatter'
                 col_data = df[thispanel['panelvars'][i]['col']]
                 col_data_replaced = col_data.replace('NaN', np.nan)
+                col_data_replaced = col_data.replace('null', np.nan)
                 data = np.array(col_data_replaced, dtype='float')
                 plot_attributes = {}
                 if np.count_nonzero(~np.isnan(data)) > 0:
@@ -1127,20 +1128,7 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.3}
             chambertemppanel2 = {'panelvars': thispanelvars,
                                  'paneldict': thispaneldict}
-
-            
-            dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)',
-                             'legend_frac_size': 0.25}
-            fibertemps = {'panelvars': thispanelvars,
-                          'paneldict': thispaneldict}
-            
-            panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)] #, fibertemps]
+            panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)]
 
         elif plot_name=='chamber_temp_detail':
             dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
@@ -1199,6 +1187,30 @@ class AnalyzeTimeSeries:
             chambertemppanel4 = {'panelvars': thispanelvars,
                                  'paneldict': thispaneldict}
             panel_arr = [copy.deepcopy(chambertemppanel1), copy.deepcopy(chambertemppanel2), copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)]
+
+        elif plot_name=='fibers':
+            dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)',
+                             'legend_frac_size': 0.25}
+            fibertempspanel = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [fibertempspanel]
+
+        elif plot_name=='ccd_readspeed':
+            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Read Speed [sec]',
+                             'title': 'CCD Read Speed',
+                             'legend_frac_size': 0.25}
+            readspeedpanel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            panel_arr = [readspeedpanel]
 
         elif plot_name=='ccd_readnoise':
             dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
@@ -1330,34 +1342,58 @@ class AnalyzeTimeSeries:
             panel_arr = [lfcpanel]
 
         elif plot_name=='etalon':
-            dict1 = {'col': 'ETAV1C1T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 1',  'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'ETAV1C2T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 2',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'ETAV1C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 3',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'ETAV1C4T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 4',  'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'ETAV1C1T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 1',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict2 = {'col': 'ETAV1C2T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 2',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'ETAV1C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'ETAV1C4T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 4',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'purple'}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'Temperature (C)',
                              'title': 'Etalon Temperatures',
                              'legend_frac_size': 0.35}
-            etalonpanel = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-
-            thispanelvars2 = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
-                             'title': 'Etalon Temperatures',
+            thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
-            etalonpanel2 = {'panelvars': thispanelvars,
+            etalonpanel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
-            panel_arr = [copy.deepcopy(etalonpanel), copy.deepcopy(etalonpanel2)]
+            etalonpanel2 = {'panelvars': [dict1],
+                           'paneldict': thispaneldict2}
+            etalonpanel3 = {'panelvars': [dict2],
+                           'paneldict': thispaneldict2}
+            etalonpanel4 = {'panelvars': [dict3],
+                           'paneldict': thispaneldict2}
+            etalonpanel5 = {'panelvars': [dict4],
+                           'paneldict': thispaneldict2}
+            etalonpanel6 = {'panelvars': [dict5],
+                           'paneldict': thispaneldict2}
+            panel_arr = [copy.deepcopy(etalonpanel), copy.deepcopy(etalonpanel2), copy.deepcopy(etalonpanel3), copy.deepcopy(etalonpanel4), copy.deepcopy(etalonpanel5), copy.deepcopy(etalonpanel6)]
+
+        elif plot_name=='hcl':
+            dict1 = {'col': 'kpfmet.TEMP',     'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Hallway',      'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.TH_DAILY', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Daily',  'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmet.TH_GOLD',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Gold',   'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmet.U_DAILY',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Daily',   'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.U_GOLD',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Gold',    'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Temperature (C)',
+                             'title': 'Hollow-Cathode Lamp Temperatures',
+                             'legend_frac_size': 0.35}
+            hclpanel = {'panelvars': thispanelvars,
+                        'paneldict': thispaneldict}
+            thispanelvars = [dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'Temperature (C)',
+                             'legend_frac_size': 0.35}
+            hclpanel2 = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict}
+            panel_arr = [copy.deepcopy(hclpanel), copy.deepcopy(hclpanel2)]
             
         elif plot_name=='hk_temp':
-            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK BENCH_C',     'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfexpose.CAMBARREL_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK CAMBARREL_C', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK DET_XTRN_C',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ECHELLE_C',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK BENCH_C',     'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfexpose.CAMBARREL_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK CAMBARREL_C', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK DET_XTRN_C',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ECHELLE_C',   'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
+            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4] #dict4
             thispaneldict = {'ylabel': 'Temperatures (K)',
                              'title': r'Ca H$\&$K Spectrometer Temperatures',
@@ -1394,6 +1430,16 @@ class AnalyzeTimeSeries:
                              'paneldict': thispaneldict}
             panel_arr = [guidingpanel1, guidingpanel2]
 
+        else:
+            self.logger.info('Error: plot_name not specified')
+            return
+        
+        self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
+                                         only_object=only_object, object_like=object_like,
+                                         fig_path=fig_path, show_plot=show_plot, clean=clean)        
+
+
+# to-do: add plots and panels for these variables
 #LFC
 #                'kpfcal.BLUECUTIACT':                  'float',  # A       Blue cut amplifier 0 measured current c- doubl...
 
@@ -1422,33 +1468,12 @@ class AnalyzeTimeSeries:
 #                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
 #                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
 
-#                'kpfmet.SCIENCE_CAL_FIBER_STG':        'float',  # degC    Science_Cal_Fiber_Stg temperature c- double de...
-#                'kpfmet.SCISKY_SCMBLR_CHMBR_EN':       'float',  # degC    SciSky Scrambler Chamber End A c- double degC ...
-#                'kpfmet.SCISKY_SCMBLR_FIBER_EN':       'float',  # degC    SciSky Scrammbler Fiber End B c- double degC {...
-#                'kpfmet.SIMCAL_FIBER_STG':             'float',  # degC    SimCal_Fiber_Stg temperature c- double degC {%...
-#                'kpfmet.SKYCAL_FIBER_STG':             'float',  # degC    SkyCal_Fiber_Stg temperature c- double degC {%...
-#                'kpfmet.TEMP':                         'float',  # degC    Vaisala Temperature c- double degC {%.3f}
-#                'kpfmet.TH_DAILY':                     'float',  # degC    Th_daily temperature c- double degC {%.1f}
-#                'kpfmet.TH_GOLD':                      'float',  # degC    Th_gold temperature c- double degC {%.1f}
-#                'kpfmet.U_DAILY':                      'float',  # degC    U_daily temperature c- double degC {%.1f}
-#                'kpfmet.U_GOLD':                       'float',  # degC    U_gold temperature c- double degC {%.1f}
-
-#GREENTRT  46.804                                      Green CCD read time [sec]
-#REDTRT    46.839                                      Red CCD read time [sec]
-
 #GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
 #GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
 
 #MOONSEP   55.0                                        Separation between Moon and target star (deg)
 #SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
 
-        else:
-            self.logger.info('Error: plot_name not specified')
-            return
-        
-        self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
-                                         only_object=only_object, object_like=object_like,
-                                         fig_path=fig_path, show_plot=show_plot, clean=clean)        
 
 # to-do make a histogram of this keyword
 #DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
@@ -1477,15 +1502,17 @@ class AnalyzeTimeSeries:
             return        
         
         plots = {
-            "p1": {"plot_name": "chamber_temp",        "subdir": "Chamber",  },
-            "p2": {"plot_name": "chamber_temp_detail", "subdir": "Chamber",  },
-            "p3": {"plot_name": "ccd_readnoise",       "subdir": "CCDs",     },
-            "p4": {"plot_name": "ccd_dark_current",    "subdir": "CCDs",     },
-            "p5": {"plot_name": "lfc",                 "subdir": "Cal",      },
-            "p6": {"plot_name": "etalon",              "subdir": "Cal",      },
-            "p7": {"plot_name": "hk_temp",             "subdir": "HK",       },
-            "p8": {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
-            "p9": {"plot_name": "guiding",             "subdir": "Observing",},
+            "p1a":  {"plot_name": "chamber_temp",        "subdir": "Chamber",  },
+            "p1b":  {"plot_name": "chamber_temp_detail", "subdir": "Chamber",  },
+            "p1c":  {"plot_name": "fibers",              "subdir": "Chamber",  },
+            "p2a":  {"plot_name": "ccd_readnoise",       "subdir": "CCDs",     },
+            "p2b":  {"plot_name": "ccd_dark_current",    "subdir": "CCDs",     },
+            "p2c":  {"plot_name": "ccd_readspeed",       "subdir": "CCDs",     },
+            "p2d":  {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
+            "p3a":  {"plot_name": "lfc",                 "subdir": "Cal",      },
+            "p3b":  {"plot_name": "etalon",              "subdir": "Cal",      },
+            "p4":   {"plot_name": "hk_temp",             "subdir": "HK",       },
+            "p4":   {"plot_name": "guiding",             "subdir": "Observing",},
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
