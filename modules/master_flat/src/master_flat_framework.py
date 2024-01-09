@@ -6,6 +6,8 @@ import configparser as cp
 from datetime import datetime, timezone
 from scipy.ndimage import gaussian_filter
 from scipy.stats import mode
+from astropy.io import fits
+import re
 
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
@@ -122,8 +124,10 @@ class MasterFlatFramework(KPF0_Primitive):
         self.smoothlamppattern_path = self.action.args[7]
         self.ordermask_path = self.action.args[8]
 
+        self.flat_object = 'autocal-flat-all'
+
         self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
-        self.imtype_values_str = ['Flatlamp','autocal-flat-all']
+        self.imtype_values_str = ['Flatlamp',self.flat_object]
 
         try:
             self.module_config_path = context.config_path['master_flat']
@@ -225,13 +229,48 @@ class MasterFlatFramework(KPF0_Primitive):
             exp_time_list.append(exp_time)
             self.logger.debug('flat_file_path,exp_time = {},{}'.format(flat_file_path,exp_time))
 
-        tester = KPF0.from_fits(all_flat_files[0])
+
+        # Ensure prototype FITS header for product file has matching OBJECT and contains both
+        # GRNAMPS and REDAMPS keywords (indicating that the data exist).
+
+        for flat_file_path in (all_flat_files):
+
+            tester = KPF0.from_fits(flat_file_path)
+            tester_object = tester.header['PRIMARY']['OBJECT']
+
+            if tester_object == self.flat_object:
+
+                try:
+                    tester_grnamps = tester.header['PRIMARY']['GRNAMPS']
+                except KeyError as err:
+                    continue
+
+                try:
+                    tester_redamps = tester.header['PRIMARY']['REDAMPS']
+                except KeyError as err:
+                    continue
+
+                self.logger.info('Prototype FITS header from {}'.format(flat_file_path))
+
+                break
+
+            else:
+
+                tester = None
+
+        if tester is None:
+            master_flat_exit_code = 6
+            exit_list = [master_flat_exit_code,master_flat_infobits]
+            return Arguments(exit_list)
+
+
         del_ext_list = []
         for i in tester.extensions.keys():
             if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'CA_HK' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
                 del_ext_list.append(i)
         master_holder = tester
 
+        filenames_kept = {}
         n_frames_kept = {}
         mjd_obs_min = {}
         mjd_obs_max = {}
@@ -240,6 +279,7 @@ class MasterFlatFramework(KPF0_Primitive):
             self.logger.debug('Loading flat data, ffi = {}'.format(ffi))
             keep_ffi = 0
 
+            filenames_kept_list = []
             frames_data = []
             frames_data_exptimes = []
             frames_data_mjdobs = []
@@ -271,6 +311,7 @@ class MasterFlatFramework(KPF0_Primitive):
                 self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
                 if n_dims == 2:       # Check if valid data extension
                      keep_ffi = 1
+                     filenames_kept_list.append(all_flat_files[i])
                      frames_data.append(obj[ffi])
                      frames_data_exptimes.append(exp_time)
                      frames_data_mjdobs.append(mjd_obs)
@@ -289,7 +330,7 @@ class MasterFlatFramework(KPF0_Primitive):
             if keep_ffi == 0:
                 self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
                 del_ext_list.append(ffi)
-                break
+                continue
 
             frames_data = np_frames_data - np_bias_data      # Subtract master bias.
 
@@ -299,6 +340,14 @@ class MasterFlatFramework(KPF0_Primitive):
             n_frames = (np.shape(frames_data))[0]
             self.logger.debug('Number of frames in stack = {}'.format(n_frames))
 
+            # Skip extension if number of frames to stack is less than 2.
+
+            if n_frames < 2:
+                self.logger.debug('n_frames < 2 for ffi,n_frames = {},{}'.format(ffi,n_frames))
+                del_ext_list.append(ffi)
+                continue
+
+            filenames_kept[ffi] = filenames_kept_list
             n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
@@ -452,10 +501,6 @@ class MasterFlatFramework(KPF0_Primitive):
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 
-        # Add informational keywords to FITS header.
-
-        master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
-
         # Remove confusing or non-relevant keywords, if existing.
 
         try:
@@ -478,6 +523,23 @@ class MasterFlatFramework(KPF0_Primitive):
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of flat observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of flat observations')
+
+            filename_match_bias = re.match(r".+/(kpf_.+\.fits)", self.masterbias_path)
+            try:
+                masterbias_path_filename_only = filename_match_bias.group(1)
+            except:
+                masterbias_path_filename_only = self.masterbias_path
+
+            master_holder.header[ffi]['INPBIAS'] = masterbias_path_filename_only
+
+            filename_match_dark = re.match(r".+/(kpf_.+\.fits)", self.masterdark_path)
+            try:
+                masterdark_path_filename_only = filename_match_dark.group(1)
+            except:
+                masterdark_path_filename_only = self.masterdark_path
+
+            master_holder.header[ffi]['INPDARK'] = masterdark_path_filename_only
+
             datetimenow = datetime.now(timezone.utc)
             createdutc = datetimenow.strftime("%Y-%m-%dT%H:%M:%SZ")
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-flat creation')
@@ -502,6 +564,36 @@ class MasterFlatFramework(KPF0_Primitive):
             if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
                 master_holder.header[ffi]['ORDRMASK'] = self.ordermask_path
                 master_holder.header[ffi]['LAMPPATT'] = self.smoothlamppattern_path
+
+            n_filenames_kept = len(filenames_kept[ffi])
+            for i in range(0, n_filenames_kept):
+                input_filename_keyword = 'INFL' + str(i)
+
+                filename_match = re.match(r".+/(KP.+\.fits)", filenames_kept[ffi][i])
+
+                try:
+                    filename_for_header = filename_match.group(1)
+                except:
+                    filename_for_header = filenames_kept[ffi][i]
+
+                master_holder.header[ffi][input_filename_keyword] = filename_for_header
+
+        # Clean up PRIMARY header.
+        #keep_cards = ['SIMPLE','BITPIX','NAXIS','EXTEND','EXTNAME','OBJECT','IMTYPE',
+        #              'SCI-OBJ','SKY-OBJ','CAL-OBJ','GRNAMPS','REDAMPS','EXPTIME',
+        #              'INSTRUME','GREEN','RED','CA_HK','TARGNAME','TARGRV']
+        #primary_hdu = fits.PrimaryHDU()
+        #for keep_card in keep_cards:
+        #    try:
+        #        primary_hdu.header[keep_card] = master_holder.header['PRIMARY'][keep_card]
+        #    except:
+        #        self.logger.debug('Not found in PRIMARY header: keep_card = {}'.format(keep_card))
+        #        pass
+        #master_holder.header['PRIMARY'] = primary_hdu.header
+
+        # Add informational to FITS header.  This is the only way I know of to keep the keyword comment.
+
+        master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
 
         master_holder.to_fits(self.masterflat_path)
 
