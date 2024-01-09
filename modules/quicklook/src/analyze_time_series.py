@@ -936,28 +936,32 @@ class AnalyzeTimeSeries:
                 t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
-                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4))
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
-                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4))
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) < 32:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
-                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=5, min_n_ticks=4))
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
             else:
                 t = df['DATE-MID'] # dates
                 xtitle = 'Date'
                 axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=4, min_n_ticks=9))
+                #axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=5, min_n_ticks=4))
+                axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
             if 'title' in thispanel['paneldict']:
                 axs[0].set_title(thispanel['paneldict']['title'], fontsize=14)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
+            if 'yscale' in thispanel['paneldict']:
+                if thispanel['paneldict']['yscale'] == 'log':
+                    axs[p].set_yscale('log')
             makelegend = True
             if 'nolegend' in thispanel['paneldict']:
                 if (thispanel['paneldict']['nolegend']).lower() == 'true':
@@ -1117,7 +1121,7 @@ class AnalyzeTimeSeries:
                                 'paneldict': thispaneldict}
             
             thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperatures (K)',
-                             'title': 'KPF Temperatures', 
+                             'title': 'KPF Spectrometer Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1164,6 +1168,7 @@ class AnalyzeTimeSeries:
                 
             thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, ]
             thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperatures (K)',
+                             'title': 'KPF Spectrometer Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1209,7 +1214,7 @@ class AnalyzeTimeSeries:
             panel_arr = [readnoisepanel]
         
         elif plot_name=='ccd_dark_current':
-            # Green CCD panel
+            # Green CCD panel - Dark current
             dict1 = {'col': 'FLXCOLLG', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict2 = {'col': 'FLXECHG',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             dict3 = {'col': 'FLXREG1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
@@ -1225,7 +1230,7 @@ class AnalyzeTimeSeries:
             greenpanel = {'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
-            # Red CCD panel
+            # Red CCD panel - Dark current
             dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
@@ -1240,6 +1245,38 @@ class AnalyzeTimeSeries:
             redpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             
+            # Green CCD panel - ion pump current
+            dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Green CCD\nIon Pump current [A]',
+                             'yscale': 'log',
+                             'legend_frac_size': 0.30}
+            greenpanel_ionpump = {'panelvars': thispanelvars,
+                                  'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'Green CCD\nIon Pump current [A]',
+                             'yscale': 'log',
+                             'legend_frac_size': 0.30}
+            greenpanel_ionpump2 = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            
+            # Red CCD panel - ion pump current
+            dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Red CCD\nIon Pump current [A]',
+                             'yscale': 'log',
+                             'legend_frac_size': 0.30}
+            redpanel_ionpump = {'panelvars': thispanelvars,
+                                'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'Red CCD\nIon Pump current [A]',
+                             'yscale': 'log',
+                             'legend_frac_size': 0.30}
+            redpanel_ionpump2 = {'panelvars': thispanelvars,
+                                'paneldict': thispaneldict}
+            
             # Amplifier glow panel
             dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
@@ -1251,8 +1288,8 @@ class AnalyzeTimeSeries:
             amppanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             
-            panel_arr = [greenpanel, redpanel, amppanel]        
-
+            panel_arr = [greenpanel, redpanel, greenpanel_ionpump, greenpanel_ionpump2, redpanel_ionpump, redpanel_ionpump2, amppanel]
+            
         elif plot_name=='ccd_controller':
             dict1 = {'col': 'kpfred.BPLANE_TEMP',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Backplane',          'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfred.BRD10_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 10 (Driver)',  'marker': '.', 'linewidth': 0.5}}
@@ -1292,23 +1329,45 @@ class AnalyzeTimeSeries:
                         'paneldict': thispaneldict}
             panel_arr = [lfcpanel]
 
+        elif plot_name=='etalon':
+            dict1 = {'col': 'ETAV1C1T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 1',  'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'ETAV1C2T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 2',  'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'ETAV1C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 3',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'ETAV1C4T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 4',  'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'Temperature (C)',
+                             'title': 'Etalon Temperatures',
+                             'legend_frac_size': 0.35}
+            etalonpanel = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+
+            thispanelvars2 = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
+                             'title': 'Etalon Temperatures',
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.35}
+            etalonpanel2 = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+            panel_arr = [copy.deepcopy(etalonpanel), copy.deepcopy(etalonpanel2)]
+            
         elif plot_name=='hk_temp':
-            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK BENCH_C',         'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK BENCH_C',     'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfexpose.CAMBARREL_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK CAMBARREL_C', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK DET_XTRN_C',    'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ECHELLE_C',       'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ENCLOSURE_C',     'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK RACK_AIR_C',      'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2, dict3, dict5, dict6, ] #dict4
+            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK DET_XTRN_C',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ECHELLE_C',   'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
+            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4] #dict4
             thispaneldict = {'ylabel': 'Temperatures (K)',
-                             'title': 'HK Temperatures?',
+                             'title': r'Ca H$\&$K Spectrometer Temperatures',
                              'legend_frac_size': 0.35}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
-            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, ] #dict4
+            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4] #dict4
             thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
-                             'title': 'HK Temperatures?',
+                             'title': r'Ca H$\&$K Spectrometer Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
             hkpanel2 = {'panelvars': thispanelvars2,
@@ -1337,11 +1396,6 @@ class AnalyzeTimeSeries:
 
 #LFC
 #                'kpfcal.BLUECUTIACT':                  'float',  # A       Blue cut amplifier 0 measured current c- doubl...
-
-#                'kpfgreen.COL_CURR':                   'float',  # A       Current ion pump current c- double A {%.3e}
-#                'kpfgreen.ECH_CURR':                   'float',  # A       Current ion pump current c- double A {%.3e}
-#                'kpfred.COL_CURR':                     'float',  # A       Current ion pump current c- double A {%.3e}
-#                'kpfred.ECH_CURR':                     'float',  # A       Current ion pump current c- double A {%.3e}
 
 #                'kpf_hk.COOLTARG':                     'float',  # degC    temperature target c2 int degC
 #                'kpf_hk.CURRTEMP':                     'float',  # degC    current temperature c- double degC {%.2f}
@@ -1379,14 +1433,6 @@ class AnalyzeTimeSeries:
 #                'kpfmet.U_DAILY':                      'float',  # degC    U_daily temperature c- double degC {%.1f}
 #                'kpfmet.U_GOLD':                       'float',  # degC    U_gold temperature c- double degC {%.1f}
 
-#                'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
-#                'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
-#                'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
-#                'ETAV1C4T': 'float', # Etalon Vescent 1 Channel 4 temperature
-#                'ETAV2C3T': 'float', # Etalon Vescent 2 Channel 3 temperature
-
-#DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
-
 #GREENTRT  46.804                                      Green CCD read time [sec]
 #REDTRT    46.839                                      Red CCD read time [sec]
 
@@ -1403,6 +1449,9 @@ class AnalyzeTimeSeries:
         self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
                                          only_object=only_object, object_like=object_like,
                                          fig_path=fig_path, show_plot=show_plot, clean=clean)        
+
+# to-do make a histogram of this keyword
+#DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
 
 
     def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
@@ -1433,9 +1482,10 @@ class AnalyzeTimeSeries:
             "p3": {"plot_name": "ccd_readnoise",       "subdir": "CCDs",     },
             "p4": {"plot_name": "ccd_dark_current",    "subdir": "CCDs",     },
             "p5": {"plot_name": "lfc",                 "subdir": "Cal",      },
-            "p6": {"plot_name": "hk_temp",             "subdir": "HK",       },
-            "p7": {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
-            "p8": {"plot_name": "guiding",             "subdir": "Observing",},
+            "p6": {"plot_name": "etalon",              "subdir": "Cal",      },
+            "p7": {"plot_name": "hk_temp",             "subdir": "HK",       },
+            "p8": {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
+            "p9": {"plot_name": "guiding",             "subdir": "Observing",},
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
