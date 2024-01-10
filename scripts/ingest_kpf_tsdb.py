@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import sys
+import argparse
 from  modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-def main():
+def main(start_date, end_date, db_path):
     """
     Script Name: ingest_kpf_tsdb.py
    
@@ -14,19 +14,11 @@ def main():
       --help  Display this message
    
     Usage:
-      python kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files] [--print_files_2D] [--print_files_L1] [--print_files_L2] [--touch_missing] [--check_version]
+      ./ingest_kpf_tsdb.py YYYYMMDD YYYYMMDD dbname.db
    
     Example:
-      python kpf_processing_progress.sh 20231114 20231231 --print_files
+      ./ingest_kpf_tsdb.py 20231201 20240101 kpfdb.db
     """
-
-    if len(sys.argv) > 4:
-        print("Usage: python add_to_tsdb.py start_date end_date db_path")
-        sys.exit(1)
-
-    start_date = sys.argv[1] # e.g., 20230501
-    end_date   = sys.argv[2] # e.g., 20230601
-    db_path    = sys.argv[3] # e.g., kpfdb.db
 
     myTS = AnalyzeTimeSeries(db_path=db_path)
     myTS.print_db_status()
@@ -34,4 +26,10 @@ def main():
     myTS.print_db_status()
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description='Ingest KPF files into an observational database.')
+    parser.add_argument('start_date', type=str, help='Start date in YYYYMMDD format, e.g. 20231201')
+    parser.add_argument('end_date', type=str, help='End date in YYYYMMDD format, e.g. 20240101')
+    parser.add_argument('db_path', type=str, help='path to database file, e.g. kpfdb.db')
+
+    args = parser.parse_args()
+    main(args.start_date, args.end_date, args.db_path)
