@@ -21,20 +21,30 @@ class AnalyzeTimeSeries:
 
     """
     Description:
-        This class contains ....
+        This class contains a set of methods to create a database of data associated 
+        with KPF observations, as well as methods to ingest data, query the database, 
+        print data, and made time series plots.  An elaborate set of standard time series 
+        plots can be made over intervals of days/months/years/decades spanning a date 
+        range.  A related script 'ingest_kpf_ts_db.py' can be used to ingest data from 
+        the command line.
 
     Arguments:
-        TBD
+        db_path (string) - path to database file
+        base_dir (string) - L0 directory
+        drop (boolean) - if true, the database at db_path is dropped at startup
+        logger (logger object) - a logger object can be passed, or one will be created
 
     Attributes:
-        TBD
+        L0_keyword_types   (array) - dictionary specifying data types for L0 header keywords
+        D2_keyword_types   (array) - dictionary specifying data types for 2D header keywords
+        L1_keyword_types   (array) - dictionary specifying data types for L1 header keywords
+        L2_keyword_types   (array) - dictionary specifying data types for L2 header keywords
+        L0_telemetry_types (array) - dictionary specifying data types for L0 telemetry keywords
         
     To-do:
-        * add date range to title
-        * documentation
+        * optimize ingestion efficiency
         * make plots using only_object and object_like
         * augment statistics in legends (median and stddev upon request)
-        * optimize ingestion efficiency
         * determine file modification times with a single call, if possible
         * check that updated rows overwrite old results
         * Add the capability of using Jump queries to find files for ingestion
@@ -99,14 +109,14 @@ class AnalyzeTimeSeries:
         
         # Define indexed columns
         index_commands = [
-            ('CREATE UNIQUE INDEX idx_ObsID ON kpfdb ("ObsID");', 'idx_ObsID'),
+            ('CREATE UNIQUE INDEX idx_ObsID       ON kpfdb ("ObsID");',       'idx_ObsID'),
+            ('CREATE UNIQUE INDEX idx_L0_filename ON kpfdb ("L0_filename");', 'idx_L0_filename'),
+            ('CREATE UNIQUE INDEX idx_D2_filename ON kpfdb ("D2_filename");', 'idx_D2_filename'),
+            ('CREATE UNIQUE INDEX idx_L1_filename ON kpfdb ("L1_filename");', 'idx_L1_filename'),
+            ('CREATE UNIQUE INDEX idx_L2_filename ON kpfdb ("L2_filename");', 'idx_L2_filename')
             ('CREATE INDEX idx_FIUMODE ON kpfdb ("FIUMODE");', 'idx_FIUMODE'),
             ('CREATE INDEX idx_OBJECT ON kpfdb ("OBJECT");', 'idx_OBJECT'),
             ('CREATE INDEX idx_DATE_MID ON kpfdb ("DATE-MID");', 'idx_DATE_MID'),
-            ('CREATE INDEX idx_L0_filename ON kpfdb ("L0_filename");', 'idx_L0_filename'),
-            ('CREATE INDEX idx_D2_filename ON kpfdb ("D2_filename");', 'idx_D2_filename'),
-            ('CREATE INDEX idx_L1_filename ON kpfdb ("L1_filename");', 'idx_L1_filename'),
-            ('CREATE INDEX idx_L2_filename ON kpfdb ("L2_filename");', 'idx_L2_filename')
         ]
         
         # Iterate and create indexes if they don't exist
@@ -422,7 +432,6 @@ class AnalyzeTimeSeries:
         except (ImportError, AttributeError):
             return False  # IPython not installed
         return True
-
 
 
     def is_file_updated(self, file_path, filename, level):
@@ -1115,7 +1124,6 @@ class AnalyzeTimeSeries:
             dict5 = {'col': 'kpfmet.CHAMBER_EXT_TOP',   'plot_type': 'plot',    'unit': 'K', 'plot_attr': {'label': r'Chamber Exterior Top', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
-                             'title': 'KPF Temperatures',
                              'legend_frac_size': 0.3}
             halltemppanel = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
@@ -1128,7 +1136,6 @@ class AnalyzeTimeSeries:
             
             thispanelvars3 = [dict2, dict3, dict4]
             thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperature (K)',
-                             'title': 'KPF Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
             halltemppanel3 = {'panelvars': thispanelvars3,
@@ -1157,7 +1164,7 @@ class AnalyzeTimeSeries:
             dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
             dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict5, dict10, dict14, dict20, dict15, dict21, dict22]
-            thispaneldict = {'ylabel': 'Spectrometer\nTemperatures' + ' ($^{\circ}$C)',
+            thispaneldict = {'ylabel': 'Spectrometer\nTemperature' + ' ($^{\circ}$C)',
                              'nolegend': 'false',
                              'legend_frac_size': 0.3}
             chambertemppanel = {'panelvars': thispanelvars,
@@ -1198,7 +1205,6 @@ class AnalyzeTimeSeries:
                 
             thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, ]
             thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperature (K)',
-                             'title': 'KPF Spectrometer Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1224,6 +1230,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict10, dict9, ]
             thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperature (K)',
                              'nolegend': 'false', 
+                             'title': 'KPF Spectrometer Temperatures', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
             chambertemppanel4 = {'panelvars': thispanelvars,
@@ -1262,7 +1269,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Read Noise [e-]',
-                             'title': 'Read Noise',
+                             'title': 'CCD Read Noise',
                              'legend_frac_size': 0.25}
             readnoisepanel = {'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
@@ -1279,15 +1286,14 @@ class AnalyzeTimeSeries:
             dict7 = {'col': 'FLXREG5G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
             dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]',
-                             'title': 'Dark Current',
-                             'legend_frac_size': 0.30}
+            thispaneldict = {'ylabel': 'Green CCD\nDark Current [e-/hr]',
+                             'legend_frac_size': 0.35}
             greenpanel = {'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
             
             # Red CCD panel - Dark current
-            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
@@ -1295,43 +1301,42 @@ class AnalyzeTimeSeries:
             dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]',
-                             'legend_frac_size': 0.30}
+            thispaneldict = {'ylabel': 'Red CCD\nDark Current [e-/hr]',
+                             'legend_frac_size': 0.35}
             redpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             
             # Green CCD panel - ion pump current
-            dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Green CCD\nIon Pump current [A]',
+            thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
                              'yscale': 'log',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.35}
             greenpanel_ionpump = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Green CCD\nIon Pump current [A]',
+            thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
                              'yscale': 'log',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.35}
             greenpanel_ionpump2 = {'panelvars': thispanelvars,
                                    'paneldict': thispaneldict}
             
             # Red CCD panel - ion pump current
-            dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Red CCD\nIon Pump current [A]',
+            thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
                              'yscale': 'log',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.35}
             redpanel_ionpump = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Red CCD\nIon Pump current [A]',
+            thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
                              'yscale': 'log',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.35}
             redpanel_ionpump2 = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
-
 # to do: add kpfred.COL_PRESS (green, too)
 #            kpfred.ECH_PRESS
 
@@ -1341,8 +1346,9 @@ class AnalyzeTimeSeries:
             dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'CCD Amplifier\nDark current [e-/hr]',
-                             'legend_frac_size': 0.30}
+            thispaneldict = {'ylabel': 'CCD Amplifier\nDark Current [e-/hr]',
+                             'title': 'CCD Dark Current',
+                             'legend_frac_size': 0.35}
             amppanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             panel_arr = [greenpanel, redpanel, greenpanel_ionpump, greenpanel_ionpump2, redpanel_ionpump, redpanel_ionpump2, amppanel]
@@ -1353,8 +1359,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             thispanelvars = [dict2, dict1, ]
             thispaneldict = {'ylabel': 'Green CCD\nTemperature (C)',
-                             'title': 'CCD Temperatures',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.25}
             green_ccd = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict}
 
@@ -1362,7 +1367,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars2 = [dict2, dict1, ]
             thispaneldict2 = {'ylabel': 'Red CCD\nTemperature (C)',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.25}
             red_ccd = {'panelvars': thispanelvars2,
                        'paneldict': thispaneldict2}
 
@@ -1371,7 +1376,7 @@ class AnalyzeTimeSeries:
             thispanelvars3 = [dict2, dict1, ]
             thispaneldict3 = {'ylabel': 'Green CCD\n' + r'$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.25}
             green_ccd2 = {'panelvars': thispanelvars3,
                           'paneldict': thispaneldict3}
 
@@ -1379,8 +1384,9 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars4 = [dict2, dict1, ]
             thispaneldict4 = {'ylabel': 'Red CCD\n' + r'$\Delta$Temperature (K)',
+                             'title': 'CCD Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.30}
+                             'legend_frac_size': 0.25}
             red_ccd2 = {'panelvars': thispanelvars4,
                         'paneldict': thispaneldict4}
 
@@ -1431,7 +1437,6 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict1 = {'ylabel': 'Intensity (counts)',
-                              'title': 'LFC Diagnostics',
                               'legend_frac_size': 0.35}
             lfcpanel1 = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict1}
@@ -1442,7 +1447,7 @@ class AnalyzeTimeSeries:
             lfcpanel2 = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict2}
 
-            dict1 = {'col': 'kpfcal.BLUECUTIACT', 'plot_type': 'scatter', 'unit': 'A', 'plot_attr': {'label': 'Blue Cut Amp. Current',  'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfcal.BLUECUTIACT', 'plot_type': 'scatter', 'unit': 'A', 'plot_attr': {'label': 'Blue Cut Amp.',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict3 = {'ylabel': 'Current (A)',
                               'title': 'LFC Diagnostics',
@@ -1459,9 +1464,9 @@ class AnalyzeTimeSeries:
             dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'purple'}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'Temperature (C)',
-                             'title': 'Etalon Temperatures',
                              'legend_frac_size': 0.35}
             thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
+                             'title': 'Etalon Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
             etalonpanel = {'panelvars': thispanelvars,
@@ -1479,19 +1484,19 @@ class AnalyzeTimeSeries:
             panel_arr = [copy.deepcopy(etalonpanel), copy.deepcopy(etalonpanel2), copy.deepcopy(etalonpanel3), copy.deepcopy(etalonpanel4), copy.deepcopy(etalonpanel5), copy.deepcopy(etalonpanel6)]
 
         elif plot_name=='hcl':
-            dict1 = {'col': 'kpfmet.TEMP',     'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Hallway',      'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.TH_DAILY', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Daily',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.TH_GOLD',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Gold',   'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.U_DAILY',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Daily',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.U_GOLD',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Gold',    'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'kpfmet.TEMP',     'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Hallway',      'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpfmet.TH_DAILY', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Daily',  'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmet.TH_GOLD',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Gold',   'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmet.U_DAILY',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Daily',   'marker': '.', 'linewidth': 0.5}}
+            dict5 = {'col': 'kpfmet.U_GOLD',   'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Gold',    'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Temperature (C)',
-                             'title': 'Hollow-Cathode Lamp Temperatures',
                              'legend_frac_size': 0.35}
             hclpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             thispanelvars = [dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'Temperature (C)',
+                             'title': 'Hollow-Cathode Lamp Temperatures',
                              'legend_frac_size': 0.35}
             hclpanel2 = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict}
@@ -1505,8 +1510,7 @@ class AnalyzeTimeSeries:
             dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
-            thispaneldict = {'ylabel': 'Spectrometer\nTemperatures (K)',
-                             'title': 'Ca H&K Spectrometer Temperatures',
+            thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
                              'legend_frac_size': 0.35}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
@@ -1521,13 +1525,14 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'kpf_hk.COOLTARG', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Target Temp.', 'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict1, dict2] 
-            thispaneldict3 = {'ylabel': 'Detector\nTemperatures (K)',
+            thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
                               'legend_frac_size': 0.35}
             hkpanel3 = {'panelvars': thispanelvars3,
                         'paneldict': thispaneldict3}
 
             thispanelvars4 = [dict1, dict2]
             thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
+                             'title': 'Ca H&K Spectrometer Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
             hkpanel4 = {'panelvars': thispanelvars4,
@@ -1540,7 +1545,6 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'kpfmot.AGITSPD', 'plot_type': 'scatter', 'unit': 'counts/sec', 'plot_attr': {'label': 'Agitator Speed', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars1 = [dict1]
             thispaneldict1 = {'ylabel': 'Agitator Speed\n(counts/sec)',
-                              'title': r'KPF Agitator',
                               'legend_frac_size': 0.35}
             agitatorpanel1 = {'panelvars': thispanelvars1,
                               'paneldict': thispaneldict1}
@@ -1560,6 +1564,7 @@ class AnalyzeTimeSeries:
             dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars4 = [dict5]
             thispaneldict4 = {'ylabel': 'Outlet A1 Power\n(mA)',
+                              'title': r'KPF Agitator',
                               'legend_frac_size': 0.35}
             agitatorpanel4 = {'panelvars': thispanelvars4,
                               'paneldict': thispaneldict4}
@@ -1572,7 +1577,6 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'GDRYBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Guiding Errors (mas)',
-                             'title': 'Guiding',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.35}
             guidingpanel1 = {'panelvars': thispanelvars,
@@ -1636,7 +1640,6 @@ class AnalyzeTimeSeries:
             PNG plot in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
-        
         if not isinstance(start_date, datetime):
             self.logger.error("'start_date' must be a datetime object.")
             return        
@@ -1683,9 +1686,9 @@ class AnalyzeTimeSeries:
                 savedir = fig_dir + plots[p]["subdir"] + '/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 fig_path = savedir + filename
+                self.logger.info('Making QL time series plot ' + fig_path)
             else:
                 fig_path = None
-            self.logger.info('Making QL time series plot ' + fig_path)
             self.plot_standard_time_series(plot_name, start_date=start_date, end_date=end_date, 
                                            fig_path=fig_path, show_plot=show_plot, clean=clean)
 
@@ -1727,16 +1730,21 @@ class AnalyzeTimeSeries:
         self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
         for day in days:
             try:
-                savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
-                print(savedir)
-                self.plot_all_quicklook(day, interval='day', fig_dir=savedir)
+                if base_dir != None:
+                    savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
+                else:
+                    savedir = None
+                self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
             except Exception as e:
                 self.logger.error(e)
 
         self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
         for month in months:
             try:
-                savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
+                if base_dir != None:
+                    savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
+                else:
+                    savedir = None
                 self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
             except Exception as e:
                 self.logger.error(e)
@@ -1744,7 +1752,10 @@ class AnalyzeTimeSeries:
         self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
         for year in years:
             try:
-                savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
+                if base_dir != None:
+                    savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
+                else:
+                    savedir = None
                 self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
             except Exception as e:
                 self.logger.error(e)
@@ -1752,7 +1763,10 @@ class AnalyzeTimeSeries:
         self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
         for decade in decades:
             try:
-                savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
+                if base_dir != None:
+                    savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
+                else:
+                    savedir = None
                 self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
             except Exception as e:
                 self.logger.error(e)
