@@ -96,22 +96,41 @@ class AnalyzeTimeSeries:
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
         create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
+        
+        # Define indexed columns
+        index_commands = [
+            ('CREATE UNIQUE INDEX idx_ObsID ON kpfdb ("ObsID");', 'idx_ObsID'),
+            ('CREATE INDEX idx_FIUMODE ON kpfdb ("FIUMODE");', 'idx_FIUMODE'),
+            ('CREATE INDEX idx_OBJECT ON kpfdb ("OBJECT");', 'idx_OBJECT'),
+            ('CREATE INDEX idx_DATE_MID ON kpfdb ("DATE-MID");', 'idx_DATE_MID'),
+            ('CREATE INDEX idx_L0_filename ON kpfdb ("L0_filename");', 'idx_L0_filename'),
+            ('CREATE INDEX idx_D2_filename ON kpfdb ("D2_filename");', 'idx_D2_filename'),
+            ('CREATE INDEX idx_L1_filename ON kpfdb ("L1_filename");', 'idx_L1_filename'),
+            ('CREATE INDEX idx_L2_filename ON kpfdb ("L2_filename");', 'idx_L2_filename')
+        ]
+        
+        # Iterate and create indexes if they don't exist
+        for command, index_name in index_commands:
+            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}';")
+            if cursor.fetchone() is None:
+                cursor.execute(command)
+                
         conn.commit()
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date, end_date, batch_size=25):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=25):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
         To-do: scan for observations that have already been ingested at a higher level.
         """
-        self.logger.info("Adding to database between " + start_date + " to " + end_date)
+        self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
-        sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date > end_date)
+        sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date_str > end_date_str)
         filtered_dir_paths = [
             dir_path for dir_path in sorted_dir_paths
-            if start_date <= os.path.basename(dir_path) <= end_date
+            if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
         #t1 = tqdm_notebook(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
@@ -884,7 +903,9 @@ class AnalyzeTimeSeries:
                                     clean=False, fig_path=None, show_plot=False):
         """
         Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
-        attributes are stored in an array of dictionaries called 'panel_arr'.
+        attributes are stored in an array of dictionaries called 'panel_arr'.  
+        The method plot_standard_time_series() provides several examples of using 
+        this method.
 
         Args:
             panel_dict (array of dictionaries) - each dictionary in the array has keys:
@@ -907,36 +928,9 @@ class AnalyzeTimeSeries:
                 object_like (string or list of strings) - partial object names to search for
                 on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
 
-
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
-        
-        Example:
-            myTS = AnalyzeTimeSeries()
-            
-            # Green CCD panel
-            dict1 = {'col': 'FLXCOLLG', 'plot_type' 'scatter', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXECHG',  'plot_type' 'scatter', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'forestgreen'}}
-            dict3 = {'col': 'FLXREG1G', 'plot_type' 'scatter', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightgreen'}}
-            dict4 = {'col': 'FLXREG2G', 'plot_type' 'scatter', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightgreen'}}
-            thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'Green CCD\nDark current [e-/hr]'}
-            greenpanel = {'panelvars': thispanelvars,
-                          'paneldict': thispaneldict}
-            # Red CCD panel
-            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'scatter', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'color': 'darkred'}}
-            dict2 = {'col': 'FLXECHR',  'plot_type': 'scatter', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'color': 'firebrick'}}
-            dict3 = {'col': 'FLXREG1R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'color': 'lightcoral'}}
-            dict4 = {'col': 'FLXREG2R', 'plot_type': 'scatter', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'color': 'lightcoral'}}
-            thispanelvars = [dict3, dict4, dict1, dict2]
-            thispaneldict = {'ylabel': 'Red CCD\nDark current [e-/hr]'}
-            redpanel = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-            panel_arr = [greenpanel, redpanel]
-            start_date = datetime(2023,11, 1)
-            end_date   = datetime(2023,12, 1)
-            myTS.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, show_plot=True)        
         """
 
         if start_date == None:
@@ -947,6 +941,7 @@ class AnalyzeTimeSeries:
         unique_cols = set()
         unique_cols.add('DATE-MID')
         unique_cols.add('FIUMODE')
+        unique_cols.add('OBJECT')
         for panel in panel_arr:
             for d in panel['panelvars']:
                 col_value = d['col']
@@ -975,11 +970,12 @@ class AnalyzeTimeSeries:
             # add this logic
             #if 'only_object' in thispanel['paneldict']:
             #if 'object_like' in thispanel['paneldict']:
+            thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
                 t = [(date - start_date).total_seconds() /  3600 for date in this_df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
-                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
+                    thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
@@ -1057,7 +1053,7 @@ class AnalyzeTimeSeries:
                                         formatted_std_dev = f"{std_dev:.{decimal_places}f}"
                                         label += ' (' + formatted_std_dev 
                                         if 'unit' in thispanel['panelvars'][i]:
-                                            label += ' ' + thispanel['panelvars'][i]['unit']
+                                            label += ' ' + str(thispanel['panelvars'][i]['unit'])
                                         label += ' rms)'
                             except Exception as e:
                                 self.logger.error(e)
@@ -1241,8 +1237,9 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
             dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'Fiber \n Temperatures' + ' ($^{\circ}$C)',
-                             'legend_frac_size': 0.25}
+            thispaneldict = {'ylabel': 'Temperature' + ' ($^{\circ}$C)',
+                             'title': 'Fiber Temperatures',
+                             'legend_frac_size': 0.30}
             fibertempspanel = {'panelvars': thispanelvars,
                                'paneldict': thispaneldict}
             panel_arr = [fibertempspanel]
@@ -1402,7 +1399,6 @@ class AnalyzeTimeSeries:
 #                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
 #                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
 
-
         elif plot_name=='ccd_controller':
             dict1 = {'col': 'kpfred.BPLANE_TEMP',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Backplane',          'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfred.BRD10_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 10 (Driver)',  'marker': '.', 'linewidth': 0.5}}
@@ -1554,8 +1550,8 @@ class AnalyzeTimeSeries:
                               'legend_frac_size': 0.35}
             agitatorpanel2 = {'panelvars': thispanelvars2,
                               'paneldict': thispaneldict2}
-            dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temperature', 'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmot.AGITMOT_T',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Motor Temperature',   'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temp.', 'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmot.AGITMOT_T',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Motor Temp.',   'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict3, dict4]
             thispaneldict3 = {'ylabel': 'Temperature (C)',
                               'legend_frac_size': 0.35}
@@ -1563,7 +1559,7 @@ class AnalyzeTimeSeries:
                               'paneldict': thispaneldict3}
             dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars4 = [dict5]
-            thispaneldict4 = {'ylabel': 'Outlet A1 Power (mA)',
+            thispaneldict4 = {'ylabel': 'Outlet A1 Power\n(mA)',
                               'legend_frac_size': 0.35}
             agitatorpanel4 = {'panelvars': thispanelvars4,
                               'paneldict': thispaneldict4}
@@ -1656,7 +1652,9 @@ class AnalyzeTimeSeries:
             "p2e":  {"plot_name": "ccd_temp",            "subdir": "CCDs",      },
             "p3a":  {"plot_name": "lfc",                 "subdir": "Cal",       },
             "p3b":  {"plot_name": "etalon",              "subdir": "Cal",       },
-            "p4":   {"plot_name": "hk_temp",             "subdir": "Subsystems",},
+            "p3c":  {"plot_name": "cal",                 "subdir": "Cal",       },
+            "p4a":  {"plot_name": "hk_temp",             "subdir": "Subsystems",},
+            "p4b":  {"plot_name": "agitator",            "subdir": "Subsystems",},
             "p5a":  {"plot_name": "guiding",             "subdir": "Observing", },
             "p5b":  {"plot_name": "seeing",              "subdir": "Observing", },
             "p5c":  {"plot_name": "sun_moon",            "subdir": "Observing", },
@@ -1730,6 +1728,7 @@ class AnalyzeTimeSeries:
         for day in days:
             try:
                 savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
+                print(savedir)
                 self.plot_all_quicklook(day, interval='day', fig_dir=savedir)
             except Exception as e:
                 self.logger.error(e)
