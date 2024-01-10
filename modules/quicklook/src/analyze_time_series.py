@@ -130,7 +130,7 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=25):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=50):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
@@ -328,7 +328,13 @@ class AnalyzeTimeSeries:
         Extract telemetry from the 'TELEMETRY' extension in an KPF L0 file.
         """
         df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
-        df_telemetry = df_telemetry[['keyword', 'average']]
+        try:
+            df_telemetry = df_telemetry[['keyword', 'average']]
+        except:
+            self.logger.info('Bad TELEMETRY extension in: ' + file_path)
+            telemetry_dict = {key: None
+                              for key in keyword_types}
+            return telemetry_dict
         df_telemetry = df_telemetry.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
         df_telemetry.replace({'-nan': np.nan, 'nan': np.nan, -999: np.nan}, inplace=True)
         df_telemetry.set_index("keyword", inplace=True)
