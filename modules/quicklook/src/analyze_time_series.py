@@ -30,14 +30,15 @@ class AnalyzeTimeSeries:
         TBD
         
     To-do:
-        * add check for >0 data points
-        * add titles to plots
+        * add date range to title
         * documentation
+        * make plots using only_object and object_like
         * augment statistics in legends (median and stddev upon request)
         * optimize ingestion efficiency
         * determine file modification times with a single call, if possible
         * check that updated rows overwrite old results
-        * use Jump queries to find files of certain types for ingestion
+        * Add the capability of using Jump queries to find files for ingestion
+        * All for other plot types, e.g. histograms of DRPTAG
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -455,35 +456,55 @@ class AnalyzeTimeSeries:
         self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
 
 
-    def print_selected_columns(self, columns):
+    def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
+                          on_sky=None, start_date=None, end_date=None):
         """
-        Prints specified columns from the database.
-        To-do: add "only_object" and other ways of narrowing the query
+        Prints a pandas dataframe of attributes (specified by column names) for all 
+        observations in the DB. The query can be restricted to observations matching a 
+        particular object name(s).  The query can also be restricted to observations 
+        that are on-sky/off-sky and after start_date and/or before end_date. 
+
+        Args:
+            columns (string or list of strings) - database columns to query
+            only_object (string or list of strings) - object names to include in query
+            object_like (string or list of strings) - partial object names to search for
+            on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
+            false (boolean) - if True, prints the SQL query
+
+        Returns:
+            A printed dataframe of the specified columns matching the constraints.
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        query = f"SELECT {', '.join(columns)} FROM kpfdb"
-        cursor.execute(query)
-        rows = cursor.fetchall()
-        print(' | '.join(columns))
-        print('-' * (len(columns) * 10))  # Adjust the number for formatting
-        for row in rows:
-            print(' | '.join(str(item) for item in row))
-    
-        conn.close()
-
-
-    def display_dataframe_from_db(self, columns, only_object=None):
         conn = sqlite3.connect(self.db_path)
         
         # Enclose column names in double quotes
         quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
-        
-        # Append WHERE clause if only_object is not None
+
+        # Append WHERE clauses
+        where_queries = []
         if only_object is not None:
-            # Use parameterized queries to prevent SQL injection
-            query += " WHERE OBJECT = ?"
+            only_object = [f"OBJECT = '{obj}'" for obj in only_object]
+            or_objects = ' OR '.join(only_object)
+            where_queries.append(f'({or_objects})')
+        if object_like is not None:
+            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
+            or_objects = ' OR '.join(object_like)
+            where_queries.append(f'({or_objects})')
+        if on_sky is not None:
+            if on_sky == True:
+                where_queries.append(f"FIUMODE = 'Observing'")
+            if on_sky == False:
+                where_queries.append(f"FIUMODE = 'Calibration'")
+        if start_date is not None:
+            start_date_txt = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            where_queries.append(f' ("DATE-MID" > "{start_date_txt}")')
+        if end_date is not None:
+            end_date_txt = end_date.strftime('%Y-%m-%d %H:%M:%S')
+            where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
+        if where_queries != []:
+            query += " WHERE " + ' AND '.join(where_queries)
     
         # Execute query
         df = pd.read_sql_query(query, conn, params=(only_object,) if only_object is not None else None)
@@ -491,26 +512,26 @@ class AnalyzeTimeSeries:
         print(df)
 
    
-    def dataframe_from_db(self, columns, only_object=None, object_like=None, 
+    def dataframe_from_db(self, columns, only_object=None, object_like=None, on_sky=None, 
                           start_date=None, end_date=None, verbose=False):
-        '''
+        """
         Returns a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
         particular object name(s).  The query can also be restricted to observations 
-        after start_date and/or before end_date. 
+        that are on-sky/off-sky and after start_date and/or before end_date. 
 
         Args:
             columns (string or list of strings) - database columns to query
             only_object (string or list of strings) - object names to include in query
             object_like (string or list of strings) - partial object names to search for
+            on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
             end_date (datetime object) - only return observations after end_date
             false (boolean) - if True, prints the SQL query
 
         Returns:
-            Pandas dataframe of the specified columns matching the object name and 
-            start_time/end_time constraints.
-        '''
+            Pandas dataframe of the specified columns matching the constraints.
+        """
         
         conn = sqlite3.connect(self.db_path)
         
@@ -528,6 +549,11 @@ class AnalyzeTimeSeries:
             object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
+        if on_sky is not None:
+            if on_sky == True:
+                where_queries.append(f"FIUMODE = 'Observing'")
+            if on_sky == False:
+                where_queries.append(f"FIUMODE = 'Calibration'")
         if start_date is not None:
             start_date_txt = start_date.strftime('%Y-%m-%d %H:%M:%S')
             where_queries.append(f' ("DATE-MID" > "{start_date_txt}")')
@@ -591,6 +617,7 @@ class AnalyzeTimeSeries:
                 'SKY-OBJ':  'string',
                 'SCI-OBJ':  'string',
                 'AGITSTA':  'string',
+                'FIUMODE':  'string', # FIU operating mode - 'Observing' = on-sky
                 'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
                 'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
                 'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
@@ -854,8 +881,7 @@ class AnalyzeTimeSeries:
        
  
     def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
-                                    only_object=None, object_like=None, clean=False,
-                                    fig_path=None, show_plot=False):
+                                    clean=False, fig_path=None, show_plot=False):
         """
         Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
         attributes are stored in an array of dictionaries called 'panel_arr'.
@@ -866,14 +892,21 @@ class AnalyzeTimeSeries:
                     ylabel - text for y-axis label
                 paneldict: a dictionary containing:
                     col: name of DB column to plot
+                    plot_type: 
                     plot_attr: a dictionary containing plot attributes for a scatter plot, 
                         including 'label', 'marker', 'color'
-            only_object (string or list of strings) - object names to include in query
-            object_like (string or list of strings) - partial object names to search for
+                    on_sky: if set to 'True', only on-sky observations will be included; if set to 'False', only calibrations will be included
+                    only_object (not implemented yet): if set, only object names in the keyword's value will be queried
+                    object_like (not implemented yet): if set, partial object names matching the keyword's value will be queried
             start_date (datetime object) - start date for plot
             end_date (datetime object) - end date for plot
             fig_path (string) - set to the path for the file to be generated
             show_plot (boolean) - show the plot in the current environment
+            These are now part of the dictionaries:
+                only_object (string or list of strings) - object names to include in query
+                object_like (string or list of strings) - partial object names to search for
+                on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
+
 
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
@@ -913,11 +946,12 @@ class AnalyzeTimeSeries:
         npanels = len(panel_arr)
         unique_cols = set()
         unique_cols.add('DATE-MID')
+        unique_cols.add('FIUMODE')
         for panel in panel_arr:
             for d in panel['panelvars']:
                 col_value = d['col']
                 unique_cols.add(col_value)
-        df = self.dataframe_from_db(unique_cols, object_like=object_like, only_object=only_object, start_date=start_date, end_date=end_date, verbose=False)
+        df = self.dataframe_from_db(unique_cols, start_date=start_date, end_date=end_date, verbose=False)
         df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
         df = df.sort_values(by='DATE-MID')
         if clean:
@@ -932,31 +966,46 @@ class AnalyzeTimeSeries:
 
         for p in np.arange(npanels):
             thispanel = panel_arr[p]
+            this_df = df.copy(deep=True)
+            if 'on_sky' in thispanel['paneldict']:
+                if (thispanel['paneldict']['on_sky']).lower() == 'true':
+                    this_df = this_df[this_df['FIUMODE'] == 'Observing']
+                elif (thispanel['paneldict']['on_sky']).lower() == 'false':
+                    this_df = this_df[this_df['FIUMODE'] == 'Calibration']
+            # add this logic
+            #if 'only_object' in thispanel['paneldict']:
+            #if 'object_like' in thispanel['paneldict']:
             if abs((end_date - start_date).days) <= 1.2:
-                t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() /  3600 for date in this_df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
-                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 86400 for date in this_df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) < 32:
-                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 86400 for date in this_df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
             else:
-                t = df['DATE-MID'] # dates
+                t = this_df['DATE-MID'] # dates
                 xtitle = 'Date'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-                #axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=5, min_n_ticks=4))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
-            if 'title' in thispanel['paneldict']:
-                axs[0].set_title(thispanel['paneldict']['title'], fontsize=14)
+                axs[0].set_title(thistitle, fontsize=14)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             if 'yscale' in thispanel['paneldict']:
@@ -976,7 +1025,7 @@ class AnalyzeTimeSeries:
                     plot_type = thispanel['panelvars'][i]['plot_type']
                 else:
                     plot_type = 'scatter'
-                col_data = df[thispanel['panelvars'][i]['col']]
+                col_data = this_df[thispanel['panelvars'][i]['col']]
                 col_data_replaced = col_data.replace('NaN', np.nan)
                 col_data_replaced = col_data.replace('null', np.nan)
                 data = np.array(col_data_replaced, dtype='float')
@@ -1044,16 +1093,13 @@ class AnalyzeTimeSeries:
 
 
     def plot_standard_time_series(self, plot_name, start_date=None, end_date=None, 
-                                  only_object=None, object_like=None, clean=False,
-                                    fig_path=None, show_plot=False):
+                                  clean=False, fig_path=None, show_plot=False):
         """
         Generate one of several standard time-series plots of KPF data.
 
         Args:
             plot_name (string): chamber_temp - 4-panel plot showing KPF chamber temperatures
                                 abc - ...
-            only_object (string or list of strings) - object names to include in query
-            object_like (string or list of strings) - partial object names to search for
             start_date (datetime object) - start date for plot
             end_date (datetime object) - end date for plot
             fig_path (string) - set to the path for a SNR vs. wavelength file
@@ -1085,7 +1131,7 @@ class AnalyzeTimeSeries:
                               'paneldict': thispaneldict2}
             
             thispanelvars3 = [dict2, dict3, dict4]
-            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperatures (K)',
+            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperature (K)',
                              'title': 'KPF Temperatures',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1121,7 +1167,7 @@ class AnalyzeTimeSeries:
             chambertemppanel = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             
-            thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperatures (K)',
+            thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperature (K)',
                              'title': 'KPF Spectrometer Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
@@ -1155,7 +1201,7 @@ class AnalyzeTimeSeries:
             dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
                 
             thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, ]
-            thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperatures (K)',
+            thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperature (K)',
                              'title': 'KPF Spectrometer Temperatures', 
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
@@ -1164,7 +1210,7 @@ class AnalyzeTimeSeries:
                                  'paneldict': thispaneldict}
             
             thispanelvars = [dict15, dict14, dict11, dict12, dict13, ]
-            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperatures (K)',
+            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperature (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1172,7 +1218,7 @@ class AnalyzeTimeSeries:
                                  'paneldict': thispaneldict}
             
             thispanelvars = [dict21, dict20, dict17, dict18, dict19, ]
-            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperatures (K)',
+            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperature (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1180,7 +1226,7 @@ class AnalyzeTimeSeries:
                                  'paneldict': thispaneldict}
                 
             thispanelvars = [dict10, dict9, ]
-            thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperatures (K)',
+            thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperature (K)',
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1188,7 +1234,7 @@ class AnalyzeTimeSeries:
                                  'paneldict': thispaneldict}
             panel_arr = [copy.deepcopy(chambertemppanel1), copy.deepcopy(chambertemppanel2), copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)]
 
-        elif plot_name=='fibers':
+        elif plot_name=='fiber_temp':
             dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
             dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
@@ -1288,7 +1334,10 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.30}
             redpanel_ionpump2 = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
-            
+
+# to do: add kpfred.COL_PRESS (green, too)
+#            kpfred.ECH_PRESS
+
             # Amplifier glow panel
             dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
@@ -1299,9 +1348,61 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.30}
             amppanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
-            
             panel_arr = [greenpanel, redpanel, greenpanel_ionpump, greenpanel_ionpump2, redpanel_ionpump, redpanel_ionpump2, amppanel]
-            
+
+        elif plot_name=='ccd_temp':
+            # CCD Temperatures
+            dict1 = {'col': 'kpfgreen.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            thispanelvars = [dict2, dict1, ]
+            thispaneldict = {'ylabel': 'Green CCD\nTemperature (C)',
+                             'title': 'CCD Temperatures',
+                             'legend_frac_size': 0.30}
+            green_ccd = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict}
+
+            dict1 = {'col': 'kpfred.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            thispanelvars2 = [dict2, dict1, ]
+            thispaneldict2 = {'ylabel': 'Red CCD\nTemperature (C)',
+                             'legend_frac_size': 0.30}
+            red_ccd = {'panelvars': thispanelvars2,
+                       'paneldict': thispaneldict2}
+
+            dict1 = {'col': 'kpfgreen.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            thispanelvars3 = [dict2, dict1, ]
+            thispaneldict3 = {'ylabel': 'Green CCD\n' + r'$\Delta$Temperature (K)',
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.30}
+            green_ccd2 = {'panelvars': thispanelvars3,
+                          'paneldict': thispaneldict3}
+
+            dict1 = {'col': 'kpfred.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            thispanelvars4 = [dict2, dict1, ]
+            thispaneldict4 = {'ylabel': 'Red CCD\n' + r'$\Delta$Temperature (K)',
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.30}
+            red_ccd2 = {'panelvars': thispanelvars4,
+                        'paneldict': thispaneldict4}
+
+            panel_arr = [green_ccd, red_ccd, green_ccd2, red_ccd2]
+
+# Additional keywords to add:
+#                'kpfred.CRYOBODY_T':                   'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
+#                'kpfred.CRYOBODY_TRG':                 'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
+#                'kpfred.CURRTEMP':                     'float',  # degC    Current cold head temperature c- double degC {...
+#                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
+#                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
+
+#                'kpfred.CF_BASE_2WT':                  'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
+#                'kpfred.CF_BASE_T':                    'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
+#                'kpfred.CF_BASE_TRG':                  'float',  # degC    base cold finger heater 1A, target temp c2 dou...
+#                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
+#                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
+
+
         elif plot_name=='ccd_controller':
             dict1 = {'col': 'kpfred.BPLANE_TEMP',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Backplane',          'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfred.BRD10_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 10 (Driver)',  'marker': '.', 'linewidth': 0.5}}
@@ -1322,7 +1423,7 @@ class AnalyzeTimeSeries:
                            'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
-            thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
+            thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
                              'title': 'CCD Controllers',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
@@ -1331,15 +1432,28 @@ class AnalyzeTimeSeries:
             panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
 
         elif plot_name=='lfc':
-            dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'plot', 'unit': 'counts', 'plot_attr': {'label': 'LFC Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfcal.VISFLUX', 'plot_type': 'plot', 'unit': 'counts', 'plot_attr': {'label': 'LFC Fiberlock Vis', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'Intensity (counts)',
-                             'title': 'LFC Diagnostics',
-                             'legend_frac_size': 0.35}
-            lfcpanel = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-            panel_arr = [lfcpanel]
+            dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1]
+            thispaneldict1 = {'ylabel': 'Intensity (counts)',
+                              'title': 'LFC Diagnostics',
+                              'legend_frac_size': 0.35}
+            lfcpanel1 = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict1}
+            dict1 = {'col': 'kpfcal.VISFLUX', 'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock Vis', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1]
+            thispaneldict2 = {'ylabel': 'Intensity (counts)',
+                              'legend_frac_size': 0.35}
+            lfcpanel2 = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict2}
+
+            dict1 = {'col': 'kpfcal.BLUECUTIACT', 'plot_type': 'scatter', 'unit': 'A', 'plot_attr': {'label': 'Blue Cut Amp. Current',  'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1]
+            thispaneldict3 = {'ylabel': 'Current (A)',
+                              'title': 'LFC Diagnostics',
+                              'legend_frac_size': 0.35}
+            lfcpanel3 = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict3}
+            panel_arr = [lfcpanel1, lfcpanel2, lfcpanel3]
 
         elif plot_name=='etalon':
             dict1 = {'col': 'ETAV1C1T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 1',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
@@ -1394,21 +1508,66 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ECHELLE_C',   'marker': '.', 'linewidth': 0.5}}
             dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4] #dict4
-            thispaneldict = {'ylabel': 'Temperatures (K)',
-                             'title': r'Ca H$\&$K Spectrometer Temperatures',
+            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
+            thispaneldict = {'ylabel': 'Spectrometer\nTemperatures (K)',
+                             'title': 'Ca H&K Spectrometer Temperatures',
                              'legend_frac_size': 0.35}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
-            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4] #dict4
-            thispaneldict2 = {'ylabel': r'$\Delta$Temperatures (K)',
-                             'title': r'Ca H$\&$K Spectrometer Temperatures',
+            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
+            thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.35}
             hkpanel2 = {'panelvars': thispanelvars2,
                         'paneldict': thispaneldict2}
-            panel_arr = [copy.deepcopy(hkpanel1), copy.deepcopy(hkpanel2)]
+
+            dict1 = {'col': 'kpf_hk.COOLTARG', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Target Temp.', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
+            thispanelvars3 = [dict1, dict2] 
+            thispaneldict3 = {'ylabel': 'Detector\nTemperatures (K)',
+                              'legend_frac_size': 0.35}
+            hkpanel3 = {'panelvars': thispanelvars3,
+                        'paneldict': thispaneldict3}
+
+            thispanelvars4 = [dict1, dict2]
+            thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
+                             'subtractmedian': 'true',
+                             'legend_frac_size': 0.35}
+            hkpanel4 = {'panelvars': thispanelvars4,
+                        'paneldict': thispaneldict4}
+
+            panel_arr = [copy.deepcopy(hkpanel1), copy.deepcopy(hkpanel2), copy.deepcopy(hkpanel3), copy.deepcopy(hkpanel4)]
+
+            
+        elif plot_name=='agitator':
+            dict1 = {'col': 'kpfmot.AGITSPD', 'plot_type': 'scatter', 'unit': 'counts/sec', 'plot_attr': {'label': 'Agitator Speed', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars1 = [dict1]
+            thispaneldict1 = {'ylabel': 'Agitator Speed\n(counts/sec)',
+                              'title': r'KPF Agitator',
+                              'legend_frac_size': 0.35}
+            agitatorpanel1 = {'panelvars': thispanelvars1,
+                              'paneldict': thispaneldict1}
+            dict2 = {'col': 'kpfmot.AGITTOR', 'plot_type': 'scatter', 'unit': 'V', 'plot_attr': {'label': 'Agitator Motor Torque', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars2 = [dict2]
+            thispaneldict2 = {'ylabel': 'Motor Torque (V)',
+                              'legend_frac_size': 0.35}
+            agitatorpanel2 = {'panelvars': thispanelvars2,
+                              'paneldict': thispaneldict2}
+            dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temperature', 'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'kpfmot.AGITMOT_T',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Motor Temperature',   'marker': '.', 'linewidth': 0.5}}
+            thispanelvars3 = [dict3, dict4]
+            thispaneldict3 = {'ylabel': 'Temperature (C)',
+                              'legend_frac_size': 0.35}
+            agitatorpanel3 = {'panelvars': thispanelvars3,
+                              'paneldict': thispaneldict3}
+            dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars4 = [dict5]
+            thispaneldict4 = {'ylabel': 'Outlet A1 Power (mA)',
+                              'legend_frac_size': 0.35}
+            agitatorpanel4 = {'panelvars': thispanelvars4,
+                              'paneldict': thispaneldict4}
+            panel_arr = [agitatorpanel1, agitatorpanel2, agitatorpanel3, agitatorpanel4]
 
         elif plot_name=='guiding':
             dict1 = {'col': 'GDRXRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (X)', 'marker': '.', 'linewidth': 0.5}}
@@ -1418,6 +1577,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Guiding Errors (mas)',
                              'title': 'Guiding',
+                             'on_sky': 'true', 
                              'legend_frac_size': 0.35}
             guidingpanel1 = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
@@ -1425,58 +1585,42 @@ class AnalyzeTimeSeries:
             thispanelvars2 = [dict3, dict4]
             thispaneldict2 = {'ylabel': 'Guiding Bias (mas)',
                              'title': 'Guiding',
+                             'on_sky': 'true', 
                              'legend_frac_size': 0.35}
             guidingpanel2 = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
             panel_arr = [guidingpanel1, guidingpanel2]
 
+        elif plot_name=='seeing':
+            dict1 = {'col': 'GDRSEEJZ', 'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in J+Z band', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'GDRSEEV',  'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in V band',   'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Seeing (arcsec)',
+                             'title': 'Seeing',
+                             'on_sky': 'true', 
+                             'legend_frac_size': 0.35}
+            seeingpanel = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+            panel_arr = [seeingpanel]
+
+        elif plot_name=='sun_moon':
+            dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-target separation', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Angle (deg)',
+                             'title': 'Separation of Sun and Moon from Target',
+                             'on_sky': 'true', 
+                             'legend_frac_size': 0.35}
+            seeingpanel = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+            panel_arr = [seeingpanel]
+
         else:
-            self.logger.info('Error: plot_name not specified')
+            self.logger.error('plot_name not specified')
             return
         
         self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
-                                         only_object=only_object, object_like=object_like,
                                          fig_path=fig_path, show_plot=show_plot, clean=clean)        
-
-
-# to-do: add plots and panels for these variables
-#LFC
-#                'kpfcal.BLUECUTIACT':                  'float',  # A       Blue cut amplifier 0 measured current c- doubl...
-
-#                'kpf_hk.COOLTARG':                     'float',  # degC    temperature target c2 int degC
-#                'kpf_hk.CURRTEMP':                     'float',  # degC    current temperature c- double degC {%.2f}
-
-#                'kpfmot.AGITSPD':                      'float',  # motor_counts/s agit raw velocity c2 int motor counts/s { -750...
-#                'kpfmot.AGITTOR':                      'float',  # V       agit motor torque c- double V {%.3f}
-#                'kpfmot.AGITAMBI_T':                   'float',  # degC    Agitator ambient temperature c- double degC {%...
-#                'kpfmot.AGITMOT_T':                    'float',  # degC    Agitator motor temperature c- double degC {%.2...
-#                'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
-
-#                'kpfred.CF_BASE_2WT':                  'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
-#                'kpfred.CF_BASE_T':                    'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
-#                'kpfred.CF_BASE_TRG':                  'float',  # degC    base cold finger heater 1A, target temp c2 dou...
-#                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
-#                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
-
-#                'kpfred.COL_PRESS':                    'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
-#                'kpfred.CRYOBODY_T':                   'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
-#                'kpfred.CRYOBODY_TRG':                 'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
-#                'kpfred.CURRTEMP':                     'float',  # degC    Current cold head temperature c- double degC {...
-#                'kpfred.ECH_PRESS':                    'float',  # Torr    Current ion pump pressure c- double Torr {%.3e}
-#                'kpfred.KPF_CCD_T':                    'float',  # degC    SSL Detector temperature c- double degC {%.3f}
-#                'kpfred.STA_CCD_T':                    'float',  # degC    STA Detector temperature c- double degC {%.3f}
-#                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
-#                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
-
-#GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
-#GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
-
-#MOONSEP   55.0                                        Separation between Moon and target star (deg)
-#SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
-
-
-# to-do make a histogram of this keyword
-#DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
 
 
     def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
@@ -1501,18 +1645,21 @@ class AnalyzeTimeSeries:
             self.logger.error("'start_date' must be a datetime object.")
             return        
         
-        plots = {
-            "p1a":  {"plot_name": "chamber_temp",        "subdir": "Chamber",  },
-            "p1b":  {"plot_name": "chamber_temp_detail", "subdir": "Chamber",  },
-            "p1c":  {"plot_name": "fibers",              "subdir": "Chamber",  },
-            "p2a":  {"plot_name": "ccd_readnoise",       "subdir": "CCDs",     },
-            "p2b":  {"plot_name": "ccd_dark_current",    "subdir": "CCDs",     },
-            "p2c":  {"plot_name": "ccd_readspeed",       "subdir": "CCDs",     },
-            "p2d":  {"plot_name": "ccd_controller",      "subdir": "CCDs",     },
-            "p3a":  {"plot_name": "lfc",                 "subdir": "Cal",      },
-            "p3b":  {"plot_name": "etalon",              "subdir": "Cal",      },
-            "p4":   {"plot_name": "hk_temp",             "subdir": "HK",       },
-            "p4":   {"plot_name": "guiding",             "subdir": "Observing",},
+        plots = { 
+            "p1a":  {"plot_name": "chamber_temp",        "subdir": "Chamber",   },
+            "p1b":  {"plot_name": "chamber_temp_detail", "subdir": "Chamber",   },
+            "p1c":  {"plot_name": "fiber_temp",          "subdir": "Chamber",   },
+            "p2a":  {"plot_name": "ccd_readnoise",       "subdir": "CCDs",      },
+            "p2b":  {"plot_name": "ccd_dark_current",    "subdir": "CCDs",      },
+            "p2c":  {"plot_name": "ccd_readspeed",       "subdir": "CCDs",      },
+            "p2d":  {"plot_name": "ccd_controller",      "subdir": "CCDs",      },
+            "p2e":  {"plot_name": "ccd_temp",            "subdir": "CCDs",      },
+            "p3a":  {"plot_name": "lfc",                 "subdir": "Cal",       },
+            "p3b":  {"plot_name": "etalon",              "subdir": "Cal",       },
+            "p4":   {"plot_name": "hk_temp",             "subdir": "Subsystems",},
+            "p5a":  {"plot_name": "guiding",             "subdir": "Observing", },
+            "p5b":  {"plot_name": "seeing",              "subdir": "Observing", },
+            "p5c":  {"plot_name": "sun_moon",            "subdir": "Observing", },
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
