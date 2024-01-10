@@ -93,6 +93,7 @@ class AnalyzeTimeSeries:
         cursor = conn.cursor()
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA wal_autocheckpoint")
+        cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
         L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_keyword_types.items()]
@@ -113,7 +114,7 @@ class AnalyzeTimeSeries:
             ('CREATE UNIQUE INDEX idx_L0_filename ON kpfdb ("L0_filename");', 'idx_L0_filename'),
             ('CREATE UNIQUE INDEX idx_D2_filename ON kpfdb ("D2_filename");', 'idx_D2_filename'),
             ('CREATE UNIQUE INDEX idx_L1_filename ON kpfdb ("L1_filename");', 'idx_L1_filename'),
-            ('CREATE UNIQUE INDEX idx_L2_filename ON kpfdb ("L2_filename");', 'idx_L2_filename')
+            ('CREATE UNIQUE INDEX idx_L2_filename ON kpfdb ("L2_filename");', 'idx_L2_filename'),
             ('CREATE INDEX idx_FIUMODE ON kpfdb ("FIUMODE");', 'idx_FIUMODE'),
             ('CREATE INDEX idx_OBJECT ON kpfdb ("OBJECT");', 'idx_OBJECT'),
             ('CREATE INDEX idx_DATE_MID ON kpfdb ("DATE-MID");', 'idx_DATE_MID'),
@@ -215,32 +216,9 @@ class AnalyzeTimeSeries:
         D2_filename  = f"{L0_filename.replace('L0', '2D')}"
         L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
         L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
-    
-        L0_exists = os.path.isfile(L0_file_path)
-        D2_exists = os.path.isfile(D2_file_path)
-        L1_exists = os.path.isfile(L1_file_path)
-        L2_exists = os.path.isfile(L2_file_path)
-
-        # determine if any associated file has been updated - more efficient logic could be written that only accesses filesystem when needed
-        L0_updated = False
-        D2_updated = False
-        L1_updated = False
-        L2_updated = False
-        if L0_exists:
-            if self.is_file_updated(L0_file_path, L0_filename, 'L0'):
-                L0_updated = True
-        if D2_exists:
-            if self.is_file_updated(D2_file_path, D2_filename, '2D'):
-                D2_updated = True
-        if L1_exists:
-            if self.is_file_updated(L1_file_path, L1_filename, 'L1'):
-                L1_updated = True
-        if L2_exists:
-            if self.is_file_updated(L2_file_path, L2_filename, 'L2'):
-                L2_updated = True
 
         # update the DB if necessary
-        if L0_updated or D2_updated or L1_updated or L2_updated:
+        if self.is_any_file_updated(L0_file_path):
         
             L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
             D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
@@ -266,6 +244,7 @@ class AnalyzeTimeSeries:
             # Insert into database
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+            cursor.execute("PRAGMA cache_size = -2000000;")
             columns = ', '.join([f'"{key}"' for key in header_data.keys()])
             placeholders = ', '.join(['?'] * len(header_data))
             insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
@@ -278,49 +257,23 @@ class AnalyzeTimeSeries:
         """
         Ingest a set of observations into the database.
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         batch_data = []
-    
         for file_path in batch:
             base_filename = os.path.basename(file_path).split('.fits')[0]
             L0_filename = base_filename.split('.fits')[0]
             L0_filename = L0_filename.split('/')[-1]
-            
+            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+
             L0_file_path = file_path
             D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
             L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
             L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
-    
-            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
-        
-            L0_exists = os.path.isfile(L0_file_path)
-            D2_exists = os.path.isfile(D2_file_path)
-            L1_exists = os.path.isfile(L1_file_path)
-            L2_exists = os.path.isfile(L2_file_path)
-    
-            # determine if any associated file has been updated - more efficient logic could be written that only accesses filesystem when needed
-            L0_updated = False
-            D2_updated = False
-            L1_updated = False
-            L2_updated = False
-            if L0_exists:
-                if self.is_file_updated(L0_file_path, L0_filename, 'L0'):
-                    L0_updated = True
-            if D2_exists:
-                if self.is_file_updated(D2_file_path, D2_filename, '2D'):
-                    D2_updated = True
-            if L1_exists:
-                if self.is_file_updated(L1_file_path, L1_filename, 'L1'):
-                    L1_updated = True
-            if L2_exists:
-                if self.is_file_updated(L2_file_path, L2_filename, 'L2'):
-                    L2_updated = True
-    
+
             # If any associated file has been updated, proceed
-            if L0_updated or D2_updated or L1_updated or L2_updated:
+            if self.is_any_file_updated(L0_file_path):
                 L0_header_data = self.extract_kwd(L0_file_path,       self.L0_keyword_types)   
                 D2_header_data = self.extract_kwd(D2_file_path,       self.D2_keyword_types)   
                 L1_header_data = self.extract_kwd(L1_file_path,       self.L1_keyword_types)   
@@ -334,67 +287,53 @@ class AnalyzeTimeSeries:
                 header_data['D2_filename'] = os.path.basename(D2_file_path)
                 header_data['L1_filename'] = os.path.basename(L1_file_path)
                 header_data['L2_filename'] = os.path.basename(L2_file_path)
-                header_data['L0_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                header_data['L0_header_read_time'] = now_str
+                header_data['D2_header_read_time'] = now_str
+                header_data['L1_header_read_time'] = now_str
+                header_data['L2_header_read_time'] = now_str
     
                 batch_data.append(header_data)
-    
+
         # Perform batch insertion/update in the database
-        if batch_data:
+        if batch_data != []:
             columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
             placeholders = ', '.join(['?'] * len(batch_data[0]))
             insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
             data_tuples = [tuple(data.values()) for data in batch_data]
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA cache_size = -2000000;")
             cursor.executemany(insert_query, data_tuples)
             conn.commit()
-    
-        conn.close()
+            conn.close()
 
 
     def extract_kwd(self, file_path, keyword_types):
         """
         Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
         """
-        header_data = {}
+        header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
-            with fits.open(file_path, memmap=True) as hdul: # memmap=True minimizes RAM usage
+            with fits.open(file_path, memmap=True) as hdul:
                 header = hdul[0].header
-                for key in keyword_types.keys():
-                    if key in header:
-                        header_data[key] = header[key]
-                    else:
-                        header_data[key] = None 
-        else:
-            for key in keyword_types.keys():
-                header_data[key] = None 
+                # Use set intersection to find common keys
+                common_keys = set(header.keys()) & header_data.keys()
+                for key in common_keys:
+                    header_data[key] = header[key]
         return header_data
 
 
     def extract_telemetry(self, file_path, keyword_types):
         """
-        Extract telemetry from the 'TELEMETRY' extension in KPF L0 files.
+        Extract telemetry from the 'TELEMETRY' extension in an KPF L0 file.
         """
         df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
-        num_columns = ['average', 'stddev', 'min', 'max']
-        for column in df_telemetry:
-            df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-            #df_telemetry = df_telemetry.replace('-nan', 0)# replace nan with 0
-            df_telemetry = df_telemetry.replace('-nan', np.nan)
-            df_telemetry = df_telemetry.replace('nan', np.nan)
-            df_telemetry = df_telemetry.replace(-999, np.nan)
-            if column in num_columns:
-                df_telemetry[column] = pd.to_numeric(df_telemetry[column], downcast="float")
-            else:
-                df_telemetry[column] = df_telemetry[column].astype(str)
+        df_telemetry = df_telemetry[['keyword', 'average']]
+        df_telemetry = df_telemetry.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
+        df_telemetry.replace({'-nan': np.nan, 'nan': np.nan, -999: np.nan}, inplace=True)
         df_telemetry.set_index("keyword", inplace=True)
-        telemetry_dict = {}
-        for key in keyword_types.keys():
-            if key in df_telemetry.index:
-                telemetry_dict[key] = float(df_telemetry.loc[key, 'average'])
-            else:
-                telemetry_dict[key] = None 
+        telemetry_dict = {key: float(df_telemetry.at[key, 'average']) if key in df_telemetry.index else None 
+                          for key in keyword_types}
         return telemetry_dict
 
 
@@ -434,32 +373,57 @@ class AnalyzeTimeSeries:
         return True
 
 
-    def is_file_updated(self, file_path, filename, level):
+    def is_any_file_updated(self, L0_file_path):
         """
-        Determines if an L0/2D/L1/L2 has been updated since the last noted modification
-        in the database.  Returns True if is has been modified.
+        Determines if any file from the L0/2D/L1/L2 set has been updated since the last 
+        noted modification in the database.  Returns True if is has been modified.
         """
-        file_mod_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
+        L0_filename = L0_file_path.split('/')[-1]
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        if level == 'L0':
-            query = f'SELECT L0_header_read_time FROM kpfdb WHERE L0_filename = "{filename}"'
-        if level == '2D':
-            query = f'SELECT D2_header_read_time FROM kpfdb WHERE D2_filename = "{filename}"'
-        if level == 'L1':
-            query = f'SELECT L1_header_read_time FROM kpfdb WHERE L1_filename = "{filename}"'
-        if level == 'L2':
-            query = f'SELECT L2_header_read_time FROM kpfdb WHERE L2_filename = "{filename}"'
+        cursor.execute("PRAGMA cache_size = -2000000;")
+        query = f'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM kpfdb WHERE L0_filename = "{L0_filename}"'
         cursor.execute(query)
         result = cursor.fetchone()
         conn.close()
     
-        if result:
-            stored_mod_time = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
-            current_mod_time = datetime.strptime(file_mod_time, "%Y-%m-%d %H:%M:%S")
-            return current_mod_time > stored_mod_time
-        
-        return True  # Process if file is not in the database
+        if not result:  
+            return True # no record in database
+
+        try:
+            L0_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L0_file_path)).strftime("%Y-%m-%d %H:%M:%S")
+        except FileNotFoundError:
+            L0_file_mod_time = '1000-01-01 01:01'
+        if L0_file_mod_time > result[0]:
+            return True # L0 file was modified
+
+        D2_file_path = f"{L0_file_path.replace('L0', '2D')}"
+        D2_file_path = f"{D2_file_path.replace('.fits', '_2D.fits')}"
+        try:
+            D2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(D2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
+        except FileNotFoundError:
+            D2_file_mod_time = '1000-01-01 01:01'
+        if D2_file_mod_time > result[0]:
+            return True # 2D file was modified
+
+        L1_file_path = f"{D2_file_path.replace('2D', 'L1')}"
+        try:
+            L1_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L1_file_path)).strftime("%Y-%m-%d %H:%M:%S")
+        except FileNotFoundError:
+            L1_file_mod_time = '1000-01-01 01:01'
+        if L1_file_mod_time > result[0]:
+            return True # L1 file was modified
+
+        L2_file_path = f"{L0_file_path.replace('L1', 'L2')}"
+        try:
+            L2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
+        except FileNotFoundError:
+            L2_file_mod_time = '1000-01-01 01:01'
+        if L2_file_mod_time > result[0]:
+            return True # L2 file was modified
+                    
+        return False # DB modification times are all more recent than file modification times
            
 
     def print_db_status(self):
