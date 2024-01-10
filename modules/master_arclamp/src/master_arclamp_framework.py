@@ -3,6 +3,7 @@ import numpy as np
 import configparser as cp
 from datetime import datetime, timezone
 import re
+from astropy.io import fits
 
 import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
@@ -309,6 +310,7 @@ class MasterArclampFramework(KPF0_Primitive):
                 del_ext_list.append(i)
         master_holder = tester
 
+        filenames_kept = {}
         n_frames_kept = {}
         mjd_obs_min = {}
         mjd_obs_max = {}
@@ -317,6 +319,7 @@ class MasterArclampFramework(KPF0_Primitive):
             self.logger.debug('Loading arclamp data, ffi = {}'.format(ffi))
             keep_ffi = 0
 
+            filenames_kept_list = []
             frames_data = []
             frames_data_exptimes = []
             frames_data_mjdobs = []
@@ -344,30 +347,30 @@ class MasterArclampFramework(KPF0_Primitive):
                 #self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
                 if n_dims == 2:       # Check if valid data extension
                     keep_ffi = 1
+                    filenames_kept_list.append(all_arclamp_files[i])
                     frames_data.append(obj[ffi])
                     frames_data_exptimes.append(exp_time)
                     frames_data_mjdobs.append(mjd_obs)
                     frames_data_path.append(path)
                     #self.logger.debug('Keeping arclamp image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,mjd_obs,exp_time))
                     if n >= self.max_num_frames_to_stack:
-                        break
+                        continue
                     n += 1
 
             n_frames = (np.shape(frames_data))[0]
             self.logger.debug('Number of frames in stack = {}'.format(n_frames))
 
-            # Exit without making product if headers of FITS files in input list do not contain specified OBJECT,
-            # or the number of frames to stack is less than 2.  In either case, exit_code=7 is returned.
+            # Skip extension if number of frames to stack is less than 2.
 
             if n_frames < 2:
-                master_arclamp_exit_code = 7
-                exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
-                return Arguments(exit_list)
+                self.logger.debug('n_frames < 2 for ffi,n_frames = {},{}'.format(ffi,n_frames))
+                del_ext_list.append(ffi)
+                continue
 
             if keep_ffi == 0:
                 #self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
                 del_ext_list.append(ffi)
-                break
+                continue
 
             # Subtract master bias.
 
@@ -377,6 +380,7 @@ class MasterArclampFramework(KPF0_Primitive):
 
             normalized_frames_data = []
 
+            filenames_kept[ffi] = filenames_kept_list
             n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
@@ -437,10 +441,6 @@ class MasterArclampFramework(KPF0_Primitive):
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 
-        # Add informational keywords to FITS header.
-
-        master_holder.header['PRIMARY']['IMTYPE'] = ('Arclamp','Master arclamp')
-
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
             master_holder.header[ffi]['BUNIT'] = ('electrons','Units of master arclamp')
@@ -450,10 +450,33 @@ class MasterArclampFramework(KPF0_Primitive):
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of arclamp observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of arclamp observations')
             master_holder.header[ffi]['TARGOBJ'] = (self.arclamp_object,'Target object of stacking')
-            master_holder.header[ffi]['INPBIAS'] = self.masterbias_path
-            master_holder.header[ffi]['INPDARK'] = self.masterdark_path
+
+            filename_match_bias = re.match(r".+/(kpf_.+\.fits)", self.masterbias_path)
+            try:
+                masterbias_path_filename_only = filename_match_bias.group(1)
+            except:
+                masterbias_path_filename_only = self.masterbias_path
+
+            master_holder.header[ffi]['INPBIAS'] = masterbias_path_filename_only
+
+            filename_match_dark = re.match(r".+/(kpf_.+\.fits)", self.masterdark_path)
+            try:
+                masterdark_path_filename_only = filename_match_dark.group(1)
+            except:
+                masterdark_path_filename_only = self.masterdark_path
+
+            master_holder.header[ffi]['INPDARK'] = masterdark_path_filename_only
+
             if self.skip_flattening == 0:
-                master_holder.header[ffi]['INPFLAT'] = self.masterflat_path
+
+                filename_match_flat = re.match(r".+/(kpf_.+\.fits)", self.masterflat_path)
+                try:
+                    masterflat_path_filename_only = filename_match_flat.group(1)
+                except:
+                    masterflat_path_filename_only = self.masterflat_path
+
+                master_holder.header[ffi]['INPFLAT'] = masterflat_path_filename_only
+
             datetimenow = datetime.now(timezone.utc)
             createdutc = datetimenow.strftime("%Y-%m-%dT%H:%M:%SZ")
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-arclamp creation')
@@ -467,6 +490,36 @@ class MasterArclampFramework(KPF0_Primitive):
 
             ffi_cnt_ext_name = ffi + '_CNT'
             master_holder.header[ffi_cnt_ext_name]['BUNIT'] = ('Count','Number of stack samples')
+
+            n_filenames_kept = len(filenames_kept[ffi])
+            for i in range(0, n_filenames_kept):
+                input_filename_keyword = 'INFL' + str(i)
+
+                filename_match = re.match(r".+/(KP.+\.fits)", filenames_kept[ffi][i])
+
+                try:
+                    filename_for_header = filename_match.group(1)
+                except:
+                    filename_for_header = filenames_kept[ffi][i]
+
+                master_holder.header[ffi][input_filename_keyword] = filename_for_header
+
+        # Clean up PRIMARY header.
+        #keep_cards = ['SIMPLE','BITPIX','NAXIS','EXTEND','EXTNAME','OBJECT','IMTYPE',
+        #              'SCI-OBJ','SKY-OBJ','CAL-OBJ','GRNAMPS','REDAMPS','EXPTIME',
+        #              'INSTRUME','GREEN','RED','CA_HK','TARGNAME','TARGRV']
+        #primary_hdu = fits.PrimaryHDU()
+        #for keep_card in keep_cards:
+        #    try:
+        #        primary_hdu.header[keep_card] = master_holder.header['PRIMARY'][keep_card]
+        #    except:
+        #        self.logger.debug('Not found in PRIMARY header: keep_card = {}'.format(keep_card))
+        #        pass
+        #master_holder.header['PRIMARY'] = primary_hdu.header
+
+        # Add informational to FITS header.  This is the only way I know of to keep the keyword comment.
+
+        master_holder.header['PRIMARY']['IMTYPE'] = ('Arclamp','Master arclamp')
 
         master_holder.to_fits(self.masterarclamp_path)
 
