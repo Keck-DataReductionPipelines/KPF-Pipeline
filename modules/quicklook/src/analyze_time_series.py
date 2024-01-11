@@ -51,6 +51,7 @@ class AnalyzeTimeSeries:
     To-do:
         * Double check that updated rows overwrite old results
         * Make plots using only_object and object_like
+        * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * All for other plot types, e.g. histograms of DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
@@ -1312,8 +1313,8 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.35}
             redpanel_ionpump2 = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
-# to do: add kpfred.COL_PRESS (green, too)
-#            kpfred.ECH_PRESS
+            # to do: add kpfred.COL_PRESS (green, too)
+            #            kpfred.ECH_PRESS
 
             # Amplifier glow panel
             dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
@@ -1630,7 +1631,7 @@ class AnalyzeTimeSeries:
             "p2e":  {"plot_name": "ccd_temp",            "subdir": "CCDs",      },
             "p3a":  {"plot_name": "lfc",                 "subdir": "Cal",       },
             "p3b":  {"plot_name": "etalon",              "subdir": "Cal",       },
-            "p3c":  {"plot_name": "cal",                 "subdir": "Cal",       },
+            "p3c":  {"plot_name": "hcl",                 "subdir": "Cal",       },
             "p4a":  {"plot_name": "hk_temp",             "subdir": "Subsystems",},
             "p4b":  {"plot_name": "agitator",            "subdir": "Subsystems",},
             "p5a":  {"plot_name": "guiding",             "subdir": "Observing", },
