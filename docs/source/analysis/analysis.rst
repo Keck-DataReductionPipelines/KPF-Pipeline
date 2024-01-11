@@ -7,8 +7,8 @@ Using Analysis Methods
     :maxdepth: 2
     :titlesonly:
 
-Add some text here.
-
     dictonary_format.rst
     analyzewls.rst
     analyzetimeseries.rst
+
+Another test.
