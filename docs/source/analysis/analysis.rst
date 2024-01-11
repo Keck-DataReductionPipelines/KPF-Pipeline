@@ -11,4 +11,4 @@ Using Analysis Methods
     analyzewls.rst
     analyzetimeseries.rst
 
-Another test.
+The links above provide explanations and tutorials on using the Analysis classes to analyze KPF data, make plots, and draw inferences.
