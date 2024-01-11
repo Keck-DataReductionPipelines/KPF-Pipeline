@@ -8,4 +8,5 @@ Using Analysis Methods
     :titlesonly:
 
     dictonary_format.rst
-    wls.rst
+    analyzewls.rst
+    analyzetimeseries.rst
