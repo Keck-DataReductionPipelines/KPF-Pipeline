@@ -27,6 +27,13 @@ class AnalyzeTimeSeries:
         plots can be made over intervals of days/months/years/decades spanning a date 
         range.  A related script 'ingest_kpf_ts_db.py' can be used to ingest data from 
         the command line.
+        
+        The ingested data comes from L0/2D/L1/L2 keywords and the TELEMETRY extension 
+        in L0 files.  With the current version of this code, all TELEMETRY keywords are 
+        added to the database an a small subset of the L0/2D/L1/L2 keywords are added. 
+        These lists can be expanded, but will require re-ingesting the data (which takes 
+        about half a day for all KPF observations).  RVs are currently not ingested, but 
+        that capability should be added.
 
     Arguments:
         db_path (string) - path to database file
@@ -35,20 +42,18 @@ class AnalyzeTimeSeries:
         logger (logger object) - a logger object can be passed, or one will be created
 
     Attributes:
-        L0_keyword_types   (array) - dictionary specifying data types for L0 header keywords
-        D2_keyword_types   (array) - dictionary specifying data types for 2D header keywords
-        L1_keyword_types   (array) - dictionary specifying data types for L1 header keywords
-        L2_keyword_types   (array) - dictionary specifying data types for L2 header keywords
-        L0_telemetry_types (array) - dictionary specifying data types for L0 telemetry keywords
+        L0_keyword_types   (dictionary) - specifies data types for L0 header keywords
+        D2_keyword_types   (dictionary) - specifies data types for 2D header keywords
+        L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
+        L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
+        L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         
     To-do:
-        * optimize ingestion efficiency
-        * make plots using only_object and object_like
-        * augment statistics in legends (median and stddev upon request)
-        * determine file modification times with a single call, if possible
-        * check that updated rows overwrite old results
-        * Add the capability of using Jump queries to find files for ingestion
+        * Double check that updated rows overwrite old results
+        * Make plots using only_object and object_like
+        * Augment statistics in legends (median and stddev upon request)
         * All for other plot types, e.g. histograms of DRPTAG
+        * Add the capability of using Jump queries to find files for ingestion or plotting
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -224,7 +229,7 @@ class AnalyzeTimeSeries:
             D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
             L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
             L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
-            L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) if L0_exists else {}
+            L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
             header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
@@ -1744,7 +1749,7 @@ class AnalyzeTimeSeries:
 
 def add_one_month(inputdate):
     """
-    Add one month to a datetime object, accounting for the different number of days per month.
+    Add one month to a datetime object, accounting for the number of days per month.
     """
     year, month, day = inputdate.year, inputdate.month, inputdate.day
     if month == 12:
