@@ -228,7 +228,6 @@ class QueryDBL0FileFramework(KPF0_Primitive):
             p84cahk = db_record[43]
             comment = db_record[44]
 
-            
             if self.verbose == 1:
                 self.logger.info('rId = {}'.format(rId))
                 self.logger.info('dateobs = {}'.format(dateobs))
@@ -262,6 +261,73 @@ class QueryDBL0FileFramework(KPF0_Primitive):
         fits_obj.header['PRIMARY']['DBRID'] = (rId,'DB raw image ID')
         fits_obj.header['PRIMARY']['L0QCBITS'] = (infobits,'L0 QC bitwise flags (see defs below)')
 
+
+        if medgreen1 is not None:
+            fits_obj.header['PRIMARY']['MEDGRN1'] = (medgreen1,'Median for GREEN_AMP1 [DN]')
+
+        if medgreen2 is not None:
+            fits_obj.header['PRIMARY']['MEDGRN2'] = (medgreen2,'Median for GREEN_AMP2 [DN]')
+
+        if medgreen3 is not None:
+            fits_obj.header['PRIMARY']['MEDGRN3'] = (medgreen3,'Median for GREEN_AMP3 [DN]')
+
+        if medgreen4 is not None:
+            fits_obj.header['PRIMARY']['MEDGRN4'] = (medgreen4,'Median for GREEN_AMP4 [DN]')
+
+        if medred1 is not None:
+            fits_obj.header['PRIMARY']['MEDRED1'] = (medred1,'Median for RED_AMP1 [DN]')
+
+        if medred2 is not None:
+            fits_obj.header['PRIMARY']['MEDRED2'] = (medred2,'Median for RED_AMP2 [DN]')
+
+        if medcahk is not None:
+            fits_obj.header['PRIMARY']['MEDCAHK'] = (medcahk,'Median for CA_HK_AMP [DN]')
+
+
+        if p16green1 is not None:
+            fits_obj.header['PRIMARY']['P16GRN1'] = (p16green1,'16th percentile for GREEN_AMP1 [DN]')
+
+        if p16green2 is not None:
+            fits_obj.header['PRIMARY']['P16GRN2'] = (p16green2,'16th percentile for GREEN_AMP2 [DN]')
+
+        if p16green3 is not None:
+            fits_obj.header['PRIMARY']['P16GRN3'] = (p16green3,'16th percentile for GREEN_AMP3 [DN]')
+
+        if p16green4 is not None:
+            fits_obj.header['PRIMARY']['P16GRN4'] = (p16green4,'16th percentile for GREEN_AMP4 [DN]')
+
+        if p16red1 is not None:
+            fits_obj.header['PRIMARY']['P16RED1'] = (p16red1,'16th percentile for RED_AMP1 [DN]')
+
+        if p16red2 is not None:
+            fits_obj.header['PRIMARY']['P16RED2'] = (p16red2,'16th percentile for RED_AMP2 [DN]')
+
+        if p16cahk is not None:
+            fits_obj.header['PRIMARY']['P16CAHK'] = (p16cahk,'16th percentile for CA_HK_AMP [DN]')
+
+
+        if p84green1 is not None:
+            fits_obj.header['PRIMARY']['P84GRN1'] = (p84green1,'84th percentile for GREEN_AMP1 [DN]')
+
+        if p84green2 is not None:
+            fits_obj.header['PRIMARY']['P84GRN2'] = (p84green2,'84th percentile for GREEN_AMP2 [DN]')
+
+        if p84green3 is not None:
+            fits_obj.header['PRIMARY']['P84GRN3'] = (p84green3,'84th percentile for GREEN_AMP3 [DN]')
+
+        if p84green4 is not None:
+            fits_obj.header['PRIMARY']['P84GRN4'] = (p84green4,'84th percentile for GREEN_AMP4 [DN]')
+
+        if p84red1 is not None:
+            fits_obj.header['PRIMARY']['P84RED1'] = (p84red1,'84th percentile for RED_AMP1 [DN]')
+
+        if p84red2 is not None:
+            fits_obj.header['PRIMARY']['P84RED2'] = (p84red2,'84th percentile for RED_AMP2 [DN]')
+
+        if p84cahk is not None:
+            fits_obj.header['PRIMARY']['P84CAHK'] = (p84cahk,'84th percentile for CA_HK_AMP [DN]')
+
+
         try:
             del fits_obj.header['PRIMARY']['L0BIT13']
 
@@ -276,12 +342,12 @@ class QueryDBL0FileFramework(KPF0_Primitive):
             keyword = "L0BIT" + numstr
             value = defs[i]
             fits_obj.header['PRIMARY'][keyword] = value
-            
+
         fits_obj.to_fits(self.fits_filename)
 
 
         # Return with arguments.
-        
+
         exit_list = [exit_code,db_record]
 
         return Arguments(exit_list)
