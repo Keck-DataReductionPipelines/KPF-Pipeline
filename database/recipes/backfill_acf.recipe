@@ -1,0 +1,14 @@
+from database.modules.backfill_acf.src.backfill_acf_framework import BackfillAcfFramework
+
+data_type = config.ARGUMENT.data_type
+lev0_fits_file = config.ARGUMENT.lev0_fits_file
+rid = config.ARGUMENT.rid
+
+do_backfill_acf = True
+
+if do_backfill_acf:
+
+    backfill_acf_exit_code = BackfillAcfFramework(data_type,
+                                                  lev0_fits_file,
+                                                  rid)
+

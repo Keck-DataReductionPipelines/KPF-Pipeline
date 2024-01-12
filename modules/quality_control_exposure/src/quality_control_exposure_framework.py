@@ -366,6 +366,16 @@ class QualityControlExposureFramework(KPF0_Primitive):
         red_found = l0_file.header['PRIMARY']['RED']
         ca_hk_found = l0_file.header['PRIMARY']['CA_HK']
 
+        try:
+            gracffln = l0_file.header['PRIMARY']['GRACFFLN']
+        except KeyError:
+            gracffln = "null"
+
+        try:
+            rdacffln = l0_file.header['PRIMARY']['RDACFFLN']
+        except KeyError:
+            rdacffln = "null"
+
         if green_found == 'YES':
             green_contentbit = 1
         else:
@@ -488,7 +498,7 @@ class QualityControlExposureFramework(KPF0_Primitive):
                   'targname,gaiaid,twomassid,ra,dec,medgreen1,p16green1,p84green1,' +\
                   'medgreen2,p16green2,p84green2,medgreen3,p16green3,p84green3,' +\
                   'medgreen4,p16green4,p84green4,medred1,p16red1,p84red1,' +\
-                  'medred2,p16red2,p84red2,medcahk,p16cahk,p84cahk,comment'
+                  'medred2,p16red2,p84red2,medcahk,p16cahk,p84cahk,gracffln,rdacffln,comment'
 
         values = "cast('DATEOBS' as date)," +\
                  "cast('UT' as time without time zone)," +\
@@ -532,6 +542,8 @@ class QualityControlExposureFramework(KPF0_Primitive):
                  "cast(MEDCAHK as real)," +\
                  "cast(P16CAHK as real)," +\
                  "cast(P84CAHK as real)," +\
+                 "cast(GRACFFLN as character varying)," +\
+                 "cast(RDACFFLN as character varying)," +\
                  "cast(COMMENT as character varying)"
 
 
@@ -571,6 +583,18 @@ class QualityControlExposureFramework(KPF0_Primitive):
         rep["FILENAME"] = filename
         rep["CHECKSUM"] = cksum
         rep["STATUS"] = str(status)
+
+
+        if gracffln == '':
+            rep["GRACFFLN"] = 'null'
+        elif gracffln != 'null':
+            rep["GRACFFLN"] = "'" + gracffln + "'"
+
+        if rdacffln == '':
+            rep["RDACFFLN"] = 'null'
+        elif rdacffln != 'null':
+            rep["RDACFFLN"] = "'" + rdacffln + "'"
+
 
         if targname == "NotFound":
             rep["TARGNAME"] = "null"
