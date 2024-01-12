@@ -1521,7 +1521,7 @@ class WaveCalibration:
             plt.xlabel('Pixel')
             plt.ylabel('Fit residuals [$\AA$]')
             plt.tight_layout()
-            plt.savefig('{}/polyfit.png'.format(plot_path))
+            #plt.savefig('{}/polyfit.png'.format(plot_path))
             plt.close()
             
             if plot_path is not None and self.cal_type =='ThAr':
