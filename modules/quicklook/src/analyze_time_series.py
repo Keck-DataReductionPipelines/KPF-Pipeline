@@ -49,12 +49,12 @@ class AnalyzeTimeSeries:
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         
     To-do:
-        * Double check that updated rows overwrite old results
         * Make plots using only_object and object_like
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * All for other plot types, e.g. histograms of DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
+        * Write ingestion script that's triggered by file events.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
