@@ -8,11 +8,12 @@ import pandas as pd
 import scipy
 from scipy import signal
 from scipy.special import erf
-from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline
+from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline, interp1d
 from scipy.optimize.minpack import curve_fit
 from modules.Utils.config_parser import ConfigHandler
 import modules.Utils.utils
 import warnings
+from numpy.polynomial.polynomial import Polynomial
 
 class WaveCalibration:
     """
@@ -67,7 +68,7 @@ class WaveCalibration:
         self.etalon_mask_in = configpull.get_config_value('master_etalon_file',None)
  
     def run_wavelength_cal(
-        self, calflux, rough_wls=None, 
+        self, calflux, rough_wls=None, our_wavelength_solution_for_order=None,
         peak_wavelengths_ang=None, lfc_allowed_wls=None,input_filename=None):
         """ Runs all wavelength calibration algorithm steps in order.
         Args:
@@ -140,9 +141,9 @@ class WaveCalibration:
             # perform wavelength calibration
             poly_soln, wls_and_pixels, orderlet_dict = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
-                comb_lines_angstrom=lfc_allowed_wls, 
-                expected_peak_locs=peak_wavelengths_ang, 
-                print_update=True, plt_path=self.save_diagnostics_dir   
+                comb_lines_angstrom=lfc_allowed_wls,
+                expected_peak_locs=peak_wavelengths_ang, peak_wavelengths_ang=peak_wavelengths_ang,
+                our_wavelength_solution_for_order=our_wavelength_solution_for_order, print_update=True, plt_path=self.save_diagnostics_dir   
             )
 
             # make a plot of all of the precise new wls minus the rough input  wls
@@ -172,7 +173,6 @@ class WaveCalibration:
                         '{}/all_wls.png'.format(self.save_diagnostics_dir), 
                         dpi=250
                     )
-                    plt.close()
 
         if self.quicklook == True:
             #TODO
@@ -184,8 +184,8 @@ class WaveCalibration:
             
             poly_soln, wls_and_pixels, orderlet_dict = self.fit_many_orders(
                 masked_calflux, order_list, rough_wls=rough_wls, 
-                comb_lines_angstrom=lfc_allowed_wls, 
-                expected_peak_locs=peak_wavelengths_ang, 
+                comb_lines_angstrom=lfc_allowed_wls,
+                expected_peak_locs=peak_wavelengths_ang, peak_wavelengths_ang=peak_wavelengths_ang,
                 print_update=True, plt_path=self.save_diagnostics_dir ###CHECK THIS TODO
             )
 
@@ -234,7 +234,7 @@ class WaveCalibration:
 
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
-        expected_peak_locs=None, plt_path=None, print_update=False):
+        expected_peak_locs=None,peak_wavelengths_ang=None, our_wavelength_solution_for_order=None, plt_path=None, print_update=False):
         """
         Iteratively performs wavelength calibration for all orders.
         Args:
@@ -383,7 +383,7 @@ class WaveCalibration:
                     good_peak_idx = np.arange(len(detected_peak_pixels))
 
                 if self.cal_type == 'LFC':
-                    wls, _ = self.mode_match(
+                    wls, _, good_peak_idx = self.mode_match(
                         order_flux, fitted_peak_pixels, good_peak_idx, 
                         rough_wls_order, comb_lines_angstrom, 
                         print_update=print_update, plot_path=order_plt_path
@@ -401,6 +401,7 @@ class WaveCalibration:
                 fitted_peak_pixels = fitted_peak_pixels[good_peak_idx]
 
                 # Mark lines with bad fits and lambda_fit for each line in dictionary:
+                '''
                 good_line_ind = 0
                 for l in np.arange(len(lines_dict)):
                     if l not in good_peak_idx:
@@ -408,7 +409,7 @@ class WaveCalibration:
                     else:
                         orderlet_dict[order_num]['lines'][l]['lambda_fit'] = wls[good_line_ind]
                         good_line_ind += 1
-
+                '''
             # use expected peak locations to compute updated precise wavelengths for each pixel
             # (only ThAr)
             else:
@@ -453,7 +454,7 @@ class WaveCalibration:
 
                 # calculate the wavelength solution for the order
                 polynomial_wls, leg_out = self.fit_polynomial(
-                    wls, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
+                    wls, rough_wls_order, peak_wavelengths_ang, order_list, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
                     plot_path=order_plt_path, fit_iterations=self.fit_iterations,
                     sigma_clip=self.sigma_clip)
                 poly_soln_final_array[order_num,:] = polynomial_wls
@@ -474,7 +475,7 @@ class WaveCalibration:
 
                 # compute various RV precision values for order
                 rel_precision, abs_precision = self.calculate_rv_precision(
-                    fitted_peak_pixels, wls, leg_out, rough_wls_order, plot_path=order_plt_path, 
+                    fitted_peak_pixels, wls, leg_out, rough_wls_order, our_wavelength_solution_for_order, rough_wls_order, plot_path=order_plt_path, 
                     print_update=print_update
                 )
                 order_precisions.append(abs_precision)
@@ -662,11 +663,11 @@ class WaveCalibration:
         detected_peaks, properties = signal.find_peaks(c, distance=distance, height=height)
         peak_heights = np.array(properties['peak_heights'])
 
-        # Only consider peaks with height greater than 5
-        valid_peak_indices = np.where(peak_heights > 5)[0]
+        # Only consider peaks with height greater than 500
+        valid_peak_indices = np.where(peak_heights > 500)[0]
         detected_peaks = detected_peaks[valid_peak_indices]
         peak_heights = peak_heights[valid_peak_indices]
-        
+
         # fit peaks with Gaussian to get accurate position
         fitted_peaks = detected_peaks.astype(float)
         gauss_coeffs = np.empty((4, len(detected_peaks)))
@@ -892,35 +893,6 @@ class WaveCalibration:
 
         return good_peak_idx
     
-    def estimate_fwhm(self, flux, peak_pixel):
-        """
-        Estimate the FWHM of a line at a given pixel position.
-
-        Args:
-            flux (np.array): The flux values of the spectrum.
-            peak_pixel (int): The pixel position of the peak of the line.
-
-        Returns:
-            float: An estimated FWHM value.
-        """
-        half_max = flux[peak_pixel] / 2
-
-        # Find the points at half maximum on both sides of the peak
-        left_idx = right_idx = peak_pixel
-        while left_idx > 0 and flux[left_idx] > half_max:
-            left_idx -= 1
-        while right_idx < len(flux) - 1 and flux[right_idx] > half_max:
-            right_idx += 1
-
-        # Interpolate to find more accurate positions where the flux crosses the half maximum
-        if left_idx > 0:
-            left_idx += (half_max - flux[left_idx]) / (flux[left_idx + 1] - flux[left_idx])
-        if right_idx < len(flux) - 1:
-            right_idx -= (half_max - flux[right_idx]) / (flux[right_idx - 1] - flux[right_idx])
-
-        fwhm = right_idx - left_idx
-        return fwhm
-
     def line_match(self, flux, linelist, line_pixels_expected, plot_toggle, savefig, gaussian_fit_width=10):
         """
         Given a linelist of known wavelengths of peaks and expected pixel locations
@@ -1090,7 +1062,32 @@ class WaveCalibration:
                 np.array: the mode numbers of the LFC modes to be used for 
                     wavelength calibration
         """
+        
+        # Calculate the peak differences
+        peak_diffs = np.diff(fitted_peak_pixels[good_peak_idx])
+        peaks_to_keep = [good_peak_idx[0]]  # Always keep the first peak
 
+        # Iterate over the peak differences, starting from the second peak
+        for i in range(1, len(good_peak_idx) - 1):
+            if i < 8:
+                nearest_peak_diffs = peak_diffs[i+1:i+9]
+            elif i > len(peak_diffs) - 8:
+                nearest_peak_diffs = peak_diffs[i-9:i-1]
+            else:
+                nearest_peak_diffs_before = peak_diffs[i-7:i-3]
+                nearest_peak_diffs_after = peak_diffs[i+3:i+7]
+                nearest_peak_diffs = np.concatenate((nearest_peak_diffs_before, nearest_peak_diffs_after))
+    
+            # Find the minimum of the nearest peak differences
+            min_nearest_peak_diff = np.min(nearest_peak_diffs)           
+            # If the current peak difference is not less than 0.9 times the minimum, keep it
+            if peak_diffs[i - 1] >= 0.9 * min_nearest_peak_diff:
+                peaks_to_keep.append(good_peak_idx[i])
+        
+        # Always keep the last peak
+        peaks_to_keep.append(good_peak_idx[-1])
+        good_peak_idx = np.array(peaks_to_keep)
+        
         n_pixels = len(order_flux)
         s = InterpolatedUnivariateSpline(np.arange(n_pixels)[rough_wls_order>0], rough_wls_order[rough_wls_order>0])
         approx_peaks_lambda = s(fitted_peak_pixels[good_peak_idx])
@@ -1115,7 +1112,7 @@ class WaveCalibration:
 
         peak_mode_num = 0
         
-	      # Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
+	    # Find peak spacing (peak_diff) for all adjacent peaks, remove outliers with median filter
         peak_diff = fitted_peak_pixels[good_peak_idx][1:] - fitted_peak_pixels[good_peak_idx][:-1]
 
         # Calculate the difference between the peak indices
@@ -1190,9 +1187,8 @@ class WaveCalibration:
             plt.legend()
             plt.savefig('{}/peak_diff.png'.format(plot_path), dpi=250)
             plt.close()
-                
-        
-        for i in range(n_clipped_peaks):
+                    
+        for i in range(len(good_peak_idx)):
             # estimate local peak diff from SPLINE fit function
             running_peak_diff = peak_diff_spline(fitted_peak_pixels[good_peak_idx][i])
 
@@ -1286,9 +1282,8 @@ class WaveCalibration:
             plt.tight_layout()
             plt.savefig('{}/labeled_line_locs.png'.format(plot_path), dpi=250)
             plt.close()
-
         wls = comb_lines_angstrom[mode_nums.astype(int)]
-        return wls, mode_nums
+        return wls, mode_nums, peaks_to_keep
     
     def fit_gaussian(self,x,y):
         """
@@ -1401,6 +1396,11 @@ class WaveCalibration:
 
         if self.cal_type == 'ThAr':          
             # Quality Checks for Gaussian Fits
+            
+            if max(y) == 0:
+                print('Amplitude is 0')
+                return(None, line_dict)
+            
             chi_squared_threshold = int(self.chi_2_threshold)
 
             # Calculate chi^2
@@ -1431,15 +1431,15 @@ class WaveCalibration:
                 print("Chi squared exceeded the threshold for this line. Line skipped")
                 return None, line_dict
 
-            #Check if the Gaussian amplitude is positive and the peak is higher than the wings
-            if popt[0] <= 0 or popt[0] <= popt[3]:
-                line_dict['quality'] = 'bad_amplitude'  # Mark the fit as bad due to negative amplitude or U shaped gaussian
-                print('Negative amplitude detected')
+            # Check if the Gaussian amplitude is positive, the peak is higher than the wings, or the peak is too high
+            if popt[0] <= 0 or popt[0] <= popt[3] or popt[0] >= 500*max(y):
+                line_dict['quality'] = 'bad_amplitude'  # Mark the fit as bad due to bad amplitude or U shaped gaussian
+                print('Bad amplitude detected')
                 return None, line_dict
 
         return (popt, line_dict)
     
-    def fit_polynomial(self, wls, n_pixels, fitted_peak_pixels, fit_iterations=5, sigma_clip=2.1, peak_heights=None, plot_path=None):
+    def fit_polynomial(self, wls, rough_wls_order, peak_wavelengths_ang, order_list, n_pixels, fitted_peak_pixels, fit_iterations=5, sigma_clip=2.1, peak_heights=None, plot_path=None):
         """
         Given precise wavelengths of detected LFC order_flux lines, fits a 
         polynomial wavelength solution.
@@ -1476,49 +1476,73 @@ class WaveCalibration:
             unclipped_idx = np.intersect1d(unclipped_idx, unique_idx[count < 2])
             
             sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
-            x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]
+            x, y, w = fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx], weights[unclipped_idx][sorted_idx]           
+
             for i in range(fit_iterations):
                 if self.fit_type.lower() == 'legendre':
-                    leg_out = Legendre.fit(x, y, self.fit_order, w=w)
-                    our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+                    if self.cal_type == 'ThAr':
+                        # fit ThAr based on 4/30 WLS
+                        rough_wls_int = interp1d(np.arange(n_pixels), rough_wls_order, kind='linear', fill_value="extrapolate")
+                        
+                        def polynomial_func(x, c0, c1, c2):
+                            """
+                            Polynomial function to fit.
+                            Args:
+                                x (np.array): Pixel values.
+                                c0, c1, c2 (float): Coefficients of the polynomial.
+                            Returns:
+                                np.array: Evaluated polynomial.
+                            """
+                            return rough_wls_int(x) + c0 + c1 * x + c2 * x**2
+                        
+                        # Using curve_fit to find the best-fit values of {c0, c1}
+                        popt, _ = curve_fit(polynomial_func, x, y)
+
+                        # Create the wavelength solution for the order
+                        our_wavelength_solution_for_order = polynomial_func(np.arange(len(rough_wls_order)), *popt)
+                        leg_out = Legendre.fit(np.arange(n_pixels), our_wavelength_solution_for_order, 9)
                     
+                    if self.cal_type == 'LFC':
+                        leg_out = Legendre.fit(x, y, 9, w=w)
+                        our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
                 if self.fit_type == 'spline':
                     leg_out = UnivariateSpline(x, y, w, k=5)
                     our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
-
+                
                 res = y - leg_out(x)
                 good = np.where(np.abs(res) <= sigma_clip*np.std(res))
                 x = x[good]
                 y = y[good]
                 w = w[good]
                 res = res[good]
-
-            # plt.plot(x, res, 'k.')
-            # plt.axhline(0, color='b', lw=2)
-            # plt.xlabel('Pixel')
-            # plt.ylabel('Fit residuals [$\AA$]')
-            # plt.tight_layout()
-            # plt.savefig('polyfits/polyfit_{}.png'.format(wls[0]))
-            # plt.close()
-
-            if plot_path is not None:
-                sorted_idx = np.argsort(fitted_peak_pixels[unclipped_idx])
-                s = InterpolatedUnivariateSpline(fitted_peak_pixels[unclipped_idx][sorted_idx], wls[unclipped_idx][sorted_idx])
-                interpolated_ground_truth = s(np.arange(n_pixels))
-                
+            
+            plt.plot(x, res, 'k.')
+            plt.axhline(0, color='b', lw=2)
+            plt.xlabel('Pixel')
+            plt.ylabel('Fit residuals [$\AA$]')
+            plt.tight_layout()
+            #plt.savefig('{}/polyfit.png'.format(plot_path))
+            plt.close()
+            
+            if plot_path is not None and self.cal_type =='ThAr':
                 approx_dispersion = (our_wavelength_solution_for_order[2000] - our_wavelength_solution_for_order[2100])/100
+                fig, ax1 = plt.subplots(tight_layout=True, figsize=(8, 4))
+                
+                # Range of interest b/c CCF chops off first/last 500 pixels
+                pixel_range = np.arange(500, 3500)
+                rough_wls_int_range = rough_wls_int(pixel_range)
+                wavelength_solution_range = our_wavelength_solution_for_order[500:3500]
 
-                # plot ground truth wls vs our wls
+                # Create the plot
                 fig, ax1 = plt.subplots(tight_layout=True, figsize=(8, 4))
                 ax1.plot(
-                    np.arange(n_pixels), 
-                    interpolated_ground_truth - our_wavelength_solution_for_order, 
+                    pixel_range, 
+                    rough_wls_int_range - wavelength_solution_range, 
                     color='k'
                 )
                 ax1.set_xlabel('Pixel')
                 ax1.set_ylabel(r'Wavelength Difference ($\AA$)')
                 ax2 = ax1.twinx()
-                warnings.filterwarnings("ignore", "FixedFormatter should only be used together with FixedLocator")
                 ax2.set_ylabel("Difference (pixels) \nusing dispersion " + r'$\approx$' + '{0:.2}'.format(approx_dispersion) + r' $\AA$/pixel')
                 ax2.set_ylim(ax1.get_ylim())
                 ax1_ticks = ax1.get_yticks()
@@ -1531,7 +1555,7 @@ class WaveCalibration:
         return our_wavelength_solution_for_order, leg_out
 
     def calculate_rv_precision(
-        self, fitted_peak_pixels, wls, leg_out, rough_wls,
+        self, fitted_peak_pixels, wls, leg_out, rough_wls, our_wavelength_solution_for_order, rough_wls_order, 
         print_update=True, plot_path=None
     ):
         """
@@ -1559,7 +1583,6 @@ class WaveCalibration:
                 float: relative RV precision in cm/s
         """
         our_wls_peak_pos = leg_out(fitted_peak_pixels) 
-
         # absolute/polynomial precision of order = difference between fundemental wavelengths
         # and our wavelength solution wavelengths for (fractional) peak pixels
         abs_residual = ((our_wls_peak_pos - wls) * scipy.constants.c) / wls
@@ -1569,9 +1592,9 @@ class WaveCalibration:
         # relative RV precision of order = difference between rough wls wavelengths
         # and our wavelength solution wavelengths for all pixels
         n_pixels = len(rough_wls)
-        rel_residual = (leg_out(np.arange(n_pixels)[rough_wls>0]) -  rough_wls[rough_wls>0]) * scipy.constants.c /rough_wls[rough_wls>0]
+        our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
+        rel_residual = (our_wavelength_solution_for_order[rough_wls>0] -  rough_wls[rough_wls>0]) * scipy.constants.c /rough_wls[rough_wls>0]
         rel_precision_cm_s = 100 * np.std(rel_residual)/np.sqrt(len(rough_wls[rough_wls>0]))
-
         if print_update:
             print('Absolute standard error (this order): {:.2f} cm/s'.format(abs_precision_cm_s))
             print('Relative standard error (this order): {:.2f} cm/s'.format(rel_precision_cm_s))
