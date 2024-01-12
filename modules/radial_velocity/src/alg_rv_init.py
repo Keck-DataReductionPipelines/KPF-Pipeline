@@ -26,6 +26,7 @@ mask_file_map = {
                  'K2_espresso': ('K2_espresso.txt', 'air'),
                  'K6_espresso': ('K6_espresso.txt', 'air'),
                  'M2_espresso': ('M2_espresso.txt', 'air'),
+                 'sun': ('G2.espresso.mas', 'air'),
                  'thar': ('Thorium_mask_031921.mas', 'vac'),
                  'lfc': ('kpf_lfc_mask_1025.mas', 'vac'),
                  'etalon': ('kpf_etalon_masks_30Oct2023.csv', 'vac')}
@@ -267,6 +268,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 default_mask = 'etalon'
             elif teff > 5800:
                 default_mask = 'F9_espresso'
+            elif teff == 5772:
+                default_mask = 'sun'
             elif 5800 > teff > 5650:
                 default_mask = 'G2_espresso'
             elif 5650 > teff > 5400:

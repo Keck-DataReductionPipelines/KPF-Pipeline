@@ -33,6 +33,13 @@ class AnalyzeGuider:
         r_mas   - radial coordinate array of measured guider errors
         nframes - number of frames in guider time series
         nframes_uniq_mas - number of frames in guider time series with detected objects
+        fwhm_mas_median - median of FWHM (mas)
+        fwhm_mas_std - standard deviation of FWHM (mas)
+        flux_median - median integrated flux
+        flux_std - standard deviation of integrated flux
+        peak_flux_median - median of peak flux (per pixel)
+        peak_flux_std - standard deviation of peak flux (per pixel)
+        frac_saturated - fraction of frames with 1 or more pixels within 90% of saturation
     """
 
     def __init__(self, L0, logger=None):
@@ -89,9 +96,22 @@ class AnalyzeGuider:
         self.r_mas = (self.x_mas**2+self.y_mas**2)**0.5
         self.nframes = self.df_GUIDER.shape[0]
         self.nframes_uniq_mas = min(np.unique(self.df_GUIDER.object1_x).size, np.unique(self.df_GUIDER.object1_y).size)
-        print('Number of Guider frames = ' + str(self.nframes))
-        print('Number of Guider frames with unique offsets = ' + str(self.nframes_uniq_mas))
         
+        # Measure FWHM, flux, peak flux, etc.
+        if not (self.df_GUIDER['object1_flux'] == 0.0).all() and self.nframes > 2:
+            self.fwhm_mas_median = np.median((self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5))
+            self.fwhm_mas_std = np.std((self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5))
+            self.flux_median = np.median(self.df_GUIDER.object1_flux)
+            self.flux_std = np.std(self.df_GUIDER.object1_flux)
+            self.peak_flux_median = np.median(self.df_GUIDER.object1_peak)
+            self.peak_flux_std = np.std(self.df_GUIDER.object1_peak)
+            self.frac_saturated = (self.df_GUIDER['object1_peak'] > 15830*0.9).sum() / self.df_GUIDER.shape[0]
+        else:
+            self.fwhm_mas_median = -1
+            self.flux_median = -1
+            self.peak_flux_median = -1
+            self.frac_saturated = -1
+
         # Measure guiding statistics
         self.measure_guider_errors()
 

@@ -1,4 +1,4 @@
-# Data Reduction Pipeline (DRP) for the Keck Planet Finder (KPF)
+# Data Reduction Pipeline (DRP) for the Keck Planet Finder (KPF) 
 
 [![Build Status](http://shrek.caltech.edu:4444/buildStatus/icon?job=KPF+CI)](http://shrek.caltech.edu:4444/job/KPF%20CI/)
 [![Documentation Status](https://readthedocs.org/projects/kpf-pipeline/badge/?version=latest)](https://kpf-pipeline.readthedocs.io/en/latest/)
@@ -19,3 +19,4 @@ If you use the KPF Data Reduction Pipeline in your research, please cite the fol
 If there is no place to include the relevant citations in the text of the publication, please include the following acknowledgment (in LaTeX using the [provided BibTeX entry](kpf_bibliography.bib)):
 
 "This research made use of the KPF Data Reduction Pipeline \citep{kpf:gibson2020}."
+
