@@ -176,8 +176,14 @@ CAL-OBJ   None                                        Calibration fiber source
 SKY-OBJ   Sky                                         Sky fiber source
 SCI-OBJ   Target                                      Science fiber source
 AGITSTA   Running                                     Agitator status
+FIUMODE   Observing                                   FIU operating mode
 TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
+ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
+ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2 temperature
+ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
+ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
+ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
 ========  ==========================================  =========
 
 2D Primary Extension Header
