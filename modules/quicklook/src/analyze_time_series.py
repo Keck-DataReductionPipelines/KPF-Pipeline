@@ -67,9 +67,9 @@ class AnalyzeTimeSeries:
         else:
             self.tqdm = tqdm
         self.db_path = db_path
-        self.logger.info('Full path of database file: ' + os.path.abspath(self.db_path))
+        self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
-        self.logger.info('Base directory: ' + self.base_dir)
+        self.logger.info('Base data directory: ' + self.base_dir)
         self.L0_keyword_types   = self.get_keyword_types(level='L0')
         self.D2_keyword_types   = self.get_keyword_types(level='2D')
         self.L1_keyword_types   = self.get_keyword_types(level='L1')

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from  modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
+from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
 def main(start_date, end_date, db_path):
     """
@@ -12,7 +12,7 @@ def main(start_date, end_date, db_path):
       KPF Time Series Database.
 
     Options:
-      --help  Display this message
+      --help  Display help message
    
     Usage:
       ./ingest_dates_kpf_tsdb.py YYYYMMDD YYYYMMDD dbname.db
