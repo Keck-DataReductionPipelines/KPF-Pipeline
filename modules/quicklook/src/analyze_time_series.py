@@ -54,7 +54,7 @@ class AnalyzeTimeSeries:
         * Augment statistics in legends (median and stddev upon request)
         * All for other plot types, e.g. histograms of DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
-        * Write ingestion script that's triggered by file events.
+        * Determine earliest observation with a TELEMETRY extension and act accordingly.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -82,7 +82,6 @@ class AnalyzeTimeSeries:
 
         # the line below might be modified so that if the database exists, then the columns are read from it
         self.create_database()
-        self.logger.info('Initialization complete')
         self.print_db_status()
 
 
