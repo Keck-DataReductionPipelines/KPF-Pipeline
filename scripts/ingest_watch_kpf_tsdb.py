@@ -94,7 +94,7 @@ def process_queue(event_queue, db_path, stop_event):
                 L0_path_batch = sorted(L0_path_batch)
                 ObsID_batch = [get_ObsID(L0_path) for L0_path in L0_path_batch]
                 myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.logger.info('Ingesting ' + str(len(L0_path_batch)) + ' observations with recent file creations/modifications: ' + ', '.join(ObsID_batch))
+                myTS.logger.info('Ingesting ' + str(len(L0_path_batch)) + ' observations: ' + ', '.join(ObsID_batch))
                 myTS.ingest_batch_observation(L0_path_batch)
                 myTS.logger.info('Finished ingesting ' + str(len(L0_path_batch)) + ' observations.')
                 myTS = [] # clear memory
@@ -110,7 +110,7 @@ def periodic_scan(db_path,stop_event):
     after the script starts.
     """
     time.sleep(20)            
-    start_date = '20230801'
+    start_date = '20221201'
     end_date   = '20400101'
     sec_between_scans = 3600
     last_run_time = datetime.now() - timedelta(seconds=sec_between_scans)
@@ -165,7 +165,7 @@ if __name__ == '__main__':
             time.sleep(1)
     except KeyboardInterrupt:
         stop_event.set()
-        print("\nStopping threads... (wait up to 30 seconds for threads to exit.)")
+        print("\nStopping threads... (wait up to 30 seconds for threads to exit)")
 
     for thread in threads:
         thread.join(timeout=30)

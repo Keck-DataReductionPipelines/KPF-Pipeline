@@ -54,7 +54,8 @@ class AnalyzeTimeSeries:
         * Augment statistics in legends (median and stddev upon request)
         * All for other plot types, e.g. histograms of DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
-        * Determine earliest observation with a TELEMETRY extension and act accordingly.
+        * Determine earliest observation with a TELEMETRY extension and act accordingly
+        * Ingest information from masters, especially WLS masters
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
