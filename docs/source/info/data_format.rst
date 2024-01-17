@@ -342,6 +342,8 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
    :height: 400px
    :width: 600px
 
+L2 Primary Extension Header and RV Extension
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *To-do: add a list of additional 2D, Level 1, and Level 2 primary keywords.*
 
