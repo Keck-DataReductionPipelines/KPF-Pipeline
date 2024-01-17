@@ -665,7 +665,23 @@ class QualityControlExposureFramework(KPF0_Primitive):
         except (Exception, psycopg2.DatabaseError) as error:
             self.logger.info('*** Error inserting record ({}); skipping...'.format(error))
             quality_control_exposure_exit_code = 66
-            rid = 0
+
+            # Rollback transaction.
+
+            conn.rollback()
+
+            # Try looking up rid of record.
+
+            qrid = "SELECT rid from L0Files where dateobs = '" + date_obs + "' and ut = '" + ut + "';"
+            self.logger.info('qrid = {}'.format(qrid))
+            cur.execute(qrid)
+            db_rid = cur.fetchone()
+            self.logger.info('PostgreSQL database rid = {}'.format(db_rid))
+
+            if db_rid is not None:
+                rid = db_rid[0]
+            else:
+                rid = 0
 
 
         # Commit transaction.
