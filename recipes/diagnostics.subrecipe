@@ -1,0 +1,14 @@
+# This subrecipe executes the standard diagnostic tests that are in 
+# modules/quality_control/src/diagnostics.py
+#
+# It expects that the following variables were defined by the recipe that called it
+#     data_level_str - 'L0' or '2D' or 'L1' or 'L2'
+#     kpf_object - a KPF object of the level specified by data_level_str
+
+from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+
+diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
+exit_code = diagnostics_output_list[0]
+new_kpf_object = diagnostics_output_list[1]
+if exit_code == 1:
+    kpf_object = new_kpf_object

@@ -140,43 +140,51 @@ Level 0 Primary Extension Header
 
 Most of the important keywords are stored in the primary extension of the Level 0 file, which is written immediately after each KPF exposure.
 
-========  ==============================  =========
-Keyword   Value (example)                 Comment
-========  ==============================  =========
-DATE-BEG  2023-10-22T15:30:01.056733      Start of exposure from kpfexpose
-DATE-MID  2023-10-22T15:32:31.065         Halfway point of the exposure (unweighted)
-DATE-END  2023-10-22T15:35:01.072797      End of exposure
-EXPTIME   300.0                           Requested exposure time
-ELAPSED   300.0                           Actual exposure time
-PROGNAME  N226                            Program name from kpfexpose
-OBJECT    42813                           Object name
-TARGRA    06:12:13.80                     Right ascension [hr] from DCS
-TARGDEC   -14:38:56.0                     Declination [deg] from DCS
-TARGEPOC  2000.0                          Target epoch from DCS
-TARGEQUI  2000.0                          Target equinox from DCS
-TARGPLAX  14.7                            Target parallax [arcsec] from DCS
-TARGPMDC  0.0                             Target proper motion [arcsec/yr] in declination from DCS
-TARGPMRA  0.0                             Target proper motion [s/yr] in right ascension from DCS
-TARGRADV  81.87                           Target radial velocity [km/s]
-AIRMASS   1.26                            Airmass from DCS
-PARANTEL  23.58                           Parallactic angle of the telescope from DCS
-HA        +01:01:37.22                    Hour angle
-EL        52.46                           Elevation [deg]
-AZ        204.46                          Azimuth [deg]
-LST       07:13:51.02                     Local sidereal time
-GAIAID    DR3 2993561629444856960         GAIA Target name
-2MASSID   J06121397-1439002               2MASS Target name
-GAIAMAG   9.28                            GAIA G band magnitude
-2MASSMAG  8.06                            2MASS J band magnitude
-TARGTEFF  5398.0                          Target effective temperature (K)
-OCTAGON   EtalonFiber                     Selected octagon calibration source (not necessarily powered on)
-TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide  Cameras that were sent triggers
-IMTYPE    Object                          Image Type
-CAL-OBJ   None                            Calibration fiber source
-SKY-OBJ   Sky                             Sky fiber source
-SCI-OBJ   Target                          Science fiber source
-AGITSTA   Running                         Agitator status
-========  ==============================  =========
+========  ==========================================  =========
+Keyword   Value (example)                             Comment
+========  ==========================================  =========
+DATE-BEG  2023-10-22T15:30:01.056733                  Start of exposure from kpfexpose
+DATE-MID  2023-10-22T15:32:31.065                     Halfway point of the exposure (unweighted)
+DATE-END  2023-10-22T15:35:01.072797                  End of exposure
+EXPTIME   300.0                                       Requested exposure time
+ELAPSED   300.0                                       Actual exposure time
+PROGNAME  N226                                        Program name from kpfexpose
+OBJECT    42813                                       Object name
+TARGRA    06:12:13.80                                 Right ascension [hr] from DCS
+TARGDEC   -14:38:56.0                                 Declination [deg] from DCS
+TARGEPOC  2000.0                                      Target epoch from DCS
+TARGEQUI  2000.0                                      Target equinox from DCS
+TARGPLAX  14.7                                        Target parallax [arcsec] from DCS
+TARGPMDC  0.0                                         Target proper motion [arcsec/yr] in declination from DCS
+TARGPMRA  0.0                                         Target proper motion [s/yr] in right ascension from DCS
+TARGRADV  81.87                                       Target radial velocity [km/s]
+AIRMASS   1.26                                        Airmass from DCS
+PARANTEL  23.58                                       Parallactic angle of the telescope from DCS
+HA        +01:01:37.22                                Hour angle
+EL        52.46                                       Elevation [deg]
+AZ        204.46                                      Azimuth [deg]
+LST       07:13:51.02                                 Local sidereal time
+GAIAID    DR3 2993561629444856960                     GAIA Target name
+2MASSID   J06121397-1439002                           2MASS Target name
+GAIAMAG   9.28                                        GAIA G band magnitude
+2MASSMAG  8.06                                        2MASS J band magnitude
+TARGTEFF  5398.0                                      Target effective temperature (K)
+OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
+TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
+IMTYPE    Object                                      Image Type
+CAL-OBJ   None                                        Calibration fiber source
+SKY-OBJ   Sky                                         Sky fiber source
+SCI-OBJ   Target                                      Science fiber source
+AGITSTA   Running                                     Agitator status
+FIUMODE   Observing                                   FIU operating mode
+TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
+TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
+ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
+ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2 temperature
+ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
+ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
+ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
+========  ==========================================  =========
 
 2D Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
