@@ -5,7 +5,7 @@
 # and masters data directories.
 #
 # Example:
-#    > kpf --watch /data/2D/20230711/ -c configs/quicklook_watch_dir.cfg -r recipes/quicklook_watch_dir.recipe
+#    > kpf --watch /data/L1/20240118/ -c configs/quicklook_watch.cfg -r recipes/quicklook_watch.recipe
 
 from modules.Utils.string_proc import level_from_kpffile
 from modules.Utils.string_proc import date_from_kpffile
