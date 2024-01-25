@@ -130,6 +130,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
     OPTIMAL = 0
     SUM = 1
     NOEXTRACT = 2
+    FOX = 3
     V_UP = 0
     H_RIGHT = 1
     V_DOWN = 2
@@ -143,24 +144,24 @@ class SpectralExtractionAlg(ModuleAlgBase):
     name = 'SpectralExtraction'
 
     rectifying_method = ['normal', 'vertical', 'norect']
-    extracting_method = ['optimal', 'summ', 'rectonly']
+    extracting_method = ['optimal', 'summ', 'rectonly', 'fox']  # fox: flat-relative optimal extraction
 
     # @profile
     def __init__(self, flat_data, flat_header, spectrum_data, spectrum_header,  order_trace_data, order_trace_header,
                  config=None, logger=None,
                  rectification_method=NoRECT, extraction_method=OPTIMAL, ccd_index=None,
                  total_order_per_ccd=None, orderlet_names=None, clip_file=None, logger_name=None,
-                 do_outlier_rejection=False, outlier_flux=None):
+                 do_outlier_rejection=False, outlier_flux=None, var_data=None):
 
         if not isinstance(flat_data, np.ndarray):
             raise TypeError('flat data type error, cannot construct object from SpectralExtractionAlg')
         if spectrum_data is not None and not isinstance(spectrum_data, np.ndarray):
             raise TypeError('flux data type error, cannot construct object from SpectralExtractionAlg')
-        if (spectrum_data is None or not spectrum_data.any()) and extraction_method in [self.SUM, self.OPTIMAL]:
+        if (spectrum_data is None or not spectrum_data.any()) and extraction_method in [self.SUM, self.OPTIMAL, self.FOX]:
             raise TypeError("no flux data for spectral extraction, cannot construct object from SpectralExtractAlg")
         if not isinstance(order_trace_data, np.ndarray) and not isinstance(order_trace_data, pd.DataFrame):
             raise TypeError('flux data type error, cannot construct object from SpectralExtractionAlg')
-        if not isinstance(spectrum_header, fits.header.Header) and extraction_method in [self.SUM, self.OPTIMAL] :
+        if not isinstance(spectrum_header, fits.header.Header) and extraction_method in [self.SUM, self.OPTIMAL, self.FOX] :
             raise TypeError('flux header type error, cannot construct object from SpectralExtractionAlg')
         if not isinstance(flat_header, fits.header.Header):
             raise TypeError('flat header type error, cannot construct object from SpectralExtractionAlg')
@@ -218,6 +219,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         self.do_outlier_rejection = do_outlier_rejection
         self.outlier_flux = outlier_flux
         self.order_name = None
+        self.var_data = var_data
 
     def get_config_value(self, prop, default=''):
         """ Get defined value from the config file.
@@ -316,6 +318,9 @@ class SpectralExtractionAlg(ModuleAlgBase):
         """
         return self.instrument
 
+    def var_of(self, x, y):
+        return 1.0 if self.var_data is None else self.var_data[y, x]
+
     def update_spectrum_flux(self, bleeding_cure_file=None):
         """ Update the spectrum flux per specified bleeding cure file or 'nan_pixels' set in config file.
 
@@ -380,7 +385,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         return self.extracted_flux_pixels
 
-    def extraction_handler(self, out_data, height, data_group, t_mask=None):
+    def extraction_handler(self, out_data, height, data_group, t_mask=None, f_var=None):
         """Perform the spectral extraction on one column of rectification data based on the extraction method.
 
         Args:
@@ -393,9 +398,12 @@ class SpectralExtractionAlg(ModuleAlgBase):
         """
 
         if self.extraction_method == SpectralExtractionAlg.OPTIMAL:
-            return self.optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height], height, 1, t_mask)
+            return self.optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height], height, 1, t_mask, f_var)
         elif self.extraction_method == SpectralExtractionAlg.SUM:
             return self.summation_extraction(out_data[self.SDATA][0:height])
+        elif self.extraction_method == SpectralExtractionAlg.FOX:
+            return self.flat_relative_optimal_extraction(out_data[self.SDATA][0:height], out_data[self.FDATA][0:height],
+                                                         height, 1, t_mask, f_var)
 
         # data_group should contain only the data set to be rectified.
         return {'extraction': out_data[data_group[0]['idx']][0:height]}
@@ -513,6 +521,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
         s_dt = None
         f_dt = None
         is_sdata_raw = True
+
         for dt in data_group:
             if dt['idx'] == self.SDATA:
                 s_dt = dt
@@ -522,6 +531,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
 
         s_data = np.zeros((p_height, p_width), dtype=float) if s_dt is not None else None
         f_data = np.zeros((p_height, p_width), dtype=float) if f_dt is not None else None
+        v_data = np.zeros((p_height, p_width), dtype=float) if self.var_data is not None else None
 
         for i_x, p_x in enumerate(input_x):
             y_input = np.floor(input_widths + y_mid[i_x]).astype(int)
@@ -540,7 +550,10 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 else:
                     f_data[y_input_idx, i_x] = f_dt['data'][output_widths[y_input_idx] + y_output_mid, x_output_step[i_x]]
 
-        return s_data, f_data, is_sdata_raw
+            if v_data is not None:
+                v_data[y_input_idx, i_x] = self.var_data[y_input, p_x]
+
+        return s_data, f_data, is_sdata_raw, v_data
 
     def outlier_rejection_for_optimal_extraction(self, s_data, f_data, input_x, x_output_step, is_sdata_raw,
                                                  input_widths, output_widths,  y_mid, y_output_mid,
@@ -626,7 +639,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
             np.ndarray: t_mask in which each pixel indicates if the trace pixel is an outlier(0) or not (1).
 
         """
-
         t_mask = np.ones_like(s_data, dtype=int)
         p_h, p_w = np.shape(s_data)
 
@@ -808,15 +820,15 @@ class SpectralExtractionAlg(ModuleAlgBase):
         is_debug = False
         mask_height = np.shape(out_data)[1]
 
-        #if self.order_name == 'GREEN_SCI_FLUX2':
-        #    if order_idx == 1:
+        #if self.order_name == 'GREEN_SCI_FLUX1':
+        #    if order_idx == 10:
         #        is_debug = True
-        s_data, f_data, is_sdata_raw = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
+        s_data, f_data, is_sdata_raw, f_var = self.data_extraction_for_optimal_extraction(data_group, y_mid, y_output_mid,
                                                                      input_widths, y_output_widths,
                                                                      input_x, x_output_step, mask_height, is_debug)
-
-
-        if self.do_outlier_rejection and self.extraction_method == SpectralExtractionAlg.OPTIMAL and \
+        if self.do_outlier_rejection and \
+                (self.extraction_method == SpectralExtractionAlg.OPTIMAL or
+                 self.extraction_method == SpectralExtractionAlg.FOX) and \
                 self.rectification_method == SpectralExtractionAlg.NoRECT and \
                 s_data is not None and f_data is not None:
             t_mask, s_data_outlier = self.outlier_rejection_for_optimal_extraction(s_data, f_data,
@@ -835,10 +847,11 @@ class SpectralExtractionAlg(ModuleAlgBase):
             if s_data is not None:
                 out_data[self.SDATA][:] = s_data[:, s_x][:, np.newaxis] \
                     if s_data_outlier is None else s_data_outlier[:, s_x][:, np.newaxis]
-            extracted_result = self.extraction_handler(out_data, y_size, data_group,
-                                                       t_mask[:, s_x][:, np.newaxis] if t_mask is not None else None)
-            extracted_data[:, o_x:o_x+1] = extracted_result['extraction']
 
+            extracted_result = self.extraction_handler(out_data, y_size, data_group,
+                                                       t_mask[:, s_x][:, np.newaxis] if t_mask is not None else None,
+                                                       f_var[:, s_x][:, np.newaxis] if f_var is not None else None)
+            extracted_data[:, o_x:o_x+1] = extracted_result['extraction']
 
         # out data starting from origin [0, 0] contains the reduced flux associated with the data range
         result_data = {'y_center': y_output_mid,
@@ -846,7 +859,6 @@ class SpectralExtractionAlg(ModuleAlgBase):
                        'extracted_data': extracted_data}
 
         return result_data
-
 
     def rectify_and_extract_spectrum_curve(self, data_group, order_idx, s_rate=1):
         """ Rectify and extraction the order trace based on the pixel collection method.
@@ -1311,7 +1323,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
                 'out_y_center': flux_results.get('y_center')}
 
     @staticmethod
-    def optimal_extraction(s_data, f_data, data_height, data_width, t_mask=None):
+    def optimal_extraction(s_data, f_data, data_height, data_width, t_mask=None, f_var=None):
         """ Do optimal extraction on collected pixels along the order.
 
         This optimal extraction method does the calculation based on the variance of the spectrum data and the
@@ -1322,6 +1334,7 @@ class SpectralExtractionAlg(ModuleAlgBase):
             f_data (numpy.ndarray): 2D flat data collected for one order.
             data_height (int): Height of the 2D data for optimal extraction.
             data_width (int): Width of the 2D data for optimal extraction.
+            f_var (numpy.ndarray, optional): flux variance collected for one order.
 
         Returns:
             dict: Information of optimal extraction result, like::
@@ -1353,6 +1366,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
         else:
             pixel_mask = np.ones_like(f_data)
 
+        # test needed using variance from varaiance extension if the data from variance extension is available
+        # d_var = np.where(np.isnan(s_data), 1.0, s_data) if f_var is None else f_var[0:data_height, 1]
         d_var = np.full((data_height, 1), 1.0)  # set the variance to be 1.0
         w_sum = np.sum(f_data[0:data_height, :], axis=0)
         nz_idx = np.where(w_sum != 0.0)[0]
@@ -1376,6 +1391,8 @@ class SpectralExtractionAlg(ModuleAlgBase):
     def summation_extraction(s_data):
         """ Spectrum extraction by summation on collected pixels (rectified or non-rectified)
 
+        This summation extraction method does the calculation to extract the spectrum by summing the flux data.
+
         Args:
             s_data (numpy.ndarray): Collected data for spectrum extraction.
 
@@ -1390,6 +1407,66 @@ class SpectralExtractionAlg(ModuleAlgBase):
         out_data = np.sum(s_data, axis=0).reshape(1, -1)
 
         return {'extraction': out_data}
+
+    @staticmethod
+    def flat_relative_optimal_extraction(s_data, f_data, data_height, data_width, t_mask=None, f_var=None):
+        """ Do flat relative optimal extraction on collected pixels along the order.
+
+        This flat relative optimal extraction method does the calculation to extract the spectrum relative to the
+        flat spectrum.
+
+        Args:
+            s_data (numpy.ndarray): 2D spectral data collected for one order.
+            f_data (numpy.ndarray): 2D flat data collected for one order.
+            data_height (int): Height of the 2D data for flat relative optimal extraction.
+            data_width (int): Width of the 2D data for flat relative optimal extraction.
+            t_mask (numpy.ndarray, option): 2D mask. Default to None
+
+        Returns:
+            dict: Information of flat relative optimal extraction result, like::
+
+                {
+                    'extraction': numpy.ndarray   # flat relative optimal extraction result.
+                }
+        Raises:
+            AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
+            Exception: If there is unmatched size between collected order data and associated flat data.
+            Exception: If the data size doesn't match to the given dimension.
+
+        """
+
+        if np.shape(s_data) != np.shape(f_data):
+            raise Exception("unmatched size between collected order data and associated flat data")
+
+        if np.shape(s_data)[0] != data_height or np.shape(s_data)[1] != data_width:
+            raise Exception("unmatched data size with the given dimension")
+
+        w_data = np.zeros((1, data_width))
+
+        # taking flat relative optimal extraction
+        # formula s_x/f_x = sum(Wx,y * F_x,y * S_x,y)/sum(Wx,y * F_x,y * F_x,y) where Wx,y = Mx,y/(sigma_x,y)^2
+
+        if t_mask is not None:
+            pixel_mask = t_mask[0:data_height, :]
+        else:
+            pixel_mask = np.ones_like(s_data)
+
+        # get variance (sigma^2) from variance extension or from flux data
+        d_var = np.where(np.isnan(s_data)|(s_data==0.0), 1.0, s_data) if f_var is None else f_var[0:data_height]
+        if np.where(d_var == 0.0)[0].size > 0:
+            d_var = np.where(d_var==0.0, 1.0, d_var)
+        # d_var = np.full((data_height, data_width), 1.0)  # set the variance to be 1.0
+        w_xy = pixel_mask/d_var
+        s_alter_data = np.where(np.isnan(s_data), 0.0, s_data)
+
+        num_sum = np.sum(w_xy * f_data * s_alter_data, axis=0)
+        dem_sum = np.sum(w_xy * f_data * f_data, axis=0)
+        nz_idx = np.where(dem_sum != 0.0)[0]
+
+        if nz_idx.size > 0:
+            w_data[0, nz_idx] = num_sum[nz_idx]/dem_sum[nz_idx]
+
+        return {'extraction': w_data}
 
     @staticmethod
     def fill_2d_with_data(from_data, to_data, to_pos, from_pos=0, height=1):
