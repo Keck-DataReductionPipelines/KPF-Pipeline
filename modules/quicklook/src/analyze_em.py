@@ -200,11 +200,11 @@ class AnalyzeEM:
             plt.plot(self.time_em, self.flux_SKY         /self.SKY_SCI_ratio/ self.flux_SCI        , marker='o',            linewidth=4, color='k', label = r'SKY$_{\mathrm{corrected}}$ / SCI - 445-870 nm')
         plt.plot(0, 0, marker='o', markersize=0.1, color='white') # force the y-axis to go to zero
         if fiber == 'both':
-            plottitle = 'Exposure Meter Time Series (SCI and SKY) - ' + str(self.EM_nexp)+ ' EM exposures, ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
+            plottitle = 'Exposure Meter Time Series (SCI and SKY) - ' + str(self.EM_nexp)+ r' EM exposures $\times$ ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
         elif fiber == 'sky':
-            plottitle = 'Exposure Meter Time Series (SKY) - ' + str(self.EM_nexp)+ ' EM exposures, ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
+            plottitle = 'Exposure Meter Time Series (SKY) - ' + str(self.EM_nexp)+ r' EM exposures $\times$  ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
         elif fiber == 'sci':
-            plottitle = 'Exposure Meter Time Series (SCI) - ' + str(self.EM_nexp)+ ' EM exposures, ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
+            plottitle = 'Exposure Meter Time Series (SCI) - ' + str(self.EM_nexp)+ r' EM exposures $\times$  ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name
         elif fiber == 'ratio':
             median_flux_ratio = np.nanmedian(self.flux_SKY/self.SKY_SCI_ratio / self.flux_SCI)
             avg_flux_ratio = np.nansum(self.flux_SKY/self.SKY_SCI_ratio) / np.nansum(self.flux_SCI)
@@ -290,7 +290,7 @@ class AnalyzeEM:
         lns2 = ax2.plot(self.wav_SKY, self.int_SKY_spec, marker='.', color='brown', label = 'SKY',zorder = 0, alpha = 0.5)
         ax1.set_ylim(0,np.nanpercentile(self.int_SCI_spec,99.9)*1.1)
         ax2.set_ylim(0,np.nanpercentile(self.int_SKY_spec,99.9)*1.1)
-        plt.title('Exposure Meter Spectrum: ' + str(self.EM_nexp)+ ' EM exposures, ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
+        plt.title('Exposure Meter Spectrum: ' + str(self.EM_nexp)+ r' EM exposures $\times$ ' + str(self.EM_texp)+ ' sec - ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.yticks(fontsize=14, color='brown')
         ax1.set_xlabel("Wavelength (nm)",fontsize=14)
         ax1.set_ylabel("Exposure Meter SCI Flux (e-/nm/s)",fontsize=14)

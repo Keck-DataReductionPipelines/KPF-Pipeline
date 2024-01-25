@@ -1,6 +1,7 @@
 # This recipe is used to manually produce a set of QLP outputs that match the 
 # fullpath config variable.  It can be used to produce QLP for a single data 
-# level (L0, 2D, L1, L2, masters) for a single datecode (YYYYDDMM) or combinations.  
+# level (L0, 2D, L1, L2, masters) for a single datecode (YYYYDDMM) or 
+# combinations.  
 # All of the examples below are executed using the command  
 #     > kpf -c configs/quicklook_match.cfg -r recipes/quicklook_match.recipe
 # but with different values for the config variable 'fullpath'.
@@ -11,10 +12,11 @@
 # Example - compute L0/2D/L1/L2 data products for KP.20230724.48905.30:
 #    fullpath = '/data/??/20230724/KP.20230724.48905.30*.fits'
 #
-# Example - compute L0/2D/L1/L2 data products for all ObsID on a particular date:
+# Example - compute L0/2D/L1/L2 data products for all ObsID on a date:
 #    fullpath = '/data/??/20230724/KP.*.fits'
 #
-# Example - compute L0/2D/L1/L2 data products for all ObsID on a range of ten dates:
+# Example - compute L0/2D/L1/L2 data products for all ObsID in a range 
+#    of ten dates:
 #    fullpath = '/data/??/2023072?/KP.*.fits'
 #
 # Example - compute masters data products for all files on a range of ten dates:

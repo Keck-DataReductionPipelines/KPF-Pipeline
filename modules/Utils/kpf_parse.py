@@ -1,3 +1,4 @@
+import re
 from astropy.io import fits
 from datetime import datetime
 
@@ -214,6 +215,26 @@ def get_datecode(ObsID):
     ObsID = ObsID.replace('_L2', '')
     datecode = ObsID.split('.')[1]
     return datecode
+
+
+def get_ObsID(file):
+    """
+    Returns an ObsID (like 'KP.20240113.23249.10') 
+    from a filename (like '/data/L1/20240113/KP.20240113.23249.10_L1.fits').
+    """
+    ObsID = file.split('/')[-1]
+    for substring in ['.fits', '_2D', '_L1', '_L2']:
+        ObsID = ObsID.replace(substring, '')
+    return ObsID
+
+
+def is_ObsID(ObsID):
+    """
+    Returns True of the input is a properly formatted ObsID, like 'KP.20240113.23249.10'.
+    """
+    pattern = r'^KP\.\d{8}\.\d{5}\.\d{2}$'
+    is_ObsID_bool = bool(re.match(pattern, ObsID))  
+    return is_ObsID_bool
 
 
 def get_data_products_L0(L0):
