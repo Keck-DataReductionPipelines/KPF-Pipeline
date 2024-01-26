@@ -1,6 +1,7 @@
 # standard dependencies
 import configparser
 import numpy as np
+import pandas as pd
 import os
 from astropy import constants as cst, units as u
 import datetime
@@ -170,7 +171,10 @@ class WaveCalibrate(KPF1_Primitive):
                         # raise ValueError('Not a ThAr file!')
                     
                     if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(self.linelist_path, allow_pickle=True).tolist()
+                        peak_wavelengths_ang = pd.read_csv(self.linelist_path,
+                                                           header=None,
+                                                           names=['wave', 'weight'],
+                                                           delim_whitespace=True)
                     else:
                         raise ValueError('ThAr run requires linelist_path')
 
