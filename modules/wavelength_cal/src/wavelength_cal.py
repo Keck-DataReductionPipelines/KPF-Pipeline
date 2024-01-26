@@ -175,6 +175,7 @@ class WaveCalibrate(KPF1_Primitive):
                                                            header=None,
                                                            names=['wave', 'weight'],
                                                            delim_whitespace=True)
+                        peak_wavelengths_ang = peak_wavelengths_ang.query('weight == 1')
                     else:
                         raise ValueError('ThAr run requires linelist_path')
 
