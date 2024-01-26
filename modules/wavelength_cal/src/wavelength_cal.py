@@ -306,6 +306,8 @@ class WaveCalibrate(KPF1_Primitive):
             file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
                 self.file_name + "_" + '{}.npy'.format(output_ext)
             self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
+        else:
+            file_name = None
             
         if output_ext != None:
             self.l1_obj[output_ext] = wl_soln
