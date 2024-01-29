@@ -1,6 +1,7 @@
 # standard dependencies
 import configparser
 import numpy as np
+import pandas as pd
 import os
 from astropy import constants as cst, units as u
 import datetime
@@ -170,7 +171,11 @@ class WaveCalibrate(KPF1_Primitive):
                         # raise ValueError('Not a ThAr file!')
                     
                     if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(self.linelist_path, allow_pickle=True).tolist()
+                        peak_wavelengths_ang = pd.read_csv(self.linelist_path,
+                                                           header=None,
+                                                           names=['wave', 'weight'],
+                                                           delim_whitespace=True)
+                        peak_wavelengths_ang = peak_wavelengths_ang.query('weight == 1')
                     else:
                         raise ValueError('ThAr run requires linelist_path')
 
@@ -301,6 +306,8 @@ class WaveCalibrate(KPF1_Primitive):
             file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
                 self.file_name + "_" + '{}.npy'.format(output_ext)
             self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
+        else:
+            file_name = None
             
         if output_ext != None:
             self.l1_obj[output_ext] = wl_soln

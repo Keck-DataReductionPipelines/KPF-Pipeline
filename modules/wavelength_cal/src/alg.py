@@ -383,11 +383,14 @@ class WaveCalibration:
                     good_peak_idx = np.arange(len(detected_peak_pixels))
 
                 if self.cal_type == 'LFC':
-                    wls, _, good_peak_idx = self.mode_match(
-                        order_flux, fitted_peak_pixels, good_peak_idx, 
-                        rough_wls_order, comb_lines_angstrom, 
-                        print_update=print_update, plot_path=order_plt_path
-                    )
+                    try:
+                        wls, _, good_peak_idx = self.mode_match(
+                            order_flux, fitted_peak_pixels, good_peak_idx, 
+                            rough_wls_order, comb_lines_angstrom, 
+                            print_update=print_update, plot_path=order_plt_path
+                        )
+                    except:
+                        import pdb; pdb.set_trace()
                 elif self.cal_type == 'Etalon':
 
                     assert comb_lines_angstrom is None, '`comb_lines_angstrom` \
@@ -418,11 +421,19 @@ class WaveCalibration:
                 else:
                     plot_toggle = False
 
-                line_wavelengths = expected_peak_locs[order_num]['known_wavelengths_vac']
-                line_pixels_expected = expected_peak_locs[order_num]['line_positions']
+                min_order_wave = np.min(rough_wls_order)
+                max_order_wave = np.max(rough_wls_order)
+                line_wavelengths = expected_peak_locs.query(f'{min_order_wave} < wave < {max_order_wave}')['wave'].values
+                
+                pixels_order = np.arange(0, len(rough_wls_order))
+                wave_to_pix = interp1d(rough_wls_order, pixels_order,
+                                       assume_sorted=False)
+                line_pixels_expected = wave_to_pix(line_wavelengths)
 
                 sorted_indices = np.argsort(line_pixels_expected)
                 line_wavelengths = line_wavelengths[sorted_indices]
+
+
                 line_pixels_expected = line_pixels_expected[sorted_indices]
 
                 line_wavelengths = np.array([
