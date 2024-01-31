@@ -64,17 +64,38 @@ class Analyze2D:
 
     def measure_2D_dark_current(self, chip=None):
         """
-        ADD DESCRIPTION
+        This method measures the dark current (flux/hr) in 10 regions on either
+        the green or red CCD.  The regions were chosen so to be sensitive to 
+        apparent dark current from the ion pumps (ech and coll), six reference
+        regions (ref1-ref6), and areas near the chip edges with significant 
+        amplifier glow (amp1 and amp2).
         
         Args:
+            chip (string) - 'green' or 'red'
 
-        Attributes:
+        Attributes (set by this method):
+            green_dark_current_regions - dictionary specifying the regions where 
+                                         dark current [e-/hr] is measured on the Green CCD
+            red_dark_current_regions - dictionary specifying the regions where 
+                                       dark current [e-/hr] is measured on the Red CCD
+            green_coll_pressure_torr - ion pump pressure (Green CCD, collimator side)
+            green_ech_pressure_torr  - ion pump pressure (Green CCD, echelle side)
+            green_coll_current_a     - ion pump current (Green CCD, collimator side)
+            green_ech_current_a      - ion pump current (Green CCD, echelle side)
+            red_coll_pressure_torr   - ion pump pressure (Red CCD, collimator side)
+            red_ech_pressure_torr    - ion pump pressure (Red CCD, echelle side)
+            red_coll_current_a       - ion pump current (Red CCD, collimator side)
+            red_ech_current_a        - ion pump current (Red CCD, echelle side)
 
         Returns:
             None
         """
         D2 = self.D2
         self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        if not self.exptime > 1:
+            exptime_hr = 1/3600 
+        else:
+            exptime_hr = self.exptime/3600
 
         # Read telemetry
         #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
@@ -99,13 +120,13 @@ class Analyze2D:
                'coll': {'name': 'Ion Pump (Collimator side)', 'x1': 3700, 'x2': 4000, 'y1':  700, 'y2': 1000, 'short':'coll', 'med_elec':0, 'label':''},
                'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
               }
-        if (chip.lower() == 'green'): #and ('GREEN_CCD' in D2):
+        if (chip.lower() == 'green'): 
             frame = np.array(D2['GREEN_CCD'].data)
             self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
             self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
             self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
             self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
-        if (chip.lower() == 'red'): #and ('RED_CCD' in D2):
+        if (chip.lower() == 'red'): 
             frame = np.array(D2['RED_CCD'].data)
             self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
             self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
@@ -114,7 +135,7 @@ class Analyze2D:
 
         for r in reg.keys():
             current_region = frame[reg[r]['y1']:reg[r]['y2'], reg[r]['x1']:reg[r]['x2']]
-            reg[r]['med_elec'] = np.median(current_region)
+            reg[r]['med_elec'] = np.median(current_region)/exptime_hr
         if chip == 'green':
             self.green_dark_current_regions = reg
         if chip == 'red':
