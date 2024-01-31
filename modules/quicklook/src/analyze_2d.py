@@ -2,6 +2,8 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from PIL import Image
+from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
@@ -24,7 +26,7 @@ class Analyze2D:
     Attributes:
         header - header of input 2D file
         name - name of source (e.g., 'Bias', 'Etalon', '185144')
-        ObsID - observation  ID (e.g. 'KP.20230704.02326.27'')
+        ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         exptime - exposure time (sec)
         green_dark_current_regions - dictionary specifying the regions where 
                                      dark current is measured on the Green CCD
@@ -97,7 +99,6 @@ class Analyze2D:
                'coll': {'name': 'Ion Pump (Collimator side)', 'x1': 3700, 'x2': 4000, 'y1':  700, 'y2': 1000, 'short':'coll', 'med_elec':0, 'label':''},
                'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
               }
-#       to-do: fix commented-out code below
         if (chip.lower() == 'green'): #and ('GREEN_CCD' in D2):
             frame = np.array(D2['GREEN_CCD'].data)
             self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
@@ -137,7 +138,6 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
-        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -245,6 +245,87 @@ class Analyze2D:
             plt.show()
         plt.close('all')
 
+# AWH will fix up this code at some point
+# to make a 1:1 pixel relationship
+#    def plot_2D_image_test(self, chip=None, overplot_dark_current=False, blur_size=None, 
+#                            fig_path=None, show_plot=False):
+#        """
+#        Generate a plot of a 2D image.  Overlay measurements of 
+#        dark current or bias measurements in preset regions, if commanded.
+#        
+#        Args:
+#            chip (string) - "green" or "red"
+#            overplot_dark_current - if True, dark current measurements are over-plotted
+#            fig_path (string) - set to the path for the file to be generated.
+#            show_plot (boolean) - show the plot in the current environment.
+#
+#        Returns:
+#            PNG plot in fig_path or shows the plot it in the current environment 
+#            (e.g., in a Jupyter Notebook).
+#
+#        """
+#
+#        # Set parameters based on the chip selected
+#        if chip == 'green' or chip == 'red':
+#            if chip == 'green':
+#                CHIP = 'GREEN'
+#                chip_title = 'Green'
+#                if overplot_dark_current:
+#                    reg = self.green_dark_current_regions
+#                    coll_pressure_torr = self.green_coll_pressure_torr
+#                    ech_pressure_torr = self.green_ech_pressure_torr
+#                    coll_current_a = self.green_coll_current_a
+#                    ech_current_a = self.green_ech_current_a
+#            if chip == 'red':
+#                CHIP = 'RED'
+#                chip_title = 'Red'
+#                if overplot_dark_current:
+#                    reg = self.red_dark_current_regions
+#                    coll_pressure_torr = self.red_coll_pressure_torr
+#                    ech_pressure_torr = self.red_ech_pressure_torr
+#                    coll_current_a = self.red_coll_current_a
+#                    ech_current_a = self.red_ech_current_a
+#            image = np.array(self.D2[CHIP + '_CCD'].data)
+#        else:
+#            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+#            return
+#            
+#        if blur_size != None:
+#            from scipy import ndimage
+#            image = ndimage.median_filter(image, size=blur_size)
+#
+#        # Assuming image is a numpy array of shape (4080, 4080)
+#        dpi = 100  # Set the DPI to 100, so the number of inches equals the number of pixels divided by DPI
+#        figsize = image.shape[1] / dpi, image.shape[0] / dpi  # Calculate the figure size in inches
+#        
+#        # Create a figure with the exact size and DPI
+#        fig = plt.figure(figsize=figsize, dpi=dpi, frameon=False)
+#        
+#        # Add an axis at position [left, bottom, width, height] where all quantities are in fractions of figure width and height
+#        ax = fig.add_axes([0, 0, 1, 1])
+#        
+#        # Hide the axes
+#        ax.axis('off')
+#        
+#        # Display the image
+#        im = ax.imshow(image, vmin = np.nanpercentile(image[100:-100,100:-100],0.1), 
+#                               vmax = np.nanpercentile(image[100:-100,100:-100],99), 
+#                               interpolation = 'None', 
+#                               origin = 'lower', 
+#                               cmap='viridis',
+#                               aspect='equal')
+#
+#        # ... (rest of your plotting code, e.g., overplot_dark_current)
+#
+#        # Display the plot
+#        if fig_path is not None:
+#            t0 = time.process_time()
+#            plt.savefig(fig_path, dpi=dpi, bbox_inches='tight', pad_inches=0, facecolor='w')
+#            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+#        if show_plot:
+#            plt.show()
+#        plt.close('all')
+
 
     def plot_2D_image_zoom(self, chip=None, fig_path=None, show_plot=False, 
                            zoom_coords=(3780, 3780, 4080, 4080)):
@@ -262,7 +343,6 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
-        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -311,7 +391,6 @@ class Analyze2D:
         Generate a 3x3 array zoom-in plots of the a 2D image.  
 
         Args:
-            zoom_coords - coordinates for zoom (xmin, ymin, xmax, ymax)
             chip (string) - "green" or "red"
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -321,7 +400,6 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
-        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -352,11 +430,6 @@ class Analyze2D:
                 start_x = center_x - size // 2 + offsets[i]
                 start_y = center_y - size // 2 + offsets[j]
 
-                ## Check if the start coordinates are out of image boundaries
-                #if start_x < 0 or start_y < 0 or start_x+size > image.shape[0] or start_y+size > image.shape[1]:
-                #    print(f"Sub-image at offset ({offsets[i]}, {offsets[j]}) is out of image boundaries")
-                #    continue
-
                 # Slice out and display the sub-image
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
                 im = axs[2-i, j].imshow(sub_img, origin='lower', 
@@ -372,7 +445,6 @@ class Analyze2D:
                 if j != 0:
                     axs[i, j].tick_params(labelleft=False) # turn off y tick labels
                 fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
-                #axs[2-i, j].set_xlabel('i,j = ' + str(i) + ','+str(j) + ' -- ' + str(start_x) + ', ' + str(start_y), fontsize=10)
         plt.grid(False)
         plt.tight_layout()
         plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
@@ -731,7 +803,6 @@ class Analyze2D:
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.xlim(0, len(column_sum))
-#        plt.ylim(1,1.2*np.nanmax(image[:,which_column]))
         if log_plot:
             plt.yscale('log')
             y_lim = plt.ylim()
@@ -745,4 +816,136 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
+        plt.close('all')
+
+
+class Analyze2D_2files:
+    """
+    This class contains functions to analyze 2D images (storing them
+    as attributes) and functions to plot the results.
+    Some of the functions need to be filled in
+
+    Arguments:
+        D2a - first 2D object
+        D2b - second 2D object
+
+    Attributes:
+        header_a - header of D2a
+        header_b - header of D2b
+        name_a - name of source (e.g., 'Bias', 'Etalon', '185144') of D2a
+        name_b - name of source (e.g., 'Bias', 'Etalon', '185144') of D2b
+        ObsID_a - observation  ID (e.g. 'KP.20230704.02326.27') of D2a
+        ObsID_b - observation  ID (e.g. 'KP.20230704.02326.27') of D2b
+    """
+
+    def __init__(self, D2a, D2b, logger=None):
+        self.logger = logger if logger is not None else DummyLogger()
+        self.D2a = D2a 
+        self.D2b = D2b
+        primary_header_a = HeaderParse(D2a, 'PRIMARY')
+        primary_header_b = HeaderParse(D2b, 'PRIMARY')
+        self.header_a = primary_header_a.header
+        self.header_b = primary_header_b.header
+        self.name_a = primary_header_a.get_name()
+        self.name_b = primary_header_b.get_name()
+        self.ObsID_a = primary_header_a.get_obsid()
+        self.ObsID_b = primary_header_b.get_obsid()
+
+    def plot_2D_image_blink(self, chip=None, fig_path=None, zoom_coords=None):
+        """
+        Generate an animated GIF that blinks back and forth between the two CCD 
+        images in the 2D objects.  The color bar will be scaled base on the 
+        dynamic range of the first image.
+        
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+            zoom_coords (tuple) - None or tuple of coordinates (x0, y0, x1, y1) 
+            	                  for a zoomed-in plot
+
+        Returns:
+            Animated GIF image in fig_path
+        
+        Example:
+            ObsID1 = 'KP.20240131.01126.61' # flat
+            ObsID2 = 'KP.20240131.18680.85' # wideflat - f/4
+            D2_file1 = '/data/2D/' + get_datecode(ObsID1) + '/' + ObsID1 + '_2D.fits'
+            D2_file2 = '/data/2D/' + get_datecode(ObsID2) + '/' + ObsID2 + '_2D.fits'
+            D2_1 = KPF0.from_fits(D2_file1)
+            D2_2 = KPF0.from_fits(D2_file2)
+            myD2 = Analyze2D_2files(D2_1, D2_2)
+            myD2.plot_2D_image_blink(chip='green', fig_path=ObsID1 + '_' + ObsID2 + '_blink.gif')
+            myD2.plot_2D_image_blink(chip='green', zoom_coords=(1640, 1640, 2440, 2440), fig_path=ObsID1 + '_' + ObsID2 + '_zoom_blink.gif')
+        """
+            
+        def update(frame):
+            if frame % 2 == 0:
+                im.set_array(image_a)
+            else:
+                im.set_array(image_b)
+            return [im]
+  
+        # Set parameters based on the chip selected
+        if chip == 'green' or chip == 'red':
+            if chip == 'green':
+                CHIP = 'GREEN'
+                chip_title = 'Green'
+            if chip == 'red':
+                CHIP = 'RED'
+                chip_title = 'Red'
+        else:
+            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+            return
+
+        image_a = np.array(self.D2a[CHIP + '_CCD'].data)
+        image_b = np.array(self.D2b[CHIP + '_CCD'].data)
+        
+        if zoom_coords != None:
+            x0 = zoom_coords[0]
+            y0 = zoom_coords[1]
+            x1 = zoom_coords[2]
+            y1 = zoom_coords[3]
+            image_a = image_a[y0:y1, x0:x1] 
+            image_b = image_b[y0:y1, x0:x1]
+            vmin = np.nanpercentile(image_a,0.1)
+            vmax = np.nanpercentile(image_a,99)
+            figsize = (int(abs(x1-x0)*10/72), int(abs(x1-x0)*10)/72 )
+        else:
+            vmin = np.nanpercentile(image_a[100:-100,100:-100],0.1)
+            vmax = np.nanpercentile(image_a[100:-100,100:-100],99)
+            figsize = ( int(4100/72), int(4100/72) )
+
+        # Generate 2D image
+        fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+        im = ax.imshow(image_a, vmin = vmin, 
+                                vmax = vmax, 
+                                interpolation = 'None', 
+                                origin = 'lower', 
+                                cmap='viridis', 
+                                animated=True)
+        
+        ax.grid(False)
+        ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID_a) + ' - ' + self.name_a  + ' & ' 
+                                                     + str(self.ObsID_b) + ' - ' + self.name_b , fontsize=12)
+        ax.set_xlabel('Column (pixel number)', fontsize=18)
+        ax.set_ylabel('Row (pixel number)', fontsize=18)
+        
+        ani = FuncAnimation(fig, update, frames=range(20), blit=True)
+        frames = []
+        for i in range(2):
+            update(i)
+            frame = Image.fromarray((im.make_image(renderer=fig.canvas.get_renderer())[0]).astype(np.uint8))
+            frames.append(frame)
+
+        if fig_path != None:
+            frames[0].save(
+                fig_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=2000,  # duration between frames in milliseconds
+                loop=0,  # loop=0 for infinite loop
+                facecolor='w'
+            )
+            self.logger.info(f'GIF saved to {fig_path}')
         plt.close('all')
