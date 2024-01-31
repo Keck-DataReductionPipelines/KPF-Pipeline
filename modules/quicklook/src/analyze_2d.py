@@ -898,7 +898,7 @@ class Analyze2D_2files:
                 CHIP = 'RED'
                 chip_title = 'Red'
         else:
-            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+            self.logger.debug('chip not supplied.  Exiting plot_2D_image_blink')
             return
 
         image_a = np.array(self.D2a[CHIP + '_CCD'].data)
@@ -914,7 +914,7 @@ class Analyze2D_2files:
             vmin = np.nanpercentile(image_a,0.1)
             vmax = np.nanpercentile(image_a,99)
             figsize = (int(abs(x1-x0)*oversampling_factor/72), 
-                       int(abs(y1-y0)*oversampling_factor)/72 )
+                       int(abs(y1-y0)*oversampling_factor/72))
         else:
             vmin = np.nanpercentile(image_a[100:-100,100:-100],0.1)
             vmax = np.nanpercentile(image_a[100:-100,100:-100],99)
@@ -930,10 +930,6 @@ class Analyze2D_2files:
                                 animated=True)
         
         ax.grid(False)
-        ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID_a) + ' - ' + self.name_a  + ' & ' 
-                                                     + str(self.ObsID_b) + ' - ' + self.name_b , fontsize=12)
-        ax.set_xlabel('Column (pixel number)', fontsize=18)
-        ax.set_ylabel('Row (pixel number)', fontsize=18)
         
         ani = FuncAnimation(fig, update, frames=range(20), blit=True)
         frames = []
