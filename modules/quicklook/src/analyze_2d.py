@@ -851,7 +851,7 @@ class Analyze2D_2files:
         self.ObsID_a = primary_header_a.get_obsid()
         self.ObsID_b = primary_header_b.get_obsid()
 
-    def plot_2D_image_blink(self, chip=None, fig_path=None, zoom_coords=None):
+    def plot_2D_image_blink(self, chip=None, fig_path=None, zoom_coords=None, oversampling_factor=10):
         """
         Generate an animated GIF that blinks back and forth between the two CCD 
         images in the 2D objects.  The color bar will be scaled base on the 
@@ -863,6 +863,9 @@ class Analyze2D_2files:
             show_plot (boolean) - show the plot in the current environment.
             zoom_coords (tuple) - None or tuple of coordinates (x0, y0, x1, y1) 
             	                  for a zoomed-in plot
+            oversampling_factor (int) - the dimensions of the final plot will 
+                                        be oversampled by this factor compared
+                                        to the pixels in zoom_coords
 
         Returns:
             Animated GIF image in fig_path
@@ -910,7 +913,8 @@ class Analyze2D_2files:
             image_b = image_b[y0:y1, x0:x1]
             vmin = np.nanpercentile(image_a,0.1)
             vmax = np.nanpercentile(image_a,99)
-            figsize = (int(abs(x1-x0)*10/72), int(abs(x1-x0)*10)/72 )
+            figsize = (int(abs(x1-x0)*oversampling_factor/72), 
+                       int(abs(y1-y0)*oversampling_factor)/72 )
         else:
             vmin = np.nanpercentile(image_a[100:-100,100:-100],0.1)
             vmax = np.nanpercentile(image_a[100:-100,100:-100],99)
