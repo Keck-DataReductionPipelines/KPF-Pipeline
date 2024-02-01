@@ -82,7 +82,6 @@ class QCDefinitions:
             Must be a short string for brevity (say, under 35 characters), following the FITS standard.
         db_columns (dictionary of strings): Each entry specifies either database_table.column if applicable,
             or None if not.
-#        methods (dictionary of lists): Each entry specifies a list of methods that apply to the metric.
     """
 
     def __init__(self):
@@ -94,7 +93,6 @@ class QCDefinitions:
         self.fits_keywords = {}
         self.fits_comments = {}
         self.db_columns = {}
-        #self.methods = {}
 
         # Define QC metrics
         name0 = 'jarque_bera_test_red_amp1'
@@ -105,7 +103,6 @@ class QCDefinitions:
         self.fits_keywords[name0] = 'JBTRED1'
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name0] = None
-        #self.methods[name0] = ["add_qc_keyword_to_header"]
 
         name1 = 'not_junk_check'
         self.names.append(name1)
@@ -115,7 +112,6 @@ class QCDefinitions:
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files check'
         self.db_columns[name1] = None
-        #self.methods[name1] = ["add_qc_keyword_to_header"]
 
         name2 = 'monotonic_wavelength_solution_check'
         self.names.append(name2)
@@ -125,8 +121,6 @@ class QCDefinitions:
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
         self.db_columns[name2] = None
-        #self.methods[name2] = ["add_qc_keyword_to_header","monotonic_wavelength_solution_check","add_qc_keyword_to_header_for_monotonic_wls"]
-        #self.methods[name2] = ["add_qc_keyword_to_header"]
 
         name3 = 'L0_data_products_check'
         self.names.append(name3)
@@ -136,7 +130,6 @@ class QCDefinitions:
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present check'
         self.db_columns[name3] = None
-        #self.methods[name3] = ["add_qc_keyword_to_header"]
 
         name4 = 'L0_header_keywords_present_check'
         self.names.append(name4)
@@ -146,7 +139,6 @@ class QCDefinitions:
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present check'
         self.db_columns[name4] = None
-        #self.methods[name4] = ["add_qc_keyword_to_header"]
 
         name5 = 'exposure_meter_not_saturated_check'
         self.names.append(name5)
@@ -156,7 +148,6 @@ class QCDefinitions:
         self.fits_keywords[name5] = 'EMSAT'
         self.fits_comments[name5] = 'QC: EM not saturated check'
         self.db_columns[name5] = None
-        #self.methods[name5] = ["add_qc_keyword_to_header"]
 
         name6 = 'exposure_meter_flux_not_negative_check'
         self.names.append(name6)
@@ -166,7 +157,6 @@ class QCDefinitions:
         self.fits_keywords[name6] = 'EMNEG'
         self.fits_comments[name6] = 'QC: EM not negative flux check'
         self.db_columns[name6] = None
-        #self.methods[name6] = ["add_qc_keyword_to_header"]
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -187,9 +177,6 @@ class QCDefinitions:
         if len(self.names) != len(self.db_columns):
             raise ValueError("Length of db_columns list does not equal number of entries in db_columns dictionary.")
 
-#        if len(self.names) != len(self.methods):
-#            raise ValueError("Length of methods list does not equal number of entries in methods dictionary.")
-
         keys_list = self.data_types.keys()
         for key in keys_list:
             dt = self.data_types[key]
@@ -209,7 +196,6 @@ class QCDefinitions:
             data_type = self.data_types[qc_name]
             keyword = self.fits_keywords[qc_name]
             comment = self.fits_comments[qc_name]
-#            methods = self.methods[qc_name]
             db_column = self.db_columns[qc_name]
             description = self.descriptions[qc_name]
 
