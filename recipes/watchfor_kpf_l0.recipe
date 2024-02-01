@@ -105,6 +105,13 @@ for raw_file_path in file_list:
         # read file
         l0 = kpf0_from_fits(raw_file_path, data_type)
 
+        # Quality Control & Diagnostics - L0 level
+        data_level_str = 'L0'
+        kpf_object = l0
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
+        l0 = kpf_object
+
         # compute red-chip ffi
         ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
         red_ffi = OverscanSubtraction(l0,
@@ -148,12 +155,13 @@ for raw_file_path in file_list:
             pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
             twod = pixels_masked
 
-        # Diagnostics & Quality Control - subrecipes
+        # Diagnostics & Quality Control - 2D level
         kpf_object = flat_applied
         data_level_str = '2D'
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
-                    
+        flat_applied = kpf_object
+      
         # Write file
         recipe_complete = to_fits(flat_applied, output_file_name)
 
