@@ -140,43 +140,51 @@ Level 0 Primary Extension Header
 
 Most of the important keywords are stored in the primary extension of the Level 0 file, which is written immediately after each KPF exposure.
 
-========  ==============================  =========
-Keyword   Value (example)                 Comment
-========  ==============================  =========
-DATE-BEG  2023-10-22T15:30:01.056733      Start of exposure from kpfexpose
-DATE-MID  2023-10-22T15:32:31.065         Halfway point of the exposure (unweighted)
-DATE-END  2023-10-22T15:35:01.072797      End of exposure
-EXPTIME   300.0                           Requested exposure time
-ELAPSED   300.0                           Actual exposure time
-PROGNAME  N226                            Program name from kpfexpose
-OBJECT    42813                           Object name
-TARGRA    06:12:13.80                     Right ascension [hr] from DCS
-TARGDEC   -14:38:56.0                     Declination [deg] from DCS
-TARGEPOC  2000.0                          Target epoch from DCS
-TARGEQUI  2000.0                          Target equinox from DCS
-TARGPLAX  14.7                            Target parallax [arcsec] from DCS
-TARGPMDC  0.0                             Target proper motion [arcsec/yr] in declination from DCS
-TARGPMRA  0.0                             Target proper motion [s/yr] in right ascension from DCS
-TARGRADV  81.87                           Target radial velocity [km/s]
-AIRMASS   1.26                            Airmass from DCS
-PARANTEL  23.58                           Parallactic angle of the telescope from DCS
-HA        +01:01:37.22                    Hour angle
-EL        52.46                           Elevation [deg]
-AZ        204.46                          Azimuth [deg]
-LST       07:13:51.02                     Local sidereal time
-GAIAID    DR3 2993561629444856960         GAIA Target name
-2MASSID   J06121397-1439002               2MASS Target name
-GAIAMAG   9.28                            GAIA G band magnitude
-2MASSMAG  8.06                            2MASS J band magnitude
-TARGTEFF  5398.0                          Target effective temperature (K)
-OCTAGON   EtalonFiber                     Selected octagon calibration source (not necessarily powered on)
-TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide  Cameras that were sent triggers
-IMTYPE    Object                          Image Type
-CAL-OBJ   None                            Calibration fiber source
-SKY-OBJ   Sky                             Sky fiber source
-SCI-OBJ   Target                          Science fiber source
-AGITSTA   Running                         Agitator status
-========  ==============================  =========
+========  ==========================================  =========
+Keyword   Value (example)                             Comment
+========  ==========================================  =========
+DATE-BEG  2023-10-22T15:30:01.056733                  Start of exposure from kpfexpose
+DATE-MID  2023-10-22T15:32:31.065                     Halfway point of the exposure (unweighted)
+DATE-END  2023-10-22T15:35:01.072797                  End of exposure
+EXPTIME   300.0                                       Requested exposure time
+ELAPSED   300.0                                       Actual exposure time
+PROGNAME  N226                                        Program name from kpfexpose
+OBJECT    42813                                       Object name
+TARGRA    06:12:13.80                                 Right ascension [hr] from DCS
+TARGDEC   -14:38:56.0                                 Declination [deg] from DCS
+TARGEPOC  2000.0                                      Target epoch from DCS
+TARGEQUI  2000.0                                      Target equinox from DCS
+TARGPLAX  14.7                                        Target parallax [arcsec] from DCS
+TARGPMDC  0.0                                         Target proper motion [arcsec/yr] in declination from DCS
+TARGPMRA  0.0                                         Target proper motion [s/yr] in right ascension from DCS
+TARGRADV  81.87                                       Target radial velocity [km/s]
+AIRMASS   1.26                                        Airmass from DCS
+PARANTEL  23.58                                       Parallactic angle of the telescope from DCS
+HA        +01:01:37.22                                Hour angle
+EL        52.46                                       Elevation [deg]
+AZ        204.46                                      Azimuth [deg]
+LST       07:13:51.02                                 Local sidereal time
+GAIAID    DR3 2993561629444856960                     GAIA Target name
+2MASSID   J06121397-1439002                           2MASS Target name
+GAIAMAG   9.28                                        GAIA G band magnitude
+2MASSMAG  8.06                                        2MASS J band magnitude
+TARGTEFF  5398.0                                      Target effective temperature (K)
+OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
+TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
+IMTYPE    Object                                      Image Type
+CAL-OBJ   None                                        Calibration fiber source
+SKY-OBJ   Sky                                         Sky fiber source
+SCI-OBJ   Target                                      Science fiber source
+AGITSTA   Running                                     Agitator status
+FIUMODE   Observing                                   FIU operating mode
+TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
+TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
+ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
+ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2 temperature
+ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
+ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
+ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
+========  ==========================================  =========
 
 2D Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -239,6 +247,27 @@ EMSKCT45  100000000.1234                              cumulative EM counts [ADU]
 EMSKCT56  100000000.1234                              cumulative EM counts [ADU] in SKY in 551-658 nm
 EMSKCT67  100000000.1234                              cumulative EM counts [ADU] in SKY in 658-764 nm
 EMSKCT78  100000000.1234                              cumulative EM counts [ADU] in SKY in 764-870 nm
+MEDGRN1   3.9642348e+07                               Median for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN1   3.9340188e+07                               16th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN1   3.9340188e+07                               84th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN2   3.9642348e+07                               Median for GREEN_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN2   3.9340188e+07                               16th-percentile for GREEN_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN2   3.9340188e+07                               84th-percentile for GREEN_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN3   3.9642348e+07                               Median for GREEN_AMP3 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN3   3.9340188e+07                               16th-percentile for GREEN_AMP3 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN3   3.9340188e+07                               84th-percentile for GREEN_AMP3 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN4   3.9642348e+07                               Median for GREEN_AMP4 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN4   3.9340188e+07                               16th-percentile for GREEN_AMP4 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN4   3.9340188e+07                               84th-percentile for GREEN_AMP4 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDRED1   3.9642348e+07                               Median for RED_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
+P16RED1   3.9340188e+07                               16th-percentile for RED_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
+P84RED1   3.9340188e+07                               84th-percentile for RED_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDRED2   3.9642348e+07                               Median for RED_AMP2 [e-] (includes overscan region, excludes NaNs explicitly)
+P16RED2   3.9340188e+07                               16th-percentile for RED_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
+P84RED2   3.9340188e+07                               84th-percentile for RED_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDCAHK   3.9642348e+07                               Median for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
+P16CAHK   3.9340188e+07                               16th-percentile for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
+P84CAHK   3.9340188e+07                               84th-percentile for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -246,6 +275,9 @@ Keywords related to read noise are only computed for the amplifiers used.  In re
 Keywords related to dark current (starting with FLX) are only added for 2D files of Dark observations (no illumination and exposure time > 0). The regions for those keywords refer to the CCD coordinates where the dark current measurements were made (using modules/quicklook/arc/analyze_2d.py).  The image below (click to enlarge) shows the regions and dark current estimates for a 2D spectrum taken when the dark current was high.
 
 Keywords related to the Guider are only added for 2D files that have Guider data products.  Similar for Exposure Meter data products.
+
+Keywords related to L0 amplifier-image statistics (e.g., MEDGRN1) are only added to 2D files.  A robust estimator of data dispersion width is
+sigma = 0.5 * (P84 - P16), equivalent to one standard deviation for normally distributed data.
 
 .. image:: dark_current_example.png
    :alt: Image of KPF Green CCD showing regions where dark current is measured

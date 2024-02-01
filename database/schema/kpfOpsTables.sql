@@ -110,6 +110,8 @@ CREATE TABLE l0files (
     p16cahk real,                                 -- 16th percentile of CA_HK image
     p84cahk real,                                 -- 84th percentile of CA_HK image
     comment character varying(255),               -- Reason for status=0, etc.
+    gracffln character varying(64),               -- FITS-header keyword: GRACFFLN
+    rdacffln character varying(64),               -- FITS-header keyword: RDACFFLN
     CONSTRAINT l0files_ra_check CHECK (((ra >= 0.0) AND (ra < 360.0))),
     CONSTRAINT l0files_dec_check CHECK (((dec >= -90.0) AND (dec <= 90.0)))
 );
