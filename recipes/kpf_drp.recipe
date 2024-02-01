@@ -164,7 +164,6 @@ for wls in wls_list:
 if do_l0_to_2d:
     invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
-
 # Override wave_fits list with optional database query for nearest WLS master file.
 do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
 date_dir_db_query = context.date_dir
