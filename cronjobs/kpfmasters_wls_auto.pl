@@ -84,7 +84,7 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.8';
+my $version = '1.9';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -127,11 +127,11 @@ my $script = "#! /bin/bash\n" .
              "mkdir -p /data/masters/${procdate}\n" .
              "cp -pr /masters/${procdate}/kpf_${procdate}*L1.fits /data/masters/${procdate}\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "rm /masters/${procdate}/*master_WLS*\n" .
              "cp -p /data/masters/${procdate}/*master_WLS* /masters/${procdate}\n" .
              "mkdir -p /masters/${procdate}/wlpixelfiles\n" .
              "cp -p /data/masters/wlpixelfiles/*kpf_${procdate}* /masters/${procdate}/wlpixelfiles\n" .
              "cp -p /code/KPF-Pipeline/pipeline_${procdate}.log /masters/${procdate}/pipeline_wls_auto_${procdate}.log\n" .
-             "find /masters/${procdate}/* -type f -mtime +7 -exec rm {} +\n" .
              "rm /code/KPF-Pipeline/pipeline_${procdate}.log\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
