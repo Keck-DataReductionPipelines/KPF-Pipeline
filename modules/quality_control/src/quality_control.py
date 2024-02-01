@@ -97,7 +97,6 @@ class QCDefinitions:
         #self.methods = {}
 
         # Define QC metrics
-
         name0 = 'jarque_bera_test_red_amp1'
         self.names.append(name0)
         self.descriptions[name0] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
@@ -162,7 +161,7 @@ class QCDefinitions:
         name6 = 'exposure_meter_flux_not_negative_check'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 2o0 consecuitive pixels in the summed spectra with negative flux.'
+        self.descriptions[name6] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name6] = 'int'
         self.fits_keywords[name6] = 'EMNEG'
         self.fits_comments[name6] = 'QC: EM not negative flux check'
@@ -286,7 +285,6 @@ class QC:
         except:
             filename = 'this file'
         obsID = filename[:20]
-        print('The obsID is ' + obsID)
     
         # read list of junk files
         if os.path.exists(junk_ObsIDs_csv):
