@@ -50,6 +50,8 @@ class AnalyzeTimeSeries:
         
     To-do:
         * Make plots using only_object and object_like
+        * Allow for separate DRPTAG values for 2D, L1, L2
+        * Make a set of plots for DRPTAG vs. time for 2D, L1, L2
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * All for other plot types, e.g. histograms of DRPTAG
