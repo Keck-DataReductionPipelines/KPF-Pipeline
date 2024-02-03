@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from modules.Utils.utils import DummyLogger
 from matplotlib import gridspec
 from matplotlib.ticker import MaxNLocator
 from modules.Utils.kpf_parse import HeaderParse
@@ -32,11 +33,7 @@ class AnalyzeL1:
     """
 
     def __init__(self, L1, logger=None):
-        if logger:
-            self.logger = logger
-            self.logger.debug('Initializing AnalyzeL1 object')
-        else:
-            self.logger = None
+        self.logger = logger if logger is not None else DummyLogger()
         self.L1 = L1
         primary_header = HeaderParse(L1, 'PRIMARY')
         self.header = primary_header.header
@@ -761,9 +758,9 @@ class AnalyzeL1:
             print('chip not supplied.  Exiting plot_1D_spectrum_single_order')
             return
 
-        # Create a 4x4 array of subplots with no vertical space between cells
-        fig, axs = plt.subplots(4, 3, sharex='col', sharey='row', figsize=(18, 12))
-        for i in range(4):
+        # Create a 5x3 array of subplots with no vertical space between cells
+        fig, axs = plt.subplots(5, 3, sharex='col', sharey='row', figsize=(18, 12))
+        for i in range(5):
             for j in range(3):
 #                axs[i, j].set_xlabel('Wavelength (Ang)', fontsize=18)
                 axs[i, j].tick_params(axis='both', which='major', labelsize=14)
@@ -836,60 +833,87 @@ class AnalyzeL1:
 
         # Row 2
         o=o1; imin = imin1; imax = imax1
-        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
-        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
-        axs[2,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
+        axs[2,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
                       label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
-                      linewidth=0.3, color='orchid') 
+                      linewidth=0.3, color='cornflowerblue') 
         axs[2,0].legend(loc='upper right')
-        axs[2,0].set_ylabel('SKY / SCI2', fontsize=18)
+        axs[2,0].set_ylabel('SCI1 / SCI3', fontsize=18)
         axs[2,0].grid()
         o=o2; imin = imin2; imax = imax2
-        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
-        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
-        axs[2,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
+        axs[2,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
                       label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
-                      linewidth=0.3, color='orchid') 
+                      linewidth=0.3, color='cornflowerblue') 
         axs[2,1].legend(loc='upper right')
         axs[2,1].grid()
         o=o3; imin = imin3; imax = imax3
-        axs[2,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+        med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
+        med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
+        axs[2,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='cornflowerblue') 
+        axs[2,2].legend(loc='upper right')
+        axs[2,2].grid()
+
+        # Row 3
+        o=o1; imin = imin1; imax = imax1
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        axs[3,0].legend(loc='upper right')
+        axs[3,0].set_ylabel('SKY / SCI2', fontsize=18)
+        axs[3,0].grid()
+        o=o2; imin = imin2; imax = imax2
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        axs[3,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
+                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      linewidth=0.3, color='orchid') 
+        axs[3,1].legend(loc='upper right')
+        axs[3,1].grid()
+        o=o3; imin = imin3; imax = imax3
+        axs[3,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
                       label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
-        axs[0,0].legend(loc='upper right')
-        axs[2,2].grid()
+        axs[3,2].legend(loc='upper right')
+        axs[3,2].grid()
         
-        # Row 3
+        # Row 4
         o=o1; imin = imin1; imax = imax1
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
-        axs[3,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+        axs[4,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
                       label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
-        axs[3,0].legend(loc='upper right')
-        axs[3,0].set_ylabel('CAL / SCI2', fontsize=18)
-        axs[3,0].set_xlabel('Wavelength (Ang)', fontsize=18)
-        axs[3,0].grid()
+        axs[4,0].legend(loc='upper right')
+        axs[4,0].set_ylabel('CAL / SCI2', fontsize=18)
+        axs[4,0].set_xlabel('Wavelength (Ang)', fontsize=18)
+        axs[4,0].grid()
         o=o2; imin = imin2; imax = imax2
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
-        axs[3,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+        axs[4,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
                       label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
-        axs[3,1].legend(loc='upper right')
-        axs[3,1].set_xlabel('Wavelength (Ang)', fontsize=18)
-        axs[3,1].grid()
+        axs[4,1].legend(loc='upper right')
+        axs[4,1].set_xlabel('Wavelength (Ang)', fontsize=18)
+        axs[4,1].grid()
         o=o3; imin = imin3; imax = imax3
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
-        axs[3,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
+        axs[4,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
                       label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
-        axs[3,2].legend(loc='upper right')
-        axs[3,2].set_xlabel('Wavelength (Ang)', fontsize=18)
-        axs[3,2].grid()
+        axs[4,2].legend(loc='upper right')
+        axs[4,2].set_xlabel('Wavelength (Ang)', fontsize=18)
+        axs[4,2].grid()
 
         plt.subplots_adjust(hspace=0,wspace=0) # Adjust layout to remove vertical space between subplots
 
