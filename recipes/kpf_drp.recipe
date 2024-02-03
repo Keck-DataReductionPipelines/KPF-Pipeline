@@ -550,6 +550,11 @@ if do_spectral_extraction or do_hk or do_bc:
 						for ext in wave_to_ext[idx]:
 							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
 
+				# todo: save WLSFILE AND WLSDIR as separate keywords
+				# try:
+				#      WLSDIR, WLSFILE = split(wave_fits[0])
+				#	   SetHeaderValue(output_data, 'WLSDIR', WLSDIR)
+				#	   SetHeaderValue(output_data, 'WLSFILE', WLSFILE)
 				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
 
 				# Quality Control - L1 level
