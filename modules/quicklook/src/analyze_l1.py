@@ -49,7 +49,6 @@ class AnalyzeL1:
         f_r_sci3 - flux array for SCI3 (red)
         f_r_sky  - flux array for SKY  (red)
         f_r_cal  - flux array for CAL  (red)
-        
         f_g_sci1_int - interpolated SCI1 flux (green) onto SCI2 wavelengths
         f_g_sci3_int - interpolated SCI3 flux (green) onto SCI2 wavelengths
         f_g_sky_int  - interpolated SKY  flux (green) onto SCI2 wavelengths
@@ -58,7 +57,6 @@ class AnalyzeL1:
         f_r_sci3_int - interpolated SCI3 flux (red) onto SCI2 wavelengths
         f_r_sky_int  - interpolated SKY  flux (red) onto SCI2 wavelengths
         f_r_cal_int  - interpolated CAL  flux (red) onto SCI2 wavelengths
-
         ratio_g_sci1_sci2 - SCI1/SCI2 flux ratio per spectral order (green)
         ratio_g_sci3_sci2 - SCI3/SCI2 flux ratio per spectral order (green)
         ratio_g_sci1_sci3 - SCI1/SCI3 flux ratio per spectral order (green)
@@ -69,7 +67,6 @@ class AnalyzeL1:
         ratio_r_sci1_sci3 - SCI1/SCI3 flux ratio per spectral order (red)
         ratio_r_sky_sci2  - SKY/SCI2  flux ratio per spectral order (red)
         ratio_r_cal_sci2  - CAL/SCI2  flux ratio per spectral order (red)
-
         w_g_order - central wavelengths for green spectral orders
         w_r_order - central wavelengths for red spectral orders
 
