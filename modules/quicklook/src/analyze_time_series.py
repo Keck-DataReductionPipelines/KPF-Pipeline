@@ -49,6 +49,8 @@ class AnalyzeTimeSeries:
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         
     To-do:
+        * Add "created on" timestamp as in the L0 or 2D plots
+        * Add filtering by junk status
         * Make plots using only_object and object_like
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
@@ -898,10 +900,14 @@ class AnalyzeTimeSeries:
                     ylabel - text for y-axis label
                 paneldict: a dictionary containing:
                     col: name of DB column to plot
-                    plot_type: 
+                    plot_type: 'plot' (points with connecting lines), 
+                               'scatter' (points), 
+                               'step' (steps), 
+                               'state' (for non-floats, like DRPTAG)
                     plot_attr: a dictionary containing plot attributes for a scatter plot, 
                         including 'label', 'marker', 'color'
-                    on_sky: if set to 'True', only on-sky observations will be included; if set to 'False', only calibrations will be included
+                    on_sky: if set to 'True', only on-sky observations will be included; 
+                            if set to 'False', only calibrations will be included
                     only_object (not implemented yet): if set, only object names in the keyword's value will be queried
                     object_like (not implemented yet): if set, partial object names matching the keyword's value will be queried
             start_date (datetime object) - start date for plot
@@ -1009,50 +1015,66 @@ class AnalyzeTimeSeries:
                 col_data = this_df[thispanel['panelvars'][i]['col']]
                 col_data_replaced = col_data.replace('NaN', np.nan)
                 col_data_replaced = col_data.replace('null', np.nan)
-                data = np.array(col_data_replaced, dtype='float')
+                if plot_type == 'state':
+                    states = np.array(col_data_replaced)
+                else:
+                    data = np.array(col_data_replaced, dtype='float')
                 plot_attributes = {}
-                if np.count_nonzero(~np.isnan(data)) > 0:
-                    if subtractmedian:
-                        data -= np.nanmedian(data)
-                    if 'plot_attr' in thispanel['panelvars'][i]:
-                        if 'label' in thispanel['panelvars'][i]['plot_attr']:
-                            label = thispanel['panelvars'][i]['plot_attr']['label']
-                            try:
-                                if makelegend:
-                                    if len(~np.isnan(data)) > 0:
-                                        median = np.nanmedian(data)
-                                    else:
-                                        median = 0.
-                                    if len(~np.isnan(data)) > 2:
-                                        std_dev = np.nanstd(data)
-                                        if std_dev != 0 and not np.isnan(std_dev):
-                                            decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                if plot_type != 'state':
+                    if np.count_nonzero(~np.isnan(data)) > 0:
+                        if subtractmedian:
+                            data -= np.nanmedian(data)
+                        if 'plot_attr' in thispanel['panelvars'][i]:
+                            if 'label' in thispanel['panelvars'][i]['plot_attr']:
+                                label = thispanel['panelvars'][i]['plot_attr']['label']
+                                try:
+                                    if makelegend:
+                                        if len(~np.isnan(data)) > 0:
+                                            median = np.nanmedian(data)
+                                        else:
+                                            median = 0.
+                                        if len(~np.isnan(data)) > 2:
+                                            std_dev = np.nanstd(data)
+                                            if std_dev != 0 and not np.isnan(std_dev):
+                                                decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                                            else:
+                                                decimal_places = 1
                                         else:
                                             decimal_places = 1
-                                    else:
-                                        decimal_places = 1
-                                        std_dev = 0.
-                                    formatted_median = f"{median:.{decimal_places}f}"
-                                    #label += '\n' + formatted_median 
-                                    if len(~np.isnan(data)) > 2:
-                                        formatted_std_dev = f"{std_dev:.{decimal_places}f}"
-                                        label += ' (' + formatted_std_dev 
-                                        if 'unit' in thispanel['panelvars'][i]:
-                                            label += ' ' + str(thispanel['panelvars'][i]['unit'])
-                                        label += ' rms)'
-                            except Exception as e:
-                                self.logger.error(e)
-                        plot_attributes = thispanel['panelvars'][i]['plot_attr']
-                        if 'label' in plot_attributes:
-                            plot_attributes['label'] = label
-                    else:
-                       plot_attributes = {}
+                                            std_dev = 0.
+                                        formatted_median = f"{median:.{decimal_places}f}"
+                                        #label += '\n' + formatted_median 
+                                        if len(~np.isnan(data)) > 2:
+                                            formatted_std_dev = f"{std_dev:.{decimal_places}f}"
+                                            label += ' (' + formatted_std_dev 
+                                            if 'unit' in thispanel['panelvars'][i]:
+                                                label += ' ' + str(thispanel['panelvars'][i]['unit'])
+                                            label += ' rms)'
+                                except Exception as e:
+                                    self.logger.error(e)
+                            plot_attributes = thispanel['panelvars'][i]['plot_attr']
+                            if 'label' in plot_attributes:
+                                plot_attributes['label'] = label
+                        else:
+                           plot_attributes = {}
                 if plot_type == 'scatter':
                     axs[p].scatter(t, data, **plot_attributes)
                 if plot_type == 'plot':
                     axs[p].plot(t, data, **plot_attributes)
                 if plot_type == 'step':
                     axs[p].step(t, data, **plot_attributes)
+                if plot_type == 'state':
+                    # Map states (e.g., DRP version number) to a numerical scale
+                    states = np.array(['None' if s is None or s == 'NaN' else s for s in states])
+                    unique_states = sorted(set(states))  # Remove duplicates and sort
+                    state_to_num = {state: i for i, state in enumerate(unique_states)}
+                    mapped_states = [state_to_num[state] for state in states]
+                    colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
+                    for state, color in zip(unique_states, colors):
+                        indices = [i for i, s in enumerate(states) if s == state]
+                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
+                    axs[p].set_yticks(range(len(unique_states)))
+                    axs[p].set_yticklabels(unique_states)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
                 if makelegend:
@@ -1572,6 +1594,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'GDRSEEV',  'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in V band',   'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Seeing (arcsec)',
+                             'yscale': 'log',
                              'title': 'Seeing',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.35}
@@ -1582,14 +1605,30 @@ class AnalyzeTimeSeries:
         elif plot_name=='sun_moon':
             dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-target separation', 'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2]
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Angle (deg)',
+                             'on_sky': 'true', 
+                             'legend_frac_size': 0.35}
+            sunpanel = {'panelvars': thispanelvars,
+                        'paneldict': thispaneldict}
+            thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'title': 'Separation of Sun and Moon from Target',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.35}
-            seeingpanel = {'panelvars': thispanelvars,
+            moonpanel = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict}
+            panel_arr = [sunpanel, moonpanel]
+
+        elif plot_name=='drptag':
+            dict1 = {'col': 'DRPTAG', 'plot_type': 'state', 'plot_attr': {'label': 'Version Number', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'DRP Version',
+                             'title': 'KPF-Pipeline Version Number',
+                             'legend_frac_size': 0.10}
+            drptagpanel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
-            panel_arr = [seeingpanel]
+            panel_arr = [drptagpanel]
 
         else:
             self.logger.error('plot_name not specified')
@@ -1637,6 +1676,7 @@ class AnalyzeTimeSeries:
             "p5a":  {"plot_name": "guiding",             "subdir": "Observing", },
             "p5b":  {"plot_name": "seeing",              "subdir": "Observing", },
             "p5c":  {"plot_name": "sun_moon",            "subdir": "Observing", },
+            "p6a":  {"plot_name": "drptag",              "subdir": "DRP",       },      
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
