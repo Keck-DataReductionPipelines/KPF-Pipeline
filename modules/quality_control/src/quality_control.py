@@ -110,7 +110,7 @@ class QCDefinitions:
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.fits_keywords[name1] = 'NOTJUNK'
-        self.fits_comments[name1] = 'QC: Not in list of junk files check'
+        self.fits_comments[name1] = 'QC: Not in the list of junk files check'
         self.db_columns[name1] = None
 
         name2 = 'monotonic_wavelength_solution_check'
@@ -125,7 +125,7 @@ class QCDefinitions:
         name3 = 'L0_data_products_check'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Check if expected data products are present with non-zero array sizes.'
+        self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present check'
@@ -134,7 +134,7 @@ class QCDefinitions:
         name4 = 'L0_header_keywords_present_check'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Check if expected header keywords are present.'
+        self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
         self.data_types[name4] = 'int'
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present check'
