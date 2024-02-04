@@ -196,6 +196,11 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
 DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used for processing
+NOTJUNK   1                                           Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
+DATAPRL0  1                                           Quality Control: 1 = L0 data products present with non-zero array sizes
+KWRDPRL0  1                                           Quality Control: 1 = L0 expected keywords present 
+EMSAT     1                                           Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
+EMNEG     1                                           Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -269,6 +274,7 @@ All keywords from Level 0 and 2D are inherited by the L1 file.  Below are additi
 ========  ===============  =========
 Keyword   Value (example)  Comment
 ========  ===============  =========
+MONOTWLS  1                Quality Control: 1 = L1 wavelength solution is monotonic
 SNRSC452  250.0            SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0            SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0            SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
