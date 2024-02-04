@@ -1749,10 +1749,10 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.30}
             flat_snr_panel = {'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452nm/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548nm/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747nm/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852nm/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'autocal-flat-all SNR & Flux Ratio',
@@ -1762,6 +1762,60 @@ class AnalyzeTimeSeries:
             flat_fr_panel = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
             panel_arr = [flat_snr_panel, flat_fr_panel]
+
+        elif plot_name=='socal_snr':
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+                             'only_object': 'SoCal',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            socal_snr_panel = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4]
+            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+                             'title': 'SoCal SNR & Flux Ratio',
+                             'only_object': 'SoCal',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            socal_fr_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            panel_arr = [socal_snr_panel, socal_fr_panel]
+
+        elif plot_name=='observing_snr':
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+                             'on_sky': 'true', 
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            observing_snr_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4]
+            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+                             'title': 'SoCal SNR & Flux Ratio',
+                             'on_sky': 'true', 
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            observing_fr_panel = {'panelvars': thispanelvars,
+                                  'paneldict': thispaneldict}
+            panel_arr = [observing_snr_panel, observing_fr_panel]
 
         else:
             self.logger.error('plot_name not specified')
@@ -1810,10 +1864,12 @@ class AnalyzeTimeSeries:
             "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", },
             "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", },
             "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", },
-            "p6a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
-            "p7a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
-            "p7b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
-            "p7c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
+            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
+            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
+            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
+            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
+            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
+            "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
