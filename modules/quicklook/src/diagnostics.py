@@ -183,7 +183,7 @@ def add_headers_guider(D2, logger=None):
     except Exception as e:
         logger.error(f"Problem with guider measurements: {e}\n{traceback.format_exc()}")
     try: 
-        D2.header['PRIMARY']['MOONSEP']  = (round(get_moon_sep(myGuider.date_mid, myGuider.ra, myGuider.dec), 1),
+        D2.header['PRIMARY']['MOONSEP']  = (round(get_moon_sep(myGuider.date_mid, myGuider.ra, myGuider.dec), 2),
                                            'Separation between Moon and target star [deg]')
     except Exception as e:
         logger.error(f"Problem with moon separation: {e}\n{traceback.format_exc()}")
@@ -360,7 +360,10 @@ def add_headers_L1_order_flux_ratios(L1, logger=None):
     Computes the SNR of L1 spectra and adds keywords to the L1 object headers
     
     Keywords:
-        TBDTBDTB - comment
+        FR452652 - Peak flux ratio (452nm/652nm) - SCI2
+        FR548652 - Peak flux ratio (548nm/652nm) - SCI2
+        FR747652 - Peak flux ratio (747nm/652nm) - SCI2
+        FR852652 - Peak flux ratio (852nm/652nm) - SCI2
 
     Args:
         L1 - a KPF L1 object 

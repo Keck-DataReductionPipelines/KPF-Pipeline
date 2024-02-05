@@ -5,6 +5,7 @@ masters_dir = config.ARGUMENT.masters_dir
 output_dir = config.ARGUMENT.output_dir + '/'
 master_wls_file = config.ARGUMENT.master_wls_file
 save_diagnostics_dir = config.ARGUMENT.diagnostic_dir
+linelist = config.ARGUMENT.thar_linelist
 quicklook = config.ARGUMENT.quicklook
 f0 = config.ARGUMENT.f0_key
 fr = config.ARGUMENT.frep_key
@@ -42,7 +43,6 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                 master_wls = full_master_wls[ext]
 
                 if ext == 'RED_CAL_WAVE':
-                    linelist = config.ARGUMENT.red_linelist
                     output_exts = config.ARGUMENT.red_output_ext
                     orderlet_names = config.ARGUMENT.red_cal_orderlet_name
                     min_order = config.ARGUMENT.red_min_order
@@ -53,7 +53,6 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                         output_exts = ['RED_SCI_WAVE2']
                     
                 if ext == 'GREEN_CAL_WAVE':
-                    linelist = config.ARGUMENT.green_linelist
                     output_exts = config.ARGUMENT.green_output_ext
                     orderlet_names = config.ARGUMENT.green_cal_orderlet_name
                     min_order = config.ARGUMENT.green_min_order
@@ -69,8 +68,9 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                 else:
                     plot_dir = None
 
+                save_wlpixelfiles = False
                 l1_obj = WaveCalibrate(
-                    l1_obj, cal_type, orderlet_names, True, quicklook, min_order, max_order,
+                    l1_obj, cal_type, orderlet_names, save_wlpixelfiles, quicklook, min_order, max_order,
                     'KPF', output_exts,
                     rough_wls = master_wls, 
                     f0_key=f0, frep_key=fr,
