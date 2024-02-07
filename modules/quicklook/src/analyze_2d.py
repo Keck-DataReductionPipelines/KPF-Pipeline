@@ -543,7 +543,6 @@ class Analyze2D:
                 start_y = start_y_arr[2*i+j]
 
                 # Slice out and display the sub-image
-                #sub_img = image[start_x:start_x+width, start_y:start_y+height]
                 sub_img = image[start_y:start_y+height, start_x:start_x+width]
                 im = axs[i, j].imshow(sub_img, origin='lower', 
                                  extent=[start_x, start_x+width, start_y, start_y+height], # these indices appear backwards, but work

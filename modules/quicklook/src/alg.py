@@ -307,6 +307,22 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+
+        # Make 2D images with order trace overlays
+        if chips != []:    
+            try:
+                savedir = D2_QLP_file_base +'2D/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
+                for chip in chips:
+                    filename = savedir + self.ObsID + '_2D_order_trace_' + chip + '_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    my_2D.plot_2D_order_trace2x2(chip=chip, fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+
         # TO-DO Add bias histogram
 
         # Make 2D image histograms
