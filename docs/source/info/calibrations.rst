@@ -95,7 +95,7 @@ The basic steps are as follows.
     source ~/.bash_profile
     printenv | grep SBX
 
-3.  Set other required environment variables::
+3. Set other required environment variables::
 
     vi ~/.bash_profile
     export KPFCRONJOB_DOCKER_NAME_L0=russkpfmastersdrpl0
@@ -112,7 +112,7 @@ The basic steps are as follows.
     export KPFDBNAME=kpfopsdb
     export KPFDB=/data/user/rlaher/kpfdb
 
-4.  Make a jobs subdirectory under the git repo KPF_Pipeline directory::
+4. Make a jobs subdirectory under the git repo KPF_Pipeline directory::
 
     cd ~/git/KPF-Pipeline
     mkdir jobs
@@ -164,7 +164,7 @@ The basic steps are as follows.
     source ~/.bash_profile
     printenv | grep SBX
 
-3.  Set other required environment variables::
+3. Set other required environment variables::
 
     vi ~/.bash_profile
     export KPFCRONJOB_DOCKER_NAME_WLS=russkpfmasterswlsauto
@@ -179,7 +179,7 @@ The basic steps are as follows.
     export KPFDBNAME=kpfopsdb
     export KPFDB=/data/user/rlaher/kpfdb
 
-4.  Make a jobs subdirectory under the git repo KPF_Pipeline directory::
+4. Make a jobs subdirectory under the git repo KPF_Pipeline directory::
 
     cd ~/git/KPF-Pipeline
     mkdir jobs
