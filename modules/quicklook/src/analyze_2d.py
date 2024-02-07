@@ -486,7 +486,7 @@ class Analyze2D:
         plt.close('all')
 
 
-    def plot_2D_order_trace_3x3(self, chip=None, fig_path=None, show_plot=False):
+    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False):
         """
         Overlay the order trace on the 2D image in a 3x3 array of zoom-in plots.  
 

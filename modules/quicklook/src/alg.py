@@ -626,6 +626,18 @@ class QuicklookAlg:
                 except Exception as e:
                     self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+                # Make 2D images with order trace overlays
+                try:
+                    my_2D = Analyze2D(kpf2d, logger=self.logger)
+                    for chip in chips:  
+                        filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
+                                   '_2D_order_trace_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_order_trace2x2(chip=chip, fig_path=filename, show_plot=False)
+
+                except Exception as e:
+                    self.logger.error(f"Failure in Master quicklook pipeline: {e}\n{traceback.format_exc()}")
+
                 # Make 2D image histograms
                 try:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
