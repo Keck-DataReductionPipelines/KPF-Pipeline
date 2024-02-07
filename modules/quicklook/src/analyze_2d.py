@@ -3,12 +3,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
+from astropy.time import Time
 from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.utils import DummyLogger
+from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime
 #import emcee
@@ -501,12 +503,16 @@ class Analyze2D:
         """
         
         # Set parameters based on the chip selected
+        obs_date = Time(self.header['DATE-MID'])
+        service_mission_date1 = Time('2024-02-03', format='iso', scale='utc')
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN'
                 chip_title = 'Green'
-                #order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
-                order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                if obs_date < service_mission_date1:
+                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                else:
+                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
                 width  = 200
                 height = 200
                 start_x_arr = [ 500, 1500,  500, 1500]
@@ -514,8 +520,10 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-                #order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
-                order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                if obs_date < service_mission_date1:
+                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                else:
+                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
                 width  = 200
                 height = 200
                 start_x_arr = [ 500, 1500,  500, 1500]
