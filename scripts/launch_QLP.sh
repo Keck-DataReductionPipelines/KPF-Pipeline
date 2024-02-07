@@ -5,10 +5,11 @@
 data_levels=("L0" "2D" "L1" "L2" "masters")
 
 for lvl in "${data_levels[@]}"; do
-    if lvl=='L1':
+    if [ "$lvl" == "L1" ]; then
         ncpus=20
-    else:
+    else
         ncpus=10
     cmd="kpf --ncpus=${ncpus} --watch ${KPFPIPE_DATA}/${lvl}/ -r recipes/quicklook_watch.recipe -c configs/quicklook_watch.cfg"
-    $cmd &
+    fi
+    eval $cmd &
 done

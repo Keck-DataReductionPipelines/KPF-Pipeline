@@ -49,10 +49,11 @@ class AnalyzeTimeSeries:
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         
     To-do:
-        * Make plots using only_object and object_like
+        * Add separate junk test from list of junked files
+        * Add standard plots for diagnostics
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * All for other plot types, e.g. histograms of DRPTAG
+        * All histograms plots, e.g. for DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
         * Ingest information from masters, especially WLS masters
@@ -461,7 +462,7 @@ class AnalyzeTimeSeries:
 
 
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
-                          on_sky=None, start_date=None, end_date=None):
+                                  on_sky=None, start_date=None, end_date=None):
         """
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
@@ -489,7 +490,7 @@ class AnalyzeTimeSeries:
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
-            only_object = [f"OBJECT = '{obj}'" for obj in only_object]
+            only_object = [f"OBJECT = '{only_object}'"]
             or_objects = ' OR '.join(only_object)
             where_queries.append(f'({or_objects})')
         if object_like is not None:
@@ -516,8 +517,11 @@ class AnalyzeTimeSeries:
         print(df)
 
    
-    def dataframe_from_db(self, columns, only_object=None, object_like=None, on_sky=None, 
-                          start_date=None, end_date=None, verbose=False):
+    def dataframe_from_db(self, columns, 
+                          start_date=None, end_date=None, 
+                          only_object=None, object_like=None, 
+                          on_sky=None, not_junk=None, 
+                          verbose=False):
         """
         Returns a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
@@ -526,8 +530,8 @@ class AnalyzeTimeSeries:
 
         Args:
             columns (string or list of strings) - database columns to query
-            only_object (string or list of strings) - object names to include in query
-            object_like (string or list of strings) - partial object names to search for
+            only_object (string) - object name to include in query
+            object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
             end_date (datetime object) - only return observations after end_date
@@ -546,13 +550,18 @@ class AnalyzeTimeSeries:
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
-            only_object = [f"OBJECT = '{obj}'" for obj in only_object]
+            only_object = [f"OBJECT = '{only_object}'"]
             or_objects = ' OR '.join(only_object)
             where_queries.append(f'({or_objects})')
-        if object_like is not None:
-            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
+        if object_like is not None: 
+            object_like = [f"OBJECT LIKE '%{object_like}%'"]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
+        if not_junk is not None:
+            if not_junk == True:
+                where_queries.append(f"NOTJUNK = 1")
+            if not_junk == False:
+                where_queries.append(f"NOTJUNK = 0")
         if on_sky is not None:
             if on_sky == True:
                 where_queries.append(f"FIUMODE = 'Observing'")
@@ -636,6 +645,11 @@ class AnalyzeTimeSeries:
         elif level == '2D':
             keyword_types = {
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
+                'NOTJUNK':  'float',  # Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
+                'DATAPRL0': 'float',  # Quality Control: 1 = L0 data products present with non-zero array sizes
+                'KWRDPRL0': 'float',  # Quality Control: 1 = L0 expected keywords present
+                'EMSAT':    'float',  # Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
+                'EMNEG':    'float',  # Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
                 'RNRED1':   'float',  # Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
                 'RNRED2':   'float',  # Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
                 'RNGREEN1': 'float',  # Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
@@ -898,10 +912,16 @@ class AnalyzeTimeSeries:
                     ylabel - text for y-axis label
                 paneldict: a dictionary containing:
                     col: name of DB column to plot
-                    plot_type: 
+                    plot_type: 'plot' (points with connecting lines), 
+                               'scatter' (points), 
+                               'step' (steps), 
+                               'state' (for non-floats, like DRPTAG)
                     plot_attr: a dictionary containing plot attributes for a scatter plot, 
                         including 'label', 'marker', 'color'
-                    on_sky: if set to 'True', only on-sky observations will be included; if set to 'False', only calibrations will be included
+                    not_junk: if set to 'True', only files with NOTJUNK=1 are included; 
+                              if set to 'False', only files with NOTJUNK=0 are included
+                    on_sky: if set to 'True', only on-sky observations will be included; 
+                            if set to 'False', only calibrations will be included
                     only_object (not implemented yet): if set, only object names in the keyword's value will be queried
                     object_like (not implemented yet): if set, partial object names matching the keyword's value will be queried
             start_date (datetime object) - start date for plot
@@ -919,7 +939,7 @@ class AnalyzeTimeSeries:
         """
 
         if start_date == None:
-            start_date = max(df['DATE-MID'])
+            start_date = min(df['DATE-MID'])
         if end_date == None:
             end_date = max(df['DATE-MID'])
         npanels = len(panel_arr)
@@ -931,13 +951,11 @@ class AnalyzeTimeSeries:
             for d in panel['panelvars']:
                 col_value = d['col']
                 unique_cols.add(col_value)
-        df = self.dataframe_from_db(unique_cols, start_date=start_date, end_date=end_date, verbose=False)
-        df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
-        df = df.sort_values(by='DATE-MID')
-        if clean:
-            df = self.clean_df(df)
-        
-        fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(15, npanels*2.5), tight_layout=True)
+        # add this logic
+        #if 'only_object' in thispanel['paneldict']:
+        #if 'object_like' in thispanel['paneldict']:
+
+        fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(15, npanels*2.5+1), tight_layout=True)
         if npanels == 1:
             axs = [axs]  # Make axs iterable even when there's only one panel
         if npanels > 1:
@@ -945,40 +963,64 @@ class AnalyzeTimeSeries:
         plt.tight_layout()
 
         for p in np.arange(npanels):
-            thispanel = panel_arr[p]
-            this_df = df.copy(deep=True)
+            thispanel = panel_arr[p]            
+            not_junk = None
+            if 'not_junk' in thispanel['paneldict']:
+                if (thispanel['paneldict']['not_junk']).lower() == 'true':
+                    not_junk = True
+                elif (thispanel['paneldict']['not_junk']).lower() == 'false':
+                    not_junk = False
+            only_object = None
+            if 'only_object' in thispanel['paneldict']:
+                only_object = thispanel['paneldict']['only_object']
+            object_like = None
+#            if 'object_like' in thispanel['paneldict']:
+#                if (thispanel['paneldict']['object_like']).lower() == 'true':
+#                    object_like = True
+#                elif (thispanel['paneldict']['object_like']).lower() == 'false':
+#                    object_like = False
+            df = self.dataframe_from_db(unique_cols, 
+                                        start_date=start_date, 
+                                        end_date=end_date, 
+                                        not_junk=not_junk, 
+                                        only_object=only_object, 
+                                        object_like=object_like,
+                                        verbose=False)
+            df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+            df = df.sort_values(by='DATE-MID')
+            if clean:
+                df = self.clean_df(df)
+
             if 'on_sky' in thispanel['paneldict']:
                 if (thispanel['paneldict']['on_sky']).lower() == 'true':
-                    this_df = this_df[this_df['FIUMODE'] == 'Observing']
+                    df = df[df['FIUMODE'] == 'Observing']
                 elif (thispanel['paneldict']['on_sky']).lower() == 'false':
-                    this_df = this_df[this_df['FIUMODE'] == 'Calibration']
-            # add this logic
-            #if 'only_object' in thispanel['paneldict']:
-            #if 'object_like' in thispanel['paneldict']:
+                    df = df[df['FIUMODE'] == 'Calibration']
+
             thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
-                t = [(date - start_date).total_seconds() /  3600 for date in this_df['DATE-MID']]
+                t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
-                t = [(date - start_date).total_seconds() / 86400 for date in this_df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) < 32:
-                t = [(date - start_date).total_seconds() / 86400 for date in this_df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
             else:
-                t = this_df['DATE-MID'] # dates
+                t = df['DATE-MID'] # dates
                 xtitle = 'Date'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
@@ -1006,53 +1048,70 @@ class AnalyzeTimeSeries:
                     plot_type = thispanel['panelvars'][i]['plot_type']
                 else:
                     plot_type = 'scatter'
-                col_data = this_df[thispanel['panelvars'][i]['col']]
+                col_data = df[thispanel['panelvars'][i]['col']]
                 col_data_replaced = col_data.replace('NaN', np.nan)
                 col_data_replaced = col_data.replace('null', np.nan)
-                data = np.array(col_data_replaced, dtype='float')
+                if plot_type == 'state':
+                    states = np.array(col_data_replaced)
+                else:
+                    data = np.array(col_data_replaced, dtype='float')
                 plot_attributes = {}
-                if np.count_nonzero(~np.isnan(data)) > 0:
-                    if subtractmedian:
-                        data -= np.nanmedian(data)
-                    if 'plot_attr' in thispanel['panelvars'][i]:
-                        if 'label' in thispanel['panelvars'][i]['plot_attr']:
-                            label = thispanel['panelvars'][i]['plot_attr']['label']
-                            try:
-                                if makelegend:
-                                    if len(~np.isnan(data)) > 0:
-                                        median = np.nanmedian(data)
-                                    else:
-                                        median = 0.
-                                    if len(~np.isnan(data)) > 2:
-                                        std_dev = np.nanstd(data)
-                                        if std_dev != 0 and not np.isnan(std_dev):
-                                            decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                if plot_type != 'state':
+                    if np.count_nonzero(~np.isnan(data)) > 0:
+                        if subtractmedian:
+                            data -= np.nanmedian(data)
+                        if 'plot_attr' in thispanel['panelvars'][i]:
+                            if 'label' in thispanel['panelvars'][i]['plot_attr']:
+                                label = thispanel['panelvars'][i]['plot_attr']['label']
+                                try:
+                                    if makelegend:
+                                        if len(~np.isnan(data)) > 0:
+                                            median = np.nanmedian(data)
+                                        else:
+                                            median = 0.
+                                        if len(~np.isnan(data)) > 2:
+                                            std_dev = np.nanstd(data)
+                                            if std_dev != 0 and not np.isnan(std_dev):
+                                                decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                                            else:
+                                                decimal_places = 1
                                         else:
                                             decimal_places = 1
-                                    else:
-                                        decimal_places = 1
-                                        std_dev = 0.
-                                    formatted_median = f"{median:.{decimal_places}f}"
-                                    #label += '\n' + formatted_median 
-                                    if len(~np.isnan(data)) > 2:
-                                        formatted_std_dev = f"{std_dev:.{decimal_places}f}"
-                                        label += ' (' + formatted_std_dev 
-                                        if 'unit' in thispanel['panelvars'][i]:
-                                            label += ' ' + str(thispanel['panelvars'][i]['unit'])
-                                        label += ' rms)'
-                            except Exception as e:
-                                self.logger.error(e)
-                        plot_attributes = thispanel['panelvars'][i]['plot_attr']
-                        if 'label' in plot_attributes:
-                            plot_attributes['label'] = label
-                    else:
-                       plot_attributes = {}
+                                            std_dev = 0.
+                                        formatted_median = f"{median:.{decimal_places}f}"
+                                        #label += '\n' + formatted_median 
+                                        if len(~np.isnan(data)) > 2:
+                                            formatted_std_dev = f"{std_dev:.{decimal_places}f}"
+                                            label += ' (' + formatted_std_dev 
+                                            if 'unit' in thispanel['panelvars'][i]:
+                                                label += ' ' + str(thispanel['panelvars'][i]['unit'])
+                                            label += ' rms)'
+                                except Exception as e:
+                                    self.logger.error(e)
+                            plot_attributes = thispanel['panelvars'][i]['plot_attr']
+                            if 'label' in plot_attributes:
+                                plot_attributes['label'] = label
+                        else:
+                           plot_attributes = {}
                 if plot_type == 'scatter':
                     axs[p].scatter(t, data, **plot_attributes)
                 if plot_type == 'plot':
                     axs[p].plot(t, data, **plot_attributes)
                 if plot_type == 'step':
                     axs[p].step(t, data, **plot_attributes)
+                if plot_type == 'state':
+                    # Map states (e.g., DRP version number) to a numerical scale
+                    states = np.array(['None' if s is None or s == 'NaN' else s for s in states])
+                    states = [x for x in states if not (isinstance(x, (int, float, complex)) and np.isnan(x))] # remove NaN values
+                    unique_states = sorted(set(states))  # Remove duplicates and sort
+                    state_to_num = {state: i for i, state in enumerate(unique_states)}
+                    mapped_states = [state_to_num[state] for state in states]
+                    colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
+                    for state, color in zip(unique_states, colors):
+                        indices = [i for i, s in enumerate(states) if s == state]
+                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
+                    axs[p].set_yticks(range(len(unique_states)))
+                    axs[p].set_yticklabels(unique_states)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
                 if makelegend:
@@ -1062,6 +1121,14 @@ class AnalyzeTimeSeries:
                         legend_frac_size = 0.20
                     axs[p].legend(loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
             axs[p].grid(color='lightgray')
+
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="left", va="bottom",
+                    xytext=(-100, -32), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -1233,6 +1300,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Read Speed [sec]',
                              'title': 'CCD Read Speed',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.25}
             readspeedpanel = {'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
@@ -1243,13 +1311,20 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars = [dict1, dict2, dict3, dict4]
-            thispaneldict = {'ylabel': 'Read Noise [e-]',
-                             'title': 'CCD Read Noise',
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.25}
-            readnoisepanel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            panel_arr = [readnoisepanel]
+            readnoisepanel1 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            thispanelvars = [dict3, dict4]
+            thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
+                             'title': 'CCD Read Noise',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.25}
+            readnoisepanel2 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [readnoisepanel1, readnoisepanel2]
         
         elif plot_name=='ccd_dark_current':
             # Green CCD panel - Dark current
@@ -1263,6 +1338,7 @@ class AnalyzeTimeSeries:
             dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Green CCD\nDark Current [e-/hr]',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.35}
             greenpanel = {'panelvars': thispanelvars,
                           'paneldict': thispaneldict}
@@ -1278,6 +1354,7 @@ class AnalyzeTimeSeries:
             dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Red CCD\nDark Current [e-/hr]',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.35}
             redpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
@@ -1288,12 +1365,14 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
                              'yscale': 'log',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.35}
             greenpanel_ionpump = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
                              'yscale': 'log',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.35}
             greenpanel_ionpump2 = {'panelvars': thispanelvars,
                                    'paneldict': thispaneldict}
@@ -1304,12 +1383,14 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
                              'yscale': 'log',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.35}
             redpanel_ionpump = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
             thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
                              'yscale': 'log',
+                             'not_junk': 'true',
                              'legend_frac_size': 0.35}
             redpanel_ionpump2 = {'panelvars': thispanelvars,
                                 'paneldict': thispaneldict}
@@ -1413,13 +1494,13 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict1 = {'ylabel': 'Intensity (counts)',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             lfcpanel1 = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict1}
             dict1 = {'col': 'kpfcal.VISFLUX', 'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock Vis', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict2 = {'ylabel': 'Intensity (counts)',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             lfcpanel2 = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict2}
 
@@ -1427,7 +1508,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1]
             thispaneldict3 = {'ylabel': 'Current (A)',
                               'title': 'LFC Diagnostics',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             lfcpanel3 = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict3}
             panel_arr = [lfcpanel1, lfcpanel2, lfcpanel3]
@@ -1440,11 +1521,11 @@ class AnalyzeTimeSeries:
             dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'purple'}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'Temperature (C)',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
                              'title': 'Etalon Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             etalonpanel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             etalonpanel2 = {'panelvars': [dict1],
@@ -1487,14 +1568,14 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             hkpanel2 = {'panelvars': thispanelvars2,
                         'paneldict': thispaneldict2}
 
@@ -1502,7 +1583,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict1, dict2] 
             thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             hkpanel3 = {'panelvars': thispanelvars3,
                         'paneldict': thispaneldict3}
 
@@ -1510,7 +1591,7 @@ class AnalyzeTimeSeries:
             thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
                              'title': 'Ca H&K Spectrometer Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             hkpanel4 = {'panelvars': thispanelvars4,
                         'paneldict': thispaneldict4}
 
@@ -1521,50 +1602,56 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'kpfmot.AGITSPD', 'plot_type': 'scatter', 'unit': 'counts/sec', 'plot_attr': {'label': 'Agitator Speed', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars1 = [dict1]
             thispaneldict1 = {'ylabel': 'Agitator Speed\n(counts/sec)',
-                              'legend_frac_size': 0.35}
+                              'not_junk': 'true',
+                             'legend_frac_size': 0.25}
             agitatorpanel1 = {'panelvars': thispanelvars1,
                               'paneldict': thispaneldict1}
             dict2 = {'col': 'kpfmot.AGITTOR', 'plot_type': 'scatter', 'unit': 'V', 'plot_attr': {'label': 'Agitator Motor Torque', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars2 = [dict2]
             thispaneldict2 = {'ylabel': 'Motor Torque (V)',
-                              'legend_frac_size': 0.35}
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.25}
             agitatorpanel2 = {'panelvars': thispanelvars2,
                               'paneldict': thispaneldict2}
             dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temp.', 'marker': '.', 'linewidth': 0.5}}
             dict4 = {'col': 'kpfmot.AGITMOT_T',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Motor Temp.',   'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict3, dict4]
             thispaneldict3 = {'ylabel': 'Temperature (C)',
-                              'legend_frac_size': 0.35}
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.25}
             agitatorpanel3 = {'panelvars': thispanelvars3,
                               'paneldict': thispaneldict3}
             dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars4 = [dict5]
             thispaneldict4 = {'ylabel': 'Outlet A1 Power\n(mA)',
                               'title': r'KPF Agitator',
-                              'legend_frac_size': 0.35}
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.25}
             agitatorpanel4 = {'panelvars': thispanelvars4,
                               'paneldict': thispaneldict4}
             panel_arr = [agitatorpanel1, agitatorpanel2, agitatorpanel3, agitatorpanel4]
 
         elif plot_name=='guiding':
-            dict1 = {'col': 'GDRXRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (X)', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'GDRYRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (Y)', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (X)',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'GDRXRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (X)', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'GDRYRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (Y)', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (X)',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'Guiding Errors (mas)',
+            thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
+                             'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.20}
             guidingpanel1 = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
 
             thispanelvars2 = [dict3, dict4]
-            thispaneldict2 = {'ylabel': 'Guiding Bias (mas)',
+            thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
                              'title': 'Guiding',
+                             'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.35}
-            guidingpanel2 = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
+                             'legend_frac_size': 0.20}
+            guidingpanel2 = {'panelvars': thispanelvars2,
+                             'paneldict': thispaneldict2}
             panel_arr = [guidingpanel1, guidingpanel2]
 
         elif plot_name=='seeing':
@@ -1572,9 +1659,11 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'GDRSEEV',  'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in V band',   'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Seeing (arcsec)',
+                             'yscale': 'log',
                              'title': 'Seeing',
+                             'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             seeingpanel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             panel_arr = [seeingpanel]
@@ -1582,14 +1671,157 @@ class AnalyzeTimeSeries:
         elif plot_name=='sun_moon':
             dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-target separation', 'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2]
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Angle (deg)',
+                             'not_junk': 'true',
+                             'on_sky': 'true', 
+                             'legend_frac_size': 0.25}
+            sunpanel = {'panelvars': thispanelvars,
+                        'paneldict': thispaneldict}
+            thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'title': 'Separation of Sun and Moon from Target',
+                             'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.35}
-            seeingpanel = {'panelvars': thispanelvars,
+                             'legend_frac_size': 0.25}
+            moonpanel = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict}
+            panel_arr = [sunpanel, moonpanel]
+
+        elif plot_name=='drptag':
+            dict1 = {'col': 'DRPTAG', 'plot_type': 'state', 'plot_attr': {'label': 'Version Number', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'DRP Version Number',
+                             'title': 'KPF-Pipeline Version Number',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.10}
+            drptagpanel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
-            panel_arr = [seeingpanel]
+            panel_arr = [drptagpanel]
+
+        elif plot_name=='junk_status':
+            dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Junk Status (1 = not junk)',
+                             'title': 'Junk Status',
+                             'legend_frac_size': 0.10}
+            junkpanel = {'panelvars': thispanelvars,
+                         'paneldict': thispaneldict}
+            panel_arr = [junkpanel]
+
+        # to-do: add 2D, L1, L2 QC keywords to the two panels below when those keywords are made
+        elif plot_name=='qc_data_keywords_present':
+            dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
+            dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Data Present\n(1=True)',
+                             'legend_frac_size': 0.10}
+            data_present_panel = {'panelvars': thispanelvars,
+                                  'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'Keywords Present\n(1=True)',
+                             'title': 'Quality Control - Data and Keywords Products Present',
+                             'legend_frac_size': 0.10}
+            keywords_present_panel = {'panelvars': thispanelvars,
+                                      'paneldict': thispaneldict}
+            panel_arr = [data_present_panel, keywords_present_panel]
+
+        elif plot_name=='qc_em':
+            dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
+            dict2 = {'col': 'EMNEG', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Netative Flux', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'EM Not Saturated\n(1=True)',
+                             'legend_frac_size': 0.10}
+            emsat_panel = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'EM Not Netative Flux\n(1=True)',
+                             'title': 'Quality Control - Exposure Meter',
+                             'legend_frac_size': 0.10}
+            emneg_panel = {'panelvars': thispanelvars,
+                           'paneldict': thispaneldict}
+            panel_arr = [emsat_panel, emneg_panel]
+
+        elif plot_name=='autocal-flat_snr':
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+                             'only_object': 'autocal-flat-all',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            flat_snr_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4]
+            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+                             'title': 'autocal-flat-all SNR & Flux Ratio',
+                             'only_object': 'autocal-flat-all',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            flat_fr_panel = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            panel_arr = [flat_snr_panel, flat_fr_panel]
+
+        elif plot_name=='socal_snr':
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+                             'only_object': 'SoCal',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            socal_snr_panel = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4]
+            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+                             'title': 'SoCal SNR & Flux Ratio',
+                             'only_object': 'SoCal',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            socal_fr_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            panel_arr = [socal_snr_panel, socal_fr_panel]
+
+        elif plot_name=='observing_snr':
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+                             'on_sky': 'true', 
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            observing_snr_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            thispanelvars = [dict1, dict2, dict3, dict4]
+            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+                             'title': 'SoCal SNR & Flux Ratio',
+                             'on_sky': 'true', 
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            observing_fr_panel = {'panelvars': thispanelvars,
+                                  'paneldict': thispaneldict}
+            panel_arr = [observing_snr_panel, observing_fr_panel]
 
         else:
             self.logger.error('plot_name not specified')
@@ -1621,22 +1853,29 @@ class AnalyzeTimeSeries:
             return        
         
         plots = { 
-            "p1a":  {"plot_name": "chamber_temp",        "subdir": "Chamber",   },
-            "p1b":  {"plot_name": "chamber_temp_detail", "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "fiber_temp",          "subdir": "Chamber",   },
-            "p2a":  {"plot_name": "ccd_readnoise",       "subdir": "CCDs",      },
-            "p2b":  {"plot_name": "ccd_dark_current",    "subdir": "CCDs",      },
-            "p2c":  {"plot_name": "ccd_readspeed",       "subdir": "CCDs",      },
-            "p2d":  {"plot_name": "ccd_controller",      "subdir": "CCDs",      },
-            "p2e":  {"plot_name": "ccd_temp",            "subdir": "CCDs",      },
-            "p3a":  {"plot_name": "lfc",                 "subdir": "Cal",       },
-            "p3b":  {"plot_name": "etalon",              "subdir": "Cal",       },
-            "p3c":  {"plot_name": "hcl",                 "subdir": "Cal",       },
-            "p4a":  {"plot_name": "hk_temp",             "subdir": "Subsystems",},
-            "p4b":  {"plot_name": "agitator",            "subdir": "Subsystems",},
-            "p5a":  {"plot_name": "guiding",             "subdir": "Observing", },
-            "p5b":  {"plot_name": "seeing",              "subdir": "Observing", },
-            "p5c":  {"plot_name": "sun_moon",            "subdir": "Observing", },
+            "p1a":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
+            "p1b":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
+            "p1c":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   },
+            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      },
+            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      },
+            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      },
+            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      },
+            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      },
+            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       },
+            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       },
+            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       },
+            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       },
+            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems",},
+            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems",},
+            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", },
+            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", },
+            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", },
+            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
+            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
+            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
+            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
+            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
+            "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
