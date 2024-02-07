@@ -1311,14 +1311,20 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars = [dict1, dict2, dict3, dict4]
-            thispaneldict = {'ylabel': 'Read Noise [e-]',
+            thispanelvars = [dict1, dict2]
+            thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.25}
+            readnoisepanel1 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            thispanelvars = [dict3, dict4]
+            thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
                              'title': 'CCD Read Noise',
                              'not_junk': 'true',
                              'legend_frac_size': 0.25}
-            readnoisepanel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            panel_arr = [readnoisepanel]
+            readnoisepanel2 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [readnoisepanel1, readnoisepanel2]
         
         elif plot_name=='ccd_dark_current':
             # Green CCD panel - Dark current
@@ -1562,14 +1568,14 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             hkpanel2 = {'panelvars': thispanelvars2,
                         'paneldict': thispaneldict2}
 
@@ -1577,7 +1583,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict1, dict2] 
             thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             hkpanel3 = {'panelvars': thispanelvars3,
                         'paneldict': thispaneldict3}
 
@@ -1585,7 +1591,7 @@ class AnalyzeTimeSeries:
             thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
                              'title': 'Ca H&K Spectrometer Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             hkpanel4 = {'panelvars': thispanelvars4,
                         'paneldict': thispaneldict4}
 
@@ -1597,14 +1603,14 @@ class AnalyzeTimeSeries:
             thispanelvars1 = [dict1]
             thispaneldict1 = {'ylabel': 'Agitator Speed\n(counts/sec)',
                               'not_junk': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.25}
             agitatorpanel1 = {'panelvars': thispanelvars1,
                               'paneldict': thispaneldict1}
             dict2 = {'col': 'kpfmot.AGITTOR', 'plot_type': 'scatter', 'unit': 'V', 'plot_attr': {'label': 'Agitator Motor Torque', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars2 = [dict2]
             thispaneldict2 = {'ylabel': 'Motor Torque (V)',
                               'not_junk': 'true',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             agitatorpanel2 = {'panelvars': thispanelvars2,
                               'paneldict': thispaneldict2}
             dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temp.', 'marker': '.', 'linewidth': 0.5}}
@@ -1612,7 +1618,7 @@ class AnalyzeTimeSeries:
             thispanelvars3 = [dict3, dict4]
             thispaneldict3 = {'ylabel': 'Temperature (C)',
                               'not_junk': 'true',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             agitatorpanel3 = {'panelvars': thispanelvars3,
                               'paneldict': thispaneldict3}
             dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
@@ -1620,30 +1626,30 @@ class AnalyzeTimeSeries:
             thispaneldict4 = {'ylabel': 'Outlet A1 Power\n(mA)',
                               'title': r'KPF Agitator',
                               'not_junk': 'true',
-                              'legend_frac_size': 0.35}
+                              'legend_frac_size': 0.25}
             agitatorpanel4 = {'panelvars': thispanelvars4,
                               'paneldict': thispaneldict4}
             panel_arr = [agitatorpanel1, agitatorpanel2, agitatorpanel3, agitatorpanel4]
 
         elif plot_name=='guiding':
-            dict1 = {'col': 'GDRXRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (X)', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'GDRYRMS',  'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Error (Y)', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (X)',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'plot', 'unit': 'mas', 'plot_attr': {'label': 'RMS Guiding Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'GDRXRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (X)', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'GDRYRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (Y)', 'marker': '.', 'linewidth': 0.5}}
+            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (X)',  'marker': '.', 'linewidth': 0.5}}
+            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'Guiding Errors (mas)',
+            thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
                              'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.20}
             guidingpanel1 = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
 
             thispanelvars2 = [dict3, dict4]
-            thispaneldict2 = {'ylabel': 'Guiding Bias (mas)',
+            thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
                              'title': 'Guiding',
                              'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.20}
             guidingpanel2 = {'panelvars': thispanelvars2,
                              'paneldict': thispaneldict2}
             panel_arr = [guidingpanel1, guidingpanel2]
@@ -1737,11 +1743,11 @@ class AnalyzeTimeSeries:
             panel_arr = [emsat_panel, emneg_panel]
 
         elif plot_name=='autocal-flat_snr':
-            dict1 = {'col': 'SNRSC452',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'SNRSC548',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'SNRSC652',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'SNRSC747',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'SNRCL852',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'only_object': 'autocal-flat-all',
@@ -1749,10 +1755,10 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.30}
             flat_snr_panel = {'panelvars': thispanelvars,
                               'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'autocal-flat-all SNR & Flux Ratio',
@@ -1764,11 +1770,11 @@ class AnalyzeTimeSeries:
             panel_arr = [flat_snr_panel, flat_fr_panel]
 
         elif plot_name=='socal_snr':
-            dict1 = {'col': 'SNRSC452',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'SNRSC548',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'SNRSC652',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'SNRSC747',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'SNRCL852',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'only_object': 'SoCal',
@@ -1776,10 +1782,10 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.30}
             socal_snr_panel = {'panelvars': thispanelvars,
                                'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
@@ -1791,11 +1797,11 @@ class AnalyzeTimeSeries:
             panel_arr = [socal_snr_panel, socal_fr_panel]
 
         elif plot_name=='observing_snr':
-            dict1 = {'col': 'SNRSC452',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'SNRSC548',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'SNRSC652',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'SNRSC747',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'SNRCL852',  'plot_type': 'plot', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'on_sky': 'true', 
@@ -1803,10 +1809,10 @@ class AnalyzeTimeSeries:
                              'legend_frac_size': 0.30}
             observing_snr_panel = {'panelvars': thispanelvars,
                                    'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'plot', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
