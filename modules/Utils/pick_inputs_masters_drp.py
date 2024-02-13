@@ -25,6 +25,7 @@ class PickInputsMastersDRP(KPF0_Primitive):
         self.data_type = self.action.args[0]
         self.all_fits_files_path = self.action.args[1]
         self.exptime_minimum = self.action.args[2]
+        self.flat_object = self.action.args[3]
 
         self.imtype_keywords = 'IMTYPE'       # Unlikely to be changed.
         self.bias_imtype_values_str = 'Bias'
@@ -32,7 +33,9 @@ class PickInputsMastersDRP(KPF0_Primitive):
         self.arclamp_imtype_values_str = 'Arclamp'
 
         self.flat_imtype_keywords = ['IMTYPE','OBJECT']
-        self.flat_imtype_values_str = ['Flatlamp','autocal-flat-all']
+        #self.flat_imtype_values_str = ['Flatlamp','autocal-flat-all']
+        #self.flat_imtype_values_str = ['Flatlamp','test-flat-all']
+        self.flat_imtype_values_str = ['Flatlamp',self.flat_object]
 
         try:
             self.config_path = context.config_path[CONTEXT_CFG_PATH]
@@ -71,8 +74,7 @@ class PickInputsMastersDRP(KPF0_Primitive):
         fh2 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.dark_imtype_values_str,self.logger)
         all_dark_files,all_dark_objects = fh2.get_good_darks(self.exptime_minimum)
 
-        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those that either don't have
-        # SCI-OBJ == CAL-OBJ and SKY-OBJ == CALOBJ or those with SCI-OBJ == "" or SCI-OBJ == "None".
+        # Filter flat files with IMTYPE=‘flatlamp’ and specified OBJECT.
 
         fh3 = FitsHeaders(self.all_fits_files_path,self.flat_imtype_keywords,self.flat_imtype_values_str,self.logger)
         all_flat_files = fh3.match_headers_string_lower()
