@@ -9,6 +9,7 @@ from scipy.stats import mode
 from astropy.io import fits
 import re
 
+import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -30,12 +31,6 @@ class MasterFlatFramework(KPF0_Primitive):
         by stacking input images for exposures with IMTYPE.lower() == 'flatlamp'
         (and other selection criteria), selected from the given path that can include
         many kinds of FITS files, not just flats.
-
-        Requirements for FITS-header keywords of inputs:
-        1. IMTYPE = 'Flatlamp'
-        2. SCI-OBJ = CAL-OBJ = SKY-OBJ
-        3. SCI-OBJ <> 'None' and SCI-OBJ not blank
-        4. EXPTIME <= 2.0 seconds (GREEN), 1.0 seconds (RED) to avoid saturation
 
         Requirements for FITS-header keywords of inputs:
         1. IMTYPE = 'Flatlamp'
@@ -123,10 +118,11 @@ class MasterFlatFramework(KPF0_Primitive):
         self.masterflat_path = self.action.args[6]
         self.smoothlamppattern_path = self.action.args[7]
         self.ordermask_path = self.action.args[8]
-
-        self.flat_object = 'autocal-flat-all'
+        self.flat_object = self.action.args[9]
 
         self.imtype_keywords = ['IMTYPE','OBJECT']       # Unlikely to be changed.
+        #self.imtype_values_str = ['Flatlamp','autocal-flat-all']
+        #self.imtype_values_str = ['Flatlamp','test-flat-all']
         self.imtype_values_str = ['Flatlamp',self.flat_object]
 
         try:
@@ -196,28 +192,97 @@ class MasterFlatFramework(KPF0_Primitive):
         order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
         self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
 
-        masterbias_path_exists = exists(self.masterbias_path)
-        if not masterbias_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.masterbias_path))
-        self.logger.info('self.masterbias_path = {}'.format(self.masterbias_path))
-        self.logger.info('masterbias_path_exists = {}'.format(masterbias_path_exists))
 
-        masterdark_path_exists = exists(self.masterdark_path)
-        if not masterdark_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.masterdark_path))
-        self.logger.info('self.masterdark_path = {}'.format(self.masterdark_path))
-        self.logger.info('masterdark_path_exists = {}'.format(masterdark_path_exists))
-
-        master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
-        master_dark_data = KPF0.from_fits(self.masterdark_path,self.data_type)
+        # Initialization.
 
         master_flat_exit_code = 0
         master_flat_infobits = 0
 
-        # Filter flat files with IMTYPE=‘flatlamp’, but exclude those with EXPTIME > maximum allowed value for detector.
+
+        # Filter flat files with IMTYPE=‘flatlamp’ and that match the input object specification with OBJECT.
+        # Parse obsdate
+
+        self.logger.info('self.flat_object = {}'.format(self.flat_object))
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
         all_flat_files = fh.match_headers_string_lower()
+        n_all_flat_files = len(all_flat_files)
+
+        if n_all_flat_files == 0:
+            self.logger.info('n_all_flat_files = {}'.format(n_all_flat_files))
+            master_flat_exit_code = 8
+            exit_list = [master_flat_exit_code,master_flat_infobits]
+            return Arguments(exit_list)
+
+        obsdate_match = re.match(r".*(\d\d\d\d\d\d\d\d).*", all_flat_files[0])
+        try:
+            obsdate = obsdate_match.group(1)
+            self.logger.info('obsdate = {}'.format(obsdate))
+        except:
+            self.logger.info("obsdate not parsed from input filename")
+            obsdate = None
+
+
+        # Get master calibration files.
+
+        dbh = db.KPFDB()             # Open database connection (if needed for fallback master calibration file)
+
+        cal_file_level = 0           # Parameters for querying database fallback master calibration file.
+        contentbitmask = 3
+
+        masterbias_path_exists = exists(self.masterbias_path)
+
+        self.logger.info('masterbias_path_exists = {}'.format(masterbias_path_exists))
+
+        if not masterbias_path_exists:
+            if obsdate != None:
+                cal_type_pair = ['bias','autocal-bias']                    # Query database for fallback master bias.
+                dbh.get_nearest_master_file(obsdate,cal_file_level,contentbitmask,cal_type_pair)
+                self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+                self.logger.info('Master dark database-query filename = {}'.format(dbh.filename))
+                if dbh.exit_code == 0:
+                    self.masterbias_path = dbh.filename
+                else:
+                     self.logger.info('Master bias file cannot be queried from database; returning...')
+                     master_flat_exit_code = 5
+                     exit_list = [master_flat_exit_code,master_flat_infobits]
+                     return Arguments(exit_list)
+            else:
+                self.logger.info('Observation date not available so master bias file cannot be queried from database; returning...')
+                master_flat_exit_code = 10
+                exit_list = [master_flat_exit_code,master_flat_infobits]
+                return Arguments(exit_list)
+
+        self.logger.info('self.masterbias_path = {}'.format(self.masterbias_path))
+
+        masterdark_path_exists = exists(self.masterdark_path)
+        self.logger.info('masterdark_path_exists = {}'.format(masterdark_path_exists))
+
+        if not masterdark_path_exists:
+            if obsdate != None:
+                cal_type_pair = ['dark','autocal-dark']                    # Query database for fallback master dark.
+                dbh.get_nearest_master_file(obsdate,cal_file_level,contentbitmask,cal_type_pair)
+                self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+                self.logger.info('Master dark database-query filename = {}'.format(dbh.filename))
+                if dbh.exit_code == 0:
+                     self.masterdark_path = dbh.filename
+                else:
+                     self.logger.info('Master dark file cannot be queried from database; returning...')
+                     master_flat_exit_code = 5
+                     exit_list = [master_flat_exit_code,master_flat_infobits]
+                     return Arguments(exit_list)
+            else:
+                self.logger.info('Observation date not available so master dark file cannot be queried from database; returning...')
+                master_flat_exit_code = 10
+                exit_list = [master_flat_exit_code,master_flat_infobits]
+                return Arguments(exit_list)
+
+        self.logger.info('self.masterdark_path = {}'.format(self.masterdark_path))
+
+        dbh.close()      # Close database connection.
+
+        master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
+        master_dark_data = KPF0.from_fits(self.masterdark_path,self.data_type)
 
         mjd_obs_list = []
         exp_time_list = []
@@ -360,7 +425,11 @@ class MasterFlatFramework(KPF0_Primitive):
 
                 single_normalized_frame_data = single_frame_data / exp_time       # Separately normalize by EXPTIME.
 
-                single_normalized_frame_data -= np.array(master_dark_data[ffi])   # Subtract master-dark-current rate.
+                # Sometimes the CA_HK dark is empty.
+                try:
+                    single_normalized_frame_data -= np.array(master_dark_data[ffi])   # Subtract master-dark-current rate.
+                except:
+                    self.logger.debug('Could not subtract dark: np.shape(np.array(master_dark_data[ffi])) = {},{},{}'.format(i,ffi,np.shape(np.array(master_dark_data[ffi]))))
 
                 normalized_frames_data.append(single_normalized_frame_data)
 
@@ -564,6 +633,17 @@ class MasterFlatFramework(KPF0_Primitive):
             if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
                 master_holder.header[ffi]['ORDRMASK'] = self.ordermask_path
                 master_holder.header[ffi]['LAMPPATT'] = self.smoothlamppattern_path
+
+                # Reconstruct name of order-trace file from observation date parsed from order-mask filename.
+
+                ordtrace_match = re.match(r".+kpf_(\d\d\d\d\d\d\d\d).+\.fits",self.ordermask_path)
+
+                try:
+                    order_trace_obsdate = ordtrace_match.group(1)
+                    order_trace_filename = "kpf_" + order_trace_obsdate + "_master_flat_" + ffi + ".csv"
+                    master_holder.header[ffi]['ORDTRACE'] = order_trace_filename
+                except:
+                    pass
 
             n_filenames_kept = len(filenames_kept[ffi])
             for i in range(0, n_filenames_kept):
