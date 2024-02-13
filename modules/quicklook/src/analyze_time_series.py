@@ -1295,8 +1295,8 @@ class AnalyzeTimeSeries:
             panel_arr = [fibertempspanel]
 
         elif plot_name=='ccd_readspeed':
-            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Read Speed [sec]',
                              'title': 'CCD Read Speed',
