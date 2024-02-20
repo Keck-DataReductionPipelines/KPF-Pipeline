@@ -34,9 +34,9 @@ from astropy.io import fits
 #fname_stack_average = "kpf_20230919_master_flat.fits"
 #fname_smooth_lamp = "kpf_20230919_smooth_lamp_made20240105_float32.fits"
 
-# Used to make smooth lamp pattern for 20240206.
-fname_stack_average = "kpf_20240206_master_flat.fits"
-fname_smooth_lamp = "kpf_20240206_smooth_lamp_made20240206.fits"
+# Used to make smooth lamp pattern for 20240211.
+fname_stack_average = "kpf_20240211_master_flat.fits"
+fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240212.fits"
 
 print("fname_stack_average =",fname_stack_average)
 print("fname_smooth_lamp =",fname_smooth_lamp)
