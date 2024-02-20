@@ -73,7 +73,10 @@ foreach my $yyyymmdd (@yyyymmdd) {
     my @op = `cat runDailyPipelines.sh`;
 
     foreach my $op (@op) {
-        if ($op =~ /^\s+$/) { next; }
+        if ($op =~ /^\s*$/) { next; }
+        if ($op =~ /^#/) { next; }
+        if ($op =~ /^if/) { next; }
+        if ($op =~ /^fi/) { next; }
         if ($op =~ /^procdate/) { next; }
         if ($op =~ /\/bin\/bash/) { next; }
         if ($op =~ /^printenv/) { next; }

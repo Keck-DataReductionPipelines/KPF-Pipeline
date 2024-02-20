@@ -90,17 +90,38 @@ The basic steps are as follows.
 
 2. Set up the environment to point to the sandbox location (must be done via the ~/.bash_profile file, since it is sourced by bash script)::
 
-    cd ~/git/KPF-Pipeline/cronjobs
     vi ~/.bash_profile
     export KPFCRONJOB_SBX=/data/user/rlaher/sbx_test
     source ~/.bash_profile
     printenv | grep SBX
 
-3. Run the full Master Pipeline for the current date::
+3. Set other required environment variables::
+
+    vi ~/.bash_profile
+    export KPFCRONJOB_DOCKER_NAME_L0=russkpfmastersdrpl0
+    export KPFCRONJOB_DOCKER_NAME_L1=russkpfmastersdrpl1
+    export KPFCRONJOB_DOCKER_NAME_WLS=russkpfmasterswlsauto
+    export KPFCRONJOB_DOCKER_NAME_DBSCRIPT=russkpfmastersregisterindb
+    export KPFPIPE_L0_BASE_DIR=/data/kpf/L0
+    export KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData
+    export KPFPIPE_MASTERS_BASE_DIR=/data/kpf/masters
+    export KPFCRONJOB_CODE=/data/user/rlaher/git/KPF-Pipeline
+    export KPFCRONJOB_LOGS=/data/user/rlaher/git/KPF-Pipeline
+    export KPFPIPE_PORT=6107
+    export KPFDBUSER=kpfporuss
+    export KPFDBNAME=kpfopsdb
+    export KPFDB=/data/user/rlaher/kpfdb
+
+4. Make a jobs subdirectory under the git repo KPF_Pipeline directory::
+
+    cd ~/git/KPF-Pipeline
+    mkdir jobs
+
+5. Run the full Master Pipeline for the current date::
 
     cd ~/git/KPF-Pipeline/cronjobs
 
-4. This can be done via a cronjob that runs daily at 5:15 p.m.::
+6. This can be done via a cronjob that runs daily at 5:15 p.m.::
    
     15 17 * * * /data/user/rlaher/git/KPF-Pipeline/cronjobs/runDailyPipelines.sh >& /data/user/rlaher/git/KPF-Pipeline/jobs/runDailyPipelines_$(date +\%Y\%m\%d).out
 
@@ -138,18 +159,37 @@ The basic steps are as follows.
 
 2. Set up the environment to point to the sandbox location (must be done via the ~/.bash_profile file, since it is sourced by bash script)::
 
-    cd ~/git/KPF-Pipeline/cronjobs
     vi ~/.bash_profile
     export KPFCRONJOB_SBX=/data/user/rlaher/sbx_test
     source ~/.bash_profile
     printenv | grep SBX
 
-3. Generate a run script for the observation date(s) of interest, in which the input parameters are start and end date.  This generates a script called runWLSPipelineFrom20230601To20230601.sh::
+3. Set other required environment variables::
+
+    vi ~/.bash_profile
+    export KPFCRONJOB_DOCKER_NAME_WLS=russkpfmasterswlsauto
+    export KPFCRONJOB_DOCKER_NAME_DBSCRIPT=russkpfmastersregisterindb
+    export KPFPIPE_L0_BASE_DIR=/data/kpf/L0
+    export KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData
+    export KPFPIPE_MASTERS_BASE_DIR=/data/kpf/masters
+    export KPFCRONJOB_CODE=/data/user/rlaher/git/KPF-Pipeline
+    export KPFCRONJOB_LOGS=/data/user/rlaher/git/KPF-Pipeline
+    export KPFPIPE_PORT=6107
+    export KPFDBUSER=kpfporuss
+    export KPFDBNAME=kpfopsdb
+    export KPFDB=/data/user/rlaher/kpfdb
+
+4. Make a jobs subdirectory under the git repo KPF_Pipeline directory::
+
+    cd ~/git/KPF-Pipeline
+    mkdir jobs
+
+5. Generate a run script for the observation date(s) of interest, in which the input parameters are start and end date.  This generates a script called runWLSPipelineFrom20230601To20230601.sh::
 
     cd ~/git/KPF-Pipeline/cronjobs
     perl generateWLSScriptBetweenTwoDates.pl 20230601 20230601
 
-4. Run the Master WLS Pipeline::
+6. Run the Master WLS Pipeline::
 
     cd ~/git/KPF-Pipeline/cronjobs
     ./runWLSPipelineFrom20230601To20230601.sh
