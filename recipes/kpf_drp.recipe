@@ -337,7 +337,7 @@ if do_order_trace:
 			# get order trace file name defined in config file
 			# output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
 			# output_lev0_trace_csv = output_order_trace[idx] 
-			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext);
+			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if overwrite or not exists(output_lev0_trace_csv):
 				order_result_data = OrderTrace(flat_data, data_extension=ccd+ccd_stack,

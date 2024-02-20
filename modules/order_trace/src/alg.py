@@ -2811,6 +2811,8 @@ class OrderTraceAlg(ModuleAlgBase):
         trace_table['BottomEdge'] = np.zeros(total_row-1)
         trace_table['TopEdge'] = np.zeros(total_row-1)
         for i in range(total_row-1):
+            if cluster_widths[i] == {}:
+                continue
             trace_table['BottomEdge'][i] = self.float_to_string(cluster_widths[i]['bottom_edge'])
             trace_table['TopEdge'][i] = self.float_to_string(cluster_widths[i]['top_edge'])
         trace_table['X1'] = cluster_coeffs[1:, power+1].astype(int)
