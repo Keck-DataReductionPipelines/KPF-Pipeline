@@ -860,13 +860,13 @@ class RadialVelocity(KPF1_Primitive):
 
         _, final_rv, _, _, _ = RadialVelocityAlg.fit_ccf(full_ccf, 0.0,
             self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
-            sci_mask,
+            mask,
             rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
             vel_span_pixel=vspan)
         
         _, _, _, _, final_rv_err = RadialVelocityAlg.fit_ccf(full_unweighted_ccf, 0.0,
             self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
-            sci_mask,
+            mask,
             rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
             vel_span_pixel=vspan)
         
