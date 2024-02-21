@@ -80,7 +80,7 @@ hdul.writeto(fname_smooth_lamp, overwrite=True)
 # hdu_old = fits.open('/data/masters/20240211/kpf_20240211_smooth_lamp_made20240220_small.fits')
 # hdu_old = fits.open('/data/masters/20240211/kpf_20240211_smooth_lamp_made20240220_mt.fits')
 hdu_old = fits.open('/data/reference_fits/kpf_20240211_smooth_lamp_made20240212.fits')
-diff = hdu_old[1].data - hdu[1].data
+diff = hdu_old[1].data - hdul[1].data
 hdu_old[1].data = diff
 print(diff)
 hdu_old.writeto('difference.fits', overwrite=True)
