@@ -57,7 +57,7 @@ hdu_list.append(fits.PrimaryHDU(empty_data))
 for ffi in ffis:
     ffi_stack = ffi + "_STACK"
     #data_order_mask = hdul_order_mask[ffi].data
-    data_stack_average = hdul_stack_average[ffi_stack].data[:100,:100]
+    data_stack_average = hdul_stack_average[ffi_stack].data[:1000,:1000]
 
     #np_om_ffi = np.array(np.rint(data_order_mask)).astype(int)           # Ensure rounding to nearest integer.
     #data = np.where(np_om_ffi > 0,data_stack_average,np.nan)             # Set to NaN outside orderlet regions.
@@ -68,8 +68,8 @@ for ffi in ffis:
     y_hwin = int((y_window - 1) / 2)
     ny = 4080
     nx = 4080
-    ny = 100
-    nx = 100
+    ny = 1000
+    nx = 1000
     smooth_image = np.zeros(shape=(ny, nx))
     smooth_image[:] = np.nan                                              # Initialize 2-D array of NaNs
     for i in range(0,ny):
