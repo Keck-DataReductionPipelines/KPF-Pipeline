@@ -49,6 +49,9 @@ class AnalyzeTimeSeries:
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         
     To-do:
+        * Add plot showing only the Hallway Temperature
+        * Check for proper data types (float vs. str) before plotting
+        * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
         * Add standard plots for diagnostics
         * Add methods to print the schema
@@ -1295,8 +1298,8 @@ class AnalyzeTimeSeries:
             panel_arr = [fibertempspanel]
 
         elif plot_name=='ccd_readspeed':
-            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Read Speed [sec]',
                              'title': 'CCD Read Speed',
