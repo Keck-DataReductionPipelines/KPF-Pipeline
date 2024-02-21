@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from astropy.io import fits
 import re
 
+import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -144,22 +145,70 @@ class MasterDarkFramework(KPF0_Primitive):
 
         """
 
-        masterbias_path_exists = exists(self.masterbias_path)
-        if not masterbias_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.masterbias_path))
-        self.logger.info('self.masterbias_path = {}'.format(self.masterbias_path))
-        self.logger.info('masterbias_path_exists = {}'.format(masterbias_path_exists))
 
-        master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
+        # Initialization.
 
         master_dark_exit_code = 0
         master_dark_infobits = 0
 
-        # Filter dark files with IMTYPE=‘Dark’ and the specified minimum exposure time. Later in this class, exclude
-        # those FITS-image extensions that don't match the input object specification with OBJECT.
+
+        # Filter dark files with IMTYPE=‘dark’ and that match the input object specification with OBJECT.
+        # Parse obsdate
+
+        self.logger.info('self.dark_object = {}'.format(self.dark_object))
 
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.imtype_values_str,self.logger)
         all_dark_files,all_dark_objects = fh.get_good_darks(self.exptime_minimum)
+        n_all_dark_files = len(all_dark_files)
+
+        if n_all_dark_files == 0:
+            self.logger.info('n_all_dark_files = {}'.format(n_all_dark_files))
+            master_dark_exit_code = 8
+            exit_list = [master_dark_exit_code,master_dark_infobits]
+            return Arguments(exit_list)
+
+        obsdate_match = re.match(r".*(\d\d\d\d\d\d\d\d).*", all_dark_files[0])
+        try:
+            obsdate = obsdate_match.group(1)
+            self.logger.info('obsdate = {}'.format(obsdate))
+        except:
+            self.logger.info("obsdate not parsed from input filename")
+            obsdate = None
+
+
+        # Get master calibration files.
+
+        dbh = db.KPFDB()             # Open database connection (if needed for fallback master calibration file)
+
+        cal_file_level = 0           # Parameters for querying database fallback master calibration file.
+        contentbitmask = 3
+
+        masterbias_path_exists = exists(self.masterbias_path)
+
+        self.logger.info('masterbias_path_exists = {}'.format(masterbias_path_exists))
+
+        if not masterbias_path_exists:
+            if obsdate != None:
+                cal_type_pair = ['bias','autocal-bias']                    # Query database for fallback master bias.
+                dbh.get_nearest_master_file(obsdate,cal_file_level,contentbitmask,cal_type_pair)
+                self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+                self.logger.info('Master dark database-query filename = {}'.format(dbh.filename))
+                if dbh.exit_code == 0:
+                    self.masterbias_path = dbh.filename
+                else:
+                     self.logger.info('Master bias file cannot be queried from database; returning...')
+                     master_dark_exit_code = 5
+                     exit_list = [master_dark_exit_code,master_dark_infobits]
+                     return Arguments(exit_list)
+            else:
+                self.logger.info('Observation date not available so master bias file cannot be queried from database; returning...')
+                master_dark_exit_code = 10
+                exit_list = [master_dark_exit_code,master_dark_infobits]
+                return Arguments(exit_list)
+
+        dbh.close()      # Close database connection.
+
+        master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
 
         mjd_obs_list = []
         exp_time_list = []

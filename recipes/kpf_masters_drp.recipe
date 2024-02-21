@@ -12,6 +12,10 @@ from modules.master_dark.src.master_dark_framework import MasterDarkFramework
 from modules.master_flat.src.master_flat_framework import MasterFlatFramework
 from modules.master_arclamp.src.master_arclamp_framework import MasterArclampFramework
 
+flat_objects = config.FLAT.flat_objects
+# Normally standard_flat_object = "autocal-flat-all"
+standard_flat_object = flat_objects[0]
+
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 date_dir = context.date_dir
@@ -29,7 +33,7 @@ all_bias_files_list,\
     all_arclamp_files_list,\
     bias_objects_auto,\
     dark_objects_auto,\
-    arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum)
+    arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum,standard_flat_object)
 
 channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
@@ -141,11 +145,8 @@ masterflat_path = config.FLAT.masterflat_path
 smoothlamppattern_path = config.FLAT.smoothlamppattern_path
 ordermask_path = config.FLAT.ordermask_path
 
-
-
 standard_bias_object = "autocal-bias"
 standard_dark_object = "autocal-dark"
-standard_flat_object = "autocal-flat-all"
 
 
 if date_dir:
@@ -252,7 +253,8 @@ if all_flat_files_list:
                                          new_masterdark_path,
                                          new_masterflat_path,
                                          smoothlamppattern_path,
-                                         ordermask_path)
+                                         ordermask_path,
+                                         standard_flat_object)
 
 new_masterflat_path = standard_masterflat_path
 
