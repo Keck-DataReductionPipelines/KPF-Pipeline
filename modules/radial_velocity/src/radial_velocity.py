@@ -483,16 +483,19 @@ class RadialVelocity(KPF1_Primitive):
         all_none = [output_df[k] is None for k in output_df.keys()]
         if all(all_none):
             if self.logger:
-                self.logger.info("RadialVelocity: no L2 produced")
+                self.logger.debug("RadialVelocity: no L2 produced")
             return Arguments(None)
         self.construct_level2_data(output_df)
         self.output_level2.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')
 
-        if self.logger:
-            self.logger.info("RadialVelocity: Receipt written")
+        self.logger.debug("RadialVelocity: calculating combined RV")
+        self.full_instrument_rv()
 
         if self.logger:
-            self.logger.info("RadialVelocity: Done!")
+            self.logger.debug("RadialVelocity: Receipt written")
+
+        if self.logger:
+            self.logger.debug("RadialVelocity: Done!")
 
         return Arguments(self.output_level2)
 
@@ -806,6 +809,70 @@ class RadialVelocity(KPF1_Primitive):
         results.attrs['do_rv_corr'] = do_corr
 
         return results
+
+    def full_instrument_rv(self):
+        """
+        Fit the full summed weighted CCF for combined RVs
+        """
+        l2 = self.output_level2
+        if np.ndim(l2['GREEN_CCF_RW']) != np.ndim(l2['RED_CCF_RW']):
+            # RED chip not ready yet
+            return
+
+        # calculate accross science fibers
+        header = l2.header['PRIMARY']
+        green_ccf = l2['GREEN_CCF_RW'][0:3].sum(axis=0).sum(axis=0)
+        red_ccf = l2['RED_CCF_RW'][0:3].sum(axis=0).sum(axis=0)
+        full_ccf = green_ccf + red_ccf
+        green_ccf = l2['GREEN_CCF'][0:3].sum(axis=0).sum(axis=0)
+        red_ccf = l2['RED_CCF'][0:3].sum(axis=0).sum(axis=0)
+        full_unweighted_ccf = green_ccf  + red_ccf
+
+        sci_mask = l2.header['GREEN_CCF_RW']['SCI_MASK']
+        vspan = self.alg.get_vel_span_pixel()
+        rv_guess = self.alg.get_rv_guess()
+
+        _, final_rv, _, _, _ = RadialVelocityAlg.fit_ccf(full_ccf, rv_guess,
+            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
+            sci_mask,
+            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
+            vel_span_pixel=vspan)
+        
+        _, _, _, _, final_rv_err = RadialVelocityAlg.fit_ccf(full_unweighted_ccf, rv_guess,
+            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
+            sci_mask,
+            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
+            vel_span_pixel=vspan)
+
+        
+        header['CCFRV'] = (final_rv, 'RV combined across sci fibers and chips (km/s)')
+        header['CCFERV'] = (final_rv_err, 'Uncertainty on CCFRV (km/s)')
+
+        # calculate for cal fiber
+        green_ccf = l2['GREEN_CCF_RW'][3].sum(axis=0)
+        red_ccf = l2['RED_CCF_RW'][3].sum(axis=0)
+        full_ccf = green_ccf + red_ccf
+        green_ccf = l2['GREEN_CCF'][3].sum(axis=0)
+        red_ccf = l2['RED_CCF'][3].sum(axis=0)
+        full_unweighted_ccf = green_ccf  + red_ccf
+
+        mask = l2.header['GREEN_CCF_RW']['CAL_MASK']
+
+        _, final_rv, _, _, _ = RadialVelocityAlg.fit_ccf(full_ccf, 0.0,
+            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
+            sci_mask,
+            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
+            vel_span_pixel=vspan)
+        
+        _, _, _, _, final_rv_err = RadialVelocityAlg.fit_ccf(full_unweighted_ccf, 0.0,
+            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
+            sci_mask,
+            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
+            vel_span_pixel=vspan)
+        
+        header['CCFRVC'] = (final_rv, 'Cal fiber RV combined across both chips (km/s)')
+        header['CCFERVC'] = (final_rv_err, 'Uncertainty on CCFRVC (km/s)')
+
 
     @staticmethod
     def load_csv(filepath, header=None):
