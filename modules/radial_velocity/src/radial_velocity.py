@@ -821,6 +821,8 @@ class RadialVelocity(KPF1_Primitive):
 
         # calculate accross science fibers
         header = l2.header['PRIMARY']
+        df = l2['RV']
+
         green_ccf = l2['GREEN_CCF_RW'][0:3].sum(axis=0).sum(axis=0)
         red_ccf = l2['RED_CCF_RW'][0:3].sum(axis=0).sum(axis=0)
         full_ccf = green_ccf + red_ccf
