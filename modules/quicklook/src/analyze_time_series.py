@@ -50,6 +50,8 @@ class AnalyzeTimeSeries:
         
     To-do:
         * Add plot showing only the Hallway Temperature
+        * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
+        * Make plots of temperature vs. RV for various types of RVs
         * Check for proper data types (float vs. str) before plotting
         * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
@@ -1162,7 +1164,17 @@ class AnalyzeTimeSeries:
             (e.g., in a Jupyter Notebook).
         """
         
-        if plot_name == 'chamber_temp':
+        if plot_name == 'hallway_temp':
+            dict1 = {'col': 'kpfmet.TEMP', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
+                             'title': 'KPF Hallway Temperature', 
+                             'legend_frac_size': 0.3}
+            halltemppanel = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            panel_arr = [halltemppanel]
+        
+        elif plot_name == 'chamber_temp':
             dict1 = {'col': 'kpfmet.TEMP',              'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway',              'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfmet.GREEN_LN2_FLANGE',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Green LN$_2$ Flng',    'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
@@ -1182,7 +1194,7 @@ class AnalyzeTimeSeries:
             
             thispanelvars3 = [dict2, dict3, dict4]
             thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperature (K)',
-                             'subtractmedian': 'true',
+                             'title': 'KPF Hallway Temperatures', 
                              'legend_frac_size': 0.3}
             halltemppanel3 = {'panelvars': thispanelvars3,
                               'paneldict': thispaneldict3}
@@ -1856,8 +1868,9 @@ class AnalyzeTimeSeries:
             return        
         
         plots = { 
-            "p1a":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
-            "p1b":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
+            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   },
+            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
+            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
             "p1c":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   },
             "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      },
             "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      },
