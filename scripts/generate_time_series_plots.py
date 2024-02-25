@@ -1,65 +1,90 @@
+#!/usr/bin/env python3
+
 import time
 from datetime import datetime
+from datetime import timedelta
 from threading import Thread
+from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-# Placeholder for the myTS class with the plot_all_quicklook method
-class myTS:
-    def __init__(self):
-        # Initialize any necessary parameters for myTS
-        pass
+def generate_plots(kwargs):
+    db_path = '/data/time_series/kpf_ts.db'
+    myTS = AnalyzeTimeSeries(db_path=db_path)
+    myTS.plot_all_quicklook_daterange(**kwargs)
+    myTS = '' # needed?  to clear memory
 
-    def plot_all_quicklook(self, start_date, interval, fig_dir):
-        # Simulate plot generation
-        print(f"Generating plots for {start_date} in {fig_dir}")
-
-def generate_plots(start_date, end_date):
-    current_date = start_date
-    while current_date <= end_date:
-        year = current_date.year
-        month = current_date.month
-        savedir = f'/data/QLP/{year}{month:02d}00/Masters/'
-        
-        # Instantiate myTS anew for each plot generation cycle
-        plotter = myTS()
-        plotter.plot_all_quicklook(datetime(year, month, 1), interval='month', fig_dir=savedir)
-        
-        if month == 12:
-            current_date = datetime(year + 1, 1, 1)
-        else:
-            current_date = datetime(year, month + 1, 1)
-
-def schedule_task(initial_delay, interval, start_date, end_date):
+def schedule_task(initial_delay, interval, time_range_type, date_range):
     """
     Schedules the plot generation task to run after an initial delay and then at specified intervals,
     allowing for different arguments for each task.
-
-    :param initial_delay: Initial delay in seconds before the task is first executed.
-    :param interval: Interval in minutes between task executions.
-    :param start_date: Start date for the plot generation.
-    :param end_date: End date for the plot generation.
+    
+    Args:
+        initial_delay [int]: Initial delay in seconds before the task is first executed.
+        interval [int]: Interval in minutes between task executions.
+        time_range_type [str]: one of: 'day', 'month', 'year', 'decade', 'all'
+        date_range: one of 'this_day', 'this_month', 'this_year', 'this_decade', 
+                           'last_10_days', (start_date, end_date)
+                           where (start_date, end_date) is a tuple of datetime objects 
+                           or the string 'today'
+        
+        
+        #kwargs: keyword arguments for AnalyzeTimeSeries.plot_all_quicklook_daterange()
     """
     time.sleep(initial_delay)  # Initial delay before first execution
+    print('starting schedule_task')
     while True:
         start_time = time.time()
-        generate_plots(start_date, end_date)
+        if   date_range == 'this_day':
+            pass
+        elif date_range == 'this_month':
+            pass
+        elif date_range == 'this_year':
+            pass
+        elif date_range == 'this_decade':
+            pass
+        elif date_range == 'last_10_days':
+            pass
+        else:
+            now = datetime.now()
+            tomorrow   = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            next_month = (now + timedelta(days=28)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            next_year  = (now + timedelta(days=365)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            if (time_range_type == 'day') and (date_range[1] > tomorrow):
+                date_range = (date_range[0], tomorrow)
+            #print(date_range)
+            kwargs = {
+                "start_date":      date_range[0],
+                "end_date":        date_range[1],
+                "time_range_type": time_range_type
+                }
+        
+        generate_plots(kwargs)
+        
         end_time = time.time()
         execution_time = end_time - start_time
-        # Calculate sleep time by converting interval from minutes to seconds and subtracting execution time
         sleep_time = interval * 60 - execution_time
         if sleep_time > 0:
             time.sleep(sleep_time)
 
 if __name__ == "__main__":
-    # Define different arguments for each task
+
     tasks = [
-        {"initial_delay": 10, "interval": 30, "start_date": datetime(2024, 1, 1), "end_date": datetime(2024, 2, 28)},
-        {"initial_delay": 30, "interval": 47, "start_date": datetime(2024, 3, 1), "end_date": datetime(2024, 4, 30)},
-        {"initial_delay": 60, "interval": 137, "start_date": datetime(2024, 5, 1), "end_date": datetime(2024, 6, 30)},
-    ]
+        {"initial_delay": 1, 
+         "interval": 3600,
+         "time_range_type": "day",
+         "date_range": (datetime(2024, 2, 23), datetime(2024, 2, 24))
+         #"date_range": (datetime(2024, 2, 23), datetime(2030, 1, 1)) # dates in the future are rounded down to tomorrow
+        },
+        {"initial_delay": 10, 
+         "interval": 3600,
+         "time_range_type": "month",
+         "date_range": (datetime(2024, 1, 1), datetime(2030, 1, 1)) # dates in the future are rounded down to next month
+        },
+        ]
 
     threads = []
     for task in tasks:
-        thread = Thread(target=schedule_task, args=(task["initial_delay"], task["interval"], task["start_date"], task["end_date"]))
+        #print('task: ' + str(task["initial_delay"]) + ' ' + str(task["interval"]) + ' ' + str(task["start_date"]) + ' ' +  str(task["end_date"]) + ' ')
+        thread = Thread(target=schedule_task, args=(task["initial_delay"], task["interval"], task["time_range_type"], task["date_range"]))
         threads.append(thread)
         thread.start()
 

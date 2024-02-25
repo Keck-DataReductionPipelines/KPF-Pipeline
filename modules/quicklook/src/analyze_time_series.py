@@ -1924,23 +1924,30 @@ class AnalyzeTimeSeries:
                                            fig_path=fig_path, show_plot=show_plot, clean=clean)
 
 
-    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, clean=True, 
-                                     base_dir=None, show_plot=False):
+    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, 
+                                     time_range_type = 'all', clean=True, 
+                                     base_dir='/data/QLP/', show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook for a date 
         range.  Every unique day, month, year, and decade between start_date and end_date 
         will have a full set of plots produced using plot_all_quicklook().
+        The set of date range types ('day', 'month', 'year', 'decade', 'all')
+        is set by the time_range_type parameter.
 
         Args:
             start_date (datetime object) - start date for plot
             end_date (datetime object) - start date for plot
-            fig_path (string) - set to the path for the files to be generated.
+            time_range_type (string)- one of: 'day', 'month', 'year', 'decade', 'all'
+            base_dir (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
         Returns:
-            PNG plots in fig_path or shows the plots it the current environment
-            (e.g., in a Jupyter Notebook).
+            PNG plots in the output director or shows the plots it the current 
+            environment (e.g., in a Jupyter Notebook).
         """
+        time_range_type = time_range_type.lower()
+        if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
+            time_range_type = 'all'
 
         days = []
         months = []
@@ -1958,49 +1965,53 @@ class AnalyzeTimeSeries:
         years   = sorted(set(years),   reverse=True)
         decades = sorted(set(decades), reverse=True)
 
-        self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
-        for day in days:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
-                else:
-                    savedir = None
-                self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
-            except Exception as e:
-                self.logger.error(e)
-
-        self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
-        for month in months:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
-                else:
-                    savedir = None
-                self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
-            except Exception as e:
-                self.logger.error(e)
-
-        self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
-        for year in years:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
-                else:
-                    savedir = None
-                self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
-            except Exception as e:
-                self.logger.error(e)
-
-        self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
-        for decade in decades:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
-                else:
-                    savedir = None
-                self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
-            except Exception as e:
-                self.logger.error(e)
+        if time_range_type in ['day', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
+            for day in days:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
+                except Exception as e:
+                    self.logger.error(e)
+    
+        if time_range_type in ['month', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
+            for month in months:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
+                except Exception as e:
+                    self.logger.error(e)
+    
+        if time_range_type in ['year', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
+            for year in years:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
+                except Exception as e:
+                    self.logger.error(e)
+    
+        if time_range_type in ['decade', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
+            for decade in decades:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
+                except Exception as e:
+                    self.logger.error(e)
 
 
 def add_one_month(inputdate):
