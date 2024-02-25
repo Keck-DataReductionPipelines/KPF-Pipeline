@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import time
+import argparse
 from threading import Thread
 from datetime import datetime, timedelta
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-def schedule_task(interval, time_range_type, date_range, thread_name):
+def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
     """
     Schedules the plot generation task to run after an initial delay and then at specified intervals,
     allowing for different arguments for each task.
@@ -18,9 +19,6 @@ def schedule_task(interval, time_range_type, date_range, thread_name):
                            'last_10_days', (start_date, end_date)
                            where (start_date, end_date) is a tuple of datetime objects 
                            or the string 'today'
-        
-        
-        #kwargs: keyword arguments for AnalyzeTimeSeries.plot_all_quicklook_daterange()
     """
     print(f'Starting {thread_name}')
     initial_date_range = date_range
@@ -43,8 +41,8 @@ def schedule_task(interval, time_range_type, date_range, thread_name):
                 }
         elif date_range == 'this_year':
             kwargs = {
-                "start_date":      (now - timedelta(days=365)).replace(month=1,day=1, hour=0, minute=0, second=0, microsecond=0),
-                "end_date":        (now + timedelta(days=365)).replace(month=1,day=1, hour=0, minute=0, second=0, microsecond=0),
+                "start_date":      (now - timedelta(days=365)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+                "end_date":        (now + timedelta(days=365)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
                 "time_range_type": time_range_type
                 }
         elif date_range == 'last_10_days':
@@ -63,18 +61,18 @@ def schedule_task(interval, time_range_type, date_range, thread_name):
                 }
 
         start_time = time.time()
-        generate_plots(kwargs)
+        generate_plots(kwargs, db_path=db_path)
         end_time = time.time()
         execution_time = end_time - start_time
-        print(f'\nStarting pass through {thread_name} in ' + str(execution_time) + ' seconds.\n')
+        print(f'\Finished pass through {thread_name} in ' + str(execution_time) + ' seconds.\n')
         sleep_time = interval - execution_time
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-def generate_plots(kwargs):
-    myTS = AnalyzeTimeSeries(db_path='/data/time_series/kpf_ts.db')
+def generate_plots(kwargs, db_path='/data/time_series/kpf_ts.db'):
+    myTS = AnalyzeTimeSeries(db_path=db_path)
     myTS.plot_all_quicklook_daterange(**kwargs)
-    myTS = ''  # Clear memory (needed?)
+#    myTS = None  # Clear memory (needed?)
 
 def monitor_threads(threads, sleep_time):
     time.sleep(10)
@@ -86,10 +84,16 @@ def monitor_threads(threads, sleep_time):
         time.sleep(sleep_time)
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description='Repeatedly generate KPF time series plots.')
+    parser.add_argument('--db_path', type=str, default='/data/time_series/kpf_ts.db', 
+                        help='path to database file; default = /data/time_series/kpf_ts.db')
+    args = parser.parse_args()   
+
     tasks = [
-        {"thread_name": "All Days Thread",    "interval":  1*3600, "time_range_type": "day",    "date_range": (datetime(2024,  1,  1), datetime(2024,  2, 24))},
-        {"thread_name": "All Months Thread",  "interval":  1*3600, "time_range_type": "month",  "date_range": (datetime(2023,  1,  1), datetime(2024,  2,  1))},
-        {"thread_name": "All Years Thread",   "interval": 10*3600, "time_range_type": "year",   "date_range": (datetime(2024,  1,  1), datetime(2024,  2,  1))},
+        {"thread_name": "All Days Thread",    "interval": 24*3600, "time_range_type": "day",    "date_range": (datetime(2024,  1,  1), datetime(2024,  2, 24))},
+        {"thread_name": "All Months Thread",  "interval": 12*3600, "time_range_type": "month",  "date_range": (datetime(2023,  1,  1), datetime(2024,  2,  1))},
+        {"thread_name": "All Years Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": (datetime(2024,  1,  1), datetime(2024,  2,  1))},
         {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (datetime(2020,  1,  1), datetime(2024,  2,  1))},
         {"thread_name": "Today Thread",       "interval":  1*3600, "time_range_type": "day",    "date_range": 'this_day'},
         {"thread_name": "This Month Thread",  "interval":  1*3600, "time_range_type": "month",  "date_range": 'this_month'},
@@ -98,7 +102,7 @@ if __name__ == "__main__":
 
     threads = []
     for task in tasks:
-        thread = Thread(target=schedule_task, args=(task["interval"], task["time_range_type"], task["date_range"], task["thread_name"]), name=task["thread_name"])
+        thread = Thread(target=schedule_task, args=(task["interval"], task["time_range_type"], task["date_range"], task["thread_name"], args.db_path), name=task["thread_name"])
         thread.start_time = datetime.now()  
         thread.start()  
         threads.append(thread)

@@ -25,8 +25,7 @@ class AnalyzeTimeSeries:
         with KPF observations, as well as methods to ingest data, query the database, 
         print data, and made time series plots.  An elaborate set of standard time series 
         plots can be made over intervals of days/months/years/decades spanning a date 
-        range.  A related script 'ingest_kpf_ts_db.py' can be used to ingest data from 
-        the command line.
+        range.  
         
         The ingested data comes from L0/2D/L1/L2 keywords and the TELEMETRY extension 
         in L0 files.  With the current version of this code, all TELEMETRY keywords are 
@@ -47,18 +46,23 @@ class AnalyzeTimeSeries:
         L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
         L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
+
+    Related Commandline Scripts:
+        'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
+        'ingest_watch_kpf_tsdb.py' - ingest by watching a set of directories
+        'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
-        * Add plot showing only the Hallway Temperature
-        * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
+        * Ingest RVs
         * Make plots of temperature vs. RV for various types of RVs
+        * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
         * Check for proper data types (float vs. str) before plotting
         * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
         * Add standard plots for diagnostics
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * All histograms plots, e.g. for DRPTAG
+        * Add histogram plots, e.g. for DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
         * Ingest information from masters, especially WLS masters
