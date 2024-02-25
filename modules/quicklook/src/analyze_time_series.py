@@ -904,7 +904,8 @@ class AnalyzeTimeSeries:
        
  
     def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
-                                    clean=False, fig_path=None, show_plot=False):
+                                    clean=False, fig_path=None, show_plot=False, 
+                                    log_savefig_timing=True):
         """
         Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
         attributes are stored in an array of dictionaries called 'panel_arr'.  
@@ -965,7 +966,7 @@ class AnalyzeTimeSeries:
             axs = [axs]  # Make axs iterable even when there's only one panel
         if npanels > 1:
             plt.subplots_adjust(hspace=0)
-        plt.tight_layout()
+        #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
@@ -1139,7 +1140,8 @@ class AnalyzeTimeSeries:
         if fig_path != None:
             t0 = time.process_time()
             plt.savefig(fig_path, dpi=300, facecolor='w')
-            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if log_savefig_timing:
+                self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close('all')
@@ -1163,7 +1165,7 @@ class AnalyzeTimeSeries:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
         """
-        
+
         if plot_name == 'hallway_temp':
             dict1 = {'col': 'kpfmet.TEMP', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway', 'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
@@ -1843,7 +1845,8 @@ class AnalyzeTimeSeries:
             return
         
         self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
-                                         fig_path=fig_path, show_plot=show_plot, clean=clean)        
+                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
+                                         log_savefig_timing=False)        
 
 
     def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
