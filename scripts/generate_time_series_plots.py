@@ -77,7 +77,7 @@ def generate_plots(kwargs, db_path='/data/time_series/kpf_ts.db'):
 def monitor_threads(threads, sleep_time):
     time.sleep(10)
     while True:
-        print("\n------ Thread Status ------")
+        print("\n------ Thread Status at TIME T ------")
         for thread in threads:
             print(f"{thread.name}: {'Alive' if thread.is_alive() else 'Dead'} - Started at {thread.start_time}")
         print("---------------------------\n")
