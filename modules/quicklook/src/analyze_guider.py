@@ -381,7 +381,7 @@ class AnalyzeGuider:
         timestamp_label = f"KPF QLP: {current_time}"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(100, -50), textcoords='offset points')
+                    xytext=(100, -40), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
