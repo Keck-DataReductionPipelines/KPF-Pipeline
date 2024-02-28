@@ -264,7 +264,7 @@ class Analyze2D:
         timestamp_label = f"KPF QLP: {current_time}"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -40), textcoords='offset points')
+                    xytext=(0, -35), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
@@ -605,11 +605,11 @@ class Analyze2D:
         timestamp_label = f"KPF QLP: {current_time}"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
-                    xytext=(-50, -75), textcoords='offset points')
+                    xytext=(-50, -150), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
         plt.annotate('Trace = ' + order_trace_master_file, xy=(0, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="left", va="bottom",
-                    xytext=(50, -75), textcoords='offset points')
+                    xytext=(50, -150), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)
 
         # Display the plot
@@ -894,6 +894,14 @@ class Analyze2D:
         plt.yticks(fontsize=14)
         plt.yscale('log')
         plt.legend(loc='lower right', fontsize=11)
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
         
         # Display the plot
         if fig_path != None:

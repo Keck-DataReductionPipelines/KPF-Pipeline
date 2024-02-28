@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from datetime import datetime
 from matplotlib.ticker import ScalarFormatter
 from modules.Utils.kpf_parse import HeaderParse
 
@@ -131,6 +132,14 @@ class AnalyzeHK:
         ax.yaxis.set_tick_params(labelsize=14)
         plt.legend(facecolor='lightgray')
 
+        # Create a timestamp and annotate in the lower right corner
+#        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+#        timestamp_label = f"KPF QLP: {current_time}"
+#        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+#                    fontsize=8, color="darkgray", ha="right", va="bottom",
+#                    xytext=(0, -40), textcoords='offset points')
+#        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -156,7 +165,7 @@ class AnalyzeHK:
 
         """
         lw = 1 # linewidth
-        fig, axs = plt.subplots(4,1, figsize=(8, 12), tight_layout=True)
+        fig, axs = plt.subplots(4,1, figsize=(8, 12), tight_layout=False)
         
         cols = [512, 900]
         
@@ -214,6 +223,14 @@ class AnalyzeHK:
 
         # Add overall title
         axs[0].set_title('Ca H&K - Column Cuts through 2D Image: ' + str(self.ObsID) + ' - ' + self.name, fontsize=12)
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -291,6 +308,14 @@ class AnalyzeHK:
         ax.plot([396.847,396.847],[ymin,ymax],':',color ='black')
         ax.plot([393.366,393.366],[ymin,ymax],':',color ='black')
         ax.plot([chk_bandpass[0], chk_bandpass[1]],[0,0],':',color ='white')
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -397,6 +422,14 @@ class AnalyzeHK:
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('Ca H&K ' + trace.upper() + ' Spectrum: ' + str(self.ObsID) + ' - ' + self.name + '\n', fontsize=18)
         ax.grid(False)
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
