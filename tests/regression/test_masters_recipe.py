@@ -7,7 +7,7 @@ from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 import os
 
-masters_test_date = '20230730'
+masters_test_date = '20240228'
 master_stacks_recipe = open('recipes/kpf_masters_drp.recipe', 'r').read()
 master_stacks_config = 'configs/kpf_masters_drp.cfg'
 
@@ -32,9 +32,9 @@ def test_master_wls():
             date_dir=masters_test_date, watch=False)
 
 def main():
-    # test_master_stacks()
+    test_master_stacks()
     test_master_l1l2()
-    # test_master_wls()
+    test_master_wls()
 
 if __name__ == '__main__':
     main()

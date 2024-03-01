@@ -815,62 +815,52 @@ class RadialVelocity(KPF1_Primitive):
         Fit the full summed weighted CCF for combined RVs
         """
         l2 = self.output_level2
+        header = l2.header['PRIMARY']
+        rvh = l2.header['RV']
+        rvg = rvh.get('CCD1RV', None)
+
+        if self.ins.lower() != 'kpf' or rvg == None:
+            return
         if np.ndim(l2['GREEN_CCF_RW']) != np.ndim(l2['RED_CCF_RW']):
             # RED chip not ready yet
             return
 
         # calculate accross science fibers
-        header = l2.header['PRIMARY']
+        green_idx = l2['GREEN_CCF_RW'].shape[1]
         df = l2['RV']
-
-        green_ccf = l2['GREEN_CCF_RW'][0:3].sum(axis=0).sum(axis=0)
-        red_ccf = l2['RED_CCF_RW'][0:3].sum(axis=0).sum(axis=0)
-        full_ccf = green_ccf + red_ccf
-        green_ccf = l2['GREEN_CCF'][0:3].sum(axis=0).sum(axis=0)
-        red_ccf = l2['RED_CCF'][0:3].sum(axis=0).sum(axis=0)
-        full_unweighted_ccf = green_ccf  + red_ccf
-
-        sci_mask = l2.header['GREEN_CCF_RW']['SCI_MASK']
-        vspan = self.alg.get_vel_span_pixel()
-        rv_guess = self.alg.get_rv_guess()
-
-        _, final_rv, _, _, _ = RadialVelocityAlg.fit_ccf(full_ccf, rv_guess,
-            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
-            sci_mask,
-            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
-            vel_span_pixel=vspan)
+        rvr = rvh['CCD2RV']
+        weights_green = df['CCF Weights'].values[0:green_idx]
+        weights_red = df['CCF Weights'].values[green_idx+1:]
+        weights_all_ords = np.nansum(weights_green) + np.nansum(weights_red)
         
-        _, _, _, _, final_rv_err = RadialVelocityAlg.fit_ccf(full_unweighted_ccf, rv_guess,
-            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
-            sci_mask,
-            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
-            vel_span_pixel=vspan)
+        final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
+        final_rv_err = 1/np.sqrt(1/rvh['CCD1ERV']**2 + 1/rvh['CCD2ERV']**2)
 
-        
         header['CCFRV'] = (final_rv, 'RV combined across sci fibers and chips (km/s)')
         header['CCFERV'] = (final_rv_err, 'Uncertainty on CCFRV (km/s)')
 
+
         # calculate for cal fiber
-        green_ccf = l2['GREEN_CCF_RW'][3].sum(axis=0)
-        red_ccf = l2['RED_CCF_RW'][3].sum(axis=0)
-        full_ccf = green_ccf + red_ccf
-        green_ccf = l2['GREEN_CCF'][3].sum(axis=0)
-        red_ccf = l2['RED_CCF'][3].sum(axis=0)
-        full_unweighted_ccf = green_ccf  + red_ccf
+        if 'CAL RV' not in df.columns:
+            return
 
-        mask = l2.header['GREEN_CCF_RW']['CAL_MASK']
+        rvs = df['CAL RV'].values
+        weights = np.ones_like(rvs)
+        rvg = rvh['CCD1RVC']
+        rvr = rvh['CCD2RVC']
 
-        _, final_rv, _, _, _ = RadialVelocityAlg.fit_ccf(full_ccf, 0.0,
-            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
-            mask,
-            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
-            vel_span_pixel=vspan)
-        
-        _, _, _, _, final_rv_err = RadialVelocityAlg.fit_ccf(full_unweighted_ccf, 0.0,
-            self.rv_init['data'][RadialVelocityAlgInit.VELOCITY_LOOP],
-            mask,
-            rv_guess_on_ccf=(self.ins.lower() == 'kpf'),
-            vel_span_pixel=vspan)
+        green_ccf = l2['GREEN_CCF_RW'][3]
+        red_ccf = l2['RED_CCF_RW'][3]
+        weights_green = np.where(green_ccf.sum(axis=1) > 0)[0]
+        weights_red = np.where(red_ccf.sum(axis=1) > 0)[0]
+        weights_all_ords = np.nansum(weights_green) + np.nansum(weights_red)
+
+        if rvh['CCD1ERVC'] > 0 and rvh['CCD2ERVC'] > 0:
+            final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
+            final_rv_err = 1/np.sqrt(1/rvh['CCD1ERVC']**2 + 1/rvh['CCD2ERVC']**2)
+        else:
+            final_rv = 0
+            final_rv_err = 0
         
         header['CCFRVC'] = (final_rv, 'Cal fiber RV combined across both chips (km/s)')
         header['CCFERVC'] = (final_rv_err, 'Uncertainty on CCFRVC (km/s)')
