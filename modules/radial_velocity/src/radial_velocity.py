@@ -817,10 +817,9 @@ class RadialVelocity(KPF1_Primitive):
         l2 = self.output_level2
         header = l2.header['PRIMARY']
         rvh = l2.header['RV']
-        inst = header.get('INSTRUME', None)
         rvg = rvh.get('CCD1RV', None)
 
-        if inst != 'KPF' or rvg == None:
+        if self.ins.lower() != 'kpf' or rvg == None:
             return
         if np.ndim(l2['GREEN_CCF_RW']) != np.ndim(l2['RED_CCF_RW']):
             # RED chip not ready yet
