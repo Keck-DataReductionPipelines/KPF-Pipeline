@@ -39,7 +39,7 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
       --help         Display this message
       --start_date   Start date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
       --end_date     End date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
-      --ncpu         Number of cores used for paralle processing; default=10
+      --ncpu         Number of cores used for parallel processing; default=10
       --l0           Select all L0 files in date range
       --2d           Select all 2D files in date range
       --l1           Select all L1 files in date range
