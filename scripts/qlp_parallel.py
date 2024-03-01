@@ -18,7 +18,7 @@ def is_running_in_docker():
 
 def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
     """
-    Script Name: qlp_parallel_jobs.py
+    Script Name: qlp_parallel.py
    
     Description:
       This script uses the 'parallel' utility to execute the recipe called 
@@ -47,10 +47,10 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
       --print_files  Display file names matching criteria, but don't generate Quicklook plots
    
     Usage:
-      python kpf_processing_progress.py YYYYMMDD.SSSSS YYYYMMDD.SSSSS --ncpu NCPU --l0 --2d --l1 --l2
+      python qlp_parallel.py YYYYMMDD.SSSSS YYYYMMDD.SSSSS --ncpu NCPU --l0 --2d --l1 --l2
     
     Example:
-      ./scripts/qlp_parallel_jobs.py 20230101.12345.67 20230101.17 --ncpu 50 --l0 --2d
+      ./scripts/qlp_parallel.py 20230101.12345.67 20230101.17 --ncpu 50 --l0 --2d
     """
 
     if start_date.count('.') == 2:
@@ -122,7 +122,6 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
             except Exception as e:
                 print(e)
 
-
 if __name__ == "__main__":
     if is_running_in_docker():
         sys.argv = [arg.lower() if arg.startswith('--') else arg for arg in sys.argv] # make command line flags case insensitive
@@ -139,7 +138,5 @@ if __name__ == "__main__":
         args = parser.parse_args()
         main(args.start_date, args.end_date, args.l0, args.d2, args.l1, args.l2, args.ncpu, args.print_files)
     else:
-        print('qlp_parallel_jobs.py needs to be run in a Docker environment.')        
+        print('qlp_parallel.py needs to be run in a Docker environment.')        
         print('Start the KPF-Pipeline instance of Docker before trying again.')        
-
-    # to-do: start_date > end_date and stop, or flip them
