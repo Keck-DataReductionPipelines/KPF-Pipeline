@@ -833,8 +833,12 @@ class RadialVelocity(KPF1_Primitive):
         weights_red = df['CCF Weights'].values[green_idx+1:]
         weights_all_ords = np.nansum(weights_green) + np.nansum(weights_red)
         
-        final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
-        final_rv_err = 1/np.sqrt(1/rvh['CCD1ERV']**2 + 1/rvh['CCD2ERV']**2)
+        if rvh['CCD1ERV'] > 0 and rvh['CCD2ERV'] > 0:
+            final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
+            final_rv_err = 1/np.sqrt(1/rvh['CCD1ERV']**2 + 1/rvh['CCD2ERV']**2)
+        else:
+            final_rv = 0
+            final_rv_err = 0
 
         header['CCFRV'] = (final_rv, 'RV combined across sci fibers and chips (km/s)')
         header['CCFERV'] = (final_rv_err, 'Uncertainty on CCFRV (km/s)')
