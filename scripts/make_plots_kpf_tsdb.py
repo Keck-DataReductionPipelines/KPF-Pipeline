@@ -13,7 +13,7 @@ def plot_data(db_path, interval, wait_time):
         savedir = f'/data/QLP/{date_str}/Masters/'
         myTS = AnalyzeTimeSeries(db_path=db_path)
         myTS.plot_all_quicklook(datetime(2024, 1, 1), interval=interval, fig_dir=savedir)
-    elif interval.startswith('last')::
+    elif interval.startswith('last'):
         savedir = f'/data/QLP/{interval}/Masters/'
         n_days = int(interval.replace('last_', '').replace('_days', '').replace('_day', ''))
         myTS = AnalyzeTimeSeries(db_path=db_path)
