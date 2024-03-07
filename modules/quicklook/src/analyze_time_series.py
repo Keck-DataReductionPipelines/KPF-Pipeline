@@ -1125,9 +1125,9 @@ class AnalyzeTimeSeries:
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="left", va="bottom",
-                    xytext=(-100, -32), textcoords='offset points')
+                    xytext=(100, -32), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
@@ -1831,7 +1831,8 @@ class AnalyzeTimeSeries:
                                          fig_path=fig_path, show_plot=show_plot, clean=clean)        
 
 
-    def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
+    def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
+                                 last_n_days=None,
                                  fig_dir=None, show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook.  
@@ -1841,6 +1842,7 @@ class AnalyzeTimeSeries:
         Args:
             start_date (datetime object) - start date for plot
             interval (string) - 'day', 'week', 'year', or 'decade'
+            last_n_days (int) - overrides start_date and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -1848,6 +1850,14 @@ class AnalyzeTimeSeries:
             PNG plot in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        if (last_n_days != None) and (type(last_n_days) == type(1)):
+            now = datetime.now()
+            if last_n_days > 3:
+                end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                end_date = now
+            start_date = end_date - timedelta(days=last_n_days)
+
         if not isinstance(start_date, datetime):
             self.logger.error("'start_date' must be a datetime object.")
             return        
@@ -1891,6 +1901,8 @@ class AnalyzeTimeSeries:
             elif interval == 'decade':
                 end_date = datetime(start_date.year+10, start_date.month, start_date.day)
                 filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+            elif (last_n_days != None) and (type(last_n_days) == type(1)):
+                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
             else:
                 self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
                 return
@@ -1908,7 +1920,7 @@ class AnalyzeTimeSeries:
                                            fig_path=fig_path, show_plot=show_plot, clean=clean)
 
 
-    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, last_n_days=None,
+    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, 
                                      clean=True, base_dir=None, show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook for a date 
@@ -1918,7 +1930,6 @@ class AnalyzeTimeSeries:
         Args:
             start_date (datetime object) - start date for plot
             end_date (datetime object) - end date for plot
-            last_n_days (int) - overrides other dates and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -1926,11 +1937,6 @@ class AnalyzeTimeSeries:
             PNG plots in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
-        if (last_n_days != None) and (type(last_n_days) == type(1)):
-            now = datetime.now()
-            end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            start_date = end_date - timedelta(days=last_n_days)
-
         days = []
         months = []
         years = []
