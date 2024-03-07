@@ -1908,8 +1908,8 @@ class AnalyzeTimeSeries:
                                            fig_path=fig_path, show_plot=show_plot, clean=clean)
 
 
-    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, clean=True, 
-                                     base_dir=None, show_plot=False):
+    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, last_n_days=None,
+                                     clean=True, base_dir=None, show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook for a date 
         range.  Every unique day, month, year, and decade between start_date and end_date 
@@ -1917,7 +1917,8 @@ class AnalyzeTimeSeries:
 
         Args:
             start_date (datetime object) - start date for plot
-            end_date (datetime object) - start date for plot
+            end_date (datetime object) - end date for plot
+            last_n_days (int) - overrides other dates and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -1925,6 +1926,10 @@ class AnalyzeTimeSeries:
             PNG plots in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        if (last_n_days != None) and (type(last_n_days) == type(1)):
+            now = datetime.now()
+            end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            start_date = end_date - timedelta(days=last_n_days)
 
         days = []
         months = []
