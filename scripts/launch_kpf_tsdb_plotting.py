@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# This script launches several instances of make_plots_kpf_tsdb.py. 
+# They are launched here, instead of using threads in that script, 
+# because matplotlib is not thread-safe.
+
 import subprocess
 import time
 
