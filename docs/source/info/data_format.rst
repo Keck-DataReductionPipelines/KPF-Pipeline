@@ -375,10 +375,15 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
 L2 Primary Extension Header and RV Extension
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-*To-do: add a list of additional 2D, Level 1, and Level 2 primary keywords.*
+* To-do: add a list of additional 2D, Level 1, and Level 2 primary keywords.*
 
 
 WLS Dictionaries
 ----------------
 
 See :doc:`../analysis/dictonary_format` for details.
+
+
+Notes on Dates and Times in KPF Files
+-------------------------------------
+* To do: add notes here about how DATE-BEG, DATE-MID, and DATE-END are computed.  There are other datetimes in the header that should be clarified.  Also, explain how exposure midpoints are computed (using the exposure meter and DATE-BEG??), which leads to BJD and ultimately the barycentric corrections.
