@@ -111,7 +111,7 @@ class QCDefinitions:
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.fits_keywords[name1] = 'NOTJUNK'
-        self.fits_comments[name1] = 'QC: Not in the list of junk files check'
+        self.fits_comments[name1] = 'QC: Not in list of junk files'
         self.db_columns[name1] = None
 
         name2 = 'monotonic_wavelength_solution_check'
@@ -120,7 +120,7 @@ class QCDefinitions:
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.fits_keywords[name2] = 'MONOTWLS'
-        self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
+        self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
         self.db_columns[name2] = None
 
         name3 = 'L0_data_products_check'
@@ -129,7 +129,7 @@ class QCDefinitions:
         self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.fits_keywords[name3] = 'DATAPRL0'
-        self.fits_comments[name3] = 'QC: L0 data present check'
+        self.fits_comments[name3] = 'QC: L0 data present'
         self.db_columns[name3] = None
 
         name4 = 'L0_header_keywords_present_check'
@@ -138,34 +138,34 @@ class QCDefinitions:
         self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
         self.data_types[name4] = 'int'
         self.fits_keywords[name4] = 'KWRDPRL0'
-        self.fits_comments[name4] = 'QC: L0 keywords present check'
+        self.fits_comments[name4] = 'QC: L0 keywords present'
         self.db_columns[name4] = None
 
-        name5 = 'exposure_meter_not_saturated_check'
+        name5 = 'L0_datetime_checks'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name5] = 'Check for timing inconsistencies in L0 header keywords and Exp Meter table.'
         self.data_types[name5] = 'int'
-        self.fits_keywords[name5] = 'EMSAT'
-        self.fits_comments[name5] = 'QC: EM not saturated check'
+        self.fits_keywords[name5] = 'TIMCHKL0'
+        self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
 
-        name6 = 'exposure_meter_flux_not_negative_check'
+        name6 = 'exposure_meter_not_saturated_check'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.descriptions[name6] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
-        self.fits_keywords[name6] = 'EMNEG'
-        self.fits_comments[name6] = 'QC: EM not negative flux check'
+        self.fits_keywords[name6] = 'EMSAT'
+        self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
 
-        name7 = 'L0_datetime_checks'
+        name7 = 'exposure_meter_flux_not_negative_check'
         self.names.append(name7)
         self.kpf_data_levels[name7] = ['L0']
-        self.descriptions[name7] = 'Check for timing inconsistencies in L0 header keywords and Exp Meter table.'
+        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
-        self.fits_keywords[name7] = 'TIMCHKL0'
-        self.fits_comments[name7] = 'QC: L0 times consistent check'
+        self.fits_keywords[name7] = 'EMNEG'
+        self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
 
         # Integrity checks
