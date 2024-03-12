@@ -36,7 +36,7 @@ from astropy.io import fits
 
 # Used to make smooth lamp pattern for 20240211.
 fname_stack_average = "kpf_20240211_master_flat.fits"
-fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240220_small.fits"
+fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240212.fits"
 
 print("fname_stack_average =",fname_stack_average)
 print("fname_smooth_lamp =",fname_smooth_lamp)
@@ -57,19 +57,17 @@ hdu_list.append(fits.PrimaryHDU(empty_data))
 for ffi in ffis:
     ffi_stack = ffi + "_STACK"
     #data_order_mask = hdul_order_mask[ffi].data
-    data_stack_average = hdul_stack_average[ffi_stack].data[:1000,:1000]
+    data_stack_average = hdul_stack_average[ffi_stack].data
 
     #np_om_ffi = np.array(np.rint(data_order_mask)).astype(int)           # Ensure rounding to nearest integer.
     #data = np.where(np_om_ffi > 0,data_stack_average,np.nan)             # Set to NaN outside orderlet regions.
     data = data_stack_average
-    # print("ffi,data[13,2077],data[12,2077],data[11,2077] = ",ffi,data[13,2077],data[12,2077],data[11,2077])
+    print("ffi,data[13,2077],data[12,2077],data[11,2077] = ",ffi,data[13,2077],data[12,2077],data[11,2077])
 
     x_hwin = int((x_window - 1) / 2)
     y_hwin = int((y_window - 1) / 2)
     ny = 4080
     nx = 4080
-    ny = 1000
-    nx = 1000
     smooth_image = np.zeros(shape=(ny, nx))
     smooth_image[:] = np.nan                                              # Initialize 2-D array of NaNs
     for i in range(0,ny):
@@ -81,7 +79,7 @@ for ffi in ffis:
             for ii in range(i - y_hwin, i + y_hwin + 1):
                 if ((ii < 0) or (ii >= ny)): continue
                 for jj in range(j - x_hwin, j + x_hwin + 1):
-                    if ((jj < 0) or (jj >= nx)): continue
+                    if ((jj < 0) or (jj >= ny)): continue
 
                     datum = data[ii, jj]
 
