@@ -475,7 +475,7 @@ class QCL0(QC):
                 DATE-END = RDDATE-E
             Consistency between Exposure Meter times (Date-Beg, etc.) and overall timing:
                 Date-Beg = DATE-BEG
-                Date-end = DATE-END
+                Date-End = DATE-END
         """
     
         L0 = self.kpf_object
