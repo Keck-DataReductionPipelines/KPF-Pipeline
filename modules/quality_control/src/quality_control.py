@@ -465,7 +465,7 @@ class QCL0(QC):
         This method returns True only if all checks pass.
         
             Time ordering: 
-                DATE-BED < DATE-MID < DATE-END
+                DATE-BEG < DATE-MID < DATE-END
             Duration consistency: 
                 DATE-END - DATE-BEG = ELAPSED
             Consistency between Green/Red and overall timing:
