@@ -57,6 +57,7 @@ class AnalyzeTimeSeries:
         * Add the capability of using Jump queries to find files for ingestion or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
         * Ingest information from masters, especially WLS masters
+        * Allow for cases where the Telemetry extension is not present (early data)
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -606,7 +607,17 @@ class AnalyzeTimeSeries:
         """
         if level == 'L0':
             keyword_types = {
-                'DATE-MID': 'datetime',
+                'DATE-MID': 'datetime', # Halfway point of the exposure, unweighted
+                'DATE-BEG': 'datetime', # Start of exposure from kpfexpose       
+                'DATE-END': 'datetime', # End of exposure from kpfexpose.ENDTIME 
+                'GRDATE-B': 'datetime', # Shutter-open time Kwd green DATE-BEG   
+                'GRDATE-E': 'datetime', # Shutter-close time Kwd green DATE-END  
+                'RDDATE-B': 'datetime', # Shutter-open time Kwd red DATE-BEG     
+                'RDDATE-E': 'datetime', # Shutter-close time Kwd red DATE-END    
+                'EMDATE-B': 'datetime', # Date-Beg of first observation Kwd expmeter
+                'EMDATE-E': 'datetime', # Date-End of last observation Kwd expmeter 
+                'GCDATE-B': 'datetime', # sequence begin Kwd guide DATE-BEG         
+                'GCDATE-E': 'datetime', # sequence end Kwd guide DATE-END           
                 'MJD-OBS':  'float',
                 'EXPTIME':  'float',
                 'ELAPSED':  'float',
