@@ -29,7 +29,10 @@ def smooth_row(row_index, data, x_window, n_sigma, nx):
 
             if clipped_window.size > 0:
                 avg = np.mean(clipped_window)
-                smooth_row[j] = max(avg, 1.0)  # Ensure non-zero positive values
+                smooth_row[j] = avg
+
+                if smooth_row[j] <= 0.0:           # Avoid division by zero and no negative values.
+                    smooth_row[j] = 1.0
 
     return row_index, smooth_row
 
@@ -52,35 +55,30 @@ def multi_threaded_smoothing(data, x_window, n_sigma, max_workers=None):
 
     return smooth_image
 
-# Example usage
-fname_stack_average = "kpf_20240211_master_flat.fits"
-fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240220_mt.fits"
-ffis = ["GREEN_CCD", "RED_CCD"]  # List of FFIs to process
 
-x_window = 200  # Kernel width
-n_sigma = 3     # Sigma for clipping
+if __name__ == '__main__':
 
-hdul_stack_average = fits.open(fname_stack_average)
-hdu_list = [fits.PrimaryHDU()]  # Initialize HDU list with a primary HDU
+    # Example usage
+    fname_stack_average = "kpf_20240211_master_flat.fits"
+    fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240308_mt.fits"
+    ffis = ["GREEN_CCD", "RED_CCD"]  # List of FFIs to process
 
-for ffi in ffis:
-    print(ffi)
-    data_stack_average = hdul_stack_average[ffi + "_STACK"].data  # Adjust extension name as needed
-    smooth_image = multi_threaded_smoothing(data_stack_average, x_window, n_sigma, max_workers=96)
+    x_window = 200  # Kernel width
+    n_sigma = 3     # Sigma for clipping
+    max_workers = 90
 
-    # Create new HDU for the smoothed data and add to the list
-    hdu = fits.ImageHDU(smooth_image.astype(np.float32), name=ffi)
-    hdu_list.append(hdu)
+    hdul_stack_average = fits.open(fname_stack_average)
+    hdu_list = [fits.PrimaryHDU()]  # Initialize HDU list with a primary HDU
 
-# Save the new HDU list to a FITS file
-hdul = fits.HDUList(hdu_list)
-hdul.writeto(fname_smooth_lamp, overwrite=True)
+    for ffi in ffis:
+        print(ffi)
+        data_stack_average = hdul_stack_average[ffi + "_STACK"].data  # Adjust extension name as needed
+        smooth_image = multi_threaded_smoothing(data_stack_average, x_window, n_sigma, max_workers)
 
+        # Create new HDU for the smoothed data and add to the list
+        hdu = fits.ImageHDU(smooth_image.astype(np.float32), name=ffi)
+        hdu_list.append(hdu)
 
-# hdu_old = fits.open('/data/masters/20240211/kpf_20240211_smooth_lamp_made20240220_small.fits')
-# hdu_old = fits.open('/data/masters/20240211/kpf_20240211_smooth_lamp_made20240220_mt.fits')
-hdu_old = fits.open('/data/reference_fits/kpf_20240211_smooth_lamp_made20240212.fits')
-diff = hdu_old[1].data - hdul[1].data
-hdu_old[1].data = diff
-print(diff)
-hdu_old.writeto('difference.fits', overwrite=True)
+    # Save the new HDU list to a FITS file
+    hdul = fits.HDUList(hdu_list)
+    hdul.writeto(fname_smooth_lamp,overwrite=True,checksum=True)

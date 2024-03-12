@@ -14,7 +14,7 @@
 
 # Used to make smooth lamp pattern for 20240211.
 fname_stack_average = "kpf_20240211_master_flat.fits"
-fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240220_fast.fits"
+fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240308_new.fits"
 
 
 import numpy as np
@@ -26,7 +26,7 @@ def apply_sliding_window_line(data_line, kernel_width, n_sigma):
     """Apply a 1D sliding window operation on a line of data with dynamic kernel adjustment near edges."""
     result_line = np.zeros_like(data_line)
     line_length = len(data_line)
-    half_kernel_width = kernel_width // 2
+    half_kernel_width = int((kernel_width - 1) / 2)
 
     for i in range(line_length):
         # Dynamically adjust window start and end to stay within data bounds
@@ -72,47 +72,40 @@ def process_image(data_stack_average, kernel_width, n_sigma, num_cores=None):
             smooth_image[index, :] = future.result()  # Store the result in the corresponding place
             print(f"Completed: {i+1}/{ny} lines", end='\r')  # Print progress, '\r' returns cursor to start of line
 
-    # Ensure no division by zero or negative values
-    smooth_image[smooth_image <= 0.0] = 1.0
     return smooth_image
 
-# Load your data
-hdul_stack_average = fits.open(fname_stack_average)
 
-ffis = ["GREEN_CCD", "RED_CCD"]
-x_window = 200  # Kernel width
-y_window = 1
-n_sigma = 3     # Sigma for clipping
-num_cores=64
+if __name__ == '__main__':
 
-hdu_list = [fits.PrimaryHDU()]
+    # Load your data
+    hdul_stack_average = fits.open(fname_stack_average)
 
-for ffi in ffis:
-    print(ffi)
-    ffi_stack = ffi + "_STACK"
-    data_stack_average = hdul_stack_average[ffi_stack].data[:1000,:1000]
+    ffis = ["GREEN_CCD", "RED_CCD"]
+    x_window = 200  # Kernel width
+    y_window = 1
+    n_sigma = 3     # Sigma for clipping
+    num_cores = 90
 
-    smooth_image = process_image(data_stack_average, x_window, n_sigma, num_cores=num_cores)
+    hdu_list = [fits.PrimaryHDU()]
 
-    # Ensure no division by zero or negative values
-    smooth_image[smooth_image <= 0.0] = 1.0
+    for ffi in ffis:
+        print(ffi)
+        ffi_stack = ffi + "_STACK"
+        data_stack_average = hdul_stack_average[ffi_stack].data
 
-    # Create new HDU for the smoothed data
-    hdu = fits.ImageHDU(smooth_image.astype(np.float32))
-    hdu.header['EXTNAME'] = ffi
-    hdu.header['XWINDOW'] = (x_window, "X clipped-mean kernel size (pix)")
-    hdu.header['YWINDOW'] = (y_window, "Y clipped-mean kernel size (pix)")
-    hdu.header['NSIGMA'] = (n_sigma, "Number of sigmas for data-clipping")
-    hdu_list.append(hdu)
+        smooth_image = process_image(data_stack_average, x_window, n_sigma, num_cores=num_cores)
 
-# Save the new HDU list to a FITS file
-hdu = fits.HDUList(hdu_list)
-hdu.writeto(fname_smooth_lamp, overwrite=True, checksum=True)
+        # Ensure no division by zero or negative values
+        smooth_image[smooth_image <= 0.0] = 1.0
 
-# hdu_old = fits.open('/data/masters/20240211/kpf_20240211_smooth_lamp_made20240220_small.fits')
-hdu_old = fits.open('/data/masters/20240211/kpf_20240211_smooth_lamp_made20240220_mt.fits')
-# hdu_old = fits.open('/data/reference_fits/kpf_20240211_smooth_lamp_made20240212.fits')
-diff = hdu_old[1].data - hdu[1].data
-hdu_old[1].data = diff
-print(diff)
-hdu_old.writeto('difference.fits', overwrite=True)
+        # Create new HDU for the smoothed data
+        hdu = fits.ImageHDU(smooth_image.astype(np.float32))
+        hdu.header['EXTNAME'] = ffi
+        hdu.header['XWINDOW'] = (x_window, "X clipped-mean kernel size (pix)")
+        hdu.header['YWINDOW'] = (y_window, "Y clipped-mean kernel size (pix)")
+        hdu.header['NSIGMA'] = (n_sigma, "Number of sigmas for data-clipping")
+        hdu_list.append(hdu)
+
+    # Save the new HDU list to a FITS file
+    hdu = fits.HDUList(hdu_list)
+    hdu.writeto(fname_smooth_lamp, overwrite=True, checksum=True)
