@@ -151,12 +151,10 @@ class AnalyzeTimeSeries:
             dir_path for dir_path in sorted_dir_paths
             if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
-        #t1 = tqdm_notebook(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         for dir_path in t1:
             t1.set_description(dir_path.split('/')[-1])
             t1.refresh() 
-            #t2 = tqdm_notebook(os.listdir(dir_path), desc=f'Files', leave=False)
             t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
             batch = []
             for L0_filename in t2:
