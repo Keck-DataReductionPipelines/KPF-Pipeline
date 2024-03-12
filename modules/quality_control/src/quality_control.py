@@ -470,8 +470,8 @@ class QCL0(QC):
                 DATE-END - DATE-BEG = ELAPSED
             Consistency between Green/Red and overall timing:
                 DATE-BEG = GRDATE-B
-                DATE-BEG = GRDATE-B
-                DATE-END = RDDATE-E
+                DATE-BEG = RDDATE-B
+                DATE-END = GRDATE-E
                 DATE-END = RDDATE-E
             Consistency between Exposure Meter times (Date-Beg, etc.) and overall timing:
                 Date-Beg = DATE-BEG
