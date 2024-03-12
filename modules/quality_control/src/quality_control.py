@@ -2,6 +2,7 @@ import os
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
+from datetime import datetime
 from scipy.ndimage import convolve1d
 from modules.Utils.kpf_parse import get_data_products_L0
 
@@ -455,7 +456,7 @@ class QCL0(QC):
         return QC_pass
 
 
-    def L0_datetime_checks(L0, debug=False):
+    def L0_datetime_checks(self, debug=False):
         """
         This QC module performs the following checks on datetimes in the L0 primary header
         and in the Exposure Meter table (if present).  The timing checks have precision 
@@ -477,6 +478,7 @@ class QCL0(QC):
                 Date-end = DATE-END
         """
     
+        L0 = self.kpf_object
         date_format = "%Y-%m-%dT%H:%M:%S.%f"
         QC_pass = True
     
