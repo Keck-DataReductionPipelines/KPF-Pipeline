@@ -473,7 +473,7 @@ class QCL0(QC):
                 DATE-BEG = GRDATE-B
                 DATE-END = RDDATE-E
                 DATE-END = RDDATE-E
-            Consistnecy between Exposure Meter times (Date-Beg, etc.) and overall timing:
+            Consistency between Exposure Meter times (Date-Beg, etc.) and overall timing:
                 Date-Beg = DATE-BEG
                 Date-end = DATE-END
         """
