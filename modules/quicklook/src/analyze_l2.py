@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 from modules.Utils.kpf_parse import HeaderParse
 from astropy.table import Table
@@ -228,6 +229,14 @@ class AnalyzeL2:
         ax = fig.add_subplot(111, frame_on=False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('L2 - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name + '\n', fontsize=30)
+            
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
