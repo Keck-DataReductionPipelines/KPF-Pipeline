@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.mlab as mlab
@@ -64,6 +65,8 @@ class AnalyzeGuider:
         self.date_mid = Time(self.header['DATE-MID'])
         self.ra  = self.header['RA'] # string
         self.dec = self.header['DEC'] # string
+        self.el = self.header['EL'] # string
+        self.airmass = self.header['AIRMASS'] # string
         self.gmag = self.header['GAIAMAG'] # Gaia G magnitude
         self.jmag = self.header['2MASSMAG'] # 2MASS J magnitude
         try:
@@ -201,7 +204,11 @@ class AnalyzeGuider:
             try:
                 print(f"Trying to fit Guider image with alpha guess = {alpha_guess*0.056} arcsec.")
                 # Update the initial guess with the current alpha value
-                p0 = [1, self.guider_header['CRPIX1'], self.guider_header['CRPIX2'], alpha_guess, 2.5]
+                p0 = [1, 343.1, 264.7, alpha_guess, 2.5]
+                if 'GCCRPIX1' in self.header:
+                    p0 = [1, self.header['GCCRPIX1'], self.header['GCCRPIX2'], alpha_guess, 2.5]
+                elif 'CRPIX1' in self.guider_header:
+                    p0 = [1, self.guider_header['CRPIX1'], self.guider_header['CRPIX2'], alpha_guess, 2.5]
         
                 # Attempt to fit the model
                 popt, pcov = curve_fit(moffat_2D, (x_flat, y_flat), image_data_flat, p0=p0) #, maxfev=10000)
@@ -369,6 +376,14 @@ class AnalyzeGuider:
         cbar3 = plt.colorbar(im2, ax=axs[2], shrink=0.7)
         cbar3.set_label('Fractional Residuals (scaled to peak of guider image)', fontsize=10)
             
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(100, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -554,6 +569,7 @@ class AnalyzeGuider:
         else:
             mag_string = mag_string + ", G = " + self.gmag
         strings.append(mag_string)
+        strings.append("Elevation = " + f"{self.el:.1f}" + " deg   Airmass = " + f"{self.airmass:.2f}")
         strings.append(str(int(self.gcfps)) + ' fps, ' + str(self.gcgain) + ' gain')
         strings.append('\n')
         strings.append(str(self.df_GUIDER.shape[0]) + ' guider frames.  Fraction with:')
@@ -636,6 +652,14 @@ class AnalyzeGuider:
         axesb.tick_params(axis='y', labelcolor='orange')
         axesb.tick_params(axis='both', which='major', labelsize=14)
         axesc.tick_params(axis='both', which='major', labelsize=10)
+
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
