@@ -7,7 +7,7 @@ from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 import os
 
-masters_test_date = '20240228'
+masters_test_date = '20230730'
 master_stacks_recipe = open('recipes/kpf_masters_drp.recipe', 'r').read()
 master_stacks_config = 'configs/kpf_masters_drp.cfg'
 
