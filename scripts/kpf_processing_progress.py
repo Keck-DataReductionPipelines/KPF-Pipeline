@@ -150,10 +150,10 @@ def main(start_date, end_date, print_files, touch_files, check_version, current_
       --current_version  The current version of determining completion status; e.g. --current version 2.5
    
     Usage:
-      python kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files] [--print_files_2D] [--print_files_L1] [--print_files_L2] [--touch_files] [--check_version]
+      kpf_processing_progress.py YYYYMMDD [YYYYMMDD] [--print_files] [--print_files_2D] [--print_files_L1] [--print_files_L2] [--touch_files] [--check_version]
    
     Example:
-      python kpf_processing_progress.sh 20231114 20231231 --print_files
+      ./scripts/kpf_processing_progress.sh 20231114 20231231 --print_files
     """
 
     base_dir = "/data/kpf"

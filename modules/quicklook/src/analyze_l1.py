@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime
 from modules.Utils.utils import DummyLogger
 from matplotlib import gridspec
 from matplotlib.ticker import MaxNLocator
@@ -288,6 +289,13 @@ class AnalyzeL1:
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
         plt.tight_layout()
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        ax3.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
 
         # Display the plot
         if fig_path != None:
@@ -361,10 +369,17 @@ class AnalyzeL1:
         if ymin > 0:
             ax3.set_ylim(bottom=0)
 
-
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
         plt.tight_layout()
+
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -449,6 +464,8 @@ class AnalyzeL1:
             ax[j].xaxis.set_tick_params(labelsize=16)
             ax[j].yaxis.set_tick_params(labelsize=16)
             ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
+            ax[j].grid(False)
+
 
         for j in range(int(np.shape(flux)[0]/n_orders_per_panel)):
             left  = min((wav[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:]).flatten())
@@ -471,6 +488,14 @@ class AnalyzeL1:
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=28)
         plt.tight_layout()
+
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -547,6 +572,14 @@ class AnalyzeL1:
         if ylog: plt.yscale('log')
         plt.grid(True)
         plt.legend()
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -30), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -760,6 +793,14 @@ class AnalyzeL1:
 
         for ax in axs:
             ax.tick_params(axis='both', which='major', labelsize=14)
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -30), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -973,6 +1014,14 @@ class AnalyzeL1:
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('L1 Orderlet Flux Ratios - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name+ '\n', fontsize=24)
         plt.tight_layout()
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -30), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
