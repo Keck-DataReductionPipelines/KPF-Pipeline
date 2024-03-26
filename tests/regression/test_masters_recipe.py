@@ -32,9 +32,9 @@ def test_master_wls():
             date_dir=masters_test_date, watch=False)
 
 def main():
-    # test_master_stacks()
+    test_master_stacks()
     test_master_l1l2()
-    # test_master_wls()
+    test_master_wls()
 
 if __name__ == '__main__':
     main()
