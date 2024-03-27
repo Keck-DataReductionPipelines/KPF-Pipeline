@@ -2,6 +2,7 @@ import os
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
+from datetime import datetime
 from scipy.ndimage import convolve1d
 from modules.Utils.kpf_parse import get_data_products_L0
 
@@ -110,7 +111,7 @@ class QCDefinitions:
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.fits_keywords[name1] = 'NOTJUNK'
-        self.fits_comments[name1] = 'QC: Not in list of junk files check'
+        self.fits_comments[name1] = 'QC: Not in list of junk files'
         self.db_columns[name1] = None
 
         name2 = 'monotonic_wavelength_solution_check'
@@ -119,44 +120,53 @@ class QCDefinitions:
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.fits_keywords[name2] = 'MONOTWLS'
-        self.fits_comments[name2] = 'QC: Monotonic wavelength-solution check'
+        self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
         self.db_columns[name2] = None
 
         name3 = 'L0_data_products_check'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Check if expected data products are present with non-zero array sizes.'
+        self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.fits_keywords[name3] = 'DATAPRL0'
-        self.fits_comments[name3] = 'QC: L0 data present check'
+        self.fits_comments[name3] = 'QC: L0 data present'
         self.db_columns[name3] = None
 
         name4 = 'L0_header_keywords_present_check'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Check if expected header keywords are present.'
+        self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
         self.data_types[name4] = 'int'
         self.fits_keywords[name4] = 'KWRDPRL0'
-        self.fits_comments[name4] = 'QC: L0 keywords present check'
+        self.fits_comments[name4] = 'QC: L0 keywords present'
         self.db_columns[name4] = None
 
-        name5 = 'exposure_meter_not_saturated_check'
+        name5 = 'L0_datetime_checks'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name5] = 'Check for timing inconsistencies in L0 header keywords and Exp Meter table.'
         self.data_types[name5] = 'int'
-        self.fits_keywords[name5] = 'EMSAT'
-        self.fits_comments[name5] = 'QC: EM not saturated check'
+        self.fits_keywords[name5] = 'TIMCHKL0'
+        self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
 
-        name6 = 'exposure_meter_flux_not_negative_check'
+        name6 = 'exposure_meter_not_saturated_check'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.descriptions[name6] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
-        self.fits_keywords[name6] = 'EMNEG'
-        self.fits_comments[name6] = 'QC: EM not negative flux check'
+        self.fits_keywords[name6] = 'EMSAT'
+        self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
+
+        name7 = 'exposure_meter_flux_not_negative_check'
+        self.names.append(name7)
+        self.kpf_data_levels[name7] = ['L0']
+        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.data_types[name7] = 'int'
+        self.fits_keywords[name7] = 'EMNEG'
+        self.fits_comments[name7] = 'QC: EM not negative flux'
+        self.db_columns[name7] = None
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -294,7 +304,7 @@ class QCL0(QC):
 
     """
     Description:
-        This class inherits QC superclass and defines QC functions for L0 files.
+        This class inherits the QC superclass and defines QC functions for L0 files.
         Since the policy is to not modify an L0 FITS file in the archive location
         /data/kpf/L0/yyyymmdd, the class operates on the FITS object that will
         elevate to a higher data level. The QC info is inherited via the FITS header
@@ -444,6 +454,146 @@ class QCL0(QC):
                     print('The keyword ' + keyword + ' is missing from the primary header.')
         
         return QC_pass
+
+
+    def L0_datetime_checks(self, debug=False):
+        """
+        This QC module performs the following checks on datetimes in the L0 primary header
+        and in the Exposure Meter table (if present).  The timing checks have precision 
+        thresholds to only catch significant timing errors and not trigger on small 
+        differences related to machine precision or dead time in the Exposure Meter detector.
+        This method returns True only if all checks pass.
+        
+            Time ordering: 
+                DATE-BEG < DATE-MID < DATE-END
+            Duration consistency: 
+                DATE-END - DATE-BEG = ELAPSED
+            Consistency between Green/Red and overall timing:
+                DATE-BEG = GRDATE-B
+                DATE-BEG = RDDATE-B
+                DATE-END = GRDATE-E
+                DATE-END = RDDATE-E
+            Consistency between Exposure Meter times (Date-Beg, etc.) and overall timing:
+                Date-Beg = DATE-BEG
+                Date-End = DATE-END
+        """
+    
+        L0 = self.kpf_object
+        date_format = "%Y-%m-%dT%H:%M:%S.%f"
+        QC_pass = True
+    
+        time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
+        time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
+        
+        # First check that the appropriate keywords are present
+        essential_keywords = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'ELAPSED']
+        for keyword in essential_keywords:
+            if keyword not in L0.header['PRIMARY']:
+                if debug:
+                    print(f'Missing keyword: {keyword}')
+                QC_pass = False
+        if not QC_pass:
+            return QC_pass
+        
+        # Check that dates are ordered correctly
+        date_beg = datetime.strptime(L0.header['PRIMARY']['DATE-BEG'], date_format)
+        date_mid = datetime.strptime(L0.header['PRIMARY']['DATE-MID'], date_format)
+        date_end = datetime.strptime(L0.header['PRIMARY']['DATE-END'], date_format)
+        elapsed  = float(L0.header['PRIMARY']['ELAPSED'])
+        if (date_end < date_mid) or (date_mid < date_beg):
+            QC_pass = False
+        
+        # Check that DATE-BEG + ELAPSE = DATE-END
+        if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
+            if debug:
+                print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
+            QC_pass = False
+            
+        # Check that GRDATE-B/RDDATE-B are consistent with DATE-BEG, etc.
+        data_products = get_data_products_L0(L0)
+        if 'Green' in data_products:
+            if 'GRDATE-B' not in L0.header['PRIMARY']:
+                if debug:
+                    print(f'Missing keyword: GRDATE-B')
+                QC_pass = False
+                return QC_pass
+            else:
+                grdate_b = datetime.strptime(L0.header['PRIMARY']['GRDATE-B'], date_format)
+                if abs((date_beg - grdate_b).total_seconds()) > time_precision_threshold:
+                    if debug:
+                        print(f'abs(DATE-BEG - GRDATE-B) = {abs((date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                    QC_pass = False
+            if 'GRDATE-E' not in L0.header['PRIMARY']:
+                if debug:
+                    print(f'Missing keyword: GRDATE-E')
+                QC_pass = False
+                return QC_pass
+            else:
+                grdate_e = datetime.strptime(L0.header['PRIMARY']['GRDATE-E'], date_format)
+                if abs((date_end - grdate_e).total_seconds()) > time_precision_threshold:
+                    if debug:
+                        print(f'abs(DATE-END - GRDATE-E) = {abs((date_end - grdate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                    QC_pass = False
+        if 'Red' in data_products:
+            if 'RDDATE-B' not in L0.header['PRIMARY']:
+                if debug:
+                    print(f'Missing keyword: RDDATE-B')
+                QC_pass = False
+                return QC_pass
+            else:
+                rddate_b = datetime.strptime(L0.header['PRIMARY']['RDDATE-B'], date_format)
+                if abs((date_beg - rddate_b).total_seconds()) > time_precision_threshold:
+                    if debug:
+                        print(f'abs(DATE-BEG - RDDATE-B) = {abs((date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                    QC_pass = False
+            if 'RDDATE-E' not in L0.header['PRIMARY']:
+                if debug:
+                    print(f'Missing keyword: RDDATE-E')
+                QC_pass = False
+                return QC_pass
+            else:
+                rddate_e = datetime.strptime(L0.header['PRIMARY']['RDDATE-E'], date_format)
+                if abs((date_end - rddate_e).total_seconds()) > time_precision_threshold:
+                    if debug:
+                        print(f'abs(DATE-END - RDDATE-E) = {abs((date_end - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                    QC_pass = False
+        if ('Green' in data_products) and ('Red' in data_products) and QC_pass:
+            if abs((grdate_b - rddate_b).total_seconds()) > time_precision_threshold: 
+                if debug:
+                    print(f'abs(GRDATE-B - RDDATE-B) = {abs((grdate_b - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                QC_pass = False
+            if abs((grdate_e - rddate_e).total_seconds()) > time_precision_threshold: 
+                if debug:
+                    print(f'abs(GRDATE-E - RDDATE-E) = {abs((grdate_e - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                QC_pass = False
+     
+        if 'ExpMeter' in data_products:
+            if 'Date-Beg-Corr' in L0['EXPMETER_SCI'].columns:
+                exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'], date_format)
+                exp_date_end = datetime.strptime(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'], date_format)
+            else:
+                exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg'], date_format)
+                exp_date_end = datetime.strptime(L0['EXPMETER_SCI'].iloc[-1]['Date-End'], date_format)
+            if 'Green' in data_products:
+                if abs((exp_date_beg - grdate_b).total_seconds()) > time_precision_threshold_exp:
+                    if debug:
+                        print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - GRDATE-B) = {abs((exp_date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                    QC_pass = False
+                if abs((exp_date_end - grdate_e).total_seconds()) > time_precision_threshold_exp:
+                    if debug:
+                        print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - GRDATE-E) = {abs((exp_date_end - grdate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                    QC_pass = False
+            if 'Red' in data_products:
+                if abs((exp_date_beg - rddate_b).total_seconds()) > time_precision_threshold_exp:
+                    if debug:
+                        print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - RDDATE-B) = {abs((exp_date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                    QC_pass = False
+                if abs((exp_date_end - rddate_e).total_seconds()) > time_precision_threshold_exp:
+                    if debug:
+                        print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - RDDATE-E) = {abs((exp_date_end - rddate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                    QC_pass = False
+        
+        return QC_pass    
 
 
     def exposure_meter_not_saturated_check(self, debug=False):

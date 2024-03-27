@@ -3,12 +3,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
+from astropy.time import Time
 from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.utils import DummyLogger
+from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime
 #import emcee
@@ -256,7 +258,15 @@ class Analyze2D:
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')
             plt.text(2040, 3970, 'Echelle Side',                       size=14, rotation= 0, ha='center', color='white')
-        
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -35), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -476,10 +486,136 @@ class Analyze2D:
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
         ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
             plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+
+    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False):
+        """
+        Overlay the order trace on the 2D image in a 3x3 array of zoom-in plots.  
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+        """
+        
+        # Set parameters based on the chip selected
+        obs_date = Time(self.header['DATE-MID'])
+        service_mission_date1 = Time('2024-02-03', format='iso', scale='utc')
+        if chip == 'green' or chip == 'red':
+            if chip == 'green':
+                CHIP = 'GREEN'
+                chip_title = 'Green'
+                if obs_date < service_mission_date1:
+                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                else:
+                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
+                width  = 200
+                height = 200
+                start_x_arr = [ 500, 1500,  500, 1500]
+                start_y_arr = [1562, 1563,  615,  623]
+            if chip == 'red':
+                CHIP = 'RED'
+                chip_title = 'Red'
+                if obs_date < service_mission_date1:
+                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                else:
+                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
+                width  = 200
+                height = 200
+                start_x_arr = [ 500, 1500,  500, 1500]
+                start_y_arr = [1538, 1538,  545,  550]
+            image = np.array(self.D2[CHIP + '_CCD'].data)
+            order_trace_master = pd.read_csv(order_trace_master_file)
+        else:
+            self.logger.info('chip not supplied.  Exiting plot_2D_image')
+            return
+                
+        # Generate the array of 2D images
+        fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
+        for i in range(2):
+            for j in range(2):
+                # Calculate the top left corner of each sub-image
+                start_x = start_x_arr[2*i+j]
+                start_y = start_y_arr[2*i+j]
+
+                # Slice out and display the sub-image
+                sub_img = image[start_y:start_y+height, start_x:start_x+width]
+                im = axs[i, j].imshow(sub_img, origin='lower', 
+                                 extent=[start_x, start_x+width, start_y, start_y+height], # these indices appear backwards, but work
+                                 vmin = np.nanpercentile(sub_img,0.1), 
+                                 vmax = np.nanpercentile(sub_img,99.9),
+                                 interpolation = 'None',
+                                 cmap='viridis')
+                axs[i, j].set_xlim(start_x, start_x+width)
+                axs[i, j].set_ylim(start_y, start_y+height)
+                # Overplot order trace
+                for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
+                    x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
+                                                order_trace_master.iloc[o]['X2'], 
+                                                int(order_trace_master.iloc[o]['X2']-order_trace_master.iloc[o]['X1']))
+                    x_grid_master = x_grid_master[x_grid_master >= start_x]
+                    x_grid_master = x_grid_master[x_grid_master <= start_x+width]
+                    y_grid_master = order_trace_master.iloc[o]['Coeff0'] + \
+                                    order_trace_master.iloc[o]['Coeff1'] * x_grid_master + \
+                                    order_trace_master.iloc[o]['Coeff2'] * x_grid_master**2 + \
+                                    order_trace_master.iloc[o]['Coeff3'] * x_grid_master**3         
+                    axs[i, j].plot(x_grid_master, y_grid_master,                                          color='red',   linewidth=1.2, linestyle='--')
+                    axs[i, j].plot(x_grid_master, y_grid_master-order_trace_master.iloc[o]['BottomEdge'], color='white', linewidth=1.2, linestyle='--', alpha=1)
+                    axs[i, j].plot(x_grid_master, y_grid_master+order_trace_master.iloc[o]['TopEdge'],    color='white', linewidth=1.2, linestyle='--', alpha=1)                
+                
+                axs[i, j].grid(False)
+                axs[i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
+                axs[i, j].tick_params(axis='x', labelsize=14)
+                axs[i, j].tick_params(axis='y', labelsize=14)
+                cbar = fig.colorbar(im, ax=axs[i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
+                cbar.ax.tick_params(labelsize=12)
+
+        plt.grid(False)
+#        plt.tight_layout()
+        #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title('Order Trace - ' + chip_title + ' CCD: ' + str(self.ObsID), fontsize=24)
+        ax.set_xlabel('Column (pixel number)', fontsize=24, labelpad=20)
+        ax.set_ylabel('Row (pixel number)', fontsize=24, labelpad=25)
+
+        # Annotations
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="right", va="bottom",
+                    xytext=(-50, -150), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+        plt.annotate('Trace = ' + order_trace_master_file, xy=(0, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="left", va="bottom",
+                    xytext=(50, -150), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=400, facecolor='w')
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
@@ -591,6 +727,14 @@ class Analyze2D:
         plt.xlabel('Counts (e-)', fontsize=14)
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
+ 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -673,6 +817,14 @@ class Analyze2D:
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -742,6 +894,14 @@ class Analyze2D:
         plt.yticks(fontsize=14)
         plt.yscale('log')
         plt.legend(loc='lower right', fontsize=11)
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
         
         # Display the plot
         if fig_path != None:
@@ -756,7 +916,8 @@ class Analyze2D:
     def plot_2D_column_cut(self, chip=None, fig_path=None, show_plot=False,
                            column_brightness_percentile=50, saturation_limit_2d=240000):
         """
-        Add description
+        Create a plot of cuts through columns corresponding to the 10th, 50th, and 90th
+        percentiles for total flux
 
         Args:
             chip (string) - "green" or "red"
@@ -828,8 +989,16 @@ class Analyze2D:
             plt.yscale('log')
             y_lim = plt.ylim()
             plt.ylim(0.9, y_lim[1])
-        plt.legend( fontsize=12)
-                
+        plt.legend( fontsize=12)    
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()

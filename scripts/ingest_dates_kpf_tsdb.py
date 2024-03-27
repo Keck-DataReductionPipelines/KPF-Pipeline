@@ -12,7 +12,9 @@ def main(start_date, end_date, db_path):
       KPF Time Series Database.
 
     Options:
-      --help  Display help message
+      --help        Display help message
+      --start_date  Start date in YYYYMMDD format
+      --end_date    End date in YYYYMMDD format
    
     Usage:
       ./ingest_dates_kpf_tsdb.py YYYYMMDD YYYYMMDD dbname.db
