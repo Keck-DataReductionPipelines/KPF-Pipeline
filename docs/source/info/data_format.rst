@@ -22,8 +22,8 @@ In addition, the DRP is able to produce WLS Dictionaries that contain detailed d
 Data Format of KPF Files
 ------------------------
 
-Level 0 FITS Extensions
-^^^^^^^^^^^^^^^^^^^^^^^
+L0 FITS Extensions
+^^^^^^^^^^^^^^^^^^
 
 ===================  =========  ==============  =======
 Extension Name       Data Type  Data Dimension  Description    
@@ -64,8 +64,8 @@ GUIDER_CUBE_ORIGINS  table      variable        Same as in L0 file
 ===================  =========  ==============  =======
 
 
-Level 1 FITS Extensions
-^^^^^^^^^^^^^^^^^^^^^^^
+L1 FITS Extensions
+^^^^^^^^^^^^^^^^^^
 
 ===================  =========  ==============  =======
 Extension Name       Data Type  Data Dimension  Description    
@@ -115,8 +115,8 @@ BARY_CORR            table      67              Table of barycentric corrections
 ===================  =========  ==============  =======
 
 
-Level 2 FITS Extensions
-^^^^^^^^^^^^^^^^^^^^^^^
+L2 FITS Extensions
+^^^^^^^^^^^^^^^^^^
 
 ===================  =========  ==============  =======
 Extension Name       Data Type  Data Dimension  Description    
@@ -135,8 +135,8 @@ ACTIVITY             table      n/a             Not used yet (will include activ
 Important FITS Header Keywords
 ------------------------------
 
-Level 0 Primary Extension Header
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+L0 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Most of the important keywords are stored in the primary extension of the Level 0 file, which is written immediately after each KPF exposure.
 
@@ -189,7 +189,7 @@ ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3
 2D Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-All keywords from Level 0 are inherited by the 2D file.  Below are additional keywords.
+The 2D file inherits all L0 keywords.  Below are additional keywords.
 
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
@@ -293,7 +293,7 @@ sigma = 0.5 * (P84 - P16), equivalent to one standard deviation for normally dis
 L1 Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-All keywords from Level 0 and 2D are inherited by the L1 file.  Below are additional important keywords.
+The L1 file inherits all L0 and 2D keywords.  Below are additional important keywords.
 
 ========  ===============  =========
 Keyword   Value (example)  Comment
@@ -372,10 +372,10 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
    :height: 400px
    :width: 600px
 
-Level 2 Primary Extension Header
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+L2 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-All keywords from Level 0, 2D, and Level 1 are inherited by the L2 file.  Below are additional important keywords.
+The L2 file inherits all Level 0, 2D, and Level 1 keywords.  Below are additional important keywords.
 
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
