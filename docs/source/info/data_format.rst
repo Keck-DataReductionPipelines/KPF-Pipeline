@@ -128,7 +128,7 @@ GREEN_CCF            image      5 x 52 x 804    CCFs (orderlet x order x RV step
 RED_CCF              image      5 x 52 x 804    CCFs (orderlet x order x RV step) for RED
 GREEN_CCF            image      5 x 52 x 804    Reweighted CCFs (orderlet x order x RV step) for GREEN
 RED_CCF              image      5 x 52 x 804    Reweighted CCFs (orderlet x order x RV step) for RED
-RV                   table      67              Table of RVs by spectral order
+RV                   table      67              Table of RVs by spectral order (described below)
 ACTIVITY             table      n/a             Not used yet (will include activity measurements)
 ===================  =========  ==============  =======
 
@@ -372,8 +372,20 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
    :height: 400px
    :width: 600px
 
-L2 RV Extension and Its Header
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Level 2 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All keywords from Level 0, 2D, and Level 1 are inherited by the L2 file.  Below are additional important keywords.
+
+========  ==========================================  =========
+Keyword   Value (example)                             Comment
+========  ==========================================  =========
+<none>
+========  ==========================================  =========
+
+
+L2 RV Extension Header
+^^^^^^^^^^^^^^^^^^^^^^
 
 The header to the RV extension (not the primary extension) contains this information about RVs computed using the CCF technique. CCD1 refers to the Green CCD (445-600 nm) and CCD2 refers to the Red CCD (600-870 nm).
 
@@ -417,6 +429,38 @@ CCD2RV         19.4069470745      RV (km/s) of average of SCI1/SCI2/SCI3 (all or
 CCD2ERV        0.0021111409       Error on CCD2RV  
 CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV
 =============  =================  =========
+
+L2 RV Extension
+^^^^^^^^^^^^^^^
+
+The RV extension in an L2 file contains the order-by-order RV information for each orderlet (SCI1, SCI2, SCI3, CAL, SKY) determined by the CCF technique.  This extension is a FITS table that is converted into a Pandas dataframe if the L2 file is read by `kpfpipe.models.level2.KPF2.from_fits()`.  The rows of the table correspond to the spectral orders, with the values of the keywords `CCD1ROW` and `CCD2ROW` in the RV extension header giving the rows where the Green and Red orders start, respectively.  The columns are listed below.
+
+=============  =================  =========
+Column         Value (example)    Comment
+=============  =================  =========
+orderlet1      19.250267          RV (km/s) of SCI1 (Green CCD); corrected for barycentric RV
+orderlet2      19.264743          RV (km/s) of SCI2 (Green CCD); corrected for barycentric RV
+orderlet3      19.388630          RV (km/s) of SCI3 (Green CCD); corrected for barycentric RV
+s_wavelength   4505.907677        starting wavelength for order
+e_wavelength   4462.664498        ending wavelength for order
+segment no.    0                  Segment number (for full-order CCF RVs, segment no. = order no.)
+order no.      0                  Order number
+RV             19.306370          RV (km/s) of average of SCI1/SCI2/SCI3 (Green CCD); corrected for barycentric RV
+RV error       0.019248           error on 'RV'
+CAL RV         0.0                RV (km/s) of CAL (Green CCD); corrected for barycentric RV
+CAL error      0.0                error on 'CAL RV'
+SKY RV         0.0                RV (km/s) of sKY (Green CCD); corrected for barycentric RV
+SKY error      0.0                error on 'SKY RV'
+CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV
+Bary_RVC       -8.729925          Barycentric RV (km/s)
+source1        GREEN_SCI_FLUX1    name of array for orderlet1 (SCI1)
+source2        GREEN_SCI_FLUX2    name of array for orderlet2 (SCI2)
+source3        GREEN_SCI_FLUX3    name of array for orderlet3 (SCI3)
+source CAL     GREEN_CAL_FLUX     name of array for CAL
+source SKY     GREEN_SKY_FLUX     name of array for SKY
+CCF Weights    0.2590             weight for this order
+=============  =================  =========
+
 
 
 WLS Dictionaries
