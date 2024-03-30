@@ -132,8 +132,8 @@ RV                   table      67              Table of RVs by spectral order (
 ACTIVITY             table      n/a             Not used yet (will include activity measurements)
 ===================  =========  ==============  =======
 
-Important FITS Header Keywords
-------------------------------
+Primary Extension Header Keywords
+---------------------------------
 
 L0 Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -383,6 +383,9 @@ Keyword   Value (example)                             Comment
 <none>                                                Add some when they're new
 ========  ==========================================  =========
 
+Radial Velocities
+-----------------
+
 
 L2 RV Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -395,7 +398,7 @@ To-do, add notes on:
 - how the orders are averaged using weights.  
 - precisely how the RVs are computed (refer to a paper on the CCF algorithm that we're using)
 - how the errors are computed
-- is BJD = BJD_TBD?
+- is BJD = BJD$_\mathrm{TBD}$?
 
 =============  =================  =========
 Keyword        Value (example)    Comment
@@ -437,7 +440,7 @@ CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV
 L2 RV Extension
 ^^^^^^^^^^^^^^^
 
-The RV extension in an L2 file contains the order-by-order RV information for each orderlet (SCI1, SCI2, SCI3, CAL, SKY) determined by the CCF technique.  This extension is a FITS table that is converted into a Pandas dataframe if the L2 file is read by `kpfpipe.models.level2.KPF2.from_fits()`.  The rows of the table correspond to the spectral orders, with the values of the keywords `CCD1ROW` and `CCD2ROW` in the RV extension header giving the rows where the Green and Red orders start, respectively.  The columns are listed below.
+The RV extension in an L2 file contains the order-by-order RV information for each orderlet (SCI1, SCI2, SCI3, CAL, SKY) determined by the CCF technique.  This extension is a FITS table that is converted into a Pandas dataframe if the L2 file is read by `kpfpipe.models.level2.KPF2.from_fits()`.  The table rows correspond to the spectral orders, with the values of the keywords `CCD1ROW` and `CCD2ROW` in the RV extension header giving the rows where the Green and Red orders start, respectively.  The table columns are listed below.
 
 =============  =================  =========
 Column         Value (example)    Comment
