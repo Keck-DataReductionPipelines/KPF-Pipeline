@@ -199,6 +199,7 @@ DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of
 NOTJUNK   1                                           Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           Quality Control: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           Quality Control: 1 = L0 expected keywords present 
+TIMCHKL0  1                                           Quality Control: 1 = consistent times in L0 file
 EMSAT     1                                           Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
 EMNEG     1                                           Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
@@ -380,7 +381,7 @@ The L2 file inherits all Level 0, 2D, and Level 1 keywords.  Below are additiona
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
-<none>                                                Add some when they're new
+TIMCHKL2  1                                           Quality Control: 1 = consistent times in L2 file
 ========  ==========================================  =========
 
 Radial Velocities
