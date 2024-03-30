@@ -380,7 +380,7 @@ All keywords from Level 0, 2D, and Level 1 are inherited by the L2 file.  Below 
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
-<none>
+<none>                                                Add some when they're new
 ========  ==========================================  =========
 
 
@@ -460,7 +460,6 @@ source CAL     GREEN_CAL_FLUX     name of array for CAL
 source SKY     GREEN_SKY_FLUX     name of array for SKY
 CCF Weights    0.2590             weight for this order
 =============  =================  =========
-
 
 
 WLS Dictionaries
