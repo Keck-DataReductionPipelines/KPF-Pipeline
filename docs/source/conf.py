@@ -103,7 +103,7 @@ html_theme = "sphinx_rtd_theme"
 # documentation.
 #
 html_theme_options = {
-    'body_max_width': '1200px',
+    'body_max_width': '2400px',
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
