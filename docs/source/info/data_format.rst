@@ -400,6 +400,10 @@ To-do, add notes on:
 =============  =================  =========
 Keyword        Value (example)    Comment
 =============  =================  =========
+CCFRV          19.4247572623      Average of CCD1RV and CCD2RV using weights from RV table
+CCFERV         0.001175044        Error on CCFRV
+CCFRVC         19.4247572623      Average of CCD1RVC and CCD2RVC using weights from RV table
+CCFERVC        0.001175044        Error on CCFRVC
 CCD1ROW        0                  Row number in the RV table (below) of the bluest order on the Green CCD
 CCD1RV1        19.4247572623      RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV1       0.0013815112       Error on CCD1RV1
