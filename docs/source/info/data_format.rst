@@ -398,8 +398,8 @@ To-do, add notes on:
 - how the orders are averaged using weights.  
 - precisely how the RVs are computed (refer to a paper on the CCF algorithm that we're using)
 - how the errors are computed
-- is BJD = BJD<sub>TBD</sub>? 
-- Test equation for rst syntax - :math:`y = x^2`
+- is BJD = BJD:sub:`TBD`? 
+- Test equation for rst syntax: :math:`y = x^2`
 
 =============  =================  =========
 Keyword        Value (example)    Comment
