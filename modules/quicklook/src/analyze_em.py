@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+from datetime import datetime
 from modules.Utils.kpf_parse import HeaderParse
 
 class AnalyzeEM:
@@ -251,6 +252,14 @@ class AnalyzeEM:
             plt.legend(loc='upper left', ncol=2, handles=lines, labels=labels, framealpha = 0.8)
         else:
             plt.legend(framealpha=0.7)#loc='lower right')
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -30), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
         
         # Display the plot
         if fig_path != None:
@@ -298,6 +307,14 @@ class AnalyzeEM:
         lns = lns1+lns2
         labs = [l.get_label() for l in lns]
         ax1.legend(lns, labs, loc=0,fontsize=14)
+     
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -30), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
