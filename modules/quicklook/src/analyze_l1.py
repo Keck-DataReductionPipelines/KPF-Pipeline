@@ -1,7 +1,6 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime
 from modules.Utils.utils import DummyLogger
 from matplotlib import gridspec
 from matplotlib.ticker import MaxNLocator
@@ -125,8 +124,7 @@ class AnalyzeL1:
         norderlets = len(orderlets)
 
         # Define SNR arrays (needed for operations below where VAR = 0)
-        #GREEN_SCI_SNR1 = np.zeros(L1['GREEN_SCI_VAR1'])
-        GREEN_SCI_SNR1 = 0 * L1['GREEN_SCI_VAR2']
+        GREEN_SCI_SNR1 = 0 * L1['GREEN_SCI_VAR1']
         GREEN_SCI_SNR2 = 0 * L1['GREEN_SCI_VAR2']
         GREEN_SCI_SNR3 = 0 * L1['GREEN_SCI_VAR3']
         GREEN_CAL_SNR  = 0 * L1['GREEN_CAL_VAR']
@@ -289,13 +287,6 @@ class AnalyzeL1:
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
         plt.tight_layout()
-     
-        # Create a timestamp and annotate in the lower right corner
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        ax3.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -40), textcoords='offset points')
 
         # Display the plot
         if fig_path != None:
@@ -369,17 +360,10 @@ class AnalyzeL1:
         if ymin > 0:
             ax3.set_ylim(bottom=0)
 
+
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
         plt.tight_layout()
-
-        # Create a timestamp and annotate in the lower right corner
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -50), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -464,8 +448,6 @@ class AnalyzeL1:
             ax[j].xaxis.set_tick_params(labelsize=16)
             ax[j].yaxis.set_tick_params(labelsize=16)
             ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
-            ax[j].grid(False)
-
 
         for j in range(int(np.shape(flux)[0]/n_orders_per_panel)):
             left  = min((wav[j*n_orders_per_panel:(j+1)*n_orders_per_panel,:]).flatten())
@@ -489,14 +471,6 @@ class AnalyzeL1:
         ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=28)
         plt.tight_layout()
 
-        # Create a timestamp and annotate in the lower right corner
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=16, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -50), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
-
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -515,7 +489,7 @@ class AnalyzeL1:
 
         Args:
             chip (string) - "green" or "red"
-            order (int) - spectral order to plot
+            order (int) - spectral order to plot; if SCI, then SCI1+SCI2+SCI3
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -553,6 +527,10 @@ class AnalyzeL1:
         flux_sky  = np.array(self.L1[CHIP + '_SKY_FLUX'].data,'d')[order,:].flatten()
         wav_cal   = np.array(self.L1[CHIP + '_CAL_WAVE'].data,'d')[order,:].flatten()
         flux_cal  = np.array(self.L1[CHIP + '_CAL_FLUX'].data,'d')[order,:].flatten()
+        wav_sci   = wav_sci2
+        flux_sci  = (np.array(self.L1[CHIP + '_SCI_FLUX1'].data,'d')[order,:]+
+                     np.array(self.L1[CHIP + '_SCI_FLUX2'].data,'d')[order,:]+
+                     np.array(self.L1[CHIP + '_SCI_FLUX3'].data,'d')[order,:]).flatten()
 
         plt.figure(figsize=(12, 4), tight_layout=True)
         if 'sci1' in orderlet_lowercase:
@@ -565,6 +543,8 @@ class AnalyzeL1:
             plt.plot(wav_sci3, flux_sky,  linewidth=0.5, label='SKY')
         if 'cal' in orderlet_lowercase:
             plt.plot(wav_sci3, flux_cal,  linewidth=0.5, label='CAL')
+        if 'sci' in orderlet_lowercase:
+            plt.plot(wav_sci, flux_sci, linewidth=0.5, label='SCI')
         plt.xlim(min(wav_sci1), max(wav_sci1))
         plt.title('L1 (' + orderlet_label + ') - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.xlabel('Wavelength (Ang)', fontsize=14)
@@ -572,14 +552,6 @@ class AnalyzeL1:
         if ylog: plt.yscale('log')
         plt.grid(True)
         plt.legend()
-     
-        # Create a timestamp and annotate in the lower right corner
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -30), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -793,14 +765,6 @@ class AnalyzeL1:
 
         for ax in axs:
             ax.tick_params(axis='both', which='major', labelsize=14)
-     
-        # Create a timestamp and annotate in the lower right corner
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -30), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -1014,14 +978,6 @@ class AnalyzeL1:
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('L1 Orderlet Flux Ratios - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name+ '\n', fontsize=24)
         plt.tight_layout()
-     
-        # Create a timestamp and annotate in the lower right corner
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -30), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
