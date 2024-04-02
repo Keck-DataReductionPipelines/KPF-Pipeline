@@ -14,7 +14,6 @@ class EraSpecific(KPF0_Primitive):
 
     """
     def __init__(self, action, context):
-        "FrameSubtract constructor."
         
         #Initialize parent class
         KPF0_Primitive.__init__(self, action, context)
