@@ -22,8 +22,8 @@ In addition, the DRP is able to produce WLS Dictionaries that contain detailed d
 Data Format of KPF Files
 ------------------------
 
-Level 0 FITS Extensions
-^^^^^^^^^^^^^^^^^^^^^^^
+L0 FITS Extensions
+^^^^^^^^^^^^^^^^^^
 
 ===================  =========  ==============  =======
 Extension Name       Data Type  Data Dimension  Description    
@@ -64,8 +64,8 @@ GUIDER_CUBE_ORIGINS  table      variable        Same as in L0 file
 ===================  =========  ==============  =======
 
 
-Level 1 FITS Extensions
-^^^^^^^^^^^^^^^^^^^^^^^
+L1 FITS Extensions
+^^^^^^^^^^^^^^^^^^
 
 ===================  =========  ==============  =======
 Extension Name       Data Type  Data Dimension  Description    
@@ -115,8 +115,8 @@ BARY_CORR            table      67              Table of barycentric corrections
 ===================  =========  ==============  =======
 
 
-Level 2 FITS Extensions
-^^^^^^^^^^^^^^^^^^^^^^^
+L2 FITS Extensions
+^^^^^^^^^^^^^^^^^^
 
 ===================  =========  ==============  =======
 Extension Name       Data Type  Data Dimension  Description    
@@ -128,15 +128,15 @@ GREEN_CCF            image      5 x 52 x 804    CCFs (orderlet x order x RV step
 RED_CCF              image      5 x 52 x 804    CCFs (orderlet x order x RV step) for RED
 GREEN_CCF            image      5 x 52 x 804    Reweighted CCFs (orderlet x order x RV step) for GREEN
 RED_CCF              image      5 x 52 x 804    Reweighted CCFs (orderlet x order x RV step) for RED
-RV                   table      67              Table of RVs by spectral order
+RV                   table      67              Table of RVs by spectral order (described below)
 ACTIVITY             table      n/a             Not used yet (will include activity measurements)
 ===================  =========  ==============  =======
 
-Important FITS Header Keywords
-------------------------------
+Primary Extension Header Keywords
+---------------------------------
 
-Level 0 Primary Extension Header
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+L0 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Most of the important keywords are stored in the primary extension of the Level 0 file, which is written immediately after each KPF exposure.
 
@@ -189,7 +189,7 @@ ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3
 2D Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-All keywords from Level 0 are inherited by the 2D file.  Below are additional keywords.
+The 2D file inherits all L0 keywords.  Below are additional keywords.
 
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
@@ -199,6 +199,7 @@ DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of
 NOTJUNK   1                                           Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           Quality Control: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           Quality Control: 1 = L0 expected keywords present 
+TIMCHKL0  1                                           Quality Control: 1 = consistent times in L0 file
 EMSAT     1                                           Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
 EMNEG     1                                           Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
@@ -293,7 +294,7 @@ sigma = 0.5 * (P84 - P16), equivalent to one standard deviation for normally dis
 L1 Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-All keywords from Level 0 and 2D are inherited by the L1 file.  Below are additional keywords.
+The L1 file inherits all L0 and 2D keywords.  Below are additional important keywords.
 
 ========  ===============  =========
 Keyword   Value (example)  Comment
@@ -372,244 +373,110 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
    :height: 400px
    :width: 600px
 
-L2 Primary Extension Header and RV Extension
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-========  ===============  =========
-Keyword   Value (example)  Comment
-========  ===============  =========
+L2 Primary Extension Header
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-LFCMODE = 'StandbyHigh'        / LFC Operation Mode                             
-AMPON   =             2499.022 / LFC: Amount of time amplifier on               
-LFCFO   =          250000000.0 / LFC filtered Offset Freq RR Comb counted       
-LFCFREF =          250000000.0 / LFC filtered Offset Freq RR Comb setpoint      
-LFCFR   =     19999999999.9804 / LFC filtered Offset Freq RR Filter counted     
-LFCFRREF=        20000000000.0 / LFC filtered Offset Freq RR Filter setpoint    
-LFCCEOFR=         5220000000.0 / CEO Filtered Setpoint Freq                     
-LFCCWFRF=    288005220000000.0 / CW Freq Reference                              
-LFCCWFRQ=    288005219851191.0 / CW Freq                                        
-LFCCWFER=            -148809.0 / CW Freq Error: Ref-Actual                      
-LFCCWMDN=              1152021 / CW mode number                                 
-LFCBIACT=                0.033 / Blue cut amp diode current (A)                 
-LFCBISET=                  0.0 / Blue cut amp diode setting (A)                 
-OCTAGON = 'Th_daily'           / selected octagon value                         
-CALMON  = 'Out     '           / Calibration intensity monitor position         
-HATCH   = 'Closed  '           / Status of the hatch on the exterior of the FIU 
-FIUMODE = 'Calibration'        / FIU operating mode                             
-FOLDNAM = 'In      '           / Named Position of FIU Fold mirror              
-FOLDVAL =                -13.5 / [mm] Position of FIU Fold mirror               
-ADCTRACK= 'Off     '           / Is the ADC Tracking                            
-HCLSN   = 'L82932  '           / S/N of lamp in use                             
-CAREQ   = 'Yes     '           / Ca HK fibers (6,7) requested                   
-EXPSCREQ= 'Yes     '           / ExpM Science fiber (8ab) requested             
-FFREQ   = 'No      '           / Flatfield fiber (10ab) requested               
-SICALREQ= 'Yes     '           / SimCal fiber (3ab) requested                   
-VACSCREQ= 'Yes     '           / Vac Sci fiber (1b) requested                   
-VACSKREQ= 'Yes     '           / Vac Sci fiber (2b) requested                   
+The L2 file inherits all Level 0, 2D, and Level 1 keywords.  Below are additional important keywords.
 
-SRCSHTTR= 'SciSelect,SkySelect,Cal_SciSky' / Source shutters commanded          
-TIMSHTTR= 'Scrambler,SimulCal,Ca_HK' / Timed shutters commanded                 
-OTIMSHTR= 'Scrambler,SimulCal,Ca_HK' / Timed shutters open exp. midpoint        
-SCISEL  = 'open    '           / Science Select shutter at exp. midpoint        
-SKYSEL  = 'open    '           / Sky Select Shutter at exp. midpoint            
-FFSHTR  = 'closed  '           / Flat field fiber shutter at exp. midpoint      
-SCRAMSHT= 'open    '           / Scrambler shutter at exp. midpoint             
-SIMCALSH= 'open    '           / Simult Cal shutter at exp. midpoint            
-TRIGTARG= 'Green,Red,ExpMeter' / Cameras that were sent triggers                
-IMTYPE  = 'Arclamp '           / Image Type                                     
-CAL-OBJ = 'Th_daily'           / Calibration fiber source                       
-SKY-OBJ = 'Th_daily'           / Sky fiber source                               
-SCI-OBJ = 'Th_daily'           / Science fiber source                           
-CAFBS   = 'Yes     '           / Ca HK fibers (6,7) on                          
-EXPSCIFB= 'Yes     '           / ExpM Science fiber (8ab) on                    
-EXPSKYFB= 'No      '           / ExpM Science fiber (9) on                      
-FFFB    = 'No      '           / Flatfield fiber (10ab) on                      
-FICALFBS= 'Yes     '           / FIU Cal fibers (4,5) on                        
-SICALFB = 'Yes     '           / SimCal fiber (3ab) on                          
-VACSCFB = 'Yes     '           / Vac Sci fiber (1b) on                          
-VACSKFB = 'Yes     '           / Vac Sci fiber (2b) on                          
-SCIFB   = 'Yes     '           / Science fiber (1a) on                          
-SKYFB   = 'Yes     '           / Sky fiber (2a) on                              
-CURRBASE= '(335.5, 258.0)'     / [pix] Selected pointing origin                 
-PIXTARG = '(13155.357, 266.95)' / [pix] Selected object tip/tilt target         
-GRACFMD5= '1EF8CF3BA1C2905FE9980C295DCB9953' / Green MD5 sum for the acf file   
-GRACFFLN= 'regular-read-green.acf' / Green acf file loaded                      
-RDACFMD5= '46B91FD6D29EEBBDED920738326414BA' / Red MD5 sum for the acf file     
-RDACFFLN= 'regular-read-red.acf' / Red acf file loaded                          
-AGITSTA = 'Running '           / Agitator status kpfmot.AGITATOR                
-THARGD  = 'Off     '           / Gold ThAr power status                         
-UNEGD   = 'Off     '           / Gold UNe power status                          
-THARDAY = 'On      '           / Daily ThAr power status                        
-UNEDAY  = 'Off     '           / Daily UNe power status                         
-OCTBB   = 'Off     '           / Octagon broad band power status                
-FFSOURCE= 'Off     '           / Flat field broad band power status             
-SCIFBILL= 'Off     '           / Science fiber LED back illuminator power       
-SKYFBILL= 'Off     '           / Sky fiber LED back illuminator power           
-HKFBILL = 'Off     '           / Ca H and K fiber LED back illuminator power    
-EXPFBILL= 'Off     '           / Exposure meter fiber LED back illuminator power
-SSCALFW = 'OD 0.1  '           / Sci/Cal FW Position                            
-SIMCALFW= 'OD 0.1  '           / Simual Cal FW Position                         
-FFFW    = 'Blank   '           / Flatfield FW Position                          
-OCTAGON = 'Th_daily'           / selected octagon value                         
-PRES    =              624.479 / [hPa] Pressure at Vaisala kpfmet.PRES          
-RELH    =               13.465 / Relative humidity at Vaisala kpfmet.RELH       
-PONAME  = 'REF     '           / DCS Point origin name                          
-PONAME1 = 'REF     '           / DCS Point origin name1                         
-DRA     =                  0.0 / [s/s] DCS Diff RA rate                         
-DDEC    =                  0.0 / [asec/s] DCS Diff Dec rate                     
-RABASE  = '22:40:00.00'        / DCS RA base                                    
-RAOFF   =                  0.0 / [asec] DCS RA offset                           
-DECBASE = '+00:02:19.3'        / DCS Dec base                                   
-DECOFF  =                  0.0 / [asec] DCS Dec offset                          
-HA      = '+00:00:00.00'       / DCS Hour angle                                 
-AIRMASS =                13.37 / DCS Airmass                                    
-PARANG  =                  0.0 / [deg] DCS Parallactic angle astrometric        
-PARANTEL=                  0.0 / [deg] DCS Parallactic angle telescope          
-EL      =                 0.04 / [deg] DCS Elevation                            
-AZ      =                -20.0 / [deg] DCS Azimuth                              
-LST     = '10:24:50.37'        / DCS Local sidereal time                        
-AXESTAT = 'not controlling'    / DCS axes control status                        
-TRACKING= 'no      '           / DCS Servos tracking status                     
-DTRACK  = 'disabled'           / DCS differential tracking status               
-GUIDING = 'false   '           / DCS Guiding status                             
-AUTACTIV= 'no      '           / DCS Guider active                              
-AUTFWHM =             1.334309 / [pix] DCS Guider fwhm                          
-AUTXCENT=                 -0.6 / [asec] DCS Guider x centroid                   
-AUTYCENT=                 -0.1 / [asec] DCS Guider y centroid                   
-SECFOCUS=               -2.482 / [mm] Secondary focus                           
-TELFOCUS=               -1.631 / [mm] Telescope focus                           
-TUBEFLEX=                -13.3 / [arcsec] Telescope tube flexure                
-TUBETEMP=                 1.57 / [degC] Telescope tube temperature              
-PRIMTEMP=             2.154095 / [degC] Telescope pri temperature               
-SECMTEMP=                1.354 / [degC] Telescope sec temperature               
-DIFFPTDW=            25.554095 / [decC] Diff between pri mirro temp dewpt       
-DIFFSTDW=               24.754 / [decC] Diff between sec mirro temp dewpt       
-VIGNETTE= 'false   '           / dome vignette (t/f)                            
-STVIGNE = 'false   '           / top shutter vignette (t/f)                     
-SBVIGNE = 'false   '           / bottom shutter vignette (t/f)                  
-SBELEV  =                23.99 / [deg] bottom shutter elevation                 
-STELEV  =                23.99 / [deg] top shutter elevation                    
-SECSTST = 'UNINIT  '           / DCS Secondary status string                    
-SECTHETX=               -441.0 / [asec] DCS Secondary theta x                   
-SECTHETY=                139.0 / [asec] DCS Secondary theta y                   
-TERTSTST= 'STANDBY '           / DCS Tertiary status string                     
-TERTDEST= 'stowed  '           / DCS Tertiary user destination                  
-TERTPOSN= 'stowed  '           / DCS Tertiary user position                     
-DOMEPOSN=               140.77 / DCS Dome user position                         
-DOMESTST= 'UNINIT  '           / DCS Dome status string                         
-CALOCAL =                  2.7 / collimation-azimuth-local                      
-CELOCAL =                  1.7 / collimation-elevation-local                    
-FOCALSTN= 'rnas (right nasmyth)' / focal-station                                
-INSTANGL=                180.0 / porg-to-instrument angle                       
-POXPOS  =                  0.0 / pointing-origin-x-position                     
-POYPOS  =                  0.0 / pointing-origin-y-position                     
-ROTCALAN=                  0.0 / rotator-calibration-angle                      
-ROTZERO =                  0.0 / rotator-zero-angle                             
-GUIDWAVE=                 0.65 / guidestar-wavelength                           
-TIMEERR = 'ok 2 2 {NTP time correct to within 2 ms}' / resp time serv           
-ETAV1C1T=                  0.0 / Etalon v1ch1temp                               
-ETAV1C2T=                  0.0 / Etalon v1ch2temp                               
-ETAV1C3T=                  0.0 / Etalon v1ch3temp                               
-ETAV1C4T=                  0.0 / Etalon v1ch4temp                               
-ETAV2C3T=                  0.0 / Etalon v2ch3temp                               
-TSHKEXP = '2023-11-05 07:47:03.302' / Time of signal sent to start HK exposure  
-WSHKEXP =                0.004 / Window of time start HK exposure active        
-TSHKSHT = '2023-11-05 07:47:51.695' / Time of signal open to close HK shutter   
-WSHKSHT = 0.008999999999999999 / Window of time open HK shutter active          
-TSTMSHT = '2023-11-05 07:47:51.691' / Time of signal sent to open timed shutter 
-WSTMSHT =                0.005 / Window of time start timed shutter active      
+========  ==========================================  =========
+Keyword   Value (example)                             Comment
+========  ==========================================  =========
+TIMCHKL2  1                                           Quality Control: 1 = consistent times in L2 file
+========  ==========================================  =========
 
-DATE    = '2023-11-05T17:48:01.708332' / End of exposure from kpfexpose.ENDTIME 
-DATE-END= '2023-11-05T17:48:01.708332' / End of exposure from kpfexpose.ENDTIME 
-ELAPSED =                 10.0 / Actual exposure time from kpfexpose.ELAPSED    
-TOTCNTS = '6.3263e+05 1.307e+06 1.6356e+07 3.1946e+07' / Total counts kpf_expmet
-TOTCORR = '4.2026e+06 8.6818e+06 1.0864e+08 2.1221e+08' / Total counts corrected
-TEHKEXP = '2023-11-05 07:47:03.302' / Time of signal sent to end HK exposure    
-WEHKEXP =                0.004 / Window of time end HK exposure active          
-TEHKSHT = '2023-11-05 07:48:01.706' / Time of signal sent to close HK shutter   
-WEHKSHT =                0.059 / Window of time close HK shutter active         
-TETMSHT = '2023-11-05 07:48:01.703' / Time of signal sent to close timed shutter
-WETMSHT =                0.004 / Window of time close timed shutter active      
-OUTDIR  = '/s/sdata1701/kpfeng/2023nov04/L0' / Output directory                 
-OFNAME  = 'KP.20231105.64071.69.fits' / Filename of output file                 
-GREENFN = '/s/sdata1701/kpfeng/2023nov04/Green/kpf_137054.fits'                 
-REDFN   = '/s/sdata1701/kpfeng/2023nov04/Red/kpf_137054.fits'                   
-EXPMETFN= '/s/sdata1701/kpfeng/2023nov04/ExpMeter/kpf_em_137054.fits'           
-FRAMENO =               137054                                                  
-GRCAMD_V= 'Nov  9 2022 09:50:15' / camerad build date Kwd green CAMD_VER        
-GREXPTI =                    0 / exposure time in msec Kwd green EXPTIME        
-GRFILENA= 'kpf_137054.fits'    / this filename Kwd green FILENAME               
-GRFIRMWA= '/kroot/rel/default/data/kpfgreen/ACF/regular-read-green.acf' / contro
-GRGAIN02=                    1 / gain for AD chan 2 Kwd green GAIN02            
-GRGAIN03=                    1 / gain for AD chan 3 Kwd green GAIN03            
-GRHDRSHI=                    0 / number of HDR right-shift bits Kwd green HDRSHI
-GROFFSET=                  100 / offset for AD chan 3 Kwd green OFFSET03        
-GRSHUTT =                    T / shutter was enabled Kwd green SHUTTEN          
-GRTM_ZO = 'GMT     '           / time zone Kwd green TM_ZONE                    
-GRCDS0  = '#eval RGsettleT'    /  Kwd green CDS0                                
-GRCDS1  = '#eval CDump - 1'    /  Kwd green CDS1                                
-GRCDS2  = '#eval PixelT'       / 2 + SWsettleT Kwd green CDS2                   
-GRCDS3  =                  950 /  Kwd green CDS3                                
-GRDATAS1= '[4:2044,0:4080]'    / left Kwd green DATASEC1                        
-GRDATAS2= '[50:2090,0:4080]'   / right Kwd green DATASEC2                       
-GRDATE  = '2023-11-05T17:48:48.562842' / FITS file write time Kwd green DATE    
-GROBSERV= '' / Observer name Kwd green OBSERVER                                 
-GRPROGNA= 'ENG     '           / Program name Kwd green PROGNAME                
-GRACF   = 'regular-read-green' / Last user-chosen ACF key Kwd green ACF         
-GRACFFI = 'regular-read-green.acf' / ACF file from ACF key Kwd green ACFFILE    
-GRACFMD5= '1EF8CF3BA1C2905FE9980C295DCB9953' / MD5 sum for ACFFILE; unknown if p
-GRFRAME =               137054 /  Kwd green FRAMENO                             
-GRDATE-B= '2023-11-05T17:47:51.691957' / Shutter-open time Kwd green DATE-BEG   
-GRDATE-E= '2023-11-05T17:48:01.708332' / Shutter-close time Kwd green DATE-END  
-GRELAPS =               10.016 / Shutter-elapsed time Kwd green ELAPSED         
-RDCAMD_V= 'Nov  9 2022 09:50:15' / camerad build date Kwd red CAMD_VER          
-RDEXPTI =                    0 / exposure time in msec Kwd red EXPTIME          
-RDFILENA= 'kpf_137054.fits'    / this filename Kwd red FILENAME                 
-RDFIRMWA= '/kroot/rel/default/data/kpfred/ACF/regular-read-red.acf' / controller
-RDHDRSHI=                    0 / number of HDR right-shift bits Kwd red HDRSHIFT
-RDSHUTT =                    T / shutter was enabled Kwd red SHUTTEN            
-RDTM_ZO = 'GMT     '           / time zone Kwd red TM_ZONE                      
-RDCDS0  = '#eval RGsettleT'    /  Kwd red CDS0                                  
-RDCDS1  = '#eval CDump - 1'    /  Kwd red CDS1                                  
-RDCDS2  = '#eval PixelT'       / 2 + SWsettleT Kwd red CDS2                     
-RDCDS3  =                  950 /  Kwd red CDS3                                  
-RDTEST  =                  123 / test fitskey from modes file Kwd red TEST      
-RDDATE  = '2023-11-05T17:48:48.570956' / FITS file write time Kwd red DATE      
-RDOBSERV= '' / Observer name Kwd red OBSERVER                                   
-RDPROGNA= 'ENG     '           / Program name Kwd red PROGNAME                  
-RDACF   = 'regular-read-red'   / Last user-chosen ACF key Kwd red ACF           
-RDACFFI = 'regular-read-red.acf' / ACF file from ACF key Kwd red ACFFILE        
-RDACFMD5= '46B91FD6D29EEBBDED920738326414BA' / MD5 sum for ACFFILE; unknown if p
-RDFRAME =               137054 /  Kwd red FRAMENO                               
-RDDATE-B= '2023-11-05T17:47:51.691957' / Shutter-open time Kwd red DATE-BEG     
-RDDATE-E= '2023-11-05T17:48:01.708332' / Shutter-close time Kwd red DATE-END    
-RDELAPS =               10.016 / Shutter-elapsed time Kwd red ELAPSED           
-EMFRAME =               137054 / Frame number from kpf_expmeter Kwd expmeter FRA
-EMFILEN = '/s/sdata1701/kpfeng/2023nov04/ExpMeter/kpf_em_137054.fits' / Output f
-EMSEQBEG=                    1 / Sequence number of first observation Kwd expmet
-EMSEQEND=                   11 / Sequence number of last observation Kwd expmete
-EMDATE-B= '2023-11-05T17:48:01.919' / Date-Beg of first observation Kwd expmeter
-EMDATE-E= '2023-11-05T17:48:02.178' / Date-End of last observation Kwd expmeter 
-DRPTAG  = 'v2.5.3  '                                                            
-DRPHASH = '82cf70d1be2f67a26a39758b50a91c5fa5ebf82d'                            
-NOTJUNK =                    1 / QC: Not in list of junk files check            
-DATAPRL0=                    1 / QC: L0 data present check                      
-KWRDPRL0=                    1 / QC: L0 keywords present check                  
-REDAMPS =                    2                                                  
-GRNAMPS =                    2                                                  
-BIASFILE= 'kpf_20231105_master_bias_autocal-bias.fits'                          
-DARKFILE= 'kpf_20231105_master_dark_autocal-dark.fits'                          
-FLATFILE= 'kpf_20231105_master_flat.fits'                                       
-EXTNAME = 'PRIMARY '           / extension name                                 
-ORIGIN  = 'astropy.fits'       / File Originator                                
-MONOTWLS=                    1 / QC: Monotonic wavelength-solution check        
-WLSFILE = '/masters/20231105/kpf_20231105_master_WLS_autocal-thar-all-eve_L1.f&'
-CONTINUE  'its'                                                                 
+Radial Velocities
+-----------------
 
 
-*To-do: add a list of additional 2D, Level 1, and Level 2 primary keywords.*
+L2 RV Extension Header
+^^^^^^^^^^^^^^^^^^^^^^
+
+The header to the RV extension (not the primary extension) contains this information about RVs computed using the CCF technique. CCD1 refers to the Green CCD (445-600 nm) and CCD2 refers to the Red CCD (600-870 nm).
+
+To-do, add notes on: 
+
+- recommendations for which RVs to use in papers
+- how the orders are averaged using weights.  
+- precisely how the RVs are computed (refer to a paper on the CCF algorithm that we're using)
+- how the errors are computed
+- is BJD = BJD :sub:`TBD`? 
+- Test equation for rst syntax: :math:`y = x^2`
+
+=============  =================  =========
+Keyword        Value (example)    Comment
+=============  =================  =========
+CCFRV          19.4247572623      Average of CCD1RV and CCD2RV using weights from RV table
+CCFERV         0.001175044        Error on CCFRV
+CCFRVC         19.4247572623      Average of CCD1RVC and CCD2RVC using weights from RV table
+CCFERVC        0.001175044        Error on CCFRVC
+CCD1ROW        0                  Row number in the RV table (below) of the bluest order on the Green CCD
+CCD1RV1        19.4247572623      RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
+CCD1ERV1       0.0013815112       Error on CCD1RV1
+CCD1RV2        19.3879442221      RV (km/s) of SCI2 (all orders, Green CCD); corrected for barycentric RV
+CCD1ERV2       0.001175044        Error on CCD1RV2
+CCD1RV3        19.3740241724      RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
+CCD1ERV3       0.0012185926       Error on CCD1RV3
+CCD1RVC        0.0                RV (km/s) of CAL (all orders, Green CCD); corrected for barycentric RV
+CCD1ERV        0.0                Error on CCD1RVC
+CCD1RVS        18.2490292404      RV (km/s) of SKY (all orders, Green CCD); corrected for barycentric RV
+CCD1ERVS       0.0                Error on CCD1RVS
+CCD1RV         19.395608349       RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
+CCD1ERV        0.0007214256       Error on CCD1RV  
+CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV
+CCD2ROW        35                 Row number in the RV table (below) of the bluest order on the Red CCD
+CCD2RV1        19.4423673077      RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
+CCD2ERV1       0.004087698        Error on CCD2RV1
+CCD2RV2        19.3979186805      RV (km/s) of SCI2 (all orders, Red CCD); corrected for barycentric RV
+CCD2ERV2       0.0034324475       Error on CCD2RV2
+CCD2RV3        19.3808011301      RV (km/s) of SCI3 (all orders, Red CCD); corrected for barycentric RV
+CCD2ERV3       0.0035412025       Error on CCD2RV3
+CCD2RVC        0.0                RV (km/s) of CAL (all orders, Red CCD); corrected for barycentric RV
+CCD2ERVC       0.0                Error on CCD2RVC
+CCD2RVS        51.9730319697      RV (km/s) of SKY (all orders, Red CCD); corrected for barycentric RV
+CCD2ERVS       0.0                Error on CCD2RVS
+CCD2RV         19.4069470745      RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
+CCD2ERV        0.0021111409       Error on CCD2RV  
+CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV
+=============  =================  =========
+
+L2 RV Extension
+^^^^^^^^^^^^^^^
+
+The RV extension in an L2 file contains the order-by-order RV information for each orderlet (SCI1, SCI2, SCI3, CAL, SKY) determined by the CCF technique.  This extension is a FITS table that is converted into a Pandas dataframe if the L2 file is read by `kpfpipe.models.level2.KPF2.from_fits()`.  The table rows correspond to the spectral orders, with the values of the keywords `CCD1ROW` and `CCD2ROW` in the RV extension header giving the rows where the Green and Red orders start, respectively.  The table columns are listed below.
+
+=============  =================  =========
+Column         Value (example)    Comment
+=============  =================  =========
+orderlet1      19.250267          RV (km/s) of SCI1 (Green CCD); corrected for barycentric RV
+orderlet2      19.264743          RV (km/s) of SCI2 (Green CCD); corrected for barycentric RV
+orderlet3      19.388630          RV (km/s) of SCI3 (Green CCD); corrected for barycentric RV
+s_wavelength   4505.907677        starting wavelength for order
+e_wavelength   4462.664498        ending wavelength for order
+segment no.    0                  Segment number (for full-order CCF RVs, segment no. = order no.)
+order no.      0                  Order number
+RV             19.306370          RV (km/s) of average of SCI1/SCI2/SCI3 (Green CCD); corrected for barycentric RV
+RV error       0.019248           error on 'RV'
+CAL RV         0.0                RV (km/s) of CAL (Green CCD); corrected for barycentric RV
+CAL error      0.0                error on 'CAL RV'
+SKY RV         0.0                RV (km/s) of sKY (Green CCD); corrected for barycentric RV
+SKY error      0.0                error on 'SKY RV'
+CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV
+Bary_RVC       -8.729925          Barycentric RV (km/s)
+source1        GREEN_SCI_FLUX1    name of array for orderlet1 (SCI1)
+source2        GREEN_SCI_FLUX2    name of array for orderlet2 (SCI2)
+source3        GREEN_SCI_FLUX3    name of array for orderlet3 (SCI3)
+source CAL     GREEN_CAL_FLUX     name of array for CAL
+source SKY     GREEN_SKY_FLUX     name of array for SKY
+CCF Weights    0.2590             weight for this order
+=============  =================  =========
 
 
 WLS Dictionaries
 ----------------
 
 See :doc:`../analysis/dictonary_format` for details.
+
+
+Notes on Dates and Times in KPF Files
+-------------------------------------
+* To do: add notes here about how DATE-BEG, DATE-MID, and DATE-END are computed.  There are other datetimes in the header that should be clarified.  Also, explain how exposure midpoints are computed (using the exposure meter and DATE-BEG??), which leads to BJD and ultimately the barycentric corrections.

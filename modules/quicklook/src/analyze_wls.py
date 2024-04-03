@@ -118,6 +118,14 @@ class AnalyzeWLS:
         ax[3].axhline(y=0, color='k', linestyle='-')        
         plt.xlabel('Wavelength (Ang)', fontsize=18)
         plt.tight_layout()
+            
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:

@@ -258,7 +258,15 @@ class Analyze2D:
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')
             plt.text(2040, 3970, 'Echelle Side',                       size=14, rotation= 0, ha='center', color='white')
-        
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -35), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -478,6 +486,14 @@ class Analyze2D:
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
         ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -535,7 +551,7 @@ class Analyze2D:
             return
                 
         # Generate the array of 2D images
-        fig, axs = plt.subplots(2, 2, figsize=(19,16), tight_layout=False)
+        fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
         for i in range(2):
             for j in range(2):
                 # Calculate the top left corner of each sub-image
@@ -575,27 +591,27 @@ class Analyze2D:
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
-        plt.tight_layout()
+#        plt.tight_layout()
         #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('Order Trace - ' + chip_title + ' CCD: ' + str(self.ObsID), fontsize=24)
-        ax.set_xlabel('Column (pixel number)', fontsize=24, labelpad=10)
-        ax.set_ylabel('Row (pixel number)', fontsize=24, labelpad=10)
+        ax.set_xlabel('Column (pixel number)', fontsize=24, labelpad=20)
+        ax.set_ylabel('Row (pixel number)', fontsize=24, labelpad=25)
 
         # Annotations
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
-                    fontsize=16, color="darkgray", ha="left", va="bottom",
-                    xytext=(-50, -75), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
-        plt.annotate('Trace = ' + order_trace_master_file, xy=(1, 0), xycoords='axes fraction', 
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
-                    xytext=(50, -75), textcoords='offset points')
+                    xytext=(-50, -150), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+        plt.annotate('Trace = ' + order_trace_master_file, xy=(0, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="left", va="bottom",
+                    xytext=(50, -150), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)
-        
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -711,6 +727,14 @@ class Analyze2D:
         plt.xlabel('Counts (e-)', fontsize=14)
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
+ 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -793,6 +817,14 @@ class Analyze2D:
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -862,6 +894,14 @@ class Analyze2D:
         plt.yticks(fontsize=14)
         plt.yscale('log')
         plt.legend(loc='lower right', fontsize=11)
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
         
         # Display the plot
         if fig_path != None:
@@ -876,7 +916,8 @@ class Analyze2D:
     def plot_2D_column_cut(self, chip=None, fig_path=None, show_plot=False,
                            column_brightness_percentile=50, saturation_limit_2d=240000):
         """
-        Add description
+        Create a plot of cuts through columns corresponding to the 10th, 50th, and 90th
+        percentiles for total flux
 
         Args:
             chip (string) - "green" or "red"
@@ -948,8 +989,16 @@ class Analyze2D:
             plt.yscale('log')
             y_lim = plt.ylim()
             plt.ylim(0.9, y_lim[1])
-        plt.legend( fontsize=12)
-                
+        plt.legend( fontsize=12)    
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
