@@ -20,7 +20,7 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
                            where (start_date, end_date) is a tuple of datetime objects 
                            or the string 'today'
     """
-    print(f'Starting {thread_name}')
+    print(f"Starting: {thread_name} to be executed every {interval/3600} hours.")
     initial_date_range = date_range
 
     while True:
@@ -30,23 +30,23 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
         if date_range == 'this_day':
             kwargs = {
                 "start_date":      (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0),
-                "end_date":        (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0),
+                "end_date":         now,
                 "time_range_type": time_range_type
                 }
         elif date_range == 'this_month':
             kwargs = {
                 "start_date":      (now - timedelta(days=31)).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
-                "end_date":        (now + timedelta(days=31)).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+                "end_date":         now,
                 "time_range_type": time_range_type
                 }
         elif date_range == 'this_year':
             kwargs = {
-                "start_date":      (now - timedelta(days=365)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
-                "end_date":        (now + timedelta(days=365)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+                "start_date":      (now - timedelta(days=366)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+                "end_date":         now,
                 "time_range_type": time_range_type
                 }
         elif date_range == 'last_10_days':
-            # need to determine where to store the results from this
+            # need to determine where to store the results from this so that it doesn't crash Jump
             pass
         else:
             tomorrow   = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -64,7 +64,7 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
         generate_plots(kwargs, db_path=db_path)
         end_time = time.time()
         execution_time = end_time - start_time
-        print(f'\Finished pass through {thread_name} in ' + str(execution_time) + ' seconds.\n')
+        print(f'Finished pass through {thread_name} in ' + str(int(execution_time)) + ' seconds.\n')
         sleep_time = interval - execution_time
         if sleep_time > 0:
             time.sleep(sleep_time)
@@ -77,10 +77,11 @@ def generate_plots(kwargs, db_path='/data/time_series/kpf_ts.db'):
 def monitor_threads(threads, sleep_time):
     time.sleep(10)
     while True:
-        print("\n------ Thread Status at TIME T ------")
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print("\n------ Thread Status at " + current_time + " ------")
         for thread in threads:
             print(f"{thread.name}: {'Alive' if thread.is_alive() else 'Dead'} - Started at {thread.start_time}")
-        print("---------------------------\n")
+        print("--------------------------------------------------- \n")
         time.sleep(sleep_time)
 
 if __name__ == "__main__":
@@ -91,13 +92,13 @@ if __name__ == "__main__":
     args = parser.parse_args()   
 
     tasks = [
-        {"thread_name": "All Days Thread",    "interval": 24*3600, "time_range_type": "day",    "date_range": (datetime(2024,  1,  1), datetime(2024,  2, 24))},
+        {"thread_name": "All Days Thread",    "interval": 72*3600, "time_range_type": "day",    "date_range": (datetime(2023,  1,  1), datetime(2024,  2, 24))},
         {"thread_name": "All Months Thread",  "interval": 12*3600, "time_range_type": "month",  "date_range": (datetime(2023,  1,  1), datetime(2024,  2,  1))},
-        {"thread_name": "All Years Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": (datetime(2024,  1,  1), datetime(2024,  2,  1))},
+        {"thread_name": "All Years Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": (datetime(2023,  1,  1), datetime(2024,  2,  1))},
         {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (datetime(2020,  1,  1), datetime(2024,  2,  1))},
-        {"thread_name": "Today Thread",       "interval":  1*3600, "time_range_type": "day",    "date_range": 'this_day'},
-        {"thread_name": "This Month Thread",  "interval":  1*3600, "time_range_type": "month",  "date_range": 'this_month'},
-        {"thread_name": "This Year Thread",   "interval":  3*3600, "time_range_type": "year",   "date_range": 'this_year'},
+        {"thread_name": "Today Thread",       "interval":  1*1800, "time_range_type": "day",    "date_range": 'this_day'},
+        {"thread_name": "This Month Thread",  "interval":  1*1800, "time_range_type": "month",  "date_range": 'this_month'},
+        {"thread_name": "This Year Thread",   "interval":  1*3600, "time_range_type": "year",   "date_range": 'this_year'},
     ]
 
     threads = []
