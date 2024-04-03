@@ -13,6 +13,7 @@ from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime
+from scipy.optimize import curve_fit
 #import emcee
 #import corner
 
@@ -144,7 +145,78 @@ class Analyze2D:
             self.red_dark_current_regions = reg
 
 
+    def fit_double_gaussian_cdf(self, ngaussians=1, chip=None):
+        """
+        This method fits the cumulative distribution of intensity values with a 
+        function that is the cumulative distribution of the sum of one or two 
+        Gaussians with the same center. The current implementation is slow.
+        
+        Args:
+            ngaussians - 1 (default) or 2
+            chip (string) - 'green' or 'red'
+
+#        Attributes (set by this method):
+#            green_dark_current_regions - dictionary specifying the regions where 
+
+        Returns:
+            None
+        """
+
+        def one_gaussian_cdf(x, mu1, sigma1):
+            return norm.cdf(x, mu1, sigma1) 
+
+        def two_gaussian_cdfs(x, mu1, sigma1, A1, sigma2):
+            return A1 * norm.cdf(x, mu1, sigma1) + (1-A1) * norm.cdf(x, mu1, sigma2)
+
+#        def one_gaussian_cdf(x, mu1, sigma1, A1):
+#            return A1 * norm.cdf(x, mu1, sigma1) 
+#
+#        def two_gaussian_cdfs(x, mu1, sigma1, A1, mu2, sigma2, A2):
+#            return A1 * norm.cdf(x, mu1, sigma1) + A2 * norm.cdf(x, mu2, sigma2)
+#
+#        def one_gaussian_cdf(x, mu1, sigma1):
+#            return norm.cdf(x, mu1, sigma1) 
+#
+#        def two_gaussian_cdfs(x, mu1, sigma1, sigma2):
+#            return norm.cdf(x, mu1, sigma1) + norm.cdf(x, mu1, sigma2)
+
+        D2 = self.D2
+        if (chip.lower() == 'green'): 
+            image = np.array(D2['GREEN_CCD'].data)
+        if (chip.lower() == 'red'): 
+            image = np.array(D2['RED_CCD'].data)
+        intensities = image.flatten()
+        intensities.sort()
+        cdf = np.arange(len(intensities)) / float(len(intensities))
+
+
+        # Define the new points where you want to sample the CDF
+        ndownsample = 1000
+        new_points = np.linspace(0, len(intensities) - 1, ndownsample, dtype=int)
+        
+        # Interpolate the CDF at these new points
+        # Since we are dealing with indices here, we can use simple array indexing rather than interpolation
+        downsampled_cdf = cdf[new_points]
+        downsampled_intensities = intensities[new_points]
+        
+        #intensities = downsampled_intensities
+        #downsampled_cdf = cdf
+
+        #initial_params_1g = [np.mean(intensities), np.std(intensities), 1]
+        initial_params_1g = [np.mean(intensities), np.std(intensities)]
+        params_1g, _ = curve_fit(one_gaussian_cdf, intensities, cdf, p0=initial_params_1g)
+        print(params_1g)
+        
+        initial_params_2g = [params_1g[0], params_1g[1], 1, 3*params_1g[1]]
+        #initial_params_2g = [params_1g[0], params_1g[1], params_1g[2], params_1g[0], 3*params_1g[1], 0.001]
+        #initial_params_2g = [params_1g[0], params_1g[1], 2*params_1g[1]]
+        #bounds = ([-np.inf,np.inf],[-np.inf,np.inf],[],[])
+        params_2g, _ = curve_fit(two_gaussian_cdfs, intensities, cdf, p0=initial_params_2g)#, bounds=bounds)
+        print(params_2g)
+
+
     def plot_2D_image(self, chip=None, overplot_dark_current=False, blur_size=None, 
+                            subtract_master_bias=False,
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -153,6 +225,11 @@ class Analyze2D:
         Args:
             chip (string) - "green" or "red"
             overlay_dark_current - if True, dark current measurements are over-plotted
+            subtract_master_bias - if not False, a master bias will be subtracted'
+                                   if 'auto', then the path to the master bias is 
+                                   the value from the BIASFILE keyword
+                                   if his parameter is set to a path, that file 
+                                   will be used 
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -636,7 +713,6 @@ class Analyze2D:
 
         """
 
-        image = np.array(self.D2[CHIP + '_CCD'].data)
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN_CCD'
@@ -644,6 +720,7 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED_CCD'
                 chip_title = 'Red'
+        image = np.array(self.D2[CHIP].data)
 
         histmin = -40
         histmax = 40
@@ -864,8 +941,7 @@ class Analyze2D:
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
         else:
-            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-            print('chip not supplied.  Exiting plot_2D_image')
+            self.logger.info(f'chip not supplied. Exiting plot_2D_image_histogram()')
             return
 
         plt.figure(figsize=(8,5), tight_layout=True)
