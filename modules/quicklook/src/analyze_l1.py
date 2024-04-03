@@ -534,21 +534,22 @@ class AnalyzeL1:
 
         plt.figure(figsize=(12, 4), tight_layout=True)
         if 'sci1' in orderlet_lowercase:
-            plt.plot(wav_sci1, flux_sci1, linewidth=0.5, label='SCI1')
+            plt.plot(wav_sci1, flux_sci1, linewidth=0.75, label='SCI1')
         if 'sci2' in orderlet_lowercase:
-            plt.plot(wav_sci2, flux_sci2, linewidth=0.5, label='SCI2')
+            plt.plot(wav_sci2, flux_sci2, linewidth=0.75, label='SCI2')
         if 'sci3' in orderlet_lowercase:
-            plt.plot(wav_sci3, flux_sci3, linewidth=0.5, label='SCI3')
+            plt.plot(wav_sci3, flux_sci3, linewidth=0.75, label='SCI3')
         if 'sky' in orderlet_lowercase:
-            plt.plot(wav_sci3, flux_sky,  linewidth=0.5, label='SKY')
+            plt.plot(wav_sci3, flux_sky,  linewidth=0.75, label='SKY')
         if 'cal' in orderlet_lowercase:
-            plt.plot(wav_sci3, flux_cal,  linewidth=0.5, label='CAL')
+            plt.plot(wav_sci3, flux_cal,  linewidth=0.75, label='CAL')
         if 'sci' in orderlet_lowercase:
-            plt.plot(wav_sci, flux_sci, linewidth=0.5, label='SCI')
+            plt.plot(wav_sci, flux_sci, linewidth=0.75, label='SCI')
         plt.xlim(min(wav_sci1), max(wav_sci1))
-        plt.title('L1 (' + orderlet_label + ') - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
-        plt.xlabel('Wavelength (Ang)', fontsize=14)
-        plt.ylabel('Counts (e-)', fontsize=14)
+        plt.title('L1 (' + orderlet_label + ') - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        plt.xlabel('Wavelength (Ang)', fontsize=18)
+        plt.tick_params(axis='both', labelsize=14)  # Setting x-axis label size
+        plt.ylabel('Counts (e-)', fontsize=18)
         if ylog: plt.yscale('log')
         plt.grid(True)
         plt.legend()
