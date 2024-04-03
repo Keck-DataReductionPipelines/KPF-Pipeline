@@ -483,16 +483,19 @@ class RadialVelocity(KPF1_Primitive):
         all_none = [output_df[k] is None for k in output_df.keys()]
         if all(all_none):
             if self.logger:
-                self.logger.info("RadialVelocity: no L2 produced")
+                self.logger.debug("RadialVelocity: no L2 produced")
             return Arguments(None)
         self.construct_level2_data(output_df)
         self.output_level2.receipt_add_entry('RadialVelocity', self.__module__, f'config_path={self.config_path}', 'PASS')
 
-        if self.logger:
-            self.logger.info("RadialVelocity: Receipt written")
+        self.logger.debug("RadialVelocity: calculating combined RV")
+        self.full_instrument_rv()
 
         if self.logger:
-            self.logger.info("RadialVelocity: Done!")
+            self.logger.debug("RadialVelocity: Receipt written")
+
+        if self.logger:
+            self.logger.debug("RadialVelocity: Done!")
 
         return Arguments(self.output_level2)
 
@@ -806,6 +809,66 @@ class RadialVelocity(KPF1_Primitive):
         results.attrs['do_rv_corr'] = do_corr
 
         return results
+
+    def full_instrument_rv(self):
+        """
+        Fit the full summed weighted CCF for combined RVs
+        """
+        l2 = self.output_level2
+        header = l2.header['PRIMARY']
+        rvh = l2.header['RV']
+        rvg = rvh.get('CCD1RV', None)
+
+        if self.ins.lower() != 'kpf' or rvg == None:
+            return
+        if np.ndim(l2['GREEN_CCF_RW']) != np.ndim(l2['RED_CCF_RW']):
+            # RED chip not ready yet
+            return
+
+        # calculate accross science fibers
+        green_idx = l2['GREEN_CCF_RW'].shape[1]
+        df = l2['RV']
+        rvr = rvh['CCD2RV']
+        weights_green = df['CCF Weights'].values[0:green_idx]
+        weights_red = df['CCF Weights'].values[green_idx+1:]
+        weights_all_ords = np.nansum(weights_green) + np.nansum(weights_red)
+        
+        if rvh['CCD1ERV'] > 0 and rvh['CCD2ERV'] > 0:
+            final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
+            final_rv_err = 1/np.sqrt(1/rvh['CCD1ERV']**2 + 1/rvh['CCD2ERV']**2)
+        else:
+            final_rv = 0
+            final_rv_err = 0
+
+        header['CCFRV'] = (final_rv, 'RV combined across sci fibers and chips (km/s)')
+        header['CCFERV'] = (final_rv_err, 'Uncertainty on CCFRV (km/s)')
+
+
+        # calculate for cal fiber
+        if 'CAL RV' not in df.columns:
+            return
+
+        rvs = df['CAL RV'].values
+        weights = np.ones_like(rvs)
+        rvg = rvh['CCD1RVC']
+        rvr = rvh['CCD2RVC']
+
+        green_ccf = l2['GREEN_CCF_RW'][3]
+        red_ccf = l2['RED_CCF_RW'][3]
+        weights_green = np.where(green_ccf.sum(axis=1) > 0)[0]
+        weights_red = np.where(red_ccf.sum(axis=1) > 0)[0]
+        weights_all_ords = np.nansum(weights_green) + np.nansum(weights_red)
+
+        if rvh['CCD1ERVC'] > 0 and rvh['CCD2ERVC'] > 0:
+            final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
+            final_rv_err = 1/np.sqrt(1/rvh['CCD1ERVC']**2 + 1/rvh['CCD2ERVC']**2)
+        else:
+            final_rv = 0
+            final_rv_err = 0
+        
+        header['CCFRVC'] = (final_rv, 'Cal fiber RV combined across both chips (km/s)')
+        header['CCFERVC'] = (final_rv_err, 'Uncertainty on CCFRVC (km/s)')
+
 
     @staticmethod
     def load_csv(filepath, header=None):

@@ -29,3 +29,6 @@ radial_velocity_neid_config = "examples/default_neid.cfg"
 def test_recipe_radial_velocity_neid():
     recipe_test(radial_velocity_neid_recipe, radial_velocity_neid_config)
 
+
+if __name__ == '__main__':
+    test_recipe_radial_velocity_neid()
