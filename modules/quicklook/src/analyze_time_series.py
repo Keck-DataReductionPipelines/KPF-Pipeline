@@ -603,6 +603,8 @@ class AnalyzeTimeSeries:
         Returns a dictionary of the data types for keywords at the L0/2D/L1/L2 or 
         L0_telemetry level.
         """
+        
+        # L0 PRIMARY header    
         if level == 'L0':
             keyword_types = {
                 'DATE-MID': 'datetime', # Halfway point of the exposure, unweighted
@@ -650,7 +652,8 @@ class AnalyzeTimeSeries:
                 'THRSHLD': 'float',
                 'THRSBIN': 'float',
             }
-     
+             
+        # 2D PRIMARY header    
         elif level == '2D':
             keyword_types = {
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
@@ -707,6 +710,8 @@ class AnalyzeTimeSeries:
                 'EMSKCT67': 'float',  # cumulative EM counts [ADU] in SKY in 658-764 nm
                 'EMSKCT78': 'float',  # cumulative EM counts [ADU] in SKY in 764-870 nm
             }
+        
+        # L1 PRIMARY header    
         elif level == 'L1':
             keyword_types = {
                 'MONOTWLS': 'bool',
@@ -770,6 +775,8 @@ class AnalyzeTimeSeries:
                 'FRC2M852': 'float', # median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
                 'FRC2U852': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
             }
+        
+        # L2 PRIMARY header    
         elif level == 'L2':
             keyword_types = {
                 'ABCDEFGH': 'string', #placeholder for now
