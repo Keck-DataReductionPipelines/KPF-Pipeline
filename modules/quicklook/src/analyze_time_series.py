@@ -2,6 +2,7 @@ import os
 import time
 import glob
 import copy
+import json
 import sqlite3
 import calendar
 import numpy as np
@@ -55,7 +56,6 @@ class AnalyzeTimeSeries:
         
     To-do:
         * Check if the plot doesn't have data and don't generate if so
-        * Ingest RVs
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
         * Check for proper data types (float vs. str) before plotting
@@ -484,6 +484,8 @@ class AnalyzeTimeSeries:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
+        TO-DO: should this method just call display_dataframe_from_db()?
+        
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
         particular object name(s).  The query can also be restricted to observations 
@@ -570,8 +572,11 @@ class AnalyzeTimeSeries:
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
-            only_object = [f"OBJECT = '{only_object}'"]
-            or_objects = ' OR '.join(only_object)
+            only_object = convert_to_list_if_array(only_object)
+            if isinstance(only_object, str):
+                only_object = [only_object]
+            object_queries = [f"OBJECT = '{obj}'" for obj in only_object]
+            or_objects = ' OR '.join(object_queries)
             where_queries.append(f'({or_objects})')
         if object_like is not None: 
             object_like = [f"OBJECT LIKE '%{object_like}%'"]
@@ -935,12 +940,6 @@ class AnalyzeTimeSeries:
         # L2 RV header    
         elif level == 'L2_RV_header':
             keyword_types = {
-               # 'CCD1RV1': 'float', # RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
-               # 'CCD1RV2': 'float', # RV (km/s) of SCI2 (all orders, Green CCD); corrected for barycentric RV
-               # 'CCD1RV3': 'float', # RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
-               # 'CCD2RV1': 'float', # RV (km/s) of SCI1 (all orders, Red   CCD); corrected for barycentric RV
-               # 'CCD2RV2': 'float', # RV (km/s) of SCI2 (all orders, Red   CCD); corrected for barycentric RV
-               # 'CCD2RV3': 'float', # RV (km/s) of SCI3 (all orders, Red   CCD); corrected for barycentric RV
                 'CCFRV'   : 'float',  # Average of CCD1RV and CCD2RV using weights from RV table
                 'CCFERV'  : 'float',  # Error on CCFRV
                 'CCFRVC'  : 'float',  # Average of CCD1RVC and CCD2RVC using weights from RV table
@@ -1924,6 +1923,26 @@ class AnalyzeTimeSeries:
                                   'paneldict': thispaneldict}
             panel_arr = [observing_snr_panel, observing_fr_panel]
 
+        elif plot_name=='autocal_rv':
+            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8]
+            thispaneldict = {'ylabel': r'$\Delta$RV (km/s)',
+                             'title': 'LFC RVs (autocal-lfc-all-*)',
+                             'subtractmedian': 'true',
+                             'only_object': '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30}
+            lfc_rv_panel = {'panelvars': thispanelvars,
+                            'paneldict': thispaneldict}
+            panel_arr = [lfc_rv_panel]
+
         else:
             self.logger.error('plot_name not specified')
             return
@@ -1989,6 +2008,7 @@ class AnalyzeTimeSeries:
             "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
             "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
             "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
+            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        }, 
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
@@ -2135,3 +2155,19 @@ def add_one_month(inputdate):
     
     outputdate = datetime(year, month, day)
     return outputdate
+
+def convert_to_list_if_array(string):
+    """
+    Convert a string like '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]' to an array.
+    """
+    # Check if the string starts with '[' and ends with ']'
+    if string.startswith('[') and string.endswith(']'):
+        try:
+            # Attempt to parse the string as JSON
+            return json.loads(string)
+        except json.JSONDecodeError:
+            # The string is not a valid JSON array
+            return string
+    else:
+        # The string does not look like a JSON array
+        return string
