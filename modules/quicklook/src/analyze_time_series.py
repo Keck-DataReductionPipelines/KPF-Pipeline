@@ -46,6 +46,7 @@ class AnalyzeTimeSeries:
         L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
         L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
+        L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
 
     Related Commandline Scripts:
         'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
@@ -83,11 +84,12 @@ class AnalyzeTimeSeries:
         self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
-        self.L0_keyword_types   = self.get_keyword_types(level='L0')
-        self.D2_keyword_types   = self.get_keyword_types(level='2D')
-        self.L1_keyword_types   = self.get_keyword_types(level='L1')
-        self.L2_keyword_types   = self.get_keyword_types(level='L2')
-        self.L0_telemetry_types = self.get_keyword_types(level='L0_telemetry')
+        self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
+        self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
+        self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
+        self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         
         if drop:
             self.drop_table()
@@ -114,12 +116,13 @@ class AnalyzeTimeSeries:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
-        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_keyword_types.items()]
-        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_keyword_types.items()]
-        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_keyword_types.items()]
-        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_keyword_types.items()]
+        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns
+        L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -236,13 +239,20 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
-            D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
-            L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
-            L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
-            L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L0_header_data           = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
+            D2_header_data           = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
+            L1_header_data           = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
+            L2_header_data           = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
+            L2_RV_header_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_telemetry             = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
-            header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+            header_data = {**L0_header_data, 
+                           **D2_header_data, 
+                           **L1_header_data, 
+                           **L2_header_data, 
+                           **L2_RV_header_data, 
+                           **L0_telemetry
+                          }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
             header_data['L0_filename'] = L0_filename
@@ -290,10 +300,11 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_keyword_types)   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_keyword_types)   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_keyword_types)   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_keyword_types)   
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
                 header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
@@ -324,14 +335,14 @@ class AnalyzeTimeSeries:
             conn.close()
 
 
-    def extract_kwd(self, file_path, keyword_types):
+    def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
         """
         header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
             with fits.open(file_path, memmap=True) as hdul:
-                header = hdul[0].header
+                header = hdul[extension].header
                 # Use set intersection to find common keys
                 common_keys = set(header.keys()) & header_data.keys()
                 for key in common_keys:
@@ -724,7 +735,7 @@ class AnalyzeTimeSeries:
         # L1 PRIMARY header    
         elif level == 'L1':
             keyword_types = {
-                'MONOTWLS': 'bool',
+                'MONOTWLS': 'bool',  # Quality Control: 1 = L1 wavelength solution is monotonic
                 'SNRSC452': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRSK452': 'float', # SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRCL452': 'float', # SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -789,8 +800,10 @@ class AnalyzeTimeSeries:
         # L2 PRIMARY header    
         elif level == 'L2':
             keyword_types = {
-                'ABCDEFGH': 'string', #placeholder for now
+                'TIMCHKL2': 'string', # Quality Control: 1 = consistent times in L2 file
             }
+
+        # L0 TELEMETRY extension
         elif level == 'L0_telemetry':
             keyword_types = {
                 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS': 'float',  # degC    Bench Bottom Between Cameras C2 c- double degC...
@@ -916,6 +929,56 @@ class AnalyzeTimeSeries:
                 'kpfmot.AGITAMBI_T':                   'float',  # degC    Agitator ambient temperature c- double degC {%...
                 'kpfmot.AGITMOT_T':                    'float',  # degC    Agitator motor temperature c- double degC {%.2...
                 'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
+            }
+
+        
+        # L2 RV header    
+        elif level == 'L2_RV_header':
+            keyword_types = {
+               # 'CCD1RV1': 'float', # RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
+               # 'CCD1RV2': 'float', # RV (km/s) of SCI2 (all orders, Green CCD); corrected for barycentric RV
+               # 'CCD1RV3': 'float', # RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
+               # 'CCD2RV1': 'float', # RV (km/s) of SCI1 (all orders, Red   CCD); corrected for barycentric RV
+               # 'CCD2RV2': 'float', # RV (km/s) of SCI2 (all orders, Red   CCD); corrected for barycentric RV
+               # 'CCD2RV3': 'float', # RV (km/s) of SCI3 (all orders, Red   CCD); corrected for barycentric RV
+                'CCFRV'   : 'float',  # Average of CCD1RV and CCD2RV using weights from RV table
+                'CCFERV'  : 'float',  # Error on CCFRV
+                'CCFRVC'  : 'float',  # Average of CCD1RVC and CCD2RVC using weights from RV table
+                'CCFERVC' : 'float',  # Error on CCFRVC
+                'CCD1ROW' : 'float',  # Row number in the RV table (below) of the bluest order on the Green CCD
+                'CCD1RV1' : 'float',  # RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV1': 'float',  # Error on CCD1RV1
+                'CCD1RV2' : 'float',  # RV (km/s) of SCI2 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV2': 'float',  # Error on CCD1RV2
+                'CCD1RV3' : 'float',  # RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV3': 'float',  # Error on CCD1RV3
+                'CCD1RVC' : 'float',  # RV (km/s) of CAL (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV' : 'float',  # Error on CCD1RVC
+                'CCD1RVS' : 'float',  # RV (km/s) of SKY (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERVS': 'float',  # Error on CCD1RVS
+                'CCD1RV'  : 'float',  # RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV' : 'float',  # Error on CCD1RV  
+                'CCD1BJD' : 'float',  # Photon-weighted mid-time (BJD) for CCD1RV
+                'CCD2ROW' : 'float',  # Row number in the RV table (below) of the bluest order on the Red CCD
+                'CCD2RV1' : 'float',  # RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV1': 'float',  # Error on CCD2RV1
+                'CCD2RV2' : 'float',  # RV (km/s) of SCI2 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV2': 'float',  # Error on CCD2RV2
+                'CCD2RV3' : 'float',  # RV (km/s) of SCI3 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV3': 'float',  # Error on CCD2RV3
+                'CCD2RVC' : 'float',  # RV (km/s) of CAL (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERVC': 'float',  # Error on CCD2RVC
+                'CCD2RVS' : 'float',  # RV (km/s) of SKY (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERVS': 'float',  # Error on CCD2RVS
+                'CCD2RV'  : 'float',  # RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV' : 'float',  # Error on CCD2RV  
+                'CCD2BJD' : 'float',  # Photon-weighted mid-time (BJD) for CCD2RV
+            }
+
+        # L2 RV extension
+        elif level == 'L2_RV':
+            keyword_types = {
+                'ABCD1234': 'string', #placeholder for now
             }
 
         else:
