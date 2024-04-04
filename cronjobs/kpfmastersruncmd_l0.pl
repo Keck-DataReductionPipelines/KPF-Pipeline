@@ -107,7 +107,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.1';
+my $version = '2.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -131,6 +131,11 @@ my $configenvar = $ENV{KPFCRONJOB_CONFIG_L0};
 if (defined $configenvar) {
     $config = $configenvar;
 }
+
+my $pythonscript = 'scripts/make_smooth_lamp_pattern_new.py';
+
+my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
+my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';
 
 
 # Get database parameters from ~/.pgpass file.
@@ -192,11 +197,14 @@ my $script = "#! /bin/bash\n" .
              "rm -rf /data/masters/${procdate}\n" .
              "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile}\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 3\n" .
              "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile}\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
