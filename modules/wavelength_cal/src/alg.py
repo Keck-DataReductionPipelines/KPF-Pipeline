@@ -1846,3 +1846,48 @@ def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
     plt.ylabel('Drift [cm s$^{-1}$]')
     plt.savefig(figsave_name, dpi=250)
     plt.close()
+
+class WaveInterpolate:
+    """
+    This module defines 'WaveInterpolation' and methods to perform the 
+    wavelength interpolation.
+    
+    Wavelength interpolation computation. Algorithm is called under _perform() 
+    in wavelength_cal.py. Algorithm itself iterates over orders.
+    """
+    
+    def __init__(
+        self, l1_timestamp, wls_timestamps, wls1_arrays, wls2_arrays, config=None, logger=None
+    ):
+        """Initializes WaveCalibration class.
+        Args:
+            l1_timestamp (float): Datetime of the input L1 file. WLS will be interpolated to this point in time         
+            wls_timestamps (list): List of timestamps for each of the input WLS arrays
+            wls1_arrays (dict): Dictionary of the input WLS arrays for the first WLS. Keys should match the extension names in the L1 obj
+            wls2_arrays (dict): Dictionary of the input WLS arrays for the second WLS. Keys should match the extension names in the L1 obj
+            config (configparser.ConfigParser, optional): Config context. 
+                Defaults to None.
+            logger (logging.Logger, optional): Instance of logging.Logger. 
+                Defaults to None.        
+
+        """
+        self.l1_timestamp = l1_timestamp
+        self.wls_timestamps = wls_timestamps
+        self.wls1_arrays = wls1_arrays
+        self.wls2_arrays = wls2_arrays
+        self.config = config
+        self.logger = logger
+
+    def wave_interpolation(self):
+        msg = "Performing wavelength interpolation."
+        if self.logger:
+            self.logger.info(msg)
+        else:
+            print(msg)
+
+        # dummy to return WLS arrays from first WLS at the moment
+        new_wls_arrays = {}
+        for ext, arr in self.wls1_arrays.items():
+            new_wls_arrays[ext] = arr
+
+        return new_wls_arrays
