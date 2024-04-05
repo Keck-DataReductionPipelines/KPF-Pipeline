@@ -1847,7 +1847,7 @@ def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
     plt.savefig(figsave_name, dpi=250)
     plt.close()
 
-class WaveInterpolate:
+class WaveInterpolation:
     """
     This module defines 'WaveInterpolation' and methods to perform the 
     wavelength interpolation.
