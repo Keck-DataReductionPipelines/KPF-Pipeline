@@ -2,6 +2,7 @@ import os
 import time
 import glob
 import copy
+import json
 import sqlite3
 import calendar
 import numpy as np
@@ -25,8 +26,7 @@ class AnalyzeTimeSeries:
         with KPF observations, as well as methods to ingest data, query the database, 
         print data, and made time series plots.  An elaborate set of standard time series 
         plots can be made over intervals of days/months/years/decades spanning a date 
-        range.  A related script 'ingest_kpf_ts_db.py' can be used to ingest data from 
-        the command line.
+        range.  
         
         The ingested data comes from L0/2D/L1/L2 keywords and the TELEMETRY extension 
         in L0 files.  With the current version of this code, all TELEMETRY keywords are 
@@ -47,16 +47,28 @@ class AnalyzeTimeSeries:
         L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
         L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
+        L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
+
+    Related Commandline Scripts:
+        'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
+        'ingest_watch_kpf_tsdb.py' - ingest by watching a set of directories
+        'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Check if the plot doesn't have data and don't generate if so
+        * Make plots of temperature vs. RV for various types of RVs
+        * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
+        * Check for proper data types (float vs. str) before plotting
+        * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
         * Add standard plots for diagnostics
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * All histograms plots, e.g. for DRPTAG
+        * Add histogram plots, e.g. for DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
         * Ingest information from masters, especially WLS masters
+        * Allow for cases where the Telemetry extension is not present (early data)
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -72,11 +84,12 @@ class AnalyzeTimeSeries:
         self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
-        self.L0_keyword_types   = self.get_keyword_types(level='L0')
-        self.D2_keyword_types   = self.get_keyword_types(level='2D')
-        self.L1_keyword_types   = self.get_keyword_types(level='L1')
-        self.L2_keyword_types   = self.get_keyword_types(level='L2')
-        self.L0_telemetry_types = self.get_keyword_types(level='L0_telemetry')
+        self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
+        self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
+        self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
+        self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         
         if drop:
             self.drop_table()
@@ -103,12 +116,13 @@ class AnalyzeTimeSeries:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
-        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_keyword_types.items()]
-        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_keyword_types.items()]
-        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_keyword_types.items()]
-        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_keyword_types.items()]
+        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns
+        L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -150,12 +164,10 @@ class AnalyzeTimeSeries:
             dir_path for dir_path in sorted_dir_paths
             if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
-        #t1 = tqdm_notebook(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         for dir_path in t1:
             t1.set_description(dir_path.split('/')[-1])
             t1.refresh() 
-            #t2 = tqdm_notebook(os.listdir(dir_path), desc=f'Files', leave=False)
             t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
             batch = []
             for L0_filename in t2:
@@ -227,13 +239,20 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
-            D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
-            L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
-            L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
-            L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L0_header_data           = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
+            D2_header_data           = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
+            L1_header_data           = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
+            L2_header_data           = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
+            L2_RV_header_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_telemetry             = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
-            header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+            header_data = {**L0_header_data, 
+                           **D2_header_data, 
+                           **L1_header_data, 
+                           **L2_header_data, 
+                           **L2_RV_header_data, 
+                           **L0_telemetry
+                          }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
             header_data['L0_filename'] = L0_filename
@@ -281,10 +300,11 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_keyword_types)   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_keyword_types)   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_keyword_types)   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_keyword_types)   
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
                 header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
@@ -315,14 +335,14 @@ class AnalyzeTimeSeries:
             conn.close()
 
 
-    def extract_kwd(self, file_path, keyword_types):
+    def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
         """
         header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
             with fits.open(file_path, memmap=True) as hdul:
-                header = hdul[0].header
+                header = hdul[extension].header
                 # Use set intersection to find common keys
                 common_keys = set(header.keys()) & header_data.keys()
                 for key in common_keys:
@@ -464,6 +484,8 @@ class AnalyzeTimeSeries:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
+        TO-DO: should this method just call display_dataframe_from_db()?
+        
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
         particular object name(s).  The query can also be restricted to observations 
@@ -550,8 +572,11 @@ class AnalyzeTimeSeries:
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
-            only_object = [f"OBJECT = '{only_object}'"]
-            or_objects = ' OR '.join(only_object)
+            only_object = convert_to_list_if_array(only_object)
+            if isinstance(only_object, str):
+                only_object = [only_object]
+            object_queries = [f"OBJECT = '{obj}'" for obj in only_object]
+            or_objects = ' OR '.join(object_queries)
             where_queries.append(f'({or_objects})')
         if object_like is not None: 
             object_like = [f"OBJECT LIKE '%{object_like}%'"]
@@ -604,9 +629,21 @@ class AnalyzeTimeSeries:
         Returns a dictionary of the data types for keywords at the L0/2D/L1/L2 or 
         L0_telemetry level.
         """
+        
+        # L0 PRIMARY header    
         if level == 'L0':
             keyword_types = {
-                'DATE-MID': 'datetime',
+                'DATE-MID': 'datetime', # Halfway point of the exposure, unweighted
+                'DATE-BEG': 'datetime', # Start of exposure from kpfexpose       
+                'DATE-END': 'datetime', # End of exposure from kpfexpose.ENDTIME 
+                'GRDATE-B': 'datetime', # Shutter-open time Kwd green DATE-BEG   
+                'GRDATE-E': 'datetime', # Shutter-close time Kwd green DATE-END  
+                'RDDATE-B': 'datetime', # Shutter-open time Kwd red DATE-BEG     
+                'RDDATE-E': 'datetime', # Shutter-close time Kwd red DATE-END    
+                'EMDATE-B': 'datetime', # Date-Beg of first observation Kwd expmeter
+                'EMDATE-E': 'datetime', # Date-End of last observation Kwd expmeter 
+                'GCDATE-B': 'datetime', # sequence begin Kwd guide DATE-BEG         
+                'GCDATE-E': 'datetime', # sequence end Kwd guide DATE-END           
                 'MJD-OBS':  'float',
                 'EXPTIME':  'float',
                 'ELAPSED':  'float',
@@ -641,7 +678,8 @@ class AnalyzeTimeSeries:
                 'THRSHLD': 'float',
                 'THRSBIN': 'float',
             }
-     
+             
+        # 2D PRIMARY header    
         elif level == '2D':
             keyword_types = {
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
@@ -698,9 +736,11 @@ class AnalyzeTimeSeries:
                 'EMSKCT67': 'float',  # cumulative EM counts [ADU] in SKY in 658-764 nm
                 'EMSKCT78': 'float',  # cumulative EM counts [ADU] in SKY in 764-870 nm
             }
+        
+        # L1 PRIMARY header    
         elif level == 'L1':
             keyword_types = {
-                'MONOTWLS': 'bool',
+                'MONOTWLS': 'bool',  # Quality Control: 1 = L1 wavelength solution is monotonic
                 'SNRSC452': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRSK452': 'float', # SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRCL452': 'float', # SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -761,10 +801,14 @@ class AnalyzeTimeSeries:
                 'FRC2M852': 'float', # median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
                 'FRC2U852': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
             }
+        
+        # L2 PRIMARY header    
         elif level == 'L2':
             keyword_types = {
-                'ABCDEFGH': 'string', #placeholder for now
+                'TIMCHKL2': 'string', # Quality Control: 1 = consistent times in L2 file
             }
+
+        # L0 TELEMETRY extension
         elif level == 'L0_telemetry':
             keyword_types = {
                 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS': 'float',  # degC    Bench Bottom Between Cameras C2 c- double degC...
@@ -892,6 +936,50 @@ class AnalyzeTimeSeries:
                 'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
             }
 
+        
+        # L2 RV header    
+        elif level == 'L2_RV_header':
+            keyword_types = {
+                'CCFRV'   : 'float',  # Average of CCD1RV and CCD2RV using weights from RV table
+                'CCFERV'  : 'float',  # Error on CCFRV
+                'CCFRVC'  : 'float',  # Average of CCD1RVC and CCD2RVC using weights from RV table
+                'CCFERVC' : 'float',  # Error on CCFRVC
+                'CCD1ROW' : 'float',  # Row number in the RV table (below) of the bluest order on the Green CCD
+                'CCD1RV1' : 'float',  # RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV1': 'float',  # Error on CCD1RV1
+                'CCD1RV2' : 'float',  # RV (km/s) of SCI2 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV2': 'float',  # Error on CCD1RV2
+                'CCD1RV3' : 'float',  # RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV3': 'float',  # Error on CCD1RV3
+                'CCD1RVC' : 'float',  # RV (km/s) of CAL (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV' : 'float',  # Error on CCD1RVC
+                'CCD1RVS' : 'float',  # RV (km/s) of SKY (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERVS': 'float',  # Error on CCD1RVS
+                'CCD1RV'  : 'float',  # RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV' : 'float',  # Error on CCD1RV  
+                'CCD1BJD' : 'float',  # Photon-weighted mid-time (BJD) for CCD1RV
+                'CCD2ROW' : 'float',  # Row number in the RV table (below) of the bluest order on the Red CCD
+                'CCD2RV1' : 'float',  # RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV1': 'float',  # Error on CCD2RV1
+                'CCD2RV2' : 'float',  # RV (km/s) of SCI2 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV2': 'float',  # Error on CCD2RV2
+                'CCD2RV3' : 'float',  # RV (km/s) of SCI3 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV3': 'float',  # Error on CCD2RV3
+                'CCD2RVC' : 'float',  # RV (km/s) of CAL (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERVC': 'float',  # Error on CCD2RVC
+                'CCD2RVS' : 'float',  # RV (km/s) of SKY (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERVS': 'float',  # Error on CCD2RVS
+                'CCD2RV'  : 'float',  # RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV' : 'float',  # Error on CCD2RV  
+                'CCD2BJD' : 'float',  # Photon-weighted mid-time (BJD) for CCD2RV
+            }
+
+        # L2 RV extension
+        elif level == 'L2_RV':
+            keyword_types = {
+                'ABCD1234': 'string', #placeholder for now
+            }
+
         else:
             keyword_types = {}
         
@@ -899,7 +987,8 @@ class AnalyzeTimeSeries:
        
  
     def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
-                                    clean=False, fig_path=None, show_plot=False):
+                                    clean=False, fig_path=None, show_plot=False, 
+                                    log_savefig_timing=True):
         """
         Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
         attributes are stored in an array of dictionaries called 'panel_arr'.  
@@ -960,7 +1049,7 @@ class AnalyzeTimeSeries:
             axs = [axs]  # Make axs iterable even when there's only one panel
         if npanels > 1:
             plt.subplots_adjust(hspace=0)
-        plt.tight_layout()
+        #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
@@ -1125,16 +1214,17 @@ class AnalyzeTimeSeries:
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="left", va="bottom",
-                    xytext=(-100, -32), textcoords='offset points')
+                    xytext=(100, -32), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
             plt.savefig(fig_path, dpi=300, facecolor='w')
-            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if log_savefig_timing:
+                self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
         plt.close('all')
@@ -1158,8 +1248,18 @@ class AnalyzeTimeSeries:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
         """
+
+        if plot_name == 'hallway_temp':
+            dict1 = {'col': 'kpfmet.TEMP', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway', 'marker': '.', 'linewidth': 0.5}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
+                             'title': 'KPF Hallway Temperature', 
+                             'legend_frac_size': 0.3}
+            halltemppanel = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            panel_arr = [halltemppanel]
         
-        if plot_name == 'chamber_temp':
+        elif plot_name == 'chamber_temp':
             dict1 = {'col': 'kpfmet.TEMP',              'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway',              'marker': '.', 'linewidth': 0.5}}
             dict2 = {'col': 'kpfmet.GREEN_LN2_FLANGE',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Green LN$_2$ Flng',    'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
@@ -1179,7 +1279,7 @@ class AnalyzeTimeSeries:
             
             thispanelvars3 = [dict2, dict3, dict4]
             thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperature (K)',
-                             'subtractmedian': 'true',
+                             'title': 'KPF Hallway Temperatures', 
                              'legend_frac_size': 0.3}
             halltemppanel3 = {'panelvars': thispanelvars3,
                               'paneldict': thispaneldict3}
@@ -1823,15 +1923,78 @@ class AnalyzeTimeSeries:
                                   'paneldict': thispaneldict}
             panel_arr = [observing_snr_panel, observing_fr_panel]
 
+        elif plot_name=='autocal_rv':
+            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8]
+            thispaneldict = {
+                             'ylabel': r'LFC RV (km/s)',
+                             #'ylabel': r'LFC $\Delta$RV (km/s)',
+                             #'subtractmedian': 'true',
+                             'only_object': '["autocal-lfc-all-morn", "autocal-lfc-all-eve", "autocal-lfc-all-night", "cal-LFC", "cal-LFC-morn", "cal-LFC-eve", "LFC_all", "lfc_all", "LFC"]',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30
+                             }
+            lfc_rv_panel = {'panelvars': thispanelvars,
+                            'paneldict': thispaneldict}
+            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars2 = [dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18]
+            thispaneldict2 = {
+                              'ylabel': r'ThAr RV (km/s)',
+                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+                              #'subtractmedian': 'true',
+                              'only_object': '["autocal-thar-all-night", "autocal-thar-all-eve", "autocal-thar-all-morn"]',
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.30
+                              }
+            thar_rv_panel = {'panelvars': thispanelvars2,
+                             'paneldict': thispaneldict2}
+            dict21 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict22 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict23 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict24 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict25 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict26 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict27 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
+            thispaneldict3 = {
+                              'ylabel': r'Etalon RV (km/s)',
+                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+                              'title': 'LFC, ThAr, & Etalon RVs',
+                              #'subtractmedian': 'true',
+                              'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.30
+                              }
+            etalon_rv_panel = {'panelvars': thispanelvars3,
+                               'paneldict': thispaneldict3}
+            panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
+
         else:
             self.logger.error('plot_name not specified')
             return
         
         self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
-                                         fig_path=fig_path, show_plot=show_plot, clean=clean)        
+                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
+                                         log_savefig_timing=False)        
 
 
-    def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
+    def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
+                                 last_n_days=None,
                                  fig_dir=None, show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook.  
@@ -1841,6 +2004,7 @@ class AnalyzeTimeSeries:
         Args:
             start_date (datetime object) - start date for plot
             interval (string) - 'day', 'week', 'year', or 'decade'
+            last_n_days (int) - overrides start_date and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -1848,13 +2012,22 @@ class AnalyzeTimeSeries:
             PNG plot in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        if (last_n_days != None) and (type(last_n_days) == type(1)):
+            now = datetime.now()
+            if last_n_days > 3:
+                end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                end_date = now
+            start_date = end_date - timedelta(days=last_n_days)
+
         if not isinstance(start_date, datetime):
             self.logger.error("'start_date' must be a datetime object.")
             return        
         
         plots = { 
-            "p1a":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
-            "p1b":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
+            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   },
+            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
+            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
             "p1c":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   },
             "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      },
             "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      },
@@ -1876,6 +2049,7 @@ class AnalyzeTimeSeries:
             "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
             "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
             "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
+            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        }, 
         }
         for p in plots:
             plot_name = plots[p]["plot_name"]
@@ -1891,6 +2065,8 @@ class AnalyzeTimeSeries:
             elif interval == 'decade':
                 end_date = datetime(start_date.year+10, start_date.month, start_date.day)
                 filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+            elif (last_n_days != None) and (type(last_n_days) == type(1)):
+                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
             else:
                 self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
                 return
@@ -1908,23 +2084,30 @@ class AnalyzeTimeSeries:
                                            fig_path=fig_path, show_plot=show_plot, clean=clean)
 
 
-    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, clean=True, 
-                                     base_dir=None, show_plot=False):
+    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, 
+                                     time_range_type = 'all', clean=True, 
+                                     base_dir='/data/QLP/', show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook for a date 
         range.  Every unique day, month, year, and decade between start_date and end_date 
         will have a full set of plots produced using plot_all_quicklook().
+        The set of date range types ('day', 'month', 'year', 'decade', 'all')
+        is set by the time_range_type parameter.
 
         Args:
             start_date (datetime object) - start date for plot
             end_date (datetime object) - start date for plot
-            fig_path (string) - set to the path for the files to be generated.
+            time_range_type (string)- one of: 'day', 'month', 'year', 'decade', 'all'
+            base_dir (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
         Returns:
-            PNG plots in fig_path or shows the plots it the current environment
-            (e.g., in a Jupyter Notebook).
+            PNG plots in the output director or shows the plots it the current 
+            environment (e.g., in a Jupyter Notebook).
         """
+        time_range_type = time_range_type.lower()
+        if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
+            time_range_type = 'all'
 
         days = []
         months = []
@@ -1942,49 +2125,53 @@ class AnalyzeTimeSeries:
         years   = sorted(set(years),   reverse=True)
         decades = sorted(set(decades), reverse=True)
 
-        self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
-        for day in days:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
-                else:
-                    savedir = None
-                self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
-            except Exception as e:
-                self.logger.error(e)
-
-        self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
-        for month in months:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
-                else:
-                    savedir = None
-                self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
-            except Exception as e:
-                self.logger.error(e)
-
-        self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
-        for year in years:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
-                else:
-                    savedir = None
-                self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
-            except Exception as e:
-                self.logger.error(e)
-
-        self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
-        for decade in decades:
-            try:
-                if base_dir != None:
-                    savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
-                else:
-                    savedir = None
-                self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
-            except Exception as e:
-                self.logger.error(e)
+        if time_range_type in ['day', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
+            for day in days:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
+                except Exception as e:
+                    self.logger.error(e)
+    
+        if time_range_type in ['month', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
+            for month in months:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
+                except Exception as e:
+                    self.logger.error(e)
+    
+        if time_range_type in ['year', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
+            for year in years:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
+                except Exception as e:
+                    self.logger.error(e)
+    
+        if time_range_type in ['decade', 'all']:
+            self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
+            for decade in decades:
+                try:
+                    if base_dir != None:
+                        savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
+                    else:
+                        savedir = None
+                    self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
+                except Exception as e:
+                    self.logger.error(e)
 
 
 def add_one_month(inputdate):
@@ -2009,3 +2196,19 @@ def add_one_month(inputdate):
     
     outputdate = datetime(year, month, day)
     return outputdate
+
+def convert_to_list_if_array(string):
+    """
+    Convert a string like '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]' to an array.
+    """
+    # Check if the string starts with '[' and ends with ']'
+    if string.startswith('[') and string.endswith(']'):
+        try:
+            # Attempt to parse the string as JSON
+            return json.loads(string)
+        except json.JSONDecodeError:
+            # The string is not a valid JSON array
+            return string
+    else:
+        # The string does not look like a JSON array
+        return string
