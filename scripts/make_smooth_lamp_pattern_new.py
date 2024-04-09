@@ -9,18 +9,23 @@
 # 1-pixel high (along cross-dispersion dimension) is used for computing the clipped mean, with
 # 3-sigma, double-sided outlier rejection.  The kernel is centered on the pixel of interest.
 #
-# The implemented method is slow and takes many hours to complete.
+# The implemented method, unless multi-threaded, is slow and takes many hours to complete.
 ####################################################################################################################
 
-# Used to make smooth lamp pattern for 20240211.
-fname_stack_average = "kpf_20240211_master_flat.fits"
-fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240308_new.fits"
-
-
+import os
+import sys
 import numpy as np
 from astropy.io import fits
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import os
+
+# Get input and output files from command-line arguments.
+
+fname_stack_average = (sys.argv)[1]
+fname_smooth_lamp = (sys.argv)[2]
+
+print("Input file: fname_stack_average =",fname_stack_average)
+print("Output file: fname_smooth_lamp =",fname_smooth_lamp)
+
 
 def apply_sliding_window_line(data_line, kernel_width, n_sigma):
     """Apply a 1D sliding window operation on a line of data with dynamic kernel adjustment near edges."""
