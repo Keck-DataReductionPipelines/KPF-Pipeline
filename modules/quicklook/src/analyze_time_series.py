@@ -55,6 +55,8 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Add database for masters (separate from ObsIDs?)
+        * Add git hash to database and plotting (in addition to git tag).
         * Write method to return plots in plot_all_quicklook
         * Check if the plot doesn't have data and don't generate if so
         * Make plots of temperature vs. RV for various types of RVs
