@@ -1953,17 +1953,36 @@ class AnalyzeTimeSeries:
             dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
             thispanelvars2 = [dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18]
             thispaneldict2 = {
+                              'ylabel': r'ThAr RV (km/s)',
+                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+                              #'subtractmedian': 'true',
+                              'only_object': '["autocal-thar-all-night", "autocal-thar-all-eve", "autocal-thar-all-morn"]',
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.30
+                              }
+            thar_rv_panel = {'panelvars': thispanelvars2,
+                             'paneldict': thispaneldict2}
+            dict21 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict22 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict23 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict24 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict25 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict26 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict27 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
+            thispaneldict3 = {
                               'ylabel': r'Etalon RV (km/s)',
                               #'ylabel': r'Etalon $\Delta$RV (km/s)',
-                              'title': 'LFC & Etalon RVs',
+                              'title': 'LFC, ThAr, & Etalon RVs',
                               #'subtractmedian': 'true',
                               'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
                               'not_junk': 'true',
                               'legend_frac_size': 0.30
                               }
-            etalon_rv_panel = {'panelvars': thispanelvars2,
-                               'paneldict': thispaneldict2}
-            panel_arr = [lfc_rv_panel, etalon_rv_panel]
+            etalon_rv_panel = {'panelvars': thispanelvars3,
+                               'paneldict': thispaneldict3}
+            panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
 
         else:
             self.logger.error('plot_name not specified')
