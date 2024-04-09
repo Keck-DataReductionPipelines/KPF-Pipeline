@@ -55,6 +55,7 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Write method to return plots in plot_all_quicklook
         * Check if the plot doesn't have data and don't generate if so
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
@@ -239,12 +240,12 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data           = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
-            D2_header_data           = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
-            L1_header_data           = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
-            L2_header_data           = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
-            L2_RV_header_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
-            L0_telemetry             = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types) 
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
             header_data = {**L0_header_data, 
                            **D2_header_data, 
