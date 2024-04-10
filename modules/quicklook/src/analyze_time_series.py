@@ -1088,25 +1088,29 @@ class AnalyzeTimeSeries:
 
             thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
-                t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
+                if 'narrow_xlim_daily' in thispanel['paneldict']:
+                    if thispanel['paneldict']['narrow_xlim_daily'] == 'true':
+                        if len(t) > 1:
+                            axs[p].set_xlim(min(t), max(t))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) < 32:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
             else:
                 t = df['DATE-MID'] # dates
@@ -1906,6 +1910,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'only_object': 'SoCal',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             socal_snr_panel = {'panelvars': thispanelvars,
@@ -1918,6 +1923,7 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
                              'only_object': 'SoCal',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             socal_fr_panel = {'panelvars': thispanelvars,
@@ -2000,9 +2006,9 @@ class AnalyzeTimeSeries:
             dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
             thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
             thispaneldict3 = {
+                              'title': 'LFC, ThAr, & Etalon RVs',
                               'ylabel': r'Etalon RV (km/s)',
                               #'ylabel': r'Etalon $\Delta$RV (km/s)',
-                              'title': 'LFC, ThAr, & Etalon RVs',
                               #'subtractmedian': 'true',
                               'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
                               'not_junk': 'true',
@@ -2011,6 +2017,48 @@ class AnalyzeTimeSeries:
             etalon_rv_panel = {'panelvars': thispanelvars3,
                                'paneldict': thispaneldict3}
             panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
+
+        elif plot_name=='socal_rv':
+            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict7]
+            thispaneldict = {
+                             'ylabel': r'SoCal RV (km/s)',
+                             'title': 'SoCal RVs',
+                             'only_object': '["SoCal"]',
+                             'narrow_xlim_daily': 'true',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.28
+                             }
+            socal_rv_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict11, dict12, dict13, dict15, dict16, dict17]
+            thispaneldict = {
+                             'ylabel': r'SoCal $\Delta$RV (km/s)',
+                             'subtractmedian': 'true',
+                             'title': 'SoCal RVs',
+                             'only_object': '["SoCal"]',
+                             'narrow_xlim_daily': 'true',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.28
+                             }
+            socal_rv_panel2 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [socal_rv_panel,socal_rv_panel2]
 
         else:
             self.logger.error('plot_name not specified')
@@ -2073,6 +2121,7 @@ class AnalyzeTimeSeries:
             "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", },
             "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
             "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
+            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        }, 
             "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
             "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       },   
             "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
