@@ -1219,8 +1219,10 @@ class AnalyzeTimeSeries:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="left", va="bottom",
-                    xytext=(100, -32), textcoords='offset points')
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    #xytext=(100, -32), 
+                    xytext=(0, -32), 
+                    textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
@@ -1581,7 +1583,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
             thispaneldict = {'ylabel': 'Temperatures (C)',
                              'title': 'CCD Controllers',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.30}
             controller1 = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
 
@@ -1589,7 +1591,7 @@ class AnalyzeTimeSeries:
             thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
                              'title': 'CCD Controllers',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.30}
             controller2 = {'panelvars': thispanelvars2,
                            'paneldict': thispaneldict2}
             panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
@@ -1672,14 +1674,14 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel2 = {'panelvars': thispanelvars2,
                         'paneldict': thispaneldict2}
 
@@ -1687,7 +1689,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict1, dict2] 
             thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
-                              'legend_frac_size': 0.25}
+                              'legend_frac_size': 0.30}
             hkpanel3 = {'panelvars': thispanelvars3,
                         'paneldict': thispaneldict3}
 
@@ -1695,7 +1697,7 @@ class AnalyzeTimeSeries:
             thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
                              'title': 'Ca H&K Spectrometer Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel4 = {'panelvars': thispanelvars4,
                         'paneldict': thispaneldict4}
 
@@ -1742,6 +1744,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.20}
@@ -1750,6 +1753,7 @@ class AnalyzeTimeSeries:
 
             thispanelvars2 = [dict3, dict4]
             thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
+                             'narrow_xlim_daily': 'true',
                              'title': 'Guiding',
                              'not_junk': 'true',
                              'on_sky': 'true', 
@@ -1764,6 +1768,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Seeing (arcsec)',
                              'yscale': 'log',
+                             'narrow_xlim_daily': 'true',
                              'title': 'Seeing',
                              'not_junk': 'true',
                              'on_sky': 'true', 
@@ -1777,6 +1782,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Angle (deg)',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.25}
@@ -1785,6 +1791,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'title': 'Separation of Sun and Moon from Target',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.25}
@@ -1939,6 +1946,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'on_sky': 'true', 
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             observing_snr_panel = {'panelvars': thispanelvars,
@@ -1951,6 +1959,7 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
                              'on_sky': 'true', 
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             observing_fr_panel = {'panelvars': thispanelvars,
