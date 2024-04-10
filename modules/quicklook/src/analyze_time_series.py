@@ -68,7 +68,6 @@ class AnalyzeTimeSeries:
         * Add the capability of using Jump queries to find files for ingestion or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
         * Ingest information from masters, especially WLS masters
-        * Allow for cases where the Telemetry extension is not present (early data)
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -668,11 +667,11 @@ class AnalyzeTimeSeries:
                 'SCI-OBJ':  'string',
                 'AGITSTA':  'string',
                 'FIUMODE':  'string', # FIU operating mode - 'Observing' = on-sky
-                'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
-                'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
-                'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
-                'ETAV1C4T': 'float', # Etalon Vescent 1 Channel 4 temperature
-                'ETAV2C3T': 'float', # Etalon Vescent 2 Channel 3 temperature
+                'ETAV1C1T': 'float',  # Etalon Vescent 1 Channel 1 temperature
+                'ETAV1C2T': 'float',  # Etalon Vescent 1 Channel 2 temperature
+                'ETAV1C3T': 'float',  # Etalon Vescent 1 Channel 3 temperature
+                'ETAV1C4T': 'float',  # Etalon Vescent 1 Channel 4 temperature
+                'ETAV2C3T': 'float',  # Etalon Vescent 2 Channel 3 temperature
                 'TOTCORR':  'string', # need to correct this to split  '498.12 604.38 710.62 816.88' / Wavelength of EM bins in nm
                 'USTHRSH':  'string', 
                 'THRSHLD': 'float',
@@ -687,6 +686,7 @@ class AnalyzeTimeSeries:
                 'NOTJUNK':  'float',  # Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
                 'DATAPRL0': 'float',  # Quality Control: 1 = L0 data products present with non-zero array sizes
                 'KWRDPRL0': 'float',  # Quality Control: 1 = L0 expected keywords present
+                'TIMCHKL0': 'string', # Quality Control: 1 = consistent times in L0 file
                 'EMSAT':    'float',  # Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
                 'EMNEG':    'float',  # Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
                 'RNRED1':   'float',  # Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
@@ -937,7 +937,6 @@ class AnalyzeTimeSeries:
                 'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
             }
 
-        
         # L2 RV header    
         elif level == 'L2_RV_header':
             keyword_types = {
@@ -1827,17 +1826,33 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Data Present\n(1=True)',
+            thispaneldict = {'ylabel': 'L0 Data Present\n(1=True)',
                              'legend_frac_size': 0.10}
             data_present_panel = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Keywords Present\n(1=True)',
-                             'title': 'Quality Control - Data and Keywords Products Present',
+            thispaneldict = {'ylabel': 'L0 Keywords Present\n(1=True)',
+                             'title': 'Quality Control - L0 Data and Keywords Products Present',
                              'legend_frac_size': 0.10}
             keywords_present_panel = {'panelvars': thispanelvars,
                                       'paneldict': thispaneldict}
             panel_arr = [data_present_panel, keywords_present_panel]
+
+        elif plot_name=='qc_time_check':
+            dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
+            dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'L0 Time Check\n(1=True)',
+                             'legend_frac_size': 0.10}
+            time_check_l0_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'L2 Time Check\n(1=True)',
+                             'title': 'Quality Control - L0 and L2 Times Consistent',
+                             'legend_frac_size': 0.10}
+            time_check_l2_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            panel_arr = [time_check_l0_panel, time_check_l2_panel]
 
         elif plot_name=='qc_em':
             dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
@@ -2059,10 +2074,11 @@ class AnalyzeTimeSeries:
             "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
             "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
             "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
-            "p7b":  {"plot_name": "drphash",                   "subdir": "DRP",       },   
+            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       },   
             "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
             "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
-            "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
+            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        }, 
+            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
             "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        }, 
         }
         for p in plots:
