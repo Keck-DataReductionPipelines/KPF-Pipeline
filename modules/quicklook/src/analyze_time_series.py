@@ -64,14 +64,12 @@ class AnalyzeTimeSeries:
         * Check for proper data types (float vs. str) before plotting
         * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
-        * Add standard plots for diagnostics
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * Add histogram plots, e.g. for DRPTAG
         * Add the capability of using Jump queries to find files for ingestion or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
         * Ingest information from masters, especially WLS masters
-        * Allow for cases where the Telemetry extension is not present (early data)
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -671,11 +669,11 @@ class AnalyzeTimeSeries:
                 'SCI-OBJ':  'string',
                 'AGITSTA':  'string',
                 'FIUMODE':  'string', # FIU operating mode - 'Observing' = on-sky
-                'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
-                'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
-                'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
-                'ETAV1C4T': 'float', # Etalon Vescent 1 Channel 4 temperature
-                'ETAV2C3T': 'float', # Etalon Vescent 2 Channel 3 temperature
+                'ETAV1C1T': 'float',  # Etalon Vescent 1 Channel 1 temperature
+                'ETAV1C2T': 'float',  # Etalon Vescent 1 Channel 2 temperature
+                'ETAV1C3T': 'float',  # Etalon Vescent 1 Channel 3 temperature
+                'ETAV1C4T': 'float',  # Etalon Vescent 1 Channel 4 temperature
+                'ETAV2C3T': 'float',  # Etalon Vescent 2 Channel 3 temperature
                 'TOTCORR':  'string', # need to correct this to split  '498.12 604.38 710.62 816.88' / Wavelength of EM bins in nm
                 'USTHRSH':  'string', 
                 'THRSHLD': 'float',
@@ -686,9 +684,11 @@ class AnalyzeTimeSeries:
         elif level == '2D':
             keyword_types = {
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
+                'DRPHASH':  'string', # Git commit hash version of KPF-Pipeline used for processing
                 'NOTJUNK':  'float',  # Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
                 'DATAPRL0': 'float',  # Quality Control: 1 = L0 data products present with non-zero array sizes
                 'KWRDPRL0': 'float',  # Quality Control: 1 = L0 expected keywords present
+                'TIMCHKL0': 'string', # Quality Control: 1 = consistent times in L0 file
                 'EMSAT':    'float',  # Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
                 'EMNEG':    'float',  # Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
                 'RNRED1':   'float',  # Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
@@ -939,7 +939,6 @@ class AnalyzeTimeSeries:
                 'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
             }
 
-        
         # L2 RV header    
         elif level == 'L2_RV_header':
             keyword_types = {
@@ -1091,25 +1090,29 @@ class AnalyzeTimeSeries:
 
             thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
-                t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
+                if 'narrow_xlim_daily' in thispanel['paneldict']:
+                    if thispanel['paneldict']['narrow_xlim_daily'] == 'true':
+                        if len(t) > 1:
+                            axs[p].set_xlim(min(t), max(t))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) < 32:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
             else:
                 t = df['DATE-MID'] # dates
@@ -1218,8 +1221,10 @@ class AnalyzeTimeSeries:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="left", va="bottom",
-                    xytext=(100, -32), textcoords='offset points')
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    #xytext=(100, -32), 
+                    xytext=(0, -32), 
+                    textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
@@ -1580,7 +1585,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
             thispaneldict = {'ylabel': 'Temperatures (C)',
                              'title': 'CCD Controllers',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.30}
             controller1 = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
 
@@ -1588,7 +1593,7 @@ class AnalyzeTimeSeries:
             thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
                              'title': 'CCD Controllers',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.30}
             controller2 = {'panelvars': thispanelvars2,
                            'paneldict': thispaneldict2}
             panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
@@ -1671,14 +1676,14 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel2 = {'panelvars': thispanelvars2,
                         'paneldict': thispaneldict2}
 
@@ -1686,7 +1691,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict1, dict2] 
             thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
-                              'legend_frac_size': 0.25}
+                              'legend_frac_size': 0.30}
             hkpanel3 = {'panelvars': thispanelvars3,
                         'paneldict': thispaneldict3}
 
@@ -1694,7 +1699,7 @@ class AnalyzeTimeSeries:
             thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
                              'title': 'Ca H&K Spectrometer Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel4 = {'panelvars': thispanelvars4,
                         'paneldict': thispaneldict4}
 
@@ -1741,6 +1746,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.20}
@@ -1749,6 +1755,7 @@ class AnalyzeTimeSeries:
 
             thispanelvars2 = [dict3, dict4]
             thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
+                             'narrow_xlim_daily': 'true',
                              'title': 'Guiding',
                              'not_junk': 'true',
                              'on_sky': 'true', 
@@ -1763,6 +1770,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Seeing (arcsec)',
                              'yscale': 'log',
+                             'narrow_xlim_daily': 'true',
                              'title': 'Seeing',
                              'not_junk': 'true',
                              'on_sky': 'true', 
@@ -1776,6 +1784,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Angle (deg)',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.25}
@@ -1784,6 +1793,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'title': 'Separation of Sun and Moon from Target',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.25}
@@ -1802,6 +1812,18 @@ class AnalyzeTimeSeries:
                            'paneldict': thispaneldict}
             panel_arr = [drptagpanel]
 
+        elif plot_name=='drphash':
+            dict1 = {'col': 'DRPHASH', 'plot_type': 'state', 'plot_attr': {'label': 'Commit Hash', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'DRP Commit Hash',
+                             'title': 'KPF-Pipeline Commit Hash String',
+                             'not_junk': 'true',
+                             'nolegend': 'true',
+                             'legend_frac_size': 0.00}
+            drphashpanel = {'panelvars': thispanelvars,
+                            'paneldict': thispaneldict}
+            panel_arr = [drphashpanel]
+
         elif plot_name=='junk_status':
             dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
             thispanelvars = [dict1]
@@ -1817,17 +1839,33 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Data Present\n(1=True)',
+            thispaneldict = {'ylabel': 'L0 Data Present\n(1=True)',
                              'legend_frac_size': 0.10}
             data_present_panel = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Keywords Present\n(1=True)',
-                             'title': 'Quality Control - Data and Keywords Products Present',
+            thispaneldict = {'ylabel': 'L0 Keywords Present\n(1=True)',
+                             'title': 'Quality Control - L0 Data and Keywords Products Present',
                              'legend_frac_size': 0.10}
             keywords_present_panel = {'panelvars': thispanelvars,
                                       'paneldict': thispaneldict}
             panel_arr = [data_present_panel, keywords_present_panel]
+
+        elif plot_name=='qc_time_check':
+            dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
+            dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'L0 Time Check\n(1=True)',
+                             'legend_frac_size': 0.10}
+            time_check_l0_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'L2 Time Check\n(1=True)',
+                             'title': 'Quality Control - L0 and L2 Times Consistent',
+                             'legend_frac_size': 0.10}
+            time_check_l2_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            panel_arr = [time_check_l0_panel, time_check_l2_panel]
 
         elif plot_name=='qc_em':
             dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
@@ -1881,6 +1919,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'only_object': 'SoCal',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             socal_snr_panel = {'panelvars': thispanelvars,
@@ -1893,6 +1932,7 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
                              'only_object': 'SoCal',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             socal_fr_panel = {'panelvars': thispanelvars,
@@ -1908,6 +1948,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'on_sky': 'true', 
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             observing_snr_panel = {'panelvars': thispanelvars,
@@ -1920,6 +1961,7 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
                              'on_sky': 'true', 
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             observing_fr_panel = {'panelvars': thispanelvars,
@@ -1975,9 +2017,9 @@ class AnalyzeTimeSeries:
             dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
             thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
             thispaneldict3 = {
+                              'title': 'LFC, ThAr, & Etalon RVs',
                               'ylabel': r'Etalon RV (km/s)',
                               #'ylabel': r'Etalon $\Delta$RV (km/s)',
-                              'title': 'LFC, ThAr, & Etalon RVs',
                               #'subtractmedian': 'true',
                               'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
                               'not_junk': 'true',
@@ -1986,6 +2028,48 @@ class AnalyzeTimeSeries:
             etalon_rv_panel = {'panelvars': thispanelvars3,
                                'paneldict': thispaneldict3}
             panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
+
+        elif plot_name=='socal_rv':
+            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict7]
+            thispaneldict = {
+                             'ylabel': r'SoCal RV (km/s)',
+                             'title': 'SoCal RVs',
+                             'only_object': '["SoCal"]',
+                             'narrow_xlim_daily': 'true',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.28
+                             }
+            socal_rv_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict11, dict12, dict13, dict15, dict16, dict17]
+            thispaneldict = {
+                             'ylabel': r'SoCal $\Delta$RV (km/s)',
+                             'subtractmedian': 'true',
+                             'title': 'SoCal RVs',
+                             'only_object': '["SoCal"]',
+                             'narrow_xlim_daily': 'true',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.28
+                             }
+            socal_rv_panel2 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [socal_rv_panel,socal_rv_panel2]
 
         else:
             self.logger.error('plot_name not specified')
@@ -1998,7 +2082,8 @@ class AnalyzeTimeSeries:
 
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
                                  last_n_days=None,
-                                 fig_dir=None, show_plot=False):
+                                 fig_dir=None, show_plot=False, 
+                                 print_plot_names=False):
         """
         Generate all of the standard time series plots for the quicklook.  
         Depending on the value of the input 'interval', the plots have time ranges 
@@ -2010,11 +2095,48 @@ class AnalyzeTimeSeries:
             last_n_days (int) - overrides start_date and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
+            print_plot_names (boolean) - prints the names of possible plots and exits
 
         Returns:
             PNG plot in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        plots = { 
+            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   "desc": "Hallway temperature"},
+            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   "desc": "Vacuum chamber temperatures"},
+            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   "desc": "Vacuum chamber temperatures (by optical element)"},
+            "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
+            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
+            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
+            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCE read speed"},
+            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
+            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
+            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
+            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       "desc": "Etalon temperatures"},
+            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       "desc": "Hollow-cathode lamp temperatures"},
+            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       "desc": "SNR of flats"},
+            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems","desc": "Ca H&K Spectrometer temperatures"},
+            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems","desc": "Agatitator temperatures"},
+            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", "desc": "FIU Guiding performance of"},
+            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", "desc": "Seeing measurements for stars"},
+            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", "desc": "Target separation to Sun and Moon"},
+            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", "desc": "SNR of stellar spectra"},
+            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     "desc": "SNR of SoCal spectra"},
+            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        "desc": "RVs from SoCal spectra"}, 
+            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       "desc": "DRP Tag"},   
+            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       "desc": "DRP Hash"},   
+            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        "desc": "Quality control: junk status"}, 
+            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
+            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
+            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
+            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
+        }
+        if print_plot_names:
+            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
+            for p in plots:
+                print("    '" + plots[p]["plot_name"] + "': " + plots[p]["desc"])
+            return
+
         if (last_n_days != None) and (type(last_n_days) == type(1)):
             now = datetime.now()
             if last_n_days > 3:
@@ -2027,33 +2149,6 @@ class AnalyzeTimeSeries:
             self.logger.error("'start_date' must be a datetime object.")
             return        
         
-        plots = { 
-            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   },
-            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   },
-            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      },
-            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      },
-            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      },
-            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      },
-            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      },
-            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       },
-            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       },
-            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       },
-            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       },
-            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems",},
-            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems",},
-            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", },
-            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", },
-            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", },
-            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
-            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
-            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
-            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
-            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
-            "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
-            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        }, 
-        }
         for p in plots:
             plot_name = plots[p]["plot_name"]
             if interval == 'day':
