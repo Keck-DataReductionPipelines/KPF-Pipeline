@@ -40,15 +40,6 @@ def add_headers_dark_current_2D(D2, logger=None):
         FLXAMP2R - Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
         FLXCOLLR - Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
         FLXECHR  - Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
-        GDRXRMS  - x-coordinate RMS guiding error in milliarcsec (mas)
-        GDRYRMS  - y-coordinate RMS guiding error in milliarcsec (mas)
-        GDRRRMS  - r-coordinate RMS guiding error in milliarcsec (mas)
-        GDRXBIAS - x-coordinate bias guiding error in milliarcsec (mas)
-        GDRYBIAS - y-coordinate bias guiding error in milliarcsec (mas)
-        GDRSEEJZ - Seeing (arcsec) in J+Z-band from Moffat func fit
-        GDRSEEV  - Scaled seeing (arcsec) in V-band from J+Z-band
-        MOONSEP  - Separation between Moon and target star (deg)
-        SUNALT   - Altitude of Sun (deg)
 
     Args:
         D2 - a KPF 2D object 
@@ -166,10 +157,24 @@ def add_headers_guider(D2, logger=None):
                                            'x-coordinate bias guiding error [milliarcsec]')
         D2.header['PRIMARY']['GDRYBIAS'] = (round(myGuider.y_bias, 2),
                                            'y-coordinate bias guiding error [milliarcsec]')
+        D2.header['PRIMARY']['GDRFWMD']  = (round(myGuider.fwhm_mas_median, 1),
+                                           'Guider images: median(FWHM [mas])')
+        D2.header['PRIMARY']['GDRFWSTD'] = (round(myGuider.fwhm_mas_std, 1),
+                                           'Guider images: std(FWHM [mas])')
+        D2.header['PRIMARY']['GDRFXMD']  = (round(myGuider.flux_median, 1),
+                                           'Guider images: median(flux [ADU])')
+        D2.header['PRIMARY']['GDRFXSTD'] = (round(myGuider.flux_std, 1),
+                                           'Guider images: std(flux [ADU])')
+        D2.header['PRIMARY']['GDRPKMD']  = (round(myGuider.peak_flux_median, 1),
+                                           'Guider images: median(flux [ADU])')
+        D2.header['PRIMARY']['GDRPKSTD'] = (round(myGuider.peak_flux_std, 1),
+                                           'Guider images: std(flux [ADU])')
+        D2.header['PRIMARY']['GDRFRSAT'] = (round(myGuider.frac_saturated, 5),
+                                           'Guider images: frac of frames w/in 90% saturated')
     except Exception as e:
         logger.error(f"Problem with guider measurements: {e}\n{traceback.format_exc()}")
     try: 
-        D2.header['PRIMARY']['MOONSEP']  = (round(get_moon_sep(myGuider.date_mid, myGuider.ra, myGuider.dec), 1),
+        D2.header['PRIMARY']['MOONSEP']  = (round(get_moon_sep(myGuider.date_mid, myGuider.ra, myGuider.dec), 2),
                                            'Separation between Moon and target star [deg]')
     except Exception as e:
         logger.error(f"Problem with moon separation: {e}\n{traceback.format_exc()}")
@@ -226,27 +231,27 @@ def add_headers_exposure_meter(D2, logger=None):
     # Use the Analyze EM class to data products
     myEM = AnalyzeEM(D2, logger=logger)
     try: 
-        D2.header['PRIMARY']['SKYSCIMS'] = (myEM.SKY_SCI_main_spectrometer,
+        D2.header['PRIMARY']['SKYSCIMS'] = (round(myEM.SKY_SCI_main_spectrometer,10),
                                            'SKY/SCI flux ratio in main spectro. based on EM')
-        D2.header['PRIMARY']['EMSCCT48'] = (myEM.counts_SCI.sum(axis=0),
+        D2.header['PRIMARY']['EMSCCT48'] = (int(myEM.counts_SCI.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SCI in 445-870 nm')
-        D2.header['PRIMARY']['EMSCCT45'] = (myEM.counts_SCI_551m.sum(axis=0),
+        D2.header['PRIMARY']['EMSCCT45'] = (int(myEM.counts_SCI_551m.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SCI in 445-551 nm')
-        D2.header['PRIMARY']['EMSCCT56'] = (myEM.counts_SCI_551_658.sum(axis=0),
+        D2.header['PRIMARY']['EMSCCT56'] = (int(myEM.counts_SCI_551_658.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SCI in 551-658 nm')
-        D2.header['PRIMARY']['EMSCCT67'] = (myEM.counts_SCI_658_764.sum(axis=0),
+        D2.header['PRIMARY']['EMSCCT67'] = (int(myEM.counts_SCI_658_764.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SCI in 658-764 nm')
-        D2.header['PRIMARY']['EMSCCT78'] = (myEM.counts_SCI_764p.sum(axis=0),
+        D2.header['PRIMARY']['EMSCCT78'] = (int(myEM.counts_SCI_764p.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SCI in 764-870 nm')
-        D2.header['PRIMARY']['EMSKCT48'] = (myEM.counts_SKY.sum(axis=0),
+        D2.header['PRIMARY']['EMSKCT48'] = (int(myEM.counts_SKY.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SKY in 445-870 nm')
-        D2.header['PRIMARY']['EMSKCT45'] = (myEM.counts_SKY_551m.sum(axis=0),
+        D2.header['PRIMARY']['EMSKCT45'] = (int(myEM.counts_SKY_551m.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SKY in 445-551 nm')
-        D2.header['PRIMARY']['EMSKCT56'] = (myEM.counts_SKY_551_658.sum(axis=0),
+        D2.header['PRIMARY']['EMSKCT56'] = (int(myEM.counts_SKY_551_658.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SKY in 551-658 nm')
-        D2.header['PRIMARY']['EMSKCT67'] = (myEM.counts_SKY_658_764.sum(axis=0),
+        D2.header['PRIMARY']['EMSKCT67'] = (int(myEM.counts_SKY_658_764.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SKY in 658-764 nm')
-        D2.header['PRIMARY']['EMSKCT78'] = (myEM.counts_SKY_764p.sum(axis=0),
+        D2.header['PRIMARY']['EMSKCT78'] = (int(myEM.counts_SKY_764p.sum(axis=0)),
                                            'cumulative EM counts [ADU] in SKY in 764-870 nm')
 
     except Exception as e:
@@ -341,12 +346,15 @@ def add_headers_L1_SNR(L1, logger=None):
     return L1
 
 
-def add_headers_L1_order_ratios(L1, logger=None):
+def add_headers_L1_order_flux_ratios(L1, logger=None):
     """
     Computes the SNR of L1 spectra and adds keywords to the L1 object headers
     
     Keywords:
-        TBDTBDTB - comment
+        FR452652 - Peak flux ratio (452nm/652nm) - SCI2
+        FR548652 - Peak flux ratio (548nm/652nm) - SCI2
+        FR747652 - Peak flux ratio (747nm/652nm) - SCI2
+        FR852652 - Peak flux ratio (852nm/652nm) - SCI2
 
     Args:
         L1 - a KPF L1 object 
@@ -370,7 +378,7 @@ def add_headers_L1_order_ratios(L1, logger=None):
         
     # Use the AnalyzeL1 class to compute ratios between spectral orders
     myL1 = AnalyzeL1(L1, logger=logger)
-    myL1.measure_L1_snr(count_percentile=95, snr_percentile=95)
+    myL1.measure_L1_snr(counts_percentile=95, snr_percentile=95)
     for chip in chips:
         if chips == ['green', 'red']:
             try: 
@@ -391,7 +399,7 @@ def add_headers_L1_order_ratios(L1, logger=None):
     return L1
 
 
-def add_headers_orderlet_flux_ratios(L1, logger=None):
+def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     """
     Computes the orderlet flux ratios of L1 spectra and 
     adds keywords to the L1 object headers

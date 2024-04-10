@@ -27,8 +27,19 @@ from astropy.io import fits
 #fname_smooth_lamp = "kpf_20230804_smooth_lamp_made20230808_float32.fits"
 
 # Used to make smooth lamp pattern for 20230622 and before.
-fname_stack_average = "kpf_20230619_master_flat.fits"
-fname_smooth_lamp = "kpf_20230619_smooth_lamp_made20230817_float32.fits"
+#fname_stack_average = "kpf_20230619_master_flat.fits"
+#fname_smooth_lamp = "kpf_20230619_smooth_lamp_made20230817_float32.fits"
+
+# Used to make smooth lamp pattern for 20230919.
+#fname_stack_average = "kpf_20230919_master_flat.fits"
+#fname_smooth_lamp = "kpf_20230919_smooth_lamp_made20240105_float32.fits"
+
+# Used to make smooth lamp pattern for 20240211.
+fname_stack_average = "kpf_20240211_master_flat.fits"
+fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240212.fits"
+
+print("fname_stack_average =",fname_stack_average)
+print("fname_smooth_lamp =",fname_smooth_lamp)
 
 #hdul_order_mask = fits.open(fname_order_mask)
 hdul_stack_average = fits.open(fname_stack_average)

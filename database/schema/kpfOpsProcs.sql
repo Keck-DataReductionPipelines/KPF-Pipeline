@@ -349,3 +349,123 @@ create function registerReadNoise (
     end;
 
 $$ language plpgsql;
+
+
+-- Get the nearest-in-time-before-only calibration file
+-- for a given observation date, level, caltype, and object.
+-- The status of the calibration file must be greater than zero.
+--
+create function getCalFileBefore (
+    obsDate_         timestamp,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+)
+    returns setof record as $$
+
+    declare
+
+        cId_             integer;
+        caltype__        character varying(32);
+        object__         character varying(32);
+        filename_        character varying(255);
+        checksum_        character varying(32);
+        infobits_        integer;
+        startDate_       date;
+        r_               record;
+        minnframes_      smallint;
+
+    begin
+
+        minnframes_ := 5;
+        caltype__ := lower(caltype_);
+        object__ := lower(object_);
+
+        select cId, filename, checksum, infobits, startDate
+        into cId_, filename_, checksum_, infobits_, startDate_
+        from CalFiles
+        where status > 0
+        and level = level_
+        and caltype = caltype__
+        and object = object__
+        and ((nframes >= minnframes_) or (nframes is null))
+        and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
+        and cast(obsDate_ as timestamp without time zone) > startDate
+        and cast(obsDate_ as timestamp without time zone) - startDate <= maxage_
+        order by
+          startDate desc
+        limit 1;
+
+        if found then
+            select cId_, level_, caltype__, object__, filename_, checksum_, infobits_, startDate_ into r_;
+            return next r_;
+        end if;
+
+        return;  -- Required to indicate function is finished executing.
+
+    end;
+
+
+$$ language plpgsql;
+
+
+-- Get the nearest-in-time-after-only calibration file
+-- for a given observation date, level, caltype, and object.
+-- The status of the calibration file must be greater than zero.
+--
+create function getCalFileAfter (
+    obsDate_         timestamp,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+)
+    returns setof record as $$
+
+    declare
+
+        cId_             integer;
+        caltype__        character varying(32);
+        object__         character varying(32);
+        filename_        character varying(255);
+        checksum_        character varying(32);
+        infobits_        integer;
+        startDate_       date;
+        r_               record;
+        minnframes_      smallint;
+
+    begin
+
+        minnframes_ := 5;
+        caltype__ := lower(caltype_);
+        object__ := lower(object_);
+
+        select cId, filename, checksum, infobits, startDate
+        into cId_, filename_, checksum_, infobits_, startDate_
+        from CalFiles
+        where status > 0
+        and level = level_
+        and caltype = caltype__
+        and object = object__
+        and ((nframes >= minnframes_) or (nframes is null))
+        and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
+        and cast(obsDate_ as timestamp without time zone) < startDate
+        and startDate - cast(obsDate_ as timestamp without time zone) <= maxage_
+        order by
+          startDate asc
+        limit 1;
+
+        if found then
+            select cId_, level_, caltype__, object__, filename_, checksum_, infobits_, startDate_ into r_;
+            return next r_;
+        end if;
+
+        return;  -- Required to indicate function is finished executing.
+
+    end;
+
+
+$$ language plpgsql;

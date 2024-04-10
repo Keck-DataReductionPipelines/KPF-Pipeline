@@ -1,6 +1,7 @@
 # standard dependencies
 import configparser
 import numpy as np
+import pandas as pd
 import os
 from astropy import constants as cst, units as u
 import datetime
@@ -9,6 +10,7 @@ from modules.quicklook.src.analyze_wls import write_wls_json
 # pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.logger import start_logger
+from kpfpipe.models.level1 import KPF1
 
 # external dependencies
 from keckdrpframework.models.action import Action
@@ -16,7 +18,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # local dependencies
-from modules.wavelength_cal.src.alg import WaveCalibration, calcdrift_polysolution
+from modules.wavelength_cal.src.alg import WaveCalibration, WaveInterpolation, calcdrift_polysolution
 
 # global read-only variables
 DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
@@ -170,7 +172,11 @@ class WaveCalibrate(KPF1_Primitive):
                         # raise ValueError('Not a ThAr file!')
                     
                     if self.linelist_path is not None:
-                        peak_wavelengths_ang = np.load(self.linelist_path, allow_pickle=True).tolist()
+                        peak_wavelengths_ang = pd.read_csv(self.linelist_path,
+                                                           header=None,
+                                                           names=['wave', 'weight'],
+                                                           delim_whitespace=True)
+                        peak_wavelengths_ang = peak_wavelengths_ang.query('weight == 1')
                     else:
                         raise ValueError('ThAr run requires linelist_path')
 
@@ -192,7 +198,7 @@ class WaveCalibrate(KPF1_Primitive):
 
                 #### etalon ####    
                 elif self.cal_type == 'Etalon':
-                    if not self.l1_obj.header['PRIMARY']['CAL-OBJ'].startswith('Etalon'):
+                    if 'Etalon' not in self.l1_obj.header['PRIMARY']['CAL-OBJ']:
                         raise ValueError('Not an Etalon file!')
                     
                     peak_wavelengths_ang = None
@@ -301,6 +307,8 @@ class WaveCalibrate(KPF1_Primitive):
             file_name = wlpixelwavedir + self.cal_type + 'lines_' + \
                 self.file_name + "_" + '{}.npy'.format(output_ext)
             self.alg.save_wl_pixel_info(file_name,wls_and_pixels)
+        else:
+            file_name = None
             
         if output_ext != None:
             self.l1_obj[output_ext] = wl_soln
@@ -327,4 +335,77 @@ class WaveCalibrate(KPF1_Primitive):
 
         self.l1_obj[output_ext] = wl_soln
 
+
+class WaveInterpolate(KPF1_Primitive):
+    """
+    This module defines class `WaveInterpolate,` which inherits from `KPF1_Primitive` and provides methods 
+    to interpolate a wavelength solution between two bracketing calibrations in the recipe.
     
+    Args:
+        KPF1_Primitive: Parent class
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveInterpolate` event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+    
+    Attributes:
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`. Interpolated WLS will be injected into this object  assigned by `actions.args[0]`
+        wls1_filename (string): Input WLS prior to the observation, assigned by `actions.args[1]`
+        wls2_filename (string): Input WLS after the observation, assigned by `actions.args[2]`
+        wls_extensions (list): List of the WLS extensions, assigned by `actions.args[3]`
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger
+        alg (modules.wavelength_cal.src.alg.WaveInterpolate): Instance of `WaveInterpolate,` which has operation codes for wavelength interpolation.
+    """
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
+        """
+        WaveInterpolate constructor.
+        """ 
+        KPF1_Primitive.__init__(self, action, context)
+        
+        self.l1_obj = self.action.args[0]
+        self.wls1_filename = self.action.args[1]
+        self.wls2_filename = self.action.args[2]
+        self.wls_extensions = self.action.args[3]
+        self.config=configparser.ConfigParser()
+
+        try:
+            config_path=context.config_path['wavelength_interpolate']
+        except:
+            config_path = DEFAULT_CFG_PATH
+        self.config.read(config_path)
+
+        #Start logger
+        self.logger=start_logger(self.__class__.__name__,config_path)
+        if not self.logger:
+            self.logger=self.context.logger
+        self.logger.info('Loading config from: {}'.format(config_path))
+
+        l1_timestamp = self.l1_obj.header['PRIMARY']['DATE-BEG']
+        wls1_l1 = KPF1.from_fits(self.wls1_filename)
+        wls1_timestamp = wls1_l1.header['PRIMARY']['DATE-BEG']
+        wls2_l1 = KPF1.from_fits(self.wls2_filename)
+        wls2_timestamp = wls2_l1.header['PRIMARY']['DATE-BEG']
+        wls_timestamps = [wls1_timestamp, wls2_timestamp]
+
+        wls1_arrays = {}
+        wls2_arrays = {}
+        for ext in self.wls_extensions:
+            wls1_arrays[ext] = wls1_l1[ext]
+            wls2_arrays[ext] = wls2_l1[ext]
+
+        self.alg = WaveInterpolation(l1_timestamp, wls_timestamps, wls1_arrays, wls2_arrays)
+
+    def _perform(self) -> None: 
+        """
+        Primitive action - perform wavelength interpolation by calling method `wavelength_interpolate` from WaveInterpolate.
+        This method will update the input L1 object with the interpolated wavelength solition
+        
+        Returns:
+            Level 1 Data Object
+        """
+
+        new_wls_arrays = self.alg
+        for ext, wls in new_wls_arrays.items():
+            self.l1_obj[ext] = new_wls_arrays[ext]
+                            
+        return Arguments(self.l1_obj)
+            

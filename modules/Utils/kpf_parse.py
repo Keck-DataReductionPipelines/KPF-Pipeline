@@ -1,3 +1,4 @@
+import re
 from astropy.io import fits
 from datetime import datetime
 
@@ -216,6 +217,26 @@ def get_datecode(ObsID):
     return datecode
 
 
+def get_ObsID(file):
+    """
+    Returns an ObsID (like 'KP.20240113.23249.10') 
+    from a filename (like '/data/L1/20240113/KP.20240113.23249.10_L1.fits').
+    """
+    ObsID = file.split('/')[-1]
+    for substring in ['.fits', '_2D', '_L1', '_L2']:
+        ObsID = ObsID.replace(substring, '')
+    return ObsID
+
+
+def is_ObsID(ObsID):
+    """
+    Returns True of the input is a properly formatted ObsID, like 'KP.20240113.23249.10'.
+    """
+    pattern = r'^KP\.\d{8}\.\d{5}\.\d{2}$'
+    is_ObsID_bool = bool(re.match(pattern, ObsID))  
+    return is_ObsID_bool
+
+
 def get_data_products_L0(L0):
     """
     Returns a list of data products available in an L0 file, which are:
@@ -243,9 +264,9 @@ def get_data_products_L0(L0):
     if hasattr(L0, 'GUIDER_AVG'):
         if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
-#    if hasattr(L0, 'guider_avg'):
-#        if (L0['guider_avg'].size > 1):
-#            data_products.append('Guider')
+    elif hasattr(L0, 'guider_avg'): # Early KPF files used lower case guider_avg
+        if (L0['guider_avg'].size > 1):
+            data_products.append('Guider')
     if hasattr(L0, 'TELEMETRY'):
         if L0['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
@@ -282,9 +303,9 @@ def get_data_products_2D(D2):
     if hasattr(D2, 'GUIDER_AVG'):
         if (D2['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
-#    if hasattr(D2, 'guider_avg'):
-#        if (D2['guider_avg'].size > 1):
-#            data_products.append('Guider')
+    elif hasattr(D2, 'guider_avg'): # Early KPF files used lower case guider_avg
+        if (D2['guider_avg'].size > 1):
+            data_products.append('Guider')
     if hasattr(D2, 'TELEMETRY'):
         if D2['TELEMETRY'].size > 1:
             data_products.append('Telemetry')

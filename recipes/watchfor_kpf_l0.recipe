@@ -76,8 +76,8 @@ lev0_ffi_exts_subbed = lev0_ffi_ext_red + lev0_ffi_ext_green + lev0_ffi_ext_cahk
 lev0_ffi_exts_full = config.WATCHFOR_L0.lev0_ffi_exts_full
 actual_dir = config.WATCHFOR_L0.actual_dir
 
+# Exposure Quality Control (not regular QC)
 do_quality_control = True
- 
 if do_quality_control:
 
     for l0_filename in file_list:
@@ -105,10 +105,11 @@ for raw_file_path in file_list:
         # read file
         l0 = kpf0_from_fits(raw_file_path, data_type)
 
-        # Quality Control - L0 level
+        # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
         kpf_object = l0
-        invoke_subrecipe("./recipes/qc_tests.subrecipe")
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
         l0 = kpf_object
 
         # compute red-chip ffi
@@ -148,56 +149,45 @@ for raw_file_path in file_list:
 
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
 
+        # why isn't twod saved?  It it an extension?  Does it have an extension added?
         twod = flat_applied
         for bpm in bad_pixel_masks:
             pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
             twod = pixels_masked
 
-        # Diagnostics: measure dark current for dark images and write to header
-        exit_code, new2D = DiagnosticsFramework('2D', flat_applied, 'add_headers_dark_current_2D')
-        if exit_code == 1:  # only wave the results if exit_code = 1 (dark current is only computed for Darks)
-            flat_applied = new2D
-            
-        # Quality Control
-        data_level_str = '2D'
+        # Diagnostics & Quality Control - 2D level
         kpf_object = flat_applied
-        invoke_subrecipe("./recipes/qc_tests.subrecipe")
+        data_level_str = '2D'
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
         flat_applied = kpf_object
-        
+      
         # Write file
         recipe_complete = to_fits(flat_applied, output_file_name)
 
-
         # Query database for QC information and update header of 2D FITS file.
-
         rid = quality_control_rid
         verbose = config.WATCHFOR_L0.verbose
 
         do_query_l0_file = True
-
         if do_query_l0_file:
             if rid > 0:
-
                 do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
                                                                     rid,
                                                                     output_file_name,
                                                                     verbose)
 
         do_read_noise = True
-
         if do_read_noise:
             if rid > 0:
-
                 read_noise_exit_code = ReadNoiseFramework(data_type,
                                                           raw_file_path,
                                                           n_sigma_read_noise,
                                                           rid)
 
         do_var_exts = True
-
         if do_var_exts:
             if rid > 0:
-
                 var_exts_exit_code = VarExtsFramework(data_type,
                                                       raw_file_path,
                                                       masterbias_path,

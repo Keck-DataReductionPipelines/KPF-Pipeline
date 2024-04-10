@@ -2,13 +2,18 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from PIL import Image
+from astropy.time import Time
+from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.utils import DummyLogger
+from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime
+from scipy.optimize import curve_fit
 #import emcee
 #import corner
 
@@ -24,7 +29,7 @@ class Analyze2D:
     Attributes:
         header - header of input 2D file
         name - name of source (e.g., 'Bias', 'Etalon', '185144')
-        ObsID - observation  ID (e.g. 'KP.20230704.02326.27'')
+        ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         exptime - exposure time (sec)
         green_dark_current_regions - dictionary specifying the regions where 
                                      dark current is measured on the Green CCD
@@ -62,17 +67,38 @@ class Analyze2D:
 
     def measure_2D_dark_current(self, chip=None):
         """
-        ADD DESCRIPTION
+        This method measures the dark current (flux/hr) in 10 regions on either
+        the green or red CCD.  The regions were chosen so to be sensitive to 
+        apparent dark current from the ion pumps (ech and coll), six reference
+        regions (ref1-ref6), and areas near the chip edges with significant 
+        amplifier glow (amp1 and amp2).
         
         Args:
+            chip (string) - 'green' or 'red'
 
-        Attributes:
+        Attributes (set by this method):
+            green_dark_current_regions - dictionary specifying the regions where 
+                                         dark current [e-/hr] is measured on the Green CCD
+            red_dark_current_regions - dictionary specifying the regions where 
+                                       dark current [e-/hr] is measured on the Red CCD
+            green_coll_pressure_torr - ion pump pressure (Green CCD, collimator side)
+            green_ech_pressure_torr  - ion pump pressure (Green CCD, echelle side)
+            green_coll_current_a     - ion pump current (Green CCD, collimator side)
+            green_ech_current_a      - ion pump current (Green CCD, echelle side)
+            red_coll_pressure_torr   - ion pump pressure (Red CCD, collimator side)
+            red_ech_pressure_torr    - ion pump pressure (Red CCD, echelle side)
+            red_coll_current_a       - ion pump current (Red CCD, collimator side)
+            red_ech_current_a        - ion pump current (Red CCD, echelle side)
 
         Returns:
             None
         """
         D2 = self.D2
         self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        if not self.exptime > 1:
+            exptime_hr = 1/3600 
+        else:
+            exptime_hr = self.exptime/3600
 
         # Read telemetry
         #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
@@ -97,14 +123,13 @@ class Analyze2D:
                'coll': {'name': 'Ion Pump (Collimator side)', 'x1': 3700, 'x2': 4000, 'y1':  700, 'y2': 1000, 'short':'coll', 'med_elec':0, 'label':''},
                'ech':  {'name': 'Ion Pump (Echelle side)',    'x1': 3700, 'x2': 4000, 'y1': 3080, 'y2': 3380, 'short':'ech',  'med_elec':0, 'label':''}
               }
-#       to-do: fix commented-out code below
-        if (chip.lower() == 'green'): #and ('GREEN_CCD' in D2):
+        if (chip.lower() == 'green'): 
             frame = np.array(D2['GREEN_CCD'].data)
             self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
             self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
             self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
             self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
-        if (chip.lower() == 'red'): #and ('RED_CCD' in D2):
+        if (chip.lower() == 'red'): 
             frame = np.array(D2['RED_CCD'].data)
             self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
             self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
@@ -113,14 +138,85 @@ class Analyze2D:
 
         for r in reg.keys():
             current_region = frame[reg[r]['y1']:reg[r]['y2'], reg[r]['x1']:reg[r]['x2']]
-            reg[r]['med_elec'] = np.median(current_region)
+            reg[r]['med_elec'] = np.median(current_region)/exptime_hr
         if chip == 'green':
             self.green_dark_current_regions = reg
         if chip == 'red':
             self.red_dark_current_regions = reg
 
 
+    def fit_double_gaussian_cdf(self, ngaussians=1, chip=None):
+        """
+        This method fits the cumulative distribution of intensity values with a 
+        function that is the cumulative distribution of the sum of one or two 
+        Gaussians with the same center. The current implementation is slow.
+        
+        Args:
+            ngaussians - 1 (default) or 2
+            chip (string) - 'green' or 'red'
+
+#        Attributes (set by this method):
+#            green_dark_current_regions - dictionary specifying the regions where 
+
+        Returns:
+            None
+        """
+
+        def one_gaussian_cdf(x, mu1, sigma1):
+            return norm.cdf(x, mu1, sigma1) 
+
+        def two_gaussian_cdfs(x, mu1, sigma1, A1, sigma2):
+            return A1 * norm.cdf(x, mu1, sigma1) + (1-A1) * norm.cdf(x, mu1, sigma2)
+
+#        def one_gaussian_cdf(x, mu1, sigma1, A1):
+#            return A1 * norm.cdf(x, mu1, sigma1) 
+#
+#        def two_gaussian_cdfs(x, mu1, sigma1, A1, mu2, sigma2, A2):
+#            return A1 * norm.cdf(x, mu1, sigma1) + A2 * norm.cdf(x, mu2, sigma2)
+#
+#        def one_gaussian_cdf(x, mu1, sigma1):
+#            return norm.cdf(x, mu1, sigma1) 
+#
+#        def two_gaussian_cdfs(x, mu1, sigma1, sigma2):
+#            return norm.cdf(x, mu1, sigma1) + norm.cdf(x, mu1, sigma2)
+
+        D2 = self.D2
+        if (chip.lower() == 'green'): 
+            image = np.array(D2['GREEN_CCD'].data)
+        if (chip.lower() == 'red'): 
+            image = np.array(D2['RED_CCD'].data)
+        intensities = image.flatten()
+        intensities.sort()
+        cdf = np.arange(len(intensities)) / float(len(intensities))
+
+
+        # Define the new points where you want to sample the CDF
+        ndownsample = 1000
+        new_points = np.linspace(0, len(intensities) - 1, ndownsample, dtype=int)
+        
+        # Interpolate the CDF at these new points
+        # Since we are dealing with indices here, we can use simple array indexing rather than interpolation
+        downsampled_cdf = cdf[new_points]
+        downsampled_intensities = intensities[new_points]
+        
+        #intensities = downsampled_intensities
+        #downsampled_cdf = cdf
+
+        #initial_params_1g = [np.mean(intensities), np.std(intensities), 1]
+        initial_params_1g = [np.mean(intensities), np.std(intensities)]
+        params_1g, _ = curve_fit(one_gaussian_cdf, intensities, cdf, p0=initial_params_1g)
+        print(params_1g)
+        
+        initial_params_2g = [params_1g[0], params_1g[1], 1, 3*params_1g[1]]
+        #initial_params_2g = [params_1g[0], params_1g[1], params_1g[2], params_1g[0], 3*params_1g[1], 0.001]
+        #initial_params_2g = [params_1g[0], params_1g[1], 2*params_1g[1]]
+        #bounds = ([-np.inf,np.inf],[-np.inf,np.inf],[],[])
+        params_2g, _ = curve_fit(two_gaussian_cdfs, intensities, cdf, p0=initial_params_2g)#, bounds=bounds)
+        print(params_2g)
+
+
     def plot_2D_image(self, chip=None, overplot_dark_current=False, blur_size=None, 
+                            subtract_master_bias=False,
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -129,6 +225,11 @@ class Analyze2D:
         Args:
             chip (string) - "green" or "red"
             overlay_dark_current - if True, dark current measurements are over-plotted
+            subtract_master_bias - if not False, a master bias will be subtracted'
+                                   if 'auto', then the path to the master bias is 
+                                   the value from the BIASFILE keyword
+                                   if his parameter is set to a path, that file 
+                                   will be used 
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -137,7 +238,6 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
-        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -235,7 +335,15 @@ class Analyze2D:
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')
             plt.text(2040, 3970, 'Echelle Side',                       size=14, rotation= 0, ha='center', color='white')
-        
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -35), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -244,6 +352,87 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+# AWH will fix up this code at some point
+# to make a 1:1 pixel relationship
+#    def plot_2D_image_test(self, chip=None, overplot_dark_current=False, blur_size=None, 
+#                            fig_path=None, show_plot=False):
+#        """
+#        Generate a plot of a 2D image.  Overlay measurements of 
+#        dark current or bias measurements in preset regions, if commanded.
+#        
+#        Args:
+#            chip (string) - "green" or "red"
+#            overplot_dark_current - if True, dark current measurements are over-plotted
+#            fig_path (string) - set to the path for the file to be generated.
+#            show_plot (boolean) - show the plot in the current environment.
+#
+#        Returns:
+#            PNG plot in fig_path or shows the plot it in the current environment 
+#            (e.g., in a Jupyter Notebook).
+#
+#        """
+#
+#        # Set parameters based on the chip selected
+#        if chip == 'green' or chip == 'red':
+#            if chip == 'green':
+#                CHIP = 'GREEN'
+#                chip_title = 'Green'
+#                if overplot_dark_current:
+#                    reg = self.green_dark_current_regions
+#                    coll_pressure_torr = self.green_coll_pressure_torr
+#                    ech_pressure_torr = self.green_ech_pressure_torr
+#                    coll_current_a = self.green_coll_current_a
+#                    ech_current_a = self.green_ech_current_a
+#            if chip == 'red':
+#                CHIP = 'RED'
+#                chip_title = 'Red'
+#                if overplot_dark_current:
+#                    reg = self.red_dark_current_regions
+#                    coll_pressure_torr = self.red_coll_pressure_torr
+#                    ech_pressure_torr = self.red_ech_pressure_torr
+#                    coll_current_a = self.red_coll_current_a
+#                    ech_current_a = self.red_ech_current_a
+#            image = np.array(self.D2[CHIP + '_CCD'].data)
+#        else:
+#            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+#            return
+#            
+#        if blur_size != None:
+#            from scipy import ndimage
+#            image = ndimage.median_filter(image, size=blur_size)
+#
+#        # Assuming image is a numpy array of shape (4080, 4080)
+#        dpi = 100  # Set the DPI to 100, so the number of inches equals the number of pixels divided by DPI
+#        figsize = image.shape[1] / dpi, image.shape[0] / dpi  # Calculate the figure size in inches
+#        
+#        # Create a figure with the exact size and DPI
+#        fig = plt.figure(figsize=figsize, dpi=dpi, frameon=False)
+#        
+#        # Add an axis at position [left, bottom, width, height] where all quantities are in fractions of figure width and height
+#        ax = fig.add_axes([0, 0, 1, 1])
+#        
+#        # Hide the axes
+#        ax.axis('off')
+#        
+#        # Display the image
+#        im = ax.imshow(image, vmin = np.nanpercentile(image[100:-100,100:-100],0.1), 
+#                               vmax = np.nanpercentile(image[100:-100,100:-100],99), 
+#                               interpolation = 'None', 
+#                               origin = 'lower', 
+#                               cmap='viridis',
+#                               aspect='equal')
+#
+#        # ... (rest of your plotting code, e.g., overplot_dark_current)
+#
+#        # Display the plot
+#        if fig_path is not None:
+#            t0 = time.process_time()
+#            plt.savefig(fig_path, dpi=dpi, bbox_inches='tight', pad_inches=0, facecolor='w')
+#            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+#        if show_plot:
+#            plt.show()
+#        plt.close('all')
 
 
     def plot_2D_image_zoom(self, chip=None, fig_path=None, show_plot=False, 
@@ -262,7 +451,6 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
-        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -311,7 +499,6 @@ class Analyze2D:
         Generate a 3x3 array zoom-in plots of the a 2D image.  
 
         Args:
-            zoom_coords - coordinates for zoom (xmin, ymin, xmax, ymax)
             chip (string) - "green" or "red"
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -321,7 +508,6 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
-        import matplotlib.pyplot as plt
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -352,11 +538,6 @@ class Analyze2D:
                 start_x = center_x - size // 2 + offsets[i]
                 start_y = center_y - size // 2 + offsets[j]
 
-                ## Check if the start coordinates are out of image boundaries
-                #if start_x < 0 or start_y < 0 or start_x+size > image.shape[0] or start_y+size > image.shape[1]:
-                #    print(f"Sub-image at offset ({offsets[i]}, {offsets[j]}) is out of image boundaries")
-                #    continue
-
                 # Slice out and display the sub-image
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
                 im = axs[2-i, j].imshow(sub_img, origin='lower', 
@@ -372,7 +553,6 @@ class Analyze2D:
                 if j != 0:
                     axs[i, j].tick_params(labelleft=False) # turn off y tick labels
                 fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
-                #axs[2-i, j].set_xlabel('i,j = ' + str(i) + ','+str(j) + ' -- ' + str(start_x) + ', ' + str(start_y), fontsize=10)
         plt.grid(False)
         plt.tight_layout()
         plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
@@ -383,10 +563,136 @@ class Analyze2D:
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
         ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
             plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+
+    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False):
+        """
+        Overlay the order trace on the 2D image in a 3x3 array of zoom-in plots.  
+
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment 
+            (e.g., in a Jupyter Notebook).
+        """
+        
+        # Set parameters based on the chip selected
+        obs_date = Time(self.header['DATE-MID'])
+        service_mission_date1 = Time('2024-02-03', format='iso', scale='utc')
+        if chip == 'green' or chip == 'red':
+            if chip == 'green':
+                CHIP = 'GREEN'
+                chip_title = 'Green'
+                if obs_date < service_mission_date1:
+                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                else:
+                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
+                width  = 200
+                height = 200
+                start_x_arr = [ 500, 1500,  500, 1500]
+                start_y_arr = [1562, 1563,  615,  623]
+            if chip == 'red':
+                CHIP = 'RED'
+                chip_title = 'Red'
+                if obs_date < service_mission_date1:
+                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                else:
+                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
+                width  = 200
+                height = 200
+                start_x_arr = [ 500, 1500,  500, 1500]
+                start_y_arr = [1538, 1538,  545,  550]
+            image = np.array(self.D2[CHIP + '_CCD'].data)
+            order_trace_master = pd.read_csv(order_trace_master_file)
+        else:
+            self.logger.info('chip not supplied.  Exiting plot_2D_image')
+            return
+                
+        # Generate the array of 2D images
+        fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
+        for i in range(2):
+            for j in range(2):
+                # Calculate the top left corner of each sub-image
+                start_x = start_x_arr[2*i+j]
+                start_y = start_y_arr[2*i+j]
+
+                # Slice out and display the sub-image
+                sub_img = image[start_y:start_y+height, start_x:start_x+width]
+                im = axs[i, j].imshow(sub_img, origin='lower', 
+                                 extent=[start_x, start_x+width, start_y, start_y+height], # these indices appear backwards, but work
+                                 vmin = np.nanpercentile(sub_img,0.1), 
+                                 vmax = np.nanpercentile(sub_img,99.9),
+                                 interpolation = 'None',
+                                 cmap='viridis')
+                axs[i, j].set_xlim(start_x, start_x+width)
+                axs[i, j].set_ylim(start_y, start_y+height)
+                # Overplot order trace
+                for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
+                    x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
+                                                order_trace_master.iloc[o]['X2'], 
+                                                int(order_trace_master.iloc[o]['X2']-order_trace_master.iloc[o]['X1']))
+                    x_grid_master = x_grid_master[x_grid_master >= start_x]
+                    x_grid_master = x_grid_master[x_grid_master <= start_x+width]
+                    y_grid_master = order_trace_master.iloc[o]['Coeff0'] + \
+                                    order_trace_master.iloc[o]['Coeff1'] * x_grid_master + \
+                                    order_trace_master.iloc[o]['Coeff2'] * x_grid_master**2 + \
+                                    order_trace_master.iloc[o]['Coeff3'] * x_grid_master**3         
+                    axs[i, j].plot(x_grid_master, y_grid_master,                                          color='red',   linewidth=1.2, linestyle='--')
+                    axs[i, j].plot(x_grid_master, y_grid_master-order_trace_master.iloc[o]['BottomEdge'], color='white', linewidth=1.2, linestyle='--', alpha=1)
+                    axs[i, j].plot(x_grid_master, y_grid_master+order_trace_master.iloc[o]['TopEdge'],    color='white', linewidth=1.2, linestyle='--', alpha=1)                
+                
+                axs[i, j].grid(False)
+                axs[i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
+                axs[i, j].tick_params(axis='x', labelsize=14)
+                axs[i, j].tick_params(axis='y', labelsize=14)
+                cbar = fig.colorbar(im, ax=axs[i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
+                cbar.ax.tick_params(labelsize=12)
+
+        plt.grid(False)
+#        plt.tight_layout()
+        #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title('Order Trace - ' + chip_title + ' CCD: ' + str(self.ObsID), fontsize=24)
+        ax.set_xlabel('Column (pixel number)', fontsize=24, labelpad=20)
+        ax.set_ylabel('Row (pixel number)', fontsize=24, labelpad=25)
+
+        # Annotations
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="right", va="bottom",
+                    xytext=(-50, -150), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+        plt.annotate('Trace = ' + order_trace_master_file, xy=(0, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="left", va="bottom",
+                    xytext=(50, -150), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=400, facecolor='w')
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
@@ -407,7 +713,6 @@ class Analyze2D:
 
         """
 
-        image = np.array(self.D2[CHIP + '_CCD'].data)
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN_CCD'
@@ -415,6 +720,7 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED_CCD'
                 chip_title = 'Red'
+        image = np.array(self.D2[CHIP].data)
 
         histmin = -40
         histmax = 40
@@ -498,6 +804,14 @@ class Analyze2D:
         plt.xlabel('Counts (e-)', fontsize=14)
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
+ 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -580,6 +894,14 @@ class Analyze2D:
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -619,8 +941,7 @@ class Analyze2D:
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
         else:
-            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-            print('chip not supplied.  Exiting plot_2D_image')
+            self.logger.info(f'chip not supplied. Exiting plot_2D_image_histogram()')
             return
 
         plt.figure(figsize=(8,5), tight_layout=True)
@@ -649,6 +970,14 @@ class Analyze2D:
         plt.yticks(fontsize=14)
         plt.yscale('log')
         plt.legend(loc='lower right', fontsize=11)
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
         
         # Display the plot
         if fig_path != None:
@@ -663,7 +992,8 @@ class Analyze2D:
     def plot_2D_column_cut(self, chip=None, fig_path=None, show_plot=False,
                            column_brightness_percentile=50, saturation_limit_2d=240000):
         """
-        Add description
+        Create a plot of cuts through columns corresponding to the 10th, 50th, and 90th
+        percentiles for total flux
 
         Args:
             chip (string) - "green" or "red"
@@ -731,13 +1061,20 @@ class Analyze2D:
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.xlim(0, len(column_sum))
-#        plt.ylim(1,1.2*np.nanmax(image[:,which_column]))
         if log_plot:
             plt.yscale('log')
             y_lim = plt.ylim()
             plt.ylim(0.9, y_lim[1])
-        plt.legend( fontsize=12)
-                
+        plt.legend( fontsize=12)    
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -745,4 +1082,136 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
+        plt.close('all')
+
+
+class Analyze2D_2files:
+    """
+    This class contains functions to analyze 2D images (storing them
+    as attributes) and functions to plot the results.
+    Some of the functions need to be filled in
+
+    Arguments:
+        D2a - first 2D object
+        D2b - second 2D object
+
+    Attributes:
+        header_a - header of D2a
+        header_b - header of D2b
+        name_a - name of source (e.g., 'Bias', 'Etalon', '185144') of D2a
+        name_b - name of source (e.g., 'Bias', 'Etalon', '185144') of D2b
+        ObsID_a - observation  ID (e.g. 'KP.20230704.02326.27') of D2a
+        ObsID_b - observation  ID (e.g. 'KP.20230704.02326.27') of D2b
+    """
+
+    def __init__(self, D2a, D2b, logger=None):
+        self.logger = logger if logger is not None else DummyLogger()
+        self.D2a = D2a 
+        self.D2b = D2b
+        primary_header_a = HeaderParse(D2a, 'PRIMARY')
+        primary_header_b = HeaderParse(D2b, 'PRIMARY')
+        self.header_a = primary_header_a.header
+        self.header_b = primary_header_b.header
+        self.name_a = primary_header_a.get_name()
+        self.name_b = primary_header_b.get_name()
+        self.ObsID_a = primary_header_a.get_obsid()
+        self.ObsID_b = primary_header_b.get_obsid()
+
+    def plot_2D_image_blink(self, chip=None, fig_path=None, zoom_coords=None, oversampling_factor=10):
+        """
+        Generate an animated GIF that blinks back and forth between the two CCD 
+        images in the 2D objects.  The color bar will be scaled base on the 
+        dynamic range of the first image.
+        
+        Args:
+            chip (string) - "green" or "red"
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+            zoom_coords (tuple) - None or tuple of coordinates (x0, y0, x1, y1) 
+            	                  for a zoomed-in plot
+            oversampling_factor (int) - the dimensions of the final plot will 
+                                        be oversampled by this factor compared
+                                        to the pixels in zoom_coords
+
+        Returns:
+            Animated GIF image in fig_path
+        
+        Example:
+            ObsID1 = 'KP.20240131.01126.61' # flat
+            ObsID2 = 'KP.20240131.18680.85' # wideflat - f/4
+            D2_file1 = '/data/2D/' + get_datecode(ObsID1) + '/' + ObsID1 + '_2D.fits'
+            D2_file2 = '/data/2D/' + get_datecode(ObsID2) + '/' + ObsID2 + '_2D.fits'
+            D2_1 = KPF0.from_fits(D2_file1)
+            D2_2 = KPF0.from_fits(D2_file2)
+            myD2 = Analyze2D_2files(D2_1, D2_2)
+            myD2.plot_2D_image_blink(chip='green', fig_path=ObsID1 + '_' + ObsID2 + '_blink.gif')
+            myD2.plot_2D_image_blink(chip='green', zoom_coords=(1640, 1640, 2440, 2440), fig_path=ObsID1 + '_' + ObsID2 + '_zoom_blink.gif')
+        """
+            
+        def update(frame):
+            if frame % 2 == 0:
+                im.set_array(image_a)
+            else:
+                im.set_array(image_b)
+            return [im]
+  
+        # Set parameters based on the chip selected
+        if chip == 'green' or chip == 'red':
+            if chip == 'green':
+                CHIP = 'GREEN'
+                chip_title = 'Green'
+            if chip == 'red':
+                CHIP = 'RED'
+                chip_title = 'Red'
+        else:
+            self.logger.debug('chip not supplied.  Exiting plot_2D_image_blink')
+            return
+
+        image_a = np.array(self.D2a[CHIP + '_CCD'].data)
+        image_b = np.array(self.D2b[CHIP + '_CCD'].data)
+        
+        if zoom_coords != None:
+            x0 = zoom_coords[0]
+            y0 = zoom_coords[1]
+            x1 = zoom_coords[2]
+            y1 = zoom_coords[3]
+            image_a = image_a[y0:y1, x0:x1] 
+            image_b = image_b[y0:y1, x0:x1]
+            vmin = np.nanpercentile(image_a,0.1)
+            vmax = np.nanpercentile(image_a,99)
+            figsize = (int(abs(x1-x0)*oversampling_factor/72), 
+                       int(abs(y1-y0)*oversampling_factor/72))
+        else:
+            vmin = np.nanpercentile(image_a[100:-100,100:-100],0.1)
+            vmax = np.nanpercentile(image_a[100:-100,100:-100],99)
+            figsize = ( int(4100/72), int(4100/72) )
+
+        # Generate 2D image
+        fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+        im = ax.imshow(image_a, vmin = vmin, 
+                                vmax = vmax, 
+                                interpolation = 'None', 
+                                origin = 'lower', 
+                                cmap='viridis', 
+                                animated=True)
+        
+        ax.grid(False)
+        
+        ani = FuncAnimation(fig, update, frames=range(20), blit=True)
+        frames = []
+        for i in range(2):
+            update(i)
+            frame = Image.fromarray((im.make_image(renderer=fig.canvas.get_renderer())[0]).astype(np.uint8))
+            frames.append(frame)
+
+        if fig_path != None:
+            frames[0].save(
+                fig_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=2000,  # duration between frames in milliseconds
+                loop=0,  # loop=0 for infinite loop
+                facecolor='w'
+            )
+            self.logger.info(f'GIF saved to {fig_path}')
         plt.close('all')
