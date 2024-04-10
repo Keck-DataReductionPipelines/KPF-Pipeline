@@ -2,6 +2,7 @@ import os
 import time
 import glob
 import copy
+import json
 import sqlite3
 import calendar
 import numpy as np
@@ -46,6 +47,7 @@ class AnalyzeTimeSeries:
         L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
         L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
+        L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
 
     Related Commandline Scripts:
         'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
@@ -53,14 +55,15 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Add database for masters (separate from ObsIDs?)
+        * Add git hash to database and plotting (in addition to git tag).
+        * Write method to return plots in plot_all_quicklook
         * Check if the plot doesn't have data and don't generate if so
-        * Ingest RVs
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
         * Check for proper data types (float vs. str) before plotting
         * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
-        * Add standard plots for diagnostics
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * Add histogram plots, e.g. for DRPTAG
@@ -82,11 +85,12 @@ class AnalyzeTimeSeries:
         self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
-        self.L0_keyword_types   = self.get_keyword_types(level='L0')
-        self.D2_keyword_types   = self.get_keyword_types(level='2D')
-        self.L1_keyword_types   = self.get_keyword_types(level='L1')
-        self.L2_keyword_types   = self.get_keyword_types(level='L2')
-        self.L0_telemetry_types = self.get_keyword_types(level='L0_telemetry')
+        self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
+        self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
+        self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
+        self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         
         if drop:
             self.drop_table()
@@ -113,12 +117,13 @@ class AnalyzeTimeSeries:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
-        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_keyword_types.items()]
-        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_keyword_types.items()]
-        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_keyword_types.items()]
-        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_keyword_types.items()]
+        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns
+        L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -160,12 +165,10 @@ class AnalyzeTimeSeries:
             dir_path for dir_path in sorted_dir_paths
             if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
-        #t1 = tqdm_notebook(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
         for dir_path in t1:
             t1.set_description(dir_path.split('/')[-1])
             t1.refresh() 
-            #t2 = tqdm_notebook(os.listdir(dir_path), desc=f'Files', leave=False)
             t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
             batch = []
             for L0_filename in t2:
@@ -237,13 +240,20 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
-            D2_header_data = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
-            L1_header_data = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
-            L2_header_data = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
-            L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types) 
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
-            header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+            header_data = {**L0_header_data, 
+                           **D2_header_data, 
+                           **L1_header_data, 
+                           **L2_header_data, 
+                           **L2_RV_header_data, 
+                           **L0_telemetry
+                          }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
             header_data['L0_filename'] = L0_filename
@@ -291,10 +301,11 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_keyword_types)   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_keyword_types)   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_keyword_types)   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_keyword_types)   
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
                 header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
@@ -325,14 +336,14 @@ class AnalyzeTimeSeries:
             conn.close()
 
 
-    def extract_kwd(self, file_path, keyword_types):
+    def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
         """
         header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
             with fits.open(file_path, memmap=True) as hdul:
-                header = hdul[0].header
+                header = hdul[extension].header
                 # Use set intersection to find common keys
                 common_keys = set(header.keys()) & header_data.keys()
                 for key in common_keys:
@@ -474,6 +485,8 @@ class AnalyzeTimeSeries:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
+        TO-DO: should this method just call display_dataframe_from_db()?
+        
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
         particular object name(s).  The query can also be restricted to observations 
@@ -560,8 +573,11 @@ class AnalyzeTimeSeries:
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
-            only_object = [f"OBJECT = '{only_object}'"]
-            or_objects = ' OR '.join(only_object)
+            only_object = convert_to_list_if_array(only_object)
+            if isinstance(only_object, str):
+                only_object = [only_object]
+            object_queries = [f"OBJECT = '{obj}'" for obj in only_object]
+            or_objects = ' OR '.join(object_queries)
             where_queries.append(f'({or_objects})')
         if object_like is not None: 
             object_like = [f"OBJECT LIKE '%{object_like}%'"]
@@ -614,9 +630,21 @@ class AnalyzeTimeSeries:
         Returns a dictionary of the data types for keywords at the L0/2D/L1/L2 or 
         L0_telemetry level.
         """
+        
+        # L0 PRIMARY header    
         if level == 'L0':
             keyword_types = {
-                'DATE-MID': 'datetime',
+                'DATE-MID': 'datetime', # Halfway point of the exposure, unweighted
+                'DATE-BEG': 'datetime', # Start of exposure from kpfexpose       
+                'DATE-END': 'datetime', # End of exposure from kpfexpose.ENDTIME 
+                'GRDATE-B': 'datetime', # Shutter-open time Kwd green DATE-BEG   
+                'GRDATE-E': 'datetime', # Shutter-close time Kwd green DATE-END  
+                'RDDATE-B': 'datetime', # Shutter-open time Kwd red DATE-BEG     
+                'RDDATE-E': 'datetime', # Shutter-close time Kwd red DATE-END    
+                'EMDATE-B': 'datetime', # Date-Beg of first observation Kwd expmeter
+                'EMDATE-E': 'datetime', # Date-End of last observation Kwd expmeter 
+                'GCDATE-B': 'datetime', # sequence begin Kwd guide DATE-BEG         
+                'GCDATE-E': 'datetime', # sequence end Kwd guide DATE-END           
                 'MJD-OBS':  'float',
                 'EXPTIME':  'float',
                 'ELAPSED':  'float',
@@ -641,23 +669,26 @@ class AnalyzeTimeSeries:
                 'SCI-OBJ':  'string',
                 'AGITSTA':  'string',
                 'FIUMODE':  'string', # FIU operating mode - 'Observing' = on-sky
-                'ETAV1C1T': 'float', # Etalon Vescent 1 Channel 1 temperature
-                'ETAV1C2T': 'float', # Etalon Vescent 1 Channel 2 temperature
-                'ETAV1C3T': 'float', # Etalon Vescent 1 Channel 3 temperature
-                'ETAV1C4T': 'float', # Etalon Vescent 1 Channel 4 temperature
-                'ETAV2C3T': 'float', # Etalon Vescent 2 Channel 3 temperature
+                'ETAV1C1T': 'float',  # Etalon Vescent 1 Channel 1 temperature
+                'ETAV1C2T': 'float',  # Etalon Vescent 1 Channel 2 temperature
+                'ETAV1C3T': 'float',  # Etalon Vescent 1 Channel 3 temperature
+                'ETAV1C4T': 'float',  # Etalon Vescent 1 Channel 4 temperature
+                'ETAV2C3T': 'float',  # Etalon Vescent 2 Channel 3 temperature
                 'TOTCORR':  'string', # need to correct this to split  '498.12 604.38 710.62 816.88' / Wavelength of EM bins in nm
                 'USTHRSH':  'string', 
                 'THRSHLD': 'float',
                 'THRSBIN': 'float',
             }
-     
+             
+        # 2D PRIMARY header    
         elif level == '2D':
             keyword_types = {
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
+                'DRPHASH':  'string', # Git commit hash version of KPF-Pipeline used for processing
                 'NOTJUNK':  'float',  # Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
                 'DATAPRL0': 'float',  # Quality Control: 1 = L0 data products present with non-zero array sizes
                 'KWRDPRL0': 'float',  # Quality Control: 1 = L0 expected keywords present
+                'TIMCHKL0': 'string', # Quality Control: 1 = consistent times in L0 file
                 'EMSAT':    'float',  # Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
                 'EMNEG':    'float',  # Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
                 'RNRED1':   'float',  # Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
@@ -708,9 +739,11 @@ class AnalyzeTimeSeries:
                 'EMSKCT67': 'float',  # cumulative EM counts [ADU] in SKY in 658-764 nm
                 'EMSKCT78': 'float',  # cumulative EM counts [ADU] in SKY in 764-870 nm
             }
+        
+        # L1 PRIMARY header    
         elif level == 'L1':
             keyword_types = {
-                'MONOTWLS': 'bool',
+                'MONOTWLS': 'bool',  # Quality Control: 1 = L1 wavelength solution is monotonic
                 'SNRSC452': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRSK452': 'float', # SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRCL452': 'float', # SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -771,10 +804,14 @@ class AnalyzeTimeSeries:
                 'FRC2M852': 'float', # median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
                 'FRC2U852': 'float', # uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
             }
+        
+        # L2 PRIMARY header    
         elif level == 'L2':
             keyword_types = {
-                'ABCDEFGH': 'string', #placeholder for now
+                'TIMCHKL2': 'string', # Quality Control: 1 = consistent times in L2 file
             }
+
+        # L0 TELEMETRY extension
         elif level == 'L0_telemetry':
             keyword_types = {
                 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS': 'float',  # degC    Bench Bottom Between Cameras C2 c- double degC...
@@ -902,6 +939,49 @@ class AnalyzeTimeSeries:
                 'kpfpower.OUTLET_A1_Amps':             'float',  # milliamps Outlet A1 current amperage c- int milliamps
             }
 
+        # L2 RV header    
+        elif level == 'L2_RV_header':
+            keyword_types = {
+                'CCFRV'   : 'float',  # Average of CCD1RV and CCD2RV using weights from RV table
+                'CCFERV'  : 'float',  # Error on CCFRV
+                'CCFRVC'  : 'float',  # Average of CCD1RVC and CCD2RVC using weights from RV table
+                'CCFERVC' : 'float',  # Error on CCFRVC
+                'CCD1ROW' : 'float',  # Row number in the RV table (below) of the bluest order on the Green CCD
+                'CCD1RV1' : 'float',  # RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV1': 'float',  # Error on CCD1RV1
+                'CCD1RV2' : 'float',  # RV (km/s) of SCI2 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV2': 'float',  # Error on CCD1RV2
+                'CCD1RV3' : 'float',  # RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV3': 'float',  # Error on CCD1RV3
+                'CCD1RVC' : 'float',  # RV (km/s) of CAL (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV' : 'float',  # Error on CCD1RVC
+                'CCD1RVS' : 'float',  # RV (km/s) of SKY (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERVS': 'float',  # Error on CCD1RVS
+                'CCD1RV'  : 'float',  # RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
+                'CCD1ERV' : 'float',  # Error on CCD1RV  
+                'CCD1BJD' : 'float',  # Photon-weighted mid-time (BJD) for CCD1RV
+                'CCD2ROW' : 'float',  # Row number in the RV table (below) of the bluest order on the Red CCD
+                'CCD2RV1' : 'float',  # RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV1': 'float',  # Error on CCD2RV1
+                'CCD2RV2' : 'float',  # RV (km/s) of SCI2 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV2': 'float',  # Error on CCD2RV2
+                'CCD2RV3' : 'float',  # RV (km/s) of SCI3 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV3': 'float',  # Error on CCD2RV3
+                'CCD2RVC' : 'float',  # RV (km/s) of CAL (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERVC': 'float',  # Error on CCD2RVC
+                'CCD2RVS' : 'float',  # RV (km/s) of SKY (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERVS': 'float',  # Error on CCD2RVS
+                'CCD2RV'  : 'float',  # RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
+                'CCD2ERV' : 'float',  # Error on CCD2RV  
+                'CCD2BJD' : 'float',  # Photon-weighted mid-time (BJD) for CCD2RV
+            }
+
+        # L2 RV extension
+        elif level == 'L2_RV':
+            keyword_types = {
+                'ABCD1234': 'string', #placeholder for now
+            }
+
         else:
             keyword_types = {}
         
@@ -1010,25 +1090,29 @@ class AnalyzeTimeSeries:
 
             thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
-                t = [(date - start_date).total_seconds() /  3600 for date in df['DATE-MID']]
+                t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  3600)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
+                if 'narrow_xlim_daily' in thispanel['paneldict']:
+                    if thispanel['paneldict']['narrow_xlim_daily'] == 'true':
+                        if len(t) > 1:
+                            axs[p].set_xlim(min(t), max(t))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) < 32:
                 t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
-                axs[p].set_xlim(0, (end_date - start_date).total_seconds() /  86400)
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
             else:
                 t = df['DATE-MID'] # dates
@@ -1136,9 +1220,11 @@ class AnalyzeTimeSeries:
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="left", va="bottom",
-                    xytext=(-100, -32), textcoords='offset points')
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    #xytext=(100, -32), 
+                    xytext=(0, -32), 
+                    textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
@@ -1499,7 +1585,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
             thispaneldict = {'ylabel': 'Temperatures (C)',
                              'title': 'CCD Controllers',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.30}
             controller1 = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
 
@@ -1507,7 +1593,7 @@ class AnalyzeTimeSeries:
             thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
                              'title': 'CCD Controllers',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.35}
+                             'legend_frac_size': 0.30}
             controller2 = {'panelvars': thispanelvars2,
                            'paneldict': thispaneldict2}
             panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
@@ -1590,14 +1676,14 @@ class AnalyzeTimeSeries:
             dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel1 = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
 
             thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
             thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel2 = {'panelvars': thispanelvars2,
                         'paneldict': thispaneldict2}
 
@@ -1605,7 +1691,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
             thispanelvars3 = [dict1, dict2] 
             thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
-                              'legend_frac_size': 0.25}
+                              'legend_frac_size': 0.30}
             hkpanel3 = {'panelvars': thispanelvars3,
                         'paneldict': thispaneldict3}
 
@@ -1613,7 +1699,7 @@ class AnalyzeTimeSeries:
             thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
                              'title': 'Ca H&K Spectrometer Temperatures',
                              'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             hkpanel4 = {'panelvars': thispanelvars4,
                         'paneldict': thispaneldict4}
 
@@ -1660,6 +1746,7 @@ class AnalyzeTimeSeries:
             dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.20}
@@ -1668,6 +1755,7 @@ class AnalyzeTimeSeries:
 
             thispanelvars2 = [dict3, dict4]
             thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
+                             'narrow_xlim_daily': 'true',
                              'title': 'Guiding',
                              'not_junk': 'true',
                              'on_sky': 'true', 
@@ -1682,6 +1770,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Seeing (arcsec)',
                              'yscale': 'log',
+                             'narrow_xlim_daily': 'true',
                              'title': 'Seeing',
                              'not_junk': 'true',
                              'on_sky': 'true', 
@@ -1695,6 +1784,7 @@ class AnalyzeTimeSeries:
             dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Angle (deg)',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.25}
@@ -1703,6 +1793,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'title': 'Separation of Sun and Moon from Target',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'on_sky': 'true', 
                              'legend_frac_size': 0.25}
@@ -1721,6 +1812,18 @@ class AnalyzeTimeSeries:
                            'paneldict': thispaneldict}
             panel_arr = [drptagpanel]
 
+        elif plot_name=='drphash':
+            dict1 = {'col': 'DRPHASH', 'plot_type': 'state', 'plot_attr': {'label': 'Commit Hash', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'DRP Commit Hash',
+                             'title': 'KPF-Pipeline Commit Hash String',
+                             'not_junk': 'true',
+                             'nolegend': 'true',
+                             'legend_frac_size': 0.00}
+            drphashpanel = {'panelvars': thispanelvars,
+                            'paneldict': thispaneldict}
+            panel_arr = [drphashpanel]
+
         elif plot_name=='junk_status':
             dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
             thispanelvars = [dict1]
@@ -1736,17 +1839,33 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Data Present\n(1=True)',
+            thispaneldict = {'ylabel': 'L0 Data Present\n(1=True)',
                              'legend_frac_size': 0.10}
             data_present_panel = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Keywords Present\n(1=True)',
-                             'title': 'Quality Control - Data and Keywords Products Present',
+            thispaneldict = {'ylabel': 'L0 Keywords Present\n(1=True)',
+                             'title': 'Quality Control - L0 Data and Keywords Products Present',
                              'legend_frac_size': 0.10}
             keywords_present_panel = {'panelvars': thispanelvars,
                                       'paneldict': thispaneldict}
             panel_arr = [data_present_panel, keywords_present_panel]
+
+        elif plot_name=='qc_time_check':
+            dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
+            dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'L0 Time Check\n(1=True)',
+                             'legend_frac_size': 0.10}
+            time_check_l0_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'L2 Time Check\n(1=True)',
+                             'title': 'Quality Control - L0 and L2 Times Consistent',
+                             'legend_frac_size': 0.10}
+            time_check_l2_panel = {'panelvars': thispanelvars,
+                                   'paneldict': thispaneldict}
+            panel_arr = [time_check_l0_panel, time_check_l2_panel]
 
         elif plot_name=='qc_em':
             dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
@@ -1800,6 +1919,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'only_object': 'SoCal',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             socal_snr_panel = {'panelvars': thispanelvars,
@@ -1812,6 +1932,7 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
                              'only_object': 'SoCal',
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             socal_fr_panel = {'panelvars': thispanelvars,
@@ -1827,6 +1948,7 @@ class AnalyzeTimeSeries:
             thispanelvars = [dict1, dict2, dict3, dict4, dict5]
             thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
                              'on_sky': 'true', 
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             observing_snr_panel = {'panelvars': thispanelvars,
@@ -1839,11 +1961,115 @@ class AnalyzeTimeSeries:
             thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
                              'title': 'SoCal SNR & Flux Ratio',
                              'on_sky': 'true', 
+                             'narrow_xlim_daily': 'true',
                              'not_junk': 'true',
                              'legend_frac_size': 0.30}
             observing_fr_panel = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             panel_arr = [observing_snr_panel, observing_fr_panel]
+
+        elif plot_name=='autocal_rv':
+            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8]
+            thispaneldict = {
+                             'ylabel': r'LFC RV (km/s)',
+                             #'ylabel': r'LFC $\Delta$RV (km/s)',
+                             #'subtractmedian': 'true',
+                             'only_object': '["autocal-lfc-all-morn", "autocal-lfc-all-eve", "autocal-lfc-all-night", "cal-LFC", "cal-LFC-morn", "cal-LFC-eve", "LFC_all", "lfc_all", "LFC"]',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.30
+                             }
+            lfc_rv_panel = {'panelvars': thispanelvars,
+                            'paneldict': thispaneldict}
+            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars2 = [dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18]
+            thispaneldict2 = {
+                              'ylabel': r'ThAr RV (km/s)',
+                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+                              #'subtractmedian': 'true',
+                              'only_object': '["autocal-thar-all-night", "autocal-thar-all-eve", "autocal-thar-all-morn"]',
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.30
+                              }
+            thar_rv_panel = {'panelvars': thispanelvars2,
+                             'paneldict': thispaneldict2}
+            dict21 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict22 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict23 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict24 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict25 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict26 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict27 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
+            thispaneldict3 = {
+                              'title': 'LFC, ThAr, & Etalon RVs',
+                              'ylabel': r'Etalon RV (km/s)',
+                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+                              #'subtractmedian': 'true',
+                              'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
+                              'not_junk': 'true',
+                              'legend_frac_size': 0.30
+                              }
+            etalon_rv_panel = {'panelvars': thispanelvars3,
+                               'paneldict': thispaneldict3}
+            panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
+
+        elif plot_name=='socal_rv':
+            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict7]
+            thispaneldict = {
+                             'ylabel': r'SoCal RV (km/s)',
+                             'title': 'SoCal RVs',
+                             'only_object': '["SoCal"]',
+                             'narrow_xlim_daily': 'true',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.28
+                             }
+            socal_rv_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+            thispanelvars = [dict11, dict12, dict13, dict15, dict16, dict17]
+            thispaneldict = {
+                             'ylabel': r'SoCal $\Delta$RV (km/s)',
+                             'subtractmedian': 'true',
+                             'title': 'SoCal RVs',
+                             'only_object': '["SoCal"]',
+                             'narrow_xlim_daily': 'true',
+                             'not_junk': 'true',
+                             'legend_frac_size': 0.28
+                             }
+            socal_rv_panel2 = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [socal_rv_panel,socal_rv_panel2]
 
         else:
             self.logger.error('plot_name not specified')
@@ -1854,8 +2080,10 @@ class AnalyzeTimeSeries:
                                          log_savefig_timing=False)        
 
 
-    def plot_all_quicklook(self, start_date=None, interval='day', clean=True, 
-                                 fig_dir=None, show_plot=False):
+    def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
+                                 last_n_days=None,
+                                 fig_dir=None, show_plot=False, 
+                                 print_plot_names=False):
         """
         Generate all of the standard time series plots for the quicklook.  
         Depending on the value of the input 'interval', the plots have time ranges 
@@ -1864,43 +2092,63 @@ class AnalyzeTimeSeries:
         Args:
             start_date (datetime object) - start date for plot
             interval (string) - 'day', 'week', 'year', or 'decade'
+            last_n_days (int) - overrides start_date and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
+            print_plot_names (boolean) - prints the names of possible plots and exits
 
         Returns:
             PNG plot in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        plots = { 
+            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   "desc": "Hallway temperature"},
+            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   "desc": "Vacuum chamber temperatures"},
+            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   "desc": "Vacuum chamber temperatures (by optical element)"},
+            "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
+            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
+            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
+            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCE read speed"},
+            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
+            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
+            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
+            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       "desc": "Etalon temperatures"},
+            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       "desc": "Hollow-cathode lamp temperatures"},
+            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       "desc": "SNR of flats"},
+            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems","desc": "Ca H&K Spectrometer temperatures"},
+            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems","desc": "Agatitator temperatures"},
+            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", "desc": "FIU Guiding performance of"},
+            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", "desc": "Seeing measurements for stars"},
+            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", "desc": "Target separation to Sun and Moon"},
+            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", "desc": "SNR of stellar spectra"},
+            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     "desc": "SNR of SoCal spectra"},
+            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        "desc": "RVs from SoCal spectra"}, 
+            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       "desc": "DRP Tag"},   
+            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       "desc": "DRP Hash"},   
+            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        "desc": "Quality control: junk status"}, 
+            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
+            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
+            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
+            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
+        }
+        if print_plot_names:
+            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
+            for p in plots:
+                print("    '" + plots[p]["plot_name"] + "': " + plots[p]["desc"])
+            return
+
+        if (last_n_days != None) and (type(last_n_days) == type(1)):
+            now = datetime.now()
+            if last_n_days > 3:
+                end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                end_date = now
+            start_date = end_date - timedelta(days=last_n_days)
+
         if not isinstance(start_date, datetime):
             self.logger.error("'start_date' must be a datetime object.")
             return        
         
-        plots = { 
-            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   },
-            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   },
-            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      },
-            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      },
-            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      },
-            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      },
-            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      },
-            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       },
-            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       },
-            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       },
-            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       },
-            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems",},
-            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems",},
-            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", },
-            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", },
-            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", },
-            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
-            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
-            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
-            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
-            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
-            "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
-        }
         for p in plots:
             plot_name = plots[p]["plot_name"]
             if interval == 'day':
@@ -1915,6 +2163,8 @@ class AnalyzeTimeSeries:
             elif interval == 'decade':
                 end_date = datetime(start_date.year+10, start_date.month, start_date.day)
                 filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+            elif (last_n_days != None) and (type(last_n_days) == type(1)):
+                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
             else:
                 self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
                 return
@@ -2044,3 +2294,19 @@ def add_one_month(inputdate):
     
     outputdate = datetime(year, month, day)
     return outputdate
+
+def convert_to_list_if_array(string):
+    """
+    Convert a string like '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]' to an array.
+    """
+    # Check if the string starts with '[' and ends with ']'
+    if string.startswith('[') and string.endswith(']'):
+        try:
+            # Attempt to parse the string as JSON
+            return json.loads(string)
+        except json.JSONDecodeError:
+            # The string is not a valid JSON array
+            return string
+    else:
+        # The string does not look like a JSON array
+        return string
