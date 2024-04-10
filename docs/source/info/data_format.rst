@@ -83,11 +83,11 @@ GREEN_SCI_VAR2       image      35 x 4080       Variance vs. pixel for GREEN_SCI
 GREEN_SCI_VAR3       image      35 x 4080       Variance vs. pixel for GREEN_SCI_FLUX3
 GREEN_SKY_VAR        image      35 x 4080       Variance vs. pixel for GREEN_SKY_FLUX
 GREEN_CAL_VAR        image      35 x 4080       Variance vs. pixel for GREEN_CAL_FLUX
-GREEN_SCI_WAV1       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX1
-GREEN_SCI_WAV2       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX2
-GREEN_SCI_WAV3       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX3
-GREEN_SKY_WAV        image      35 x 4080       Wavelength vs. pixel for GREEN_SKY_FLUX
-GREEN_CAL_WAV        image      35 x 4080       Wavelength vs. pixel for GREEN_CAL_FLUX
+GREEN_SCI_WAVE1       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX1
+GREEN_SCI_WAVE2       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX2
+GREEN_SCI_WAVE3       image      35 x 4080       Wavelength vs. pixel for GREEN_SCI_FLUX3
+GREEN_SKY_WAVE        image      35 x 4080       Wavelength vs. pixel for GREEN_SKY_FLUX
+GREEN_CAL_WAVE        image      35 x 4080       Wavelength vs. pixel for GREEN_CAL_FLUX
 GREEN_TELLURIC       table      n/a             Not used yet (will include telluric spectrum)
 GREEN_SKY            table      n/a             Not used yet (will include modeled sky spectrum)
 RED_SCI_FLUX1        image      32 x 4080       1D spectra for 32 RED CCD orders of SCI1 orderlet
@@ -100,11 +100,11 @@ RED_SCI_VAR2         image      32 x 4080       Variance vs. pixel for RED_SCI_F
 RED_SCI_VAR3         image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX3
 RED_SKY_VAR          image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX
 RED_CAL_VAR          image      32 x 4080       Variance vs. pixel for RED_SCI_FLUX
-RED_SCI_WAV1         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX1
-RED_SCI_WAV2         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX2
-RED_SCI_WAV3         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX3
-RED_SKY_WAV          image      32 x 4080       Wavelength vs. pixel for RED_SKY_FLUX
-RED_CAL_WAV          image      32 x 4080       Wavelength vs. pixel for RED_CAL_FLUX
+RED_SCI_WAVE1         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX1
+RED_SCI_WAVE2         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX2
+RED_SCI_WAVE3         image      32 x 4080       Wavelength vs. pixel for RED_SCI_FLUX3
+RED_SKY_WAVE          image      32 x 4080       Wavelength vs. pixel for RED_SKY_FLUX
+RED_CAL_WAVE          image      32 x 4080       Wavelength vs. pixel for RED_CAL_FLUX
 RED_TELLURIC         table      n/a             Not used yet (will include telluric spectrum)
 RED_SKY              table      n/a             Not used yet (will include modeled sky spectrum)
 CA_HK_SCI            image      6 x 1024        1D spectra (6 orders) of SCI in Ca H&K spectrometer

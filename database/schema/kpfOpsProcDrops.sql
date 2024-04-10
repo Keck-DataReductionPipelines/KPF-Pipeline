@@ -58,3 +58,21 @@ DROP FUNCTION registerReadNoise (
     redreadtime_   real,
     readspeed_     character varying(16)
 );
+
+DROP FUNCTION getCalFileBefore (
+    obsDate_         timestamp,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+);
+
+DROP FUNCTION getCalFileAfter (
+    obsDate_         timestamp,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+);
