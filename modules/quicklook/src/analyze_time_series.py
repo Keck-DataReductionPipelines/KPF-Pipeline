@@ -2108,7 +2108,7 @@ class AnalyzeTimeSeries:
             "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
             "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
             "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
-            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCE read speed"},
+            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCD read speed"},
             "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
             "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
             "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
