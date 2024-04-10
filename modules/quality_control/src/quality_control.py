@@ -144,11 +144,20 @@ class QCDefinitions:
         name5 = 'L0_datetime_checks'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Check for timing inconsistencies in L0 header keywords and Exp Meter table.'
+        self.descriptions[name5] = 'Check for timing consistency in L0 header keywords and Exp Meter table.'
         self.data_types[name5] = 'int'
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
+
+        name5b = 'L2_datetime_checks'
+        self.names.append(name5b)
+        self.kpf_data_levels[name5b] = ['L2']
+        self.descriptions[name5b] = 'Check for timing consistency in L2 files.'
+        self.data_types[name5b] = 'int'
+        self.fits_keywords[name5b] = 'TIMCHKL2'
+        self.fits_comments[name5b] = 'QC: L2 times consistent'
+        self.db_columns[name5b] = None
 
         name6 = 'exposure_meter_not_saturated_check'
         self.names.append(name6)
@@ -863,3 +872,66 @@ class QCL2(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
+
+    def L2_datetime_checks(self, debug=False):
+        """
+        This QC module performs the following checks on datetimes in the header 
+        to the RV extension in an L2 object. The timing checks have precision 
+        thresholds to only catch significant timing errors and not trigger on 
+        small differences related to machine precision or dead time in the 
+        Exposure Meter detector.  This method returns True only if all checks 
+        pass.
+        
+            Time ordering: 
+                DATE-BEG < DATE-MID < DATE-END
+            Duration consistency: 
+                DATE-END - DATE-BEG = ELAPSED
+            Consistency between Green/Red and overall timing:
+                DATE-BEG = GRDATE-B
+                DATE-BEG = RDDATE-B
+                DATE-END = GRDATE-E
+                DATE-END = RDDATE-E
+        
+        To-do: 
+          * Add checks for the times in the RV table.  These are currently in BJD.
+            We will also need to record the UT times.
+        """
+    
+        L2 = self.kpf_object
+        date_format = "%Y-%m-%dT%H:%M:%S.%f"
+        QC_pass = True
+    
+        time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
+        time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
+        
+        # First check that the appropriate headers and keywords are present
+        if not 'PRIMARY' in L2.header:
+            QC_pass = False
+            return QC_pass
+        if not 'RV' in L2.header:
+            QC_pass = False
+            return QC_pass
+        essential_keywords = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'ELAPSED']
+        for keyword in essential_keywords:
+            if keyword not in L2.header['PRIMARY']:
+                if debug:
+                    print(f'Missing keyword: {keyword}')
+                QC_pass = False
+        if not QC_pass:
+            return QC_pass
+        
+        # Check that dates are ordered correctly
+        date_beg = datetime.strptime(L2.header['PRIMARY']['DATE-BEG'], date_format)
+        date_mid = datetime.strptime(L2.header['PRIMARY']['DATE-MID'], date_format)
+        date_end = datetime.strptime(L2.header['PRIMARY']['DATE-END'], date_format)
+        elapsed  = float(L2.header['PRIMARY']['ELAPSED'])
+        if (date_end < date_mid) or (date_mid < date_beg):
+            QC_pass = False
+        
+        # Check that DATE-BEG + ELAPSE = DATE-END
+        if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
+            if debug:
+                print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
+            QC_pass = False
+            
+        return QC_pass    

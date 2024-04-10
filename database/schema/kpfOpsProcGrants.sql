@@ -58,3 +58,21 @@ grant EXECUTE on FUNCTION registerReadNoise (
     redreadtime_   real,
     readspeed_     character varying(16)
 ) to kpfporole, kpfreadrole;
+
+grant EXECUTE on FUNCTION getCalFileBefore (
+    obsDate_         timestamp,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+) to kpfporole, kpfreadrole;
+
+grant EXECUTE on FUNCTION getCalFileAfter (
+    obsDate_         timestamp,
+    level_           smallint,
+    caltype_         character varying(32),
+    object_          character varying(32),
+    contentbitmask_  integer,
+    maxage_          interval
+) to kpfporole, kpfreadrole;
