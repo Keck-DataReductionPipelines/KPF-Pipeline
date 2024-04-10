@@ -61,7 +61,6 @@ class AnalyzeTimeSeries:
         * Check for proper data types (float vs. str) before plotting
         * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
-        * Add standard plots for diagnostics
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * Add histogram plots, e.g. for DRPTAG
@@ -2080,7 +2079,8 @@ class AnalyzeTimeSeries:
 
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
                                  last_n_days=None,
-                                 fig_dir=None, show_plot=False):
+                                 fig_dir=None, show_plot=False, 
+                                 print_plot_names=False):
         """
         Generate all of the standard time series plots for the quicklook.  
         Depending on the value of the input 'interval', the plots have time ranges 
@@ -2092,11 +2092,48 @@ class AnalyzeTimeSeries:
             last_n_days (int) - overrides start_date and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
+            print_plot_names (boolean) - prints the names of possible plots and exits
 
         Returns:
             PNG plot in fig_path or shows the plots it the current environment
             (e.g., in a Jupyter Notebook).
         """
+        plots = { 
+            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   "desc": "Hallway temperature"},
+            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   "desc": "Vacuum chamber temperatures"},
+            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   "desc": "Vacuum chamber temperatures (by optical element)"},
+            "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
+            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
+            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
+            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCE read speed"},
+            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
+            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
+            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
+            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       "desc": "Etalon temperatures"},
+            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       "desc": "Hollow-cathode lamp temperatures"},
+            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       "desc": "SNR of flats"},
+            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems","desc": "Ca H&K Spectrometer temperatures"},
+            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems","desc": "Agatitator temperatures"},
+            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", "desc": "FIU Guiding performance of"},
+            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", "desc": "Seeing measurements for stars"},
+            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", "desc": "Target separation to Sun and Moon"},
+            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", "desc": "SNR of stellar spectra"},
+            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     "desc": "SNR of SoCal spectra"},
+            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        "desc": "RVs from SoCal spectra"}, 
+            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       "desc": "DRP Tag"},   
+            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       "desc": "DRP Hash"},   
+            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        "desc": "Quality control: junk status"}, 
+            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
+            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
+            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
+            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
+        }
+        if print_plot_names:
+            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
+            for p in plots:
+                print("    '" + plots[p]["plot_name"] + "': " + plots[p]["desc"])
+            return
+
         if (last_n_days != None) and (type(last_n_days) == type(1)):
             now = datetime.now()
             if last_n_days > 3:
@@ -2109,36 +2146,6 @@ class AnalyzeTimeSeries:
             self.logger.error("'start_date' must be a datetime object.")
             return        
         
-        plots = { 
-            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   },
-            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   },
-            "p1c":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   },
-            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      },
-            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      },
-            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      },
-            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      },
-            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      },
-            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       },
-            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       },
-            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       },
-            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       },
-            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems",},
-            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems",},
-            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", },
-            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", },
-            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", },
-            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
-            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
-            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        }, 
-            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
-            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       },   
-            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
-            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
-            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        }, 
-            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
-            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        }, 
-        }
         for p in plots:
             plot_name = plots[p]["plot_name"]
             if interval == 'day':
