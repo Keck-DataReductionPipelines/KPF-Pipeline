@@ -683,6 +683,7 @@ class AnalyzeTimeSeries:
         elif level == '2D':
             keyword_types = {
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
+                'DRPHASH':  'string', # Git commit hash version of KPF-Pipeline used for processing
                 'NOTJUNK':  'float',  # Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
                 'DATAPRL0': 'float',  # Quality Control: 1 = L0 data products present with non-zero array sizes
                 'KWRDPRL0': 'float',  # Quality Control: 1 = L0 expected keywords present
@@ -1799,6 +1800,18 @@ class AnalyzeTimeSeries:
                            'paneldict': thispaneldict}
             panel_arr = [drptagpanel]
 
+        elif plot_name=='drphash':
+            dict1 = {'col': 'DRPHASH', 'plot_type': 'state', 'plot_attr': {'label': 'Commit Hash', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'DRP Commit Hash',
+                             'title': 'KPF-Pipeline Commit Hash String',
+                             'not_junk': 'true',
+                             'nolegend': 'true',
+                             'legend_frac_size': 0.00}
+            drphashpanel = {'panelvars': thispanelvars,
+                            'paneldict': thispaneldict}
+            panel_arr = [drphashpanel]
+
         elif plot_name=='junk_status':
             dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
             thispanelvars = [dict1]
@@ -2046,6 +2059,7 @@ class AnalyzeTimeSeries:
             "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", },
             "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     },
             "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       },   
+            "p7b":  {"plot_name": "drphash",                   "subdir": "DRP",       },   
             "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        }, 
             "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        }, 
             "p8c":  {"plot_name": "qc_em",                    "subdir": "QC",        }, 
