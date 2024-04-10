@@ -17,7 +17,7 @@ class Watcher:
     """
     Class to watch for file creations and modifications in a specified directory.  
     Such events are accumulated and passed on to a processing method for ingestion
-    into the database
+    into the database.
     """
     def __init__(self, directory_to_watch, db_path, stop_event):
         self.event_queue = queue.Queue()
@@ -106,8 +106,8 @@ def process_queue(event_queue, db_path, stop_event):
 
 def periodic_scan(db_path,stop_event):
     """
-    Method to scan the data directories every hour, with the first scan starting 20 sec
-    after the script starts.
+    Method to scan the data directories every hour, with the first scan starting 
+    20 sec after the script starts.
     """
     time.sleep(20)            
     start_date = '20221201'
@@ -160,7 +160,6 @@ if __name__ == '__main__':
     threads.append(periodic_thread)
 
     try:
-        # Here you can add your logic when to stop. For example, wait for a keyboard interrupt.
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
