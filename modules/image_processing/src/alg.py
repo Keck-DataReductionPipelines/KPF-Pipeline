@@ -81,6 +81,7 @@ class ImageProcessingAlg():
         # BIASDONE keyword will be set to 1 if bias is subtracted and 0 otherwise.
 
         header['BIASFILE'] = masterbias.filename
+        header['BIASDIR'] = masterbias.dirname
 
         if header['IMTYPE'].lower() == 'bias':
             self.logger.info("Image is bias, skipping bias correction.")
@@ -112,6 +113,7 @@ class ImageProcessingAlg():
         # FLATDONE keyword will be set to 1 if flat is divided and 0 otherwise.
 
         header['FLATFILE'] = flat_frame.filename
+        header['FLATDIR'] = flat_frame.dirname
 
         if header['IMTYPE'].lower() == 'bias' or \
             header['IMTYPE'].lower() == 'dark' or \
@@ -149,6 +151,7 @@ class ImageProcessingAlg():
         # DARKDONE keyword will be set to 1 if dark is subtracted and 0 otherwise.
 
         header['DARKFILE'] = dark_frame.filename
+        header['DARKDIR'] = dark_frame.dirname
 
         if header['IMTYPE'].lower() == 'bias' or \
             header['IMTYPE'].lower() == 'dark':
