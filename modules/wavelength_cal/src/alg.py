@@ -2,6 +2,7 @@ from astropy import units as u, constants as cst
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial.legendre import Legendre
+from modules.Utils.utils import DummyLogger
 import os
 import time
 import pandas as pd
@@ -10,6 +11,8 @@ from scipy import signal
 from scipy.special import erf
 from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline, interp1d
 from scipy.optimize.minpack import curve_fit
+from datetime import datetime, timedelta
+from dateutil import parser
 from modules.Utils.config_parser import ConfigHandler
 import modules.Utils.utils
 import warnings
@@ -1849,8 +1852,8 @@ def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
 
 class WaveInterpolation:
     """
-    This module defines 'WaveInterpolation' and methods to perform the 
-    wavelength interpolation.
+    This module defines 'WaveInterpolation' and methods to perform interpolation 
+    between different wavelength solutions.
     
     Wavelength interpolation computation. Algorithm is called under _perform() 
     in wavelength_cal.py. Algorithm itself iterates over orders.
@@ -1871,12 +1874,12 @@ class WaveInterpolation:
                 Defaults to None.        
 
         """
+        self.logger = logger if logger is not None else DummyLogger()
         self.l1_timestamp = l1_timestamp
         self.wls_timestamps = wls_timestamps
         self.wls1_arrays = wls1_arrays
         self.wls2_arrays = wls2_arrays
         self.config = config
-        self.logger = logger
 
     def wave_interpolation(self):
         msg = "Performing wavelength interpolation."
@@ -1884,10 +1887,40 @@ class WaveInterpolation:
             self.logger.info(msg)
         else:
             print(msg)
+      
+        # Determine how the dates are formatted
+        isJD = isinstance(self.l1_timestamp, float)
+        isDatetime = isinstance(self.l1_timestamp, datetime)
+        try:
+            # If the string is successfully parsed, it's a datetime string
+            null = parser.parse(self.l1_timestamp)
+            isDateStr = True
+        except:
+            isDateStr = False
+        
+        # Compute differences between timestamps
+        if isDateStr:
+            self.l1_timestamp_obj = datetime.strptime(self.l1_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
+            self.wls_timestamp_objs = [datetime.strptime(self.wls_timestamps[0], "%Y-%m-%dT%H:%M:%S.%f"), 
+                                       datetime.strptime(self.wls_timestamps[1], "%Y-%m-%dT%H:%M:%S.%f")]
+            tdiff = (self.wls_timestamp_objs[1] - self.wls_timestamp_objs[0]).total_seconds()
+            deltat = (self.l1_timestamp_obj - self.wls_timestamp_objs[0]).total_seconds()
+        elif isJD:
+            tdiff = self.wls_timestamp[1] - self.wls_timestamp[0]
+            deltat = self.l1_timestamp - self.wls_timestamp[0]
+        elif isDatetime:
+            tdiff = (self.wls_timestamp[1] - self.wls_timestamp[0]).total_seconds()
+            deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
+        else:
+             self.logger.error("l1_timestamp not in a recognized format")
+        frac = deltat / tdiff
 
-        # dummy to return WLS arrays from first WLS at the moment
+        # Interpolate between wls1 and wls2
         new_wls_arrays = {}
         for ext, arr in self.wls1_arrays.items():
-            new_wls_arrays[ext] = arr
+            new_wls_arrays[ext] = self.wls1_arrays[ext] + frac * (self.wls2_arrays[ext] - self.wls1_arrays[ext])
 
         return new_wls_arrays
+
+
+

@@ -347,7 +347,7 @@ class WaveInterpolate(KPF1_Primitive):
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
     
     Attributes:
-        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`. Interpolated WLS will be injected into this object  assigned by `actions.args[0]`
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`. Interpolated WLS will be injected into this object assigned by `actions.args[0]`
         wls1_filename (string): Input WLS prior to the observation, assigned by `actions.args[1]`
         wls2_filename (string): Input WLS after the observation, assigned by `actions.args[2]`
         wls_extensions (list): List of the WLS extensions, assigned by `actions.args[3]`
