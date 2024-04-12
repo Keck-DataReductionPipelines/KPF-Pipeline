@@ -740,6 +740,8 @@ class AnalyzeTimeSeries:
         # L1 PRIMARY header    
         elif level == 'L1':
             keyword_types = {
+                'WLSFILE':  'string' # Filename of wavelength solution file used
+                'WLSDIR':   'string' # Directory of wavelength solution file used (4/12/24 - TO BE ADDED)
                 'MONOTWLS': 'bool',  # Quality Control: 1 = L1 wavelength solution is monotonic
                 'SNRSC452': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRSK452': 'float', # SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
