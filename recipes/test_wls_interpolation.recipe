@@ -1,4 +1,4 @@
-# This is an example recipe showing use of the Quality Control and Diagnostics frameworks
+# This is an example recipe showing use of the WLS interpolation framework
 
 from modules.Utils.string_proc import date_from_kpffile
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
