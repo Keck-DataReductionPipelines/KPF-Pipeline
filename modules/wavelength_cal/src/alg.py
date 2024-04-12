@@ -1871,7 +1871,7 @@ class WaveInterpolation:
             config (configparser.ConfigParser, optional): Config context. 
                 Defaults to None.
             logger (logging.Logger, optional): Instance of logging.Logger. 
-                Defaults to None.        
+                Defaults to None, which involves DummyLogger (print statements).        
 
         """
         self.logger = logger if logger is not None else DummyLogger()
@@ -1881,46 +1881,48 @@ class WaveInterpolation:
         self.wls2_arrays = wls2_arrays
         self.config = config
 
-    def wave_interpolation(self):
+    def wave_interpolation(self, method='linear'):
         msg = "Performing wavelength interpolation."
         if self.logger:
             self.logger.info(msg)
         else:
             print(msg)
       
-        # Determine how the dates are formatted
-        isJD = isinstance(self.l1_timestamp, float)
-        isDatetime = isinstance(self.l1_timestamp, datetime)
-        try:
-            # If the string is successfully parsed, it's a datetime string
-            null = parser.parse(self.l1_timestamp)
-            isDateStr = True
-        except:
-            isDateStr = False
+        if method == 'linear':
+            # Determine how the dates are formatted
+            isJD = isinstance(self.l1_timestamp, float)
+            isDatetime = isinstance(self.l1_timestamp, datetime)
+            try:
+                # If the string is successfully parsed, it's a datetime string
+                foo = parser.parse(self.l1_timestamp)
+                isDateStr = True
+            except:
+                isDateStr = False
+            
+            # Compute differences between timestamps
+            if isDateStr:
+                self.l1_timestamp_obj = datetime.strptime(self.l1_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
+                self.wls_timestamp_objs = [datetime.strptime(self.wls_timestamps[0], "%Y-%m-%dT%H:%M:%S.%f"), 
+                                           datetime.strptime(self.wls_timestamps[1], "%Y-%m-%dT%H:%M:%S.%f")]
+                tdiff = (self.wls_timestamp_objs[1] - self.wls_timestamp_objs[0]).total_seconds()
+                deltat = (self.l1_timestamp_obj - self.wls_timestamp_objs[0]).total_seconds()
+            elif isJD:
+                tdiff = self.wls_timestamp[1] - self.wls_timestamp[0]
+                deltat = self.l1_timestamp - self.wls_timestamp[0]
+            elif isDatetime:
+                tdiff = (self.wls_timestamp[1] - self.wls_timestamp[0]).total_seconds()
+                deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
+            else:
+                 self.logger.error("l1_timestamp not in a recognized format")
+            frac = deltat / tdiff
+    
+            # Perform linear interpolation between wls1 and wls2
+            new_wls_arrays = {}
+            for ext, arr in self.wls1_arrays.items():
+                new_wls_arrays[ext] = self.wls1_arrays[ext] + frac * (self.wls2_arrays[ext] - self.wls1_arrays[ext])
+    
+            return new_wls_arrays
         
-        # Compute differences between timestamps
-        if isDateStr:
-            self.l1_timestamp_obj = datetime.strptime(self.l1_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
-            self.wls_timestamp_objs = [datetime.strptime(self.wls_timestamps[0], "%Y-%m-%dT%H:%M:%S.%f"), 
-                                       datetime.strptime(self.wls_timestamps[1], "%Y-%m-%dT%H:%M:%S.%f")]
-            tdiff = (self.wls_timestamp_objs[1] - self.wls_timestamp_objs[0]).total_seconds()
-            deltat = (self.l1_timestamp_obj - self.wls_timestamp_objs[0]).total_seconds()
-        elif isJD:
-            tdiff = self.wls_timestamp[1] - self.wls_timestamp[0]
-            deltat = self.l1_timestamp - self.wls_timestamp[0]
-        elif isDatetime:
-            tdiff = (self.wls_timestamp[1] - self.wls_timestamp[0]).total_seconds()
-            deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
         else:
-             self.logger.error("l1_timestamp not in a recognized format")
-        frac = deltat / tdiff
-
-        # Interpolate between wls1 and wls2
-        new_wls_arrays = {}
-        for ext, arr in self.wls1_arrays.items():
-            new_wls_arrays[ext] = self.wls1_arrays[ext] + frac * (self.wls2_arrays[ext] - self.wls1_arrays[ext])
-
-        return new_wls_arrays
-
-
-
+            self.logger.error('Unsupported method specified in wave_interpolation')
+            return None
