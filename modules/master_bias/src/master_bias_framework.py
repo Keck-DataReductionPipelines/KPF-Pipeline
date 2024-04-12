@@ -1,6 +1,7 @@
 import numpy as np
 from datetime import datetime, timezone
 from astropy.io import fits
+from astropy.time import Time
 import re
 
 from modules.Utils.kpf_fits import FitsHeaders
@@ -264,6 +265,15 @@ class MasterBiasFramework(KPF0_Primitive):
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of bias observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of bias observations')
+
+            mjd_obs_mid = (mjd_obs_min[ffi] + mjd_obs_max[ffi]) * 0.5
+            master_holder.header[ffi]['MIDMJD'] = (mjd_obs_mid,'Middle MJD of bias observations')
+            t_object = Time(mjd_obs_mid,format='mjd')
+            t_iso_string = str(t_object.iso)
+            t_iso_string += "Z"
+            t_iso_for_hdr = t_iso_string.replace(" ","T")
+            master_holder.header[ffi]['DATE-MID'] = (t_iso_for_hdr,'Middle timestamp of bias observations')
+
             datetimenow = datetime.now(timezone.utc)
             createdutc = datetimenow.strftime("%Y-%m-%dT%H:%M:%SZ")
             master_holder.header[ffi]['CREATED'] = (createdutc,'UTC of master-bias creation')
@@ -311,6 +321,22 @@ class MasterBiasFramework(KPF0_Primitive):
         master_holder.header['PRIMARY']['IMTYPE'] = ('Bias','Master bias')
 
         master_holder.to_fits(self.masterbias_path)
+
+
+        # Overwrite the newly created FITS file with one having a cleaned-up primary header.
+
+        new_primary_hdr = fits.Header()
+        new_primary_hdr['EXTNAME'] = 'PRIMARY'
+        new_primary_hdr['IMTYPE'] = ('Bias','Master bias')
+        new_primary_hdr['TARGOBJ'] = (self.bias_object,'Target object of stacking')
+        new_primary_hdr['INSTRUME'] = ('KPF','Doppler Spectrometer')
+        new_primary_hdr['OBSERVAT'] = ('KECK','Observatory name')
+        new_primary_hdr['TELESCOP'] = ('Keck I','Telescope')
+
+        FitsHeaders.cleanup_primary_header(self.masterbias_path,self.masterbias_path,new_primary_hdr)
+
+
+        # Return list of values.
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
