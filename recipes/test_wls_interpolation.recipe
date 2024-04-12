@@ -1,0 +1,47 @@
+# This is an example recipe showing use of the Quality Control and Diagnostics frameworks
+
+from modules.Utils.string_proc import level_from_kpffile
+from modules.Utils.string_proc import date_from_kpffile
+from modules.Utils.string_proc import date_from_path
+from modules.wavelength_cal.src.alg import WaveInterpolation
+
+data_type = config.ARGUMENT.data_type
+
+obsid1 = config.ARGUMENT.obsid1
+obsid2 = config.ARGUMENT.obsid2
+wls1_file = config.ARGUMENT.input_dir + 'L1/' + date_from_kpffile(obsid1) + '/' + obsid1 + '_L1.fits'
+wls2_file = config.ARGUMENT.input_dir + 'L1/' + date_from_kpffile(obsid2) + '/' + obsid2 + '_L1.fits'
+wls1_l1 = kpf1_from_fits(wls1_file, data_type=data_type)
+wls2_l1 = kpf1_from_fits(wls2_file, data_type=data_type)
+ObsID_l1 = config.ARGUMENT.ObsID1
+l1_file = config.ARGUMENT.input_dir + 'L1/' + date_from_kpffile(ObsID_l1) + '/' + ObsID_l1 + '_L1.fits'
+l1 = kpf1_from_fits(l1_file, data_type=data_type)
+
+l1_timestamp = l1.header['PRIMARY']['DATE-BEG']
+wls_timestamps = [wls1_l1.header['PRIMARY']['DATE-BEG'], wls2_l1.header['PRIMARY']['DATE-BEG']]
+wls_extensions = config.ARGUMENT.wave_ext
+
+wls1_arrays = {}
+wls2_arrays = {}
+for ext in wls_extensions:
+    wls1_arrays[ext] = wls1_l1[ext]
+    wls2_arrays[ext] = wls2_l1[ext]
+
+return_list = QualityControlFramework(data_type, data_level_str, kpf_object, 0)
+exit_code = return_list[0]
+if exit_code == 1:
+    l1_object = return_list[1]
+
+#result = to_fits(l1_object, output_fits_filename)
+
+#    qc_return_list = QualityControlFramework(data_type, data_level_str, kpf_object, 0)
+#    exit_code = qc_return_list[0]
+#    if exit_code == 1:
+#        kpf_object = qc_return_list[1]
+#
+#    diag_return_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
+#    exit_code = diag_return_list[0]
+#    if exit_code == 1:
+#        kpf_object = diag_return_list[1]
+#
+#    result = to_fits(kpf_object, output_fits_filename)
