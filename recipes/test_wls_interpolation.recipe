@@ -4,14 +4,9 @@ from modules.Utils.string_proc import date_from_kpffile
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.Utils.data_handler import GetHeaderValue
 
-
-obsid1 = config.ARGUMENT.obsid1
-obsid2 = config.ARGUMENT.obsid2
-datecode1 = date_from_kpffile(obsid1)
-datecode2 = date_from_kpffile(obsid2)
 data_type = config.ARGUMENT.data_type
-wls1_file = config.ARGUMENT.input_dir + 'L1/' + datecode1 + '/' + obsid1 + '_L1.fits'
-wls2_file = config.ARGUMENT.input_dir + 'L1/' + datecode2 + '/' + obsid2 + '_L1.fits'
+wls1_file = config.ARGUMENT.input_dir + config.ARGUMENT.wls1_file
+wls2_file = config.ARGUMENT.input_dir + config.ARGUMENT.wls2_file
 wls1_l1 = kpf1_from_fits(wls1_file, data_type=data_type)
 wls2_l1 = kpf1_from_fits(wls2_file, data_type=data_type)
 obsid_l1 = config.ARGUMENT.obsid_l1
