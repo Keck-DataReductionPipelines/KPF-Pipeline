@@ -403,7 +403,7 @@ class WaveInterpolate(KPF1_Primitive):
             Level 1 Data Object
         """
 
-        new_wls_arrays = self.alg
+        new_wls_arrays = self.alg.wave_interpolation(method='linear') 
         for ext, wls in new_wls_arrays.items():
             self.l1_obj[ext] = new_wls_arrays[ext]
                             
