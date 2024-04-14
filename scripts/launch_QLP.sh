@@ -29,6 +29,7 @@ done
 
 for lvl in "${data_levels[@]}"; do
     ncpus=15
-    cmd="kpf --ncpus=${ncpus} --watch ${KPFPIPE_DATA}/${lvl}/ -r ${recipe_file} -c {config_file}"
+    cmd="kpf --ncpus=${ncpus} --watch ${KPFPIPE_DATA}/${lvl}/ -r ${recipe_file} -c ${config_file}"
+    echo $cmd
     eval $cmd &
 done
