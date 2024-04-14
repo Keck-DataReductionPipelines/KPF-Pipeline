@@ -2,7 +2,6 @@
 
 from modules.Utils.string_proc import date_from_kpffile
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
-from modules.Utils.data_handler import GetHeaderValue
 
 data_type = config.ARGUMENT.data_type
 wls1_file = config.ARGUMENT.input_dir + config.ARGUMENT.wls1_file
