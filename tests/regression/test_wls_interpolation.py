@@ -1,6 +1,7 @@
 """
 Test of interpolation between two wavelength solutions.
 """
+import os
 from kpfpipe.tools.recipe_test_unit import recipe_test
 
 recipe = """from modules.Utils.string_proc import date_from_kpffile
