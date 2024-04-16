@@ -683,6 +683,12 @@ class AnalyzeTimeSeries:
         # 2D PRIMARY header    
         elif level == '2D':
             keyword_types = {
+                'BIASFILE': 'string', # Master bias file used (except for bias exposures)
+                'DARKFILE': 'string', # Master dark file used (except for dark exposures)                         
+                'FLATFILE': 'string', # Master flat file used (except for ?? exposures)
+                'BIASDIR':  'string', # Directory for BIASDIR (keyword to be added)
+                'DARKDIR':  'string', # Directory for DARKDIR (keyword to be added)                        
+                'FLATDIR':  'string', # Directory for FLATDIR (keyword to be added)
                 'DRPTAG':   'string', # Git version number of KPF-Pipeline used for processing
                 'DRPHASH':  'string', # Git commit hash version of KPF-Pipeline used for processing
                 'NOTJUNK':  'float',  # Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
@@ -743,6 +749,8 @@ class AnalyzeTimeSeries:
         # L1 PRIMARY header    
         elif level == 'L1':
             keyword_types = {
+                'WLSFILE':  'string',# Filename of wavelength solution file used
+                'WLSDIR':   'string',# Directory of wavelength solution file used (4/12/24 - TO BE ADDED)
                 'MONOTWLS': 'bool',  # Quality Control: 1 = L1 wavelength solution is monotonic
                 'SNRSC452': 'float', # SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
                 'SNRSK452': 'float', # SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
