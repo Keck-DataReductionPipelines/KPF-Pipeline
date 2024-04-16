@@ -1,4 +1,5 @@
 import os
+import ast
 import time
 import glob
 import copy
@@ -15,6 +16,7 @@ from astropy.table import Table
 from astropy.io import fits
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
 
@@ -55,6 +57,7 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Add database for masters (separate from ObsIDs?)
         * Check if the plot doesn't have data and don't generate if so
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
@@ -237,12 +240,12 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data           = self.extract_kwd(L0_file_path, self.L0_keyword_types) 
-            D2_header_data           = self.extract_kwd(D2_file_path, self.D2_keyword_types) 
-            L1_header_data           = self.extract_kwd(L1_file_path, self.L1_keyword_types) 
-            L2_header_data           = self.extract_kwd(L2_file_path, self.L2_keyword_types) 
-            L2_RV_header_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
-            L0_telemetry             = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types) 
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
             header_data = {**L0_header_data, 
                            **D2_header_data, 
@@ -1034,6 +1037,23 @@ class AnalyzeTimeSeries:
             (e.g., in a Jupyter Notebook).
         """
 
+        def num_fmt(n: float, sf: int = 3) -> str:
+            """
+            Returns number as a formatted string with specified number of significant figures
+            :param n: number to format
+            :param sf: number of sig figs in output
+            """
+            r = f'{n:.{sf}}'  # use existing formatter to get to right number of sig figs
+            if 'e' in r:
+                exp = int(r.split('e')[1])
+                base = r.split('e')[0]
+                r = base + '0' * (exp - sf + 2)
+            return r
+    
+        def format_func(value, tick_number):
+            """ For formatting of log plots """
+            return num_fmt(value, sf=2)
+
         if start_date == None:
             start_date = min(df['DATE-MID'])
         if end_date == None:
@@ -1131,9 +1151,22 @@ class AnalyzeTimeSeries:
                 axs[0].set_title(thistitle, fontsize=14)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
+            axs[p].grid(color='lightgray')        
             if 'yscale' in thispanel['paneldict']:
                 if thispanel['paneldict']['yscale'] == 'log':
+                    formatter = FuncFormatter(format_func)  # this doesn't seem to be working
+                    axs[p].minorticks_on()
+                    axs[p].grid(which='major', axis='x', color='darkgray',  linestyle='-', linewidth=0.5)
+                    axs[p].grid(which='both',  axis='y', color='lightgray', linestyle='-', linewidth=0.5)
                     axs[p].set_yscale('log')
+                    axs[p].yaxis.set_minor_locator(plt.AutoLocator())
+                    axs[p].yaxis.set_major_formatter(formatter)
+            else:
+                axs[p].grid(color='lightgray')        
+            ylim=False
+            if 'ylim' in thispanel['paneldict']:
+                if type(ast.literal_eval(thispanel['paneldict']['ylim'])) == type((1,2)):
+                    ylim = ast.literal_eval(thispanel['paneldict']['ylim'])
             makelegend = True
             if 'nolegend' in thispanel['paneldict']:
                 if (thispanel['paneldict']['nolegend']).lower() == 'true':
@@ -1214,12 +1247,21 @@ class AnalyzeTimeSeries:
                     axs[p].set_yticklabels(unique_states)
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
+                if 'axhspan' in thispanel['paneldict']:
+                    for key, axh in thispanel['paneldict']['axhspan'].items():
+                        ymin = axh['ymin']
+                        ymax = axh['ymax']
+                        clr  = axh['color']
+                        alp  = axh['alpha']
+                        axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
                 if makelegend:
                     if 'legend_frac_size' in thispanel['paneldict']:
                         legend_frac_size = thispanel['paneldict']['legend_frac_size']
                     else:
                         legend_frac_size = 0.20
                     axs[p].legend(loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+                if ylim:
+                    axs[p].set_ylim(ylim)
             axs[p].grid(color='lightgray')
 
         # Create a timestamp and annotate in the lower right corner
@@ -1328,6 +1370,11 @@ class AnalyzeTimeSeries:
             
             thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperature (K)',
                              'title': 'KPF Spectrometer Temperatures', 
+                             # Not working yet
+                             #'axhspan': {
+                             #           1: {'ymin':  0.01, 'ymax':  100, 'color': 'red', 'alpha': 0.2},
+                             #           2: {'ymin': -0.01, 'ymax': -100, 'color': 'red', 'alpha': 0.2},
+                             #           },
                              'nolegend': 'false', 
                              'subtractmedian': 'true',
                              'legend_frac_size': 0.3}
@@ -1779,29 +1826,38 @@ class AnalyzeTimeSeries:
                              'title': 'Seeing',
                              'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             seeingpanel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             panel_arr = [seeingpanel]
 
         elif plot_name=='sun_moon':
-            dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-target separation', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Alt. of Sun',            'marker': '.', 'linewidth': 0.5}}
+            dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-star separation', 'marker': '.', 'linewidth': 0.5}}
+            dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Altitude of Sun',      'marker': '.', 'linewidth': 0.5}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'narrow_xlim_daily': 'true',
+                             'ylim': '(0,180)',
+                             'axhspan': {
+                                        1: {'ymin':  0, 'ymax': 30, 'color': 'red', 'alpha': 0.2},
+                                        },
                              'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             sunpanel = {'panelvars': thispanelvars,
                         'paneldict': thispaneldict}
             thispanelvars = [dict2]
             thispaneldict = {'ylabel': 'Angle (deg)',
                              'title': 'Separation of Sun and Moon from Target',
                              'narrow_xlim_daily': 'true',
+                             'ylim': '(-90,0)',
+                             'axhspan': {
+                                        1: {'ymin':  0, 'ymax':  -6, 'color': 'red',    'alpha': 0.2},
+                                        2: {'ymin': -6, 'ymax': -12, 'color': 'orange', 'alpha': 0.2}
+                                        },
                              'not_junk': 'true',
                              'on_sky': 'true', 
-                             'legend_frac_size': 0.25}
+                             'legend_frac_size': 0.30}
             moonpanel = {'panelvars': thispanelvars,
                          'paneldict': thispaneldict}
             panel_arr = [sunpanel, moonpanel]
@@ -2113,7 +2169,7 @@ class AnalyzeTimeSeries:
             "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
             "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
             "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
-            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCE read speed"},
+            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCD read speed"},
             "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
             "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
             "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
