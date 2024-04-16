@@ -4,7 +4,7 @@ Test of interpolation between two wavelength solutions.
 import os
 from kpfpipe.tools.recipe_test_unit import recipe_test
 
-recipe = """from modules.Utils.string_proc import date_from_kpffile
+this_recipe = """from modules.Utils.string_proc import date_from_kpffile
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 
 data_type = 'KPF'
@@ -19,10 +19,10 @@ l1 = kpf1_from_fits(l1_file, data_type=data_type)
 l1_out = WaveInterpolate(wls1_l1, wls2_l1, l1)
 """
 
-cfg = this_config = "examples/default_recipe_test_neid.cfg" #dummy cfg
+this_config = "examples/default_neid.cfg" #dummy cfg
 
 def test_wls_interpolation():
-    recipe_test(recipe)
+    recipe_test(this_recipe, this_config)
 
 if __name__ == '__main__':
     test_wls_interpolation()
