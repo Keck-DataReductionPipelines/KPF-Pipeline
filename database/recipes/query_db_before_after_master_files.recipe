@@ -1,0 +1,39 @@
+from database.modules.query_db_before_after_master_files.src.query_db_before_after_master_files_framework import QueryDBBeforeAfterMasterFilesFramework
+
+data_type = config.ARGUMENT.data_type
+obs_date_time = config.ARGUMENT.obs_date_time
+cal_type = config.ARGUMENT.cal_type
+cal_file_level = config.ARGUMENT.cal_file_level
+contentbitmask = config.ARGUMENT.contentbitmask
+object_before = config.ARGUMENT.object_before
+object_after = config.ARGUMENT.object_after
+max_cal_file_age = config.ARGUMENT.max_cal_file_age
+master_file_before = config.ARGUMENT.master_file_before_default
+master_file_after = config.ARGUMENT.master_file_after_default
+
+
+do_db_query_for_before_after_master_files = True
+
+if do_db_query_for_before_after_master_files:
+
+    query_before_after_master_files_list = QueryDBBeforeAfterMasterFilesFramework(data_type,
+                                                                                  obs_date_time,
+                                                                                  cal_type,
+                                                                                  cal_file_level,
+                                                                                  contentbitmask,
+                                                                                  object_before,
+                                                                                  object_after,
+                                                                                  max_cal_file_age)
+
+    db_exit_code_before = query_before_after_master_files_list[0]
+    db_rec_before = query_before_after_master_files_list[1]
+
+    if db_exit_code_before == 0:
+        master_file_before = db_rec_before[6]
+
+    db_exit_code_after = query_before_after_master_files_list[2]
+    db_rec_after = query_before_after_master_files_list[3]
+
+    if db_exit_code_after == 0:
+        master_file_after = db_rec_after[6]
+
