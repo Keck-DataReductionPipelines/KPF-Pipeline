@@ -68,7 +68,7 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                 else:
                     plot_dir = None
 
-                save_wlpixelfiles = False
+                save_wlpixelfiles = True
                 l1_obj = WaveCalibrate(
                     l1_obj, cal_type, orderlet_names, save_wlpixelfiles, quicklook, min_order, max_order,
                     'KPF', output_exts,
