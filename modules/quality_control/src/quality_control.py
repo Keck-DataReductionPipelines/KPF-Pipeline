@@ -77,6 +77,8 @@ class QCDefinitions:
             Possible values in the list: 'L0', '2D', 'L1', 'L2'
         data_types (dictionary of strings): Each entry specifies the Python data type of the metric.
             Only string, int, float are allowed.  Use 0/1 for boolean.
+        spectrum_types (dictionary of arrays of strings ): Each entry specifies the types of spectra that the metric will be applied to.
+            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>, ''
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
             Must be 8 characters or less, following the FITS standard.
         fits_comments (dictionary of strings): Each entry specifies the FITS-header comment for the metric.
@@ -90,7 +92,8 @@ class QCDefinitions:
         self.names = []
         self.descriptions = {}
         self.kpf_data_levels = {} 
-        self.data_types = {}
+        self.data_types = {}  # values are arrays; one or more of ['L0', '2D', 'L1', 'L2']
+        self.spectrum_types = {} # values are arrays; one or more of []
         self.fits_keywords = {}
         self.fits_comments = {}
         self.db_columns = {}
@@ -101,6 +104,7 @@ class QCDefinitions:
         self.descriptions[name0] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
         self.kpf_data_levels[name0] = ['L3'] # bogus value L3 to avoid executing
         self.data_types[name0] = 'float'
+        self.spectrum_types[name0] = ['all', ]
         self.fits_keywords[name0] = 'JBTRED1'
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name0] = None
@@ -110,6 +114,7 @@ class QCDefinitions:
         self.descriptions[name1] = 'Check if file is not in list of junk files.'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
+        self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files'
         self.db_columns[name1] = None
@@ -119,6 +124,7 @@ class QCDefinitions:
         self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
+        self.spectrum_types[name2] = ['all', ]
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
         self.db_columns[name2] = None
@@ -128,6 +134,7 @@ class QCDefinitions:
         self.kpf_data_levels[name3] = ['L0']
         self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
         self.data_types[name3] = 'int'
+        self.spectrum_types[name3] = ['all', ]
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present'
         self.db_columns[name3] = None
@@ -137,6 +144,7 @@ class QCDefinitions:
         self.kpf_data_levels[name4] = ['L0']
         self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
         self.data_types[name4] = 'int'
+        self.spectrum_types[name4] = ['all', ]
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present'
         self.db_columns[name4] = None
@@ -146,6 +154,7 @@ class QCDefinitions:
         self.kpf_data_levels[name5] = ['L0']
         self.descriptions[name5] = 'Check for timing consistency in L0 header keywords and Exp Meter table.'
         self.data_types[name5] = 'int'
+        self.spectrum_types[name5] = ['all', ]
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
@@ -155,6 +164,7 @@ class QCDefinitions:
         self.kpf_data_levels[name5b] = ['L2']
         self.descriptions[name5b] = 'Check for timing consistency in L2 files.'
         self.data_types[name5b] = 'int'
+        self.spectrum_types[name5b] = ['all', ]
         self.fits_keywords[name5b] = 'TIMCHKL2'
         self.fits_comments[name5b] = 'QC: L2 times consistent'
         self.db_columns[name5b] = None
@@ -164,6 +174,7 @@ class QCDefinitions:
         self.kpf_data_levels[name6] = ['L0']
         self.descriptions[name6] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
+        self.spectrum_types[name6] = ['all', ]
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
@@ -173,6 +184,7 @@ class QCDefinitions:
         self.kpf_data_levels[name7] = ['L0']
         self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
+        self.spectrum_types[name7] = ['all', ]
         self.fits_keywords[name7] = 'EMNEG'
         self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
@@ -186,6 +198,9 @@ class QCDefinitions:
 
         if len(self.names) != len(self.data_types):
             raise ValueError("Length of data_types list does not equal number of entries in data_types dictionary.")
+
+        if len(self.names) != len(self.spectrum_types):
+            raise ValueError("Length of spectrum_types list does not equal number of entries in data_types dictionary.")
 
         if len(self.names) != len(self.fits_keywords):
             raise ValueError("Length of fits_keywords list does not equal number of entries in fits_keywords dictionary.")
@@ -206,19 +221,20 @@ class QCDefinitions:
 
     def list_qc_metrics(self):
 
-        print("name | data_type | keyword | comment | db_column | description |")
+        print("name | data_type | spectrum_type | keyword | comment | db_column | description |")
 
         qc_names = self.names
 
         for qc_name in qc_names:
 
             data_type = self.data_types[qc_name]
+            spectrum_type = self.spectrum_types[qc_name]
             keyword = self.fits_keywords[qc_name]
             comment = self.fits_comments[qc_name]
             db_column = self.db_columns[qc_name]
             description = self.descriptions[qc_name]
 
-            print(qc_name," | ",data_type," | ",keyword," | ",comment," | ",db_column," | ",description)
+            print(qc_name," | ",data_type," | ",spectrum_type," | ",keyword," | ",comment," | ",db_column," | ",description)
 
 
 #####################################################################
