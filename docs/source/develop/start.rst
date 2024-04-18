@@ -26,10 +26,10 @@ Here is a brief explanation of the contents of the directories at the top level 
 * **Dockerfile** - File used to set up the Docker instance.  
 * **kpf_bibliography.bib** - Latex style bibliography file with KPF papers mentioned in README.md
 * **LICENSE** - file with software license
-* **makefile** - file that contains instruction for the make utility to build different environments, including the main environment to run the command `kpf`, the environment to run a Jupyter session, and the testing environments.
+* **makefile** - file that contains instructions for the make utility to build different environments, including the main environment to run the command `kpf`, the environment to run a Jupyter session, and the testing environments.
 * **README.md** - file that is formatted on the main Github page for the repository.
 * **.readthedocs.yml** - file for configuration of Read the Docs
-* **requirements.txt** - file with python packages and (in some cases) version numbers.  This is used to enforce a consistent environment in Docker to run the pipeline.
+* **requirements.txt** - file with Python packages and (in some cases) version numbers.  This is used to enforce a consistent environment in Docker to run the pipeline.
 * **setup.py** - file used for configuration and installation of this software package.
 
 Development Strategy
@@ -41,7 +41,7 @@ Continuous Integration (CI)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 <add general statements about how CI works>
 
-The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within docker with commands like: ``> pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` (see the makefile for examples of performance and validation tests).
+The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like: ``> pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` (see the makefile for examples of performance and validation tests).
 
 Developing Quality Control (QC) Metrics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -49,7 +49,7 @@ Here are the steps to adding a new quality control test.
 
 #. Develop the code to determine if a KPF file passes or fails a QC metric.  See `this Jupyter notebook <QC_Example__Developing_a_QC_Method.ipynb>`_ for an example.  
 #. Start a Git branch for your feature.
-#. Write a method for your QC check in  `KPF-modules/quality_control/src/quality_control.py <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/blob/master/modules/quality_control/src/quality_control.py>`_ based on code from your Jupyter notebook.  The method should return a boolean (``QC_pass``) that is True if the input KPF object passed the QC check and False otherwise.  One method to model yours on is ``L0_data_products_check()``.  Your method should be in the appropriate class for the data level of your QC check.  For example, for a QC check to an L0 object, put the method in the ``QCL0`` class in ``quality_control.py``.
+#. Write a method for your QC check in  `KPF-modules/quality_control/src/quality_control.py <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/blob/master/modules/quality_control/src/quality_control.py>`_ based on code from your Jupyter notebook.  The method should return a True boolean (``QC_pass``) if the input KPF object passed the QC check and False otherwise.  One method to model yours on is ``L0_data_products_check()``.  Your method should be in the appropriate class for your QC check data level.  For example, for a QC check to an L0 object, put the method in the ``QCL0`` class in ``quality_control.py``.
 #. Add information about your QC to the QCDefinitions class in ``quality_control.py``.  You can model your dictionary entries on the ones for ``name4 = 'L0_data_products_check'``.
 #. Check that your QC works as expected.  See `this Jupyter notebook <QC_Example__L0_Data_Products_Check.ipynb>`_ for an example.  You can also modify the config file specified in this command and check the result: ``kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe``.
 #. Commit the changes to your Git branch and submit a pull request.
@@ -57,13 +57,13 @@ Here are the steps to adding a new quality control test.
 
 Developing Diagnostic Metrics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Diagnostics are similar to QC metrics in that they are used to evaluate data quality.  The difference is that QCs have a boolean value (pass/fail), while diagnostic information is more granular and can usually be expressed as a floating point number.  Below are the steps to developing a new diagnostic and adding the information to the headers.
+Diagnostics are similar to QC metrics in that they evaluate data quality. The difference is that QCs have a boolean value (pass/fail), while diagnostic information is more granular and can usually be expressed as a floating-point number.  Below are the steps to develop a new diagnostic and add the information to the headers.
 
-#. Develop the code to analyze a standard L0/2D/L1/L2/Master KPF file.  This is usually done with one of the Analyze classes; for example, in the ``Analyze2D`` class (in ``modules/quicklook/src/analyze2D.py``), the method ``measure_2D_dark_current()`` performs photometry on regions of the 2D images and saves that information as class attributes.  Using the Analyze methods is a convenient way because those same methods are used to generate Quicklook data products, providing overlap with annotations that might be used on plots.
+#. Develop the code to analyze a standard L0/2D/L1/L2/Master KPF file.  This is usually done with one of the Analyze classes; for example, in the ``Analyze2D`` class (in ``modules/quicklook/src/analyze2D.py``), the method ``measure_2D_dark_current()`` performs photometry on regions of the 2D images and saves that information as class attributes.  Using the Analyze methods is convenient because those same methods are used to generate Quicklook data products, providing overlap with annotations that might be used on plots.
 #. Start a Git branch for your feature.
-#. Write a method in ``modules/quicklook/src/diagnostics.py``.  See the method ``add_headers_dark_current_2D()`` for example code that writes diagnostics related to dark current.
+#. Write a method in ``modules/quicklook/src/diagnostics.py``.  See the method ``add_headers_dark_current_2D()`` for example, code that writes diagnostics related to dark current.
 #. Add your method and the appropriate logic to trigger it (e.g., only compute dark current for dark exposures) to the appropriate section of ``_perform`` in the ``DiagnosticsFramework`` class in ``modules/quicklook/src/diagnostics_framework.py``.
-#. Check that your QC works as expected.  This can be done by examining the FITS headers of files generated using the recipe ``recipes/quality_control.recipe``.
+#. Check that your QC works as expected.  You can do this by examining the FITS headers of files generated using the recipe ``recipes/quality_control.recipe``.
 #. Commit the changes to your Git branch and submit a pull request.
 #. Document the new Diagnostics-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
@@ -74,3 +74,12 @@ Developing Quicklook Plots
 
 Testing 
 -------
+
+Processing Files in a Test Environment
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When developing a feature, processing a set of files with a particular branch of the pipeline is useful.  The steps below explain how to do so.
+
+#. Select a set of observations to process.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search, the Jump portal can be used to make such a CSV file.
+#. Set up a test directory that is separate from `/data`.  ...
+#. <more>
