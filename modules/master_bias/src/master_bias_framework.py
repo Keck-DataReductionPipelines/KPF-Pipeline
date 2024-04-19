@@ -131,6 +131,8 @@ class MasterBiasFramework(KPF0_Primitive):
 
                 self.logger.info('Prototype FITS header from {}'.format(bias_file_path))
 
+                date_obs = tester.header['PRIMARY']['DATE-OBS']
+
                 break
 
             else:
@@ -327,13 +329,14 @@ class MasterBiasFramework(KPF0_Primitive):
 
         new_primary_hdr = fits.Header()
         new_primary_hdr['EXTNAME'] = 'PRIMARY'
+        new_primary_hdr['DATE-OBS'] = date_obs
         new_primary_hdr['IMTYPE'] = ('Bias','Master bias')
         new_primary_hdr['TARGOBJ'] = (self.bias_object,'Target object of stacking')
         new_primary_hdr['INSTRUME'] = ('KPF','Doppler Spectrometer')
         new_primary_hdr['OBSERVAT'] = ('KECK','Observatory name')
         new_primary_hdr['TELESCOP'] = ('Keck I','Telescope')
 
-        FitsHeaders.cleanup_primary_header(self.masterbias_path,self.masterbias_path,new_primary_hdr)
+        #FitsHeaders.cleanup_primary_header(self.masterbias_path,self.masterbias_path,new_primary_hdr)
 
 
         # Return list of values.
