@@ -1,5 +1,6 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 from modules.Utils.string_proc import str_replace
+from modules.Utils.era_specific_parameters import EraSpecific
 
 masters_dir = config.ARGUMENT.masters_dir
 output_dir = config.ARGUMENT.output_dir + '/'
@@ -33,6 +34,8 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
             completed = False
         else:
             l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
+            master_wls_file = EraSpecific(l1_obj, 'master_wls_file')
+            full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
             base_path = masters_dir + date_dir
             obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
             obj_string_short = str_replace(obj_string, '_L1.fits', '')
