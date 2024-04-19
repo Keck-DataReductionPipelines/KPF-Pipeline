@@ -32,20 +32,26 @@ Here is a brief explanation of the contents of the directories at the top level 
 * **requirements.txt** - file with Python packages and (in some cases) version numbers.  This is used to enforce a consistent environment in Docker to run the pipeline.
 * **setup.py** - file used for configuration and installation of this software package.
 
-Development Strategy
---------------------
+Development Techniques
+----------------------
 
-<add content here about many topics>
+Processing Files in a Test Environment
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+When developing a feature, processing a set of files with a particular branch of the pipeline is useful.  The steps below explain how to do so.
+
+#. Select a set of observations to process.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search, the Jump portal can be used to make such a CSV file.
+#. Modify .config file(s) to use /testdata.  Set up a test directory that is separate from `/data`.  ...
+#. Run DRP.  ...
 
 Continuous Integration (CI)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-<add general statements about how CI works>
+Continuous integration is a software development practice that involves frequently merging code changes into a central repository, followed by automated builds and tests that verify the functionality of the code.
 
 The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like: ``> pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` (see the makefile for examples of performance and validation tests).
 
 Developing Quality Control (QC) Metrics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Here are the steps to adding a new quality control test.
+The Quality Control module of KPF-Pipeline has a set of methods that determine if L0/2D/L1/L2 data products meet certain criteria, such as having the expected FITS extensions with the correction dimensions and data, having the expected FITS header keywords, having non-negative data where expected, etc.  The results of QC tests are recorded to the headers of KPF objects and written to the headers of KPF FITS files.  Here are the steps to adding a new quality control test.
 
 #. Develop the code to determine if a KPF file passes or fails a QC metric.  See `this Jupyter notebook <QC_Example__Developing_a_QC_Method.ipynb>`_ for an example.  
 #. Start a Git branch for your feature.
@@ -69,17 +75,4 @@ Diagnostics are similar to QC metrics in that they evaluate data quality. The di
 
 Developing Quicklook Plots
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 <AWH to add content here.>
-
-Testing 
--------
-
-Processing Files in a Test Environment
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-When developing a feature, processing a set of files with a particular branch of the pipeline is useful.  The steps below explain how to do so.
-
-#. Select a set of observations to process.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search, the Jump portal can be used to make such a CSV file.
-#. Set up a test directory that is separate from `/data`.  ...
-#. <more>
