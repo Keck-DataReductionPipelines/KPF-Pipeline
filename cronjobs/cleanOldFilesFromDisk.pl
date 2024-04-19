@@ -11,14 +11,14 @@ if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
 
 
 my $dir1 = "/data/user/rlaher/sbx/L0";
-&removeOldSubDirs(3, $dir1);
+&removeOldSubDirs(10, $dir1);
 
 
 my $dir2 = "/data/user/rlaher/sbx/2D";
-&removeOldSubDirs(3, $dir2);
+&removeOldSubDirs(10, $dir2);
 
 my $dir3 = "/data/user/rlaher/sbx/masters/wlpixelfiles";
-&removeOldFiles(5, $dir3);
+&removeOldFiles(10, $dir3);
 
 my $cmd1 = "df -h /data/user/rlaher/sbx";
 
