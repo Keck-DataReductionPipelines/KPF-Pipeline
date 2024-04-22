@@ -1,8 +1,9 @@
 # standard dependencies
+import os
+import fnmatch
 import configparser
 import numpy as np
 import pandas as pd
-import os
 from astropy import constants as cst, units as u
 import datetime
 from modules.quicklook.src.analyze_wls import write_wls_json
@@ -347,7 +348,7 @@ class WaveInterpolate(KPF1_Primitive):
         context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
     
     Attributes:
-        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`. Interpolated WLS will be injected into this object  assigned by `actions.args[0]`
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`. Interpolated WLS will be injected into this object assigned by `actions.args[0]`
         wls1_filename (string): Input WLS prior to the observation, assigned by `actions.args[1]`
         wls2_filename (string): Input WLS after the observation, assigned by `actions.args[2]`
         wls_extensions (list): List of the WLS extensions, assigned by `actions.args[3]`
@@ -361,10 +362,9 @@ class WaveInterpolate(KPF1_Primitive):
         """ 
         KPF1_Primitive.__init__(self, action, context)
         
-        self.l1_obj = self.action.args[0]
-        self.wls1_filename = self.action.args[1]
-        self.wls2_filename = self.action.args[2]
-        self.wls_extensions = self.action.args[3]
+        self.l1_wls1 = self.action.args[0]
+        self.l1_wls2 = self.action.args[1]
+        self.l1_interp = self.action.args[2]
         self.config=configparser.ConfigParser()
 
         try:
@@ -379,18 +379,20 @@ class WaveInterpolate(KPF1_Primitive):
             self.logger=self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
 
-        l1_timestamp = self.l1_obj.header['PRIMARY']['DATE-BEG']
-        wls1_l1 = KPF1.from_fits(self.wls1_filename)
-        wls1_timestamp = wls1_l1.header['PRIMARY']['DATE-BEG']
-        wls2_l1 = KPF1.from_fits(self.wls2_filename)
-        wls2_timestamp = wls2_l1.header['PRIMARY']['DATE-BEG']
+        l1_timestamp = self.l1_interp.header['PRIMARY']['DATE-BEG']
+        wls1_timestamp = self.l1_wls1.header['PRIMARY']['DATE-BEG']
+        wls2_timestamp = self.l1_wls2.header['PRIMARY']['DATE-BEG']
         wls_timestamps = [wls1_timestamp, wls2_timestamp]
 
+        wls_extensions = []
+        for name in self.l1_interp.extensions.keys():
+            if fnmatch.fnmatch(name, 'GREEN*WAVE*') or fnmatch.fnmatch(name, 'RED*WAVE*'):
+                wls_extensions.append(name)
         wls1_arrays = {}
         wls2_arrays = {}
-        for ext in self.wls_extensions:
-            wls1_arrays[ext] = wls1_l1[ext]
-            wls2_arrays[ext] = wls2_l1[ext]
+        for ext in wls_extensions:
+            wls1_arrays[ext] = self.l1_wls1[ext]
+            wls2_arrays[ext] = self.l1_wls2[ext]
 
         self.alg = WaveInterpolation(l1_timestamp, wls_timestamps, wls1_arrays, wls2_arrays)
 
@@ -403,9 +405,9 @@ class WaveInterpolate(KPF1_Primitive):
             Level 1 Data Object
         """
 
-        new_wls_arrays = self.alg
+        new_wls_arrays = self.alg.wave_interpolation(method='linear') 
         for ext, wls in new_wls_arrays.items():
-            self.l1_obj[ext] = new_wls_arrays[ext]
+            self.l1_interp[ext] = new_wls_arrays[ext]
                             
-        return Arguments(self.l1_obj)
+        return Arguments(self.l1_interp)
             
