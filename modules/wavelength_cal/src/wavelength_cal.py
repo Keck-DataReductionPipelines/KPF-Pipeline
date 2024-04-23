@@ -12,6 +12,7 @@ from modules.quicklook.src.analyze_wls import write_wls_json
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.logger import start_logger
 from kpfpipe.models.level1 import KPF1
+from kpfpipe.tools.helpers import catch_exceptions
 
 # external dependencies
 from keckdrpframework.models.action import Action
@@ -116,6 +117,7 @@ class WaveCalibrate(KPF1_Primitive):
             self.min_order, self.max_order, self.save_diagnostics, self.config, self.logger
         )
 
+    @catch_exceptions
     def _perform(self) -> None: 
         """
         Primitive action - perform wavelength calibration by calling method `wavelength_cal` from WaveCalibrate.
@@ -191,7 +193,6 @@ class WaveCalibrate(KPF1_Primitive):
                         if not os.path.exists(wlpixelwavedir):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + self.file_name + "_" + '{}.npy'.format(prefix)
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name, wls_and_pixels)
 
                     self.l1_obj[output_ext] = wl_soln
                     self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
