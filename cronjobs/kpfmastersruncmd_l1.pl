@@ -104,7 +104,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '1.9';
+my $version = '2.0';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -175,6 +175,7 @@ my $script = "#! /bin/bash\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "mkdir -p /data/masters/${procdate}\n" .
              "cp -pr /masters/${procdate}/kpf_${procdate}*.fits /data/masters/${procdate}\n" .
+             "rm /data/masters/${procdate}/kpf_${procdate}_smooth_lamp.fits\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
              "cp -p /data/masters/${procdate}/* /masters/${procdate}\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l1_${procdate}.log\n" .
