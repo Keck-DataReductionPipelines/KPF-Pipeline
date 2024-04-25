@@ -772,6 +772,35 @@ class QC2D(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
+    def lfc_flux_check(file, debug = False):
+        """
+        This Quality Control function checks if the flux values in the green and red chips of the
+        given FITS file are above a defined threshold at the 98th percentile.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if both green and red channels have 98th percentile values above the
+                            threshold, False otherwise.
+        
+        The function opens the FITS file, extracts data for 'GREEN_CCD' and 'RED_CCD' extensions, and
+        computes the 98th percentile of their values. It compares these values against a preset 
+        threshold (4000) to determine if the quality control check passes.
+        """
+        
+        from astropy.io import fits
+        Two_D = fits.open(file)
+        threshold = 4000
+        green_counts = Two_D['GREEN_CCD'].data
+        red_counts = Two_D['RED_CCD'].data
+        
+        QC_Test = True
+        if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
+            QC_Test = False
+            
+        return QC_Test
+
 
 #####################################################################
 
