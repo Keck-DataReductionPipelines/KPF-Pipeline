@@ -789,8 +789,7 @@ class QC2D(QC):
         threshold (4000) to determine if the quality control check passes.
         """
         
-        from astropy.io import fits
-        Two_D = fits.open(file)
+        Two_D = self.kpf_object
         threshold = 4000
         green_counts = Two_D['GREEN_CCD'].data
         red_counts = Two_D['RED_CCD'].data
