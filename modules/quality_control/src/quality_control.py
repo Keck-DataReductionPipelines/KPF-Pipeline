@@ -194,7 +194,7 @@ class QCDefinitions:
         self.kpf_data_levels[name8] = ['L0']
         self.descriptions[name8] = 'Check if an LFC frame that goes into a masters has enough flux'
         self.data_types[name8] = 'int'
-        self.spectrum_types[name7] = ['all', ]
+        self.spectrum_types[name8] = ['all', ]
         self.fits_keywords[name8] = 'LFC2DFOK'
         self.fits_comments[name8] = 'QC: LFC Flux not below threshold'
         self.db_columns[name8] = None
