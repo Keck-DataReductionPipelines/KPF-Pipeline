@@ -189,7 +189,7 @@ class QCDefinitions:
         self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
 
-        name8 = 'lfc_flux_check'
+        name8 = 'D2_lfc_flux_check'
         self.names.append(name8)
         self.kpf_data_levels[name8] = ['2D']
         self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
@@ -772,7 +772,7 @@ class QC2D(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
-    def lfc_flux_check(self, debug = False):
+    def D2_lfc_flux_check(self, threshold=4000, debug=False):
         """
         This Quality Control function checks if the flux values in the green and red chips of the
         given 2D file are above a defined threshold at the 98th percentile.
@@ -786,14 +786,16 @@ class QC2D(QC):
         """
         
         Two_D = self.kpf_object
-        threshold = 4000
         green_counts = Two_D['GREEN_CCD'].data
         red_counts = Two_D['RED_CCD'].data
         
         QC_Test = True
+        if debug:
+            print("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
+            print("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
         if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
             QC_Test = False
-            
+           
         return QC_Test
 
 
