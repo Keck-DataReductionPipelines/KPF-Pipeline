@@ -18,22 +18,22 @@ master_wls_recipe = open('recipes/wls_auto.recipe', 'r').read()
 master_wls_config = 'configs/wls_auto.cfg'
 
 
-def test_master_stacks():
-    # os.system(f'rm -vf /data/2D/{masters_test_date}/*.fits')
-    recipe_test(master_stacks_recipe, master_stacks_config, date_dir=masters_test_date)
-    os.system(f'mkdir /data/masters/{masters_test_date}; mv -v /data/masters/pool/kpf_{masters_test_date}_master_*.fits /data/masters/{masters_test_date}/')
+# def test_master_stacks():
+#     # os.system(f'rm -vf /data/2D/{masters_test_date}/*.fits')
+#     recipe_test(master_stacks_recipe, master_stacks_config, date_dir=masters_test_date)
+#     os.system(f'mkdir /data/masters/{masters_test_date}; mv -v /data/masters/pool/kpf_{masters_test_date}_master_*.fits /data/masters/{masters_test_date}/')
 
-def test_master_l1l2():
-    recipe_test(master_l1l2_recipe, master_l1l2_config,
-                date_dir=masters_test_date, watch=False)
+# def test_master_l1l2():
+#     recipe_test(master_l1l2_recipe, master_l1l2_config,
+#                 date_dir=masters_test_date, watch=False)
 
-def test_master_wls():
-    recipe_test(master_wls_recipe, master_wls_config,
-            date_dir=masters_test_date, watch=False)
+# def test_master_wls():
+#     recipe_test(master_wls_recipe, master_wls_config,
+#             date_dir=masters_test_date, watch=False)
 
 def main():
-    # test_master_stacks()
-    # test_master_l1l2()
+    test_master_stacks()
+    test_master_l1l2()
     test_master_wls()
 
 if __name__ == '__main__':

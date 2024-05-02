@@ -246,6 +246,9 @@ for master_file in master_files:
                 if re.match(r".+_master_flat", fits_file):
                     filename_caltype = 'flat'
                     filename_object = "autocal-flat-all"
+                elif re.match(r".+_smooth_lamp", fits_file):
+                    filename_caltype = 'smoothlamp'
+                    filename_object = "smoothlamp"
                 else:
                     filename_match = re.match(r".+_master_(.+)_(.+)\.fits", fits_file)
                     filename_caltype = filename_match.group(1)
@@ -318,9 +321,12 @@ for master_file in master_files:
 
             print("kwd =",kwd)
             print("ext =",ext)
+            print("level =",level)
 
             try:
                 if kwd == "IMTYPE" and level > 0:
+                    val = filename_caltype
+                elif kwd == "IMTYPE" and filename_caltype == 'smoothlamp':
                     val = filename_caltype
                 elif kwd == "TARGOBJ" and level > 0:
                     val = filename_object
@@ -370,7 +376,7 @@ for master_file in master_files:
                     val = time.strftime("%Y-%m-%d %H:%M:%S", t_obj)
                     print("Since no FITS keyword CREATED exists use file timestamp =", val)
                 else:
-                    print("Exception raised: cannot find FITS keyword =", kwd)
+                    print("===>Exception raised: cannot find FITS keyword =", kwd)
                     exit(64)
             print("fits_file,kwd,val =",fits_file,kwd,val)
 

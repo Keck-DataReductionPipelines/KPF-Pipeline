@@ -60,7 +60,7 @@ class HeaderParse:
         self.ObsID = '' # e.g., 'KP.20230708.04519.63'
 
 
-    def get_name(self):
+    def get_name(self, use_star_names=True):
         """
         Returns the name of the source in a spectrum.  For stellar observations, this 
         is the star's name (e.g. '185144' for HD 185144 = sigma Draconis).  
@@ -68,10 +68,16 @@ class HeaderParse:
         bias/dark.  Flats using KPF's regular fibers are distinguished from wide flats.
 
         Args:
-            None
+            use_star_names - if True (default), this function will return the name of the star
+                           - if False, this function will return 'Star' for stars
+                           
 
         Returns:
-            the source/image type
+            the source/image name
+            possible values: 'Bias', 'Dark', 'Flat', 'Wide Flat', 
+                             'LFC', 'Etalon', 'ThAr', 'UNe',
+                             'Sun', 'Star', <starname>,
+                             ''
         """
         try: 
             if 'IMTYPE' in self.header:
@@ -99,7 +105,10 @@ class HeaderParse:
                     self.name = 'Sun' # SoCal
                 if ('OBJECT' in self.header) and ('FIUMODE' in self.header):
                     if (self.header['FIUMODE'] == 'Observing'):
-                        self.name = self.header['OBJECT']
+                        if use_star_names:
+                            self.name = self.header['OBJECT']
+                        else:
+                            self.name = 'Star'
             else:
                 self.name = ''
         except:

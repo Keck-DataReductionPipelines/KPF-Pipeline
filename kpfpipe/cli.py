@@ -187,7 +187,7 @@ def main():
     frame_config = tp.name
 
     # Using the multiprocessing library, create the specified number of instances
-    if args.watch and args.ncpus > 1:
+    if args.watch:
         for i in range(args.ncpus):
             # This could be done with a careful use of subprocess.Popen, if that's more your style
             p = Process(target=worker, args=(i, pipe_config, framework_logcfg, frame_config))

@@ -13,6 +13,7 @@ from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime
+from scipy.optimize import curve_fit
 #import emcee
 #import corner
 
@@ -144,7 +145,78 @@ class Analyze2D:
             self.red_dark_current_regions = reg
 
 
+    def fit_double_gaussian_cdf(self, ngaussians=1, chip=None):
+        """
+        This method fits the cumulative distribution of intensity values with a 
+        function that is the cumulative distribution of the sum of one or two 
+        Gaussians with the same center. The current implementation is slow.
+        
+        Args:
+            ngaussians - 1 (default) or 2
+            chip (string) - 'green' or 'red'
+
+#        Attributes (set by this method):
+#            green_dark_current_regions - dictionary specifying the regions where 
+
+        Returns:
+            None
+        """
+
+        def one_gaussian_cdf(x, mu1, sigma1):
+            return norm.cdf(x, mu1, sigma1) 
+
+        def two_gaussian_cdfs(x, mu1, sigma1, A1, sigma2):
+            return A1 * norm.cdf(x, mu1, sigma1) + (1-A1) * norm.cdf(x, mu1, sigma2)
+
+#        def one_gaussian_cdf(x, mu1, sigma1, A1):
+#            return A1 * norm.cdf(x, mu1, sigma1) 
+#
+#        def two_gaussian_cdfs(x, mu1, sigma1, A1, mu2, sigma2, A2):
+#            return A1 * norm.cdf(x, mu1, sigma1) + A2 * norm.cdf(x, mu2, sigma2)
+#
+#        def one_gaussian_cdf(x, mu1, sigma1):
+#            return norm.cdf(x, mu1, sigma1) 
+#
+#        def two_gaussian_cdfs(x, mu1, sigma1, sigma2):
+#            return norm.cdf(x, mu1, sigma1) + norm.cdf(x, mu1, sigma2)
+
+        D2 = self.D2
+        if (chip.lower() == 'green'): 
+            image = np.array(D2['GREEN_CCD'].data)
+        if (chip.lower() == 'red'): 
+            image = np.array(D2['RED_CCD'].data)
+        intensities = image.flatten()
+        intensities.sort()
+        cdf = np.arange(len(intensities)) / float(len(intensities))
+
+
+        # Define the new points where you want to sample the CDF
+        ndownsample = 1000
+        new_points = np.linspace(0, len(intensities) - 1, ndownsample, dtype=int)
+        
+        # Interpolate the CDF at these new points
+        # Since we are dealing with indices here, we can use simple array indexing rather than interpolation
+        downsampled_cdf = cdf[new_points]
+        downsampled_intensities = intensities[new_points]
+        
+        #intensities = downsampled_intensities
+        #downsampled_cdf = cdf
+
+        #initial_params_1g = [np.mean(intensities), np.std(intensities), 1]
+        initial_params_1g = [np.mean(intensities), np.std(intensities)]
+        params_1g, _ = curve_fit(one_gaussian_cdf, intensities, cdf, p0=initial_params_1g)
+        print(params_1g)
+        
+        initial_params_2g = [params_1g[0], params_1g[1], 1, 3*params_1g[1]]
+        #initial_params_2g = [params_1g[0], params_1g[1], params_1g[2], params_1g[0], 3*params_1g[1], 0.001]
+        #initial_params_2g = [params_1g[0], params_1g[1], 2*params_1g[1]]
+        #bounds = ([-np.inf,np.inf],[-np.inf,np.inf],[],[])
+        params_2g, _ = curve_fit(two_gaussian_cdfs, intensities, cdf, p0=initial_params_2g)#, bounds=bounds)
+        print(params_2g)
+
+
     def plot_2D_image(self, chip=None, overplot_dark_current=False, blur_size=None, 
+                            subtract_master_bias=False,
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -153,6 +225,11 @@ class Analyze2D:
         Args:
             chip (string) - "green" or "red"
             overlay_dark_current - if True, dark current measurements are over-plotted
+            subtract_master_bias - if not False, a master bias will be subtracted'
+                                   if 'auto', then the path to the master bias is 
+                                   the value from the BIASFILE keyword
+                                   if his parameter is set to a path, that file 
+                                   will be used 
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -258,7 +335,15 @@ class Analyze2D:
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')
             plt.text(2040, 3970, 'Echelle Side',                       size=14, rotation= 0, ha='center', color='white')
-        
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -35), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -478,6 +563,14 @@ class Analyze2D:
         ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
         ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -535,7 +628,7 @@ class Analyze2D:
             return
                 
         # Generate the array of 2D images
-        fig, axs = plt.subplots(2, 2, figsize=(19,16), tight_layout=False)
+        fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
         for i in range(2):
             for j in range(2):
                 # Calculate the top left corner of each sub-image
@@ -575,27 +668,27 @@ class Analyze2D:
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
-        plt.tight_layout()
+#        plt.tight_layout()
         #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('Order Trace - ' + chip_title + ' CCD: ' + str(self.ObsID), fontsize=24)
-        ax.set_xlabel('Column (pixel number)', fontsize=24, labelpad=10)
-        ax.set_ylabel('Row (pixel number)', fontsize=24, labelpad=10)
+        ax.set_xlabel('Column (pixel number)', fontsize=24, labelpad=20)
+        ax.set_ylabel('Row (pixel number)', fontsize=24, labelpad=25)
 
         # Annotations
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
-                    fontsize=16, color="darkgray", ha="left", va="bottom",
-                    xytext=(-50, -75), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
-        plt.annotate('Trace = ' + order_trace_master_file, xy=(1, 0), xycoords='axes fraction', 
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
-                    xytext=(50, -75), textcoords='offset points')
+                    xytext=(-50, -150), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+        plt.annotate('Trace = ' + order_trace_master_file, xy=(0, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="left", va="bottom",
+                    xytext=(50, -150), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)
-        
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -620,7 +713,6 @@ class Analyze2D:
 
         """
 
-        image = np.array(self.D2[CHIP + '_CCD'].data)
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN_CCD'
@@ -628,6 +720,7 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED_CCD'
                 chip_title = 'Red'
+        image = np.array(self.D2[CHIP].data)
 
         histmin = -40
         histmax = 40
@@ -711,6 +804,14 @@ class Analyze2D:
         plt.xlabel('Counts (e-)', fontsize=14)
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
+ 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -793,6 +894,14 @@ class Analyze2D:
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
 
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
@@ -832,8 +941,7 @@ class Analyze2D:
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
         else:
-            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-            print('chip not supplied.  Exiting plot_2D_image')
+            self.logger.info(f'chip not supplied. Exiting plot_2D_image_histogram()')
             return
 
         plt.figure(figsize=(8,5), tight_layout=True)
@@ -862,6 +970,14 @@ class Analyze2D:
         plt.yticks(fontsize=14)
         plt.yscale('log')
         plt.legend(loc='lower right', fontsize=11)
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
         
         # Display the plot
         if fig_path != None:
@@ -876,7 +992,8 @@ class Analyze2D:
     def plot_2D_column_cut(self, chip=None, fig_path=None, show_plot=False,
                            column_brightness_percentile=50, saturation_limit_2d=240000):
         """
-        Add description
+        Create a plot of cuts through columns corresponding to the 10th, 50th, and 90th
+        percentiles for total flux
 
         Args:
             chip (string) - "green" or "red"
@@ -948,8 +1065,16 @@ class Analyze2D:
             plt.yscale('log')
             y_lim = plt.ylim()
             plt.ylim(0.9, y_lim[1])
-        plt.legend( fontsize=12)
-                
+        plt.legend( fontsize=12)    
+         
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -40), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
         # Display the plot
         if fig_path != None:
             t0 = time.process_time()
