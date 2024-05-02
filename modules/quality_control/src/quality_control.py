@@ -184,17 +184,17 @@ class QCDefinitions:
         self.kpf_data_levels[name15] = ['2D']
         self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
         self.data_types[name15] = 'int'
-	self.spectrum_type[name15] = ['all', ]
+        self.spectrum_types[name15] = ['all', ]
         self.fits_keywords[name15] = 'DATAPR2D'
         self.fits_comments[name15] = 'QC: 2D red and green data present check'
         self.db_columns[name15] = None
 
-	name14 = 'data_2D_CaHK_check'
+        name14 = 'data_2D_CaHK_check'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
         self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
         self.data_types[name14] = 'int'
-	self.spectrum_type[name14] = ['all', ]
+        self.spectrum_types[name14] = ['all', ]
         self.fits_keywords[name14] = 'CaHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
@@ -204,7 +204,7 @@ class QCDefinitions:
         self.kpf_data_levels[name9] = ['2D']
         self.descriptions[name9] = 'Check to see if flux is low in bias exposure.'
         self.data_types[name9] = 'int'
-	self.spectrum_types[name9] = ['Bias', ]
+        self.spectrum_types[name9] = ['Bias', ]
         self.fits_keywords[name9] = 'LOWBIAS'
         self.fits_comments[name9] = 'QC: 2D bias low flux check'
         self.db_columns[name9] = None
@@ -214,7 +214,7 @@ class QCDefinitions:
         self.kpf_data_levels[name10] = ['2D']
         self.descriptions[name10] = 'Check to see if flux is low in dark exposure.'
         self.data_types[name10] = 'int'
-	self.spectrum_types[name10] = ['Dark', ]
+        self.spectrum_types[name10] = ['Dark', ]
         self.fits_keywords[name10] = 'LOWDARK'
         self.fits_comments[name10] = 'QC: 2D dark low flux check'
         self.db_columns[name10] = None
@@ -222,8 +222,8 @@ class QCDefinitions:
         name11 = 'data_L1_red_green_check'
         self.names.append(name11)
         self.kpf_data_levels[name11] = ['L1']
-	self.data_types[name11] = 'int'
-	self.spectrum_types[name11] = ['all', ]
+        self.data_types[name11] = 'int'
+        self.spectrum_types[name11] = ['all', ]
         self.descriptions[name11] = 'Check to see if red and green data are present in L1 with expected shapes.'
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
@@ -234,7 +234,7 @@ class QCDefinitions:
         self.kpf_data_levels[name12] = ['L1']
         self.descriptions[name12] = 'Check to see if CaHK data is present in L1 with expected shape.'
         self.data_types[name12] = 'int'
-	self.spectrum_types[name12] = ['all', ]
+        self.spectrum_types[name12] = ['all', ]
         self.fits_keywords[name12] = 'CaHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
@@ -244,7 +244,7 @@ class QCDefinitions:
         self.kpf_data_levels[name13] = ['L2']
         self.descriptions[name13] = 'Check to see if all data is present in L2.'
         self.data_types[name13] = 'int'
-	self.spectrum_types[name13] = ['all', ]
+        self.spectrum_types[name13] = ['all', ]
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
         self.db_columns[name13] = None
@@ -764,7 +764,7 @@ class QCL0(QC):
         elif saturated_elements_SKY / total_elements > saturated_fraction_threshold:
             QC_pass = False
         else: 
-        	QC_pass = True
+            QC_pass = True
             
         return QC_pass
 
@@ -819,7 +819,7 @@ class QCL0(QC):
         if has_consec_negs_SCI or has_consec_negs_SKY:
             QC_pass = False
         else: 
-        	QC_pass = True
+            QC_pass = True
             
         return QC_pass
 
@@ -997,7 +997,7 @@ class QC2D(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-       D2 = self.kpf_object
+        D2 = self.kpf_object
 
         if debug:
             print(D2.info())
