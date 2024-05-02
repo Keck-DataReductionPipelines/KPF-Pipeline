@@ -957,32 +957,22 @@ class QC2D(QC):
             print("type_2D = ",type_D2)
             print("D2 = ",D2)
 
-        if data_2D_green_red_check(D2) == True:
-            QC_pass = True
-            extensions = D2.extensions
+        QC_pass = True
+        extensions = D2.extensions
 
-            if D2.header["PRIMARY"]["IMTYPE"] == "Bias":
-                mean_GREEN = D2["GREEN_CCD"].flatten().mean()
-                mean_RED = D2["RED_CCD"].flatten().mean()
+        mean_GREEN = D2["GREEN_CCD"].flatten().mean()
+        mean_RED = D2["RED_CCD"].flatten().mean()
 
-                if debug:
-                    print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
-                    print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-                    print("Max allowed mean flux =", 10)
+        if debug:
+            print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+            print("Mean RED_CCD flux =", np.round(mean_RED, 2))
+            print("Max allowed mean flux =", 10)
 
-                if (mean_GREEN > 10) | (mean_RED > 10):
-                    if debug:
-                        print("One of the CCDs has a high flux")
-                    QC_pass = False
-
-            else:
-                if debug:
-                    print("This is not a bias frame")
-                QC_pass = False
-            
-        else:
+        if (mean_GREEN > 10) | (mean_RED > 10):
+            if debug:
+                print("One of the CCDs has a high flux")
             QC_pass = False
-        
+
         return QC_pass
 
     def data_2D_dark_low_flux_check(self,debug=False):
@@ -1005,30 +995,20 @@ class QC2D(QC):
             print("type_2D = ",type_D2)
             print("D2 = ",D2)
     
-        if data_2D_green_red_check(D2) == True:
-            QC_pass = True
-            extensions = D2.extensions
+        QC_pass = True
+        extensions = D2.extensions
 
-            if D2.header["PRIMARY"]["IMTYPE"] == "Dark":
-                mean_GREEN = D2["GREEN_CCD"].flatten().mean()
-                mean_RED = D2["RED_CCD"].flatten().mean()
+        mean_GREEN = D2["GREEN_CCD"].flatten().mean()
+        mean_RED = D2["RED_CCD"].flatten().mean()
 
-                if debug:
-                    print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
-                    print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-                    print("Max allowed mean flux =", 10)
+        if debug:
+            print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+            print("Mean RED_CCD flux =", np.round(mean_RED, 2))
+            print("Max allowed mean flux =", 10)
 
-                if (mean_GREEN > 10) | (mean_RED > 10):
-                    if debug:
-                        print("One of the CCDs has a high flux")
-                    QC_pass = False
-
-            else:
-                if debug:
-                    print("This is not a dark frame")
-                QC_pass = False
-            
-        else:
+        if (mean_GREEN > 10) | (mean_RED > 10):
+            if debug:
+                print("One of the CCDs has a high flux")
             QC_pass = False
         
         return QC_pass
