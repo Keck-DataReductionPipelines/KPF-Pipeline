@@ -4,7 +4,7 @@ Quality Control
 The KPF DRP has several Quality Control (QC) methods that can be run on the L0, 2D, L1, and 2D objects.  
 The QC tests are run during normal processing in the main recipe.  
 The results of these QC checks are added to the primary headers of kpf objects, which are written to 2D, L1, and L2 FITS files (but not the L0 files, which with rare exceptions are not modified after data collection at WMKO).
-The QC methods are defined in the `QCDefinitions` class in `modules/quality_control/src/quality_control.py`.
+The QC methods are defined in the ``QCDefinitions`` class in ``modules/quality_control/src/quality_control.py``.
 
 The FITS header keywords produced by QC tests are defined in :doc:`data_format`.  
 The QCDefinitions.list_qc_metrics () produces a list of QC tests and their characteristics (including the primary header keywords), as shown below.
