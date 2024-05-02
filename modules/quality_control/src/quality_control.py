@@ -167,14 +167,14 @@ class QCDefinitions:
         self.fits_comments[name7] = 'QC: 2D red and green data present check'
         self.db_columns[name7] = None
 
-	name8 = 'data_2D_CaHK_check'
-        self.names.append(name8)
-        self.kpf_data_levels[name8] = ['2D']
-        self.descriptions[name8] = 'Check to see if CaHK CCD data is present with expected array sizes.'
-        self.data_types[name8] = 'int'
-        self.fits_keywords[name8] = 'CaHKPR2D'
-        self.fits_comments[name8] = 'QC: 2D CaHK data present check'
-        self.db_columns[name8] = None
+	name14 = 'data_2D_CaHK_check'
+        self.names.append(name14)
+        self.kpf_data_levels[name14] = ['2D']
+        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
+        self.data_types[name14] = 'int'
+        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
+        self.db_columns[name14] = None
 
         name9 = 'data_2D_bias_low_flux_check'
         self.names.append(name9)
