@@ -370,7 +370,7 @@ class QC:
                 self.logger.info(f'ObsID = {kfpera_csv} is not in the correct format.')
             return KPFERA
         datetime_ObsID = get_datetime_obsid(ObsID)
-        self.logger.info(datetime_ObsID)
+        self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
 
         if os.path.exists(kfpera_csv):
             try:
