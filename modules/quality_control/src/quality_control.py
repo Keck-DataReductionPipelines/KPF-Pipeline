@@ -220,21 +220,35 @@ class QCDefinitions:
 
 
     def list_qc_metrics(self):
-
-        print("name | data_type | spectrum_type | keyword | comment | db_column | description |")
-
+        """
+        Method to print a formatted block of the available QC checks and their
+        characteristics, sorted by the data level that the QC check accepts.
+        """
         qc_names = self.names
-
-        for qc_name in qc_names:
-
-            data_type = self.data_types[qc_name]
-            spectrum_type = self.spectrum_types[qc_name]
-            keyword = self.fits_keywords[qc_name]
-            comment = self.fits_comments[qc_name]
-            db_column = self.db_columns[qc_name]
-            description = self.descriptions[qc_name]
-
-            print(qc_name," | ",data_type," | ",spectrum_type," | ",keyword," | ",comment," | ",db_column," | ",description)
+        
+        for data_level in ['L0', '2D', 'L1', 'L2']:
+            print(f'\033[1mQuality Control tests for {data_level}:\033[0m')
+            for qc_name in qc_names:
+    
+                kpf_data_levels = self.kpf_data_levels[qc_name]
+                data_type = self.data_types[qc_name]
+                spectrum_type = self.spectrum_types[qc_name]
+                keyword = self.fits_keywords[qc_name]
+                comment = self.fits_comments[qc_name]
+                db_column = self.db_columns[qc_name]
+                description = self.descriptions[qc_name]
+    
+                if data_level in self.kpf_data_levels[qc_name]:
+                    print('   \033[1mQC Name:\033[0m ' + qc_name)
+                    print('      \033[1mDescription:\033[0m ' + description)
+                    print('      \033[1mData levels:\033[0m ' + str(kpf_data_levels))
+                    print('      \033[1mData type:\033[0m ' + data_type)
+                    print('      \033[1mSpectrum type:\033[0m ' + str(spectrum_type))
+                    print('      \033[1mKeyword:\033[0m ' + keyword)
+                    print('      \033[1mComment:\033[0m ' + comment)
+                    print('      \033[1mDatabase column:\033[0m ' + str(db_column))
+                    print()
+    
 
 
 #####################################################################
