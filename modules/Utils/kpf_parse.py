@@ -1,4 +1,5 @@
 import re
+import pandas as pd
 from astropy.io import fits
 from datetime import datetime, timedelta
 
@@ -246,7 +247,8 @@ def get_datetime_obsid(ObsID):
     ObsID = ObsID.replace('_L2', '')
     datecode = ObsID.split('.')[1]
     seconds = int(ObsID.split('.')[2])
-    print(len(ObsID.split('.')))
+    #print(len(ObsID.split('.')))
+    
     if len(ObsID.split('.')) == 4:
         datetime_obsid = datetime(year=int(datecode[0:4]), month=int(datecode[4:6]), day=int(datecode[6:8]))
         datetime_obsid += timedelta(seconds=seconds)
