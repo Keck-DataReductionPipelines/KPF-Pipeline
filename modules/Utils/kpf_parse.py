@@ -228,7 +228,10 @@ def get_datecode(ObsID):
 
 def get_datetime_obsid(ObsID):
     """
-    Return a datetime object for an ObsID
+    Return a datetime object for an ObsID.  Note that this datetime is related 
+    to the time that files were written to disk that were later assembled into 
+    an L0 file was created and is not accurate at the level needed for 
+    barycentric corrections.
 
     Args:
         ObsID, e.g. 'KP.20230708.04519.63' or 'KP.20230708.04519.63_2D.fits'
