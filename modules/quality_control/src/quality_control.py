@@ -384,7 +384,7 @@ class QC:
                     if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
                         KPFERA = str(df_kpfera.iloc[i][0]).strip()
                         if debug:
-                            self.logger.info(f'KPFERA = {KPFERA}')
+                            self.logger.info(f'Setting KPFERA = {KPFERA}')
             except Exception as e:
                 self.logger.info(f"Exceptions: {e}")
                 return None
