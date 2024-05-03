@@ -3,7 +3,7 @@ KPF Data Frequently Asked Questions (FAQ)
 
 How do I download my data?
 --------------------------
-The primary portal for KPF data access is the Keck Observatory Archive, which hosts Level 0, Level 1, and Level 2 data products.  Members of the California Planet Search (CPS) can also access KPF data products on the Jump portal or on the computer called shrek.
+The primary portal for KPF data access is the Keck Observatory Archive, which hosts Level 0, Level 1, and Level 2 data products.  Members of the California Planet Search (CPS) can also access KPF data products on the Jump portal or on the computer called shrek. 
 
 
 How do I cite the KPF DRP in scientific publications?
