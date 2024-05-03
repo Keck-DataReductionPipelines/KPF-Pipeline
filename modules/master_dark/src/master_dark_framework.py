@@ -3,6 +3,7 @@ import numpy as np
 import configparser as cp
 from datetime import datetime, timezone
 from astropy.io import fits
+from astropy.time import Time
 import re
 
 import database.modules.utils.kpf_db as db
@@ -247,6 +248,8 @@ class MasterDarkFramework(KPF0_Primitive):
 
                 self.logger.info('Prototype FITS header from {}'.format(dark_file_path))
 
+                date_obs = tester.header['PRIMARY']['DATE-OBS']
+
                 break
 
             else:
@@ -419,6 +422,14 @@ class MasterDarkFramework(KPF0_Primitive):
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of dark observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of dark observations')
 
+            mjd_obs_mid = (mjd_obs_min[ffi] + mjd_obs_max[ffi]) * 0.5
+            master_holder.header[ffi]['MIDMJD'] = (mjd_obs_mid,'Middle MJD of dark observations')
+            t_object = Time(mjd_obs_mid,format='mjd')
+            t_iso_string = str(t_object.iso)
+            t_iso_string += "Z"
+            t_iso_for_hdr = t_iso_string.replace(" ","T")
+            master_holder.header[ffi]['DATE-MID'] = (t_iso_for_hdr,'Middle timestamp of dark observations')
+
             filename_match_bias = re.match(r".+/(kpf_.+\.fits)", self.masterbias_path)
             try:
                 masterbias_path_filename_only = filename_match_bias.group(1)
@@ -473,6 +484,23 @@ class MasterDarkFramework(KPF0_Primitive):
         master_holder.header['PRIMARY']['IMTYPE'] = ('Dark','Master dark')
 
         master_holder.to_fits(self.masterdark_path)
+
+
+        # Overwrite the newly created FITS file with one having a cleaned-up primary header.
+
+        new_primary_hdr = fits.Header()
+        new_primary_hdr['EXTNAME'] = 'PRIMARY'
+        new_primary_hdr['DATE-OBS'] = date_obs
+        new_primary_hdr['IMTYPE'] = ('Dark','Master dark')
+        new_primary_hdr['TARGOBJ'] = (self.dark_object,'Target object of stacking')
+        new_primary_hdr['INSTRUME'] = ('KPF','Doppler Spectrometer')
+        new_primary_hdr['OBSERVAT'] = ('KECK','Observatory name')
+        new_primary_hdr['TELESCOP'] = ('Keck I','Telescope')
+
+        #FitsHeaders.cleanup_primary_header(self.masterdark_path,self.masterdark_path,new_primary_hdr)
+
+
+        # Return list of values.
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
