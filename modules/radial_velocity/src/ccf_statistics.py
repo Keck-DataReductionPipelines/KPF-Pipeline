@@ -1,8 +1,3 @@
-"""
-	This module defines class `CCFStats` which inherits from `KPF1_Primitive` and provides methods to
-	extract statistics from the CCF (Bisector, BIS, FWHM, skew, etc.).
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -18,6 +13,12 @@ from keckdrpframework.models.processing_context import ProcessingContext
 
 class CCFStats(object):
 
+	"""
+	This module defines class `CCFStats` which inherits from `KPF1_Primitive` 
+	and provides methods to extract statistics from the CCF 
+	(Bisector, BIS, FWHM, skew, etc.).
+	"""
+	
 	def __init__(self,
 				 action: Action,
 				 context: ProcessingContext) -> None:
