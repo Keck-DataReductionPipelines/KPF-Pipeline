@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
 from modules.Utils.utils import DummyLogger
-from modules.Utils.kpf_parse import get_data_products_L0, get_datetime_obsid
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -197,7 +197,7 @@ class QCDefinitions:
         self.names.append(name20)
         self.kpf_data_levels[name20] = ['L0', '2D', 'L1', 'L2']
         self.descriptions[name20] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
-        self.data_types[name20] = 'string'
+        self.data_types[name20] = 'float'
         self.spectrum_types[name20] = ['all', ]
         self.fits_keywords[name20] = 'KPFERA'
         self.fits_comments[name20] = 'Current era of KPF observations'
@@ -358,7 +358,7 @@ class QC:
              KPFERA - a string the the KPFERA (e.g., '1.0') for the input file
         """
         
-        KPFERA = '0.0'
+        KPFERA = float('0.0')
         
         try:
             filename = self.kpf_object.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
@@ -382,7 +382,7 @@ class QC:
                     starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S') 
                     stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
                     if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
-                        KPFERA = str(df_kpfera.iloc[i][0]).strip()
+                        KPFERA = float(df_kpfera.iloc[i][0])
                         if debug:
                             self.logger.info(f'Setting KPFERA = {KPFERA}')
             except Exception as e:
