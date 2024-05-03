@@ -11,6 +11,8 @@ from modules.master_bias.src.master_bias_framework import MasterBiasFramework
 from modules.master_dark.src.master_dark_framework import MasterDarkFramework
 from modules.master_flat.src.master_flat_framework import MasterFlatFramework
 from modules.master_arclamp.src.master_arclamp_framework import MasterArclampFramework
+from modules.quality_control.src.quality_control_framework import QualityControlFramework
+from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 
 flat_objects = config.FLAT.flat_objects
 # Normally standard_flat_object = "autocal-flat-all"
@@ -104,6 +106,28 @@ for raw_file_path in file_list:
                                           channel_datasec_ncols_green,
                                           channel_datasec_nrows_green,
                                           n_sigma)
+
+        kpf_object = L0_with_ffi
+        data_level_str = 'L0'
+
+        #invoke_subrecipe("./recipes/quality_control.subrecipe")
+        #invoke_subrecipe("./recipes/diagnostics.subrecipe")
+
+        qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
+        exit_code      = qc_output_list[0]
+        new_kpf_object = qc_output_list[1]
+        # exit_code = 1 is good.
+        if exit_code == 1:
+            kpf_object = new_kpf_object
+
+        diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
+        exit_code = diagnostics_output_list[0]
+        new_kpf_object = diagnostics_output_list[1]
+        # exit_code = 1 is good.
+        if exit_code == 1:
+            kpf_object = new_kpf_object
+
+        L0_with_ffi = kpf_object
 
         oscan_complete = to_fits(L0_with_ffi, output_file_name)
 
