@@ -182,25 +182,25 @@ class QCDefinitions:
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
 
-        name15 = 'data_2D_red_green_check'
-        self.names.append(name15)
-        self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
-        self.data_types[name15] = 'int'
-        self.spectrum_types[name15] = ['all', ]
-        self.fits_keywords[name15] = 'DATAPR2D'
-        self.fits_comments[name15] = 'QC: 2D red and green data present check'
-        self.db_columns[name15] = None
+        name7 = 'exposure_meter_flux_not_negative_check'
+        self.names.append(name7)
+        self.kpf_data_levels[name7] = ['L0']
+        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.data_types[name7] = 'int'
+        self.spectrum_types[name7] = ['all', ]
+        self.fits_keywords[name7] = 'EMNEG'
+        self.fits_comments[name7] = 'QC: EM not negative flux'
+        self.db_columns[name7] = None
 
-        name14 = 'data_2D_CaHK_check'
-        self.names.append(name14)
-        self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
-        self.data_types[name14] = 'int'
-        self.spectrum_types[name14] = ['all', ]
-        self.fits_keywords[name14] = 'CaHKPR2D'
-        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
-        self.db_columns[name14] = None
+        name8 = 'D2_lfc_flux_check'
+        self.names.append(name8)
+        self.kpf_data_levels[name8] = ['2D']
+        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
+        self.data_types[name8] = 'int'
+        self.spectrum_types[name8] = ['LFC', ]
+        self.fits_keywords[name8] = 'LFC2DFOK'
+        self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
+        self.db_columns[name8] = None
 
         name9 = 'data_2D_bias_low_flux_check'
         self.names.append(name9)
@@ -251,38 +251,36 @@ class QCDefinitions:
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
         self.db_columns[name13] = None
-
-        name7 = 'exposure_meter_flux_not_negative_check'
-        self.names.append(name7)
-        self.kpf_data_levels[name7] = ['L0']
-        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
-        self.data_types[name7] = 'int'
-        self.spectrum_types[name7] = ['all', ]
-        self.fits_keywords[name7] = 'EMNEG'
-        self.fits_comments[name7] = 'QC: EM not negative flux'
-        self.db_columns[name7] = None
-
-        name8 = 'D2_lfc_flux_check'
-        self.names.append(name8)
-        self.kpf_data_levels[name8] = ['2D']
-        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
-        self.data_types[name8] = 'int'
-        self.spectrum_types[name8] = ['LFC', ]
-        self.fits_keywords[name8] = 'LFC2DFOK'
-        self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
-        self.db_columns[name8] = None
         
+        name14 = 'data_2D_CaHK_check'
+        self.names.append(name14)
+        self.kpf_data_levels[name14] = ['2D']
+        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
+        self.data_types[name14] = 'int'
+        self.spectrum_types[name14] = ['all', ]
+        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
+        self.db_columns[name14] = None
 
+        name15 = 'data_2D_red_green_check'
+        self.names.append(name15)
+        self.kpf_data_levels[name15] = ['2D']
+        self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
+        self.data_types[name15] = 'int'
+        self.spectrum_types[name15] = ['all', ]
+        self.fits_keywords[name15] = 'DATAPR2D'
+        self.fits_comments[name15] = 'QC: 2D red and green data present check'
+        self.db_columns[name15] = None
 
-        name20 = 'add_kpfera'
-        self.names.append(name20)
-        self.kpf_data_levels[name20] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name20] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
-        self.data_types[name20] = 'float'
-        self.spectrum_types[name20] = ['all', ]
-        self.fits_keywords[name20] = 'KPFERA'
-        self.fits_comments[name20] = 'Current era of KPF observations'
-        self.db_columns[name20] = None
+        name16 = 'add_kpfera'
+        self.names.append(name16)
+        self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
+        self.descriptions[name16] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
+        self.data_types[name16] = 'float'
+        self.spectrum_types[name16] = ['all', ]
+        self.fits_keywords[name16] = 'KPFERA'
+        self.fits_comments[name16] = 'Current era of KPF observations'
+        self.db_columns[name16] = None
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -343,7 +341,6 @@ class QCDefinitions:
                     print('      \033[1mComment:\033[0m ' + comment)
                     print('      \033[1mDatabase column:\033[0m ' + str(db_column))
                     print()
-    
 
 
 #####################################################################
