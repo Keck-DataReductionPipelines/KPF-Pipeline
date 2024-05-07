@@ -36,11 +36,28 @@ Development Techniques
 
 Processing Files in a Test Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-When developing a feature, processing a set of files with a particular branch of the pipeline is useful.  The steps below explain how to do so.
+When developing a feature, it is useful to process a set of files with a particular branch of the pipeline.  The steps below explain how to do so.
 
 #. Select a set of observations to process.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search, the Jump portal can be used to make such a CSV file.
-#. Modify .config file(s) to use /testdata.  Set up a test directory that is separate from `/data`.  ...
+#. Modify the .config file(s) to use `/testdata`.  Set up a test directory separate from `/data`.  Below are commands to set environment variables in C-shell and should be put in a `.cshrc` file.  If needed, copy files from `/data` to your personal `/testdata`.  Note that one can read from `/data` by specifying the input directories in a recipe, but for non-production execution of the DRP the output of recipes should be written to private `/testdata` subdirectories.::
+
+    setenv KPFPIPE /src/<username>/code/KPF-Pipeline/
+    setenv KPFPIPE_DATA /data/kpf/
+    setenv KPFPIPE_TEST_DATA /data/user/<username>/testdata/
+    setenv KPFPIPE_TEST_OUTPUTS /data/user/<username>/testdata/
+    setenv OWNCLOUD_BASE /scr/<username>/owncloud/<username>/
+
+#. Set up masters database environment variables.  (Contact the database administrator if needed.)::
+
+    setenv KPFPIPE_DB_USER <username>
+    setenv KPFPIPE_DB_PASS '<password>'
+
+#. Optional: set up a port for forwarding Jupyter Notebooks run on the remote server that is executing the pipeline.::
+
+    setenv KPFPIPE_PORT <NNNN>
+
 #. Run DRP.  ...
+
 
 Continuous Integration (CI)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
