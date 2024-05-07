@@ -259,6 +259,27 @@ def add_headers_exposure_meter(D2, logger=None):
 
     return D2
 
+def add_headers_LFC_flux(D2, logger = None)
+    """
+    Computes 98 percentile of the flux of a 2D frame and adds keyword to headers. 
+    Keywords:
+        LFC2DFlux98 - 98 percentile of the flux of a 2D LFC frame 
+    Args:
+        D2 - a KPF 2D object 
+    Returns:
+        D2 - a 2D file with headers added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D KPF file.')
+        return D2
 
 def add_headers_L1_SNR(L1, logger=None):
     """
