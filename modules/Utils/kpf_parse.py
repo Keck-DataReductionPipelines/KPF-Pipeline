@@ -1,6 +1,7 @@
 import re
+import pandas as pd
 from astropy.io import fits
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class KPFParse:
 
@@ -224,6 +225,35 @@ def get_datecode(ObsID):
     ObsID = ObsID.replace('_L2', '')
     datecode = ObsID.split('.')[1]
     return datecode
+
+
+def get_datetime_obsid(ObsID):
+    """
+    Return a datetime object for an ObsID.  Note that this datetime is related 
+    to the time that files were written to disk that were later assembled into 
+    an L0 file was created and is not accurate at the level needed for 
+    barycentric corrections.
+
+    Args:
+        ObsID, e.g. 'KP.20230708.04519.63' or 'KP.20230708.04519.63_2D.fits'
+
+    Returns:
+        datecode, e.g. '20230708'
+    """
+    datetime_obsid = datetime(year=2000, month=1, day=1)
+    ObsID = ObsID.replace('.fits', '')
+    ObsID = ObsID.replace('_2D', '')
+    ObsID = ObsID.replace('_L1', '')
+    ObsID = ObsID.replace('_L2', '')
+    datecode = ObsID.split('.')[1]
+    seconds = int(ObsID.split('.')[2])
+    #print(len(ObsID.split('.')))
+    
+    if len(ObsID.split('.')) == 4:
+        datetime_obsid = datetime(year=int(datecode[0:4]), month=int(datecode[4:6]), day=int(datecode[6:8]))
+        datetime_obsid += timedelta(seconds=seconds)
+    
+    return datetime_obsid
 
 
 def get_ObsID(file):

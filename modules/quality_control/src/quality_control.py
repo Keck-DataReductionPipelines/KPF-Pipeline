@@ -4,7 +4,8 @@ import numpy.ma as ma
 import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
-from modules.Utils.kpf_parse import get_data_products_L0
+from modules.Utils.utils import DummyLogger
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -87,8 +88,10 @@ class QCDefinitions:
             or None if not.
     """
 
-    def __init__(self):
+    def __init__(self, logger=None):
 
+        self.logger = logger if logger is not None else DummyLogger()
+        
         self.names = []
         self.descriptions = {}
         self.kpf_data_levels = {} 
@@ -179,25 +182,25 @@ class QCDefinitions:
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
 
-        name15 = 'data_2D_red_green_check'
-        self.names.append(name15)
-        self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
-        self.data_types[name15] = 'int'
-        self.spectrum_types[name15] = ['all', ]
-        self.fits_keywords[name15] = 'DATAPR2D'
-        self.fits_comments[name15] = 'QC: 2D red and green data present check'
-        self.db_columns[name15] = None
+        name7 = 'exposure_meter_flux_not_negative_check'
+        self.names.append(name7)
+        self.kpf_data_levels[name7] = ['L0']
+        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.data_types[name7] = 'int'
+        self.spectrum_types[name7] = ['all', ]
+        self.fits_keywords[name7] = 'EMNEG'
+        self.fits_comments[name7] = 'QC: EM not negative flux'
+        self.db_columns[name7] = None
 
-        name14 = 'data_2D_CaHK_check'
-        self.names.append(name14)
-        self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
-        self.data_types[name14] = 'int'
-        self.spectrum_types[name14] = ['all', ]
-        self.fits_keywords[name14] = 'CaHKPR2D'
-        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
-        self.db_columns[name14] = None
+        name8 = 'D2_lfc_flux_check'
+        self.names.append(name8)
+        self.kpf_data_levels[name8] = ['2D']
+        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
+        self.data_types[name8] = 'int'
+        self.spectrum_types[name8] = ['LFC', ]
+        self.fits_keywords[name8] = 'LFC2DFOK'
+        self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
+        self.db_columns[name8] = None
 
         name9 = 'data_2D_bias_low_flux_check'
         self.names.append(name9)
@@ -248,27 +251,37 @@ class QCDefinitions:
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
         self.db_columns[name13] = None
-
-        name7 = 'exposure_meter_flux_not_negative_check'
-        self.names.append(name7)
-        self.kpf_data_levels[name7] = ['L0']
-        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
-        self.data_types[name7] = 'int'
-        self.spectrum_types[name7] = ['all', ]
-        self.fits_keywords[name7] = 'EMNEG'
-        self.fits_comments[name7] = 'QC: EM not negative flux'
-        self.db_columns[name7] = None
-
-        name8 = 'D2_lfc_flux_check'
-        self.names.append(name8)
-        self.kpf_data_levels[name8] = ['2D']
-        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
-        self.data_types[name8] = 'int'
-        self.spectrum_types[name8] = ['LFC', ]
-        self.fits_keywords[name8] = 'LFC2DFOK'
-        self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
-        self.db_columns[name8] = None
         
+        name14 = 'data_2D_CaHK_check'
+        self.names.append(name14)
+        self.kpf_data_levels[name14] = ['2D']
+        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
+        self.data_types[name14] = 'int'
+        self.spectrum_types[name14] = ['all', ]
+        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
+        self.db_columns[name14] = None
+
+        name15 = 'data_2D_red_green_check'
+        self.names.append(name15)
+        self.kpf_data_levels[name15] = ['2D']
+        self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
+        self.data_types[name15] = 'int'
+        self.spectrum_types[name15] = ['all', ]
+        self.fits_keywords[name15] = 'DATAPR2D'
+        self.fits_comments[name15] = 'QC: 2D red and green data present check'
+        self.db_columns[name15] = None
+
+        name16 = 'add_kpfera'
+        self.names.append(name16)
+        self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
+        self.descriptions[name16] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
+        self.data_types[name16] = 'float'
+        self.spectrum_types[name16] = ['all', ]
+        self.fits_keywords[name16] = 'KPFERA'
+        self.fits_comments[name16] = 'Current era of KPF observations'
+        self.db_columns[name16] = None
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -328,7 +341,6 @@ class QCDefinitions:
                     print('      \033[1mComment:\033[0m ' + comment)
                     print('      \033[1mDatabase column:\033[0m ' + str(db_column))
                     print()
-    
 
 
 #####################################################################
@@ -351,17 +363,19 @@ class QC:
 
     """
 
-    def __init__(self,kpf_object):
+    def __init__(self, kpf_object, logger=None):
         self.kpf_object = kpf_object
         self.qcdefinitions = QCDefinitions()
+        self.logger = logger if logger is not None else DummyLogger()
+        
 
     def add_qc_keyword_to_header(self, qc_name, value, debug=False):
 
         if str(type(value)) == "<class 'bool'>":
             if value == True:
-            	value = 1
+                value = 1
             else:
-            	value = 0
+                value = 0
         
         keyword = self.qcdefinitions.fits_keywords[qc_name]
         comment = self.qcdefinitions.fits_comments[qc_name]
@@ -405,17 +419,74 @@ class QC:
         if os.path.exists(junk_ObsIDs_csv):
             df_junk = pd.read_csv(junk_ObsIDs_csv)
             if debug:
-                print(f'Read the junk file {junk_ObsIDs_csv}.')
+                self.logger.info(f'Read the junk file {junk_ObsIDs_csv}.')
         else:
-            print(f"The file {junk_ObsIDs_csv} does not exist.")
+            self.logger.info(f"The file {junk_ObsIDs_csv} does not exist.")
             return QC_pass
         
         QC_pass = not (df_junk['observation_id'].isin([obsID])).any()
         if debug:
-            print(f'{filename} is a Junk file: ' + str(not QC_pass[i]))
-    
+            self.logger.info(f'{filename} is a Junk file: ' + str(not QC_pass[i]))
     
         return QC_pass
+
+
+    def add_kpfera(self, kfpera_csv='/code/KPF-Pipeline/static/kpfera_definitions.csv', debug=False):
+        """
+        This is not a Quality Control method.  
+        The goal of this method is to add the KPFERA keyword to all KPF files.
+        This keyword was created in February 2024, during the first service mission;
+        thus, L0 files before then (with KPFERA = 1.0 and 1.5) do not have 
+        this defined.  By running a recipe with the L0 checks as the first 
+        element in a processing recipe involving L0 files, the KPFERA keyword
+        is guaranteed to be in the primary header of every kpf object.
+    
+        Args:
+             kpfobs - a KPF L0/2D/L1/L2 object
+             kfpera_csv - a CSV the KPF era definitions    
+             debug - an optional flag.  If True, verbose output will be printed.
+    
+         Returns:
+             KPFERA - a string the the KPFERA (e.g., '1.0') for the input file
+        """
+        
+        KPFERA = float('0.0')
+        
+        try:
+            filename = self.kpf_object.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
+        except:
+            filename = 'this file'
+        ObsID = filename[:20]
+        if len(ObsID.split('.')) != 4:
+            if debug:
+                self.logger.info(f'ObsID = {kfpera_csv} is not in the correct format.')
+            return KPFERA
+        datetime_ObsID = get_datetime_obsid(ObsID)
+        self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
+
+        if os.path.exists(kfpera_csv):
+            try:
+                df_kpfera = pd.read_csv(kfpera_csv)
+                if debug:
+                    self.logger.info(f'Read the KPFERA file {kfpera_csv}.')
+                nrows = len(df_kpfera)
+                for i in np.arange(nrows):
+                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S') 
+                    stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
+                    if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
+                        KPFERA = float(df_kpfera.iloc[i][0])
+                        if debug:
+                            self.logger.info(f'Setting KPFERA = {KPFERA}')
+            except Exception as e:
+                self.logger.info(f"Exceptions: {e}")
+                return None
+        else:
+            self.logger.error(f"The file {kfpera_csv} does not exist.")
+        
+        if debug:
+            self.logger.info(f'The KPFERA of {filename} is: ' + str(KPFERA))
+    
+        return KPFERA
 
 #####################################################################
 
@@ -492,13 +563,13 @@ class QCL0(QC):
         if hasattr(L0, 'SOCAL PYRHELIOMETER'):
             data_products.append('Pyrheliometer')
         if debug:
-            print('Data products that are supposed to be in this L0 file: ' + str(data_products))
+            self.logger.info('Data products that are supposed to be in this L0 file: ' + str(data_products))
      
         # Use helper funtion to get data products and check their characteristics.
         QC_pass = True
         data_products_present = get_data_products_L0(L0)
         if debug:
-            print('Data products in L0 file: ' + str(data_products_present))
+            self.logger.info('Data products in L0 file: ' + str(data_products_present))
     
         # Check for specific data products
         possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
@@ -507,7 +578,7 @@ class QCL0(QC):
                 if not dp in data_products_present:
                     QC_pass = False
                     if debug:
-                        print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
         
         return QC_pass
 
