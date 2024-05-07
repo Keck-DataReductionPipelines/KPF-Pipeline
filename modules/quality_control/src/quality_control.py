@@ -4,7 +4,8 @@ import numpy.ma as ma
 import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
-from modules.Utils.kpf_parse import get_data_products_L0
+from modules.Utils.utils import DummyLogger
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -87,8 +88,10 @@ class QCDefinitions:
             or None if not.
     """
 
-    def __init__(self):
+    def __init__(self, logger=None):
 
+        self.logger = logger if logger is not None else DummyLogger()
+        
         self.names = []
         self.descriptions = {}
         self.kpf_data_levels = {} 
@@ -189,6 +192,96 @@ class QCDefinitions:
         self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
 
+        name8 = 'D2_lfc_flux_check'
+        self.names.append(name8)
+        self.kpf_data_levels[name8] = ['2D']
+        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
+        self.data_types[name8] = 'int'
+        self.spectrum_types[name8] = ['LFC', ]
+        self.fits_keywords[name8] = 'LFC2DFOK'
+        self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
+        self.db_columns[name8] = None
+
+        name9 = 'data_2D_bias_low_flux_check'
+        self.names.append(name9)
+        self.kpf_data_levels[name9] = ['2D']
+        self.descriptions[name9] = 'Check to see if flux is low in bias exposure.'
+        self.data_types[name9] = 'int'
+        self.spectrum_types[name9] = ['Bias', ]
+        self.fits_keywords[name9] = 'LOWBIAS'
+        self.fits_comments[name9] = 'QC: 2D bias low flux check'
+        self.db_columns[name9] = None
+
+        name10 = 'data_2D_dark_low_flux_check'
+        self.names.append(name10)
+        self.kpf_data_levels[name10] = ['2D']
+        self.descriptions[name10] = 'Check to see if flux is low in dark exposure.'
+        self.data_types[name10] = 'int'
+        self.spectrum_types[name10] = ['Dark', ]
+        self.fits_keywords[name10] = 'LOWDARK'
+        self.fits_comments[name10] = 'QC: 2D dark low flux check'
+        self.db_columns[name10] = None
+
+        name11 = 'data_L1_red_green_check'
+        self.names.append(name11)
+        self.kpf_data_levels[name11] = ['L1']
+        self.data_types[name11] = 'int'
+        self.spectrum_types[name11] = ['all', ]
+        self.descriptions[name11] = 'Check to see if red and green data are present in L1 with expected shapes.'
+        self.fits_keywords[name11] = 'DATAPRL1'
+        self.fits_comments[name11] = 'QC: L1 red and green data present check'
+        self.db_columns[name11] = None
+
+        name12 = 'data_L1_CaHK_check'
+        self.names.append(name12)
+        self.kpf_data_levels[name12] = ['L1']
+        self.descriptions[name12] = 'Check to see if CaHK data is present in L1 with expected shape.'
+        self.data_types[name12] = 'int'
+        self.spectrum_types[name12] = ['all', ]
+        self.fits_keywords[name12] = 'CaHKPRL1'
+        self.fits_comments[name12] = 'QC: L1 CaHK present check'
+        self.db_columns[name12] = None
+
+        name13 = 'data_L2_check'
+        self.names.append(name13)
+        self.kpf_data_levels[name13] = ['L2']
+        self.descriptions[name13] = 'Check to see if all data is present in L2.'
+        self.data_types[name13] = 'int'
+        self.spectrum_types[name13] = ['all', ]
+        self.fits_keywords[name13] = 'DATAPRL2'
+        self.fits_comments[name13] = 'QC: L2 data present check'
+        self.db_columns[name13] = None
+        
+        name14 = 'data_2D_CaHK_check'
+        self.names.append(name14)
+        self.kpf_data_levels[name14] = ['2D']
+        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
+        self.data_types[name14] = 'int'
+        self.spectrum_types[name14] = ['all', ]
+        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
+        self.db_columns[name14] = None
+
+        name15 = 'data_2D_red_green_check'
+        self.names.append(name15)
+        self.kpf_data_levels[name15] = ['2D']
+        self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
+        self.data_types[name15] = 'int'
+        self.spectrum_types[name15] = ['all', ]
+        self.fits_keywords[name15] = 'DATAPR2D'
+        self.fits_comments[name15] = 'QC: 2D red and green data present check'
+        self.db_columns[name15] = None
+
+        name16 = 'add_kpfera'
+        self.names.append(name16)
+        self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
+        self.descriptions[name16] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
+        self.data_types[name16] = 'float'
+        self.spectrum_types[name16] = ['all', ]
+        self.fits_keywords[name16] = 'KPFERA'
+        self.fits_comments[name16] = 'Current era of KPF observations'
+        self.db_columns[name16] = None
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -220,21 +313,34 @@ class QCDefinitions:
 
 
     def list_qc_metrics(self):
-
-        print("name | data_type | spectrum_type | keyword | comment | db_column | description |")
-
+        """
+        Method to print a formatted block of the available QC checks and their
+        characteristics, sorted by the data level that the QC check accepts.
+        """
         qc_names = self.names
-
-        for qc_name in qc_names:
-
-            data_type = self.data_types[qc_name]
-            spectrum_type = self.spectrum_types[qc_name]
-            keyword = self.fits_keywords[qc_name]
-            comment = self.fits_comments[qc_name]
-            db_column = self.db_columns[qc_name]
-            description = self.descriptions[qc_name]
-
-            print(qc_name," | ",data_type," | ",spectrum_type," | ",keyword," | ",comment," | ",db_column," | ",description)
+        
+        for data_level in ['L0', '2D', 'L1', 'L2']:
+            print(f'\033[1mQuality Control tests for {data_level}:\033[0m')
+            for qc_name in qc_names:
+    
+                kpf_data_levels = self.kpf_data_levels[qc_name]
+                data_type = self.data_types[qc_name]
+                spectrum_type = self.spectrum_types[qc_name]
+                keyword = self.fits_keywords[qc_name]
+                comment = self.fits_comments[qc_name]
+                db_column = self.db_columns[qc_name]
+                description = self.descriptions[qc_name]
+    
+                if data_level in self.kpf_data_levels[qc_name]:
+                    print('   \033[1mQC Name:\033[0m ' + qc_name)
+                    print('      \033[1mDescription:\033[0m ' + description)
+                    print('      \033[1mData levels:\033[0m ' + str(kpf_data_levels))
+                    print('      \033[1mData type:\033[0m ' + data_type)
+                    print('      \033[1mSpectrum type:\033[0m ' + str(spectrum_type))
+                    print('      \033[1mKeyword:\033[0m ' + keyword)
+                    print('      \033[1mComment:\033[0m ' + comment)
+                    print('      \033[1mDatabase column:\033[0m ' + str(db_column))
+                    print()
 
 
 #####################################################################
@@ -257,17 +363,19 @@ class QC:
 
     """
 
-    def __init__(self,kpf_object):
+    def __init__(self, kpf_object, logger=None):
         self.kpf_object = kpf_object
         self.qcdefinitions = QCDefinitions()
+        self.logger = logger if logger is not None else DummyLogger()
+        
 
     def add_qc_keyword_to_header(self, qc_name, value, debug=False):
 
         if str(type(value)) == "<class 'bool'>":
             if value == True:
-            	value = 1
+                value = 1
             else:
-            	value = 0
+                value = 0
         
         keyword = self.qcdefinitions.fits_keywords[qc_name]
         comment = self.qcdefinitions.fits_comments[qc_name]
@@ -311,17 +419,74 @@ class QC:
         if os.path.exists(junk_ObsIDs_csv):
             df_junk = pd.read_csv(junk_ObsIDs_csv)
             if debug:
-                print(f'Read the junk file {junk_ObsIDs_csv}.')
+                self.logger.info(f'Read the junk file {junk_ObsIDs_csv}.')
         else:
-            print(f"The file {junk_ObsIDs_csv} does not exist.")
+            self.logger.info(f"The file {junk_ObsIDs_csv} does not exist.")
             return QC_pass
         
         QC_pass = not (df_junk['observation_id'].isin([obsID])).any()
         if debug:
-            print(f'{filename} is a Junk file: ' + str(not QC_pass[i]))
-    
+            self.logger.info(f'{filename} is a Junk file: ' + str(not QC_pass[i]))
     
         return QC_pass
+
+
+    def add_kpfera(self, kfpera_csv='/code/KPF-Pipeline/static/kpfera_definitions.csv', debug=False):
+        """
+        This is not a Quality Control method.  
+        The goal of this method is to add the KPFERA keyword to all KPF files.
+        This keyword was created in February 2024, during the first service mission;
+        thus, L0 files before then (with KPFERA = 1.0 and 1.5) do not have 
+        this defined.  By running a recipe with the L0 checks as the first 
+        element in a processing recipe involving L0 files, the KPFERA keyword
+        is guaranteed to be in the primary header of every kpf object.
+    
+        Args:
+             kpfobs - a KPF L0/2D/L1/L2 object
+             kfpera_csv - a CSV the KPF era definitions    
+             debug - an optional flag.  If True, verbose output will be printed.
+    
+         Returns:
+             KPFERA - a string the the KPFERA (e.g., '1.0') for the input file
+        """
+        
+        KPFERA = float('0.0')
+        
+        try:
+            filename = self.kpf_object.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
+        except:
+            filename = 'this file'
+        ObsID = filename[:20]
+        if len(ObsID.split('.')) != 4:
+            if debug:
+                self.logger.info(f'ObsID = {kfpera_csv} is not in the correct format.')
+            return KPFERA
+        datetime_ObsID = get_datetime_obsid(ObsID)
+        self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
+
+        if os.path.exists(kfpera_csv):
+            try:
+                df_kpfera = pd.read_csv(kfpera_csv)
+                if debug:
+                    self.logger.info(f'Read the KPFERA file {kfpera_csv}.')
+                nrows = len(df_kpfera)
+                for i in np.arange(nrows):
+                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S') 
+                    stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
+                    if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
+                        KPFERA = float(df_kpfera.iloc[i][0])
+                        if debug:
+                            self.logger.info(f'Setting KPFERA = {KPFERA}')
+            except Exception as e:
+                self.logger.info(f"Exceptions: {e}")
+                return None
+        else:
+            self.logger.error(f"The file {kfpera_csv} does not exist.")
+        
+        if debug:
+            self.logger.info(f'The KPFERA of {filename} is: ' + str(KPFERA))
+    
+        return KPFERA
 
 #####################################################################
 
@@ -398,13 +563,13 @@ class QCL0(QC):
         if hasattr(L0, 'SOCAL PYRHELIOMETER'):
             data_products.append('Pyrheliometer')
         if debug:
-            print('Data products that are supposed to be in this L0 file: ' + str(data_products))
+            self.logger.info('Data products that are supposed to be in this L0 file: ' + str(data_products))
      
         # Use helper funtion to get data products and check their characteristics.
         QC_pass = True
         data_products_present = get_data_products_L0(L0)
         if debug:
-            print('Data products in L0 file: ' + str(data_products_present))
+            self.logger.info('Data products in L0 file: ' + str(data_products_present))
     
         # Check for specific data products
         possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
@@ -413,7 +578,7 @@ class QCL0(QC):
                 if not dp in data_products_present:
                     QC_pass = False
                     if debug:
-                        print(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
         
         return QC_pass
 
@@ -684,7 +849,7 @@ class QCL0(QC):
         elif saturated_elements_SKY / total_elements > saturated_fraction_threshold:
             QC_pass = False
         else: 
-        	QC_pass = True
+            QC_pass = True
             
         return QC_pass
 
@@ -739,7 +904,7 @@ class QCL0(QC):
         if has_consec_negs_SCI or has_consec_negs_SKY:
             QC_pass = False
         else: 
-        	QC_pass = True
+            QC_pass = True
             
         return QC_pass
 
@@ -762,6 +927,202 @@ class QC2D(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
+    def data_2D_red_green_check(self,debug=False):
+        """
+        This Quality Control function checks to see if the 2D data exists for both
+        the red and green chips and checks that the sizes of the arrays are as expected.
+    
+        Args:
+             debug - an optional flag.  If True, prints shapes of CCD arrays and other comments.
+    
+         Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        D2 = self.kpf_object
+
+
+        if debug:
+            print(D2.info())
+            type_D2 = type(D2)
+            print("type_2D = ",type_D2)
+            print("D2 = ",D2)
+
+        QC_pass = True
+    
+        extensions = D2.extensions
+    
+        if 'GREEN_CCD' in extensions:
+        
+            if debug:
+                print("GREEN_CCD exists")
+                print("data_shape =", np.shape(D2["GREEN_CCD"]))
+            
+            if np.shape(D2["GREEN_CCD"]) != (4080, 4080):  
+                QC_pass = False
+            
+        else:
+            if debug:
+                print("GREEN_CCD does not exist")
+            QC_pass = False       
+        
+        if 'RED_CCD' in extensions:
+        
+            if debug:
+                print("RED_CCD exists")
+                print("data_shape =", np.shape(D2["RED_CCD"]))
+            
+            if np.shape(D2["RED_CCD"]) != (4080, 4080):  
+                QC_pass = False
+            
+        else:
+            if debug:
+                print("RED_CCD does not exist")
+            QC_pass = False    
+        
+        return QC_pass
+
+    def data_2D_CaHK_check(self,debug=False):
+        """
+        This Quality Control function checks to see if the 2D data exists for the
+        Ca H&K chip and checks that the size of the array is as expected.
+
+        Args:
+             debug - an optional flag.  If True, prints shape of CaHK CCD array.
+    
+        Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        D2 = self.kpf_object
+
+        if debug:
+            print(D2.info())
+            type_D2 = type(D2)
+            print("type_2D = ",type_D2)
+            print("D2 = ",D2)
+
+        QC_pass = True
+    
+        extensions = D2.extensions
+    
+        if 'CA_HK' in extensions:
+        
+            if debug:
+                print("CA_HK exists")
+                print("data_shape =", np.shape(D2["CA_HK"]))
+            
+            if np.shape(D2["CA_HK"]) == (0,):  
+                QC_pass = False
+            
+        else:
+            if debug:
+                print("CA_HK does not exist")
+            QC_pass = False       
+        
+        return QC_pass
+
+    def data_2D_bias_low_flux_check(self,debug=False):
+        """
+        This Quality Control function checks to see if the flux is low
+        (mean flux < 10) for a bias exposure.
+
+        Args:
+             debug - an optional flag.  If True, prints mean flux in each CCD.
+
+        Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        D2 = self.kpf_object
+
+        if debug:
+            print(D2.info())
+            type_D2 = type(D2)
+            print("type_2D = ",type_D2)
+            print("D2 = ",D2)
+
+        QC_pass = True
+        extensions = D2.extensions
+
+        mean_GREEN = D2["GREEN_CCD"].flatten().mean()
+        mean_RED = D2["RED_CCD"].flatten().mean()
+
+        if debug:
+            print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+            print("Mean RED_CCD flux =", np.round(mean_RED, 2))
+            print("Max allowed mean flux =", 10)
+
+        if (mean_GREEN > 10) | (mean_RED > 10):
+            if debug:
+                print("One of the CCDs has a high flux")
+            QC_pass = False
+
+        return QC_pass
+
+    def data_2D_dark_low_flux_check(self,debug=False):
+        """
+        This Quality Control function checks to see if the flux is low
+        (mean flux < 10) for a dark exposure.
+
+        Args:
+             debug - an optional flag.  If True, prints mean flux in each CCD.
+
+        Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        D2 = self.kpf_object
+
+        if debug:
+            print(D2.info())
+            type_D2 = type(D2)
+            print("type_2D = ",type_D2)
+            print("D2 = ",D2)
+    
+        QC_pass = True
+        extensions = D2.extensions
+
+        mean_GREEN = D2["GREEN_CCD"].flatten().mean()
+        mean_RED = D2["RED_CCD"].flatten().mean()
+
+        if debug:
+            print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+            print("Mean RED_CCD flux =", np.round(mean_RED, 2))
+            print("Max allowed mean flux =", 10)
+
+        if (mean_GREEN > 10) | (mean_RED > 10):
+            if debug:
+                print("One of the CCDs has a high flux")
+            QC_pass = False
+        
+        return QC_pass
+
+    def D2_lfc_flux_check(self, threshold=4000, debug=False):
+        """
+        This Quality Control function checks if the flux values in the green and red chips of the
+        given 2D file are above a defined threshold at the 98th percentile.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if both green and red channels have 98th percentile values above the
+                            threshold, False otherwise.
+        """
+        
+        Two_D = self.kpf_object
+        green_counts = Two_D['GREEN_CCD'].data
+        red_counts = Two_D['RED_CCD'].data
+        
+        QC_Test = True
+        if debug:
+            print("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
+            print("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
+        if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
+            QC_Test = False
+           
+        return QC_Test
 
 #####################################################################
 
@@ -868,6 +1229,141 @@ class QCL1(QC):
 
         return QC_pass #, bad_orders
 
+    def data_L1_red_green_check(self,debug=False):
+        """
+        This Quality Control function checks to see if the red and green data
+        are present in an L1 file, and that all array sizes are as expected.
+
+        Args:
+             debug - an optional flag.  If True prints shapes of arrays.
+
+        Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        L1 = self.kpf_object
+
+        if debug:
+            print(L1.info())
+            type_L1 = type(L1)
+            print("type_L1 = ",type_L1)
+            print("L1 = ",L1)
+
+        QC_pass = True
+    
+        extensions = L1.extensions
+    
+        GREEN_extensions = [
+         'GREEN_SCI_FLUX1',  
+         'GREEN_SCI_FLUX2',  
+         'GREEN_SCI_FLUX3',  
+         'GREEN_SKY_FLUX',   
+         'GREEN_CAL_FLUX',   
+         'GREEN_SCI_VAR1',  
+         'GREEN_SCI_VAR2',  
+         'GREEN_SCI_VAR3',  
+         'GREEN_SKY_VAR',   
+         'GREEN_CAL_VAR',   
+         'GREEN_SCI_WAVE1',  
+         'GREEN_SCI_WAVE2',  
+         'GREEN_SCI_WAVE3',  
+         'GREEN_SKY_WAVE',   
+         'GREEN_CAL_WAVE' 
+        ] 
+
+        RED_extensions = [
+         'RED_SCI_FLUX1',  
+         'RED_SCI_FLUX2',  
+         'RED_SCI_FLUX3',  
+         'RED_SKY_FLUX',   
+         'RED_CAL_FLUX',   
+         'RED_SCI_VAR1',  
+         'RED_SCI_VAR2',  
+         'RED_SCI_VAR3',  
+         'RED_SKY_VAR',   
+         'RED_CAL_VAR',   
+         'RED_SCI_WAVE1',  
+         'RED_SCI_WAVE2',  
+         'RED_SCI_WAVE3',  
+         'RED_SKY_WAVE',   
+         'RED_CAL_WAVE'  
+        ] 
+    
+        QC_pass = True
+    
+        for ext in GREEN_extensions:
+            if ext not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension ' + ext + ' is missing from the file.')
+            else:
+                if np.shape(L1[ext]) != (35, 4080):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of ' + ext + ' array is incorrect.')
+                        print("data_shape =", np.shape(L1[ext]))
+                    
+        for ext in RED_extensions:
+            if ext not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension ' + ext + ' is missing from the file.')
+            else:
+                if np.shape(L1[ext]) != (32, 4080):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of ' + ext + ' array is incorrect.')   
+                        print("data_shape =", np.shape(L1[ext]))
+        
+        return QC_pass
+
+    def data_L1_CaHK_check(self,debug=False):
+        """
+        This Quality Control function checks to see if the green and red data
+        are present in an L1 file, and that all array sizes are as expected.
+
+        Args:
+             debug - an optional flag.  If True, prints shapes of arrays.
+
+        Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        L1 = self.kpf_object
+
+        if debug:
+            print(L1.info())
+            type_L1 = type(L1)
+            print("type_L1 = ",type_L1)
+            print("L1 = ",L1)
+
+        QC_pass = True
+    
+        extensions = L1.extensions
+    
+        CaHK_extensions = [
+         'CA_HK_SCI',  
+         'CA_HK_SKY',  
+         'CA_HK_SCI_WAVE',  
+         'CA_HK_SKY_WAVE'  
+        ] 
+    
+        QC_pass = True
+    
+        for ext in CaHK_extensions:
+            if ext not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension ' + ext + ' is missing from the file.')
+            else:
+                if np.shape(L1[ext]) == (0,):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of ' + ext + ' array is zero.')
+                        print("data_shape =", np.shape(L1[ext]))
+        
+        return QC_pass
+
 
 #####################################################################
 
@@ -888,6 +1384,106 @@ class QCL2(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
+    def data_L2_check(self,debug=False):
+        """
+        This Quality Control function checks to see if all of the 
+        expected data (telemetry, CCFs, and RVs) are present.
+
+        Args:
+             debug - an optional flag.  If True, prints shapes of arrays.
+
+        Returns:
+             QC_pass - a boolean signifying that all of the data exists as expected
+        """
+    
+        L2 = self.kpf_object
+
+        if debug:
+            print(L2.info())
+            type_L2 = type(L2)
+            print("type_L2 = ",type_L2)
+            print("L2 = ",L2)
+    
+        extensions = L2.extensions
+    
+        required_extensions = [
+            "TELEMETRY",
+            "GREEN_CCF",
+            "RED_CCF",
+            "GREEN_CCF_RW",
+            "RED_CCF_RW",
+            "RV"
+        ]
+    
+        QC_pass = True
+    
+        if "TELEMETRY" not in extensions:
+            QC_pass = False
+            if debug:
+                print('The extension TELEMETRY is missing from the file.')
+        else:
+            if np.shape(L2["TELEMETRY"]) == (0,):
+                QC_pass = False
+                if debug:
+                    print('Shape of TELEMETRY array is zero.')
+                    print("data_shape =", np.shape(L2["TELEMETRY"]))
+                
+        if "GREEN_CCF" not in extensions:
+            QC_pass = False
+            if debug:
+                print('The extension GREEN_CCF is missing from the file.')
+        else:
+            if np.shape(L2["GREEN_CCF"]) != (5, 35, 804):
+                QC_pass = False
+                if debug:
+                    print('Shape of GREEN_CCF array is incorrect.')
+                    print("data_shape =", np.shape(L2["GREEN_CCF"]))
+                
+        if "GREEN_CCF_RW" not in extensions:
+            QC_pass = False
+            if debug:
+                print('The extension GREEN_CCF_RW is missing from the file.')
+        else:
+            if np.shape(L2["GREEN_CCF_RW"]) != (5, 35, 804):
+                QC_pass = False
+                if debug:
+                    print('Shape of GREEN_CCF_RW array is incorrect.')
+                    print("data_shape =", np.shape(L2["GREEN_CCF_RW"]))
+                
+        if "RED_CCF" not in extensions:
+            QC_pass = False
+            if debug:
+                print('The extension RED_CCF is missing from the file.')
+        else:
+            if np.shape(L2["RED_CCF"]) != (5, 32, 804):
+                QC_pass = False
+                if debug:
+                    print('Shape of RED_CCF_RW array is incorrect.')
+                    print("data_shape =", np.shape(L2["RED_CCF"]))
+                
+        if "RED_CCF_RW" not in extensions:
+            QC_pass = False
+            if debug:
+                print('The extension RED_CCF_RW is missing from the file.')
+        else:
+            if np.shape(L2["RED_CCF_RW"]) != (5, 32, 804):
+                QC_pass = False
+                if debug:
+                    print('Shape of RED_CCF_RW array is incorrect.')
+                    print("data_shape =", np.shape(L2["RED_CCF_RW"]))
+                
+        if "RV" not in extensions:
+            QC_pass = False
+            if debug:
+                print('The extension RV is missing from the file.')
+        else:
+            if np.shape(L2["RV"]) == (0,):
+                QC_pass = False
+                if debug:
+                    print('Shape of RV array is zero.')
+                    print("data_shape =", np.shape(L2["RV"]))
+        
+        return QC_pass
 
     def L2_datetime_checks(self, debug=False):
         """
