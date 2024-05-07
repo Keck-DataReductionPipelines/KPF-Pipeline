@@ -1,68 +1,4 @@
 # Standard dependencies
-"""
-    This module defines class `RadialVelocityInit` which inherits from `KPF_Primitive` and provides methods
-    to perform the event on radial velocity initial setting in the recipe.
-
-    Description:
-        * Method `__init__`:
-
-            RadialVelocityInit constructor, the following arguments are passed to `__init__`,
-
-                - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
-                  keyword arguments passed by the `RadialVelocityInit` event issued in the recipe:
-
-                    - `action.args['start_time'] (str | float)`: Starting time in yyyy-mm-dd or Julian Data format.
-                      Defaults to None.
-                    - `action.args['period'] (str | int)`: A period of days for Barycentric correction computation.
-                      Default to None.
-                    - `action.args['l1_data'] (KPF1)`: KPF1 instance. The primary header of this L1 object provides
-                      star configuration information for the initial setting.
-                    - `action.args['bc_corr_path'] (str)`: Path of the csv file storing a list of Barycentric
-                      correction related data over a period of time. Default to None.
-                    - `actions.args['test_data_path'] (str)`: Path of the star config file. Default to None.
-
-                - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
-                  contains the path of the config file defined for the module of radial velocity in the master
-                  config file associated with the recipe.
-
-            and following attributes are defined to initialize the object,
-
-                - `bc_period (float)`: Period for Barycentric velocity correction calculation.
-                - `bc_start_jd (float)`: Start time in Julian data format for Barycentric velocity correction calculation.
-                - `bc_data (str)`: Path of csv file storing barycentric correction related data for a period of time.
-                - `test_data (str)`: Path of the star config file.
-                - `bc_output_data (str)`: Path of csv output file storing the result from barycentric correction computation.
-                - `l1_data (KPF1)`: L1 instance containing star configuration information.
-                - `config_path (str)`: Path of config file for radial velocity.
-                - `config (configparser.ConfigParser)`: Config context.
-                - `logger (logging.Logger)`: Instance of logging.Logger.
-                - `alg_rv_init (RadialVelocityAlgInit)`: Instance of `RadialVelocityAlgInit` which has operation codes
-                  for radial velocity initial setting.
-
-        * Method `__perform`:
-
-            RadialVelocityInit returns the result in `Arguments` object which contains the initialization result
-            including status, error message, and the data. Please refer to `Returns` section
-            in :func:`modules.radial_velocity.src.alg_rv_init.RadialVelocityAlgInit.start()`
-            for the detail of the result.
-
-    Usage:
-        For the recipe, the optimal extraction init event is issued like::
-
-            lev1_data = kpf1_from_fits(input_L1_file, data_type='KPF')
-            rv_init = RadialVelocityInit(start_time="2021-03-01",
-                    l1_data=lev1_data,
-                    bc_corr_path='/data/bary/',
-                    test_data_path='/data/masters/'
-                    )
-            :
-
-            rv_data = RadialVelocity(lev1_data, rv_init, ...)
-            :
-
-        where `rv_data` is dict object wrapped in `Arguments` class object.
-"""
-
 import configparser
 
 # Pipeline dependencies
@@ -84,6 +20,70 @@ DEFAULT_CFG_PATH = 'modules/radial_velocity/configs/default.cfg'
 
 
 class RadialVelocityInit(KPF_Primitive):
+
+    """
+        This module defines class `RadialVelocityInit` which inherits from `KPF_Primitive` and provides methods
+        to perform the event on radial velocity initial setting in the recipe.
+    
+        Description:
+            * Method `__init__`:
+    
+                RadialVelocityInit constructor, the following arguments are passed to `__init__`,
+    
+                    - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
+                      keyword arguments passed by the `RadialVelocityInit` event issued in the recipe:
+    
+                        - `action.args['start_time'] (str | float)`: Starting time in yyyy-mm-dd or Julian Data format.
+                          Defaults to None.
+                        - `action.args['period'] (str | int)`: A period of days for Barycentric correction computation.
+                          Default to None.
+                        - `action.args['l1_data'] (KPF1)`: KPF1 instance. The primary header of this L1 object provides
+                          star configuration information for the initial setting.
+                        - `action.args['bc_corr_path'] (str)`: Path of the csv file storing a list of Barycentric
+                          correction related data over a period of time. Default to None.
+                        - `actions.args['test_data_path'] (str)`: Path of the star config file. Default to None.
+    
+                    - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
+                      contains the path of the config file defined for the module of radial velocity in the master
+                      config file associated with the recipe.
+    
+                and following attributes are defined to initialize the object,
+    
+                    - `bc_period (float)`: Period for Barycentric velocity correction calculation.
+                    - `bc_start_jd (float)`: Start time in Julian data format for Barycentric velocity correction calculation.
+                    - `bc_data (str)`: Path of csv file storing barycentric correction related data for a period of time.
+                    - `test_data (str)`: Path of the star config file.
+                    - `bc_output_data (str)`: Path of csv output file storing the result from barycentric correction computation.
+                    - `l1_data (KPF1)`: L1 instance containing star configuration information.
+                    - `config_path (str)`: Path of config file for radial velocity.
+                    - `config (configparser.ConfigParser)`: Config context.
+                    - `logger (logging.Logger)`: Instance of logging.Logger.
+                    - `alg_rv_init (RadialVelocityAlgInit)`: Instance of `RadialVelocityAlgInit` which has operation codes
+                      for radial velocity initial setting.
+    
+            * Method `__perform`:
+    
+                RadialVelocityInit returns the result in `Arguments` object which contains the initialization result
+                including status, error message, and the data. Please refer to `Returns` section
+                in :func:`modules.radial_velocity.src.alg_rv_init.RadialVelocityAlgInit.start()`
+                for the detail of the result.
+    
+        Usage:
+            For the recipe, the optimal extraction init event is issued like::
+    
+                lev1_data = kpf1_from_fits(input_L1_file, data_type='KPF')
+                rv_init = RadialVelocityInit(start_time="2021-03-01",
+                        l1_data=lev1_data,
+                        bc_corr_path='/data/bary/',
+                        test_data_path='/data/masters/'
+                        )
+                :
+    
+                rv_data = RadialVelocity(lev1_data, rv_init, ...)
+                :
+    
+            where `rv_data` is dict object wrapped in `Arguments` class object.
+    """
 
     def __init__(self,
                  action: Action,
