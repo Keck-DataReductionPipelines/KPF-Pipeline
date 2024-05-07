@@ -1517,7 +1517,7 @@ class WaveCalibration:
                         leg_out = Legendre.fit(np.arange(n_pixels), our_wavelength_solution_for_order, 9)
                     
                     if self.cal_type == 'LFC':
-                        leg_out = Legendre.fit(x, y, 9, w=w)
+                        leg_out = Legendre.fit(x, y, self.fit_order, w=w)
                         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
                 if self.fit_type == 'spline':
                     leg_out = UnivariateSpline(x, y, w, k=5)
