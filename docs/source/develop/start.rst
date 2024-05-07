@@ -1,7 +1,6 @@
 KPF Pipeline Development
 ========================
 
-
 Repository Structure
 --------------------
 
@@ -47,7 +46,11 @@ Continuous Integration (CI)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Continuous integration is a software development practice that involves frequently merging code changes into a central repository, followed by automated builds and tests that verify the functionality of the code.
 
-The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like: ``> pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` (see the makefile for examples of performance and validation tests).
+The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like::
+
+    pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` 
+
+See the makefile for examples of performance and validation tests.
 
 Developing Quality Control (QC) Metrics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -57,7 +60,10 @@ The Quality Control module of KPF-Pipeline has a set of methods that determine i
 #. Start a Git branch for your feature.
 #. Write a method for your QC check in  `KPF-modules/quality_control/src/quality_control.py <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/blob/master/modules/quality_control/src/quality_control.py>`_ based on code from your Jupyter notebook.  The method should return a True boolean (``QC_pass``) if the input KPF object passed the QC check and False otherwise.  One method to model yours on is ``L0_data_products_check()``.  Your method should be in the appropriate class for your QC check data level.  For example, for a QC check to an L0 object, put the method in the ``QCL0`` class in ``quality_control.py``.
 #. Add information about your QC to the QCDefinitions class in ``quality_control.py``.  You can model your dictionary entries on the ones for ``name4 = 'L0_data_products_check'``.
-#. Check that your QC works as expected.  See `this Jupyter notebook <QC_Example__L0_Data_Products_Check.ipynb>`_ for an example.  You can also modify the config file specified in this command and check the result: ``kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe``.
+#. Check that your QC works as expected.  See `this Jupyter notebook <QC_Example__L0_Data_Products_Check.ipynb>`_ for an example.  You can also modify the config file specified in this command and check the result::
+
+    kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe
+
 #. Commit the changes to your Git branch and submit a pull request.
 #. Document the new QC-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
@@ -69,7 +75,10 @@ Diagnostics are similar to QC metrics in that they evaluate data quality. The di
 #. Start a Git branch for your feature.
 #. Write a method in ``modules/quicklook/src/diagnostics.py``.  See the method ``add_headers_dark_current_2D()`` for example, code that writes diagnostics related to dark current.
 #. Add your method and the appropriate logic to trigger it (e.g., only compute dark current for dark exposures) to the appropriate section of ``_perform`` in the ``DiagnosticsFramework`` class in ``modules/quicklook/src/diagnostics_framework.py``.
-#. Check that your QC works as expected.  You can do this by examining the FITS headers of files generated using the recipe ``recipes/quality_control.recipe``.
+#. Check that your QC works as expected.  You can do this by examining the FITS headers of files generated using the recipe  below (after modifying the config file).::
+
+    kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe
+
 #. Commit the changes to your Git branch and submit a pull request.
 #. Document the new Diagnostics-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
