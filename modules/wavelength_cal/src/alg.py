@@ -393,7 +393,13 @@ class WaveCalibration:
                             print_update=print_update, plot_path=order_plt_path
                         )
                     except:
-                        import pdb; pdb.set_trace()
+                        poly_soln_final_array[order_num,:] = rough_wls_order
+                        wavelengths_and_pixels[order_num] = {
+                            'known_wavelengths_vac': rough_wls_order, 
+                            'line_positions':[]
+                        }
+                        order_dict = {}
+                        continue
                 elif self.cal_type == 'Etalon':
 
                     assert comb_lines_angstrom is None, '`comb_lines_angstrom` \
