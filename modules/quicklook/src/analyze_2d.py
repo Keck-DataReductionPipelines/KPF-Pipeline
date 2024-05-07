@@ -60,10 +60,12 @@ class Analyze2D:
         self.green_ech_pressure_torr  = 0
         self.green_coll_current_a     = 0
         self.green_ech_current_a      = 0
+        self.green_lfc_flux_98        = 0
         self.red_coll_pressure_torr   = 0
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
+        self.red_lfc_flux_98          = 0
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -144,7 +146,27 @@ class Analyze2D:
         if chip == 'red':
             self.red_dark_current_regions = reg
 
-
+    def measure_LFC_flux_98(self, chip = None)
+        """
+        This method measures the 98th percentile of an LFC 2D frame
+        Args:
+            chip (string) - 'green' or 'red'
+        Attributes (set by this method):
+            green_lfc_flux_98     - 98th percentile of LFC flux (Green CCD)
+            red_lfc_flux_98       - 98th percentile of LFC flux (Red CCD)
+        Returns:
+            None
+        """
+        D2 = self.D2
+        if (chip.lower() == 'green'): 
+            image = np.array(D2['GREEN_CCD'].data)
+            percentile_98 = np.percentile(image, 98)
+            self.green_lfc_flux_98 = percentile_98
+        if (chip.lower() == 'red'): 
+            image = np.array(D2['RED_CCD'].data)
+            percentile_98 = np.percentile(image, 98)
+            self.red_lfc_flux_98 = percentile_98
+            
     def fit_double_gaussian_cdf(self, ngaussians=1, chip=None):
         """
         This method fits the cumulative distribution of intensity values with a 
