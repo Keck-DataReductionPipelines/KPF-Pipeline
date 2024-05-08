@@ -67,7 +67,7 @@ def process_image(data_stack_average, kernel_width, n_sigma, num_cores=None):
     with ProcessPoolExecutor(max_workers=num_cores) as executor:
         # Submit all tasks to the executor and store the futures in a list
         futures = [executor.submit(apply_sliding_window_line, data_stack_average[i, :], kernel_width, n_sigma) for i in range(ny)]
-        
+
         # Initialize an array to hold the results, filled with NaNs as placeholders
         smooth_image = np.full((ny, data_stack_average.shape[1]), np.nan)
 
@@ -84,6 +84,8 @@ if __name__ == '__main__':
 
     # Load your data
     hdul_stack_average = fits.open(fname_stack_average)
+    primary_header = hdul_stack_average['PRIMARY'].header
+    date_obs = primary_header['DATE-OBS']
 
     ffis = ["GREEN_CCD", "RED_CCD"]
     x_window = 200  # Kernel width
@@ -92,6 +94,8 @@ if __name__ == '__main__':
     num_cores = 90
 
     hdu_list = [fits.PrimaryHDU()]
+    hdu_list[0].header['EXTNAME'] = 'PRIMARY'
+    hdu_list[0].header['DATE-OBS'] = date_obs
 
     for ffi in ffis:
         print(ffi)

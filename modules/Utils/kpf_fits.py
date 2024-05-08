@@ -23,6 +23,31 @@ class FitsHeaders:
         input_fits_files (list of str): Individual FITS filename(s) that will be searched.
     """
 
+
+    @staticmethod
+    def cleanup_primary_header(fname_input,fname_output,hdr=None):
+
+        print("fname_input =",fname_input)
+        print("fname_output =",fname_output)
+
+        hdul_input = fits.open(fname_input)
+        nhdul = len(hdul_input)
+
+        hdu_list = []
+        hdu_list.append(fits.PrimaryHDU(header=hdr))
+
+        for i in range(1,nhdul):
+
+            type_hdul = type(hdul_input[i])
+
+            print("i,type_hdul =",i,type_hdul)
+
+            hdu_list.append(hdul_input[i])
+
+        hdu = fits.HDUList(hdu_list)
+        hdu.writeto(fname_output,overwrite=True,checksum=True)
+
+
     def __init__(self, search_path, header_keywords, header_values, logger=None):
         self.n_header_keywords = np.size(header_keywords)
         if not isinstance(header_keywords, list):
