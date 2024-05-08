@@ -606,10 +606,10 @@ class Analyze2D:
                     order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
                 else:
                     order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
-                width  = 1000
+                width  = 200
                 height = 200
-                start_x_arr = [ 0, 3500,  0, 3500]
-                start_y_arr = [3500, 3500,  1200,  1200]
+                start_x_arr = [ 0, 3600,  0, 3600]
+                start_y_arr = [1200, 1200,  545,  545]
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
@@ -617,9 +617,9 @@ class Analyze2D:
                     order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
                 else:
                     order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
-                width  = 1000
+                width  = 200
                 height = 200
-                start_x_arr = [ 500, 1500,  500, 1500]
+                start_x_arr = [ 0, 3600,  0, 3600]
                 start_y_arr = [1538, 1538,  545,  550]
             image = np.array(self.D2[CHIP + '_CCD'].data)
             order_trace_master = pd.read_csv(order_trace_master_file)
@@ -628,7 +628,7 @@ class Analyze2D:
             return
                 
         # Generate the array of 2D images
-        fig, axs = plt.subplots(2, 2, figsize=(50,17), tight_layout=False)
+        fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
         for i in range(2):
             for j in range(2):
                 # Calculate the top left corner of each sub-image
@@ -666,7 +666,7 @@ class Analyze2D:
                 axs[i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
                 axs[i, j].tick_params(axis='x', labelsize=14)
                 axs[i, j].tick_params(axis='y', labelsize=14)
-                cbar = fig.colorbar(im, ax=axs[i, j], fraction=0.012, pad=0.04) # Adjust the fraction and pad for proper placement
+                cbar = fig.colorbar(im, ax=axs[i, j], fraction=0.04, pad=0.04) # Adjust the fraction and pad for proper placement
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
@@ -698,7 +698,6 @@ class Analyze2D:
             self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
         if show_plot == True:
             plt.show()
-        import pdb; pdb.set_trace()
         plt.close('all')
 
     def plot_bias_histogram(self, chip=None, fig_path=None, show_plot=False):
