@@ -31,11 +31,9 @@ Here is a brief explanation of the contents of the directories at the top level 
 * **requirements.txt** - file with Python packages and (in some cases) version numbers.  This is used to enforce a consistent environment in Docker to run the pipeline.
 * **setup.py** - file used for configuration and installation of this software package.
 
-Development Techniques
-----------------------
 
 Processing Files in a Test Environment
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------------------
 When developing a feature, it is useful to process a set of files with a particular branch of the pipeline.  The steps below explain how to do so.
 
 #. **Select a set of observations to process**.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search group, the Jump portal can be used to make such a CSV file.
@@ -71,8 +69,8 @@ When developing a feature, it is useful to process a set of files with a particu
 
 
 Continuous Integration (CI)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Continuous integration is a software development practice that involves frequently merging code changes into a central repository, followed by automated builds and tests that verify the functionality of the code.
+---------------------------
+Continuous integration is a software development practice that involves frequently merging code changes into a central repository, followed by automated builds and tests that verify the code's functionality.
 
 The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like::
 
@@ -81,7 +79,7 @@ The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automat
 See the makefile for examples of performance and validation tests.
 
 Developing Quality Control (QC) Metrics
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------
 The Quality Control module of KPF-Pipeline has a set of methods that determine if L0/2D/L1/L2 data products meet certain criteria, such as having the expected FITS extensions with the correction dimensions and data, having the expected FITS header keywords, having non-negative data where expected, etc.  The results of QC tests are recorded to the headers of KPF objects and written to the headers of KPF FITS files.  Here are the steps to adding a new quality control test.
 
 #. Develop the code to determine if a KPF file passes or fails a QC metric.  See `this Jupyter notebook <QC_Example__Developing_a_QC_Method.ipynb>`_ for an example.  
@@ -96,7 +94,7 @@ The Quality Control module of KPF-Pipeline has a set of methods that determine i
 #. Document the new QC-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
 Developing Diagnostic Metrics
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 Diagnostics are similar to QC metrics in that they evaluate data quality. The difference is that QCs have a boolean value (pass/fail), while diagnostic information is more granular and can usually be expressed as a floating-point number.  Below are the steps to develop a new diagnostic and add the information to the headers.
 
 #. Develop the code to analyze a standard L0/2D/L1/L2/Master KPF file.  This is usually done with one of the Analyze classes; for example, in the ``Analyze2D`` class (in ``modules/quicklook/src/analyze2D.py``), the method ``measure_2D_dark_current()`` performs photometry on regions of the 2D images and saves that information as class attributes.  Using the Analyze methods is convenient because those same methods are used to generate Quicklook data products, providing overlap with annotations that might be used on plots.
@@ -111,5 +109,5 @@ Diagnostics are similar to QC metrics in that they evaluate data quality. The di
 #. Document the new Diagnostics-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
 Developing Quicklook Plots
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 <AWH to add content here.>
