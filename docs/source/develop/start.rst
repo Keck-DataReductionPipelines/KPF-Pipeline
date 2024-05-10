@@ -9,7 +9,7 @@ Here is a brief explanation of the contents of the directories at the top level 
 * **configs** - directory with pipeline configuration files 
 * **cronjobs** - directory with perl scripts and shell scripts run by cronjobs.  These are mostly associated with the generation of daily master files.
 * **database** - directory with several subdirectories related to the master file database.
-* **docs** - directory with documentation formatted as .rst files and Jupyter notebooks that as displayed on the Read the Docs webpage.
+* **docs** - directory with documentation formatted as .rst files and Jupyter notebooks that are displayed on the Read the Docs webpage.
 * **events** - directory with examples of using KPF-Pipeline in the WMKO Framework.  (This material might be moved to `docs/`.)
 * **examples** - directory with several recipes and config files that provide examples of KPF features.
 * **kpfpipe** - directory with code that defines the core functions of the `kpf` pipeline including the data model.
@@ -38,25 +38,36 @@ Processing Files in a Test Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 When developing a feature, it is useful to process a set of files with a particular branch of the pipeline.  The steps below explain how to do so.
 
-#. Select a set of observations to process.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search, the Jump portal can be used to make such a CSV file.
-#. Modify the .config file(s) to use `/testdata`.  Set up a test directory separate from `/data`.  Below are commands to set environment variables in C-shell and should be put in a `.cshrc` file.  If needed, copy files from `/data` to your personal `/testdata`.  Note that one can read from `/data` by specifying the input directories in a recipe, but for non-production execution of the DRP the output of recipes should be written to private `/testdata` subdirectories.::
+#. **Select a set of observations to process**.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search group, the Jump portal can be used to make such a CSV file.
+#. **Set up the test environment** by modifying the .config file(s) to use the `/testdata` that is separate from the output directories of the production pipeline and other developer's workspaces.  The `/testdata` directory should be separate from `/data`.  Below are commands to set environment variables in C-shell and should be put in a `.cshrc` file.  (They can be straightforwardly modified for Bash and other shell scripts.)  Those four lines set an equivalency between a directories outside of docker and inside of docker.  Specifically, the value of KPFPIPE is the path outside of Docker that is equivalent to `/code/` inside Docker.  Ditto for KPFPIPE_DATA <-> `/data/`, KPFPIPE_TEST_DATA <-> `/testdata/`, KPFPIPE_TEST_OUTPUTS <-> `/outputs/`.  These are defined in the file Dockerfile at the root of the pipeline repository.  The point of setting these directory equivalencies it that it allows for the same recipes and configs to be used for different environments and by different users.::
 
     setenv KPFPIPE /src/<username>/code/KPF-Pipeline/
     setenv KPFPIPE_DATA /data/kpf/
     setenv KPFPIPE_TEST_DATA /data/user/<username>/testdata/
     setenv KPFPIPE_TEST_OUTPUTS /data/user/<username>/testdata/
-    setenv OWNCLOUD_BASE /scr/<username>/owncloud/<username>/
 
-#. Set up masters database environment variables.  (Contact the database administrator if needed.)::
+#. **Set up masters database environment variables**.  (Contact the database administrator if needed for the username and password.)::
 
     setenv KPFPIPE_DB_USER <username>
-    setenv KPFPIPE_DB_PASS '<password>'
+    setenv KPFPIPE_DB_PASS <password>
 
-#. Optional: set up a port for forwarding Jupyter Notebooks run on the remote server that is executing the pipeline.::
+#. **Optional: set up a port for forwarding Jupyter Notebooks** run on the remote server that is executing the pipeline.  This is useful when developing or checking algorithms.::
 
     setenv KPFPIPE_PORT <NNNN>
 
-#. Run DRP.  ...
+#. **Optional: connect to the remove serving using port-forwarding over SSH**.  NNNN should be filled in with the value of KPFPIPE_PORT above and hostname is the server on which the KPF DRP is running.::
+
+    ssh -L NNNN:localhost:NNNN hostname.edu
+
+#. **Start Docker** using the commands below.  After running those commands,o ne can also execute `make notebook` to start a Jupyter notebook with remote port-forwarding (see above) to `make clean` to remove temporary files.::
+
+    make docker
+    make init
+
+#. **Select (or write) a recipe and a config file for exacution**.  Recipes must be run from the command line (most easily within Docker) and not in a Jupyter Notebook.  For example, the recipe and config for the command in the next item are `recipes/quicklook_match.recipe` and `configs/quicklook_match.cfg`, respectively.  It is important during development to write files to a private directory (usually `/testdata/`) and not where production files are stored (usually `/data/`).
+#. **Run the recipe**.  Here’s an example of running the DRP to compute the QLP data products for one KPF observation.  Note that the config file should be modified to set the output directory appropriately.::
+
+    kpf -c configs/quicklook_match.cfg -r recipes/quicklook_match.recipe
 
 
 Continuous Integration (CI)
