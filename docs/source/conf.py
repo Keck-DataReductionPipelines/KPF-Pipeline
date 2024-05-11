@@ -60,7 +60,7 @@ master_doc = 'index'
 # General information about the project.
 project = u'KPFPipeline'
 copyright = u'2020-2024, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
-author = u'Arpita Roy, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
+author = u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -153,7 +153,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'KPFPipeline.tex', u'KPFPipeline Documentation',
-     u'Arpita Roy, BJ Fulton, Andrew Howard', 'manual'),
+     u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, et al.', 'manual'),
 ]
 
 
