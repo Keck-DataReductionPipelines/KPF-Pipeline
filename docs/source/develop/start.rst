@@ -1,7 +1,6 @@
 KPF Pipeline Development
 ========================
 
-
 Repository Structure
 --------------------
 
@@ -10,7 +9,7 @@ Here is a brief explanation of the contents of the directories at the top level 
 * **configs** - directory with pipeline configuration files 
 * **cronjobs** - directory with perl scripts and shell scripts run by cronjobs.  These are mostly associated with the generation of daily master files.
 * **database** - directory with several subdirectories related to the master file database.
-* **docs** - directory with documentation formatted as .rst files and Jupyter notebooks that as displayed on the Read the Docs webpage.
+* **docs** - directory with documentation formatted as .rst files and Jupyter notebooks that are displayed on the Read the Docs webpage.
 * **events** - directory with examples of using KPF-Pipeline in the WMKO Framework.  (This material might be moved to `docs/`.)
 * **examples** - directory with several recipes and config files that provide examples of KPF features.
 * **kpfpipe** - directory with code that defines the core functions of the `kpf` pipeline including the data model.
@@ -32,47 +31,83 @@ Here is a brief explanation of the contents of the directories at the top level 
 * **requirements.txt** - file with Python packages and (in some cases) version numbers.  This is used to enforce a consistent environment in Docker to run the pipeline.
 * **setup.py** - file used for configuration and installation of this software package.
 
-Development Techniques
-----------------------
 
 Processing Files in a Test Environment
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-When developing a feature, processing a set of files with a particular branch of the pipeline is useful.  The steps below explain how to do so.
+--------------------------------------
+When developing a feature, it is useful to process a set of files with a particular branch of the pipeline.  The steps below explain how to do so.
 
-#. Select a set of observations to process.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search, the Jump portal can be used to make such a CSV file.
-#. Modify .config file(s) to use /testdata.  Set up a test directory that is separate from `/data`.  ...
-#. Run DRP.  ...
+#. **Select a set of observations to process**.  It is often convenient to store the ObsIDs of the observations (e.g., `KP.20240416.76442.84`) in a CSV file.  This can be accomplished in several ways.  One option is to use the AnalyzeTimeSeries methods to select a set of observations matching various criteria.  For those in the California Planet Search group, the Jump portal can be used to make such a CSV file.
+#. **Set up the test environment** by modifying the .config file(s) to use the `/testdata` that is separate from the output directories of the production pipeline and other developer's workspaces.  The `/testdata` directory should be separate from `/data`.  Below are commands to set environment variables in C-shell and should be put in a `.cshrc` file.  (They can be straightforwardly modified for Bash and other shell scripts.)  Those four lines set an equivalency between a directories outside of docker and inside of docker.  Specifically, the value of KPFPIPE is the path outside of Docker that is equivalent to `/code/` inside Docker.  Ditto for KPFPIPE_DATA <-> `/data/`, KPFPIPE_TEST_DATA <-> `/testdata/`, KPFPIPE_TEST_OUTPUTS <-> `/outputs/`.  These are defined in the file Dockerfile at the root of the pipeline repository.  The point of setting these directory equivalencies it that it allows for the same recipes and configs to be used for different environments and by different users.::
+
+    setenv KPFPIPE /src/<username>/code/KPF-Pipeline/
+    setenv KPFPIPE_DATA /data/kpf/
+    setenv KPFPIPE_TEST_DATA /data/user/<username>/testdata/
+    setenv KPFPIPE_TEST_OUTPUTS /data/user/<username>/testdata/
+
+#. **Set up masters database environment variables**.  (Contact the database administrator if needed for the username and password.)::
+
+    setenv KPFPIPE_DB_USER <username>
+    setenv KPFPIPE_DB_PASS <password>
+
+#. **Optional: set up a port for forwarding Jupyter Notebooks** run on the remote server that is executing the pipeline.  This is useful when developing or checking algorithms.::
+
+    setenv KPFPIPE_PORT <NNNN>
+
+#. **Optional: connect to the remove serving using port-forwarding over SSH**.  NNNN should be filled in with the value of KPFPIPE_PORT above and hostname is the server on which the KPF DRP is running.::
+
+    ssh -L NNNN:localhost:NNNN hostname.edu
+
+#. **Start Docker** using the commands below.  After running those commands,o ne can also execute `make notebook` to start a Jupyter notebook with remote port-forwarding (see above) to `make clean` to remove temporary files.::
+
+    make docker
+    make init
+
+#. **Select (or write) a recipe and a config file for exacution**.  Recipes must be run from the command line (most easily within Docker) and not in a Jupyter Notebook.  For example, the recipe and config for the command in the next item are `recipes/quicklook_match.recipe` and `configs/quicklook_match.cfg`, respectively.  It is important during development to write files to a private directory (usually `/testdata/`) and not where production files are stored (usually `/data/`).
+#. **Run the recipe**.  Here’s an example of running the DRP to compute the QLP data products for one KPF observation.  Note that the config file should be modified to set the output directory appropriately.::
+
+    kpf -c configs/quicklook_match.cfg -r recipes/quicklook_match.recipe
+
 
 Continuous Integration (CI)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Continuous integration is a software development practice that involves frequently merging code changes into a central repository, followed by automated builds and tests that verify the functionality of the code.
+---------------------------
+Continuous integration is a software development practice that involves frequently merging code changes into a central repository, followed by automated builds and tests that verify the code's functionality.
 
-The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like: ``> pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` (see the makefile for examples of performance and validation tests).
+The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like::
+
+    pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` 
+
+See the makefile for examples of performance and validation tests.
 
 Developing Quality Control (QC) Metrics
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------
 The Quality Control module of KPF-Pipeline has a set of methods that determine if L0/2D/L1/L2 data products meet certain criteria, such as having the expected FITS extensions with the correction dimensions and data, having the expected FITS header keywords, having non-negative data where expected, etc.  The results of QC tests are recorded to the headers of KPF objects and written to the headers of KPF FITS files.  Here are the steps to adding a new quality control test.
 
 #. Develop the code to determine if a KPF file passes or fails a QC metric.  See `this Jupyter notebook <QC_Example__Developing_a_QC_Method.ipynb>`_ for an example.  
 #. Start a Git branch for your feature.
 #. Write a method for your QC check in  `KPF-modules/quality_control/src/quality_control.py <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/blob/master/modules/quality_control/src/quality_control.py>`_ based on code from your Jupyter notebook.  The method should return a True boolean (``QC_pass``) if the input KPF object passed the QC check and False otherwise.  One method to model yours on is ``L0_data_products_check()``.  Your method should be in the appropriate class for your QC check data level.  For example, for a QC check to an L0 object, put the method in the ``QCL0`` class in ``quality_control.py``.
 #. Add information about your QC to the QCDefinitions class in ``quality_control.py``.  You can model your dictionary entries on the ones for ``name4 = 'L0_data_products_check'``.
-#. Check that your QC works as expected.  See `this Jupyter notebook <QC_Example__L0_Data_Products_Check.ipynb>`_ for an example.  You can also modify the config file specified in this command and check the result: ``kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe``.
+#. Check that your QC works as expected.  See `this Jupyter notebook <QC_Example__L0_Data_Products_Check.ipynb>`_ for an example.  You can also modify the config file specified in this command and check the result::
+
+    kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe
+
 #. Commit the changes to your Git branch and submit a pull request.
 #. Document the new QC-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
 Developing Diagnostic Metrics
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 Diagnostics are similar to QC metrics in that they evaluate data quality. The difference is that QCs have a boolean value (pass/fail), while diagnostic information is more granular and can usually be expressed as a floating-point number.  Below are the steps to develop a new diagnostic and add the information to the headers.
 
 #. Develop the code to analyze a standard L0/2D/L1/L2/Master KPF file.  This is usually done with one of the Analyze classes; for example, in the ``Analyze2D`` class (in ``modules/quicklook/src/analyze2D.py``), the method ``measure_2D_dark_current()`` performs photometry on regions of the 2D images and saves that information as class attributes.  Using the Analyze methods is convenient because those same methods are used to generate Quicklook data products, providing overlap with annotations that might be used on plots.
 #. Start a Git branch for your feature.
 #. Write a method in ``modules/quicklook/src/diagnostics.py``.  See the method ``add_headers_dark_current_2D()`` for example, code that writes diagnostics related to dark current.
 #. Add your method and the appropriate logic to trigger it (e.g., only compute dark current for dark exposures) to the appropriate section of ``_perform`` in the ``DiagnosticsFramework`` class in ``modules/quicklook/src/diagnostics_framework.py``.
-#. Check that your QC works as expected.  You can do this by examining the FITS headers of files generated using the recipe ``recipes/quality_control.recipe``.
+#. Check that your QC works as expected.  You can do this by examining the FITS headers of files generated using the recipe  below (after modifying the config file).::
+
+    kpf -c configs/qc_diagnostics_example.cfg -r recipes/qc_diagnostics_example.recipe
+
 #. Commit the changes to your Git branch and submit a pull request.
 #. Document the new Diagnostics-related FITS keywords in the appropriate section of 'KPF Data Format' in Readthedocs.
 
 Developing Quicklook Plots
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 <AWH to add content here.>
