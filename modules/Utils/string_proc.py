@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from kpfpipe.primitives.core import KPF_Primitive
 
 # External dependencies
@@ -88,6 +89,71 @@ class date_from_kpffile(KPF_Primitive):
                 self.logger.info("File is from " + date_str)
 
         return Arguments(date_str)
+
+
+class days_since_observation(KPF_Primitive):
+    """
+    This primitive returns the number of days (float) since the time encoded 
+    in the ObsID of a KPF filename (e.g., 'KP.20240101.10214.08.fits' or 
+    '/data/L1/20240101/KP.20240101.10214.08_L1.fits')
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
+                  keyword arguments passed by the `days_since_observation` event issued in the recipe:
+
+            - `action.args[0] (float)`: days since time in encoded in filename
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        if 'startswith' in args_keys and action.args['startswith']:
+            self.filenamestartwith = action.args['startswith']
+        else:
+            self.filenamestartwith = ''
+
+        self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) == 1 and isinstance(self.action.args[0], str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        f_name = self.action.args[0]
+        first_key = self.filenamestartwith or 'KP.'
+        date_format = 'YYYYMMDD.SSSSS.SS'
+        first_idx = f_name.find(first_key)
+        days_since = 0
+        if first_idx >= 0:
+            start_idx = first_idx + len(first_key)
+            date_str = f_name[start_idx:start_idx+len(date_format)]
+            date_parts = date_str.split('.')
+            if len(date_parts) == 3:
+                try:
+                    yyyymmdd = date_parts[0]
+                    year = yyyymmdd[0:4]   
+                    month = yyyymmdd[4:6]  
+                    day = yyyymmdd[6:8]
+                    sec = date_parts[1]
+                    then = datetime(int(year), int(month), int(day)) + timedelta(seconds=int(sec))
+                    now = datetime.now()
+                    days_since = (now - then).total_seconds() / 86400 
+                except:
+                    self.logger.info("Error computing time difference.")
+
+        if days_since == 0:
+            if self.logger:
+                self.logger.info("Can not find date from " + f_name)
+        else:
+            if self.logger:
+                self.logger.info(f"Days since observation of {f_name}: " + str(days_since))
+
+        return Arguments(days_since)
 
 
 class date_from_path(KPF_Primitive):

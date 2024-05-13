@@ -4,6 +4,7 @@ import configparser as cp
 from datetime import datetime, timezone
 import re
 from astropy.io import fits
+from astropy.time import Time
 
 import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
@@ -292,6 +293,8 @@ class MasterArclampFramework(KPF0_Primitive):
 
                 self.logger.info('Prototype FITS header from {}'.format(arclamp_file_path))
 
+                date_obs = tester.header['PRIMARY']['DATE-OBS']
+
                 break
 
             else:
@@ -341,6 +344,15 @@ class MasterArclampFramework(KPF0_Primitive):
 
                 path = all_arclamp_files[i]
                 obj = KPF0.from_fits(path)
+
+                try:
+                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
+                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
+                    if obj_not_junk != 1:
+                        continue
+                except KeyError as err:
+                    pass
+
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
                 n_dims = len(np_obj_ffi_shape)
@@ -449,6 +461,15 @@ class MasterArclampFramework(KPF0_Primitive):
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of arclamp observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of arclamp observations')
+
+            mjd_obs_mid = (mjd_obs_min[ffi] + mjd_obs_max[ffi]) * 0.5
+            master_holder.header[ffi]['MIDMJD'] = (mjd_obs_mid,'Middle MJD of arclamp observations')
+            t_object = Time(mjd_obs_mid,format='mjd')
+            t_iso_string = str(t_object.iso)
+            t_iso_string += "Z"
+            t_iso_for_hdr = t_iso_string.replace(" ","T")
+            master_holder.header[ffi]['DATE-MID'] = (t_iso_for_hdr,'Middle timestamp of arclamp observations')
+
             master_holder.header[ffi]['TARGOBJ'] = (self.arclamp_object,'Target object of stacking')
 
             filename_match_bias = re.match(r".+/(kpf_.+\.fits)", self.masterbias_path)
@@ -522,6 +543,23 @@ class MasterArclampFramework(KPF0_Primitive):
         master_holder.header['PRIMARY']['IMTYPE'] = ('Arclamp','Master arclamp')
 
         master_holder.to_fits(self.masterarclamp_path)
+
+
+        # Overwrite the newly created FITS file with one having a cleaned-up primary header.
+
+        new_primary_hdr = fits.Header()
+        new_primary_hdr['EXTNAME'] = 'PRIMARY'
+        new_primary_hdr['DATE-OBS'] = date_obs
+        new_primary_hdr['IMTYPE'] = ('Arclamp','Master arclamp')
+        new_primary_hdr['TARGOBJ'] = (self.arclamp_object,'Target object of stacking')
+        new_primary_hdr['INSTRUME'] = ('KPF','Doppler Spectrometer')
+        new_primary_hdr['OBSERVAT'] = ('KECK','Observatory name')
+        new_primary_hdr['TELESCOP'] = ('Keck I','Telescope')
+
+        #FitsHeaders.cleanup_primary_header(self.masterarclamp_path,self.masterarclamp_path,new_primary_hdr)
+
+
+        # Return list of values.
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 

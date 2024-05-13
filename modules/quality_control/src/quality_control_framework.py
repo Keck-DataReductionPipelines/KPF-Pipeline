@@ -1,9 +1,10 @@
 import ast
 import configparser as cp
 import modules.quality_control.src.quality_control as qc
+from modules.Utils.kpf_parse import HeaderParse
 
 # temporarily:
-import inspect
+#import inspect
 
 # Pipeline dependencies
 from kpfpipe.logger import *
@@ -94,11 +95,17 @@ class QualityControlFramework(KPF0_Primitive):
         # Run the QC tests and add result to keyword to header
         for qc_name in qc_names:
             try:
-                self.logger.info('Running QC: ' + qc_name + ' (' + qc_obj.qcdefinitions.descriptions[qc_name] + ')')
-                method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
-                qc_value = method() # evaluate method
-                self.logger.info('Result (True = pass): ' + str(qc_value))
-                qc_obj.add_qc_keyword_to_header(qc_name, qc_value)
+                primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                this_spectrum_type = primary_header.get_name(use_star_names=False)    
+                spectrum_types = qc_obj.qcdefinitions.spectrum_types[qc_name]
+                if (this_spectrum_type in spectrum_types) or ('all' in spectrum_types):
+                    self.logger.info(f'Running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]})')
+                    method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
+                    qc_value = method() # evaluate method
+                    self.logger.info(f'QC result: {qc_value} (True = pass)')
+                    qc_obj.add_qc_keyword_to_header(qc_name, qc_value)
+                else:
+                    self.logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because spectrum type {this_spectrum_type} not in list of spectrum types: {spectrum_types}')
             except AttributeError as e:
                 self.logger.info(f'Method {qc_name} does not exist in qc_obj or another AttributeError occurred: {e}')
                 pass

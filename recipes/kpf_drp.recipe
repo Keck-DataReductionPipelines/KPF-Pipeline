@@ -17,6 +17,7 @@ from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
+from modules.Utils.era_specific_parameters import EraSpecific
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
@@ -123,19 +124,9 @@ else:
 # date dir for 2D, masters input and L1 and L2 output.
 date_dir = sel_obsid + '/'
 
-# flat_file_pattern = config.ARGUMENT.flat_file
-# date dir for flat file
-# use the full path of flat file defined in config instead
-# date_dir_flat = date_from_kpffile(flat_file_pattern, startswith='kpf_')
-# if date_dir_flat == None:
-#	date_dir_flat = date_dir
-# else:
-#	date_dir_flat = date_dir_flat + '/'
-
 output_dir = config.ARGUMENT.output_dir
 input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
 masters_data_dir = config.ARGUMENT.masters_dir
-#masters_data_dir = output_dir + "masters/"
 
 ## general purpose variables
 ccd_list = config.ARGUMENT.ccd_list
@@ -148,7 +139,6 @@ csv_ext = '.csv'
 poly_degree = config.ARGUMENT.fitting_poly_degree
 ccd_idx=config.ARGUMENT.ccd_idx
 
-start_order= config.ARGUMENT.start_order
 rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
 orderlet_names = config.ARGUMENT.orderlet_names
@@ -206,12 +196,8 @@ origin = [data_col_range[0], data_row_range[0]]
 
 #    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
 #    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
-#lev0_flat_pattern = input_2d_dir_flat + flat_file_pattern + fits_ext
 lev0_flat_pattern = config.ARGUMENT.flat_file
-# output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
 # use the full path of ourder trace files defind in config
-order_trace_flat = config.ARGUMENT.order_trace_flat
-output_order_trace = config.ARGUMENT.order_trace_files
 orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
 
 ## for spectral extraction: input and output
@@ -335,8 +321,6 @@ if do_order_trace:
 		for idx in ccd_idx:
 			ccd = ccd_list[idx]
 			# get order trace file name defined in config file
-			# output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
-			# output_lev0_trace_csv = output_order_trace[idx] 
 			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if overwrite or not exists(output_lev0_trace_csv):
@@ -420,23 +404,6 @@ outlier_mask_path = config.ARGUMENT.outlier_mask_path
 
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
-	trace_list = []
-
-	# prepare trace files and rectified L0 flat data for spectral extraction
-	if do_spectral_extraction:
-		# existence of flat and trace files
-		# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-		output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
-		if exists(output_lev0_flat_rect):
-			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
-
-		if not trace_list:
-			b_all_traces = True
-			for idx in ccd_idx:
-				# lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
-				lev0_trace_csv = output_order_trace[idx]
-				trace_list = trace_list + [lev0_trace_csv]
-				b_all_traces = b_all_traces and exists(lev0_trace_csv)
 
 	# prepare bias, dark data for ca_hk
 	if do_hk:
@@ -457,6 +424,26 @@ if do_spectral_extraction or do_hk or do_bc:
 	for input_lev0_file in lev0_files:
 		# lev0_data is KPF0 instance for input_lev0_file
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+		start_order = EraSpecific(lev0_data, 'start_order')
+		output_order_trace = EraSpecific(lev0_data, 'order_trace_files')
+		order_trace_flat = EraSpecific(lev0_data, 'order_trace_flat')
+
+		# prepare trace files and rectified L0 flat data for spectral extraction
+		if do_spectral_extraction:
+			# existence of flat and trace files
+			# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+			output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
+			if exists(output_lev0_flat_rect):
+				lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
+
+			if not trace_list:
+				b_all_traces = True
+				for idx in ccd_idx:
+					lev0_trace_csv = output_order_trace[idx]
+					trace_list = trace_list + [lev0_trace_csv]
+					b_all_traces = b_all_traces and exists(lev0_trace_csv)
+
+
 		# this used to denote the level 0 data before background subtraction
 		lev0_data_no_bk = kpf0_from_fits(input_lev0_file, data_type=data_type)
 

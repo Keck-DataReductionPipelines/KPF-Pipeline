@@ -9,18 +9,23 @@
 # 1-pixel high (along cross-dispersion dimension) is used for computing the clipped mean, with
 # 3-sigma, double-sided outlier rejection.  The kernel is centered on the pixel of interest.
 #
-# The implemented method is slow and takes many hours to complete.
+# The implemented method, unless multi-threaded, is slow and takes many hours to complete.
 ####################################################################################################################
 
-# Used to make smooth lamp pattern for 20240211.
-fname_stack_average = "kpf_20240211_master_flat.fits"
-fname_smooth_lamp = "kpf_20240211_smooth_lamp_made20240308_new.fits"
-
-
+import os
+import sys
 import numpy as np
 from astropy.io import fits
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import os
+
+# Get input and output files from command-line arguments.
+
+fname_stack_average = (sys.argv)[1]
+fname_smooth_lamp = (sys.argv)[2]
+
+print("Input file: fname_stack_average =",fname_stack_average)
+print("Output file: fname_smooth_lamp =",fname_smooth_lamp)
+
 
 def apply_sliding_window_line(data_line, kernel_width, n_sigma):
     """Apply a 1D sliding window operation on a line of data with dynamic kernel adjustment near edges."""
@@ -62,7 +67,7 @@ def process_image(data_stack_average, kernel_width, n_sigma, num_cores=None):
     with ProcessPoolExecutor(max_workers=num_cores) as executor:
         # Submit all tasks to the executor and store the futures in a list
         futures = [executor.submit(apply_sliding_window_line, data_stack_average[i, :], kernel_width, n_sigma) for i in range(ny)]
-        
+
         # Initialize an array to hold the results, filled with NaNs as placeholders
         smooth_image = np.full((ny, data_stack_average.shape[1]), np.nan)
 
@@ -79,6 +84,8 @@ if __name__ == '__main__':
 
     # Load your data
     hdul_stack_average = fits.open(fname_stack_average)
+    primary_header = hdul_stack_average['PRIMARY'].header
+    date_obs = primary_header['DATE-OBS']
 
     ffis = ["GREEN_CCD", "RED_CCD"]
     x_window = 200  # Kernel width
@@ -87,6 +94,8 @@ if __name__ == '__main__':
     num_cores = 90
 
     hdu_list = [fits.PrimaryHDU()]
+    hdu_list[0].header['EXTNAME'] = 'PRIMARY'
+    hdu_list[0].header['DATE-OBS'] = date_obs
 
     for ffi in ffis:
         print(ffi)
