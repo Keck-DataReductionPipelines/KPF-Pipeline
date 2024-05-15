@@ -608,8 +608,8 @@ class Analyze2D:
                     order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
                 width  = 200
                 height = 200
-                start_x_arr = [ 500, 1500,  500, 1500]
-                start_y_arr = [1562, 1563,  615,  623]
+                start_x_arr = [ 0, 3600,  0, 3600]
+                start_y_arr = [1200, 1200,  545,  545]
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
@@ -619,7 +619,7 @@ class Analyze2D:
                     order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
                 width  = 200
                 height = 200
-                start_x_arr = [ 500, 1500,  500, 1500]
+                start_x_arr = [ 0, 3600,  0, 3600]
                 start_y_arr = [1538, 1538,  545,  550]
             image = np.array(self.D2[CHIP + '_CCD'].data)
             order_trace_master = pd.read_csv(order_trace_master_file)
@@ -634,11 +634,13 @@ class Analyze2D:
                 # Calculate the top left corner of each sub-image
                 start_x = start_x_arr[2*i+j]
                 start_y = start_y_arr[2*i+j]
+                end_x = min(start_x+width, image.shape[0])
+                end_y = min(start_y+height, image.shape[1])
 
                 # Slice out and display the sub-image
-                sub_img = image[start_y:start_y+height, start_x:start_x+width]
+                sub_img = image[start_y:end_y, start_x:end_x]
                 im = axs[i, j].imshow(sub_img, origin='lower', 
-                                 extent=[start_x, start_x+width, start_y, start_y+height], # these indices appear backwards, but work
+                                 extent=[start_x, end_x, start_y, end_y], # these indices appear backwards, but work
                                  vmin = np.nanpercentile(sub_img,0.1), 
                                  vmax = np.nanpercentile(sub_img,99.9),
                                  interpolation = 'None',
@@ -664,7 +666,7 @@ class Analyze2D:
                 axs[i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
                 axs[i, j].tick_params(axis='x', labelsize=14)
                 axs[i, j].tick_params(axis='y', labelsize=14)
-                cbar = fig.colorbar(im, ax=axs[i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
+                cbar = fig.colorbar(im, ax=axs[i, j], fraction=0.04, pad=0.04) # Adjust the fraction and pad for proper placement
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
@@ -697,7 +699,6 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
-
 
     def plot_bias_histogram(self, chip=None, fig_path=None, show_plot=False):
         """
