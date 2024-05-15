@@ -160,7 +160,7 @@ def query_database(date, cal_types, cal_file_levels, log):
         
         return exit_list
 
-def query_wls(datetime, log):
+def query_wls(datetime, cal_type, max_cal_file_age, log):
         """
         Returns [exitcode_for_before_query,[before_master_file_record],exitcode_for_after_query,[after_master_file_record]].
 
@@ -174,10 +174,10 @@ def query_wls(datetime, log):
         dbserver = os.getenv('DBSERVER')
         
         # hard code some parameters for WLS lookup
-        cal_type = [['WLS','autocal-lfc-all'], ['WLS', 'autocal-thar-all']]
-        cal_file_level = 1
+        # cal_type = [['WLS','autocal-lfc-all'], ['WLS', 'autocal-thar-all']]
+        cal_file_level = 1  # can assume WLS is in L1 format
         contentbitmask = 3
-        max_cal_file_age = '3 days'
+        # max_cal_file_age = '3 days'
 
         # Connect to database
 
@@ -393,6 +393,8 @@ class GetCalibrations:
         self.lookup_map = eval(self.config['PARAM']['lookup_map'])
         self.db_cal_types = eval(self.config['PARAM']['db_cal_types'])
         self.db_cal_file_levels = eval(self.config['PARAM']['db_cal_file_levels'])
+        self.wls_cal_types = eval(self.config['PARAM']['wls_cal_types'])
+        self.max_age = eval(self.config['PARAM']['max_cal_age'])
 
     def lookup(self):
         dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
@@ -415,7 +417,7 @@ class GetCalibrations:
             elif lookup == 'database' and db_results != None:
                 output_cals[cal] = extract_from_db_results(db_results, cal)
             elif lookup == 'wls':
-                wls_results = query_wls(self.datetime, self.log)
+                wls_results = query_wls(self.datetime, self.wls_cal_types, self.max_age, self.log)
                 output_cals[cal] = extract_from_db_results(wls_results, cal)
 
         return output_cals
