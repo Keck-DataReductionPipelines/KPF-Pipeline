@@ -1,0 +1,40 @@
+# Find the nearest wavelength solutions in time and generate an interpolated wavelength solution.
+from database.modules.query_db_before_after_master_files.src.query_db_before_after_master_files_framework import QueryDBBeforeAfterMasterFilesFramework
+
+obs_date_time = config.WLS_INTERPOLATION.obs_date_time   #NEW
+cal_type = config.WLS_INTERPOLATION.cal_type             #NEW
+object_before = config.WLS_INTERPOLATION.object_before   # WLS FILE of choice
+object_after = config.WLS_INTERPOLATION.object_after     # WLS FILE of choice
+
+if do_db_query_for_before_after_master_files:
+
+    query_before_after_master_files_list = QueryDBBeforeAfterMasterFilesFramework(data_type,
+                                                                                  obs_date_time,
+                                                                                  cal_type,
+                                                                                  cal_file_level,
+                                                                                  contentbitmask,
+                                                                                  object_before,
+                                                                                  object_after,
+                                                                                  max_cal_file_age)
+
+    db_exit_code_before = query_before_after_master_files_list[0]
+    db_rec_before = query_before_after_master_files_list[1]
+
+    if db_exit_code_before == 0:
+        master_file_before = db_rec_before[6]
+
+    db_exit_code_after = query_before_after_master_files_list[2]
+    db_rec_after = query_before_after_master_files_list[3]
+
+    if db_exit_code_after == 0:
+        master_file_after = db_rec_after[6]
+
+# This section performs the interpolation. ########
+#  The inputs are l1 objects, the one in question, and the two calibrations.
+#  The output is an l1 file with an interpolated WLS.
+wls_data_before = kpf1_from_fits(master_file_before,data_type=data_type)
+wls_data_after = kpf1_from_fits(master_file_after,data_type=data_type)
+
+master_file_before_l1 = kpf1_from_fits(master_file_before,data_type=data_type)
+master_file_after_l1  = kpf1_from_fits(master_file_after,data_type=data_type)
+interpolated_l1 = WaveInterpolate(master_file_before_l1,master_file_after_l1,output_data)
