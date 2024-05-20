@@ -317,6 +317,7 @@ def run_query(cur,rep,query_template, contentbitmask, log):
     record = cur.fetchone()
 
     exit_code = 1
+    results_list = []
 
     if record is not None:
 
@@ -354,7 +355,7 @@ def run_query(cur,rep,query_template, contentbitmask, log):
 
         results_list = [cId, db_level, db_cal_type, db_object, contentbitmask, infobits, filename]
 
-        return exit_code,results_list
+    return exit_code,results_list
 
 def extract_from_db_results(results, cal_type):
     if results[0] == 1:
