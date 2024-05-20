@@ -396,6 +396,7 @@ class GetCalibrations:
         self.db_cal_file_levels = eval(self.config['PARAM']['db_cal_file_levels'])
         self.wls_cal_types = eval(self.config['PARAM']['wls_cal_types'])
         self.max_age = eval(self.config['PARAM']['max_cal_age'])
+        self.defaults = eval(self.config['PARAM']['defaults'])
 
     def lookup(self):
         dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
@@ -411,15 +412,27 @@ class GetCalibrations:
                     start = datetime.strptime(row['UT_start_date'], "%Y-%m-%d %H:%M:%S")
                     end = datetime.strptime(row['UT_end_date'], "%Y-%m-%d %H:%M:%S")
                     if start <= dt < end:
-                        output_cals[cal] = row['CALPATH']
+                        try:
+                            output_cals[cal] = eval(row['CALPATH'])
+                        except SyntaxError:
+                            output_cals[cal] = row['CALPATH']
             elif lookup == 'database' and db_results == None:
                 db_results = query_database(date_str, self.db_cal_types, self.db_cal_file_levels, self.log)
-                output_cals[cal] = extract_from_db_results(db_results, cal)
+                if db_results[0] == 0:
+                    output_cals[cal] = extract_from_db_results(db_results, cal)
+                else:
+                    output_cals[cal] = self.defaults[cal]
             elif lookup == 'database' and db_results != None:
-                output_cals[cal] = extract_from_db_results(db_results, cal)
+                if db_results[0] == 0:
+                    output_cals[cal] = extract_from_db_results(db_results, cal)
+                else:
+                    output_cals[cal] = self.defaults[cal]
             elif lookup == 'wls':
                 wls_results = query_wls(self.datetime, self.wls_cal_types, self.max_age, self.log)
-                output_cals[cal] = extract_from_db_results(wls_results, cal)
+                if wls_results[0] == 0 and wls_results[2] == 0:
+                    output_cals[cal] = extract_from_db_results(wls_results, cal)
+                else:
+                    output_cals[cal] = self.defaults[cal]
 
         return output_cals
 

@@ -12,6 +12,34 @@ class CalibrationLookup(KPF0_Primitive):
     """This utility looks up the associated calibrations for a given datetime and
        returns a dictionary with all calibration types.
 
+    Description:
+        * Method `__init__`:
+
+            CalibrationLookup constructor, the following arguments are passed to `__init__`,
+
+                - `action (keckdrpframework.models.action.Action)`: `action.args` contains positional arguments and
+                  keyword arguments passed by the `BarycentricCorrection` event issued in the recipe:
+
+                    - `action.args[0] (dict)`: Datetime string in ISO format
+                
+                - `context (keckdrpframework.models.processing_context.ProcessingContext)`: `context.config_path`
+                  contains the path of the default config file defined for the CalibrationLookup module.
+
+
+        * Method `__perform`:
+
+            CalibrationLookup returns the result in `Arguments` object which contains a dictionary of calibration file paths
+            for the input datetime
+
+    Usage:
+        For the recipe, the CalibrationLookup primitive is called like::
+
+            :
+            dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
+            cals = CalibrationLookup(dt_string)
+            :
+
+
     """
     def __init__(self, action, context):
 
