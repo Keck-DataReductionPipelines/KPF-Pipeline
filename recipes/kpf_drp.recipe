@@ -167,25 +167,25 @@ contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
-if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
-	db_wls_exit_code = 1
-	for cal_type_pair in cal_type_pairs:
-		if db_wls_exit_code != 0:
-			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-                                                                                                  date_dir_db_query,
-                                                                                                  cal_file_level,
-                                                                                                  contentbitmask,
-                                                                                                  cal_type_pair,
-                                                                                                  max_cal_file_age)
+# if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+# 	db_wls_exit_code = 1
+# 	for cal_type_pair in cal_type_pairs:
+# 		if db_wls_exit_code != 0:
+# 			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+#                                                                                                   date_dir_db_query,
+#                                                                                                   cal_file_level,
+#                                                                                                   contentbitmask,
+#                                                                                                   cal_type_pair,
+#                                                                                                   max_cal_file_age)
 
-			db_wls_exit_code = query_one_nearest_master_file_list[0]
-			if db_wls_exit_code == 0:
+# 			db_wls_exit_code = query_one_nearest_master_file_list[0]
+# 			if db_wls_exit_code == 0:
 
-				db_wls_rec = query_one_nearest_master_file_list[1]
-				db_wls_master_file = db_wls_rec[6]
-				wave_fits = []
-				for wls in wls_list:
-                                    wave_fits = wave_fits + [db_wls_master_file]
+# 				db_wls_rec = query_one_nearest_master_file_list[1]
+# 				db_wls_master_file = db_wls_rec[6]
+# 				wave_fits = []
+# 				for wls in wls_list:
+#                                     wave_fits = wave_fits + [db_wls_master_file]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv
@@ -538,6 +538,7 @@ if do_spectral_extraction or do_hk or do_bc:
 			# copy wls to the proper extension of lev1 data
 			if do_sp_wavecopy and exists(output_lev1_file):
 				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				obs_date_time = GetHeaderValue(output_data,'DATE-MID') 
 				if do_db_query_for_before_after_master_files == True:
 					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
 					output_data = interpolated_l1
