@@ -29,6 +29,8 @@ from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+from modules.wavelength_cal.src.alg import WaveInterpolation          
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate 
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -51,6 +53,9 @@ overwrite = config.ARGUMENT.overwrite
 
 # if copy wavelength solution data to L1 from file samples with wls data.
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
+
+# Peroform wavelength interpolation
+do_db_query_for_before_after_master_files = config.WLS_INTERPOLATION.do_db_query_for_before_after_master_files 
 
 # file path for lev0 and lev1 data
 lev0_file_path = ""
@@ -533,13 +538,19 @@ if do_spectral_extraction or do_hk or do_bc:
 			# copy wls to the proper extension of lev1 data
 			if do_sp_wavecopy and exists(output_lev1_file):
 				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-				for idx in ccd_idx:
-					if wave_fits[idx] != None and exists(wave_fits[idx]):
-						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
-						for ext in wave_to_ext[idx]:
-							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
-
-				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+				if do_db_query_for_before_after_master_files == True:
+					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
+					output_data = interpolated_l1
+					SetHeaderValue(output_data, 'WLSFILE', master_file_before) # db_rec_before from subrecipe
+					SetHeaderValue(output_data, 'WLSFILE2', master_file_after) # db_rec_after from subrecipe
+				else:
+					for idx in ccd_idx:
+						if wave_fits[idx] != None and exists(wave_fits[idx]):
+							# wavecal_data will be replaced by wavelength interpolation.
+							wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+							for ext in wave_to_ext[idx]:
+								ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
+					SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
 
 				# Quality Control - L1 level
 				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
