@@ -260,7 +260,7 @@ class GetHeaderValue(KPF_Primitive):
         KPF_Primitive.__init__(self, action, context)
 
         self.kpfobj = action.args[0]
-        self.key_list = [str] if isinstance(action.args[1], str) else action.args[1]
+        self.key_list = [action.args[1]] if isinstance(action.args[1], str) else action.args[1]
 
         self.logger = None
         if not self.logger:

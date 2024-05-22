@@ -17,7 +17,6 @@ from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
-from modules.Utils.era_specific_parameters import EraSpecific
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
@@ -29,6 +28,7 @@ from modules.quality_control.src.quality_control_framework import QualityControl
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.wavelength_cal.src.alg import WaveInterpolation          
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate 
 
@@ -429,9 +429,11 @@ if do_spectral_extraction or do_hk or do_bc:
 	for input_lev0_file in lev0_files:
 		# lev0_data is KPF0 instance for input_lev0_file
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-		start_order = EraSpecific(lev0_data, 'start_order')
-		output_order_trace = EraSpecific(lev0_data, 'order_trace_files')
-		order_trace_flat = EraSpecific(lev0_data, 'order_trace_flat')
+		dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
+		cals = CalibrationLookup(dt_string)
+		start_order = cals['start_order']
+		output_order_trace = cals['order_trace']
+		order_trace_flat = cals['trace_flat']
 
 		# prepare trace files and rectified L0 flat data for spectral extraction
 		if do_spectral_extraction:

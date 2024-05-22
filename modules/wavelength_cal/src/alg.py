@@ -1920,7 +1920,10 @@ class WaveInterpolation:
                 deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
             else:
                  self.logger.error("l1_timestamp not in a recognized format")
-            frac = deltat / tdiff
+            if tdiff == 0:
+                frac = 0.0
+            else:
+                frac = deltat / tdiff
     
             # Perform linear interpolation between wls1 and wls2
             new_wls_arrays = {}
