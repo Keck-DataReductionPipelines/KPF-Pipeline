@@ -1,6 +1,6 @@
 # Find the nearest wavelength solutions in time and generate an interpolated wavelength solution.
 
-cals      = CalirationLookup(obs_date_time) 
+cals      = CalibrationLookup(obs_date_time) 
 master_file_before = cals['wls'][0]
 master_file_after  = cals['wls'][1]
 
