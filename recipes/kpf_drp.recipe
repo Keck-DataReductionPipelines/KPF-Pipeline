@@ -17,7 +17,6 @@ from modules.Utils.data_handler import SelectObs
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
-from modules.Utils.era_specific_parameters import EraSpecific
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.order_trace.src.order_mask import OrderMask
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
@@ -29,6 +28,9 @@ from modules.quality_control.src.quality_control_framework import QualityControl
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+from modules.wavelength_cal.src.alg import WaveInterpolation          
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate 
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -51,6 +53,9 @@ overwrite = config.ARGUMENT.overwrite
 
 # if copy wavelength solution data to L1 from file samples with wls data.
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
+
+# Peroform wavelength interpolation
+do_db_query_for_before_after_master_files = config.WLS_INTERPOLATION.do_db_query_for_before_after_master_files 
 
 # file path for lev0 and lev1 data
 lev0_file_path = ""
@@ -162,25 +167,25 @@ contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
-if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
-	db_wls_exit_code = 1
-	for cal_type_pair in cal_type_pairs:
-		if db_wls_exit_code != 0:
-			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-                                                                                                  date_dir_db_query,
-                                                                                                  cal_file_level,
-                                                                                                  contentbitmask,
-                                                                                                  cal_type_pair,
-                                                                                                  max_cal_file_age)
+# if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+# 	db_wls_exit_code = 1
+# 	for cal_type_pair in cal_type_pairs:
+# 		if db_wls_exit_code != 0:
+# 			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+#                                                                                                   date_dir_db_query,
+#                                                                                                   cal_file_level,
+#                                                                                                   contentbitmask,
+#                                                                                                   cal_type_pair,
+#                                                                                                   max_cal_file_age)
 
-			db_wls_exit_code = query_one_nearest_master_file_list[0]
-			if db_wls_exit_code == 0:
+# 			db_wls_exit_code = query_one_nearest_master_file_list[0]
+# 			if db_wls_exit_code == 0:
 
-				db_wls_rec = query_one_nearest_master_file_list[1]
-				db_wls_master_file = db_wls_rec[6]
-				wave_fits = []
-				for wls in wls_list:
-                                    wave_fits = wave_fits + [db_wls_master_file]
+# 				db_wls_rec = query_one_nearest_master_file_list[1]
+# 				db_wls_master_file = db_wls_rec[6]
+# 				wave_fits = []
+# 				for wls in wls_list:
+#                                     wave_fits = wave_fits + [db_wls_master_file]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv
@@ -424,9 +429,11 @@ if do_spectral_extraction or do_hk or do_bc:
 	for input_lev0_file in lev0_files:
 		# lev0_data is KPF0 instance for input_lev0_file
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-		start_order = EraSpecific(lev0_data, 'start_order')
-		output_order_trace = EraSpecific(lev0_data, 'order_trace_files')
-		order_trace_flat = EraSpecific(lev0_data, 'order_trace_flat')
+		dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
+		cals = CalibrationLookup(dt_string)
+		start_order = cals['start_order']
+		output_order_trace = cals['order_trace']
+		order_trace_flat = cals['trace_flat']
 
 		# prepare trace files and rectified L0 flat data for spectral extraction
 		if do_spectral_extraction:
@@ -531,13 +538,20 @@ if do_spectral_extraction or do_hk or do_bc:
 			# copy wls to the proper extension of lev1 data
 			if do_sp_wavecopy and exists(output_lev1_file):
 				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-				for idx in ccd_idx:
-					if wave_fits[idx] != None and exists(wave_fits[idx]):
-						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
-						for ext in wave_to_ext[idx]:
-							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
-
-				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+				obs_date_time = GetHeaderValue(output_data,'DATE-MID') 
+				if do_db_query_for_before_after_master_files == True:
+					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
+					output_data = interpolated_l1
+					SetHeaderValue(output_data, 'WLSFILE', master_file_before) # db_rec_before from subrecipe
+					SetHeaderValue(output_data, 'WLSFILE2', master_file_after) # db_rec_after from subrecipe
+				else:
+					for idx in ccd_idx:
+						if wave_fits[idx] != None and exists(wave_fits[idx]):
+							# wavecal_data will be replaced by wavelength interpolation.
+							wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+							for ext in wave_to_ext[idx]:
+								ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
+					SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
 
 				# Quality Control - L1 level
 				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
