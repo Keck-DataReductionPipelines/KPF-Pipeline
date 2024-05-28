@@ -1,8 +1,9 @@
 # standard dependencies
+import os
+import fnmatch
 import configparser
 import numpy as np
 import pandas as pd
-import os
 from astropy import constants as cst, units as u
 import datetime
 from modules.quicklook.src.analyze_wls import write_wls_json
@@ -10,6 +11,8 @@ from modules.quicklook.src.analyze_wls import write_wls_json
 # pipeline dependencies
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from kpfpipe.logger import start_logger
+from kpfpipe.models.level1 import KPF1
+from kpfpipe.tools.helpers import catch_exceptions
 
 # external dependencies
 from keckdrpframework.models.action import Action
@@ -17,7 +20,7 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # local dependencies
-from modules.wavelength_cal.src.alg import WaveCalibration, calcdrift_polysolution
+from modules.wavelength_cal.src.alg import WaveCalibration, WaveInterpolation, calcdrift_polysolution
 
 # global read-only variables
 DEFAULT_CFG_PATH = 'modules/wavelength_cal/configs/default.cfg'
@@ -114,6 +117,7 @@ class WaveCalibrate(KPF1_Primitive):
             self.min_order, self.max_order, self.save_diagnostics, self.config, self.logger
         )
 
+    @catch_exceptions
     def _perform(self) -> None: 
         """
         Primitive action - perform wavelength calibration by calling method `wavelength_cal` from WaveCalibrate.
@@ -189,7 +193,6 @@ class WaveCalibrate(KPF1_Primitive):
                         if not os.path.exists(wlpixelwavedir):
                             os.mkdir(wlpixelwavedir)
                         file_name = wlpixelwavedir + self.cal_type + 'lines_' + self.file_name + "_" + '{}.npy'.format(prefix)
-                        wl_pixel_filename = self.alg.save_wl_pixel_info(file_name, wls_and_pixels)
 
                     self.l1_obj[output_ext] = wl_soln
                     self.wls_dict['orderlets'][orderlet_name]['norders'] = self.max_order-self.min_order+1
@@ -334,4 +337,78 @@ class WaveCalibrate(KPF1_Primitive):
 
         self.l1_obj[output_ext] = wl_soln
 
+
+class WaveInterpolate(KPF1_Primitive):
+    """
+    This module defines class `WaveInterpolate,` which inherits from `KPF1_Primitive` and provides methods 
+    to interpolate a wavelength solution between two bracketing calibrations in the recipe.
     
+    Args:
+        KPF1_Primitive: Parent class
+        action (keckdrpframework.models.action.Action): Contains positional arguments and keyword arguments passed by the `WaveInterpolate` event issued in recipe.
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains path of config file defined for `wavelength_cal` module in master config file associated with recipe.
+    
+    Attributes:
+        l1_obj (kpfpipe.models.level1.KPF1): Instance of `KPF1`. Interpolated WLS will be injected into this object assigned by `actions.args[0]`
+        wls1_filename (string): Input WLS prior to the observation, assigned by `actions.args[1]`
+        wls2_filename (string): Input WLS after the observation, assigned by `actions.args[2]`
+        wls_extensions (list): List of the WLS extensions, assigned by `actions.args[3]`
+        config (configparser.ConfigParser): Config context.
+        logger (logging.Logger): Instance of logging.Logger
+        alg (modules.wavelength_cal.src.alg.WaveInterpolate): Instance of `WaveInterpolate,` which has operation codes for wavelength interpolation.
+    """
+    def __init__(self, action:Action, context:ProcessingContext) -> None:
+        """
+        WaveInterpolate constructor.
+        """ 
+        KPF1_Primitive.__init__(self, action, context)
+        
+        self.l1_wls1 = self.action.args[0]
+        self.l1_wls2 = self.action.args[1]
+        self.l1_interp = self.action.args[2]
+        self.config=configparser.ConfigParser()
+
+        try:
+            config_path=context.config_path['wavelength_interpolate']
+        except:
+            config_path = DEFAULT_CFG_PATH
+        self.config.read(config_path)
+
+        #Start logger
+        self.logger=start_logger(self.__class__.__name__,config_path)
+        if not self.logger:
+            self.logger=self.context.logger
+        self.logger.info('Loading config from: {}'.format(config_path))
+
+        l1_timestamp = self.l1_interp.header['PRIMARY']['DATE-BEG']
+        wls1_timestamp = self.l1_wls1.header['PRIMARY']['DATE-BEG']
+        wls2_timestamp = self.l1_wls2.header['PRIMARY']['DATE-BEG']
+        wls_timestamps = [wls1_timestamp, wls2_timestamp]
+
+        wls_extensions = []
+        for name in self.l1_interp.extensions.keys():
+            if fnmatch.fnmatch(name, 'GREEN*WAVE*') or fnmatch.fnmatch(name, 'RED*WAVE*'):
+                wls_extensions.append(name)
+        wls1_arrays = {}
+        wls2_arrays = {}
+        for ext in wls_extensions:
+            wls1_arrays[ext] = self.l1_wls1[ext]
+            wls2_arrays[ext] = self.l1_wls2[ext]
+
+        self.alg = WaveInterpolation(l1_timestamp, wls_timestamps, wls1_arrays, wls2_arrays)
+
+    def _perform(self) -> None: 
+        """
+        Primitive action - perform wavelength interpolation by calling method `wavelength_interpolate` from WaveInterpolate.
+        This method will update the input L1 object with the interpolated wavelength solition
+        
+        Returns:
+            Level 1 Data Object
+        """
+
+        new_wls_arrays = self.alg.wave_interpolation(method='linear') 
+        for ext, wls in new_wls_arrays.items():
+            self.l1_interp[ext] = new_wls_arrays[ext]
+                            
+        return Arguments(self.l1_interp)
+            

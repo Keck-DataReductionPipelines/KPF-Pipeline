@@ -40,15 +40,6 @@ def add_headers_dark_current_2D(D2, logger=None):
         FLXAMP2R - Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
         FLXCOLLR - Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
         FLXECHR  - Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
-        GDRXRMS  - x-coordinate RMS guiding error in milliarcsec (mas)
-        GDRYRMS  - y-coordinate RMS guiding error in milliarcsec (mas)
-        GDRRRMS  - r-coordinate RMS guiding error in milliarcsec (mas)
-        GDRXBIAS - x-coordinate bias guiding error in milliarcsec (mas)
-        GDRYBIAS - y-coordinate bias guiding error in milliarcsec (mas)
-        GDRSEEJZ - Seeing (arcsec) in J+Z-band from Moffat func fit
-        GDRSEEV  - Scaled seeing (arcsec) in V-band from J+Z-band
-        MOONSEP  - Separation between Moon and target star (deg)
-        SUNALT   - Altitude of Sun (deg)
 
     Args:
         D2 - a KPF 2D object 

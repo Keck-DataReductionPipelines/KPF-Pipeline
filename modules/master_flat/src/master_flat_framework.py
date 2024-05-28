@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from scipy.ndimage import gaussian_filter
 from scipy.stats import mode
 from astropy.io import fits
+from astropy.time import Time
 import re
+import pandas as pd
 
 import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
@@ -19,6 +21,7 @@ from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
+from kpfpipe.config.pipeline_config import ConfigClass
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/master_flat/configs/default.cfg'
@@ -170,28 +173,6 @@ class MasterFlatFramework(KPF0_Primitive):
 
         """
 
-        # Optionally override self.smoothlamppattern_path from input argument.
-        smoothlamppattern_envar = getenv('SMOOTH_LAMP_PATTERN')
-        if smoothlamppattern_envar is not None:
-            self.smoothlamppattern_path = smoothlamppattern_envar
-
-        smoothlamppattern_path_exists = exists(self.smoothlamppattern_path)
-        if not smoothlamppattern_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.smoothlamppattern_path))
-        self.logger.info('self.smoothlamppattern_path = {}'.format(self.smoothlamppattern_path))
-        self.logger.info('smoothlamppattern_path_exists = {}'.format(smoothlamppattern_path_exists))
-
-        smooth_lamp_pattern_data = KPF0.from_fits(self.smoothlamppattern_path,self.data_type)
-
-        ordermask_path_exists = exists(self.ordermask_path)
-        if not ordermask_path_exists:
-            raise FileNotFoundError('File does not exist: {}'.format(self.ordermask_path))
-        self.logger.info('self.ordermask_path = {}'.format(self.ordermask_path))
-        self.logger.info('ordermask_path_exists = {}'.format(ordermask_path_exists))
-
-        order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
-        self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
-
 
         # Initialization.
 
@@ -219,8 +200,63 @@ class MasterFlatFramework(KPF0_Primitive):
             obsdate = obsdate_match.group(1)
             self.logger.info('obsdate = {}'.format(obsdate))
         except:
-            self.logger.info("obsdate not parsed from input filename")
-            obsdate = None
+            self.logger.info("obsdate not parsed from first input filename")
+            obsdate = None    # This should never happen
+            self.logger.info('*** Warning: Observation date not available from first input flat frame; returning...')
+            master_flat_exit_code = 10
+            exit_list = [master_flat_exit_code,master_flat_infobits]
+            return Arguments(exit_list)
+
+
+        # Era-specific parameters.  Override input arguments.
+        
+        self.logger.info('Override smoothlamppattern_path and ordermask_path with era-specific settings...')
+
+        era_file = 'static/kpfera_definitions.csv'
+        config_file = 'configs/era_specific.cfg'
+        self.config = ConfigClass(config_file)
+
+        self.eras = pd.read_csv(era_file, dtype='str',
+                                sep='\s*,\s*')
+
+        dt = datetime.strptime(obsdate, "%Y%m%d")
+        for i,row in self.eras.iterrows():
+            start = datetime.strptime(row['UT_start_date'], "%Y-%m-%d %H:%M:%S")
+            end = datetime.strptime(row['UT_end_date'], "%Y-%m-%d %H:%M:%S")
+            if dt > start and dt <= end:
+                break
+
+        era = row['KPFERA']
+        self.logger.info('era = {}'.format(era))
+        smoothlamppattern_path_options = eval(self.config.ARGUMENTS["smoothlamppattern_path"])
+        self.smoothlamppattern_path = smoothlamppattern_path_options[era]
+        ordermask_path_options = eval(self.config.ARGUMENTS["ordermask_path"])
+        self.ordermask_path = ordermask_path_options[era]
+
+
+        # Optionally override self.smoothlamppattern_path from input argument with environment-variable setting.
+
+        smoothlamppattern_envar = getenv('SMOOTH_LAMP_PATTERN')
+        if smoothlamppattern_envar is not None:
+            self.logger.info('Override smoothlamppattern_path with SMOOTH_LAMP_PATTERN setting...')
+            self.smoothlamppattern_path = smoothlamppattern_envar
+
+        smoothlamppattern_path_exists = exists(self.smoothlamppattern_path)
+        if not smoothlamppattern_path_exists:
+            raise FileNotFoundError('File does not exist: {}'.format(self.smoothlamppattern_path))
+        self.logger.info('self.smoothlamppattern_path = {}'.format(self.smoothlamppattern_path))
+        self.logger.info('smoothlamppattern_path_exists = {}'.format(smoothlamppattern_path_exists))
+
+        smooth_lamp_pattern_data = KPF0.from_fits(self.smoothlamppattern_path,self.data_type)
+
+        ordermask_path_exists = exists(self.ordermask_path)
+        if not ordermask_path_exists:
+            raise FileNotFoundError('File does not exist: {}'.format(self.ordermask_path))
+        self.logger.info('self.ordermask_path = {}'.format(self.ordermask_path))
+        self.logger.info('ordermask_path_exists = {}'.format(ordermask_path_exists))
+
+        order_mask_data = KPF0.from_fits(self.ordermask_path,self.data_type)
+        self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
 
 
         # Get master calibration files.
@@ -317,6 +353,8 @@ class MasterFlatFramework(KPF0_Primitive):
 
                 self.logger.info('Prototype FITS header from {}'.format(flat_file_path))
 
+                date_obs = tester.header['PRIMARY']['DATE-OBS']
+
                 break
 
             else:
@@ -370,6 +408,15 @@ class MasterFlatFramework(KPF0_Primitive):
 
                 path = all_flat_files[i]
                 obj = KPF0.from_fits(path)
+
+                try:
+                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
+                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
+                    if obj_not_junk != 1:
+                        continue
+                except KeyError as err:
+                    pass
+
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
                 n_dims = len(np_obj_ffi_shape)
@@ -593,6 +640,14 @@ class MasterFlatFramework(KPF0_Primitive):
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of flat observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of flat observations')
 
+            mjd_obs_mid = (mjd_obs_min[ffi] + mjd_obs_max[ffi]) * 0.5
+            master_holder.header[ffi]['MIDMJD'] = (mjd_obs_mid,'Middle MJD of flat observations')
+            t_object = Time(mjd_obs_mid,format='mjd')
+            t_iso_string = str(t_object.iso)
+            t_iso_string += "Z"
+            t_iso_for_hdr = t_iso_string.replace(" ","T")
+            master_holder.header[ffi]['DATE-MID'] = (t_iso_for_hdr,'Middle timestamp of flat observations')
+
             filename_match_bias = re.match(r".+/(kpf_.+\.fits)", self.masterbias_path)
             try:
                 masterbias_path_filename_only = filename_match_bias.group(1)
@@ -676,6 +731,23 @@ class MasterFlatFramework(KPF0_Primitive):
         master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
 
         master_holder.to_fits(self.masterflat_path)
+
+
+        # Overwrite the newly created FITS file with one having a cleaned-up primary header.
+
+        new_primary_hdr = fits.Header()
+        new_primary_hdr['EXTNAME'] = 'PRIMARY'
+        new_primary_hdr['DATE-OBS'] = date_obs
+        new_primary_hdr['IMTYPE'] = ('Flat','Master flat')
+        new_primary_hdr['TARGOBJ'] = (self.flat_object,'Target object of stacking')
+        new_primary_hdr['INSTRUME'] = ('KPF','Doppler Spectrometer')
+        new_primary_hdr['OBSERVAT'] = ('KECK','Observatory name')
+        new_primary_hdr['TELESCOP'] = ('Keck I','Telescope')
+
+        #FitsHeaders.cleanup_primary_header(self.masterflat_path,self.masterflat_path,new_primary_hdr)
+
+
+        # Return list of values.
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 

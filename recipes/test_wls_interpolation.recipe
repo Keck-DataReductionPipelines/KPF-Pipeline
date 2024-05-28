@@ -1,0 +1,25 @@
+# This is an example recipe showing use of the WLS interpolation framework
+
+from modules.Utils.string_proc import date_from_kpffile
+from modules.Utils.data_handler import GetHeaderValue
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+
+data_type = config.ARGUMENT.data_type
+obsid_l1 = config.ARGUMENT.obsid_l1
+datecode_l1 = date_from_kpffile(obsid_l1)
+
+l1_file = config.ARGUMENT.input_dir + 'L1/' + datecode_l1 + '/' + obsid_l1 + '_L1.fits'
+l1 = kpf1_from_fits(l1_file, data_type=data_type)
+datetime_string = GetHeaderValue(l1, 'DATE-MID')
+
+cals = CalibrationLookup(datetime_string)
+wls1_file = cals['wls'][0]
+wls2_file = cals['wls'][1]
+
+wls1_l1 = kpf1_from_fits(wls1_file, data_type=data_type)
+wls2_l1 = kpf1_from_fits(wls2_file, data_type=data_type)
+
+l1_out = WaveInterpolate(wls1_l1, wls2_l1, l1)
+l1_out_filename = config.ARGUMENT.output_dir + 'L1/' + datecode_l1 + '/' + obsid_l1 + '_L1.fits'
+result = to_fits(l1_out, l1_out_filename)

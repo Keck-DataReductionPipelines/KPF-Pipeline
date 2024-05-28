@@ -37,6 +37,7 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.imgmath',
+    'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx_rtd_theme',
@@ -58,8 +59,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'KPFPipeline'
-copyright = u'2020-2023, Arpita Roy, BJ Fulton, Cindy Wang, Andrew Howard, and others on the KPF Team'
-author = u'Arpita Roy, BJ Fulton, Cindy Wang, Russ Laher, Andrew Howard, Qifan Wang, David Rumph, and others on the KPF Team'
+copyright = u'2020-2024, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
+author = u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -101,7 +102,7 @@ html_theme = "sphinx_rtd_theme"
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+#html_theme_options = {}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -152,7 +153,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'KPFPipeline.tex', u'KPFPipeline Documentation',
-     u'Arpita Roy, BJ Fulton, Andrew Howard', 'manual'),
+     u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, et al.', 'manual'),
 ]
 
 

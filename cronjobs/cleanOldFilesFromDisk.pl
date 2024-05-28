@@ -9,16 +9,17 @@ print "Executing [$cmd0]...\n";
 my @op0 = `$cmd0`;
 if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
 
+my $olderthanndays = 3;   # Remove files older than 3 days.
 
 my $dir1 = "/data/user/rlaher/sbx/L0";
-&removeOldSubDirs(3, $dir1);
+&removeOldSubDirs($olderthanndays, $dir1);
 
 
 my $dir2 = "/data/user/rlaher/sbx/2D";
-&removeOldSubDirs(3, $dir2);
+&removeOldSubDirs($olderthanndays, $dir2);
 
 my $dir3 = "/data/user/rlaher/sbx/masters/wlpixelfiles";
-&removeOldFiles(5, $dir3);
+&removeOldFiles($olderthanndays, $dir3);
 
 my $cmd1 = "df -h /data/user/rlaher/sbx";
 

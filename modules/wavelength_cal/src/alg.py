@@ -2,6 +2,7 @@ from astropy import units as u, constants as cst
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial.legendre import Legendre
+from modules.Utils.utils import DummyLogger
 import os
 import time
 import pandas as pd
@@ -10,6 +11,8 @@ from scipy import signal
 from scipy.special import erf
 from scipy.interpolate import InterpolatedUnivariateSpline, UnivariateSpline, interp1d
 from scipy.optimize.minpack import curve_fit
+from datetime import datetime, timedelta
+from dateutil import parser
 from modules.Utils.config_parser import ConfigHandler
 import modules.Utils.utils
 import warnings
@@ -390,7 +393,13 @@ class WaveCalibration:
                             print_update=print_update, plot_path=order_plt_path
                         )
                     except:
-                        import pdb; pdb.set_trace()
+                        poly_soln_final_array[order_num,:] = rough_wls_order
+                        wavelengths_and_pixels[order_num] = {
+                            'known_wavelengths_vac': rough_wls_order, 
+                            'line_positions':[]
+                        }
+                        order_dict = {}
+                        continue
                 elif self.cal_type == 'Etalon':
 
                     assert comb_lines_angstrom is None, '`comb_lines_angstrom` \
@@ -1514,7 +1523,7 @@ class WaveCalibration:
                         leg_out = Legendre.fit(np.arange(n_pixels), our_wavelength_solution_for_order, 9)
                     
                     if self.cal_type == 'LFC':
-                        leg_out = Legendre.fit(x, y, 9, w=w)
+                        leg_out = Legendre.fit(x, y, self.fit_order, w=w)
                         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
                 if self.fit_type == 'spline':
                     leg_out = UnivariateSpline(x, y, w, k=5)
@@ -1846,3 +1855,83 @@ def plot_drift(wlpixelfile1,wlpixelfile2, figsave_name):
     plt.ylabel('Drift [cm s$^{-1}$]')
     plt.savefig(figsave_name, dpi=250)
     plt.close()
+
+class WaveInterpolation:
+    """
+    This module defines 'WaveInterpolation' and methods to perform interpolation 
+    between different wavelength solutions.
+    
+    Wavelength interpolation computation. Algorithm is called under _perform() 
+    in wavelength_cal.py. Algorithm itself iterates over orders.
+    """
+    
+    def __init__(
+        self, l1_timestamp, wls_timestamps, wls1_arrays, wls2_arrays, config=None, logger=None
+    ):
+        """Initializes WaveCalibration class.
+        Args:
+            l1_timestamp (float): Datetime of the input L1 file. WLS will be interpolated to this point in time         
+            wls_timestamps (list): List of timestamps for each of the input WLS arrays
+            wls1_arrays (dict): Dictionary of the input WLS arrays for the first WLS. Keys should match the extension names in the L1 obj
+            wls2_arrays (dict): Dictionary of the input WLS arrays for the second WLS. Keys should match the extension names in the L1 obj
+            config (configparser.ConfigParser, optional): Config context. 
+                Defaults to None.
+            logger (logging.Logger, optional): Instance of logging.Logger. 
+                Defaults to None, which involves DummyLogger (print statements).        
+
+        """
+        self.logger = logger if logger is not None else DummyLogger()
+        self.l1_timestamp = l1_timestamp
+        self.wls_timestamps = wls_timestamps
+        self.wls1_arrays = wls1_arrays
+        self.wls2_arrays = wls2_arrays
+        self.config = config
+
+    def wave_interpolation(self, method='linear'):
+        msg = "Performing wavelength interpolation."
+        if self.logger:
+            self.logger.info(msg)
+        else:
+            print(msg)
+      
+        if method == 'linear':
+            # Determine how the dates are formatted
+            isJD = isinstance(self.l1_timestamp, float)
+            isDatetime = isinstance(self.l1_timestamp, datetime)
+            try:
+                # If the string is successfully parsed, it's a datetime string
+                foo = parser.parse(self.l1_timestamp)
+                isDateStr = True
+            except:
+                isDateStr = False
+            
+            # Compute differences between timestamps
+            if isDateStr:
+                self.l1_timestamp_obj = datetime.strptime(self.l1_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
+                self.wls_timestamp_objs = [datetime.strptime(self.wls_timestamps[0], "%Y-%m-%dT%H:%M:%S.%f"), 
+                                           datetime.strptime(self.wls_timestamps[1], "%Y-%m-%dT%H:%M:%S.%f")]
+                tdiff = (self.wls_timestamp_objs[1] - self.wls_timestamp_objs[0]).total_seconds()
+                deltat = (self.l1_timestamp_obj - self.wls_timestamp_objs[0]).total_seconds()
+            elif isJD:
+                tdiff = self.wls_timestamp[1] - self.wls_timestamp[0]
+                deltat = self.l1_timestamp - self.wls_timestamp[0]
+            elif isDatetime:
+                tdiff = (self.wls_timestamp[1] - self.wls_timestamp[0]).total_seconds()
+                deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
+            else:
+                 self.logger.error("l1_timestamp not in a recognized format")
+            if tdiff == 0:
+                frac = 0.0
+            else:
+                frac = deltat / tdiff
+    
+            # Perform linear interpolation between wls1 and wls2
+            new_wls_arrays = {}
+            for ext, arr in self.wls1_arrays.items():
+                new_wls_arrays[ext] = self.wls1_arrays[ext] + frac * (self.wls2_arrays[ext] - self.wls1_arrays[ext])
+    
+            return new_wls_arrays
+        
+        else:
+            self.logger.error('Unsupported method specified in wave_interpolation')
+            return None

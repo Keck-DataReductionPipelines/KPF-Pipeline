@@ -1,0 +1,9 @@
+# Find the nearest wavelength solutions in time and generate an interpolated wavelength solution.
+
+cals      = CalibrationLookup(obs_date_time) 
+master_file_before = cals['wls'][0]
+master_file_after  = cals['wls'][1]
+
+master_file_before_l1 = kpf1_from_fits(master_file_before,data_type=data_type)
+master_file_after_l1  = kpf1_from_fits(master_file_after,data_type=data_type)
+interpolated_l1 = WaveInterpolate(master_file_before_l1,master_file_after_l1,output_data)

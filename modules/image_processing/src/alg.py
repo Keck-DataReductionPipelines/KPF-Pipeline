@@ -76,13 +76,23 @@ class ImageProcessingAlg():
             masterbias (FITS File): The master bias data.
         """
         header = self.rawimage.header['PRIMARY']
+
+        # Write BIASFILE keyword to header regardless of whether bias is subtracted.
+        # BIASDONE keyword will be set to 1 if bias is subtracted and 0 otherwise.
+
+        header['BIASFILE'] = masterbias.filename
+        header['BIASDIR'] = masterbias.dirname
+
         if header['IMTYPE'].lower() == 'bias':
             self.logger.info("Image is bias, skipping bias correction.")
+            header['BIASDONE'] = 0
             return
+        else:
+            header['BIASDONE'] = 1
+
         for ffi in self.ffi_exts:
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - masterbias[ffi]
-                header['BIASFILE'] = masterbias.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
@@ -98,16 +108,25 @@ class ImageProcessingAlg():
 
         """
         header = self.rawimage.header['PRIMARY']
+
+        # Write FLATFILE keyword to header regardless of whether flat is divided.
+        # FLATDONE keyword will be set to 1 if flat is divided and 0 otherwise.
+
+        header['FLATFILE'] = flat_frame.filename
+        header['FLATDIR'] = flat_frame.dirname
+
         if header['IMTYPE'].lower() == 'bias' or \
             header['IMTYPE'].lower() == 'dark' or \
             header['IMTYPE'].lower() == 'flat':
             self.logger.info("Image is {}, skipping flat correction.".format(header['IMTYPE']))
+            header['FLATDONE'] = 0
             return
+        else:
+            header['FLATDONE'] = 1
 
         for ffi in self.ffi_exts:
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] / flat_frame[ffi]
-                header['FLATFILE'] = flat_frame.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
@@ -124,22 +143,33 @@ class ImageProcessingAlg():
 
         """
         header = self.rawimage.header['PRIMARY']
+
+        image_exptime = float(self.rawimage.header['PRIMARY']['ELAPSED'])
+        dark_exptime = 1.0   # master darks are already normalized
+
+        # Write DARKFILE keyword to header regardless of whether dark is subtracted.
+        # DARKDONE keyword will be set to 1 if dark is subtracted and 0 otherwise.
+
+        header['DARKFILE'] = dark_frame.filename
+        header['DARKDIR'] = dark_frame.dirname
+
         if header['IMTYPE'].lower() == 'bias' or \
             header['IMTYPE'].lower() == 'dark':
             self.logger.info("Image is {}, skipping dark correction.".format(header['IMTYPE']))
+            header['DARKDONE'] = 0
             return
+        else:
+            header['DARKDONE'] = 1
 
         for ffi in self.ffi_exts:
-            image_exptime = float(self.rawimage.header['PRIMARY']['ELAPSED'])
-            dark_exptime = 1.0   # master darks are already normalized
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - dark_frame[ffi]*(image_exptime/dark_exptime)
-                self.rawimage.header['PRIMARY']['DARKFILE'] = dark_frame.filename
             except Exception as e:
                 if self.logger:
                     self.logger.info('*** Exception raised: {}'.format(e))
                 else:
                     print("*** Exception raised:", e)
+
 
     def cosmic_ray_masking(self, verbose=True):
         """Masks cosmic rays from input rawimage.

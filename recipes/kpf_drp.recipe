@@ -28,6 +28,9 @@ from modules.quality_control.src.quality_control_framework import QualityControl
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+from modules.wavelength_cal.src.alg import WaveInterpolation          
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate 
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -50,6 +53,9 @@ overwrite = config.ARGUMENT.overwrite
 
 # if copy wavelength solution data to L1 from file samples with wls data.
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
+
+# Peroform wavelength interpolation
+do_db_query_for_before_after_master_files = config.WLS_INTERPOLATION.do_db_query_for_before_after_master_files 
 
 # file path for lev0 and lev1 data
 lev0_file_path = ""
@@ -123,19 +129,9 @@ else:
 # date dir for 2D, masters input and L1 and L2 output.
 date_dir = sel_obsid + '/'
 
-# flat_file_pattern = config.ARGUMENT.flat_file
-# date dir for flat file
-# use the full path of flat file defined in config instead
-# date_dir_flat = date_from_kpffile(flat_file_pattern, startswith='kpf_')
-# if date_dir_flat == None:
-#	date_dir_flat = date_dir
-# else:
-#	date_dir_flat = date_dir_flat + '/'
-
 output_dir = config.ARGUMENT.output_dir
 input_2d_dir = config.ARGUMENT.input_dir_root + date_dir
 masters_data_dir = config.ARGUMENT.masters_dir
-#masters_data_dir = output_dir + "masters/"
 
 ## general purpose variables
 ccd_list = config.ARGUMENT.ccd_list
@@ -148,7 +144,6 @@ csv_ext = '.csv'
 poly_degree = config.ARGUMENT.fitting_poly_degree
 ccd_idx=config.ARGUMENT.ccd_idx
 
-start_order= config.ARGUMENT.start_order
 rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
 orderlet_names = config.ARGUMENT.orderlet_names
@@ -172,25 +167,25 @@ contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
-if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
-	db_wls_exit_code = 1
-	for cal_type_pair in cal_type_pairs:
-		if db_wls_exit_code != 0:
-			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
-                                                                                                  date_dir_db_query,
-                                                                                                  cal_file_level,
-                                                                                                  contentbitmask,
-                                                                                                  cal_type_pair,
-                                                                                                  max_cal_file_age)
+# if do_db_query_for_one_nearest_wls_master_file and do_spectral_extraction:
+# 	db_wls_exit_code = 1
+# 	for cal_type_pair in cal_type_pairs:
+# 		if db_wls_exit_code != 0:
+# 			query_one_nearest_master_file_list = QueryDBOneNearestMasterFileFramework(data_type,
+#                                                                                                   date_dir_db_query,
+#                                                                                                   cal_file_level,
+#                                                                                                   contentbitmask,
+#                                                                                                   cal_type_pair,
+#                                                                                                   max_cal_file_age)
 
-			db_wls_exit_code = query_one_nearest_master_file_list[0]
-			if db_wls_exit_code == 0:
+# 			db_wls_exit_code = query_one_nearest_master_file_list[0]
+# 			if db_wls_exit_code == 0:
 
-				db_wls_rec = query_one_nearest_master_file_list[1]
-				db_wls_master_file = db_wls_rec[6]
-				wave_fits = []
-				for wls in wls_list:
-                                    wave_fits = wave_fits + [db_wls_master_file]
+# 				db_wls_rec = query_one_nearest_master_file_list[1]
+# 				db_wls_master_file = db_wls_rec[6]
+# 				wave_fits = []
+# 				for wls in wls_list:
+#                                     wave_fits = wave_fits + [db_wls_master_file]
 
 
 #### variables related to input/output and process conditions for order_trace, spectral extraction, CA-HK, rv
@@ -206,12 +201,8 @@ origin = [data_col_range[0], data_row_range[0]]
 
 #    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
 #    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
-#lev0_flat_pattern = input_2d_dir_flat + flat_file_pattern + fits_ext
 lev0_flat_pattern = config.ARGUMENT.flat_file
-# output_order_trace = output_dir + config.ARGUMENT.output_trace + date_dir_flat
 # use the full path of ourder trace files defind in config
-order_trace_flat = config.ARGUMENT.order_trace_flat
-output_order_trace = config.ARGUMENT.order_trace_files
 orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
 
 ## for spectral extraction: input and output
@@ -335,8 +326,6 @@ if do_order_trace:
 		for idx in ccd_idx:
 			ccd = ccd_list[idx]
 			# get order trace file name defined in config file
-			# output_lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd + csv_ext
-			# output_lev0_trace_csv = output_order_trace[idx] 
 			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
 			trace_list = trace_list + [output_lev0_trace_csv]
 			if overwrite or not exists(output_lev0_trace_csv):
@@ -420,23 +409,6 @@ outlier_mask_path = config.ARGUMENT.outlier_mask_path
 
 if do_spectral_extraction or do_hk or do_bc:
 	lev0_flat_rect = None
-	trace_list = []
-
-	# prepare trace files and rectified L0 flat data for spectral extraction
-	if do_spectral_extraction:
-		# existence of flat and trace files
-		# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-		output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
-		if exists(output_lev0_flat_rect):
-			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
-
-		if not trace_list:
-			b_all_traces = True
-			for idx in ccd_idx:
-				# lev0_trace_csv = output_order_trace + flat_stem + '_' + ccd_list[idx] + csv_ext
-				lev0_trace_csv = output_order_trace[idx]
-				trace_list = trace_list + [lev0_trace_csv]
-				b_all_traces = b_all_traces and exists(lev0_trace_csv)
 
 	# prepare bias, dark data for ca_hk
 	if do_hk:
@@ -457,6 +429,28 @@ if do_spectral_extraction or do_hk or do_bc:
 	for input_lev0_file in lev0_files:
 		# lev0_data is KPF0 instance for input_lev0_file
 		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+		dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
+		cals = CalibrationLookup(dt_string)
+		start_order = cals['start_order']
+		output_order_trace = cals['order_trace']
+		order_trace_flat = cals['trace_flat']
+
+		# prepare trace files and rectified L0 flat data for spectral extraction
+		if do_spectral_extraction:
+			# existence of flat and trace files
+			# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+			output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
+			if exists(output_lev0_flat_rect):
+				lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
+
+			if not trace_list:
+				b_all_traces = True
+				for idx in ccd_idx:
+					lev0_trace_csv = output_order_trace[idx]
+					trace_list = trace_list + [lev0_trace_csv]
+					b_all_traces = b_all_traces and exists(lev0_trace_csv)
+
+
 		# this used to denote the level 0 data before background subtraction
 		lev0_data_no_bk = kpf0_from_fits(input_lev0_file, data_type=data_type)
 
@@ -544,13 +538,20 @@ if do_spectral_extraction or do_hk or do_bc:
 			# copy wls to the proper extension of lev1 data
 			if do_sp_wavecopy and exists(output_lev1_file):
 				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-				for idx in ccd_idx:
-					if wave_fits[idx] != None and exists(wave_fits[idx]):
-						wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
-						for ext in wave_to_ext[idx]:
-							ExtCopy(wavecal_data, ext, ext, to_data_model=output_data)
-
-				SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+				obs_date_time = GetHeaderValue(output_data,'DATE-MID') 
+				if do_db_query_for_before_after_master_files == True:
+					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
+					output_data = interpolated_l1
+					SetHeaderValue(output_data, 'WLSFILE', master_file_before) # db_rec_before from subrecipe
+					SetHeaderValue(output_data, 'WLSFILE2', master_file_after) # db_rec_after from subrecipe
+				else:
+					for idx in ccd_idx:
+						if wave_fits[idx] != None and exists(wave_fits[idx]):
+							# wavecal_data will be replaced by wavelength interpolation.
+							wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+							for ext in wave_to_ext[idx]:
+								ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
+					SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
 
 				# Quality Control - L1 level
 				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)

@@ -1,5 +1,8 @@
 from modules.wavelength_cal.src.wavelength_cal import WaveCalibrate
 from modules.Utils.string_proc import str_replace
+from modules.Utils.data_handler import GetHeaderValue
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+
 
 masters_dir = config.ARGUMENT.masters_dir
 output_dir = config.ARGUMENT.output_dir + '/'
@@ -33,6 +36,10 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
             completed = False
         else:
             l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
+            dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
+            cals = CalibrationLookup(dt_string)
+            master_wls_file = cals['rough_wls']
+            full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
             base_path = masters_dir + date_dir
             obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
             obj_string_short = str_replace(obj_string, '_L1.fits', '')
@@ -68,7 +75,7 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                 else:
                     plot_dir = None
 
-                save_wlpixelfiles = False
+                save_wlpixelfiles = 1
                 l1_obj = WaveCalibrate(
                     l1_obj, cal_type, orderlet_names, save_wlpixelfiles, quicklook, min_order, max_order,
                     'KPF', output_exts,
