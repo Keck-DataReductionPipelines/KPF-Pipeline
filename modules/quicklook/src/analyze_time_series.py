@@ -58,6 +58,7 @@ class AnalyzeTimeSeries:
         
     To-do:
         * Add database for masters (separate from ObsIDs?)
+        * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
         * Check if the plot doesn't have data and don't generate if so
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
@@ -699,8 +700,12 @@ class AnalyzeTimeSeries:
                 'EMNEG':    'float',  # Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
                 'RNRED1':   'float',  # Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
                 'RNRED2':   'float',  # Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
+                'RNRED3':   'float',  # Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
+                'RNRED4':   'float',  # Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
                 'RNGREEN1': 'float',  # Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
                 'RNGREEN2': 'float',  # Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
+                'RNGREEN3': 'float',  # Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
+                'RNGREEN4': 'float',  # Read noise for GREEN_AMP4 [e-] (fourth amplifier region on Green CCD)
                 'GREENTRT': 'float',  # Green CCD read time [sec]
                 'REDTRT':   'float',  # Red CCD read time [sec]
                 'READSPED': 'string', # Categorization of CCD read speed ('regular' or 'fast')
@@ -1469,19 +1474,19 @@ class AnalyzeTimeSeries:
         elif plot_name=='ccd_readnoise':
             dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
+            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
             dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars = [dict1, dict2]
+            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
+            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            thispanelvars = [dict1, dict2, dict1b, dict2b]
             thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
                              'not_junk': 'true',
                              'legend_frac_size': 0.25}
             readnoisepanel1 = {'panelvars': thispanelvars,
                                'paneldict': thispaneldict}
-            thispanelvars = [dict3, dict4]
+            thispanelvars = [dict3, dict4, dict3b, dict4b]
             thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
                              'title': 'CCD Read Noise',
                              'not_junk': 'true',
