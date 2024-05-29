@@ -2,6 +2,9 @@ import re
 import pandas as pd
 from astropy.io import fits
 from datetime import datetime, timedelta
+from kpfpipe.models.level0 import KPF0
+from kpfpipe.models.level1 import KPF1
+from kpfpipe.models.level2 import KPF2
 
 class KPFParse:
 
@@ -479,30 +482,50 @@ def get_kpf_level(kpf_object):
 
     return None
 
-def get_kpf_data_path(ObsID, data_level, data_dir='/data'):
+def get_kpf_data(ObsID, data_level, data_dir='/data', return_kpf_object=True):
     """
-    Returns the full path of a KPF object with a specific data level
+    Returns the full path of a KPF object or the KPF object itself 
+    with a specific data level
 
     Args:
         ObsID - e.g., 'KP.20230617.61836.73'
         data_level - 'L0', '2D', 'L1', or 'L2'
         data_dir - directory that contains L0/, 2D/, L1/, L2/
+        return_kpf_object - if True, return kpf_object; if false, return path to object
 
     Returns:
+        kpf_object 
+           or
         full path of file, e.g., /data/2D/20230701/KP.20230701.49940.99_2D.fits
     """
     try:
         datecode = get_datecode(ObsID)
         if data_level == 'L0':
-            full_path = data_dir + '/L0/' + get_datecode(ObsID) + '/' + ObsID + '.fits'
+            fullpath = data_dir + '/L0/' + get_datecode(ObsID) + '/' + ObsID + '.fits'
+            if return_kpf_object:
+                return_object = KPF0.from_fits(fullpath)
+            else:
+                return_object = fullpath
         elif data_level == '2D':
-            full_path = data_dir + '/2D/' + get_datecode(ObsID) + '/' + ObsID + '_2D.fits'
+            fullpath = data_dir + '/2D/' + get_datecode(ObsID) + '/' + ObsID + '_2D.fits'
+            if return_kpf_object:
+                return_object = KPF0.from_fits(fullpath)
+            else:
+                return_object = fullpath
         elif data_level == 'L1':
-            full_path = data_dir + '/L1/' + get_datecode(ObsID) + '/' + ObsID + '_L1.fits'
+            fullpath = data_dir + '/L1/' + get_datecode(ObsID) + '/' + ObsID + '_L1.fits'
+            if return_kpf_object:
+                return_object = KPF1.from_fits(fullpath)
+            else:
+                return_object = fullpath
         elif data_level == 'L2':
-            full_path = data_dir + '/L2/' + get_datecode(ObsID) + '/' + ObsID + '_L2.fits'
+            fullpath = data_dir + '/L2/' + get_datecode(ObsID) + '/' + ObsID + '_L2.fits'
+            if return_kpf_object:
+                return_object = KPF2.from_fits(fullpath)
+            else:
+                return_object = fullpath
     except:
         return None
 
-    return full_path
+    return return_object
 
