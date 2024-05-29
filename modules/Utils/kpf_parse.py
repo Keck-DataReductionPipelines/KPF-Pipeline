@@ -435,6 +435,7 @@ def get_data_products_L2(L2):
             data_products.append('Receipt')
     return data_products
 
+
 def hasattr_with_wildcard(obj, pattern):
     regex = re.compile(pattern)
     return any(regex.match(attr) for attr in dir(obj))
@@ -477,3 +478,31 @@ def get_kpf_level(kpf_object):
                 return 'L0'
 
     return None
+
+def get_kpf_data_path(ObsID, data_level, data_dir='/data'):
+    """
+    Returns the full path of a KPF object with a specific data level
+
+    Args:
+        ObsID - e.g., 'KP.20230617.61836.73'
+        data_level - 'L0', '2D', 'L1', or 'L2'
+        data_dir - directory that contains L0/, 2D/, L1/, L2/
+
+    Returns:
+        full path of file, e.g., /data/2D/20230701/KP.20230701.49940.99_2D.fits
+    """
+    try:
+        datecode = get_datecode(ObsID)
+        if data_level == 'L0':
+            full_path = data_dir + '/L0/' + get_datecode(ObsID) + '/' + ObsID + '.fits'
+        elif data_level == '2D':
+            full_path = data_dir + '/2D/' + get_datecode(ObsID) + '/' + ObsID + '_2D.fits'
+        elif data_level == 'L1':
+            full_path = data_dir + '/L1/' + get_datecode(ObsID) + '/' + ObsID + '_L1.fits'
+        elif data_level == 'L2':
+            full_path = data_dir + '/L2/' + get_datecode(ObsID) + '/' + ObsID + '_L2.fits'
+    except:
+        return None
+
+    return full_path
+
