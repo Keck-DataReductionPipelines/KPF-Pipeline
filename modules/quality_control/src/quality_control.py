@@ -97,13 +97,13 @@ def test_all_QCs(kpf_object, data_type):
             try:
                 spectrum_types = qc_obj.qcdefinitions.spectrum_types[qc_name]
                 if (this_spectrum_type in spectrum_types) or ('all' in spectrum_types):
-                    logger.info(f'Running QC: \033[1m{qc_name}\033[0m ({qc_obj.qcdefinitions.descriptions[qc_name]})')
+                    logger.info(f'Running QC: \033[1;34m{qc_name}\033[0m ({qc_obj.qcdefinitions.descriptions[qc_name]})')
                     method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
                     qc_value = method() # evaluate method
                     if qc_value == True: 
-                        color_code = '\033[1;32m' 
+                        color_code = '\033[1;32m' # green
                     elif qc_value == False:
-                        color_code = '\033[1;31m'
+                        color_code = '\033[1;31m' # red
                     else:
                         color_code = '\033[1m'
                     logger.info(f'QC result:  {color_code}{qc_value}\033[0m (True = pass)')
