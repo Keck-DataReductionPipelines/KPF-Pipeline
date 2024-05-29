@@ -151,11 +151,11 @@ class AnalyzeL0:
                     self.red_present = True
 
 
-    def measure_read_noise_overscan(self, nparallel=30, nserial=50, nsigma=5.0): 
+    def measure_read_noise_overscan(self, nparallel=30, nserial=50, nsigma=5.0, verbose=False): 
         """
         Measure read noise in the overscan region of a KPF CCD image. 
         Read noise is measured as the standard deviation of the pixel values, 
-        after applying an n-sigma iterative outlier rejection.
+        after applying an n-sigma outlier rejection.
         
         Args:
             nparallel (integer) - overscan length in parallel direction 
@@ -192,6 +192,8 @@ class AnalyzeL0:
             overscan_region = data[5:2040 + nparallel-5,2044 + 10:2044 + nserial-10]
             vals = self.reject_outliers(overscan_region.flat, nsigma)    
             self.read_noise_overscan[region] = gain * np.std(vals)
+            if verbose:
+                self.logger.info(f'Read noise({region}) = {self.read_noise_overscan[region]}')
 
 
     def plot_L0_stitched_image(self, chip=None, fig_path=None, show_plot=False):

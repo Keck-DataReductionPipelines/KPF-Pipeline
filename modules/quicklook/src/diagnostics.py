@@ -17,7 +17,7 @@ from modules.Utils.utils import get_moon_sep, get_sun_alt
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
-    Compute the read noise for dark files and adds keywords to the 2D object headers
+    Compute the dark current for dark files and adds keywords to the 2D object headers
 
     Keywords:
         FLXREG1G - Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
