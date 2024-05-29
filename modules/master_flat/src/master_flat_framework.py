@@ -208,32 +208,6 @@ class MasterFlatFramework(KPF0_Primitive):
             return Arguments(exit_list)
 
 
-        # Era-specific parameters.  Override input arguments.
-        
-        self.logger.info('Override smoothlamppattern_path and ordermask_path with era-specific settings...')
-
-        era_file = 'static/kpfera_definitions.csv'
-        config_file = 'configs/era_specific.cfg'
-        self.config = ConfigClass(config_file)
-
-        self.eras = pd.read_csv(era_file, dtype='str',
-                                sep='\s*,\s*')
-
-        dt = datetime.strptime(obsdate, "%Y%m%d")
-        for i,row in self.eras.iterrows():
-            start = datetime.strptime(row['UT_start_date'], "%Y-%m-%d %H:%M:%S")
-            end = datetime.strptime(row['UT_end_date'], "%Y-%m-%d %H:%M:%S")
-            if dt > start and dt <= end:
-                break
-
-        era = row['KPFERA']
-        self.logger.info('era = {}'.format(era))
-        smoothlamppattern_path_options = eval(self.config.ARGUMENTS["smoothlamppattern_path"])
-        self.smoothlamppattern_path = smoothlamppattern_path_options[era]
-        ordermask_path_options = eval(self.config.ARGUMENTS["ordermask_path"])
-        self.ordermask_path = ordermask_path_options[era]
-
-
         # Optionally override self.smoothlamppattern_path from input argument with environment-variable setting.
 
         smoothlamppattern_envar = getenv('SMOOTH_LAMP_PATTERN')
@@ -259,7 +233,9 @@ class MasterFlatFramework(KPF0_Primitive):
         self.logger.debug('Finished loading order-mask data from FITS file = {}'.format(self.ordermask_path))
 
 
-        # Get master calibration files.
+        # Get required bias and dark master calibration files from database, if those provided by input arguments to not exist.
+        # This code section is needed because this cannot be easily handled via module/calibration_lookup in kpf_masters_drp.recipe.
+        # This code section is only necessary in the rare case where no daily bias and/or dark data are available.
 
         dbh = db.KPFDB()             # Open database connection (if needed for fallback master calibration file)
 

@@ -358,7 +358,14 @@ def run_query(cur,rep,query_template, contentbitmask, log):
     return exit_code,results_list
 
 def extract_from_db_results(results, cal_type):
-    if results[0] == 1:
+    if cal_type.lower() == 'wls':
+        results_list = [None, None]
+        if results[0] == 0:
+            results_list[0] = results[1][6]
+        if results[2] == 0:
+            results_list[1] = results[3][6]
+        return results_list
+    elif results[0] == 1:
         return ''
     elif cal_type.lower() == 'wls':
         return [results[1][6], results[3][6]]
@@ -429,8 +436,13 @@ class GetCalibrations:
                     output_cals[cal] = self.defaults[cal]
             elif lookup == 'wls':
                 wls_results = query_wls(self.datetime, self.wls_cal_types, self.max_age, self.log)
-                if wls_results[0] == 0 and wls_results[2] == 0:
-                    output_cals[cal] = extract_from_db_results(wls_results, cal)
+                if wls_results[0] == 0 or wls_results[2] == 0:
+                    wls_files = extract_from_db_results(wls_results, cal)
+                    if wls_files[0] == None:
+                        wls_files[0] = wls_files[1]
+                    if wls_files[1] == None:
+                        wls_files[1] = wls_files[0]
+                    output_cals[cal] = wls_files
                 else:
                     output_cals[cal] = self.defaults[cal]
 
