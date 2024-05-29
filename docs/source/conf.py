@@ -42,7 +42,8 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.githubpages',
     'sphinx_rtd_theme',
     'sphinxcontrib.napoleon',
-    'nbsphinx'
+    'nbsphinx',
+    'nbsphinx_link'              
 ]
 
 # Add any paths that contain templates here, relative to this directory.
