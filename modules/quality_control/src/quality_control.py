@@ -173,7 +173,7 @@ class QCDefinitions:
 
         name1 = 'not_junk_check'
         self.names.append(name1)
-        self.descriptions[name1] = 'Check if file is not in list of junk files.'
+        self.descriptions[name1] = 'File is not in list of junk files.'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
@@ -183,7 +183,7 @@ class QCDefinitions:
 
         name2 = 'monotonic_wavelength_solution_check'
         self.names.append(name2)
-        self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
+        self.descriptions[name2] = 'Wavelength solution is monotonic.'
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.spectrum_types[name2] = ['all', ]
@@ -194,7 +194,7 @@ class QCDefinitions:
         name3 = 'L0_data_products_check'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
+        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.spectrum_types[name3] = ['all', ]
         self.fits_keywords[name3] = 'DATAPRL0'
@@ -204,7 +204,7 @@ class QCDefinitions:
         name4 = 'L0_header_keywords_present_check'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
+        self.descriptions[name4] = 'Expected L0 header keywords present.'
         self.data_types[name4] = 'int'
         self.spectrum_types[name4] = ['all', ]
         self.fits_keywords[name4] = 'KWRDPRL0'
@@ -214,7 +214,7 @@ class QCDefinitions:
         name5 = 'L0_datetime_checks'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Check for timing consistency in L0 header keywords and Exp Meter table.'
+        self.descriptions[name5] = 'Timing consistency in L0 header keywords and Exp Meter table.'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
         self.fits_keywords[name5] = 'TIMCHKL0'
@@ -224,7 +224,7 @@ class QCDefinitions:
         name5b = 'L2_datetime_checks'
         self.names.append(name5b)
         self.kpf_data_levels[name5b] = ['L2']
-        self.descriptions[name5b] = 'Check for timing consistency in L2 files.'
+        self.descriptions[name5b] = 'Timing consistency in L2 files.'
         self.data_types[name5b] = 'int'
         self.spectrum_types[name5b] = ['all', ]
         self.fits_keywords[name5b] = 'TIMCHKL2'
@@ -234,7 +234,7 @@ class QCDefinitions:
         name6 = 'exposure_meter_not_saturated_check'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name6] = '2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
         self.fits_keywords[name6] = 'EMSAT'
@@ -244,7 +244,7 @@ class QCDefinitions:
         name7 = 'exposure_meter_flux_not_negative_check'
         self.names.append(name7)
         self.kpf_data_levels[name7] = ['L0']
-        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
         self.fits_keywords[name7] = 'EMNEG'
@@ -254,7 +254,7 @@ class QCDefinitions:
         name8 = 'D2_lfc_flux_check'
         self.names.append(name8)
         self.kpf_data_levels[name8] = ['2D']
-        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
+        self.descriptions[name8] = 'LFC frame that goes into a master has sufficient flux'
         self.data_types[name8] = 'int'
         self.spectrum_types[name8] = ['LFC', ]
         self.fits_keywords[name8] = 'LFC2DFOK'
@@ -264,7 +264,7 @@ class QCDefinitions:
         name9 = 'data_2D_bias_low_flux_check'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
-        self.descriptions[name9] = 'Check if flux is low in bias exposure.'
+        self.descriptions[name9] = 'Flux is low in bias exposure.'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
         self.fits_keywords[name9] = 'LOWBIAS'
@@ -274,7 +274,7 @@ class QCDefinitions:
         name10 = 'data_2D_dark_low_flux_check'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
-        self.descriptions[name10] = 'Check if flux is low in dark exposure.'
+        self.descriptions[name10] = 'Flux is low in dark exposure.'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
         self.fits_keywords[name10] = 'LOWDARK'
@@ -286,7 +286,7 @@ class QCDefinitions:
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
-        self.descriptions[name11] = 'Check if red/green data are present in L1 with expected shapes.'
+        self.descriptions[name11] = 'Red/Green data present in L1 with expected shapes.'
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
@@ -294,7 +294,7 @@ class QCDefinitions:
         name12 = 'data_L1_CaHK_check'
         self.names.append(name12)
         self.kpf_data_levels[name12] = ['L1']
-        self.descriptions[name12] = 'Check if CaHK data is present in L1 with expected shape.'
+        self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.fits_keywords[name12] = 'CaHKPRL1'
@@ -304,7 +304,7 @@ class QCDefinitions:
         name13 = 'data_L2_check'
         self.names.append(name13)
         self.kpf_data_levels[name13] = ['L2']
-        self.descriptions[name13] = 'Check if all data are present in L2.'
+        self.descriptions[name13] = 'All data present in L2.'
         self.data_types[name13] = 'int'
         self.spectrum_types[name13] = ['all', ]
         self.fits_keywords[name13] = 'DATAPRL2'
@@ -314,7 +314,7 @@ class QCDefinitions:
         name14 = 'data_2D_CaHK_check'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'Check if CaHK CCD data is present with expected array sizes.'
+        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.fits_keywords[name14] = 'CaHKPR2D'
@@ -324,7 +324,7 @@ class QCDefinitions:
         name15 = 'data_2D_red_green_check'
         self.names.append(name15)
         self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Check if red/green CCD data is present with expected array sizes.'
+        self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
         self.data_types[name15] = 'int'
         self.spectrum_types[name15] = ['all', ]
         self.fits_keywords[name15] = 'DATAPR2D'
@@ -334,7 +334,7 @@ class QCDefinitions:
         name16 = 'add_kpfera'
         self.names.append(name16)
         self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name16] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
+        self.descriptions[name16] = 'Not a QC test; used to add the KPFERA keyword to header.'
         self.data_types[name16] = 'float'
         self.spectrum_types[name16] = ['all', ]
         self.fits_keywords[name16] = 'KPFERA'
