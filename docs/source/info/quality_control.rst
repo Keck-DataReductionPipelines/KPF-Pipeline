@@ -1,8 +1,7 @@
+.. _quality_control:
+
 Quality Control
 ===============
-
-.. toctree::
-   :maxdepth: 0
 
 .. nbsphinx::
 
