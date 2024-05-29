@@ -12,4 +12,5 @@ Welcome! This is the documentation for the KPF Data Reduction Pipeline.
    api/api.rst
    primitives/primitives.rst
    info/quality_control.rst
+   tutorials/KPF_Data_Tutorial_L0_and_2D
    analysis/analysis.rst
