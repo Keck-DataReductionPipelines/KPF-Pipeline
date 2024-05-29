@@ -214,7 +214,7 @@ class QCDefinitions:
         name5 = 'L0_datetime_checks'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Timing consistency in L0 header keywords and Exp Meter table.'
+        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
         self.fits_keywords[name5] = 'TIMCHKL0'
@@ -234,7 +234,7 @@ class QCDefinitions:
         name6 = 'exposure_meter_not_saturated_check'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = '2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
         self.fits_keywords[name6] = 'EMSAT'
