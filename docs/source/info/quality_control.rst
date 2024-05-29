@@ -12,9 +12,6 @@ One can find the QC tests on the command line using a command like
 
 The Jupyter Notebook linked in the bullet points below demonstrates some features of the Quality Control module.
 
-.. toctree::
-   :maxdepth: 0
-
 .. nbsphinx::
 
    ../tutorials/KPF_Data_Tutorial_Quality_Control.ipynb
