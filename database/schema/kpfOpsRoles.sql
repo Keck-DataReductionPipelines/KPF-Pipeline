@@ -29,3 +29,7 @@ GRANT kpfporole to bfulton;
 
 -- Make it so Andrew can run the master-files pipeline.
 GRANT kpfporole to howard;
+
+-- Make it so Howard Isaacson has a read-only database role (per his request).
+REVOKE kpfporole from isaacson;
+GRANT kpfreadrole to isaacson;
