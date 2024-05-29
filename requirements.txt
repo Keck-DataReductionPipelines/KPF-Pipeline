@@ -23,6 +23,7 @@ sphinx
 sphinx-rtd-theme
 sphinxcontrib-napoleon
 nbsphinx
+nbsphinx_link
 pandoc
 ipython
 pygments
