@@ -15,9 +15,10 @@ lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
 prescan_reg = config.WATCHFOR_L0.prescan_reg
 gain_key = config.WATCHFOR_L0.gain_keyword
 do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
-masterbias_path = config.WATCHFOR_L0.masterbias_path
-masterdark_path = config.WATCHFOR_L0.masterdark_path
-masterflat_path = config.WATCHFOR_L0.masterflat_path
+#masterbias_path = config.WATCHFOR_L0.masterbias_path
+#masterdark_path = config.WATCHFOR_L0.masterdark_path
+#masterflat_path = config.WATCHFOR_L0.masterflat_path
+
 bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
 n_sigma = config.WATCHFOR_L0.n_sigma
@@ -25,39 +26,39 @@ n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 
 date_dir = context.date_dir + '/'
 
-if do_db_query_for_master_files:
+# if do_db_query_for_master_files:
 
-    query_nearest_master_files_list = QueryDBNearestMasterFilesFramework(data_type,
-                                                                         date_dir)
+#     query_nearest_master_files_list = QueryDBNearestMasterFilesFramework(data_type,
+#                                                                          date_dir)
 
-    db_exit_code = query_nearest_master_files_list[0]
+#     db_exit_code = query_nearest_master_files_list[0]
 
-    flag_masterbias = 0
-    flag_masterdark = 0
-    flag_masterflat = 0
+#     flag_masterbias = 0
+#     flag_masterdark = 0
+#     flag_masterflat = 0
 
-    for db_rec in query_nearest_master_files_list[1]:
-        db_level = db_rec[1]
-        db_cal_type = db_rec[2]
-        db_master_file = db_rec[6]
+#     for db_rec in query_nearest_master_files_list[1]:
+#         db_level = db_rec[1]
+#         db_cal_type = db_rec[2]
+#         db_master_file = db_rec[6]
 
-        if flag_masterbias == 0:
-            if db_level == 0:
-                if db_cal_type == 'bias':
-                    masterbias_path = db_master_file
-                    flag_masterbias = 1
+#         if flag_masterbias == 0:
+#             if db_level == 0:
+#                 if db_cal_type == 'bias':
+#                     masterbias_path = db_master_file
+#                     flag_masterbias = 1
 
-        if flag_masterdark == 0:
-            if db_level == 0:
-                if db_cal_type == 'dark':
-                    masterdark_path = db_master_file
-                    flag_masterdark = 1
+#         if flag_masterdark == 0:
+#             if db_level == 0:
+#                 if db_cal_type == 'dark':
+#                     masterdark_path = db_master_file
+#                     flag_masterdark = 1
 
-        if flag_masterflat == 0:
-            if db_level == 0:
-                if db_cal_type == 'flat':
-                    masterflat_path = db_master_file
-                    flag_masterflat = 1
+#         if flag_masterflat == 0:
+#             if db_level == 0:
+#                 if db_cal_type == 'flat':
+#                     masterflat_path = db_master_file
+#                     flag_masterflat = 1
 
 
 search_string = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
@@ -104,7 +105,11 @@ for raw_file_path in file_list:
 
         # read file
         l0 = kpf0_from_fits(raw_file_path, data_type)
-
+        dt_string = GetHeaderValue(l0, 'DATE-MID')
+        cals = CalibrationLookup(dt_string)
+        masterbias_path = cals['bias']
+        masterdark_path = cals['dark']
+        masterflat_path = cals['flat']
         # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
         kpf_object = l0
