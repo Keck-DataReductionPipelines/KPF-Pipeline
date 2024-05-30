@@ -436,7 +436,7 @@ class GetCalibrations:
                     output_cals[cal] = self.defaults[cal]
             elif lookup == 'wls':
                 wls_results = query_wls(self.datetime, self.wls_cal_types, self.max_age, self.log)
-                if len(wls_results > 1) and (wls_results[0] == 0 or wls_results[2] == 0):
+                if len(wls_results) > 1 and (wls_results[0] == 0 or wls_results[2] == 0):
                     wls_files = extract_from_db_results(wls_results, cal)
                     if wls_files[0] == None:
                         wls_files[0] = wls_files[1]
