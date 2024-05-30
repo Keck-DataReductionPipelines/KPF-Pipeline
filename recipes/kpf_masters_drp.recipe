@@ -13,10 +13,14 @@ from modules.master_flat.src.master_flat_framework import MasterFlatFramework
 from modules.master_arclamp.src.master_arclamp_framework import MasterArclampFramework
 from modules.quality_control.src.quality_control_framework import QualityControlFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 
 flat_objects = config.FLAT.flat_objects
 # Normally standard_flat_object = "autocal-flat-all"
 standard_flat_object = flat_objects[0]
+
+smoothlamppattern_path = config.FLAT.smoothlamppattern_path
+ordermask_path = config.FLAT.ordermask_path
 
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
@@ -26,6 +30,12 @@ if date_dir is None:
     search_string = config.PICK_INPUTS_MASTERS_DRP.input_dir + "/" + '*.fits'
 else:
     search_string = config.PICK_INPUTS_MASTERS_DRP.input_dir + "/" + date_dir + "/" + '*.fits'
+
+    dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
+                 "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:00:00.000000"
+    cals = CalibrationLookup(dt_string)
+    ordermask_path = cals['order_mask']
+    smoothlamppattern_path = cals['smooth_lamp_pattern']
 
 exptime_minimum = config.DARK.exptime_minimum
 
@@ -166,8 +176,6 @@ masterdark_path = config.DARK.masterdark_path
 flat_n_sigma = config.FLAT.n_sigma
 flat_lev0_ffi_exts = config.FLAT.lev0_ffi_exts
 masterflat_path = config.FLAT.masterflat_path
-smoothlamppattern_path = config.FLAT.smoothlamppattern_path
-ordermask_path = config.FLAT.ordermask_path
 
 standard_bias_object = "autocal-bias"
 standard_dark_object = "autocal-dark"

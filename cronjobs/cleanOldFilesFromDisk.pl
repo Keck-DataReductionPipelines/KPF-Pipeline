@@ -42,8 +42,9 @@ sub removeOldSubDirs {
     closedir DIR; 
     foreach my $file (@files) {
         print "file = $file\n";
-        if (($file eq ".") or ($file eq "..") or ($file =~ /\.+/)) {
+        if (($file eq ".") or ($file eq "..") or ($file =~ /^\.+/)) {
           print "Skipping file---->[$file]\n";
+	  next;
         }
         $file = $dir . "/" . $file;
         if ((-d $file) and (! ($file =~ /^.+\/\..*$/))) {
@@ -71,8 +72,9 @@ sub removeOldFiles {
     closedir DIR; 
     foreach my $file (@files) {
         print "file = $file\n";
-        if (($file eq ".") or ($file eq "..") or ($file =~ /\.+/)) {
+        if (($file eq ".") or ($file eq "..") or ($file =~ /^\.+/)) {
           print "Skipping file---->[$file]\n";
+	  next;
         }
         $file = $dir . "/" . $file;
         if ((-f $file) and (! ($file =~ /^.+\/\..*$/))) {
