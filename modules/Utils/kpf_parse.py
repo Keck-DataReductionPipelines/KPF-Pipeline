@@ -2,6 +2,9 @@ import re
 import pandas as pd
 from astropy.io import fits
 from datetime import datetime, timedelta
+from kpfpipe.models.level0 import KPF0
+from kpfpipe.models.level1 import KPF1
+from kpfpipe.models.level2 import KPF2
 
 class KPFParse:
 
@@ -400,7 +403,7 @@ def get_data_products_L2(L2):
         Telemetry, Config, Receipt
 
     Args:
-        L1 - a KPF L2 object 
+        L2 - a KPF L2 object 
 
     Returns:
         data_products in a L2 file
@@ -434,3 +437,95 @@ def get_data_products_L2(L2):
         if L2['RECEIPT'].size > 1:
             data_products.append('Receipt')
     return data_products
+
+
+def hasattr_with_wildcard(obj, pattern):
+    regex = re.compile(pattern)
+    return any(regex.match(attr) for attr in dir(obj))
+    
+def get_kpf_level(kpf_object):
+    """
+    Returns a string with the KPF level ('L0', '2D', 'L1', 'L2') corresponding 
+    to the input KPF pubject
+
+    Args:
+        kpf_object - a KPF object 
+
+    Returns:
+        kpf_level ('L0', '2D', 'L1', 'L2')
+    """
+    
+    # L2 if there's an extension that starts with 'CCF' or 'RV'
+    if hasattr(kpf_object, 'RV'):
+        return 'L2'
+    if hasattr(kpf_object, 'CCF'):
+        return 'L2'
+
+    # elif L1 if there's an extension that includes 'WAVE'
+    if hasattr_with_wildcard(kpf_object, r'.*WAVE.*'):
+        return 'L1'
+
+    # elif 2D if GREEN_CCD or RED_CCD has non-zero size
+    if hasattr(kpf_object, 'GREEN_CCD'):
+        if kpf_object['GREEN_CCD'].size > 1:
+            return '2D'
+    if hasattr(kpf_object, 'RED_CCD'):
+        if kpf_object['RED_CCD'].size > 1:
+            return '2D'
+
+    # elif L0 if one of the standard extensions is present with non-zero size
+    L0_attrs = ['GREEN_AMP1', 'RED_AMP1', 'CA_HK', 'EXPMETER_SCI', 'GUIDER_AVG', 'GUIDER_CUBE_ORIGINS']
+    for L0_attr in L0_attrs:
+        if hasattr(kpf_object, L0_attr):
+            if kpf_object[L0_attr].size:
+                return 'L0'
+
+    return None
+
+def get_kpf_data(ObsID, data_level, data_dir='/data', return_kpf_object=True):
+    """
+    Returns the full path of a KPF object or the KPF object itself 
+    with a specific data level
+
+    Args:
+        ObsID - e.g., 'KP.20230617.61836.73'
+        data_level - 'L0', '2D', 'L1', or 'L2'
+        data_dir - directory that contains L0/, 2D/, L1/, L2/
+        return_kpf_object - if True, return kpf_object; if false, return path to object
+
+    Returns:
+        kpf_object 
+           or
+        full path of file, e.g., /data/2D/20230701/KP.20230701.49940.99_2D.fits
+    """
+    try:
+        datecode = get_datecode(ObsID)
+        if data_level == 'L0':
+            fullpath = data_dir + '/L0/' + get_datecode(ObsID) + '/' + ObsID + '.fits'
+            if return_kpf_object:
+                return_object = KPF0.from_fits(fullpath)
+            else:
+                return_object = fullpath
+        elif data_level == '2D':
+            fullpath = data_dir + '/2D/' + get_datecode(ObsID) + '/' + ObsID + '_2D.fits'
+            if return_kpf_object:
+                return_object = KPF0.from_fits(fullpath)
+            else:
+                return_object = fullpath
+        elif data_level == 'L1':
+            fullpath = data_dir + '/L1/' + get_datecode(ObsID) + '/' + ObsID + '_L1.fits'
+            if return_kpf_object:
+                return_object = KPF1.from_fits(fullpath)
+            else:
+                return_object = fullpath
+        elif data_level == 'L2':
+            fullpath = data_dir + '/L2/' + get_datecode(ObsID) + '/' + ObsID + '_L2.fits'
+            if return_kpf_object:
+                return_object = KPF2.from_fits(fullpath)
+            else:
+                return_object = fullpath
+    except:
+        return None
+
+    return return_object
+
