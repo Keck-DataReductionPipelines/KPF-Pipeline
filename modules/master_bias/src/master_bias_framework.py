@@ -174,6 +174,15 @@ class MasterBiasFramework(KPF0_Primitive):
 
                 path = all_bias_files[i]
                 obj = KPF0.from_fits(path)
+
+                try:
+                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
+                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
+                    if obj_not_junk != 1:
+                        continue
+                except KeyError as err:
+                    pass
+
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
                 n_dims = len(np_obj_ffi_shape)

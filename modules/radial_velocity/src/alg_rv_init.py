@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from modules.radial_velocity.src.alg_rv_base import RadialVelocityBase
 from modules.radial_velocity.src.alg_rv_mask_line import RadialVelocityMaskLine
 from modules.barycentric_correction.src.alg_barycentric_corr import BarycentricCorrectionAlg
+from modules.calibration_lookup.src.alg import GetCalibrations
 from modules.Utils.config_parser import ConfigHandler
 from astropy.time import Time
 
@@ -14,6 +15,8 @@ from astropy.time import Time
 # from kpfpipe.logger import start_logger
 # from kpfpipe.primitives.level0 import KPF0_Primitive
 # from kpfpipe.models.level0 import KPF0
+
+DEFAULT_CALIBRATION_CONFIG = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
 
 mask_file_map = {
                  'F9_espresso': ('F9_espresso.txt', 'air'),
@@ -150,6 +153,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         self.star_config_file = None
         self.vel_span_pixel = None
         self.mask_orderlet = dict()
+        self.config = config
 
     @staticmethod
     def ret_status(msg='ok'):
@@ -293,7 +297,12 @@ class RadialVelocityAlgInit(RadialVelocityBase):
             if fobj == RadialVelocityAlgInit.KEY_SKY_OBJ and sci_mask is not None and 'espresso' in sci_mask.lower():
                 default_mask = 'G2_espresso'
 
-            self.mask_path = stellar_dir + mask_file_map[default_mask][0]
+            if default_mask == 'etalon':
+                cals = GetCalibrations(self.pheader['DATE-MID'], DEFAULT_CALIBRATION_CONFIG).lookup()
+                self.mask_path = cals['etalon_mask']
+            else:
+                self.mask_path = stellar_dir + mask_file_map[default_mask][0]
+    
             self.mask_type = default_mask
             self.mask_wavelengths = mask_file_map[default_mask][1]
             self.mask_orderlet[fobj] = {"obj": fiber_obj,

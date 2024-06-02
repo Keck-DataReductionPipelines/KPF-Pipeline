@@ -393,7 +393,13 @@ class WaveCalibration:
                             print_update=print_update, plot_path=order_plt_path
                         )
                     except:
-                        import pdb; pdb.set_trace()
+                        poly_soln_final_array[order_num,:] = rough_wls_order
+                        wavelengths_and_pixels[order_num] = {
+                            'known_wavelengths_vac': rough_wls_order, 
+                            'line_positions':[]
+                        }
+                        order_dict = {}
+                        continue
                 elif self.cal_type == 'Etalon':
 
                     assert comb_lines_angstrom is None, '`comb_lines_angstrom` \
@@ -1517,7 +1523,7 @@ class WaveCalibration:
                         leg_out = Legendre.fit(np.arange(n_pixels), our_wavelength_solution_for_order, 9)
                     
                     if self.cal_type == 'LFC':
-                        leg_out = Legendre.fit(x, y, 9, w=w)
+                        leg_out = Legendre.fit(x, y, self.fit_order, w=w)
                         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
                 if self.fit_type == 'spline':
                     leg_out = UnivariateSpline(x, y, w, k=5)
@@ -1914,7 +1920,10 @@ class WaveInterpolation:
                 deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
             else:
                  self.logger.error("l1_timestamp not in a recognized format")
-            frac = deltat / tdiff
+            if tdiff == 0:
+                frac = 0.0
+            else:
+                frac = deltat / tdiff
     
             # Perform linear interpolation between wls1 and wls2
             new_wls_arrays = {}

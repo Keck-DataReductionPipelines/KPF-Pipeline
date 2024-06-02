@@ -10,21 +10,10 @@ from kpfpipe.logger import *
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
+from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import md5
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'database/modules/query_db_before_after_master_files/configs/default.cfg'
-
-def md5(fname):
-    hash_md5 = hashlib.md5()
-
-    try:
-        with open(fname, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    except:
-        print("*** Error: Cannot open file =",fname,"; quitting...")
-        exit(65)
 
 class QueryDBBeforeAfterMasterFilesFramework(KPF0_Primitive):
 

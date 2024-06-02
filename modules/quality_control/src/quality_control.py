@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
 from modules.Utils.utils import DummyLogger
-from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid, get_kpf_level
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -57,6 +57,65 @@ def avg_data_with_clipping(data_array,n_sigma = 3.0):
 
     return avg,std,cnt
 
+def test_all_QCs(kpf_object, data_type):
+    """
+    Method to loop over all QC tests for the data level of the input KPF object 
+    (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g., 
+    in a Jupyter Notebook).  To run the QCs in a recipe, use methods in 
+    quality_control_framework.py
+    """
+    
+    logger = DummyLogger()
+    
+    data_level = get_kpf_level(kpf_object)
+    
+    # Define QC object
+    if data_level == 'L0':
+        qc_obj = QCL0(kpf_object)
+    elif data_level == '2D':
+        qc_obj = QC2D(kpf_object)
+    elif data_level == 'L1':
+        qc_obj = QCL1(kpf_object)
+    elif data_level == 'L2':
+        qc_obj = QCL2(kpf_object)
+    else:
+        print('data_level is not L0, 2D, L1, or L2.  Exiting.')
+        
+    if data_level != None:
+
+        # Get a list of QC method names appropriate for the data level
+        qc_names = []
+        for qc_name in qc_obj.qcdefinitions.names:
+            if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
+                qc_names.append(qc_name)
+
+        # Run the QC tests and add result to keyword to header
+        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+        this_spectrum_type = primary_header.get_name(use_star_names=False)    
+        logger.info(f'Spectrum type: {this_spectrum_type}')
+        for qc_name in qc_names:
+            try:
+                spectrum_types = qc_obj.qcdefinitions.spectrum_types[qc_name]
+                if (this_spectrum_type in spectrum_types) or ('all' in spectrum_types):
+                    logger.info(f'Running QC: \033[1;34m{qc_name}\033[0m ({qc_obj.qcdefinitions.descriptions[qc_name]})')
+                    method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
+                    qc_value = method() # evaluate method
+                    if qc_value == True: 
+                        color_code = '\033[1;32m' # green
+                    elif qc_value == False:
+                        color_code = '\033[1;31m' # red
+                    else:
+                        color_code = '\033[1m'
+                    logger.info(f'QC result:  {color_code}{qc_value}\033[0m (True = pass)')
+                    qc_obj.add_qc_keyword_to_header(qc_name, qc_value)
+                else:
+                    logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because spectrum type {this_spectrum_type} not in list of spectrum types: {spectrum_types}')
+            except AttributeError as e:
+                logger.info(f'Method {qc_name} does not exist in qc_obj or another AttributeError occurred: {e}')
+                pass
+            except Exception as e:
+                logger.info(f'An error occurred when executing {qc_name}:', str(e))
+                pass
 
 #####################################################################
 
@@ -114,7 +173,7 @@ class QCDefinitions:
 
         name1 = 'not_junk_check'
         self.names.append(name1)
-        self.descriptions[name1] = 'Check if file is not in list of junk files.'
+        self.descriptions[name1] = 'File is not in list of junk files.'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
@@ -124,7 +183,7 @@ class QCDefinitions:
 
         name2 = 'monotonic_wavelength_solution_check'
         self.names.append(name2)
-        self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
+        self.descriptions[name2] = 'Wavelength solution is monotonic.'
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.spectrum_types[name2] = ['all', ]
@@ -135,7 +194,7 @@ class QCDefinitions:
         name3 = 'L0_data_products_check'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
+        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.spectrum_types[name3] = ['all', ]
         self.fits_keywords[name3] = 'DATAPRL0'
@@ -145,7 +204,7 @@ class QCDefinitions:
         name4 = 'L0_header_keywords_present_check'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
+        self.descriptions[name4] = 'Expected L0 header keywords present.'
         self.data_types[name4] = 'int'
         self.spectrum_types[name4] = ['all', ]
         self.fits_keywords[name4] = 'KWRDPRL0'
@@ -155,7 +214,7 @@ class QCDefinitions:
         name5 = 'L0_datetime_checks'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Check for timing consistency in L0 header keywords and Exp Meter table.'
+        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
         self.fits_keywords[name5] = 'TIMCHKL0'
@@ -165,7 +224,7 @@ class QCDefinitions:
         name5b = 'L2_datetime_checks'
         self.names.append(name5b)
         self.kpf_data_levels[name5b] = ['L2']
-        self.descriptions[name5b] = 'Check for timing consistency in L2 files.'
+        self.descriptions[name5b] = 'Timing consistency in L2 files.'
         self.data_types[name5b] = 'int'
         self.spectrum_types[name5b] = ['all', ]
         self.fits_keywords[name5b] = 'TIMCHKL2'
@@ -175,7 +234,7 @@ class QCDefinitions:
         name6 = 'exposure_meter_not_saturated_check'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
         self.fits_keywords[name6] = 'EMSAT'
@@ -185,7 +244,7 @@ class QCDefinitions:
         name7 = 'exposure_meter_flux_not_negative_check'
         self.names.append(name7)
         self.kpf_data_levels[name7] = ['L0']
-        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
         self.fits_keywords[name7] = 'EMNEG'
@@ -195,7 +254,7 @@ class QCDefinitions:
         name8 = 'D2_lfc_flux_check'
         self.names.append(name8)
         self.kpf_data_levels[name8] = ['2D']
-        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
+        self.descriptions[name8] = 'LFC frame that goes into a master has sufficient flux'
         self.data_types[name8] = 'int'
         self.spectrum_types[name8] = ['LFC', ]
         self.fits_keywords[name8] = 'LFC2DFOK'
@@ -205,7 +264,7 @@ class QCDefinitions:
         name9 = 'data_2D_bias_low_flux_check'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
-        self.descriptions[name9] = 'Check to see if flux is low in bias exposure.'
+        self.descriptions[name9] = 'Flux is low in bias exposure.'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
         self.fits_keywords[name9] = 'LOWBIAS'
@@ -215,7 +274,7 @@ class QCDefinitions:
         name10 = 'data_2D_dark_low_flux_check'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
-        self.descriptions[name10] = 'Check to see if flux is low in dark exposure.'
+        self.descriptions[name10] = 'Flux is low in dark exposure.'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
         self.fits_keywords[name10] = 'LOWDARK'
@@ -227,7 +286,7 @@ class QCDefinitions:
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
-        self.descriptions[name11] = 'Check to see if red and green data are present in L1 with expected shapes.'
+        self.descriptions[name11] = 'Red/Green data present in L1 with expected shapes.'
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
@@ -235,7 +294,7 @@ class QCDefinitions:
         name12 = 'data_L1_CaHK_check'
         self.names.append(name12)
         self.kpf_data_levels[name12] = ['L1']
-        self.descriptions[name12] = 'Check to see if CaHK data is present in L1 with expected shape.'
+        self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.fits_keywords[name12] = 'CaHKPRL1'
@@ -245,7 +304,7 @@ class QCDefinitions:
         name13 = 'data_L2_check'
         self.names.append(name13)
         self.kpf_data_levels[name13] = ['L2']
-        self.descriptions[name13] = 'Check to see if all data is present in L2.'
+        self.descriptions[name13] = 'All data present in L2.'
         self.data_types[name13] = 'int'
         self.spectrum_types[name13] = ['all', ]
         self.fits_keywords[name13] = 'DATAPRL2'
@@ -255,7 +314,7 @@ class QCDefinitions:
         name14 = 'data_2D_CaHK_check'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'Check to see if CaHK CCD data is present with expected array sizes.'
+        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.fits_keywords[name14] = 'CaHKPR2D'
@@ -265,7 +324,7 @@ class QCDefinitions:
         name15 = 'data_2D_red_green_check'
         self.names.append(name15)
         self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Check to see if red and green CCD data is present with expected array sizes.'
+        self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
         self.data_types[name15] = 'int'
         self.spectrum_types[name15] = ['all', ]
         self.fits_keywords[name15] = 'DATAPR2D'
@@ -275,7 +334,7 @@ class QCDefinitions:
         name16 = 'add_kpfera'
         self.names.append(name16)
         self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name16] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
+        self.descriptions[name16] = 'Not a QC test; used to add the KPFERA keyword to header.'
         self.data_types[name16] = 'float'
         self.spectrum_types[name16] = ['all', ]
         self.fits_keywords[name16] = 'KPFERA'
@@ -929,7 +988,7 @@ class QC2D(QC):
 
     def data_2D_red_green_check(self,debug=False):
         """
-        This Quality Control function checks to see if the 2D data exists for both
+        This Quality Control function checks if the 2D data exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
     
         Args:
@@ -984,7 +1043,7 @@ class QC2D(QC):
 
     def data_2D_CaHK_check(self,debug=False):
         """
-        This Quality Control function checks to see if the 2D data exists for the
+        This Quality Control function checks if the 2D data exists for the
         Ca H&K chip and checks that the size of the array is as expected.
 
         Args:
@@ -1024,7 +1083,7 @@ class QC2D(QC):
 
     def data_2D_bias_low_flux_check(self,debug=False):
         """
-        This Quality Control function checks to see if the flux is low
+        This Quality Control function checks if the flux is low
         (mean flux < 10) for a bias exposure.
 
         Args:
@@ -1062,7 +1121,7 @@ class QC2D(QC):
 
     def data_2D_dark_low_flux_check(self,debug=False):
         """
-        This Quality Control function checks to see if the flux is low
+        This Quality Control function checks if the flux is low
         (mean flux < 10) for a dark exposure.
 
         Args:
@@ -1145,7 +1204,7 @@ class QCL1(QC):
 
     def monotonic_wavelength_solution_check(self,debug=False):
         """
-        This Quality Control function checks to see if a wavelength solution is
+        This Quality Control function checks if a wavelength solution is
         monotonic, specifically if wavelength decreases (or stays constant) with
         increasing array index.
 
@@ -1231,7 +1290,7 @@ class QCL1(QC):
 
     def data_L1_red_green_check(self,debug=False):
         """
-        This Quality Control function checks to see if the red and green data
+        This Quality Control function checks if the red and green data
         are present in an L1 file, and that all array sizes are as expected.
 
         Args:
@@ -1319,7 +1378,7 @@ class QCL1(QC):
 
     def data_L1_CaHK_check(self,debug=False):
         """
-        This Quality Control function checks to see if the green and red data
+        This Quality Control function checks if the green and red data
         are present in an L1 file, and that all array sizes are as expected.
 
         Args:
@@ -1386,7 +1445,7 @@ class QCL2(QC):
 
     def data_L2_check(self,debug=False):
         """
-        This Quality Control function checks to see if all of the 
+        This Quality Control function checks if all of the 
         expected data (telemetry, CCFs, and RVs) are present.
 
         Args:
