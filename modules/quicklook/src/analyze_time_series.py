@@ -634,31 +634,31 @@ class AnalyzeTimeSeries:
         # L0 PRIMARY header    
         if level == 'L0':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, dtype=str)
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
              
         # 2D PRIMARY header    
         elif level == '2D':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, dtype=str)
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         # L1 PRIMARY header    
         elif level == 'L1':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, dtype=str)
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
         
         # L2 PRIMARY header    
         elif level == 'L2':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, dtype=str)
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         # L0 TELEMETRY extension
         elif level == 'L0_telemetry':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, dtype=str)
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
 #        # L2 RV extension
@@ -670,7 +670,7 @@ class AnalyzeTimeSeries:
         # L2 RV extension    
         elif level == 'L2_RV_header':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, dtype=str)
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         else:
