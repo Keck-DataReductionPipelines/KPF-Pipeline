@@ -233,7 +233,7 @@ class QCDefinitions:
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name0] = None
 
-        name1 = 'not_junk_check'
+        name1 = 'not_junk'
         self.names.append(name1)
         self.descriptions[name1] = 'File is not in list of junk files.'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
@@ -244,7 +244,7 @@ class QCDefinitions:
         self.fits_comments[name1] = 'QC: Not in list of junk files'
         self.db_columns[name1] = None
 
-        name2 = 'monotonic_wavelength_solution_check'
+        name2 = 'monotonic_wavelength_solution'
         self.names.append(name2)
         self.descriptions[name2] = 'Wavelength solution is monotonic.'
         self.kpf_data_levels[name2] = ['L1']
@@ -255,7 +255,7 @@ class QCDefinitions:
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
         self.db_columns[name2] = None
 
-        name3 = 'L0_data_products_check'
+        name3 = 'L0_data_products'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
         self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
@@ -266,7 +266,7 @@ class QCDefinitions:
         self.fits_comments[name3] = 'QC: L0 data present'
         self.db_columns[name3] = None
 
-        name4 = 'L0_header_keywords_present_check'
+        name4 = 'L0_header_keywords_present'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
         self.descriptions[name4] = 'Expected L0 header keywords present.'
@@ -277,7 +277,7 @@ class QCDefinitions:
         self.fits_comments[name4] = 'QC: L0 keywords present'
         self.db_columns[name4] = None
 
-        name5 = 'L0_datetime_checks'
+        name5 = 'L0_datetime'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
         self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
@@ -288,7 +288,7 @@ class QCDefinitions:
         self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
 
-        name5b = 'L2_datetime_checks'
+        name5b = 'L2_datetime'
         self.names.append(name5b)
         self.kpf_data_levels[name5b] = ['L2']
         self.descriptions[name5b] = 'Timing consistency in L2 files.'
@@ -299,7 +299,7 @@ class QCDefinitions:
         self.fits_comments[name5b] = 'QC: L2 times consistent'
         self.db_columns[name5b] = None
 
-        name6 = 'exposure_meter_not_saturated_check'
+        name6 = 'exposure_meter_not_saturated'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
         self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
@@ -310,7 +310,7 @@ class QCDefinitions:
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
 
-        name7 = 'exposure_meter_flux_not_negative_check'
+        name7 = 'exposure_meter_flux_not_negative'
         self.names.append(name7)
         self.kpf_data_levels[name7] = ['L0']
         self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
@@ -321,7 +321,7 @@ class QCDefinitions:
         self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
 
-        name8 = 'D2_lfc_flux_check'
+        name8 = 'D2_lfc_flux'
         self.names.append(name8)
         self.kpf_data_levels[name8] = ['2D']
         self.descriptions[name8] = 'LFC frame that goes into a master has sufficient flux'
@@ -332,7 +332,7 @@ class QCDefinitions:
         self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
         self.db_columns[name8] = None
 
-        name9 = 'data_2D_bias_low_flux_check'
+        name9 = 'data_2D_bias_low_flux'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
         self.descriptions[name9] = 'Flux is low in bias exposure.'
@@ -343,7 +343,7 @@ class QCDefinitions:
         self.fits_comments[name9] = 'QC: 2D bias low flux check'
         self.db_columns[name9] = None
 
-        name10 = 'data_2D_dark_low_flux_check'
+        name10 = 'data_2D_dark_low_flux'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
         self.descriptions[name10] = 'Flux is low in dark exposure.'
@@ -354,7 +354,7 @@ class QCDefinitions:
         self.fits_comments[name10] = 'QC: 2D dark low flux check'
         self.db_columns[name10] = None
 
-        name11 = 'data_L1_red_green_check'
+        name11 = 'data_L1_red_green'
         self.names.append(name11)
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
@@ -365,7 +365,7 @@ class QCDefinitions:
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
 
-        name12 = 'data_L1_CaHK_check'
+        name12 = 'data_L1_CaHK'
         self.names.append(name12)
         self.kpf_data_levels[name12] = ['L1']
         self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
@@ -376,7 +376,7 @@ class QCDefinitions:
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
 
-        name13 = 'data_L2_check'
+        name13 = 'data_L2'
         self.names.append(name13)
         self.kpf_data_levels[name13] = ['L2']
         self.descriptions[name13] = 'All data present in L2.'
@@ -387,7 +387,7 @@ class QCDefinitions:
         self.fits_comments[name13] = 'QC: L2 data present check'
         self.db_columns[name13] = None
         
-        name14 = 'data_2D_CaHK_check'
+        name14 = 'data_2D_CaHK'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
         self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
@@ -398,7 +398,7 @@ class QCDefinitions:
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
 
-        name15 = 'data_2D_red_green_check'
+        name15 = 'data_2D_red_green'
         self.names.append(name15)
         self.kpf_data_levels[name15] = ['2D']
         self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
@@ -523,7 +523,7 @@ class QC:
             print('---->add_qc_keyword_to_header: qc_name, keyword, value, comment = {}, {}, {}, {}'.format(qc_name,keyword,value,comment))
 
 
-    def not_junk_check(self, junk_ObsIDs_csv='/data/reference/Junk_Observations_for_KPF.csv', debug=False):
+    def not_junk(self, junk_ObsIDs_csv='/data/reference/Junk_Observations_for_KPF.csv', debug=False):
         """
         This Quality Control method can be used in any of the data levels (L0/2D/L1/L2) 
         so it is included in the superclass. 
@@ -668,7 +668,7 @@ class QCL0(QC):
         super().__init__(kpf_object)
 
 
-    def L0_data_products_check(self, debug=False):
+    def L0_data_products(self, debug=False):
         """
         This Quality Control function checks if the expected data_products 
         in an L0 file are present and if their data extensions are populated 
@@ -716,12 +716,12 @@ class QCL0(QC):
                 if not dp in data_products_present:
                     QC_pass = False
                     if debug:
-                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products) failed.')
         
         return QC_pass
 
 
-    def L0_header_keywords_present_check(self, essential_keywords=['auto'], debug=False):
+    def L0_header_keywords_present(self, essential_keywords=['auto'], debug=False):
         """
         This Quality Control function checks if a specified set of FITS header keywords are present.
         
@@ -784,7 +784,7 @@ class QCL0(QC):
         return QC_pass
 
 
-    def L0_datetime_checks(self, debug=False):
+    def L0_datetime(self, debug=False):
         """
         This QC module performs the following checks on datetimes in the L0 primary header
         and in the Exposure Meter table (if present).  The timing checks have precision 
@@ -924,7 +924,7 @@ class QCL0(QC):
         return QC_pass    
 
 
-    def exposure_meter_not_saturated_check(self, debug=False):
+    def exposure_meter_not_saturated(self, debug=False):
         """
         This Quality Control function checks if 2 or more reduced pixels in an exposure
         meter spectrum is within 90% of saturated.  The check is applied to the EM-SCI 
@@ -992,7 +992,7 @@ class QCL0(QC):
         return QC_pass
 
 
-    def exposure_meter_flux_not_negative_check(self, debug=False):
+    def exposure_meter_flux_not_negative(self, debug=False):
         """
         This Quality Control function checks if 20 or more consecutive elements of the 
         exposure meter spectra are negative.  Negative flux usually indicates 
@@ -1065,7 +1065,7 @@ class QC2D(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
-    def data_2D_red_green_check(self,debug=False):
+    def data_2D_red_green(self,debug=False):
         """
         This Quality Control function checks if the 2D data exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
@@ -1120,7 +1120,7 @@ class QC2D(QC):
         
         return QC_pass
 
-    def data_2D_CaHK_check(self,debug=False):
+    def data_2D_CaHK(self,debug=False):
         """
         This Quality Control function checks if the 2D data exists for the
         Ca H&K chip and checks that the size of the array is as expected.
@@ -1160,7 +1160,7 @@ class QC2D(QC):
         
         return QC_pass
 
-    def data_2D_bias_low_flux_check(self,debug=False):
+    def data_2D_bias_low_flux(self,debug=False):
         """
         This Quality Control function checks if the flux is low
         (mean flux < 10) for a bias exposure.
@@ -1198,7 +1198,7 @@ class QC2D(QC):
 
         return QC_pass
 
-    def data_2D_dark_low_flux_check(self,debug=False):
+    def data_2D_dark_low_flux(self,debug=False):
         """
         This Quality Control function checks if the flux is low
         (mean flux < 10) for a dark exposure.
@@ -1236,7 +1236,7 @@ class QC2D(QC):
         
         return QC_pass
 
-    def D2_lfc_flux_check(self, threshold=4000, debug=False):
+    def D2_lfc_flux(self, threshold=4000, debug=False):
         """
         This Quality Control function checks if the flux values in the green and red chips of the
         given 2D file are above a defined threshold at the 98th percentile.
@@ -1281,7 +1281,7 @@ class QCL1(QC):
         super().__init__(kpf_object)
 
 
-    def monotonic_wavelength_solution_check(self,debug=False):
+    def monotonic_wavelength_solution(self,debug=False):
         """
         This Quality Control function checks if a wavelength solution is
         monotonic, specifically if wavelength decreases (or stays constant) with
@@ -1367,7 +1367,7 @@ class QCL1(QC):
 
         return QC_pass #, bad_orders
 
-    def data_L1_red_green_check(self,debug=False):
+    def data_L1_red_green(self,debug=False):
         """
         This Quality Control function checks if the red and green data
         are present in an L1 file, and that all array sizes are as expected.
@@ -1455,7 +1455,7 @@ class QCL1(QC):
         
         return QC_pass
 
-    def data_L1_CaHK_check(self,debug=False):
+    def data_L1_CaHK(self,debug=False):
         """
         This Quality Control function checks if the green and red data
         are present in an L1 file, and that all array sizes are as expected.
@@ -1522,7 +1522,7 @@ class QCL2(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
-    def data_L2_check(self,debug=False):
+    def data_L2(self,debug=False):
         """
         This Quality Control function checks if all of the 
         expected data (telemetry, CCFs, and RVs) are present.
@@ -1623,7 +1623,7 @@ class QCL2(QC):
         
         return QC_pass
 
-    def L2_datetime_checks(self, debug=False):
+    def L2_datetime(self, debug=False):
         """
         This QC module performs the following checks on datetimes in the header 
         to the RV extension in an L2 object. The timing checks have precision 
