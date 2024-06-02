@@ -125,7 +125,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         elif qc_value == False:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Red")
                         if qc_obj.qcdefinitions.fits_keywords[qc_name] == 'KPFERA':
-                            logger.info(f'Result: {styled_text(qc_value, style="Bold")}')
+                            logger.info(f'Result: {styled_text("KPFERA", style="Bold", color="Blue")}={styled_text(qc_value, style="Bold")}')
                         else:
                             logger.info(f'QC result: {text_qc_value} (True = pass)')
                         qc_obj.add_qc_keyword_to_header(qc_name, qc_value)
@@ -458,7 +458,7 @@ class QCDefinitions:
         qc_names = self.names
         
         for data_level in ['L0', '2D', 'L1', 'L2']:
-            print(f'\033[1mQuality Control tests for {data_level}:\033[0m')
+            print(styled_text(f"Quality Control tests for {data_level}:", style="Bold"))
             for qc_name in qc_names:
     
                 kpf_data_levels = self.kpf_data_levels[qc_name]
@@ -470,14 +470,14 @@ class QCDefinitions:
                 description = self.descriptions[qc_name]
     
                 if data_level in self.kpf_data_levels[qc_name]:
-                    print('   \033[1mQC Name:\033[0m ' + qc_name)
-                    print('      \033[1mDescription:\033[0m ' + description)
-                    print('      \033[1mData levels:\033[0m ' + str(kpf_data_levels))
-                    print('      \033[1mData type:\033[0m ' + data_type)
-                    print('      \033[1mSpectrum type:\033[0m ' + str(spectrum_type))
-                    print('      \033[1mKeyword:\033[0m ' + keyword)
-                    print('      \033[1mComment:\033[0m ' + comment)
-                    print('      \033[1mDatabase column:\033[0m ' + str(db_column))
+                    print('   ' + styled_text("Name: ", style="Bold") + styled_text(qc_name, style="Bold", color="Blue"))
+                    print('      ' + styled_text("Description: ", style="Bold") + description)
+                    print('      ' + styled_text("Date levels: ", style="Bold") + str(kpf_data_levels))
+                    print('      ' + styled_text("Date type: ", style="Bold") + data_type)
+                    print('      ' + styled_text("Spectrum type: ", style="Bold") + str(spectrum_type))
+                    print('      ' + styled_text("Keyword: ", style="Bold") + styled_text(keyword, style="Bold", color='Blue'))
+                    print('      ' + styled_text("Comment: ", style="Bold") + comment)
+                    print('      ' + styled_text("Database column: ", style="Bold") + str(db_column))
                     print()
 
 
