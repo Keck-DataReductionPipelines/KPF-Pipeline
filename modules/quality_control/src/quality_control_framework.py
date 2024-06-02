@@ -61,7 +61,6 @@ class QualityControlFramework(KPF0_Primitive):
         module_param_cfg = module_config_obj['PARAM']
         debug_level_cfg_str = module_param_cfg.get('debug_level')
         self.debug_level_cfg = ast.literal_eval(debug_level_cfg_str)
-        #self.logger.info('self.debug_level_cfg = {}'.format(self.debug_level_cfg))
         self.logger.info('Type of self.debug_level_cfg = {}'.format(type(self.debug_level_cfg)))
 
 
