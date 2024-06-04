@@ -165,7 +165,6 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
                 print(f'    {ncpu} out of {ncpu_system} cores (initially)')
                 print(f'    {load}% maximum load ({int(ncpu_system * float(load)/100)} cores)')
                 print(f'    no swapping')
-            print(f'command = {command}')
             try:
                 subprocess.run(command, shell=True, check=True)
             except Exception as e:
