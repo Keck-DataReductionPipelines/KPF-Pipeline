@@ -152,7 +152,7 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
         else:        
             # Create a temporary file and write the sorted file paths to it
             ncpu_system = os.cpu_count()
-            delay = 0.5 # sec; delay between starting jobs
+            delay = 0.1 # sec; delay between starting jobs
             with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile:
                 tmpfile_name = tmpfile.name
                 for file_path in sorted_files:
