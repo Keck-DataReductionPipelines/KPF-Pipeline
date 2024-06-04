@@ -113,7 +113,17 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
             if re.search(pattern, filename) and start_date <= float(re.search(pattern, filename).group(1)) <= end_date
         ]
         sorted_files.extend(matching_masters)
-        # Note: the Master files are not sorted in date order
+
+        # Custom sort key function to extract and convert the date part
+        def extract_date(filename):
+            datepattern = r'/data/.*/(\d{8})/'
+            match = re.search(datepattern, filename)
+            if match:
+                return int(match.group(1))
+            return 0  # Default value if the pattern does not match (shouldn't happen if input is consistent)
+        
+        # Sort again to interleave masters in datecode-sorted list of L0-L2
+        sorted_files = sorted(sorted_files, key=extract_date)
  
     print(f"Number of files queued for parallel Quicklook processing: {len(sorted_files)}")
     
