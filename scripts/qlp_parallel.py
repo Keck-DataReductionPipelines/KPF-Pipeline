@@ -17,7 +17,7 @@ def is_running_in_docker():
         return False
 
 
-def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
+def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
     """
     Script Name: qlp_parallel.py
    
@@ -33,26 +33,40 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
       is being run in Docker and will return with an error message if not. 
       If start_date is later than end_date, the arguments will be reversed 
       and the files with later dates will be processed first.
+      
+      The --ncpu parameter determines the maximum number of cores used.  If the 
+      --load parameter (a percentage, e.g. 90 = 90%) is set to a non-zero value, 
+      this script will be throttled so that no new files will have QLPs 
+      processed until the load is below that value.  Note that throttling works 
+      in steady state; it is possible to overload the system with the first set 
+      of jobs if --ncpu is set too way high.  Also, the system runs with a 
+      little higher load than commanded, e.g., if you want 90% load, set it for 
+      80%.
+      
       Invoking the --print_files flag causes the script to print the file
       names, but not compute Quicklook data products.
 
+    Arguments:
+      start_date     Start date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
+      end_date       End date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
+
     Options:
-      --help         Display this message
-      --start_date   Start date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
-      --end_date     End date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
-      --ncpu         Number of cores used for parallel processing; default=10
       --l0           Select all L0 files in date range
       --2d           Select all 2D files in date range
       --l1           Select all L1 files in date range
       --l2           Select all L2 files in date range
       --master       Select all master files in date range
+      --ncpu         Number of cores used for parallel processing; default=10
+      --load         Maximum load (1 min average); default=0 (only activated if !=0)
       --print_files  Display file names matching criteria, but don't generate Quicklook plots
+      --help         Display this message
    
     Usage:
-      python qlp_parallel.py YYYYMMDD.SSSSS YYYYMMDD.SSSSS --ncpu NCPU --l0 --2d --l1 --l2 --master
+      python qlp_parallel.py YYYYMMDD.SSSSS YYYYMMDD.SSSSS --ncpu NCPU --load LOAD --l0 --2d --l1 --l2 --master --print_files
     
-    Example:
+    Examples:
       ./scripts/qlp_parallel.py 20230101.12345.67 20230101.17 --ncpu 50 --l0 --2d
+      ./scripts/qlp_parallel.py 20240501 20240505 --ncpu 150 --load 90
     """
 
     if start_date.count('.') == 2:
@@ -137,12 +151,21 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
                 print(f)
         else:        
             # Create a temporary file and write the sorted file paths to it
+            ncpu_system = os.cpu_count()
             with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile:
                 tmpfile_name = tmpfile.name
                 for file_path in sorted_files:
                     tmpfile.write(file_path + '\n')
-            command = f"""bash -c "parallel -j {ncpu} -k --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
-            
+            print('Starting parallel with:')
+            if int(load) < 0.1:
+                print(f'    {ncpu} out of {ncpu_system} cores')
+                command = f"""bash -c "parallel -j {ncpu} -k --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
+            else:
+                command = f"""bash -c "parallel -j {ncpu} --load {int(load)}% --noswap -k --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
+                print(f'    {ncpu} out of {ncpu_system} cores (initially)')
+                print(f'    {load}% maximum load ({int(ncpu_system * float(load)/100)} cores)')
+                print(f'    no swapping')
+            print(f'command = {command}')
             try:
                 subprocess.run(command, shell=True, check=True)
             except Exception as e:
@@ -155,6 +178,7 @@ if __name__ == "__main__":
         parser.add_argument('start_date', type=str, help='Start date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS')
         parser.add_argument('end_date',  type=str, help='End date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS')
         parser.add_argument('--ncpu', type=str, default=10, help='Number of cores for parallel processing')
+        parser.add_argument('--load', type=str, default=0, help='Maximum load (percent)')
         parser.add_argument('--l0', action='store_true', help='Select all L0 files in date range')
         parser.add_argument('--2d', action='store_true', dest='d2', help='Select all 2D files in date range')
         parser.add_argument('--l1', action='store_true', help='Select all L1 files in date range')
@@ -163,7 +187,7 @@ if __name__ == "__main__":
         parser.add_argument('--print_files', action='store_true', help="Display file names matching criteria, but don't generate Quicklook plots")
     
         args = parser.parse_args()
-        main(args.start_date, args.end_date, args.l0, args.d2, args.l1, args.l2, args.master, args.ncpu, args.print_files)
+        main(args.start_date, args.end_date, args.l0, args.d2, args.l1, args.l2, args.master, args.ncpu, args.load, args.print_files)
     else:
         print('qlp_parallel.py needs to be run in a Docker environment.')        
         print('Start the KPF-Pipeline instance of Docker before trying again.')        
