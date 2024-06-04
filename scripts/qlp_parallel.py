@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
+import re
 import os
 import sys
 import glob
@@ -16,7 +17,7 @@ def is_running_in_docker():
         return False
 
 
-def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
+def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
     """
     Script Name: qlp_parallel.py
    
@@ -24,8 +25,8 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
       This script uses the 'parallel' utility to execute the recipe called 
       'recipes/quicklook_match.recipe' to generate standard Quicklook data 
       products.  The script selects all KPF files based on their
-      type (L0/2D/L1/L2) from the standard data directory using a date range
-      specified by the parameters start_date and end_date.  L0 files are 
+      type (L0/2D/L1/L2/master) from the standard data directory using a date 
+      range specified by the parameters start_date and end_date.  L0 files are 
       included if the --l0 flag is set or none of the --l0, --2d, --l1, --l2
       flags are set (in which case all data types are included).  The --2d, 
       --l1, and --l2 flags have similar functions.  The script assumes that it
@@ -44,10 +45,11 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
       --2d           Select all 2D files in date range
       --l1           Select all L1 files in date range
       --l2           Select all L2 files in date range
+      --master       Select all master files in date range
       --print_files  Display file names matching criteria, but don't generate Quicklook plots
    
     Usage:
-      python qlp_parallel.py YYYYMMDD.SSSSS YYYYMMDD.SSSSS --ncpu NCPU --l0 --2d --l1 --l2
+      python qlp_parallel.py YYYYMMDD.SSSSS YYYYMMDD.SSSSS --ncpu NCPU --l0 --2d --l1 --l2 --master
     
     Example:
       ./scripts/qlp_parallel.py 20230101.12345.67 20230101.17 --ncpu 50 --l0 --2d
@@ -71,17 +73,17 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
 
     base_dir = "/data"
     all_files = []
-    if ((not l0) and (not d2) and (not l1) and (not l2)) or l0:
+    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or l0:
         print("Checking L0 files")
-        all_files.extend(glob.glob(f"{base_dir}/L0/????????/*.fits"))
-    if ((not l0) and (not d2) and (not l1) and (not l2)) or d2:
-        all_files.extend(glob.glob(f"{base_dir}/2D/????????/*_2D.fits"))
+        all_files.extend(glob.glob(f"{base_dir}/L0/20??????/*.fits"))
+    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or d2:
+        all_files.extend(glob.glob(f"{base_dir}/2D/20??????/*_2D.fits"))
         print("Checking 2D files")
-    if ((not l0) and (not d2) and (not l1) and (not l2)) or l1:
-        all_files.extend(glob.glob(f"{base_dir}/L1/????????/*_L1.fits"))
+    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or l1:
+        all_files.extend(glob.glob(f"{base_dir}/L1/20??????/*_L1.fits"))
         print("Checking L1 files")
-    if ((not l0) and (not d2) and (not l1) and (not l2)) or l2:
-        all_files.extend(glob.glob(f"{base_dir}/L2/????????/*_L2.fits"))
+    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or l2:
+        all_files.extend(glob.glob(f"{base_dir}/L2/20??????/*_L2.fits"))
         print("Checking L2 files")
     print("Processing filenames")
     all_files = [item for item in all_files if '-' not in item]  # remove bad files like `KP.20240101.00000.00-1.fits`
@@ -100,9 +102,22 @@ def main(start_date, end_date, l0, d2, l1, l2, ncpu, print_files):
     sorted_files = sorted_paths.tolist()
     if do_reversed:
         sorted_files = sorted_files[::-1]
+
+    if master:
+        print("Adding Master files")
+        master_files = []
+        master_files.extend(glob.glob(f"{base_dir}/masters/20??????/*.fits"))
+        pattern = r'/data/masters/(\d{8})/'
+        matching_masters = [
+            filename for filename in master_files
+            if re.search(pattern, filename) and start_date <= float(re.search(pattern, filename).group(1)) <= end_date
+        ]
+        sorted_files.extend(matching_masters)
+        # Note: the Master files are not sorted in date order
+ 
     print(f"Number of files queued for parallel Quicklook processing: {len(sorted_files)}")
     
-    if len(filtered_files) == 0:
+    if len(sorted_files) == 0:
         print("Script stopped because no matching files were found.")
     else:
         if print_files:
@@ -133,10 +148,11 @@ if __name__ == "__main__":
         parser.add_argument('--2d', action='store_true', dest='d2', help='Select all 2D files in date range')
         parser.add_argument('--l1', action='store_true', help='Select all L1 files in date range')
         parser.add_argument('--l2', action='store_true', help='Select all L2 files in date range')
+        parser.add_argument('--master', action='store_true', help='Select all master files in date range')
         parser.add_argument('--print_files', action='store_true', help="Display file names matching criteria, but don't generate Quicklook plots")
     
         args = parser.parse_args()
-        main(args.start_date, args.end_date, args.l0, args.d2, args.l1, args.l2, args.ncpu, args.print_files)
+        main(args.start_date, args.end_date, args.l0, args.d2, args.l1, args.l2, args.master, args.ncpu, args.print_files)
     else:
         print('qlp_parallel.py needs to be run in a Docker environment.')        
         print('Start the KPF-Pipeline instance of Docker before trying again.')        
