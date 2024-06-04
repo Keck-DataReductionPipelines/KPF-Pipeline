@@ -152,6 +152,7 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
         else:        
             # Create a temporary file and write the sorted file paths to it
             ncpu_system = os.cpu_count()
+            delay = 0.5 # sec; delay between starting jobs
             with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile:
                 tmpfile_name = tmpfile.name
                 for file_path in sorted_files:
@@ -159,9 +160,9 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
             print('Starting parallel with:')
             if int(load) < 0.1:
                 print(f'    {ncpu} out of {ncpu_system} cores')
-                command = f"""bash -c "parallel -j {ncpu} -k --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
+                command = f"""bash -c "parallel -j {ncpu} -k --bar --delay {delay} bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
             else:
-                command = f"""bash -c "parallel -j {ncpu} --load {int(load)}% --noswap -k --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
+                command = f"""bash -c "parallel -j {ncpu} -k --load {load}% --noswap --bar --delay {delay} bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
                 print(f'    {ncpu} out of {ncpu_system} cores (initially)')
                 print(f'    {load}% maximum load ({int(ncpu_system * float(load)/100)} cores)')
                 print(f'    no swapping')
