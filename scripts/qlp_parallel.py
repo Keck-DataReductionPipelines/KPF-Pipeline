@@ -100,8 +100,6 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
     sorted_indices = np.argsort([file.split('/')[-1] for file in filtered_files])
     sorted_paths = filtered_files[sorted_indices]
     sorted_files = sorted_paths.tolist()
-    if do_reversed:
-        sorted_files = sorted_files[::-1]
 
     if master:
         print("Adding Master files")
@@ -124,6 +122,9 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, print_files):
         
         # Sort again to interleave masters in datecode-sorted list of L0-L2
         sorted_files = sorted(sorted_files, key=extract_date)
+
+    if do_reversed:
+        sorted_files = sorted_files[::-1]
  
     print(f"Number of files queued for parallel Quicklook processing: {len(sorted_files)}")
     
