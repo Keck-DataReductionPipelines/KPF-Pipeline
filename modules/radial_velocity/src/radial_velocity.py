@@ -338,6 +338,8 @@ class RadialVelocity(KPF1_Primitive):
                     self.rv_init['data'][mod][RadialVelocityAlg.get_fiber_object_in_header(self.ins, sci)][mtype]
 
         self.total_orderlet = len(self.spectrum_data_set)
+        mpath = RadialVelocityAlgInit.MASK_PATH
+        self.input.header['MASKPATH'] = mpath # input the etalon file path into the header.
 
         do_rv_corr = False
         self.is_solar_data = False

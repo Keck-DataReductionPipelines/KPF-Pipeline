@@ -114,6 +114,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_TYPE = 'mask_type'
     VEL_SPAN_PIXEL = 'vel_span_pixel'
     MASK_ORDERLET = 'mask_orderlet'
+    MASK_PATH = 'mask_path'
 
     # primary key
     KEY_SCI_OBJ = 'SCI-OBJ'
