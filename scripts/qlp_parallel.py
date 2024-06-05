@@ -34,17 +34,17 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
       If start_date is later than end_date, the arguments will be reversed 
       and the files with later dates will be processed first.
       
-      The --ncpu parameter determines the maximum number of cores used.  If the 
-      --load parameter (a percentage, e.g. 90 = 90%) is set to a non-zero value, 
-      this script will be throttled so that no new files will have QLPs 
-      processed until the load is below that value.  Note that throttling works 
-      in steady state; it is possible to overload the system with the first set 
-      of jobs if --ncpu is set too way high.  Also, the system runs with a 
-      little higher load than commanded, e.g., if you want 90% load, set it for 
-      80%.
+      Invoking the --print_files flag causes the script to print filenames
+      but not create QLP data products.
       
-      Invoking the --print_files flag causes the script to print the file
-      names, but not compute Quicklook data products.
+      The --ncpu parameter determines the maximum number of cores used.  
+      
+      The following feature is not operational if this script is run inside of 
+      a Docker container: If the --load parameter (a percentage, e.g. 90 = 90%) 
+      is set to a non-zero value, this script will be throttled so that no new 
+      files will have QLPs processed until the load is below that value.  Note 
+      that throttling works in steady state; it is possible to overload the 
+      system with the first set of jobs if --ncpu is set too way high.  
 
     Arguments:
       start_date     Start date as YYYYMMDD, YYYYMMDD.SSSSS, or YYYYMMDD.SSSSS.SS
@@ -87,16 +87,16 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
 
     base_dir = "/data"
     all_files = []
-    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or l0:
+    if l0 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
         print("Checking L0 files")
         all_files.extend(glob.glob(f"{base_dir}/L0/20??????/*.fits"))
-    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or d2:
+    if d2 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
         all_files.extend(glob.glob(f"{base_dir}/2D/20??????/*_2D.fits"))
         print("Checking 2D files")
-    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or l1:
+    if l1 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
         all_files.extend(glob.glob(f"{base_dir}/L1/20??????/*_L1.fits"))
         print("Checking L1 files")
-    if ((not master) and (not l0) and (not d2) and (not l1) and (not l2)) or l2:
+    if l2 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
         all_files.extend(glob.glob(f"{base_dir}/L2/20??????/*_L2.fits"))
         print("Checking L2 files")
     print("Processing filenames")
@@ -115,7 +115,7 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
     sorted_paths = filtered_files[sorted_indices]
     sorted_files = sorted_paths.tolist()
 
-    if master:
+    if master or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
         print("Adding Master files")
         master_files = []
         master_files.extend(glob.glob(f"{base_dir}/masters/20??????/*.fits"))
@@ -152,7 +152,6 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
         else:        
             # Create a temporary file and write the sorted file paths to it
             ncpu_system = os.cpu_count()
-            delay = 0.1 # sec; delay between starting jobs
             with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile:
                 tmpfile_name = tmpfile.name
                 for file_path in sorted_files:
@@ -160,12 +159,16 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
             print('Starting parallel with:')
             if int(load) < 0.1:
                 print(f'    {ncpu} out of {ncpu_system} cores')
-                command = f"""bash -c "parallel -j {ncpu} -k --bar --delay {delay} bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
+                command = f"""bash -c "parallel -j {ncpu} -k --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
             else:
-                command = f"""bash -c "parallel -j {ncpu} -k --load {load}% --noswap --bar --delay {delay} bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
-                print(f'    {ncpu} out of {ncpu_system} cores (initially)')
-                print(f'    {load}% maximum load ({int(ncpu_system * float(load)/100)} cores)')
-                print(f'    no swapping')
+                command = f"""bash -c "parallel -j {ncpu} -k --load {load}% --noswap --bar bash -c 'echo \\"Starting Quicklook instance {{}}\\"; config=\$(mktemp) && sed \\"s|INSERT_FITS_PATH|{{}}|\\" configs/quicklook_parallel.cfg > \\"\\$config\\" && kpf -c \\"\\$config\\" -r recipes/quicklook_match.recipe && rm \\"\\$config\\"' :::: {tmpfile_name}" """
+                if is_running_in_docker():
+                    print(f'    {ncpu} out of {ncpu_system} cores')
+                    print(f'    {load}% maximum load ({int(ncpu_system * float(load)/100)} cores was set) - THIS FEATURE IS NOT OPERATIONAL WHEN RUN INSIDE DOCKER')
+                else:
+                    print(f'    {ncpu} out of {ncpu_system} cores (initially)')
+                    print(f'    {load}% maximum load ({int(ncpu_system * float(load)/100)} cores)')
+                    print(f'    no swapping')
             try:
                 subprocess.run(command, shell=True, check=True)
             except Exception as e:
