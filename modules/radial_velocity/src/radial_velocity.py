@@ -328,7 +328,8 @@ class RadialVelocity(KPF1_Primitive):
             for hkey in ['IMTYPE', 'SCI-OBJ', 'SKY-OBJ', 'CAL-OBJ', 'STAR_RV', 'QRV', 'TARGRADV', 'OBJECT']:
                 if hkey in p_header:
                     self.input.header[sci][hkey] = p_header[hkey]
-
+            mpath = RadialVelocityAlgInit.MASK_PATH
+            self.input.header[sci]['MASKPATH'] = mpath # input the etalon file path into the header.
             mod, mtype = RadialVelocityAlgInit.MASK_ORDERLET, RadialVelocityAlgInit.MASK_TYPE
             self.input.header[sci]['MASK'] = None
             if not self.rv_init['data'][mod]:
