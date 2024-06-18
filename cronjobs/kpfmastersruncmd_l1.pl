@@ -176,7 +176,7 @@ my $script = "#! /bin/bash\n" .
              "mkdir -p /data/masters/${procdate}\n" .
              "cp -pr /masters/${procdate}/kpf_${procdate}*.fits /data/masters/${procdate}\n" .
              "rm /data/masters/${procdate}/kpf_${procdate}_smooth_lamp.fits\n" .
-             "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "kpf --ncpus 32 --watch /data/masters/${procdate}/ --reprocess --masters -r $recipe  -c $config \n" .
              "cp -p /data/masters/${procdate}/* /masters/${procdate}\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l1_${procdate}.log\n" .
              "exit\n";
