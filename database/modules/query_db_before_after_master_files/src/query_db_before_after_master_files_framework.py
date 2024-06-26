@@ -12,8 +12,12 @@ from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
 from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import md5
 
+import database.modules.utils.kpf_db as db
+
+
 # Global read-only variables
 DEFAULT_CFG_PATH = 'database/modules/query_db_before_after_master_files/configs/default.cfg'
+
 
 class QueryDBBeforeAfterMasterFilesFramework(KPF0_Primitive):
 
@@ -148,7 +152,7 @@ class QueryDBBeforeAfterMasterFilesFramework(KPF0_Primitive):
 
             # Compute checksum and compare with database value.
 
-            cksum = md5(filename)
+            cksum = db.md5(filename)
             self.logger.info('cksum = {}'.format(cksum))
 
             if cksum == checksum:
