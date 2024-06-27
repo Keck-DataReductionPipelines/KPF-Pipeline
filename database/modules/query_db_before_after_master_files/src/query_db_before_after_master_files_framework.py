@@ -10,7 +10,6 @@ from kpfpipe.logger import *
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
 from keckdrpframework.models.arguments import Arguments
-from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import md5
 
 import database.modules.utils.kpf_db as db
 
