@@ -66,6 +66,9 @@ def query_wls(datetime, cal_type_pairs, max_cal_file_age, log):
     # Only the first element of input argument cal_type_pairs list is pertinent below.
     #
 
+    results_before = None
+    results_after = None
+
     cal_file_level = 1  # can assume WLS is in L1 format
     contentbitmask = 3
     object_before = cal_type_pairs[0][1] + "-eve"
