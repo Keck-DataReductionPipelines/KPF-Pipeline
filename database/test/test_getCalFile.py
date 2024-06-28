@@ -10,19 +10,9 @@ import re
 from astropy.io import fits
 import hashlib
 
-exitcode = 0
+import database.modules.utils.kpf_db as db
 
-def md5(fname):
-    hash_md5 = hashlib.md5()
-    
-    try:
-        with open(fname, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    except:
-        print("*** Error: Cannot open file =",fname,"; quitting...")
-        exit(65)
+exitcode = 0
 
 
 # Get date from command-line argument.
@@ -80,7 +70,9 @@ query_template =\
     "cast(OBSDATE as date)," +\
     "cast(LEVEL as smallint)," +\
     "cast('CALTYPE' as character varying(32))," +\
-    "cast('OBJECT' as character varying(32))) as " +\
+    "cast('OBJECT' as character varying(32))," +\
+    "cast(CONTENTBITMASK as integer), " +\
+    "cast('MAXFILEAGE' as interval)) as " +\
     "(cId integer," +\
     " level smallint," +\
     " caltype varchar(32)," +\
@@ -95,11 +87,16 @@ level = 0
 levelstr = str(level)
 caltype = 'Flat'
 object = 'Autocal-flat-all'
+contentbitmask = 3
+max_cal_file_age = '1000 days'
 
 rep = {"OBSDATE": obsdate,
        "LEVEL": levelstr,
        "CALTYPE": caltype,
-       "OBJECT": object}
+       "OBJECT": object,
+       "MAXFILEAGE": max_cal_file_age}
+
+rep["CONTENTBITMASK"] = str(contentbitmask)
 
 rep = dict((re.escape(k), v) for k, v in rep.items()) 
 pattern = re.compile("|".join(rep.keys()))
@@ -127,7 +124,7 @@ print("File existence =",isExist)
 
 # Compute checksum and compare with database value.
 
-cksum = md5(filename)
+cksum = db.md5(filename)
 print("Computed checksum =",cksum)
 
 if cksum == checksum:
