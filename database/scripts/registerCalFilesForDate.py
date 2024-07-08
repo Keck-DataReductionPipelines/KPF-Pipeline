@@ -12,14 +12,9 @@ import hashlib
 from datetime import datetime, timezone
 import time
 
-exitcode = 0
+import database.modules.utils.kpf_db as db
 
-def md5(fname):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+exitcode = 0
 
 
 # Process identification.
@@ -143,7 +138,14 @@ for master_file in master_files:
            "ENDDATE": enddate,
            "FILESTATUS": filestatusstr}
 
-    cksum = md5(master_file)
+    cksum = db.md5(master_file)
+
+    print('cksum = {}'.format(cksum))
+
+    # Check for error in computing MD5 checksum.
+    if  cksum == 68:
+        continue
+
     rep["CHECKSUM"] = cksum
     rep["FILENAME"] = master_file[1:]      # Remove leading slash to make it a relative path.
 

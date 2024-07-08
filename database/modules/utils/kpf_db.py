@@ -3,9 +3,13 @@ import psycopg2
 import re
 import hashlib
 
-max_cal_file_age = '1000 days'
+# Common methods.
 
 def md5(fname):
+    """
+    Returns checksum = 68 if it fails to compute the MD5 checksum.
+    """
+
     hash_md5 = hashlib.md5()
 
     try:
@@ -14,13 +18,14 @@ def md5(fname):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except:
-        print("*** Error: Cannot open file =",fname,"; quitting...")
-        exit(65)
+        print("*** Error: Failed to compute checksum =",fname,"; quitting...")
+        return 68
+
 
 class KPFDB:
 
     """
-    Class to facilitate execution of queries in the KPF operations database.  
+    Class to facilitate execution of queries in the KPF operations database.
     For each query a different method is defined.
 
     Returns exitcode:
@@ -29,11 +34,18 @@ class KPFDB:
         64 = Cannot connect to database
         65 = Input file does not exist
         66 = File checksum does not match database checksum
+        67 = Could not execute query
+        68 = Failed to compute checksum
     """
 
     def __init__(self):
 
         self.exit_code = 0
+        self.cId = None
+        self.db_level = None
+        self.db_cal_type = None
+        self.db_object = None
+        self.infobits = None
         self.filename = None
         self.conn = None
 
@@ -74,11 +86,25 @@ class KPFDB:
         for record in self.cur:
             print('record = {}'.format(record))
 
-    def get_nearest_master_file(self,obs_date,cal_file_level,contentbitmask,cal_type_pair):
+
+    def get_nearest_master_file(self,obs_date,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
 
         '''
         Get nearest master file for the specified set of input parameters.
+
+        obs_date is a YYYYMMDD (string or number)
         '''
+
+        # Reinitialize.
+
+        self.cId = None
+        self.db_level = None
+        self.db_cal_type = None
+        self.db_object = None
+        self.infobits = None
+        self.filename = None
+        self.exit_code = 0
+
 
         # Define query template.
 
@@ -127,7 +153,18 @@ class KPFDB:
 
         print('query = {}'.format(query))
 
-        self.cur.execute(query)
+
+        # Execute query.
+
+        try:
+            self.cur.execute(query)
+
+        except (Exception, psycopg2.DatabaseError) as error:
+            print('*** Error executing query ({}); skipping...'.format(query))
+            self.exit_code = 67
+            return
+
+
         record = self.cur.fetchone()
 
         if record is not None:
@@ -159,17 +196,26 @@ class KPFDB:
 
             # Compute checksum and compare with database value.
 
-            if isExist is True:
-                cksum = md5(filename)
-                print('cksum = {}'.format(cksum))
+            cksum = md5(filename)
+            print('cksum = {}'.format(cksum))
 
-                if cksum == checksum:
-                    print("File checksum is correct ({})...".format(filename))
-                    self.filename = filename
-                else:
-                    print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
-                    self.exit_code = 66
-                    return
+            if  cksum == 68:
+                self.exit_code = 68
+                return
+
+            if cksum == checksum:
+                print("File checksum is correct ({})...".format(filename))
+                self.cId = cId
+                self.db_level = db_level
+                self.db_cal_type = db_cal_type
+                self.db_object = db_object
+                self.infobits = infobits
+                self.filename = filename
+                self.exit_code = 0
+            else:
+                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+                self.exit_code = 66
+                return
 
 
     def close(self):
@@ -187,3 +233,259 @@ class KPFDB:
             if self.conn is not None:
                 self.conn.close()
                 print('Database connection closed.')
+
+
+    def get_nearest_master_file_before(self,obsdatetime,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
+
+        '''
+        Get nearest master file before for the specified set of input parameters.
+
+        obsdatetime is an # ISO datetime string, generally from the DATE-MID FITS keyword.
+        '''
+
+        # Reinitialize.
+
+        self.cId = None
+        self.db_level = None
+        self.db_cal_type = None
+        self.db_object = None
+        self.infobits = None
+        self.filename = None
+        self.exit_code = 0
+
+
+        # Define query template.
+
+        query_template =\
+            "select * from getCalFileBefore(" +\
+            "cast('OBSDATETIME' as timestamp)," +\
+            "cast(LEVEL as smallint)," +\
+            "cast('CALTYPE' as character varying(32))," +\
+            "cast('OBJECT' as character varying(32))," +\
+            "cast(CONTENTBITMASK as integer), " +\
+            "cast('MAXFILEAGE' as interval)) as " +\
+            "(cId integer," +\
+            " level smallint," +\
+            " caltype varchar(32)," +\
+            " object varchar(32)," +\
+            " filename varchar(255)," +\
+            " checksum varchar(32)," +\
+            " infobits integer," +\
+            " startDate date);"
+
+
+        # Query database for all cal_types.
+
+        print('----> cal_file_level = {}'.format(cal_file_level))
+        print('----> contentbitmask = {}'.format(contentbitmask))
+        print('----> cal_type_pair = {}'.format(cal_type_pair))
+
+        levelstr = str(cal_file_level)
+        cal_type = cal_type_pair[0]
+        object = cal_type_pair[1]
+
+        rep = {"OBSDATETIME": obsdatetime,
+               "LEVEL": levelstr,
+               "CALTYPE": cal_type,
+               "OBJECT": object,
+               "MAXFILEAGE": max_cal_file_age}
+
+        rep["CONTENTBITMASK"] = str(contentbitmask)
+
+        rep = dict((re.escape(k), v) for k, v in rep.items())
+        pattern = re.compile("|".join(rep.keys()))
+        query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
+
+        print('query = {}'.format(query))
+
+
+        # Execute query.
+
+        try:
+            self.cur.execute(query)
+
+        except (Exception, psycopg2.DatabaseError) as error:
+            print('*** Error executing query ({}); skipping...'.format(query))
+            self.exit_code = 67
+            return
+
+
+        record = self.cur.fetchone()
+
+        if record is not None:
+            cId = record[0]
+            db_level = record[1]
+            db_cal_type = record[2]
+            db_object = record[3]
+            filename = '/' + record[4]         # docker run has -v /data/kpf/masters:/masters
+            checksum = record[5]
+            infobits = record[6]
+
+            print('cId = {}'.format(cId))
+            print('filename = {}'.format(filename))
+            print('checksum = {}'.format(checksum))
+
+
+            # See if file exists.
+
+            isExist = os.path.exists(filename)
+            print('File existence = {}'.format(isExist))
+
+            if isExist is True:
+                print("File exists...")
+            else:
+                print("*** Error: File does not exist; quitting...")
+                self.exit_code = 65
+                return
+
+
+            # Compute checksum and compare with database value.
+
+            cksum = md5(filename)
+            print('cksum = {}'.format(cksum))
+
+            if  cksum == 68:
+                self.exit_code = 68
+                return
+
+            if cksum == checksum:
+                print("File checksum is correct ({})...".format(filename))
+                self.cId = cId
+                self.db_level = db_level
+                self.db_cal_type = db_cal_type
+                self.db_object = db_object
+                self.infobits = infobits
+                self.filename = filename
+                self.exit_code = 0
+            else:
+                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+                self.exit_code = 66
+                return
+
+
+    def get_nearest_master_file_after(self,obsdatetime,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
+
+        '''
+        Get nearest master file after for the specified set of input parameters.
+
+        obsdatetime is an # ISO datetime string, generally from the DATE-MID FITS keyword.
+        '''
+
+        # Reinitialize.
+
+        self.cId = None
+        self.db_level = None
+        self.db_cal_type = None
+        self.db_object = None
+        self.infobits = None
+        self.filename = None
+        self.exit_code = 0
+
+
+        # Define query template.
+
+        query_template =\
+            "select * from getCalFileAfter(" +\
+            "cast('OBSDATETIME' as timestamp)," +\
+            "cast(LEVEL as smallint)," +\
+            "cast('CALTYPE' as character varying(32))," +\
+            "cast('OBJECT' as character varying(32))," +\
+            "cast(CONTENTBITMASK as integer), " +\
+            "cast('MAXFILEAGE' as interval)) as " +\
+            "(cId integer," +\
+            " level smallint," +\
+            " caltype varchar(32)," +\
+            " object varchar(32)," +\
+            " filename varchar(255)," +\
+            " checksum varchar(32)," +\
+            " infobits integer," +\
+            " startDate date);"
+
+
+        # Query database for all cal_types.
+
+        print('----> cal_file_level = {}'.format(cal_file_level))
+        print('----> contentbitmask = {}'.format(contentbitmask))
+        print('----> cal_type_pair = {}'.format(cal_type_pair))
+
+        levelstr = str(cal_file_level)
+        cal_type = cal_type_pair[0]
+        object = cal_type_pair[1]
+
+        rep = {"OBSDATETIME": obsdatetime,
+               "LEVEL": levelstr,
+               "CALTYPE": cal_type,
+               "OBJECT": object,
+               "MAXFILEAGE": max_cal_file_age}
+
+        rep["CONTENTBITMASK"] = str(contentbitmask)
+
+        rep = dict((re.escape(k), v) for k, v in rep.items())
+        pattern = re.compile("|".join(rep.keys()))
+        query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
+
+        print('query = {}'.format(query))
+
+
+        # Execute query.
+
+        try:
+            self.cur.execute(query)
+
+        except (Exception, psycopg2.DatabaseError) as error:
+            print('*** Error executing query ({}); skipping...'.format(query))
+            self.exit_code = 67
+            return
+
+
+        record = self.cur.fetchone()
+
+        if record is not None:
+            cId = record[0]
+            db_level = record[1]
+            db_cal_type = record[2]
+            db_object = record[3]
+            filename = '/' + record[4]         # docker run has -v /data/kpf/masters:/masters
+            checksum = record[5]
+            infobits = record[6]
+
+            print('cId = {}'.format(cId))
+            print('filename = {}'.format(filename))
+            print('checksum = {}'.format(checksum))
+
+
+            # See if file exists.
+
+            isExist = os.path.exists(filename)
+            print('File existence = {}'.format(isExist))
+
+            if isExist is True:
+                print("File exists...")
+            else:
+                print("*** Error: File does not exist; quitting...")
+                self.exit_code = 65
+                return
+
+
+            # Compute checksum and compare with database value.
+
+            cksum = md5(filename)
+            print('cksum = {}'.format(cksum))
+
+            if  cksum == 68:
+                self.exit_code = 68
+                return
+
+            if cksum == checksum:
+                print("File checksum is correct ({})...".format(filename))
+                self.cId = cId
+                self.db_level = db_level
+                self.db_cal_type = db_cal_type
+                self.db_object = db_object
+                self.infobits = infobits
+                self.filename = filename
+                self.exit_code = 0
+            else:
+                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+                self.exit_code = 66
+                return
