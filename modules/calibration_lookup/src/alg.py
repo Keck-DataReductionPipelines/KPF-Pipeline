@@ -64,7 +64,6 @@ class GetCalibrations:
             elif lookup == 'wls':
                 for cal_type in self.wls_cal_types:
                     wls_results = self.db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
-                    print(wls_results)
                     if len(wls_results) > 1 and (wls_results[0] == 0 or wls_results[2] == 0):
                         wls_files = [wls_results[1], wls_results[3]]
                         if wls_files[0] == None:
