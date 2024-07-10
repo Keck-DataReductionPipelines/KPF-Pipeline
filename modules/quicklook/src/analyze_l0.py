@@ -510,12 +510,9 @@ class AnalyzeL0Stack:
         cbar.ax.tick_params(labelsize=12)
         ax.set_title(title, fontsize=14)
         ax.grid(False)
-        
-        # Draw a red box around the specified coordinates
-        rect = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, linewidth=2, edgecolor='r', facecolor='none')
-        ax.add_patch(rect)
-    
-    def plot_zoomed_2D_panel(self, ax, image, xmin, xmax, ymin, ymax, buffer=50, height=50, title=''):
+            
+    def plot_zoomed_2D_panel(self, ax, image, xmin, xmax, ymin, ymax, 
+                                   buffer=50, height=50, title='', annotate=True):
         """
         Method to make a panel in a plot showing a zoomed 2D image with a 
         red box around the extraction region.
@@ -553,6 +550,8 @@ class AnalyzeL0Stack:
         # Add a red box to show the exact region
         rect = patches.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, linewidth=2, edgecolor='r', facecolor='none')
         ax.add_patch(rect)
+        if annotate:
+            ax.text(xmax+2, ymin+0.5*(ymax-ymin), f'{int(xmax-xmin)} x {int(ymax-ymin)}', size=14, color='red', ha='left', va='center')
     
     def plot_1D_panel(self, ax, pixel_num, normalized_flux, title='', expected_SNR=0):
         """
