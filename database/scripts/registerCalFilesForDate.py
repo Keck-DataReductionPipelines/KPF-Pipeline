@@ -47,6 +47,15 @@ for file in input_files:
     print("file =",file)
     master_files.append(file)
 
+search_path = '/masters' + '/' + datearg + '/wlpixelfiles/' + 'Etalonmask*.csv'
+
+print("search_path =",search_path)
+input_files = glob.glob(search_path)
+
+for file in input_files:
+    print("file =",file)
+    master_files.append(file)
+
 
 # Get database connection parameters from environment.
 
@@ -163,14 +172,49 @@ for master_file in master_files:
 
         rep["LEVEL"] = str(1)
 
+        # Currently only two different kinds of CSV files are handled.
+
+        filename_object = 'not_found_yet'
+
+        if 'Etalonmask' in csv_file:
+            filename_caltype = 'etalonmask'
+
+            filename_match = re.match(r".+_master_(.+)_L[1:2]\.csv", csv_file)
+
+            try:
+                filename_substring = filename_match.group(1)
+                print("-----1-----> fn_substring =",filename_substring)
+
+                filename_match = re.match(r"(.+?)_(.+)", filename_substring)
+
+                try:
+                    filename_object = filename_match.group(2)
+
+                    print("-------2--------> fn_object =",filename_object)
+
+                except:
+                    print("-------2--------> No filename match found")
+                    continue
+
+            except:
+                print("-----1-----> No filename match found")
+                continue
+
+            filename_object = filename_object + "_"             # Add underbar suffix for Etalonmask only.
+
+        else:
+            filename_caltype = 'ordertrace'
+            filename_object = filename_caltype
+
+        rep["IMTYPE"] = filename_caltype
+
+
         if 'GREEN' in csv_file:
             hasGREEN = 1
-            rep["IMTYPE"] = "ordertrace"
-            rep["TARGOBJ"] = "ordertracegreen"
+            rep["TARGOBJ"] = filename_object + "green"
         elif 'RED' in csv_file:
             hasRED = 1
-            rep["IMTYPE"] = "ordertrace"
-            rep["TARGOBJ"] = "ordertracered"
+            rep["TARGOBJ"] = filename_object + "red"
 
         contentbits = hasCAHK * 2**2 + hasRED * 2**1 + hasGREEN * 2**0
         rep["CONTENTBITS"] = str(contentbits)
