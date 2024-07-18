@@ -19,6 +19,8 @@ class FrameStacker:
         n_sigma (float): Number of sigmas for data clipping (default = 2.5).
     """
 
+    __version__ = '1.0.1'
+
     def __init__(self,frames_data,n_sigma=2.5,logger=None):
         self.frames_data = frames_data
         self.n_sigma = n_sigma
@@ -109,13 +111,52 @@ class FrameStacker:
         unc = np.sqrt(var/cnt)
 
         if self.logger:
-            self.logger.debug('{}.compute(): avg(bias),avg(cnt),avg(unc) = {},{},{}'.\
+            self.logger.debug('{}.compute(): avg(stack_avg),avg(cnt),avg(unc) = {},{},{}'.\
                 format(self.__class__.__name__,avg.mean(),cnt.mean(),unc.mean()))
         else:
-            print('---->{}.compute(): avg(bias),avg(cnt),avg(unc) = {},{},{}'.\
+            print('---->{}.compute(): avg(stack_avg),avg(cnt),avg(unc) = {},{},{}'.\
                 format(self.__class__.__name__,avg.mean(),cnt.mean(),unc.mean()))
 
         return avg,var,cnt,unc
 
+#
+# Method similar to compute() to be called in case of insufficient number of frames in stack,
+# in which case the estimator of the expected value will be the stack median.
+# The calling program determines whether to call this method.
+#
 
+    def compute_stack_median(self):
 
+        """
+        Compute median of stack.
+        Data dispersion is based on the median absolute deviation.
+
+        Returns the stack median image.
+        """
+
+        a = self.frames_data
+        frames_data_shape = np.shape(a)
+
+        if self.logger:
+            self.logger.debug('{}.compute(): frames_data_shape = {}'.\
+                format(self.__class__.__name__,frames_data_shape))
+        else:
+            print('---->{}.compute(): frames_data_shape = {}'.\
+                format(self.__class__.__name__,frames_data_shape))
+
+        med = np.median(a, axis=0)
+        mad = np.median(np.absolute(a - med),axis=0)
+
+        var = mad * mad
+        cnt = np.full((frames_data_shape[1],frames_data_shape[2]),frames_data_shape[0])
+        unc = np.sqrt(var/cnt)
+
+        if self.logger:
+            self.logger.debug('{}.compute(): avg(stack_med),avg(cnt),avg(unc) = {},{},{}'.\
+                format(self.__class__.__name__,med.mean(),cnt.mean(),unc.mean()))
+        else:
+            print('---->{}.compute(): avg(stack_med),avg(cnt),avg(unc) = {},{},{}'.\
+                format(self.__class__.__name__,med.mean(),cnt.mean(),unc.mean()))
+
+        return med,var,cnt,unc
+    
