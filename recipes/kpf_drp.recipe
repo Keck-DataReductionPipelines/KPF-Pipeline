@@ -79,11 +79,15 @@ if context.watch:
 		# do_order_trace = False
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
-	if '2D' in file_path:
+	# assume masters is operating on 2D files
+	if '2D' in file_path or 'masters' in file_path:
 		lev0_file_path = file_path
-		lev1_file_path = str_replace(file_path, '2D', 'L1')
 		do_l0_to_2d = False
-		do_order_trace = False
+		if 'masters' in file_path:
+			lev1_file_path = str_replace(file_path, '.fits', '_L1.fits')
+		else:
+			do_order_trace = False
+			lev1_file_path = str_replace(file_path, '2D', 'L1')
 
 	# do rv if L1 data is watched, do l1->l2
 	if 'L1' in file_path:
@@ -216,7 +220,7 @@ if lev0_file_path:
     lev0_science_pattern = lev0_file_path
 else:
     lev0_science_pattern = input_2d_dir + '*' + fits_ext
-    
+
 output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
 wave_to_ext = config.ARGUMENT.wave_to_ext
 orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
@@ -462,6 +466,7 @@ if do_spectral_extraction or do_hk or do_bc:
 			if lev0_stem_suffix in lev1_stem:
 				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
+
 		is_raw = 1
 		if rect_method in input_lev0_file:
 		   is_raw = 0
@@ -530,6 +535,7 @@ if do_spectral_extraction or do_hk or do_bc:
 					# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
 					data_level_str = 'L1'
 					kpf_object = op_data
+					obj = GetHeaderValue(kpf_object, 'OBJECT')
 					invoke_subrecipe("./recipes/quality_control.subrecipe")
 					invoke_subrecipe("./recipes/diagnostics.subrecipe")
 					op_data = kpf_object
@@ -538,7 +544,7 @@ if do_spectral_extraction or do_hk or do_bc:
 			# copy wls to the proper extension of lev1 data
 			if do_sp_wavecopy and exists(output_lev1_file):
 				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
-				obs_date_time = GetHeaderValue(output_data,'DATE-MID') 
+				obs_date_time = GetHeaderValue(output_data,'DATE-MID')
 				if do_db_query_for_before_after_master_files == True:
 					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
 					output_data = interpolated_l1

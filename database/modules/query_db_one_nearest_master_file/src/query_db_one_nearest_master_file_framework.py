@@ -13,27 +13,18 @@ from kpfpipe.primitives.level0 import KPF0_Primitive
 from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
+import database.modules.utils.kpf_db as db
+
+
 # Global read-only variables
 DEFAULT_CFG_PATH = 'database/modules/query_db_one_nearest_master_file/configs/default.cfg'
 
-def md5(fname):
-    hash_md5 = hashlib.md5()
-
-    try:
-        with open(fname, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    except:
-        print("*** Error: Cannot open file =",fname,"; quitting...")
-        exit(65)
 
 class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
 
     """
     Description:
         Queries the KPF pipeline-operations database for the one nearest-in-time master file.
-        Currently, only a master file made for data earlier than the observation date is returned.
 
     Arguments:
         data_type (str): Type of data (e.g., KPF).
@@ -252,7 +243,7 @@ class QueryDBOneNearestMasterFileFramework(KPF0_Primitive):
 
             # Compute checksum and compare with database value.
 
-            cksum = md5(filename)
+            cksum = db.md5(filename)
             self.logger.info('cksum = {}'.format(cksum))
 
             if cksum == checksum:
