@@ -8,7 +8,7 @@ from astropy.time import Time
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.logger import start_logger
 
-DEFAULT_CFG_PATH = 'database/utils/configs/kpf_db.cfg'
+DEFAULT_CFG_PATH = 'database/modules/utils/kpf_db.cfg'
 
 # Common methods.
 
@@ -98,7 +98,11 @@ class KPFDB:
             print('record = {}'.format(record))
 
     def query_to_pandas(self, query):
-        results = pd.read_sql_query(query, self.conn)
+        try:
+            results = pd.read_sql_query(query, self.conn)
+        except:
+            self.log.warning(f"Error running database query:\n{query}\n")
+            results = pd.DataFrame([])
 
         return results
 
@@ -126,7 +130,7 @@ AND contentbits = {contentbitmask}
 AND caltype = '{cal_type_pair[0].lower()}'
 AND object = '{cal_type_pair[1]}'
 ORDER BY startdate;"""
-
+        
         df = self.query_to_pandas(query_template)
         if len(df) == 0:
             return [1, None]
@@ -306,7 +310,6 @@ ORDER BY startdate;"""
             self.db_cal_type = db_cal_type
             self.db_object = db_object
             self.infobits = infobits
-
 
     def verify_checksum(self, filename, checksum):
         # See if file exists.
