@@ -116,8 +116,7 @@ class ImageProcessingAlg():
         header['FLATDIR'] = flat_frame.dirname
 
         if header['IMTYPE'].lower() == 'bias' or \
-            header['IMTYPE'].lower() == 'dark' or \
-            header['IMTYPE'].lower() == 'flat':
+            header['IMTYPE'].lower() == 'dark':
             self.logger.info("Image is {}, skipping flat correction.".format(header['IMTYPE']))
             header['FLATDONE'] = 0
             return
