@@ -308,7 +308,24 @@ if "*" in lev0_flat_pattern:
 	ll0 = output_dir + date_dir + lev0_flat_pattern
 else:
 	ll0 = lev0_flat_pattern
-input_flat_file = find_files(ll0)[0]
+
+
+
+
+
+# The following line generates IndexError exception if master flat is not found,
+# so replace it with call to CalibrationLookup.
+#input_flat_file = find_files(ll0)[0]
+
+# CalibrationLookup input datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
+dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
+             "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
+cals = CalibrationLookup(dt_string)
+input_flat_file = cals['flat']
+
+
+
+
 _, short_flat_file = split(input_flat_file)
 flat_stem, flat_ext = splitext(short_flat_file)
 
