@@ -12,6 +12,7 @@ import re
 import pandas as pd
 
 import database.modules.utils.kpf_db as db
+import modules.quality_control.src.quality_control as qc
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -25,6 +26,7 @@ from kpfpipe.config.pipeline_config import ConfigClass
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/master_flat/configs/default.cfg'
+
 
 class MasterFlatFramework(KPF0_Primitive):
 
@@ -385,13 +387,14 @@ class MasterFlatFramework(KPF0_Primitive):
                 path = all_flat_files[i]
                 obj = KPF0.from_fits(path)
 
-                try:
-                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
-                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
-                    if obj_not_junk != 1:
-                        continue
-                except KeyError as err:
-                    pass
+
+                # Check QC keywords and skip image if it does not pass QC checking.
+
+                skip = qc.check_all_qc_keywords(obj,path,self.logger)
+                self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
+                if skip:
+                    continue
+
 
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
