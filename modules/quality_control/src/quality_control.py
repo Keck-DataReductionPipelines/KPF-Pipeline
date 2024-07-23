@@ -33,10 +33,46 @@ Includes helper functions that compute statistics of data of arbitrary shape.
 def what_am_i():
     print('Software version:',iam + ' ' + version)
 
+def compute_clip_corr(n_sigma):
+
+    """
+    Compute a correction factor to properly reinflate the variance after it is
+    naturally diminished via data-clipping.  Employ a simple Monte Carlo method
+    and standard normal deviates to simulate the data-clipping and obtain the
+    correction factor.
+    """
+
+    var_trials = []
+    for x in range(0,10):
+        a = np.random.normal(0.0, 1.0, 1000000)
+        med = np.median(a, axis=0)
+        p16 = np.percentile(a, 16, axis=0)
+        p84 = np.percentile(a, 84, axis=0)
+        sigma = 0.5 * (p84 - p16)
+        mdmsg = med - n_sigma * sigma
+        b = np.less(a,mdmsg)
+        mdpsg = med + n_sigma * sigma
+        c = np.greater(a,mdpsg)
+        mask = np.any([b,c],axis=0)
+        mx = ma.masked_array(a, mask)
+        var = ma.getdata(mx.var(axis=0))
+        var_trials.append(var)
+
+    np_var_trials = np.array(var_trials)
+    avg_var_trials = np.mean(np_var_trials)
+    std_var_trials = np.std(np_var_trials)
+    corr_fact = 1.0 / avg_var_trials
+
+    return corr_fact
+
 def avg_data_with_clipping(data_array,n_sigma = 3.0):
+
     """
     Statistics with outlier rejection (n-sigma data-trimming), ignoring NaNs, across all data array dimensions.
     """
+
+    cf = compute_clip_corr(n_sigma)
+    sqrtcf = np.sqrt(cf)
 
     a = np.array(data_array)
 
@@ -52,10 +88,59 @@ def avg_data_with_clipping(data_array,n_sigma = 3.0):
     mask = b | c | d
     mx = ma.masked_array(a, mask)
     avg = ma.getdata(mx.mean())
-    std = ma.getdata(mx.std())
+    std = ma.getdata(mx.std()) * sqrtcf
     cnt = ma.getdata(mx.count())
 
     return avg,std,cnt
+
+
+def check_all_qc_keywords(kpf_object,fname,logger=None):
+
+    """
+    Method to check all QC keywords in PRIMARY header of FITS object.
+
+    Agnostic of data level; checks all QC keywords in PRIMARY header
+    that have assigned value for qc_definitions.fits_keyword_fail_value[dict_key]
+    (which are not None).  Currently only integer fail_values are handled.
+
+    Returns:
+        qc_fail - a boolean signifying that the QC failed (True) or not (False)
+    """
+
+    logger = logger if logger is not None else DummyLogger()
+
+    qc_fail = False
+
+    qc_definitions = QCDefinitions()
+
+    dict_keys_list = qc_definitions.fits_keywords.keys()
+
+    for dict_key in dict_keys_list:
+
+        kw = qc_definitions.fits_keywords[dict_key]
+
+        try:
+            fail_value = qc_definitions.fits_keyword_fail_value[dict_key]
+        except:
+            continue
+
+        if fail_value is None:
+            continue
+
+        try:
+            kw_value = kpf_object.header['PRIMARY'][kw]
+
+            if kw_value == fail_value:
+
+                logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{}'.format(fname,kw,kw_value,fail_value))
+
+                qc_fail = True
+                return qc_fail
+        except KeyError as err:
+            continue
+
+    return qc_fail
+
 
 # To-do: move this to a new class?
 def execute_all_QCs(kpf_object, data_level, logger=None):
@@ -142,7 +227,8 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
     return kpf_object
 
-# To do: finish this method
+# See check_all_qc_keywords method above, which is data-level agnostic.
+# To do: finish this method or just use check_all_qc_keywords method above????
 # To-do: move this a new class?
 def check_all_QC_keywords_present(kpf_object, logger=None):
     """
@@ -220,6 +306,7 @@ class QCDefinitions:
         self.fits_keywords = {}
         self.fits_comments = {}
         self.db_columns = {}
+        self.fits_keyword_fail_value = {}
 
         # Define QC metrics
         name0 = 'jarque_bera_test_red_amp1'
@@ -232,6 +319,7 @@ class QCDefinitions:
         self.fits_keywords[name0] = 'JBTRED1'
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name0] = None
+        self.fits_keyword_fail_value[name0] = None
 
         name1 = 'not_junk'
         self.names.append(name1)
@@ -243,6 +331,7 @@ class QCDefinitions:
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files'
         self.db_columns[name1] = None
+        self.fits_keyword_fail_value[name1] = 0
 
         name2 = 'monotonic_wavelength_solution'
         self.names.append(name2)
@@ -254,6 +343,7 @@ class QCDefinitions:
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
         self.db_columns[name2] = None
+        self.fits_keyword_fail_value[name2] = 0
 
         name3 = 'L0_data_products'
         self.names.append(name3)
@@ -265,6 +355,7 @@ class QCDefinitions:
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present'
         self.db_columns[name3] = None
+        self.fits_keyword_fail_value[name3] = 0
 
         name4 = 'L0_header_keywords_present'
         self.names.append(name4)
@@ -276,6 +367,7 @@ class QCDefinitions:
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present'
         self.db_columns[name4] = None
+        self.fits_keyword_fail_value[name4] = 0
 
         name5 = 'L0_datetime'
         self.names.append(name5)
@@ -287,6 +379,7 @@ class QCDefinitions:
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
+        self.fits_keyword_fail_value[name5] = 0
 
         name5b = 'L2_datetime'
         self.names.append(name5b)
@@ -298,6 +391,7 @@ class QCDefinitions:
         self.fits_keywords[name5b] = 'TIMCHKL2'
         self.fits_comments[name5b] = 'QC: L2 times consistent'
         self.db_columns[name5b] = None
+        self.fits_keyword_fail_value[name5b] = 0
 
         name6 = 'exposure_meter_not_saturated'
         self.names.append(name6)
@@ -309,6 +403,7 @@ class QCDefinitions:
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
+        self.fits_keyword_fail_value[name6] = 0
 
         name7 = 'exposure_meter_flux_not_negative'
         self.names.append(name7)
@@ -320,6 +415,7 @@ class QCDefinitions:
         self.fits_keywords[name7] = 'EMNEG'
         self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
+        self.fits_keyword_fail_value[name7] = 0
 
         name8 = 'D2_lfc_flux'
         self.names.append(name8)
@@ -331,6 +427,7 @@ class QCDefinitions:
         self.fits_keywords[name8] = 'LFC2DFOK'
         self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
         self.db_columns[name8] = None
+        self.fits_keyword_fail_value[name8] = 0
 
         name9 = 'data_2D_bias_low_flux'
         self.names.append(name9)
@@ -342,6 +439,7 @@ class QCDefinitions:
         self.fits_keywords[name9] = 'LOWBIAS'
         self.fits_comments[name9] = 'QC: 2D bias low flux check'
         self.db_columns[name9] = None
+        self.fits_keyword_fail_value[name9] = 0
 
         name10 = 'data_2D_dark_low_flux'
         self.names.append(name10)
@@ -353,6 +451,7 @@ class QCDefinitions:
         self.fits_keywords[name10] = 'LOWDARK'
         self.fits_comments[name10] = 'QC: 2D dark low flux check'
         self.db_columns[name10] = None
+        self.fits_keyword_fail_value[name10] = 0
 
         name11 = 'data_L1_red_green'
         self.names.append(name11)
@@ -364,6 +463,7 @@ class QCDefinitions:
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
+        self.fits_keyword_fail_value[name11] = 0
 
         name12 = 'data_L1_CaHK'
         self.names.append(name12)
@@ -375,6 +475,7 @@ class QCDefinitions:
         self.fits_keywords[name12] = 'CaHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
+        self.fits_keyword_fail_value[name12] = 0
 
         name13 = 'data_L2'
         self.names.append(name13)
@@ -386,7 +487,8 @@ class QCDefinitions:
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
         self.db_columns[name13] = None
-        
+        self.fits_keyword_fail_value[name13] = 0
+
         name14 = 'data_2D_CaHK'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
@@ -397,6 +499,7 @@ class QCDefinitions:
         self.fits_keywords[name14] = 'CaHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
+        self.fits_keyword_fail_value[name14] = 0
 
         name15 = 'data_2D_red_green'
         self.names.append(name15)
@@ -408,6 +511,7 @@ class QCDefinitions:
         self.fits_keywords[name15] = 'DATAPR2D'
         self.fits_comments[name15] = 'QC: 2D red and green data present check'
         self.db_columns[name15] = None
+        self.fits_keyword_fail_value[name15] = 0
 
         name16 = 'add_kpfera'
         self.names.append(name16)
@@ -419,6 +523,7 @@ class QCDefinitions:
         self.fits_keywords[name16] = 'KPFERA'
         self.fits_comments[name16] = 'Current era of KPF observations'
         self.db_columns[name16] = None
+        self.fits_keyword_fail_value[name16] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
