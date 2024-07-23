@@ -281,9 +281,11 @@ class QCDefinitions:
             Possible values in the list: 'L0', '2D', 'L1', 'L2'
         data_types (dictionary of strings): Each entry specifies the Python data type of the metric.
             Only string, int, float are allowed.  Use 0/1 for boolean.
-        spectrum_types (dictionary of arrays of strings ): Each entry specifies the types of spectra that the metric will be applied to.
+        spectrum_types (dictionary of arrays of strings): Each entry specifies the types of spectra that the metric will be applied to.
             Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
-        required_data_products (dictionary of arrays of strings ): specifies if data products are needed to perform check
+        master_types (dictionary of arrays of strings): Each entry specifies the types of masters where the QC check is relevant.  If the QC fails for an exposure, it is not added to the master stack.
+            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
+        required_data_products (dictionary of arrays of strings): specifies if data products are needed to perform check
             if = [], then no required data products; other possible values are from get_data_products_L0, etc.
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
             Must be 8 characters or less, following the FITS standard.
@@ -302,6 +304,7 @@ class QCDefinitions:
         self.kpf_data_levels = {} 
         self.data_types = {}  
         self.spectrum_types = {} 
+        self.master_types = {} # if = [], then the QC test is not relevant for the construction of any masters
         self.required_data_products = {} # if = [], then no required data products; other possible values: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
         self.fits_keywords = {}
         self.fits_comments = {}
@@ -315,6 +318,7 @@ class QCDefinitions:
         self.kpf_data_levels[name0] = ['L3'] # bogus value L3 to avoid executing
         self.data_types[name0] = 'float'
         self.spectrum_types[name0] = ['all', ]
+        self.master_types[name0] = []
         self.required_data_products[name0] = [] # no required data products
         self.fits_keywords[name0] = 'JBTRED1'
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
@@ -327,6 +331,7 @@ class QCDefinitions:
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
+        self.master_types[name1] = ['all', ]
         self.required_data_products[name1] = [] # no required data products
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files'
@@ -339,6 +344,7 @@ class QCDefinitions:
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.spectrum_types[name2] = ['all', ]
+        self.master_types[name2] = []
         self.required_data_products[name2] = [] # no required data products
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
@@ -351,6 +357,7 @@ class QCDefinitions:
         self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.spectrum_types[name3] = ['all', ]
+        self.master_types[name3] = ['all', ]
         self.required_data_products[name3] = [] # no required data products
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present'
@@ -363,6 +370,7 @@ class QCDefinitions:
         self.descriptions[name4] = 'Expected L0 header keywords present.'
         self.data_types[name4] = 'int'
         self.spectrum_types[name4] = ['all', ]
+        self.master_types[name4] = ['all', ]
         self.required_data_products[name4] = [] # no required data products
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present'
@@ -375,6 +383,7 @@ class QCDefinitions:
         self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
+        self.master_types[name5] = ['all', ]
         self.required_data_products[name5] = [] # no required data products
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
@@ -387,6 +396,7 @@ class QCDefinitions:
         self.descriptions[name5b] = 'Timing consistency in L2 files.'
         self.data_types[name5b] = 'int'
         self.spectrum_types[name5b] = ['all', ]
+        self.master_types[name5b] = []
         self.required_data_products[name5b] = [] # no required data products
         self.fits_keywords[name5b] = 'TIMCHKL2'
         self.fits_comments[name5b] = 'QC: L2 times consistent'
@@ -399,6 +409,7 @@ class QCDefinitions:
         self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
+        self.master_types[name6] = []
         self.required_data_products[name6] = ['ExpMeter'] 
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
@@ -411,6 +422,7 @@ class QCDefinitions:
         self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
+        self.master_types[name7] = []
         self.required_data_products[name7] = ['ExpMeter']
         self.fits_keywords[name7] = 'EMNEG'
         self.fits_comments[name7] = 'QC: EM not negative flux'
@@ -423,6 +435,7 @@ class QCDefinitions:
         self.descriptions[name8] = 'LFC frame that goes into a master has sufficient flux'
         self.data_types[name8] = 'int'
         self.spectrum_types[name8] = ['LFC', ]
+        self.master_types[name8] = ['LFC', ]
         self.required_data_products[name8] = [] # no required data products
         self.fits_keywords[name8] = 'LFC2DFOK'
         self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
@@ -435,6 +448,7 @@ class QCDefinitions:
         self.descriptions[name9] = 'Flux is low in bias exposure.'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
+        self.master_types[name9] = ['Bias', ]
         self.required_data_products[name9] = [] # no required data products
         self.fits_keywords[name9] = 'LOWBIAS'
         self.fits_comments[name9] = 'QC: 2D bias low flux check'
@@ -447,6 +461,7 @@ class QCDefinitions:
         self.descriptions[name10] = 'Flux is low in dark exposure.'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
+        self.master_types[name10] = ['Dark', ]
         self.required_data_products[name10] = [] # no required data products
         self.fits_keywords[name10] = 'LOWDARK'
         self.fits_comments[name10] = 'QC: 2D dark low flux check'
@@ -458,6 +473,7 @@ class QCDefinitions:
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
+        self.master_types[name11] = ['all', ]
         self.required_data_products[name11] = [] # no required data products
         self.descriptions[name11] = 'Red/Green data present in L1 with expected shapes.'
         self.fits_keywords[name11] = 'DATAPRL1'
@@ -471,6 +487,7 @@ class QCDefinitions:
         self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
+        self.master_types[name12] = []
         self.required_data_products[name12] = ['HK'] # no required data products
         self.fits_keywords[name12] = 'CaHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
@@ -483,6 +500,7 @@ class QCDefinitions:
         self.descriptions[name13] = 'All data present in L2.'
         self.data_types[name13] = 'int'
         self.spectrum_types[name13] = ['all', ]
+        self.master_types[name13] = []
         self.required_data_products[name13] = [] # no required data products
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
@@ -495,6 +513,7 @@ class QCDefinitions:
         self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
+        self.master_types[name14] = []
         self.required_data_products[name14] = ['HK'] # no required data products
         self.fits_keywords[name14] = 'CaHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
@@ -507,6 +526,7 @@ class QCDefinitions:
         self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
         self.data_types[name15] = 'int'
         self.spectrum_types[name15] = ['all', ]
+        self.master_types[name15] = ['all', ]
         self.required_data_products[name15] = [] # no required data products
         self.fits_keywords[name15] = 'DATAPR2D'
         self.fits_comments[name15] = 'QC: 2D red and green data present check'
@@ -519,11 +539,12 @@ class QCDefinitions:
         self.descriptions[name16] = 'Not a QC test; used to add the KPFERA keyword to header.'
         self.data_types[name16] = 'float'
         self.spectrum_types[name16] = ['all', ]
+        self.master_types[name16] = []
         self.required_data_products[name16] = [] # no required data products
         self.fits_keywords[name16] = 'KPFERA'
         self.fits_comments[name16] = 'Current era of KPF observations'
         self.db_columns[name16] = None
-        self.fits_keyword_fail_value[name16] = 0
+        self.fits_keyword_fail_value[name16] = -1
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -568,8 +589,11 @@ class QCDefinitions:
     
                 kpf_data_levels = self.kpf_data_levels[qc_name]
                 data_type = self.data_types[qc_name]
-                spectrum_type = self.spectrum_types[qc_name]
+                spectrum_types = self.spectrum_types[qc_name]
+                master_types = self.master_types[qc_name]
+                required_data_products = self.required_data_products[qc_name]
                 keyword = self.fits_keywords[qc_name]
+                keyword_fail_value = self.fits_keyword_fail_value[qc_name]
                 comment = self.fits_comments[qc_name]
                 db_column = self.db_columns[qc_name]
                 description = self.descriptions[qc_name]
@@ -579,8 +603,11 @@ class QCDefinitions:
                     print('      ' + styled_text("Description: ", style="Bold") + description)
                     print('      ' + styled_text("Date levels: ", style="Bold") + str(kpf_data_levels))
                     print('      ' + styled_text("Date type: ", style="Bold") + data_type)
-                    print('      ' + styled_text("Spectrum type: ", style="Bold") + str(spectrum_type))
+                    print('      ' + styled_text("Required data products: ", style="Bold") + str(required_data_products))
+                    print('      ' + styled_text("Spectrum types (applied to): ", style="Bold") + str(spectrum_types))
+                    print('      ' + styled_text("Master types (applied to): ", style="Bold") + str(master_types))
                     print('      ' + styled_text("Keyword: ", style="Bold") + styled_text(keyword, style="Bold", color='Blue'))
+                    print('      ' + styled_text("Keyword fail value: ", style="Bold") + str(keyword_fail_value))
                     print('      ' + styled_text("Comment: ", style="Bold") + comment)
                     print('      ' + styled_text("Database column: ", style="Bold") + str(db_column))
                     print()
