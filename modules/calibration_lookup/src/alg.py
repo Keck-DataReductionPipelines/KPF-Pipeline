@@ -60,7 +60,7 @@ class GetCalibrations:
                     if db_results[0] == 0:
                         output_cals[cal_type[0]] = db_results[1]
                     else:
-                        output_cals[cal_type[0]] = self.defaults[cal_type[0].lower()]
+                        output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
             elif lookup == 'wls':
                 for cal_type in self.wls_cal_types:
                     wls_results = self.db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
