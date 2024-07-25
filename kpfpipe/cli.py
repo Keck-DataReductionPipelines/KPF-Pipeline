@@ -214,9 +214,9 @@ def main():
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
-        infiles = [sorted(glob(args.watch + "*.fits"), reverse=True) + \
-                    sorted(glob(args.watch + "20*/*.fits"), reverse=True)]
-        
+        infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
+                sorted(glob(args.watch + "20*/*.fits"), reverse=True)
+
         if args.masters:
             infiles = sorted(glob(args.watch + "*autocal*.fits"), reverse=True)
 
