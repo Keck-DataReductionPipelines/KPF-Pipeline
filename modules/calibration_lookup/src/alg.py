@@ -58,7 +58,7 @@ class GetCalibrations:
                         continue
                     db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type)
                     if db_results[0] == 0:
-                        output_cals[cal_type[0]] = db_results[1]
+                        output_cals[cal_type[0].lower()] = db_results[1]
                     else:
                         output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
             elif lookup == 'wls':
