@@ -4,8 +4,8 @@ import numpy.ma as ma
 import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
-from modules.Utils.utils import DummyLogger
-from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid, get_kpf_level
+from modules.Utils.utils import DummyLogger, styled_text
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid, get_kpf_level, get_data_products_expected
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -33,10 +33,46 @@ Includes helper functions that compute statistics of data of arbitrary shape.
 def what_am_i():
     print('Software version:',iam + ' ' + version)
 
+def compute_clip_corr(n_sigma):
+
+    """
+    Compute a correction factor to properly reinflate the variance after it is
+    naturally diminished via data-clipping.  Employ a simple Monte Carlo method
+    and standard normal deviates to simulate the data-clipping and obtain the
+    correction factor.
+    """
+
+    var_trials = []
+    for x in range(0,10):
+        a = np.random.normal(0.0, 1.0, 1000000)
+        med = np.median(a, axis=0)
+        p16 = np.percentile(a, 16, axis=0)
+        p84 = np.percentile(a, 84, axis=0)
+        sigma = 0.5 * (p84 - p16)
+        mdmsg = med - n_sigma * sigma
+        b = np.less(a,mdmsg)
+        mdpsg = med + n_sigma * sigma
+        c = np.greater(a,mdpsg)
+        mask = np.any([b,c],axis=0)
+        mx = ma.masked_array(a, mask)
+        var = ma.getdata(mx.var(axis=0))
+        var_trials.append(var)
+
+    np_var_trials = np.array(var_trials)
+    avg_var_trials = np.mean(np_var_trials)
+    std_var_trials = np.std(np_var_trials)
+    corr_fact = 1.0 / avg_var_trials
+
+    return corr_fact
+
 def avg_data_with_clipping(data_array,n_sigma = 3.0):
+
     """
     Statistics with outlier rejection (n-sigma data-trimming), ignoring NaNs, across all data array dimensions.
     """
+
+    cf = compute_clip_corr(n_sigma)
+    sqrtcf = np.sqrt(cf)
 
     a = np.array(data_array)
 
@@ -52,22 +88,82 @@ def avg_data_with_clipping(data_array,n_sigma = 3.0):
     mask = b | c | d
     mx = ma.masked_array(a, mask)
     avg = ma.getdata(mx.mean())
-    std = ma.getdata(mx.std())
+    std = ma.getdata(mx.std()) * sqrtcf
     cnt = ma.getdata(mx.count())
 
     return avg,std,cnt
 
-def test_all_QCs(kpf_object, data_type):
+
+def check_all_qc_keywords(kpf_object,fname,logger=None):
+
+    """
+    Method to check all QC keywords in PRIMARY header of FITS object.
+
+    Agnostic of data level; checks all QC keywords in PRIMARY header
+    that have assigned value for qc_definitions.fits_keyword_fail_value[dict_key]
+    (which are not None).  Currently only integer fail_values are handled.
+
+    Returns:
+        qc_fail - a boolean signifying that the QC failed (True) or not (False)
+    """
+
+    logger = logger if logger is not None else DummyLogger()
+
+    qc_fail = False
+
+    qc_definitions = QCDefinitions()
+
+    dict_keys_list = qc_definitions.fits_keywords.keys()
+
+    for dict_key in dict_keys_list:
+
+        kw = qc_definitions.fits_keywords[dict_key]
+
+        try:
+            fail_value = qc_definitions.fits_keyword_fail_value[dict_key]
+        except:
+            continue
+
+        if fail_value is None:
+            continue
+
+        try:
+            kw_value = kpf_object.header['PRIMARY'][kw]
+
+            if kw_value == fail_value:
+
+                logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{}'.format(fname,kw,kw_value,fail_value))
+
+                qc_fail = True
+                return qc_fail
+        except KeyError as err:
+            continue
+
+    return qc_fail
+
+
+# To-do: move this to a new class?
+def execute_all_QCs(kpf_object, data_level, logger=None):
     """
     Method to loop over all QC tests for the data level of the input KPF object 
     (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g., 
     in a Jupyter Notebook).  To run the QCs in a recipe, use methods in 
     quality_control_framework.py
+
+    Args:
+        kpf_object - a KPF object (L0, 2D, L1, or L2)
+        data_type - 
+
+    Attributes:
+        None
+
+    Returns:
+        kpf_object - the input kpf_object with QC keywords added
     """
     
-    logger = DummyLogger()
+    logger = logger if logger is not None else DummyLogger()
     
-    data_level = get_kpf_level(kpf_object)
+    #data_level = get_kpf_level(kpf_object)
     
     # Define QC object
     if data_level == 'L0':
@@ -89,7 +185,7 @@ def test_all_QCs(kpf_object, data_type):
             if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
                 qc_names.append(qc_name)
 
-        # Run the QC tests and add result to keyword to header
+        # Run the QC tests and add result keyword to header
         primary_header = HeaderParse(kpf_object, 'PRIMARY')
         this_spectrum_type = primary_header.get_name(use_star_names=False)    
         logger.info(f'Spectrum type: {this_spectrum_type}')
@@ -97,25 +193,73 @@ def test_all_QCs(kpf_object, data_type):
             try:
                 spectrum_types = qc_obj.qcdefinitions.spectrum_types[qc_name]
                 if (this_spectrum_type in spectrum_types) or ('all' in spectrum_types):
-                    logger.info(f'Running QC: \033[1;34m{qc_name}\033[0m ({qc_obj.qcdefinitions.descriptions[qc_name]})')
-                    method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
-                    qc_value = method() # evaluate method
-                    if qc_value == True: 
-                        color_code = '\033[1;32m' # green
-                    elif qc_value == False:
-                        color_code = '\033[1;31m' # red
+                    if len(qc_obj.qcdefinitions.required_data_products[qc_name]) == 0:
+                        all_required_data_products_present = True
                     else:
-                        color_code = '\033[1m'
-                    logger.info(f'QC result:  {color_code}{qc_value}\033[0m (True = pass)')
-                    qc_obj.add_qc_keyword_to_header(qc_name, qc_value)
+                        data_products_expected = get_data_products_expected(kpf_object, data_level)
+                        data_products_required = qc_obj.qcdefinitions.required_data_products[qc_name]
+                        all_required_data_products_present = all(element in data_products_expected for element in data_products_required)
+                    if all_required_data_products_present:
+                        text_qc_name = styled_text(qc_name, style="Bold", color="Blue")
+                        text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
+                        logger.info(f'Running QC: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
+                        method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
+                        qc_value = method() # evaluate method
+                        if qc_value == True: 
+                            text_qc_value = styled_text(qc_value, style="Bold", color="Green")
+                        elif qc_value == False:
+                            text_qc_value = styled_text(qc_value, style="Bold", color="Red")
+                        if qc_obj.qcdefinitions.fits_keywords[qc_name] == 'KPFERA':
+                            logger.info(f'Result: {styled_text("KPFERA", style="Bold", color="Blue")}={styled_text(qc_value, style="Bold")}')
+                        else:
+                            logger.info(f'QC result: {text_qc_value} (True = pass)')
+                        qc_obj.add_qc_keyword_to_header(qc_name, qc_value)
+                    else:
+                        logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because {data_products_required} not in list of expected data products({data_products_expected})')
                 else:
-                    logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because spectrum type {this_spectrum_type} not in list of spectrum types: {spectrum_types}')
+                    logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because {this_spectrum_type} not in list of spectrum types: {spectrum_types}')
             except AttributeError as e:
                 logger.info(f'Method {qc_name} does not exist in qc_obj or another AttributeError occurred: {e}')
                 pass
             except Exception as e:
                 logger.info(f'An error occurred when executing {qc_name}:', str(e))
                 pass
+
+    return kpf_object
+
+# See check_all_qc_keywords method above, which is data-level agnostic.
+# To do: finish this method or just use check_all_qc_keywords method above????
+# To-do: move this a new class?
+def check_all_QC_keywords_present(kpf_object, logger=None):
+    """
+    Method to determine if all QC tests have been run on the input kpf_object
+    by examining it's keywords.  The method determines the data_level for 
+    kpf_object and checks for keywords of that level and lower, e.g., for 
+    data_level = 'L1', the method checks for keywords in levels 'L0', '2D', 
+    and 'L1'.
+
+    Args:
+        kpf_object - a KPF object (L0, 2D, L1, or L2)
+        logger - Python logger object; if None, the DummyLogger is used
+
+    Returns:
+        kpf_object - the input kpf_object with QC keywords added
+    """
+    
+    logger = logger if logger is not None else DummyLogger()
+    data_level = get_kpf_level(kpf_object)
+    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+    this_spectrum_type = primary_header.get_name(use_star_names=False)    
+
+    if data_level == 'L0':
+        data_levels = data_levels = ['L0']
+    if data_level == '2D':
+        data_levels = data_levels = ['L0', '2D']
+    if data_level == 'L1':
+        data_levels = data_levels = ['L0', '2D', 'L1']
+    if data_level == 'L2':
+        data_levels = data_levels = ['L0', '2D', 'L1', 'L2']
+
 
 #####################################################################
 
@@ -137,8 +281,12 @@ class QCDefinitions:
             Possible values in the list: 'L0', '2D', 'L1', 'L2'
         data_types (dictionary of strings): Each entry specifies the Python data type of the metric.
             Only string, int, float are allowed.  Use 0/1 for boolean.
-        spectrum_types (dictionary of arrays of strings ): Each entry specifies the types of spectra that the metric will be applied to.
-            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>, ''
+        spectrum_types (dictionary of arrays of strings): Each entry specifies the types of spectra that the metric will be applied to.
+            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
+        master_types (dictionary of arrays of strings): Each entry specifies the types of masters where the QC check is relevant.  If the QC fails for an exposure, it is not added to the master stack.
+            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
+        required_data_products (dictionary of arrays of strings): specifies if data products are needed to perform check
+            if = [], then no required data products; other possible values are from get_data_products_L0, etc.
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
             Must be 8 characters or less, following the FITS standard.
         fits_comments (dictionary of strings): Each entry specifies the FITS-header comment for the metric.
@@ -154,11 +302,14 @@ class QCDefinitions:
         self.names = []
         self.descriptions = {}
         self.kpf_data_levels = {} 
-        self.data_types = {}  # values are arrays; one or more of ['L0', '2D', 'L1', 'L2']
-        self.spectrum_types = {} # values are arrays; one or more of []
+        self.data_types = {}  
+        self.spectrum_types = {} 
+        self.master_types = {} # if = [], then the QC test is not relevant for the construction of any masters
+        self.required_data_products = {} # if = [], then no required data products; other possible values: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
         self.fits_keywords = {}
         self.fits_comments = {}
         self.db_columns = {}
+        self.fits_keyword_fail_value = {}
 
         # Define QC metrics
         name0 = 'jarque_bera_test_red_amp1'
@@ -167,179 +318,233 @@ class QCDefinitions:
         self.kpf_data_levels[name0] = ['L3'] # bogus value L3 to avoid executing
         self.data_types[name0] = 'float'
         self.spectrum_types[name0] = ['all', ]
+        self.master_types[name0] = []
+        self.required_data_products[name0] = [] # no required data products
         self.fits_keywords[name0] = 'JBTRED1'
         self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
         self.db_columns[name0] = None
+        self.fits_keyword_fail_value[name0] = None
 
-        name1 = 'not_junk_check'
+        name1 = 'not_junk'
         self.names.append(name1)
-        self.descriptions[name1] = 'Check if file is not in list of junk files.'
+        self.descriptions[name1] = 'File is not in list of junk files.'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
+        self.master_types[name1] = ['all', ]
+        self.required_data_products[name1] = [] # no required data products
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files'
         self.db_columns[name1] = None
+        self.fits_keyword_fail_value[name1] = 0
 
-        name2 = 'monotonic_wavelength_solution_check'
+        name2 = 'monotonic_wavelength_solution'
         self.names.append(name2)
-        self.descriptions[name2] = 'Check if wavelength solution is monotonic.'
+        self.descriptions[name2] = 'Wavelength solution is monotonic.'
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.spectrum_types[name2] = ['all', ]
+        self.master_types[name2] = []
+        self.required_data_products[name2] = [] # no required data products
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
         self.db_columns[name2] = None
+        self.fits_keyword_fail_value[name2] = 0
 
-        name3 = 'L0_data_products_check'
+        name3 = 'L0_data_products'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Check if expected L0 data products are present with non-zero array sizes.'
+        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
         self.data_types[name3] = 'int'
         self.spectrum_types[name3] = ['all', ]
+        self.master_types[name3] = ['all', ]
+        self.required_data_products[name3] = [] # no required data products
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present'
         self.db_columns[name3] = None
+        self.fits_keyword_fail_value[name3] = 0
 
-        name4 = 'L0_header_keywords_present_check'
+        name4 = 'L0_header_keywords_present'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Check if expected L0 header keywords are present.'
+        self.descriptions[name4] = 'Expected L0 header keywords present.'
         self.data_types[name4] = 'int'
         self.spectrum_types[name4] = ['all', ]
+        self.master_types[name4] = ['all', ]
+        self.required_data_products[name4] = [] # no required data products
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present'
         self.db_columns[name4] = None
+        self.fits_keyword_fail_value[name4] = 0
 
-        name5 = 'L0_datetime_checks'
+        name5 = 'L0_datetime'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Check for timing consistency in L0 header keywords and Exp Meter table.'
+        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
+        self.master_types[name5] = ['all', ]
+        self.required_data_products[name5] = [] # no required data products
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
         self.db_columns[name5] = None
+        self.fits_keyword_fail_value[name5] = 0
 
-        name5b = 'L2_datetime_checks'
+        name5b = 'L2_datetime'
         self.names.append(name5b)
         self.kpf_data_levels[name5b] = ['L2']
-        self.descriptions[name5b] = 'Check for timing consistency in L2 files.'
+        self.descriptions[name5b] = 'Timing consistency in L2 files.'
         self.data_types[name5b] = 'int'
         self.spectrum_types[name5b] = ['all', ]
+        self.master_types[name5b] = []
+        self.required_data_products[name5b] = [] # no required data products
         self.fits_keywords[name5b] = 'TIMCHKL2'
         self.fits_comments[name5b] = 'QC: L2 times consistent'
         self.db_columns[name5b] = None
+        self.fits_keyword_fail_value[name5b] = 0
 
-        name6 = 'exposure_meter_not_saturated_check'
+        name6 = 'exposure_meter_not_saturated'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = 'Check if 2+ reduced EM pixels are within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
+        self.master_types[name6] = []
+        self.required_data_products[name6] = ['ExpMeter'] 
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
+        self.fits_keyword_fail_value[name6] = 0
 
-        name7 = 'exposure_meter_flux_not_negative_check'
+        name7 = 'exposure_meter_flux_not_negative'
         self.names.append(name7)
         self.kpf_data_levels[name7] = ['L0']
-        self.descriptions[name7] = 'Check for negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
+        self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
+        self.master_types[name7] = []
+        self.required_data_products[name7] = ['ExpMeter']
         self.fits_keywords[name7] = 'EMNEG'
         self.fits_comments[name7] = 'QC: EM not negative flux'
         self.db_columns[name7] = None
+        self.fits_keyword_fail_value[name7] = 0
 
-        name8 = 'D2_lfc_flux_check'
+        name8 = 'D2_lfc_flux'
         self.names.append(name8)
         self.kpf_data_levels[name8] = ['2D']
-        self.descriptions[name8] = 'Check if an LFC frame that goes into a master has sufficient flux'
+        self.descriptions[name8] = 'LFC frame that goes into a master has sufficient flux'
         self.data_types[name8] = 'int'
         self.spectrum_types[name8] = ['LFC', ]
+        self.master_types[name8] = ['LFC', ]
+        self.required_data_products[name8] = [] # no required data products
         self.fits_keywords[name8] = 'LFC2DFOK'
         self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
         self.db_columns[name8] = None
+        self.fits_keyword_fail_value[name8] = 0
 
-        name9 = 'data_2D_bias_low_flux_check'
+        name9 = 'data_2D_bias_low_flux'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
-        self.descriptions[name9] = 'Check if flux is low in bias exposure.'
+        self.descriptions[name9] = 'Flux is low in bias exposure.'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
+        self.master_types[name9] = ['Bias', ]
+        self.required_data_products[name9] = [] # no required data products
         self.fits_keywords[name9] = 'LOWBIAS'
         self.fits_comments[name9] = 'QC: 2D bias low flux check'
         self.db_columns[name9] = None
+        self.fits_keyword_fail_value[name9] = 0
 
-        name10 = 'data_2D_dark_low_flux_check'
+        name10 = 'data_2D_dark_low_flux'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
-        self.descriptions[name10] = 'Check if flux is low in dark exposure.'
+        self.descriptions[name10] = 'Flux is low in dark exposure.'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
+        self.master_types[name10] = ['Dark', ]
+        self.required_data_products[name10] = [] # no required data products
         self.fits_keywords[name10] = 'LOWDARK'
         self.fits_comments[name10] = 'QC: 2D dark low flux check'
         self.db_columns[name10] = None
+        self.fits_keyword_fail_value[name10] = 0
 
-        name11 = 'data_L1_red_green_check'
+        name11 = 'data_L1_red_green'
         self.names.append(name11)
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
-        self.descriptions[name11] = 'Check if red/green data are present in L1 with expected shapes.'
+        self.master_types[name11] = ['all', ]
+        self.required_data_products[name11] = [] # no required data products
+        self.descriptions[name11] = 'Red/Green data present in L1 with expected shapes.'
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
+        self.fits_keyword_fail_value[name11] = 0
 
-        name12 = 'data_L1_CaHK_check'
+        name12 = 'data_L1_CaHK'
         self.names.append(name12)
         self.kpf_data_levels[name12] = ['L1']
-        self.descriptions[name12] = 'Check if CaHK data is present in L1 with expected shape.'
+        self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
+        self.master_types[name12] = []
+        self.required_data_products[name12] = ['HK'] # no required data products
         self.fits_keywords[name12] = 'CaHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
+        self.fits_keyword_fail_value[name12] = 0
 
-        name13 = 'data_L2_check'
+        name13 = 'data_L2'
         self.names.append(name13)
         self.kpf_data_levels[name13] = ['L2']
-        self.descriptions[name13] = 'Check if all data are present in L2.'
+        self.descriptions[name13] = 'All data present in L2.'
         self.data_types[name13] = 'int'
         self.spectrum_types[name13] = ['all', ]
+        self.master_types[name13] = []
+        self.required_data_products[name13] = [] # no required data products
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
         self.db_columns[name13] = None
-        
-        name14 = 'data_2D_CaHK_check'
+        self.fits_keyword_fail_value[name13] = 0
+
+        name14 = 'data_2D_CaHK'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'Check if CaHK CCD data is present with expected array sizes.'
+        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
+        self.master_types[name14] = []
+        self.required_data_products[name14] = ['HK'] # no required data products
         self.fits_keywords[name14] = 'CaHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
+        self.fits_keyword_fail_value[name14] = 0
 
-        name15 = 'data_2D_red_green_check'
+        name15 = 'data_2D_red_green'
         self.names.append(name15)
         self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Check if red/green CCD data is present with expected array sizes.'
+        self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
         self.data_types[name15] = 'int'
         self.spectrum_types[name15] = ['all', ]
+        self.master_types[name15] = ['all', ]
+        self.required_data_products[name15] = [] # no required data products
         self.fits_keywords[name15] = 'DATAPR2D'
         self.fits_comments[name15] = 'QC: 2D red and green data present check'
         self.db_columns[name15] = None
+        self.fits_keyword_fail_value[name15] = 0
 
         name16 = 'add_kpfera'
         self.names.append(name16)
         self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name16] = 'Not a QC test.  The QC module is used to add the KPFERA keyword to all files.'
+        self.descriptions[name16] = 'Not a QC test; used to add the KPFERA keyword to header.'
         self.data_types[name16] = 'float'
         self.spectrum_types[name16] = ['all', ]
+        self.master_types[name16] = []
+        self.required_data_products[name16] = [] # no required data products
         self.fits_keywords[name16] = 'KPFERA'
         self.fits_comments[name16] = 'Current era of KPF observations'
         self.db_columns[name16] = None
+        self.fits_keyword_fail_value[name16] = -1
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -379,26 +584,32 @@ class QCDefinitions:
         qc_names = self.names
         
         for data_level in ['L0', '2D', 'L1', 'L2']:
-            print(f'\033[1mQuality Control tests for {data_level}:\033[0m')
+            print(styled_text(f"Quality Control tests for {data_level}:", style="Bold"))
             for qc_name in qc_names:
     
                 kpf_data_levels = self.kpf_data_levels[qc_name]
                 data_type = self.data_types[qc_name]
-                spectrum_type = self.spectrum_types[qc_name]
+                spectrum_types = self.spectrum_types[qc_name]
+                master_types = self.master_types[qc_name]
+                required_data_products = self.required_data_products[qc_name]
                 keyword = self.fits_keywords[qc_name]
+                keyword_fail_value = self.fits_keyword_fail_value[qc_name]
                 comment = self.fits_comments[qc_name]
                 db_column = self.db_columns[qc_name]
                 description = self.descriptions[qc_name]
     
                 if data_level in self.kpf_data_levels[qc_name]:
-                    print('   \033[1mQC Name:\033[0m ' + qc_name)
-                    print('      \033[1mDescription:\033[0m ' + description)
-                    print('      \033[1mData levels:\033[0m ' + str(kpf_data_levels))
-                    print('      \033[1mData type:\033[0m ' + data_type)
-                    print('      \033[1mSpectrum type:\033[0m ' + str(spectrum_type))
-                    print('      \033[1mKeyword:\033[0m ' + keyword)
-                    print('      \033[1mComment:\033[0m ' + comment)
-                    print('      \033[1mDatabase column:\033[0m ' + str(db_column))
+                    print('   ' + styled_text("Name: ", style="Bold") + styled_text(qc_name, style="Bold", color="Blue"))
+                    print('      ' + styled_text("Description: ", style="Bold") + description)
+                    print('      ' + styled_text("Date levels: ", style="Bold") + str(kpf_data_levels))
+                    print('      ' + styled_text("Date type: ", style="Bold") + data_type)
+                    print('      ' + styled_text("Required data products: ", style="Bold") + str(required_data_products))
+                    print('      ' + styled_text("Spectrum types (applied to): ", style="Bold") + str(spectrum_types))
+                    print('      ' + styled_text("Master types (applied to): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Keyword: ", style="Bold") + styled_text(keyword, style="Bold", color='Blue'))
+                    print('      ' + styled_text("Keyword fail value: ", style="Bold") + str(keyword_fail_value))
+                    print('      ' + styled_text("Comment: ", style="Bold") + comment)
+                    print('      ' + styled_text("Database column: ", style="Bold") + str(db_column))
                     print()
 
 
@@ -444,7 +655,7 @@ class QC:
             print('---->add_qc_keyword_to_header: qc_name, keyword, value, comment = {}, {}, {}, {}'.format(qc_name,keyword,value,comment))
 
 
-    def not_junk_check(self, junk_ObsIDs_csv='/data/reference/Junk_Observations_for_KPF.csv', debug=False):
+    def not_junk(self, junk_ObsIDs_csv='/data/reference/Junk_Observations_for_KPF.csv', debug=False):
         """
         This Quality Control method can be used in any of the data levels (L0/2D/L1/L2) 
         so it is included in the superclass. 
@@ -589,7 +800,7 @@ class QCL0(QC):
         super().__init__(kpf_object)
 
 
-    def L0_data_products_check(self, debug=False):
+    def L0_data_products(self, debug=False):
         """
         This Quality Control function checks if the expected data_products 
         in an L0 file are present and if their data extensions are populated 
@@ -637,12 +848,12 @@ class QCL0(QC):
                 if not dp in data_products_present:
                     QC_pass = False
                     if debug:
-                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products_check) failed.')
+                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products) failed.')
         
         return QC_pass
 
 
-    def L0_header_keywords_present_check(self, essential_keywords=['auto'], debug=False):
+    def L0_header_keywords_present(self, essential_keywords=['auto'], debug=False):
         """
         This Quality Control function checks if a specified set of FITS header keywords are present.
         
@@ -705,7 +916,7 @@ class QCL0(QC):
         return QC_pass
 
 
-    def L0_datetime_checks(self, debug=False):
+    def L0_datetime(self, debug=False):
         """
         This QC module performs the following checks on datetimes in the L0 primary header
         and in the Exposure Meter table (if present).  The timing checks have precision 
@@ -845,7 +1056,7 @@ class QCL0(QC):
         return QC_pass    
 
 
-    def exposure_meter_not_saturated_check(self, debug=False):
+    def exposure_meter_not_saturated(self, debug=False):
         """
         This Quality Control function checks if 2 or more reduced pixels in an exposure
         meter spectrum is within 90% of saturated.  The check is applied to the EM-SCI 
@@ -913,7 +1124,7 @@ class QCL0(QC):
         return QC_pass
 
 
-    def exposure_meter_flux_not_negative_check(self, debug=False):
+    def exposure_meter_flux_not_negative(self, debug=False):
         """
         This Quality Control function checks if 20 or more consecutive elements of the 
         exposure meter spectra are negative.  Negative flux usually indicates 
@@ -986,7 +1197,7 @@ class QC2D(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
-    def data_2D_red_green_check(self,debug=False):
+    def data_2D_red_green(self,debug=False):
         """
         This Quality Control function checks if the 2D data exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
@@ -1041,7 +1252,7 @@ class QC2D(QC):
         
         return QC_pass
 
-    def data_2D_CaHK_check(self,debug=False):
+    def data_2D_CaHK(self,debug=False):
         """
         This Quality Control function checks if the 2D data exists for the
         Ca H&K chip and checks that the size of the array is as expected.
@@ -1081,7 +1292,7 @@ class QC2D(QC):
         
         return QC_pass
 
-    def data_2D_bias_low_flux_check(self,debug=False):
+    def data_2D_bias_low_flux(self,debug=False):
         """
         This Quality Control function checks if the flux is low
         (mean flux < 10) for a bias exposure.
@@ -1119,7 +1330,7 @@ class QC2D(QC):
 
         return QC_pass
 
-    def data_2D_dark_low_flux_check(self,debug=False):
+    def data_2D_dark_low_flux(self,debug=False):
         """
         This Quality Control function checks if the flux is low
         (mean flux < 10) for a dark exposure.
@@ -1157,7 +1368,7 @@ class QC2D(QC):
         
         return QC_pass
 
-    def D2_lfc_flux_check(self, threshold=4000, debug=False):
+    def D2_lfc_flux(self, threshold=4000, debug=False):
         """
         This Quality Control function checks if the flux values in the green and red chips of the
         given 2D file are above a defined threshold at the 98th percentile.
@@ -1202,7 +1413,7 @@ class QCL1(QC):
         super().__init__(kpf_object)
 
 
-    def monotonic_wavelength_solution_check(self,debug=False):
+    def monotonic_wavelength_solution(self,debug=False):
         """
         This Quality Control function checks if a wavelength solution is
         monotonic, specifically if wavelength decreases (or stays constant) with
@@ -1288,7 +1499,7 @@ class QCL1(QC):
 
         return QC_pass #, bad_orders
 
-    def data_L1_red_green_check(self,debug=False):
+    def data_L1_red_green(self,debug=False):
         """
         This Quality Control function checks if the red and green data
         are present in an L1 file, and that all array sizes are as expected.
@@ -1376,7 +1587,7 @@ class QCL1(QC):
         
         return QC_pass
 
-    def data_L1_CaHK_check(self,debug=False):
+    def data_L1_CaHK(self,debug=False):
         """
         This Quality Control function checks if the green and red data
         are present in an L1 file, and that all array sizes are as expected.
@@ -1443,7 +1654,7 @@ class QCL2(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
-    def data_L2_check(self,debug=False):
+    def data_L2(self,debug=False):
         """
         This Quality Control function checks if all of the 
         expected data (telemetry, CCFs, and RVs) are present.
@@ -1544,7 +1755,7 @@ class QCL2(QC):
         
         return QC_pass
 
-    def L2_datetime_checks(self, debug=False):
+    def L2_datetime(self, debug=False):
         """
         This QC module performs the following checks on datetimes in the header 
         to the RV extension in an L2 object. The timing checks have precision 

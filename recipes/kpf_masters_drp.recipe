@@ -31,8 +31,9 @@ if date_dir is None:
 else:
     search_string = config.PICK_INPUTS_MASTERS_DRP.input_dir + "/" + date_dir + "/" + '*.fits'
 
+    # Set the datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
     dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
-                 "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:00:00.000000"
+                 "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
     cals = CalibrationLookup(dt_string)
     ordermask_path = cals['order_mask']
     smoothlamppattern_path = cals['smooth_lamp_pattern']
@@ -84,10 +85,44 @@ for raw_file_path in file_list:
         file_exists = False
 
     if overwrite or not output_file_exists:
+
+        # Read in FITS data.
+        l0 = kpf0_from_fits(raw_file_path, data_type)
+
+        #---------
+
+        # Diagnostics & Quality Control - L0 level
+
+        kpf_object = l0
+        data_level_str = 'L0'
+
+        # Cannot call subrecipes in a loop (does not work correctly).
+        #invoke_subrecipe("./recipes/quality_control.subrecipe")
+        #invoke_subrecipe("./recipes/diagnostics.subrecipe")
+
+        qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
+        exit_code      = qc_output_list[0]
+        new_kpf_object = qc_output_list[1]
+        # exit_code = 1 is good.
+        if exit_code == 1:
+            kpf_object = new_kpf_object
+
+        diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
+        exit_code = diagnostics_output_list[0]
+        new_kpf_object = diagnostics_output_list[1]
+        # exit_code = 1 is good.
+        if exit_code == 1:
+            kpf_object = new_kpf_object
+        l0 = kpf_object
+
+        #---------
+
+        # Overscan subtraction, first red, then green (the ordering should not matter, except
+        # how the FITS object is modified and passed on to subsequent processes in the code below).
+
         ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
 
         # compute red-chip ffi
-        l0 = kpf0_from_fits(raw_file_path, data_type)
         red_ffi = OverscanSubtraction(l0,
                                       overscan_method,
                                       order,
@@ -117,9 +152,15 @@ for raw_file_path in file_list:
                                           channel_datasec_nrows_green,
                                           n_sigma)
 
-        kpf_object = L0_with_ffi
-        data_level_str = 'L0'
 
+        #---------
+
+        # Diagnostics & Quality Control - 2D level
+
+        kpf_object = L0_with_ffi
+        data_level_str = '2D'
+
+        # Cannot call subrecipes in a loop (does not work correctly).
         #invoke_subrecipe("./recipes/quality_control.subrecipe")
         #invoke_subrecipe("./recipes/diagnostics.subrecipe")
 
@@ -138,6 +179,8 @@ for raw_file_path in file_list:
             kpf_object = new_kpf_object
 
         L0_with_ffi = kpf_object
+
+        #---------
 
         oscan_complete = to_fits(L0_with_ffi, output_file_name)
 

@@ -12,14 +12,9 @@ import hashlib
 from datetime import datetime, timezone
 import time
 
-exitcode = 0
+import database.modules.utils.kpf_db as db
 
-def md5(fname):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+exitcode = 0
 
 
 # Process identification.
@@ -49,6 +44,15 @@ for file in input_files:
     if '_norect' in file: continue                  # Omit *_norect* files.
     if '.log' in file: continue                     # Omit *.log files.
     if '.txt' in file: continue                     # Omit *.txt files.
+    print("file =",file)
+    master_files.append(file)
+
+search_path = '/masters' + '/' + datearg + '/wlpixelfiles/' + 'Etalonmask*.csv'
+
+print("search_path =",search_path)
+input_files = glob.glob(search_path)
+
+for file in input_files:
     print("file =",file)
     master_files.append(file)
 
@@ -143,7 +147,14 @@ for master_file in master_files:
            "ENDDATE": enddate,
            "FILESTATUS": filestatusstr}
 
-    cksum = md5(master_file)
+    cksum = db.md5(master_file)
+
+    print('cksum = {}'.format(cksum))
+
+    # Check for error in computing MD5 checksum.
+    if  cksum == 68:
+        continue
+
     rep["CHECKSUM"] = cksum
     rep["FILENAME"] = master_file[1:]      # Remove leading slash to make it a relative path.
 
@@ -161,14 +172,49 @@ for master_file in master_files:
 
         rep["LEVEL"] = str(1)
 
+        # Currently only two different kinds of CSV files are handled.
+
+        filename_object = 'not_found_yet'
+
+        if 'Etalonmask' in csv_file:
+            filename_caltype = 'etalonmask'
+
+            filename_match = re.match(r".+_master_(.+)_L[1:2]\.csv", csv_file)
+
+            try:
+                filename_substring = filename_match.group(1)
+                print("-----1-----> fn_substring =",filename_substring)
+
+                filename_match = re.match(r"(.+?)_(.+)", filename_substring)
+
+                try:
+                    filename_object = filename_match.group(2)
+
+                    print("-------2--------> fn_object =",filename_object)
+
+                except:
+                    print("-------2--------> No filename match found")
+                    continue
+
+            except:
+                print("-----1-----> No filename match found")
+                continue
+
+            filename_object = filename_object + "_"             # Add underbar suffix for Etalonmask only.
+
+        else:
+            filename_caltype = 'ordertrace'
+            filename_object = filename_caltype
+
+        rep["IMTYPE"] = filename_caltype
+
+
         if 'GREEN' in csv_file:
             hasGREEN = 1
-            rep["IMTYPE"] = "ordertrace"
-            rep["TARGOBJ"] = "ordertracegreen"
+            rep["TARGOBJ"] = filename_object + "green"
         elif 'RED' in csv_file:
             hasRED = 1
-            rep["IMTYPE"] = "ordertrace"
-            rep["TARGOBJ"] = "ordertracered"
+            rep["TARGOBJ"] = filename_object + "red"
 
         contentbits = hasCAHK * 2**2 + hasRED * 2**1 + hasGREEN * 2**0
         rep["CONTENTBITS"] = str(contentbits)

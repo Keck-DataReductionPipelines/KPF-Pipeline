@@ -43,6 +43,8 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
     parser.add_argument('--reprocess', dest='reprocess', action='store_true',
                         help="For use in watch mode. Process any existing files found in the watch mode path.")
+    parser.add_argument('--masters', dest='masters', action='store_true',
+                        help="For use in watch mode. Process any existing files found in the watch mode path. Use if processing a directory of masters files. Will only look for files without 'WLS', 'L1', or 'L2' in the filename")
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
     parser.add_argument('--date', dest='date', type=str, default=None, help="Date for the data to be processed.")
@@ -212,8 +214,11 @@ def main():
     if args.watch != None:
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
-        infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
-                    sorted(glob(args.watch + "20*/*.fits"), reverse=True)
+        infiles = [sorted(glob(args.watch + "*.fits"), reverse=True) + \
+                    sorted(glob(args.watch + "20*/*.fits"), reverse=True)]
+        
+        if args.masters:
+            infiles = sorted(glob(args.watch + "*autocal*.fits"), reverse=True)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
@@ -223,8 +228,10 @@ def main():
 
         if args.reprocess:
             framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
-
             for fname in infiles:
+                if args.masters and ('L1' in fname or 'L2' in fname):
+                    framework.pipeline.logger.info("Skipping reduced file {}.".format(fname))
+                    continue
                 arg = arg
                 arg.date_dir = datestr
                 arg.file_path = fname
