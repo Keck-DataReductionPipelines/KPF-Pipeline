@@ -94,17 +94,18 @@ def avg_data_with_clipping(data_array,n_sigma = 3.0):
     return avg,std,cnt
 
 
-def check_all_qc_keywords(kpf_object,fname,logger=None):
+def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
     """
     Method to check all QC keywords in PRIMARY header of FITS object.
 
     Agnostic of data level; checks all QC keywords in PRIMARY header
     that have assigned value for qc_definitions.fits_keyword_fail_value[dict_key]
-    (which are not None).  Currently only integer fail_values are handled.
+    (which are not None).  Failure is declared only for the relevant master type.
+    Currently only integer fail_values are handled.
 
     Returns:
-        qc_fail - a boolean signifying that the QC failed (True) or not (False)
+        qc_fail - a boolean signifying that the QC failed (True) for at least one of the QC keywords or not (False).
     """
 
     logger = logger if logger is not None else DummyLogger()
@@ -118,6 +119,7 @@ def check_all_qc_keywords(kpf_object,fname,logger=None):
     for dict_key in dict_keys_list:
 
         kw = qc_definitions.fits_keywords[dict_key]
+        master_types = qc_definitions.master_types[dict_key]
 
         try:
             fail_value = qc_definitions.fits_keyword_fail_value[dict_key]
@@ -134,8 +136,14 @@ def check_all_qc_keywords(kpf_object,fname,logger=None):
 
                 logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{}'.format(fname,kw,kw_value,fail_value))
 
-                qc_fail = True
+                for master_type in masters_types:
+
+                    if input_master_type.lower() == master_type.lower() or master_type.lower() == 'all':
+                        qc_fail = True
+                        break
+
                 return qc_fail
+
         except KeyError as err:
             continue
 
