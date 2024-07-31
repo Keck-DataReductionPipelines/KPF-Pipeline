@@ -136,7 +136,7 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
                 logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{}'.format(fname,kw,kw_value,fail_value))
 
-                for master_type in masters_types:
+                for master_type in master_types:
 
                     if input_master_type.lower() == master_type.lower() or master_type.lower() == 'all':
                         qc_fail = True
