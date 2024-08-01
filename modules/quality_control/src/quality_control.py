@@ -138,7 +138,7 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
                 for master_type in master_types:
 
-                    if input_master_type.lower() == master_type.lower() or master_type.lower() == 'all':
+                    if input_master_type.lower() == master_type.lower() or master_type.lower() == 'all' or input_master_type.lower() == 'all':
                         qc_fail = True
                         break
 
