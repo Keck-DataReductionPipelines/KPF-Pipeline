@@ -180,6 +180,7 @@ class MasterFlatFramework(KPF0_Primitive):
 
         master_flat_exit_code = 0
         master_flat_infobits = 0
+        input_master_type = 'Flat'
 
 
         # Filter flat files with IMTYPE=‘flatlamp’ and that match the input object specification with OBJECT.
@@ -390,7 +391,7 @@ class MasterFlatFramework(KPF0_Primitive):
 
                 # Check QC keywords and skip image if it does not pass QC checking.
 
-                skip = qc.check_all_qc_keywords(obj,path,self.logger)
+                skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
                 self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
                 if skip:
                     continue
