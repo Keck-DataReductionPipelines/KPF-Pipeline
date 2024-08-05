@@ -71,6 +71,7 @@ class GetCalibrations:
                         if wls_files[1] == None:
                             wls_files[1] = wls_files[0]
                         output_cals[cal] = wls_files
+                        break
                     else:
                         output_cals[cal] = self.defaults[cal]
 

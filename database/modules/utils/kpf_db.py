@@ -126,11 +126,12 @@ SELECT *,
 FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 AND level = '{cal_file_level}'
-AND contentbits = {contentbitmask}
 AND caltype = '{cal_type_pair[0].lower()}'
 AND object = '{cal_type_pair[1]}'
 ORDER BY startdate;"""
         
+        # AND contentbits = {contentbitmask}
+
         df = self.query_to_pandas(query_template)
         if len(df) == 0:
             return [1, None]
@@ -164,7 +165,6 @@ SELECT *,
 FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 and level = 1
-and contentbits = {contentbitmask}
 AND caltype = 'wls'
 AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%')
 ORDER BY startdate;"""
