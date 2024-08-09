@@ -7,6 +7,7 @@ from astropy.time import Time
 import re
 
 import database.modules.utils.kpf_db as db
+import modules.quality_control.src.quality_control as qc
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -151,6 +152,7 @@ class MasterDarkFramework(KPF0_Primitive):
 
         master_dark_exit_code = 0
         master_dark_infobits = 0
+        input_master_type = 'Dark'
 
 
         # Filter dark files with IMTYPE=‘dark’ and that match the input object specification with OBJECT.
@@ -298,13 +300,14 @@ class MasterDarkFramework(KPF0_Primitive):
                 path = all_dark_files[i]
                 obj = KPF0.from_fits(path)
 
-                try:
-                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
-                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
-                    if obj_not_junk != 1:
-                        continue
-                except KeyError as err:
-                    pass
+
+                # Check QC keywords and skip image if it does not pass QC checking.
+
+                skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
+                self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
+                if skip:
+                    continue
+
 
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
