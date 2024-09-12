@@ -20,3 +20,6 @@ $KPFCRONJOB_CODE/cronjobs/kpfmasters_wls_auto.pl $procdate >& $KPFCRONJOB_LOGS/j
 echo Return value from kpfmasters_wls_auto.pl = $?
 $KPFCRONJOB_CODE/database/cronjobs/kpfmasters_register_in_db.pl $procdate >& $KPFCRONJOB_LOGS/jobs/kpfmasters_register_in_db_$procdate.out
 echo Return value from kpfmasters_register_in_db.pl = $?
+
+$KPFCRONJOB_CODE/cronjobs/kpfmasters_etalon_analysis.pl $procdate >& $KPFCRONJOB_LOGS/jobs/kpfmasters_etalon_analysis_$procdate.out
+echo Return value from kpfmasters_etalon_analysis.pl = $?
