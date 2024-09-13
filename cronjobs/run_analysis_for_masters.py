@@ -85,22 +85,15 @@ def execute_command(code_to_execute_args):
 
     # Execute code_to_execute.
 
-    code_to_execute_object = subprocess.run(code_to_execute_args, capture_output=True)
+    code_to_execute_object = subprocess.run(code_to_execute_args, capture_output=True, text=True)
     print("returncode =",code_to_execute_object.returncode)
 
-    try:
-        code_to_execute_stdout = code_to_execute_object.stdout.decode('ASCII')
-        if code_to_execute_stdout:
-            print("code_to_execute_stdout =\n",code_to_execute_stdout)
-    except:
-        print("*** Warning: Error from code_to_execute_object.stdout.decode('ASCII')....")
+    code_to_execute_stdout = code_to_execute_object.stdout
+    print("code_to_execute_stdout =\n",code_to_execute_stdout)
 
-    try:
-        code_to_execute_stderr = code_to_execute_object.stderr.decode('ASCII')
-        if code_to_execute_stderr:
-            print("code_to_execute_stderr =\n",code_to_execute_stderr)
-    except:
-        print("*** Warning: Error from code_to_execute_object.stderr.decode('ASCII')....")
+    code_to_execute_stderr = code_to_execute_object.stderr
+    if code_to_execute_stderr:
+        print("code_to_execute_stderr =\n",code_to_execute_stderr)
 
 
 if __name__ == '__main__':
