@@ -20,7 +20,7 @@ exitcode = 0
 # Process identification.
 
 iam = "database/scripts/registerCalFilesForDate.py"
-iam_version = "1.0"
+iam_version = "1.1"
 print("iam =",iam)
 print("iam_version =",iam_version)
 
@@ -44,10 +44,20 @@ for file in input_files:
     if '_norect' in file: continue                  # Omit *_norect* files.
     if '.log' in file: continue                     # Omit *.log files.
     if '.txt' in file: continue                     # Omit *.txt files.
+    if '.png' in file: continue                     # Omit *.png files.
     print("file =",file)
     master_files.append(file)
 
 search_path = '/masters' + '/' + datearg + '/wlpixelfiles/' + 'Etalonmask*.csv'
+
+print("search_path =",search_path)
+input_files = glob.glob(search_path)
+
+for file in input_files:
+    print("file =",file)
+    master_files.append(file)
+
+search_path = '/masters' + '/' + datearg + '/masks/' + '*.csv'
 
 print("search_path =",search_path)
 input_files = glob.glob(search_path)
@@ -200,7 +210,22 @@ for master_file in master_files:
                 print("-----1-----> No filename match found")
                 continue
 
-            filename_object = filename_object + "_"             # Add underbar suffix for Etalonmask only.
+            filename_object = filename_object + "_"             # Add underbar suffix for Etalonmask only, for adding GREEN or RED later.
+
+        elif 'etalon_wavelengths' in csv_file:
+            filename_caltype = 'etalonmask'
+
+            filename_match = re.match(r".+\/\d+_(.+)_etalon_wavelengths\.csv", csv_file)
+
+
+            try:
+                filename_object = filename_match.group(1)
+
+                print("-------2--------> fn_object =",filename_object)
+
+            except:
+                print("-------2--------> No filename match found")
+                continue
 
         else:
             filename_caltype = 'ordertrace'
@@ -215,6 +240,10 @@ for master_file in master_files:
         elif 'RED' in csv_file:
             hasRED = 1
             rep["TARGOBJ"] = filename_object + "red"
+        else:
+            hasGREEN = 1                               # Jake's script produces *etalon_wavelengths.csv files, which have both GREEN and RED.
+            hasRED = 1
+            rep["TARGOBJ"] = filename_object
 
         contentbits = hasCAHK * 2**2 + hasRED * 2**1 + hasGREEN * 2**0
         rep["CONTENTBITS"] = str(contentbits)

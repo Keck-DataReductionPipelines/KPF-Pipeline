@@ -12,6 +12,10 @@ my $privaterefdir = '/data/user/rlaher/sbx/reference_fits';
 my $publicrefdir = '/data/kpf/reference_fits';
 &updateReferenceFits($privaterefdir,$publicrefdir);
 
+my $privaterefdir2 = '/data/user/rlaher/sbx/reference';
+my $publicrefdir2 = '/data/kpf/reference';
+&updateReference($privaterefdir2,$publicrefdir2);
+
 exit 0;
 
 
@@ -63,13 +67,13 @@ sub updateReferenceFits {
     }
 
     print "dir = $dir\n";
-    opendir(DIR, "$dir"); 
-    my @files = readdir DIR; 
+    opendir(DIR, "$dir");
+    my @files = readdir DIR;
     closedir DIR;
 
     print "dir2 = $dir2\n";
-    opendir(DIR, "$dir2"); 
-    my @files2 = readdir DIR; 
+    opendir(DIR, "$dir2");
+    my @files2 = readdir DIR;
     closedir DIR;
 
     foreach my $file2 (@files2) {
@@ -93,4 +97,34 @@ sub updateReferenceFits {
             if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
         }
     }
+}
+
+
+#------------------------------------------
+# Update files in private reference.
+
+sub updateReference {
+
+    my ($dir,$dir_public) = @_;
+
+
+    # Change to private directory.
+
+    print "Changing to private reference directory = $dir\n";
+
+    if (! chdir "$dir") {
+        print "*** Warning: Could not change to $dir; sleep for 10 seconds and try again...\n";
+        sleep(10);
+        if (! chdir "$dir") {
+            die "*** Error: Could not change to $dir; quitting...\n";
+        }
+    }
+
+    my $junk_obs = $dir_public . "/" . 'Junk_Observations_for_KPF.csv';
+
+    # Copy command will leave last-updated timestamp.
+    my $cmd0 = "cp $junk_obs .";
+    print "Executing [$cmd0]...\n";
+    my @op0 = `$cmd0`;
+    if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
 }
