@@ -875,6 +875,9 @@ class AnalyzeTimeSeries:
             if 'subtractmedian' in thispanel['paneldict']:
                 if (thispanel['paneldict']['subtractmedian']).lower() == 'true':
                     subtractmedian = True
+            datamultiplier = 1.0
+            if 'datamultiplier' in thispanel['paneldict']:
+                datamultiplier = thispanel['paneldict']['datamultiplier']
             nvars = len(thispanel['panelvars'])
             for i in np.arange(nvars):
                 if 'plot_type' in thispanel['panelvars'][i]:
@@ -895,6 +898,8 @@ class AnalyzeTimeSeries:
                     data = np.array(col_data_replaced, dtype='float')
                     if plot_type == 'errorbar':
                         data_err = np.array(col_data_err_replaced, dtype='float')
+                    data *= datamultiplier
+                    data_err *= datamultiplier
                 plot_attributes = {}
                 if plot_type != 'state':
                     if np.count_nonzero(~np.isnan(data)) > 0:
