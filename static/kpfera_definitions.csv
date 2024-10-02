@@ -1,0 +1,5 @@
+KPFERA, UT_start_date,       UT_end_date,         comment
+0.5,    2000-01-01 00:00:00, 2022-11-09 00:00:00, Before First Light (engineering)
+1.0,    2022-11-09 00:00:01, 2024-02-03 00:00:00, First science era: First Light to Service Mission #1
+1.5,    2024-02-03 00:00:01, 2024-02-11 00:00:00, Service Mission #1 (engineering)
+2.0,    2024-02-23 12:00:00, 3000-01-01 00:00:00, Second science era: After Service Mission #1
