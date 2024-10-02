@@ -54,9 +54,11 @@ class GetCalibrations:
                             output_cals[cal] = row['CALPATH']
             elif lookup == 'database':
                 for lvl, cal_type in zip(self.db_cal_file_levels, self.db_cal_types):
+                    print(lvl, cal_type)
                     if cal_type[0] in output_cals.keys():
                         continue
                     db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type)
+                    print(db_results)
                     if db_results[0] == 0:
                         output_cals[cal_type[0].lower()] = db_results[1]
                     else:

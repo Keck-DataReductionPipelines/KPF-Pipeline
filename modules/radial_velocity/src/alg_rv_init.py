@@ -299,7 +299,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
 
             if default_mask == 'etalon':
                 cals = GetCalibrations(self.pheader['DATE-MID'], DEFAULT_CALIBRATION_CONFIG).lookup()
-                self.mask_path = cals['etalon_mask']
+                self.mask_path = cals['etalonmask']
             else:
                 self.mask_path = stellar_dir + mask_file_map[default_mask][0]
     
