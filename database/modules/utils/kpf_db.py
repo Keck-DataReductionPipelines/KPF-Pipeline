@@ -166,7 +166,7 @@ FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 and level = 1
 AND caltype = 'wls'
-AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%')
+AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%' OR object like '%{object_name}-midnight%')
 ORDER BY startdate;"""
         
         df = self.query_to_pandas(query_template)
