@@ -2091,3 +2091,8 @@ def convert_to_list_if_array(string):
     else:
         # The string does not look like a JSON array
         return string
+
+# Time series plots to add:
+# * Time series of RVs (overall, by chip, by orderlet, by order)
+# * Errvel vs. SNR
+# * 
