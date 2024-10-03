@@ -118,6 +118,7 @@ my $containerimage = 'kpf-drp:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_l1.cfg';
 
+
 my ($dbport, $dbpass);
 my @op = `cat ~/.pgpass`;
 foreach my $op (@op) {
@@ -177,7 +178,6 @@ my $script = "#! /bin/bash\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "mkdir -p /data/masters/${procdate}\n" .
              "cp -pr /masters/${procdate}/kpf_${procdate}*.fits /data/masters/${procdate}\n" .
-             "rm /data/masters/${procdate}/kpf_${procdate}_smooth_lamp.fits\n" .
              "kpf --ncpus 32 --watch /data/masters/${procdate}/ --reprocess --masters -r $recipe  -c $config \n" .
              "cp -p /data/masters/${procdate}/* /masters/${procdate}\n" .
              "mkdir -p /masters/${procdate}/${logssubdir}\n" .
