@@ -34,13 +34,17 @@ class GetCalibrations:
         self.defaults = eval(self.config['PARAM']['defaults'])
         self.db = KPFDB(logger=self.log)
 
-    def lookup(self):
+    def lookup(self, subset=None):
         dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
         date_str = datetime.strftime(dt, "%Y%m%d")
 
         output_cals = {}
         db_results = None
+        if subset == None:
+            subset = self.lookup_map.keys()
         for cal,lookup in self.lookup_map.items():
+            if cal not in subset:
+                continue
             if lookup == 'file':
                 filename = self.caldate_files[cal]
                 df = pd.read_csv(filename, header=0, skipinitialspace=True)
@@ -54,11 +58,9 @@ class GetCalibrations:
                             output_cals[cal] = row['CALPATH']
             elif lookup == 'database':
                 for lvl, cal_type in zip(self.db_cal_file_levels, self.db_cal_types):
-                    print(lvl, cal_type)
-                    if cal_type[0] in output_cals.keys():
+                    if cal_type[0] in output_cals.keys() or cal_type[0].lower() not in subset:
                         continue
                     db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type)
-                    print(db_results)
                     if db_results[0] == 0:
                         output_cals[cal_type[0].lower()] = db_results[1]
                     else:

@@ -682,6 +682,14 @@ class RadialVelocityAlg(RadialVelocityBase):
             return rv_init_data[RadialVelocityAlgInit.MASK_ORDERLET][fiber_key][RadialVelocityAlgInit.MASK_TYPE]
 
     @staticmethod
+    def get_orderlet_maskpath(ins, orderletname, rv_init_data):
+        if not rv_init_data[RadialVelocityAlgInit.MASK_ORDERLET]:   # no need ins and orderletname
+            return rv_init_data[RadialVelocityAlgInit.MASK_PATH]
+        else:
+            fiber_key = RadialVelocityAlg.get_fiber_object_in_header(ins, orderletname)
+            return rv_init_data[RadialVelocityAlgInit.MASK_ORDERLET][fiber_key][RadialVelocityAlgInit.MASK_PATH]
+
+    @staticmethod
     def get_fiber_object_in_header(ins, sciname):
         if ins.lower() in RadialVelocityAlg.map_fibers_mask:
             fibers = RadialVelocityAlg.map_fibers_mask[ins.lower()]
