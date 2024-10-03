@@ -44,12 +44,12 @@ class AnalyzeTimeSeries:
         logger (logger object) - a logger object can be passed, or one will be created
 
     Attributes:
-        L0_keyword_types   (dictionary) - specifies data types for L0 header keywords
-        D2_keyword_types   (dictionary) - specifies data types for 2D header keywords
-        L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
-        L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
-        L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
-        L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
+        L0_PRIMARY_keyword_types (dictionary)  - specifies data types for L0 PRIMARY header keywords
+        D2_PRIMARY_keyword_types (dictionary)  - specifies data types for 2D PRIMARY header keywords
+        L1_PRIMARY_keyword_types (dictionary)  - specifies data types for L1 PRIMARY header keywords
+        L2_PRIMARY_keyword_types (dictionary)  - specifies data types for L2 PRIMARY header keywords
+        L2_RV_keyword_types      (dictionary) - specifies data types for L2 RV header keywords
+        L0_telemetry_types       (dictionary)  - specifies data types for L0 telemetry keywords
 
     Related Commandline Scripts:
         'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
@@ -86,12 +86,12 @@ class AnalyzeTimeSeries:
         self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
-        self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
-        self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
-        self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
-        self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
-        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
-        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
+        self.L0_PRIMARY_keyword_types = self.get_keyword_types(level='L0_PRIMARY')
+        self.D2_PRIMARY_keyword_types = self.get_keyword_types(level='2D_PRIMARY')
+        self.L1_PRIMARY_keyword_types = self.get_keyword_types(level='L1_PRIMARY')
+        self.L2_PRIMARY_keyword_types = self.get_keyword_types(level='L2_PRIMARY')
+        self.L2_RV_keyword_types     = self.get_keyword_types(level='L2_RV')
+        self.L0_telemetry_types      = self.get_keyword_types(level='L0_telemetry')
         
         if drop:
             self.drop_table()
@@ -118,13 +118,13 @@ class AnalyzeTimeSeries:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
-        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
-        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
-        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
-        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
+        L0_PRIMARY_columns   = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_PRIMARY_keyword_types.items()]
+        D2_PRIMARY_columns   = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_PRIMARY_keyword_types.items()]
+        L1_PRIMARY_columns   = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_PRIMARY_keyword_types.items()]
+        L2_PRIMARY_columns   = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_PRIMARY_keyword_types.items()]
+        L2_RV_columns        = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns
+        columns = L0_PRIMARY_columns + D2_PRIMARY_columns + L1_PRIMARY_columns + L2_PRIMARY_columns + L2_RV_columns + L0_telemetry_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -242,11 +242,11 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types) 
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_PRIMARY_keyword_types, extension='PRIMARY') 
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_PRIMARY_keyword_types, extension='PRIMARY') 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_PRIMARY_keyword_types, extension='PRIMARY') 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_PRIMARY_keyword_types, extension='PRIMARY') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_keyword_types, extension='RV') 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
             header_data = {**L0_header_data, 
@@ -303,11 +303,11 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_PRIMARY_keyword_types, extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_PRIMARY_keyword_types, extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_PRIMARY_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_PRIMARY_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_keyword_types, extension='RV')   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
                 header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
@@ -634,46 +634,38 @@ class AnalyzeTimeSeries:
         """
         
         # L0 PRIMARY header    
-        if level == 'L0':
+        if level == 'L0_PRIMARY':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
              
         # 2D PRIMARY header    
-        elif level == '2D':
+        elif level == '2D_PRIMARY':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         # L1 PRIMARY header    
-        elif level == 'L1':
+        elif level == 'L1_PRIMARY':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
         
         # L2 PRIMARY header    
-        elif level == 'L2':
+        elif level == 'L2_PRIMARY':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV extension
+        elif level == 'L2_RV':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         # L0 TELEMETRY extension
         elif level == 'L0_telemetry':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv'
-            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
-            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
-
-#        # L2 RV extension
-#        elif level == 'L2_RV':
-#            keyword_types = {
-#                'ABCD1234': 'string', #placeholder for now
-#            }
-#
-#       Note that CCD1RV1, etc. are in the header for the RV extension table now.  Check on code below.  Only CCFRV is read.
-
-        # L2 RV extension    
-        elif level == 'L2_RV_header':
-            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
