@@ -330,15 +330,15 @@ def add_headers_L1_SNR(L1, logger=None):
                 L1.header['PRIMARY']['SNRCL652'] = (round(myL1.RED_SNR[8,0],1),
                                                     'SNR of L1 CAL near 652 nm')
                 L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
-                                                    'SNR of L1 SKY near 747 nm')
+                                                    'SNR of L1 SCI near 747 nm')
                 L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
-                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 747 nm')
+                                                    'SNR of L1 SKY (SCI1+SCI2+SCI3) near 747 nm')
                 L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
                                                     'SNR of L1 CAL near 747 nm')
                 L1.header['PRIMARY']['SNRSC852'] = (round(myL1.RED_SNR[30,-1],1),
-                                                    'SNR of L1 SKY near 852 nm')
+                                                    'SNR of L1 SCI near 852 nm')
                 L1.header['PRIMARY']['SNRSK852'] = (round(myL1.RED_SNR[30,-2],1),
-                                                    'SNR of L1 SCI (SCI1+SCI2+SCI3) near 852 nm')
+                                                    'SNR of L1 SKY (SCI1+SCI2+SCI3) near 852 nm')
                 L1.header['PRIMARY']['SNRCL852'] = (round(myL1.RED_SNR[30,0],1),
                                                     'SNR of L1 CAL near 852 nm')
             except Exception as e:
