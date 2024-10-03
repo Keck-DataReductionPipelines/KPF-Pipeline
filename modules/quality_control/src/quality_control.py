@@ -489,7 +489,7 @@ class QCDefinitions:
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
         self.required_data_products[name12] = ['HK'] # no required data products
-        self.fits_keywords[name12] = 'CaHKPRL1'
+        self.fits_keywords[name12] = 'CAHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
         self.fits_keyword_fail_value[name12] = 0
