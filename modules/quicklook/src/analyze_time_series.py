@@ -340,7 +340,7 @@ class AnalyzeTimeSeries:
 
     def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
-        Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
+        Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
         """
         header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
