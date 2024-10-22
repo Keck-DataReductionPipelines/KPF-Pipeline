@@ -112,6 +112,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
     MASK_LINE = 'mask_line'
     ZB_RANGE = 'zb_range'
     MASK_TYPE = 'mask_type'
+    MASK_PATH = 'mask_path'
     VEL_SPAN_PIXEL = 'vel_span_pixel'
     MASK_ORDERLET = 'mask_orderlet'
 
@@ -257,6 +258,8 @@ class RadialVelocityAlgInit(RadialVelocityBase):
         if stellar_dir is None:
             return self.ret_status(self.STELLAR_DIR + not_defined)
 
+        cals = GetCalibrations(self.pheader['DATE-MID'], DEFAULT_CALIBRATION_CONFIG).lookup(subset=['etalonmask'])
+
         sci_mask = None
         for fobj in [RadialVelocityAlgInit.KEY_SCI_OBJ, RadialVelocityAlgInit.KEY_CAL_OBJ, RadialVelocityAlgInit.KEY_SKY_OBJ]:
             try:
@@ -298,8 +301,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 default_mask = 'G2_espresso'
 
             if default_mask == 'etalon':
-                cals = GetCalibrations(self.pheader['DATE-MID'], DEFAULT_CALIBRATION_CONFIG).lookup()
-                self.mask_path = cals['etalon_mask']
+                self.mask_path = cals['etalonmask']
+                # dfm = os.path.basename(self.mask_path)
+                # mask_file_map[dfm] = mask_file_map[default_mask]
+                # default_mask = dfm
             else:
                 self.mask_path = stellar_dir + mask_file_map[default_mask][0]
     
