@@ -132,18 +132,21 @@ ORDER BY startdate;"""
         
         # AND contentbits = {contentbitmask}
 
+        # print(query_template)
         df = self.query_to_pandas(query_template)
         if len(df) == 0:
             return [1, None]
 
         obst = Time(obs_date)
         obs_jd = obst.mjd
-        print(obs_jd)
 
         df['delta'] = (df['meanmjd'] - obs_jd).abs()
+        if df['delta'].isnull().all():
+            odt = pd.to_datetime(obs_date)
+            df['delta'] = odt - pd.to_datetime(df['startdate'])
+
         best_match = df.loc[df['delta'].idxmin()]
         fname = os.path.join('/', best_match['filename'])
-
         self.verify_checksum(fname, best_match['checksum'])
 
         return [self.exit_code, fname]
@@ -166,7 +169,7 @@ FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 and level = 1
 AND caltype = 'wls'
-AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%')
+AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%' OR object like '%{object_name}-midnight%')
 ORDER BY startdate;"""
         
         df = self.query_to_pandas(query_template)
