@@ -195,6 +195,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
         # Run the QC tests and add result keyword to header
         primary_header = HeaderParse(kpf_object, 'PRIMARY')
+        is_good = 1
         this_spectrum_type = primary_header.get_name(use_star_names=False)    
         logger.info(f'Spectrum type: {this_spectrum_type}')
         for qc_name in qc_names:
@@ -217,6 +218,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                             text_qc_value = styled_text(qc_value, style="Bold", color="Green")
                         elif qc_value == False:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Red")
+                            is_good = 0
                         if qc_obj.qcdefinitions.fits_keywords[qc_name] == 'KPFERA':
                             logger.info(f'Result: {styled_text("KPFERA", style="Bold", color="Blue")}={styled_text(qc_value, style="Bold")}')
                         else:
@@ -232,6 +234,8 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
             except Exception as e:
                 logger.info(f'An error occurred when executing {qc_name}:', str(e))
                 pass
+
+        kpf_object.header['PRIMARY']['ISGOOD'] = (is_good, "QC: all other QC tests passed")
 
     return kpf_object
 
