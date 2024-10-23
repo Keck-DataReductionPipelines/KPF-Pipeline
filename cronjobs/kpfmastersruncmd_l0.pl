@@ -107,7 +107,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.2';
+my $version = '2.3';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -136,6 +136,11 @@ my $pythonscript = 'scripts/make_smooth_lamp_pattern_new.py';
 
 my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
 my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';
+
+my $pythonscript2 = 'scripts/reformat_smooth_lamp_fitsfile_for_kpf_drp.py';
+
+my ($pylogfileDir2, $pylogfileBase2) = $pythonscript2 =~ /(.+)\/(.+)\.py/;
+my $pylogfile2 = $pylogfileBase2 . '_' . $procdate . '.out';
 
 
 # Get database parameters from ~/.pgpass file.
@@ -173,6 +178,10 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
+print "pythonscript=$pythonscript\n";
+print "pylogfile=$pylogfile\n";
+print "pythonscript2=$pythonscript2\n";
+print "pylogfile2=$pylogfile2\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -197,14 +206,18 @@ my $script = "#! /bin/bash\n" .
              "rm -rf /data/masters/${procdate}\n" .
              "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
-             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile}\n" .
+             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits >& ${pylogfile}\n" .
+             "python $pythonscript2 /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile2}\n" .
+             "rm /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 3\n" .
              "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile2} /masters/${procdate}\n" .
              "rm /code/KPF-Pipeline/${pylogfile}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile2}\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
