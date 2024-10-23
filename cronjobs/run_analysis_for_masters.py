@@ -131,7 +131,7 @@ if __name__ == '__main__':
                 execute_command(cmd)
 
 
-            exitcode = 0
-            print("exitcode = ",exitcode)
-            exit(exitcode)
+    exitcode = 0
+    print("exitcode = ",exitcode)
+    exit(exitcode)
 
