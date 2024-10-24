@@ -35,4 +35,4 @@ git+https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git@master
 # The following needs to be installed under the KPF-Pipeline directory (so the path is KPF-Pipeline/polly).
 # If this is not possible, then the relative path in KPF-Pipeline/cronjobs/run_analysis_for_masters.py
 #
-git+https://github.com/pemberj/polly.git@main
+# git+https://github.com/pemberj/polly.git@main
