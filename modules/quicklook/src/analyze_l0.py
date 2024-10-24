@@ -1,10 +1,12 @@
 import re
 import time
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0
 from modules.Utils.utils import DummyLogger
-from datetime import datetime
+from kpfpipe.models.level1 import KPF1
+from modules.Utils.kpf_parse import get_datecode
 
 class AnalyzeL0:
     """
@@ -297,3 +299,43 @@ class AnalyzeL0:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+
+    def simple_sum_extraction(self):
+        """
+        This method performs a very simple sum extraction of the orders in the 
+        2D file.  The steps performed are: 
+            1. Division by 2^16 (if needed)
+            2. Bias subtraction using an overscan region
+            3. Sum extraction using ...
+        
+        Parameters:
+            TBD
+         
+        Returns:
+            L1 - an L1 object with the *FLUX* and *VAR* extensions populated
+                 and a generic wavelength solution put into the *WAV* extensions.
+                 Data from the Ca H&K Spectrometer is not processed.
+        """
+        
+        thisL0 = self.L0
+        
+        # First, make a D2 object using standard methods.  This should handle the orientation issues and the 2^16 issue.
+        
+        # Initialize L1 object
+        L1 = KPF1.from_l0(self.L0)
+
+        FLUX_extensions = [f"{c}_SCI_FLUX{n}" for c in ["GREEN", "RED"] for n in range(1, 4)] + [f"{c}_SKY_FLUX" for c in ["GREEN", "RED"]] + [f"{c}_CAL_FLUX" for c in ["GREEN", "RED"]]
+        VAR_extensions  = [f"{c}_SCI_VAR{n}"  for c in ["GREEN", "RED"] for n in range(1, 4)] + [f"{c}_SKY_VAR"  for c in ["GREEN", "RED"]] + [f"{c}_CAL_VAR"  for c in ["GREEN", "RED"]]
+        WAVE_extensions = [f"{c}_SCI_WAVE{n}" for c in ["GREEN", "RED"] for n in range(1, 4)] + [f"{c}_SKY_WAVE" for c in ["GREEN", "RED"]] + [f"{c}_CAL_WAVE" for c in ["GREEN", "RED"]]
+        
+        # Do sum extraction using a default order mask file
+        
+        # Copy WLS from a random L1 file (this should be refined to account for KPFERA values).
+        ObsID_sample_L1 = 'KP.20240726.76933.79'
+        sample_L1_file = '/data/L1/' + get_datecode(ObsID_sample_L1) + '/' + ObsID_sample_L1 + '_L1.fits'
+        sample_L1_object = KPF1.from_fits(sample_L1_file)
+        for ext in WAVE_extensions:
+            L1[ext] = sample_L1_object[ext]
+        
+        return L1
