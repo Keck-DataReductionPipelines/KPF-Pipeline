@@ -21,14 +21,14 @@ def add_headers_2D_flux(D2, logger=None):
     Adds keywords to the 2D object header for flux measurements
     
     Keywords:
-        GR2DF99P - 99th percentile flux in the Green image for the 2D header (e-)
-        GR2DF90P - 90th percentile flux in the Green image for the 2D header (e-)
-        GR2DF50P - 50th percentile flux in the Green image for the 2D header (e-)
-        GR2DF10P - 10th percentile flux in the Green image for the 2D header (e-)
-        RD2DF99P - 99th percentile flux in the Green image for the 2D header (e-)
-        RD2DF90P - 90th percentile flux in the Green image for the 2D header (e-)
-        RD2DF50P - 50th percentile flux in the Green image for the 2D header (e-)
-        RD2DF10P - 10th percentile flux in the Green image for the 2D header (e-)
+        GR2DF99P - 99th percentile flux in the 2D Green image (e-)
+        GR2DF90P - 90th percentile flux in the 2D Green image (e-)
+        GR2DF50P - 50th percentile flux in the 2D Green image (e-)
+        GR2DF10P - 10th percentile flux in the 2D Green image (e-)
+        RD2DF99P - 99th percentile flux in the 2D Red image (e-)
+        RD2DF90P - 90th percentile flux in the 2D Red image (e-)
+        RD2DF50P - 50th percentile flux in the 2D Red image (e-)
+        RD2DF10P - 10th percentile flux in the 2D Red image (e-)
 
     Args:
         D2 - a KPF L1 object 
