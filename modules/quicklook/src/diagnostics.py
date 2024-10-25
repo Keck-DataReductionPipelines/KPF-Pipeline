@@ -55,18 +55,18 @@ def add_headers_2D_flux(D2, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image')
-                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image')
-                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image')
-                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image')
+                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Green 2D flux measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image')
-                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image')
-                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image')
-                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image')
+                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
     return D2
@@ -255,10 +255,10 @@ def add_headers_hk(D2, logger=None):
     Adds HK-related information to the header of a 2D object
     
     Keywords:
-        HK2DF99P - 99th percentile flux in the 2D header (e-)
-        HK2DF90P - 90th percentile flux in the 2D header (e-)
-        HK2DF50P - 50th percentile flux in the 2D header (e-)
-        HK2DF10P - 10th percentile flux in the 2D header (e-)
+        HK2DF99P - 99th percentile flux in the 2D HK image (e-)
+        HK2DF90P - 90th percentile flux in the 2D HK image (e-)
+        HK2DF50P - 50th percentile flux in the 2D HK image (e-)
+        HK2DF10P - 10th percentile flux in the 2D HK image (e-)
 
     Args:
         D2 - a KPF 2D object 
