@@ -16,6 +16,61 @@ from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.utils import get_moon_sep, get_sun_alt
 
+def add_headers_2D_flux(D2, logger=None):
+    """
+    Adds keywords to the 2D object header for flux measurements
+    
+    Keywords:
+        GR2DF99P - 99th percentile flux in the Green image for the 2D header (e-)
+        GR2DF90P - 90th percentile flux in the Green image for the 2D header (e-)
+        GR2DF50P - 50th percentile flux in the Green image for the 2D header (e-)
+        GR2DF10P - 10th percentile flux in the Green image for the 2D header (e-)
+        RD2DF99P - 99th percentile flux in the Green image for the 2D header (e-)
+        RD2DF90P - 90th percentile flux in the Green image for the 2D header (e-)
+        RD2DF50P - 50th percentile flux in the Green image for the 2D header (e-)
+        RD2DF10P - 10th percentile flux in the Green image for the 2D header (e-)
+
+    Args:
+        D2 - a KPF L1 object 
+
+    Returns:
+        D2 - a L1 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D KPF file.')
+        return D2
+        
+    # Use the Analyze2D class to compute flux
+    my2D = Analyze2D(D2, logger=logger)
+    for chip in chips:
+        if chip == 'green':
+            try:
+                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image')
+                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image')
+                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image')
+                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image')
+            except Exception as e:
+                logger.error(f"Problem with Green 2D flux measurements: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image')
+                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image')
+                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image')
+                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image')
+            except Exception as e:
+                logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
+    return D2
+
 def add_headers_dark_current_2D(D2, logger=None):
     """
     Compute the dark current for dark files and adds keywords to the 2D object header
@@ -200,7 +255,10 @@ def add_headers_hk(D2, logger=None):
     Adds HK-related information to the header of a 2D object
     
     Keywords:
-        HK2D99P  - 99th percentile flux in the 2D header (e-)
+        HK2DF99P - 99th percentile flux in the 2D header (e-)
+        HK2DF90P - 90th percentile flux in the 2D header (e-)
+        HK2DF50P - 50th percentile flux in the 2D header (e-)
+        HK2DF10P - 10th percentile flux in the 2D header (e-)
 
     Args:
         D2 - a KPF 2D object 
@@ -222,8 +280,10 @@ def add_headers_hk(D2, logger=None):
     # Use the AnalyzeGuider class to compute data products
     myHK = AnalyzeHK(D2, logger=logger)
     try: 
-        D2.header['PRIMARY']['HK2D99P']  = (round(myHK.percentile_99, 2),
-                                           '99th %ile flux in 2D CaHK image')
+        D2.header['PRIMARY']['HK2DF99P'] = (round(myHK.percentile_99, 2), '99th percentile flux in 2D CaHK image')
+        D2.header['PRIMARY']['HK2DF90P'] = (round(myHK.percentile_90, 2), '90th percentile flux in 2D CaHK image')
+        D2.header['PRIMARY']['HK2DF50P'] = (round(myHK.percentile_50, 2), '50th percentile flux in 2D CaHK image')
+        D2.header['PRIMARY']['HK2DF10P'] = (round(myHK.percentile_10, 2), '10th percentile flux in 2D CaHK image')
     except Exception as e:
         logger.error(f"Problem with HK measurements: {e}\n{traceback.format_exc()}")
                                            

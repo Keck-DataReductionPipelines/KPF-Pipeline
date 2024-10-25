@@ -43,6 +43,14 @@ class Analyze2D:
         red_ech_pressure_torr    - ion pump pressure (Red CCD, echelle side)
         red_coll_current_a       - ion pump current (Red CCD, collimator side)
         red_ech_current_a        - ion pump current (Red CCD, echelle side)
+        green_percentile_99      - 99th percentile flux of Green 2D image (e-)
+        green_percentile_90      - 90th percentile flux of Green 2D image (e-)
+        green_percentile_50      - 50th percentile flux of Green 2D image (e-)
+        green_percentile_10      - 10th percentile flux of Green 2D image (e-)
+        red_percentile_99        - 99th percentile flux of Red 2D image (e-)
+        red_percentile_90        - 90th percentile flux of Red 2D image (e-)
+        red_percentile_50        - 50th percentile flux of Red 2D image (e-)
+        red_percentile_10        - 10th percentile flux of Red 2D image (e-)
     """
 
     def __init__(self, D2, logger=None):
@@ -64,6 +72,8 @@ class Analyze2D:
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
+        self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+        self.red_percentile_99,   self.red_percentile_90,   self.red_percentile_50,   self.red_percentile_10   = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
 
     def measure_2D_dark_current(self, chip=None):
         """

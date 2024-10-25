@@ -68,6 +68,16 @@ class DiagnosticsFramework(KPF0_Primitive):
             pass
             
         elif '2D' in self.data_level_str:
+            # 2D flux
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_2D_flux'):
+                try:
+                    self.logger.info('Measuring diagnostics: add_headers_2D_flux')
+                    self.kpf_object = diagnostics.add_headers_2D_flux(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring 2D flux failed: {e}\n{traceback.format_exc()}")
+
             # Dark Current
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_dark_current_2D'):
