@@ -8,6 +8,7 @@ import numpy as np
 from modules.Utils.utils import DummyLogger
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
+from modules.quicklook.src.analyze_hk import AnalyzeHK
 from modules.quicklook.src.analyze_em import AnalyzeEM
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
@@ -17,7 +18,7 @@ from modules.Utils.utils import get_moon_sep, get_sun_alt
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
-    Compute the dark current for dark files and adds keywords to the 2D object headers
+    Compute the dark current for dark files and adds keywords to the 2D object header
 
     Keywords:
         FLXREG1G - Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
@@ -45,7 +46,7 @@ def add_headers_dark_current_2D(D2, logger=None):
         D2 - a KPF 2D object 
 
     Returns:
-        D2 - a 2D file with headers added
+        D2 - a 2D file with header keywords added
     """
 
     if logger == None:
@@ -114,7 +115,7 @@ def add_headers_dark_current_2D(D2, logger=None):
 
 def add_headers_guider(D2, logger=None):
     """
-    Computes the SNR of L1 spectra and adds keywords to the L1 object headers
+    Adds guider-related information to the header of a 2D object
     
     Keywords:
         GDRXRMS  - x-coordinate RMS guiding error in milliarcsec (mas)
@@ -131,7 +132,7 @@ def add_headers_guider(D2, logger=None):
         D2 - a KPF 2D object 
 
     Returns:
-        D2 - a 2D file with headers added
+        D2 - a 2D file with header keywords added
     """
 
     if logger == None:
@@ -194,6 +195,40 @@ def add_headers_guider(D2, logger=None):
                                            
     return D2
 
+def add_headers_hk(D2, logger=None):
+    """
+    Adds HK-related information to the header of a 2D object
+    
+    Keywords:
+        HK2D99P  - 99th percentile flux in the 2D header (e-)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    data_products = get_data_products_2D(D2)
+    if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('HK' in data_products):
+        logger.info('CaHK not in the 2D file or not a valid 2D KPF file.  CaHK data products not added to header.')
+        logger.info(data_products)
+        return D2
+        
+    # Use the AnalyzeGuider class to compute data products
+    myHK = AnalyzeHK(D2, logger=logger)
+    try: 
+        D2.header['PRIMARY']['HK2D99P']  = (round(myHK.percentile_99, 2),
+                                           '99th %ile flux in 2D CaHK image')
+    except Exception as e:
+        logger.error(f"Problem with HK measurements: {e}\n{traceback.format_exc()}")
+                                           
+    return D2
+
 
 def add_headers_exposure_meter(D2, logger=None):
     """
@@ -216,7 +251,7 @@ def add_headers_exposure_meter(D2, logger=None):
         D2 - a KPF 2D object 
 
     Returns:
-        D2 - a 2D file with headers added
+        D2 - a 2D file with header keywords added
     """
 
     if logger == None:
@@ -285,7 +320,7 @@ def add_headers_L1_SNR(L1, logger=None):
         L1 - a KPF L1 object 
 
     Returns:
-        L1 - a L1 file with headers added
+        L1 - a L1 file with header keywords added
     """
 
     if logger == None:
@@ -360,7 +395,7 @@ def add_headers_L1_order_flux_ratios(L1, logger=None):
         L1 - a KPF L1 object 
 
     Returns:
-        L1 - a L1 file with headers added
+        L1 - a L1 file with header keywords added
     """
 
     if logger == None:
@@ -450,7 +485,7 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
         L1 - a KPF L1 object 
 
     Returns:
-        L1 - a L1 file with headers added
+        L1 - a L1 file with header keywords added
     """
 
     if logger == None:
