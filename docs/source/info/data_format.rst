@@ -274,6 +274,18 @@ P84RED2   3.9340188e+07                               84th-percentile for RED_AM
 MEDCAHK   3.9642348e+07                               Median for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
 P16CAHK   3.9340188e+07                               16th-percentile for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
 P84CAHK   3.9340188e+07                               84th-percentile for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
+GR2DF99P  30552.46                                    99th percentile flux in 2D Green image (e-)
+GR2DF90P  14860.21                                    90th percentile flux in 2D Green image (e-)
+GR2DF50P  234.62                                      50th percentile flux in 2D Green image (e-)
+GR2DF10P  42.05                                       10th percentile flux in 2D Green image (e-)
+RD2DF99P  62520.97                                    99th percentile flux in 2D Red image (e-)
+RD2DF90P  40589.16                                    90th percentile flux in 2D Red image (e-)
+RD2DF50P  613.23                                      50th percentile flux in 2D Red image (e-)
+RD2DF10P  128.83                                      10th percentile flux in 2D Red image (e-)
+HK2DF99P  62520.97                                    99th percentile flux in the 2D header (e-)
+HK2DF90P  40589.16                                    90th percentile flux in the 2D header (e-)
+HK2DF50P  613.23                                      50th percentile flux in the 2D header (e-)
+HK2DF10P  128.83                                      10th percentile flux in the 2D header (e-)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
