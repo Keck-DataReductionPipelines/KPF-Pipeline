@@ -3,6 +3,7 @@ import psycopg2
 import re
 import hashlib
 import pandas as pd
+import numpy as np
 from astropy.time import Time
 
 from kpfpipe.models.level1 import KPF1
@@ -185,11 +186,14 @@ ORDER BY startdate;"""
 
         mjds = []
         for i, row in df.iterrows():
-            fname = '/' + row['filename']
-            l1 = KPF1.from_fits(fname)
-            dt = l1.header['PRIMARY']['DATE-MID']
-            mjd = Time(dt).mjd
-            mjds.append(mjd)
+            if np.isfinite(row['minmjd']) and np.isfinite(row['maxmjd']):
+                mjds.append((row['maxmjd'] + row['minmjd']) / 2)
+            else:
+                fname = '/' + row['filename']
+                l1 = KPF1.from_fits(fname)
+                dt = l1.header['PRIMARY']['DATE-MID']
+                mjd = Time(dt).mjd
+                mjds.append(mjd)
 
         df['meanmjd'] = mjds
 
