@@ -16,7 +16,7 @@ class AnalyzeHK:
         Some of the functions need to be filled in.
 
     Arguments:
-        L0 - a KPF L0 object
+        L0 - a KPF L0 or 2D object
 
     Attributes:
         TBD
@@ -36,6 +36,7 @@ class AnalyzeHK:
         self.wavesoln_file = wavesoln_file
         self.offset = offset
         self.image = np.array(L0['CA_HK'].data)
+        self.percentile_99 = np.nanpercentile(self.image, 99)  # this will be bias-subtracted for 2D, but not L0
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
