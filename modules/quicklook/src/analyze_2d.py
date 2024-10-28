@@ -43,6 +43,14 @@ class Analyze2D:
         red_ech_pressure_torr    - ion pump pressure (Red CCD, echelle side)
         red_coll_current_a       - ion pump current (Red CCD, collimator side)
         red_ech_current_a        - ion pump current (Red CCD, echelle side)
+        green_percentile_99      - 99th percentile flux of Green 2D image (e-)
+        green_percentile_90      - 90th percentile flux of Green 2D image (e-)
+        green_percentile_50      - 50th percentile flux of Green 2D image (e-)
+        green_percentile_10      - 10th percentile flux of Green 2D image (e-)
+        red_percentile_99        - 99th percentile flux of Red 2D image (e-)
+        red_percentile_90        - 90th percentile flux of Red 2D image (e-)
+        red_percentile_50        - 50th percentile flux of Red 2D image (e-)
+        red_percentile_10        - 10th percentile flux of Red 2D image (e-)
     """
 
     def __init__(self, D2, logger=None):
@@ -64,6 +72,8 @@ class Analyze2D:
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
+        self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+        self.red_percentile_99,   self.red_percentile_90,   self.red_percentile_50,   self.red_percentile_10   = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -215,7 +225,8 @@ class Analyze2D:
         print(params_2g)
 
 
-    def plot_2D_image(self, chip=None, overplot_dark_current=False, blur_size=None, 
+    def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,
+                            overplot_dark_current=False, blur_size=None, 
                             subtract_master_bias=False,
                             fig_path=None, show_plot=False):
         """
@@ -224,6 +235,8 @@ class Analyze2D:
         
         Args:
             chip (string) - "green" or "red"
+            variance - plot variance (VAR extensions) instead of signal (CCD extensions)
+            data_over_sqrt_variance - plot data divided by sqrt(variance), an approximate SNR image
             overlay_dark_current - if True, dark current measurements are over-plotted
             subtract_master_bias - if not False, a master bias will be subtracted'
                                    if 'auto', then the path to the master bias is 
@@ -259,7 +272,13 @@ class Analyze2D:
                     ech_pressure_torr = self.red_ech_pressure_torr
                     coll_current_a = self.red_coll_current_a
                     ech_current_a = self.red_ech_current_a
-            image = np.array(self.D2[CHIP + '_CCD'].data)
+            if variance:
+                image = np.array(self.D2[CHIP + '_VAR'].data)
+            elif data_over_sqrt_variance:
+                image = np.array(self.D2[CHIP + '_CCD'].data) / np.sqrt(np.array(self.D2[CHIP + '_VAR'].data))
+            else:
+                image = np.array(self.D2[CHIP + '_CCD'].data)
+            
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
             return
@@ -270,18 +289,32 @@ class Analyze2D:
 
         # Generate 2D image
         plt.figure(figsize=(10,8), tight_layout=True)
-        plt.imshow(image, vmin = np.nanpercentile(image[100:-100,100:-100],0.1), 
-                          vmax = np.nanpercentile(image[100:-100,100:-100],99), 
+        vmin = np.nanpercentile(image[100:-100,100:-100],0.1)
+        vmax = np.nanpercentile(image[100:-100,100:-100],99)
+        if variance or data_over_sqrt_variance:
+            vmin = np.nanpercentile(image, 0.01)
+            vmax = np.nanpercentile(image,99.99)
+        plt.imshow(image, vmin=vmin, vmax=vmax, 
                           interpolation = 'None', 
                           origin = 'lower', 
                           cmap='viridis')
         plt.grid(False)
-        plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
+        title_txt = '2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name
+        if variance:
+            title_txt = title_txt + ' (Variance)'
+        elif data_over_sqrt_variance:
+            title_txt = title_txt + ' (SNR)'
+        plt.title(title_txt, fontsize=18)
         plt.xlabel('Column (pixel number)', fontsize=18)
         plt.ylabel('Row (pixel number)', fontsize=18)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
-        cbar = plt.colorbar(label = 'Counts (e-)')
+        label = 'Counts (e-)'
+        if variance:
+            label = 'Variance (e-)'
+        elif data_over_sqrt_variance:
+            label = r'Counts (e-) / (Variance (e-))$^{0.5}$'
+        cbar = plt.colorbar(label = label)
         cbar.ax.yaxis.label.set_size(18)
         cbar.ax.tick_params(labelsize=14)
         
@@ -700,11 +733,13 @@ class Analyze2D:
             plt.show()
         plt.close('all')
 
-    def plot_bias_histogram(self, chip=None, fig_path=None, show_plot=False):
+    def plot_bias_histogram(self, variance=False, data_over_sqrt_variance=False, chip=None, fig_path=None, show_plot=False):
         """
         Plot a histogram of the counts per pixel in a 2D image.  
 
         Args:
+            variance - plot variance (VAR extensions) instead of signal (CCD extensions)
+            data_over_sqrt_variance - plot data divided by sqrt(variance), an approximate SNR image
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -716,24 +751,36 @@ class Analyze2D:
 
         if chip == 'green' or chip == 'red':
             if chip == 'green':
-                CHIP = 'GREEN_CCD'
                 chip_title = 'Green'
+                CHIP = 'GREEN'
             if chip == 'red':
-                CHIP = 'RED_CCD'
                 chip_title = 'Red'
-        image = np.array(self.D2[CHIP].data)
+                CHIP = 'RED'
 
-        histmin = -40
-        histmax = 40
-        flattened = self.D2[CHIP].data.flatten()
+        if variance:
+            image = np.array(self.D2[CHIP + '_VAR'].data)
+        elif data_over_sqrt_variance:
+            image = np.array(self.D2[CHIP + '_CCD'].data) / np.sqrt(np.array(self.D2[CHIP + '_VAR'].data))
+        else:
+            image = np.array(self.D2[CHIP + '_CCD'].data)
+
+        if not data_over_sqrt_variance and not variance:
+            histmin = -40
+            histmax = 40
+        else:
+            histmin = int(np.floor(np.percentile(image,0)))
+            histmax = int(np.ceil(np.percentile(image,99.995)))
+
+        flattened = image.flatten()
         flattened = flattened[(flattened >= histmin) & (flattened <= histmax)]
         
         # Fit a normal distribution to the data
-        mu, std = norm.fit(flattened)
-        median = np.median(flattened)
+        if not data_over_sqrt_variance and not variance:
+            mu, std = norm.fit(flattened)
+            median = np.median(flattened)
 
-        innermin = -15
-        innermax = 15
+        #innermin = -15
+        #innermax = 15
         #flattened_inner = flattened[(flattened >= innermin) & (flattened <= innermax)]
         #mu, std = norm.fit(flattened_inner)
         #median = np.median(flattened_inner)
@@ -778,31 +825,40 @@ class Analyze2D:
         
         # Create histogram with log scale
         n, bins, patches = plt.hist(flattened, bins=range(histmin, histmax+1), color='gray', log=True)
-        
-        # Plot the distribution
-        xmin, xmax = plt.xlim()
-        x = np.linspace(xmin, xmax, histmax-histmin+1)
-        p = norm.pdf(x, mu, std) * len(flattened) * np.diff(bins)[0] # scale the PDF to match the histogram
-        plt.plot(x, p, 'r', linewidth=2)
-        
-        # Add annotations
-        textstr = '\n'.join((
-            r'$\mu=%.2f$ e-' % (mu, ),
-            r'$\sigma=%.2f$ e-' % (std, ),
-            r'$\mathrm{median}=%.2f$ e-' % (median, )))
-        props = dict(boxstyle='round', facecolor='red', alpha=0.15)
-        plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
-                verticalalignment='top', horizontalalignment='right', bbox=props)
+                
+        if not data_over_sqrt_variance and not variance:
+            # Plot the distribution
+            xmin, xmax = plt.xlim()
+            x = np.linspace(xmin, xmax, histmax-histmin+1)
+            p = norm.pdf(x, mu, std) * len(flattened) * np.diff(bins)[0] # scale the PDF to match the histogram
+            plt.plot(x, p, 'r', linewidth=2)
+    
+            # Add annotations
+            textstr = '\n'.join((
+                r'$\mu=%.2f$ e-' % (mu, ),
+                r'$\sigma=%.2f$ e-' % (std, ),
+                r'$\mathrm{median}=%.2f$ e-' % (median, )))
+            props = dict(boxstyle='round', facecolor='red', alpha=0.15)
+            plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
+                    verticalalignment='top', horizontalalignment='right', bbox=props)
         
         # Set up axes
-        ax.axvline(x=0, color='blue', linestyle='--')
+        if not data_over_sqrt_variance and not variance:
+            ax.axvline(x=0, color='blue', linestyle='--')
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.xlim(histmin, histmax)
         plt.ylim(5*10**-1, 10**7)
         #plt.title(str(self.ObsID) + ' - ' + self.name, fontsize=14)
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=14)
-        plt.xlabel('Counts (e-)', fontsize=14)
+        if variance:
+            xlabel = 'Variance (e-)'
+        elif data_over_sqrt_variance:
+            xlabel = r'Counts (e-) / (Variance (e-))$^{0.5}$'
+        else:
+            xlabel = 'Counts (e-)'
+
+        plt.xlabel(xlabel, fontsize=14)
         plt.ylabel('Number of Pixels (log scale)', fontsize=14)
         plt.tight_layout()
  
