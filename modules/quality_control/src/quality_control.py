@@ -500,7 +500,7 @@ class QCDefinitions:
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
-        self.required_data_products[name12] = ['HK'] # no required data products
+        self.required_data_products[name12] = ['HK'] 
         self.fits_keywords[name12] = 'CaHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
@@ -526,7 +526,7 @@ class QCDefinitions:
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
-        self.required_data_products[name14] = ['HK'] # no required data products
+        self.required_data_products[name14] = ['HK'] 
         self.fits_keywords[name14] = 'CaHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
@@ -545,18 +545,31 @@ class QCDefinitions:
         self.db_columns[name15] = None
         self.fits_keyword_fail_value[name15] = 0
 
-        name16 = 'add_kpfera'
+        name16 = 'positive_2D_SNR'
         self.names.append(name16)
-        self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name16] = 'Not a QC test; used to add the KPFERA keyword to header.'
-        self.data_types[name16] = 'float'
+        self.kpf_data_levels[name16] = ['2D']
+        self.descriptions[name16] = 'Red/Green CCD data/var^0.5 not significantly negative.'
+        self.data_types[name16] = 'int'
         self.spectrum_types[name16] = ['all', ]
-        self.master_types[name16] = []
+        self.master_types[name16] = ['all', ]
         self.required_data_products[name16] = [] # no required data products
-        self.fits_keywords[name16] = 'KPFERA'
-        self.fits_comments[name16] = 'Current era of KPF observations'
+        self.fits_keywords[name16] = 'POS2DSNR'
+        self.fits_comments[name16] = 'QC: 2D check for > 10% data 5-sigma below zero'
         self.db_columns[name16] = None
-        self.fits_keyword_fail_value[name16] = -1
+        self.fits_keyword_fail_value[name16] = 0
+
+        name17 = 'add_kpfera'
+        self.names.append(name17)
+        self.kpf_data_levels[name17] = ['L0', '2D', 'L1', 'L2']
+        self.descriptions[name17] = 'Not a QC test; used to add the KPFERA keyword to header.'
+        self.data_types[name17] = 'float'
+        self.spectrum_types[name17] = ['all', ]
+        self.master_types[name17] = []
+        self.required_data_products[name17] = [] # no required data products
+        self.fits_keywords[name17] = 'KPFERA'
+        self.fits_comments[name17] = 'Current era of KPF observations'
+        self.db_columns[name17] = None
+        self.fits_keyword_fail_value[name17] = -1
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -1417,6 +1430,55 @@ class QC2D(QC):
             if debug:
                 print("One of the CCDs has a high flux")
             QC_pass = False
+        
+        return QC_pass
+
+    def positive_2D_SNR(self, neg_threshold=-5, debug=False):
+        """
+        This Quality Control function checks a 2D image to see if more than 1%
+        of the pixel values of 'SNR' = counts / sqrt(variance) < -5.  
+        The value of -5 was chosen because for a definition of SNR that is 
+        normally distributed, this is 5-sigma low.  
+        
+        Args:
+             neg_threshold - the low flux threshold (default: -5, i.e., 5-sigma)
+             debug - an optional flag.  If True, prints mean flux in each CCD.
+
+        Returns:
+             QC_pass - a boolean signifying that < 1% of the 2D pixels have 
+                       values below the threshold
+        """
+    
+        D2 = self.kpf_object
+
+        if debug:
+            print(D2.info())
+            type_D2 = type(D2)
+            print("type_2D = ",type_D2)
+            print("D2 = ",D2)
+    
+        QC_pass = True
+        extensions = D2.extensions
+    
+        if 'GREEN_CCD' in extensions:
+            scaled_counts = np.array(D2['GREEN_CCD'].data) / np.sqrt(np.array(D2['GREEN_VAR'].data))
+            subthreshold = np.sum(scaled_counts < neg_threshold)
+            total_pixels = scaled_counts.size
+            if debug:
+                print(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                print(f'Total number of pixels: {total_pixels}')
+            if ( subthreshold / total_pixels ) > 0.01:
+                QC_pass = False
+        
+        if 'RED_CCD' in extensions:
+            scaled_counts = (np.array(D2['RED_CCD'].data) / np.sqrt(np.array(D2['RED_VAR'].data))).flatten()
+            subthreshold = np.sum(scaled_counts < neg_threshold)
+            total_pixels = scaled_counts.size
+            if debug:
+                print(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                print(f'Total number of pixels: {total_pixels}')
+            if ( subthreshold / total_pixels ) > 0.1:
+                QC_pass = False
         
         return QC_pass
 
