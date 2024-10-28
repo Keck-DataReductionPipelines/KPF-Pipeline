@@ -1708,6 +1708,38 @@ class QCL1(QC):
         
         return QC_pass
 
+    def L1_check_snr_flc(L1, data_products=['auto']):
+        """
+        This Quality Control function checks checks the SNR of
+        LFC frames, marking satured frames as failing the test.
+        
+        Args:
+            L1 - an L1 object
+            data_products - L1 data_products to check (list)
+            
+            This file should pass: KP.20240711.11549.10_L1.fits
+            This file should fail: KP.20240506.33962.36_L1.fits
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        # Check L1 header
+        # SNR_452 = L1.header['PRIMARY']['SNRSC452'] # Not used for LFC
+        SNR_548 = L1.header['PRIMARY']['SNRSC548'] # 
+        # SNR_652 = L1.header['PRIMARY']['SNRSC652'] # # Not used for LFC
+        SNR_747 = L1.header['PRIMARY']['SNRSC747'] # 
+        object  = L1.header['PRIMARY']['OBJECT']
+
+        if object like 'autocal-lfc' 
+            SNR_limit = 2800 # Optimistic limit. Could be lower.
+            if (SNR_548 >= SNR_limit) | (SNR_747 >= SNR_limit):
+                QC_pass = False
+            else:
+                QC_pass = True
+        else:
+            QC_pass = True
+            
+        return QC_pass
 
 #####################################################################
 
