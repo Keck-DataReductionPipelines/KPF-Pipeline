@@ -1250,7 +1250,7 @@ class QCL0(QC):
         # print('Desired exposure time: ', Texp_desired)
         # print('Actual exposure time:  ', Texp_actual)
 
-        if (Texp_desired >= 7) & ((Texp_actual > 6.0) & (Texp_actual <= 6.6):
+        if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
             QC_pass = False
         else:
             QC_pass = True
