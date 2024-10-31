@@ -186,9 +186,11 @@ ORDER BY startdate;"""
 
         mjds = []
         for i, row in df.iterrows():
-            if np.isfinite(row['minmjd']) and np.isfinite(row['maxmjd']):
+            try:
+                pd.to_numeric(row['minmjd'])
+                pd.to_numeric(row['maxmjd'])
                 mjds.append((row['maxmjd'] + row['minmjd']) / 2)
-            else:
+            except ValueError:
                 fname = '/' + row['filename']
                 l1 = KPF1.from_fits(fname)
                 dt = l1.header['PRIMARY']['DATE-MID']
