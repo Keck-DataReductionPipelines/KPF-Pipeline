@@ -571,6 +571,19 @@ class QCDefinitions:
         self.db_columns[name17] = None
         self.fits_keyword_fail_value[name17] = -1
 
+        name18 = 'L0_bad_readout_check'
+        self.names.append(name18)
+        self.kpf_data_levels[name18] = ['L0']#, '2D', 'L1', 'L2']
+        self.descriptions[name18] = 'Check Texp that identifies error in reading out CCD'
+        self.data_types[name18] = 'float'
+        self.spectrum_types[name18] = ['all', ]
+        self.master_types[name18] = ['all', ]
+        self.required_data_products[name18] = [] # no required data products
+        self.fits_keywords[name18] = 'GOODREAD'  
+        self.fits_comments[name18] = 'QC: CCD readout properly'
+        self.db_columns[name18] = None
+        self.fits_keyword_fail_value[name18] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -1203,6 +1216,46 @@ class QCL0(QC):
             
         return QC_pass
 
+    def L0_bad_readout_check(L0, data_products=['L0'], debug=False):
+        """
+        This Quality Control function checks if desired readout time
+        matches the expected readout time (within some limit). This 
+        mismatch idetifies a 'smeared' readout scenario that we want to junk.
+        Bad readout states can also have no value for Greed/Red elapsed time.
+        Bad readouts have elapsed time between 6 and 7 seconds.
+        This occurs a few times per day on both cals and stars.
+
+        Edge case: If a star has a desired exposure time larger than 7 seconds
+        but the exposure meter properly terminates the exposure between
+        6.0 and 6.7 seconds, the star will be improperly failed. (very rare)
+        
+        Args:
+            L0 - an L0 object
+            data_products - L0 data_products to check (list)
+                            possible elements = 'auto', 'all',
+                                                'Green', 'Red', 'CaHK', 'ExpMeter',
+                                                'Guider', 'Telemetry', 'Pyrheliometer'
+                                                (note that 'all' should be used rarely since good data
+                                                could be missing some extensions, e.g. CaHK, Pyrheliometer)
+            debug - an optional flag.  If True, missing data products are noted.
+
+            Example that should fail this QC test: KP.20241008.31459.57
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        # Check primary header
+        Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
+        Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
+        # print('Desired exposure time: ', Texp_desired)
+        # print('Actual exposure time:  ', Texp_actual)
+
+        if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
+            QC_pass = False
+        else:
+            QC_pass = True
+
+        return QC_pass
 
 #####################################################################
 
