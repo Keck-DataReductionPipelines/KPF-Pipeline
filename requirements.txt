@@ -17,6 +17,7 @@ watchdog==2.1.7
 astroscrappy==1.1.0
 psycopg2-binary
 tqdm
+dataclasses
 
 # Documentation
 sphinx
@@ -28,6 +29,10 @@ ipython
 pygments
 
 # Framework
-# --TODO-- tracking master for now. Need to settle on a release in the future 
+# --TODO-- tracking master for now. Need to settle on a release in the future
 git+https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git@master
 
+# The following needs to be installed under the KPF-Pipeline directory (so the path is KPF-Pipeline/polly).
+# If this is not possible, then the relative path in KPF-Pipeline/cronjobs/run_analysis_for_masters.py
+#
+# git+https://github.com/pemberj/polly.git@main

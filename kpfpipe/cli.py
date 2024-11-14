@@ -95,7 +95,7 @@ class FileAlarm(PatternMatchingEventHandler):
     def __init__(self, framework, arg, patterns=["*"], cooldown=1):
         PatternMatchingEventHandler.__init__(self, patterns=patterns,
                                              ignore_patterns=['*/.*', '*/*~'])
-        
+
         self.framework = framework
         self.arg = arg
         self.arg.watch = True
@@ -116,7 +116,7 @@ class FileAlarm(PatternMatchingEventHandler):
                 return False
 
         self.file_cache[key] = time.time()
-        return True            
+        return True
 
     def process(self, event):
         if os.path.basename(event.src_path).startswith('.'):
@@ -155,12 +155,12 @@ class FileAlarm(PatternMatchingEventHandler):
 
 def main():
     '''
-    This is executed when 'kpfpipe' is called from commandline 
+    This is executed when 'kpfpipe' is called from commandline
     '''
     args = _parseArguments(sys.argv)
     # Set the pipeline and read the config file.
     # Using configparser for any configuration reading on the pipeline's
-    # level and below. 
+    # level and below.
     pipe_config = args.config_file
     pipe = KPFPipeline
     recipe = args.recipe
@@ -185,7 +185,7 @@ def main():
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='cfg') as tp:
         frame_config.write(tp)
-    
+
     frame_config = tp.name
 
     # Using the multiprocessing library, create the specified number of instances
@@ -218,7 +218,15 @@ def main():
                 sorted(glob(args.watch + "20*/*.fits"), reverse=True)
 
         if args.masters:
-            infiles = sorted(glob(args.watch + "*autocal*.fits"), reverse=True)
+            infiles_all_fits = sorted(glob(args.watch + "*.fits"), reverse=True)
+
+            infiles = []
+            for f in infiles_all_fits:
+                if "L1" in f:
+                    continue
+                if "L2" in f:
+                    continue
+                infiles.append(f)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",

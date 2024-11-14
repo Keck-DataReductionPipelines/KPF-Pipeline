@@ -195,6 +195,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
         # Run the QC tests and add result keyword to header
         primary_header = HeaderParse(kpf_object, 'PRIMARY')
+        is_good = 1
         this_spectrum_type = primary_header.get_name(use_star_names=False)    
         logger.info(f'Spectrum type: {this_spectrum_type}')
         for qc_name in qc_names:
@@ -217,6 +218,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                             text_qc_value = styled_text(qc_value, style="Bold", color="Green")
                         elif qc_value == False:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Red")
+                            is_good = 0
                         if qc_obj.qcdefinitions.fits_keywords[qc_name] == 'KPFERA':
                             logger.info(f'Result: {styled_text("KPFERA", style="Bold", color="Blue")}={styled_text(qc_value, style="Bold")}')
                         else:
@@ -232,6 +234,8 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
             except Exception as e:
                 logger.info(f'An error occurred when executing {qc_name}:', str(e))
                 pass
+
+        kpf_object.header['PRIMARY']['ISGOOD'] = (is_good, "QC: all other QC tests passed")
 
     return kpf_object
 
@@ -496,7 +500,7 @@ class QCDefinitions:
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
-        self.required_data_products[name12] = ['HK'] # no required data products
+        self.required_data_products[name12] = ['HK'] 
         self.fits_keywords[name12] = 'CaHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
@@ -522,7 +526,7 @@ class QCDefinitions:
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
-        self.required_data_products[name14] = ['HK'] # no required data products
+        self.required_data_products[name14] = ['HK'] 
         self.fits_keywords[name14] = 'CaHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
@@ -541,18 +545,57 @@ class QCDefinitions:
         self.db_columns[name15] = None
         self.fits_keyword_fail_value[name15] = 0
 
-        name16 = 'add_kpfera'
+        name16 = 'positive_2D_SNR'
         self.names.append(name16)
-        self.kpf_data_levels[name16] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name16] = 'Not a QC test; used to add the KPFERA keyword to header.'
-        self.data_types[name16] = 'float'
+        self.kpf_data_levels[name16] = ['2D']
+        self.descriptions[name16] = 'Red/Green CCD data/var^0.5 not significantly negative.'
+        self.data_types[name16] = 'int'
         self.spectrum_types[name16] = ['all', ]
-        self.master_types[name16] = []
+        self.master_types[name16] = ['all', ]
         self.required_data_products[name16] = [] # no required data products
-        self.fits_keywords[name16] = 'KPFERA'
-        self.fits_comments[name16] = 'Current era of KPF observations'
+        self.fits_keywords[name16] = 'POS2DSNR'
+        self.fits_comments[name16] = 'QC: 2D check for > 10% data 5-sigma below zero'
         self.db_columns[name16] = None
-        self.fits_keyword_fail_value[name16] = -1
+        self.fits_keyword_fail_value[name16] = 0
+
+        name17 = 'add_kpfera'
+        self.names.append(name17)
+        self.kpf_data_levels[name17] = ['L0', '2D', 'L1', 'L2']
+        self.descriptions[name17] = 'Not a QC test; used to add the KPFERA keyword to header.'
+        self.data_types[name17] = 'float'
+        self.spectrum_types[name17] = ['all', ]
+        self.master_types[name17] = []
+        self.required_data_products[name17] = [] # no required data products
+        self.fits_keywords[name17] = 'KPFERA'
+        self.fits_comments[name17] = 'Current era of KPF observations'
+        self.db_columns[name17] = None
+        self.fits_keyword_fail_value[name17] = -1
+
+        name19 = 'L1_check_snr_lfc'
+        self.names.append(name19)
+        self.kpf_data_levels[name19] = ['L1']#, '2D', 'L1', 'L2']
+        self.descriptions[name19] = 'QC test for identifying saturated LFC frames.'
+        self.data_types[name19] = 'float'
+        self.spectrum_types[name19] = ['all', ]
+        self.master_types[name19] = ['lfc', ]
+        self.required_data_products[name19] = ['L1',] # no required data products
+        self.fits_keywords[name19] = 'LFCSAT'
+        self.fits_comments[name19] = 'LFC is saturated'
+        self.db_columns[name19] = None
+        self.fits_keyword_fail_value[name19] = 0
+
+        name18 = 'L0_bad_readout_check'
+        self.names.append(name18)
+        self.kpf_data_levels[name18] = ['L0']#, '2D', 'L1', 'L2']
+        self.descriptions[name18] = 'Check Texp that identifies error in reading out CCD'
+        self.data_types[name18] = 'float'
+        self.spectrum_types[name18] = ['all', ]
+        self.master_types[name18] = ['all', ]
+        self.required_data_products[name18] = [] # no required data products
+        self.fits_keywords[name18] = 'GOODREAD'  
+        self.fits_comments[name18] = 'QC: CCD readout properly'
+        self.db_columns[name18] = None
+        self.fits_keyword_fail_value[name18] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -1186,6 +1229,46 @@ class QCL0(QC):
             
         return QC_pass
 
+    def L0_bad_readout_check(L0, data_products=['L0'], debug=False):
+        """
+        This Quality Control function checks if desired readout time
+        matches the expected readout time (within some limit). This 
+        mismatch idetifies a 'smeared' readout scenario that we want to junk.
+        Bad readout states can also have no value for Greed/Red elapsed time.
+        Bad readouts have elapsed time between 6 and 7 seconds.
+        This occurs a few times per day on both cals and stars.
+
+        Edge case: If a star has a desired exposure time larger than 7 seconds
+        but the exposure meter properly terminates the exposure between
+        6.0 and 6.7 seconds, the star will be improperly failed. (very rare)
+        
+        Args:
+            L0 - an L0 object
+            data_products - L0 data_products to check (list)
+                            possible elements = 'auto', 'all',
+                                                'Green', 'Red', 'CaHK', 'ExpMeter',
+                                                'Guider', 'Telemetry', 'Pyrheliometer'
+                                                (note that 'all' should be used rarely since good data
+                                                could be missing some extensions, e.g. CaHK, Pyrheliometer)
+            debug - an optional flag.  If True, missing data products are noted.
+
+            Example that should fail this QC test: KP.20241008.31459.57
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        # Check primary header
+        Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
+        Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
+        # print('Desired exposure time: ', Texp_desired)
+        # print('Actual exposure time:  ', Texp_actual)
+
+        if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
+            QC_pass = False
+        else:
+            QC_pass = True
+
+        return QC_pass
 
 #####################################################################
 
@@ -1373,6 +1456,55 @@ class QC2D(QC):
             if debug:
                 print("One of the CCDs has a high flux")
             QC_pass = False
+        
+        return QC_pass
+
+    def positive_2D_SNR(self, neg_threshold=-5, debug=False):
+        """
+        This Quality Control function checks a 2D image to see if more than 1%
+        of the pixel values of 'SNR' = counts / sqrt(variance) < -5.  
+        The value of -5 was chosen because for a definition of SNR that is 
+        normally distributed, this is 5-sigma low.  
+        
+        Args:
+             neg_threshold - the low flux threshold (default: -5, i.e., 5-sigma)
+             debug - an optional flag.  If True, prints mean flux in each CCD.
+
+        Returns:
+             QC_pass - a boolean signifying that < 1% of the 2D pixels have 
+                       values below the threshold
+        """
+    
+        D2 = self.kpf_object
+
+        if debug:
+            print(D2.info())
+            type_D2 = type(D2)
+            print("type_2D = ",type_D2)
+            print("D2 = ",D2)
+    
+        QC_pass = True
+        extensions = D2.extensions
+    
+        if 'GREEN_CCD' in extensions:
+            scaled_counts = np.array(D2['GREEN_CCD'].data) / np.sqrt(np.array(D2['GREEN_VAR'].data))
+            subthreshold = np.sum(scaled_counts < neg_threshold)
+            total_pixels = scaled_counts.size
+            if debug:
+                print(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                print(f'Total number of pixels: {total_pixels}')
+            if ( subthreshold / total_pixels ) > 0.01:
+                QC_pass = False
+        
+        if 'RED_CCD' in extensions:
+            scaled_counts = (np.array(D2['RED_CCD'].data) / np.sqrt(np.array(D2['RED_VAR'].data))).flatten()
+            subthreshold = np.sum(scaled_counts < neg_threshold)
+            total_pixels = scaled_counts.size
+            if debug:
+                print(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                print(f'Total number of pixels: {total_pixels}')
+            if ( subthreshold / total_pixels ) > 0.1:
+                QC_pass = False
         
         return QC_pass
 
@@ -1642,6 +1774,38 @@ class QCL1(QC):
         
         return QC_pass
 
+    def L1_check_snr_lfc(L1, data_products=['auto']):
+        """
+        This Quality Control function checks checks the SNR of
+        LFC frames, marking satured frames as failing the test.
+        
+        Args:
+            L1 - an L1 object
+            data_products - L1 data_products to check (list)
+            
+            This file should pass: KP.20240711.11549.10_L1.fits
+            This file should fail: KP.20240506.33962.36_L1.fits
+        Returns:
+            QC_pass - a boolean signifying that the QC passed or failed
+        """
+
+        # Check L1 header
+        # SNR_452 = L1.header['PRIMARY']['SNRSC452'] # Not used for LFC
+        SNR_548 = L1.header['PRIMARY']['SNRSC548'] # 
+        # SNR_652 = L1.header['PRIMARY']['SNRSC652'] # # Not used for LFC
+        SNR_747 = L1.header['PRIMARY']['SNRSC747'] # 
+        object_name  = L1.header['PRIMARY']['OBJECT']
+
+        if object_name in 'autocal-lfc':
+            SNR_limit = 2800 # Optimistic limit. Could be lower.
+            if (SNR_548 >= SNR_limit) or (SNR_747 >= SNR_limit):
+                QC_pass = False
+            else:
+                QC_pass = True
+        else:
+            QC_pass = True
+            
+        return QC_pass
 
 #####################################################################
 

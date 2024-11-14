@@ -12,7 +12,7 @@ With rare exceptions, calibration spectra are taken on a daily basis with KPF to
 ======  ===========================  ===============  =======  ==================
 Type    Object name                  Exp. time (sec)  Num/day  Comment
 ======  ===========================  ===============  =======  ==================
-Dark    autocal-dark                 1200             5          
+Dark    autocal-dark                 1200             5
 Bias    autocal-bias                 0                22
 Flat    autocal-flat-all             30               100
 LFC     autocal-lfc-all-morn         60               5        morning sequence
@@ -30,14 +30,14 @@ Etalon  autocal-etalon-all-morn      60               10       morning sequence
         slewcal                      60               varies   ~once per hour when on-sky
 UNe     autocal-une-all-morn         5                5        not used
 
-        autocal-une-all-eve          5                5        not used 
+        autocal-une-all-eve          5                5        not used
 ======  ===========================  ===============  =======  ==================
 
 
 Ca H & K Spectrometer
 ^^^^^^^^^^^^^^^^^^^^^
 
-The Ca H & K spectrometer shares several calibration exposures with the main spectrometer.  The full set is listed below.  
+The Ca H & K spectrometer shares several calibration exposures with the main spectrometer.  The full set is listed below.
 
 ======  ===========================  ===============  =======  ==================
 Type    Object name                  Exp. time (sec)  Num/day  Comment
@@ -62,7 +62,7 @@ Bias    bias                         0.12             50       taken daily, then
 Master Files
 ------------
 
-For the main spectrometer, master files for bias, dark, flat, and the wavelength calibration sources listed above are created each day from the calibrations during the UT date.  The co-addition process involves iterative outlier rejection per pixel.  
+For the main spectrometer, master files for bias, dark, flat, and the wavelength calibration sources listed above are created each day from the calibrations during the UT date.  The co-addition process involves iterative outlier rejection per pixel.
 
 
 How To Run The Full Master Pipeline
@@ -77,6 +77,9 @@ The basic steps are as follows.
 1. Set up a private sandbox::
 
     mkdir -p /data/user/rlaher/sbx_test
+    mkdir -p /data/user/rlaher/sbx_test/reference
+    cd /data/user/rlaher/sbx_test/reference
+    cp -p /data/kpf/reference/* .
     mkdir -p /data/user/rlaher/sbx_test/reference_fits
     cd /data/user/rlaher/sbx_test/reference_fits
     cp -p /data/kpf/reference_fits/* .
@@ -84,7 +87,7 @@ The basic steps are as follows.
     cd /data/user/rlaher/sbx_test/masters/masters
     cp -p /data/kpf/L0/20221029/KP.20221029.21537.28.fits .
     cp -p /data/kpf/masters/kpfMaster_HKOrderBounds20230818.csv  .
-    cp -p /data/kpf/masters/kpfMaster_HKwave20230818_sci.csv  . 
+    cp -p /data/kpf/masters/kpfMaster_HKwave20230818_sci.csv  .
     cp -p /data/kpf/masters/kpfMaster_HKwave20230818_sky.csv .
     cp -pr /data/kpf/masters/stellarmasks .
 
@@ -122,25 +125,26 @@ The basic steps are as follows.
     cd ~/git/KPF-Pipeline/cronjobs
 
 6. This can be done via a cronjob that runs daily at 5:15 p.m.::
-   
+
     15 17 * * * /data/user/rlaher/git/KPF-Pipeline/cronjobs/runDailyPipelines.sh >& /data/user/rlaher/git/KPF-Pipeline/jobs/runDailyPipelines_$(date +\%Y\%m\%d).out
 
-To rerun the full Master Pipeline for some prior observation date (assuming steps 1 and 2 above have been done), such as 20230601, simply copy the run script, modify it to have the desired observation date, ensure the correct configuration file is specified (rather than the default kpf_masters_drp.cfg), and then execute the modified run script::
+To rerun the full Master Pipeline for some prior observation date (assuming steps 1 and 2 above have been done),
+such as 20230601, simply copy the run script, modify it to have the desired observation date, and then execute the modified run script::
 
     cp ~/git/KPF-Pipeline/cronjobs/runDailyPipelines.sh ~/git/KPF-Pipeline/cronjobs/runDailyPipelines_20230601.sh
     vi ~/git/KPF-Pipeline/cronjobs/runDailyPipelines_20230601.sh (replace with desired observation date)
-    export KPFCRONJOB_CONFIG_L0=/code/KPF-Pipeline/configs/kpf_masters_drp_before20230623.cfg
     ~/git/KPF-Pipeline/cronjobs/runDailyPipelines_20230601.sh
 
-If the default configuration file is desired (which is kpf_masters_drp.cfg), then no need to set the KPFCRONJOB_CONFIG_L0 environment variable. The available configuration files listed below contain different settings for smoothlamppattern_path.  The smoothlamppattern_path files are located in /data/reference_fits inside the docker container (which is mapped to /data/user/rlaher/sbx_test/reference_fits outside of the docker container).
+To rerun the full Master Pipeline for a set of contiguous observation dates, this can be accomplished simply as follows::
 
-+--------------------------------------------+---------------------+------------------------------------------------------+
-| Configuration file                         | Observation dates   |  smoothlamppattern_path (/data/reference_fits)       |
-+============================================+=====================+======================================================+
-| kpf_masters_drp_before20230623.cfg         | <20230623           |  kpf_20230619_smooth_lamp_made20230817_float32.fits  |
-| kpf_masters_drp_from20230624to20230730.cfg | 20230624-2023730    |  kpf_20230628_smooth_lamp_made20230803_float32.fits  |
-| kpf_masters_drp.cfg (default)              | >20230731           |  kpf_20230804_smooth_lamp_made20230808_float32.fits  |
-+--------------------------------------------+---------------------+------------------------------------------------------+
+    mkdir -p ${KPFCRONJOB_CODE}/cronjobs/current_jobs
+    cd ${KPFCRONJOB_CODE}/cronjobs/current_jobs
+    # Generate shell script runMastersPipeline_From_20240614_To_20240725.sh
+    ${KPFCRONJOB_CODE}/cronjobs/generateDailyRunScriptsBetweenTwoDates.pl 20240614 20240725
+    # Run shell script in the background
+    nohup script -c ${KPFCRONJOB_CODE}/cronjobs/current_jobs/runMastersPipeline_From_20240614_To_20240725.sh -f ${KPFCRONJOB_CODE}/runMastersPipeline_From_20240614_To_20240725.out
+
+The above example is for dates between 20240614 and 20240725, inclusive.  If start and end dates are the same, then only that one date is reprocessed.
 
 
 How To Run Master WLS Pipeline

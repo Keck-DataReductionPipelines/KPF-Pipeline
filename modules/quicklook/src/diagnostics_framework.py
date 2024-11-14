@@ -32,11 +32,12 @@ class DiagnosticsFramework(KPF0_Primitive):
 
         KPF0_Primitive.__init__(self, action, context)
 
-        #Input arguments
+        # Input arguments
         self.data_level_str   = self.action.args[0]
         self.kpf_object       = self.action.args[1]
         self.diagnostics_name = self.action.args[2]
-        #Input configuration
+
+        # Input configuration
         self.config = cp.ConfigParser()
         try:
             self.config_path = context.config_path['quicklook']
@@ -45,7 +46,7 @@ class DiagnosticsFramework(KPF0_Primitive):
 
         self.config.read(self.config_path)
 
-        #Start logger
+        # Start logger
         self.logger=None
         if not self.logger:
             self.logger=self.context.logger
@@ -67,6 +68,16 @@ class DiagnosticsFramework(KPF0_Primitive):
             pass
             
         elif '2D' in self.data_level_str:
+            # 2D flux
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_2D_flux'):
+                try:
+                    self.logger.info('Measuring diagnostics: add_headers_2D_flux')
+                    self.kpf_object = diagnostics.add_headers_2D_flux(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring 2D flux failed: {e}\n{traceback.format_exc()}")
+
             # Dark Current
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_dark_current_2D'):
@@ -91,6 +102,16 @@ class DiagnosticsFramework(KPF0_Primitive):
                     exit_code = 1
                 except Exception as e:
                     self.logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # HK
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_hk'):
+                try:
+                    self.logger.info('Measuring diagnostics: add_headers_hk')
+                    self.kpf_object = diagnostics.add_headers_hk(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring HK diagnostics failed: {e}\n{traceback.format_exc()}")
 
             # Exposure Meter
             if (self.diagnostics_name == 'all') or \

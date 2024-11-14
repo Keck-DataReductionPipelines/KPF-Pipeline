@@ -4,22 +4,11 @@
 # Pipeline Perl script to do detached docker run.  Can run this script
 # in the background so that open terminal is not required.
 #
-# Generate all KPF L0 master calibration files for YYYYMMDD date, given as
-# command-line input parameter.  Input KPF L0 FITS files are copied to
-# sandbox directory KPFCRONJOB_SBX=/data/user/rlaher/sbx, and outputs
-# are written to /data/user/rlaher/sbx/masters/pool, and then at
-# the end copied to /data/kpf/masters/YYYYMMDD. The following two files
-# must exist in /code/KPF-Pipeline/static:
-# channel_orientation_ref_path_red = kpfsim_ccd_orient_red.txt
-# channel_orientation_ref_path_green = kpfsim_ccd_orient_green.txt
-# KPF 2D FITS files with no master bias subtraction are made as
-# intermediate products in the sandbox.  The master-bias subtraction,
-# master-dark subtraction, and master-flattening, as appropriate, are
-# done by the individidual Frameworks for generation of the master bias,
-# master dark, master flat, and various master arclamps.
-#
-# Be sure to make a jobs subdirectory for temporary files:
-# mkdir -p $KPFCRONJOB_CODE/jobs
+# Runs at the end of the masters pipeline.
+# 1. Run Jake Pember's etalon-analysis script (run_analysis_for_masters.py),
+# 2. Copy products from the sandbox subdirectory to the canonical masters
+#    subdirectory for the observation date of interest, which must be done
+#    inside a container for root privileges.
 ##########################################################################
 
 use strict;
@@ -106,8 +95,8 @@ if (! (defined $dbname)) {
 
 # Initialize fixed parameters and read command-line parameter.
 
-my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.3';
+my $iam = 'kpfmasters_etalon_analysis.pl';
+my $version = '1.0';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -120,27 +109,23 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 }
 
 # These parameters are fixed for this Perl script.
-my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
-$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
+my $dockercmdscript = 'jobs/kpfmasters_etalon_analysis';                     # Auto-generates this shell script with multiple commands.
+$dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment with unique numbers (process ID and truncated seconds).
 my $containerimage = 'kpf-drp:latest';
-my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
-my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
-my $configenvar = $ENV{KPFCRONJOB_CONFIG_L0};
 
-if (defined $configenvar) {
-    $config = $configenvar;
+# Ensure PYTHONPATH or equivalent is set; e.g., $ENV{PYTHONPATH} = "/data/user/rlaher/git/KPF-Pipeline"
+my $pythonpath = $ENV{PYTHONPATH};
+if (defined $pythonpath) {
+    print "PYTHONPATH=$pythonpath\n";
+} else {
+    print "PYTHONPATH not defined (assume current PATH is sufficient); continuing...\n";
 }
 
-my $pythonscript = 'scripts/make_smooth_lamp_pattern_new.py';
+my $pythonscript = 'cronjobs/run_analysis_for_masters.py';
 
 my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
 my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';
-
-my $pythonscript2 = 'scripts/reformat_smooth_lamp_fitsfile_for_kpf_drp.py';
-
-my ($pylogfileDir2, $pylogfileBase2) = $pythonscript2 =~ /(.+)\/(.+)\.py/;
-my $pylogfile2 = $pylogfileBase2 . '_' . $procdate . '.out';
 
 
 # Get database parameters from ~/.pgpass file.
@@ -176,12 +161,6 @@ print "version=$version\n";
 print "procdate=$procdate\n";
 print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
-print "recipe=$recipe\n";
-print "config=$config\n";
-print "pythonscript=$pythonscript\n";
-print "pylogfile=$pylogfile\n";
-print "pythonscript2=$pythonscript2\n";
-print "pylogfile2=$pylogfile2\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -203,29 +182,27 @@ my $script = "#! /bin/bash\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
-             "rm -rf /data/masters/${procdate}\n" .
-             "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
-             "kpf -r $recipe  -c $config --date ${procdate}\n" .
-             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits >& ${pylogfile}\n" .
-             "python $pythonscript2 /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile2}\n" .
-             "rm /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits\n" .
-             "mkdir -p /masters/${procdate}\n" .
-             "sleep 3\n" .
-             "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
-             "chown root:root /masters/${procdate}/*\n" .
-             "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
+             "cp -pr /data/analysis/${procdate}/* /masters/${procdate}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
-             "cp -p /code/KPF-Pipeline/${pylogfile2} /masters/${procdate}\n" .
+             "chown root:root /masters/${procdate}/*\n" .
+             "chown root:root /masters/${procdate}/*/*\n" .
              "rm /code/KPF-Pipeline/${pylogfile}\n" .
-             "rm /code/KPF-Pipeline/${pylogfile2}\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
-`mkdir -p $sandbox/L0/$procdate`;
-`mkdir -p $sandbox/2D/$procdate`;
-`cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
+
+# Make output directory and the run Jake Pember's etalon-analysis script (run_analysis_for_masters.py).
+
+`mkdir -p $sandbox/analysis/$procdate`;
+
+my $analysiscmd = "python $pythonscript $procdate >& $pylogfile";
+print "Executing $analysiscmd\n";
+`$analysiscmd`;
+
+
+# Launch container with root to copy products to permanent location.
 
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .

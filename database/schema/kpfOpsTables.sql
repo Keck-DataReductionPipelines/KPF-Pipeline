@@ -25,6 +25,7 @@ CREATE TABLE calfiles (
     infobits integer,                             -- FITS-header keyword: INFOBITS
     startdate date NOT NULL,                      -- Start date for application of master (for earliest-in-time selection)
     enddate date NOT NULL,                        -- End date for application of master (may not be used)
+    cidparent integer,                            -- cid of parent file source of nframes, minmjd, and maxmjd, if applicable
     filename character varying(255) NOT NULL,     -- Path and filename of master calibration file.
     checksum character varying(32) NOT NULL,      -- MD5 checksum
     status smallint DEFAULT 0 NOT NULL,           -- Set to zero if bad and one if good
