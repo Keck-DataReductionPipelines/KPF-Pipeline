@@ -44,7 +44,6 @@ class GetCalibrations:
         if subset == None:
             subset = self.lookup_map.keys()
         for cal,lookup in self.lookup_map.items():
-            print(cal, lookup)
             if cal not in subset:
                 continue
             if lookup == 'file':
@@ -85,7 +84,7 @@ class GetCalibrations:
                     new_dt = getheader(wls_files[0])['DATE-BEG']
                     self.lookup_map['etalonmask'] = 'database'
                     self.datetime = new_dt
-                    return self.lookup(subset=['etalonmask'])
+                    output_cals[cal] = self.lookup(subset=['etalonmask'])
 
         return output_cals
 
