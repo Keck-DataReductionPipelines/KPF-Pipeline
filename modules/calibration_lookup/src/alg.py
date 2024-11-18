@@ -6,6 +6,7 @@ from database.modules.utils.kpf_db import KPFDB
 from keckdrpframework.models.arguments import Arguments
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
+from astropy.io.fits import getheader
 
 class GetCalibrations:
     """This utility looks up the associated calibrations for a given datetime and
@@ -65,7 +66,7 @@ class GetCalibrations:
                         output_cals[cal_type[0].lower()] = db_results[1]
                     else:
                         output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
-            elif lookup == 'wls':
+            elif lookup == 'wls' or lookup == 'etalon':
                 for cal_type in self.wls_cal_types:
                     wls_results = self.db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
                     if len(wls_results) > 1 and (wls_results[0] == 0 or wls_results[2] == 0):
@@ -78,6 +79,16 @@ class GetCalibrations:
                         break
                     else:
                         output_cals[cal] = self.defaults[cal]
+                        wls_files = output_cals[cal]
+
+                if lookup == 'etalon':
+                    try:
+                        new_dt = getheader(wls_files[0])['DATE-BEG']
+                        self.datetime = new_dt
+                    except:  # no DB available
+                        pass
+                    self.lookup_map['etalonmask'] = 'database'
+                    output_cals[cal] = self.lookup(subset=['etalonmask'])
 
         return output_cals
 

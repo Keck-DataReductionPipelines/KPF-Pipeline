@@ -128,7 +128,7 @@ FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 AND level = '{cal_file_level}'
 AND caltype = '{cal_type_pair[0].lower()}'
-AND object = '{cal_type_pair[1]}'
+AND object like '%{cal_type_pair[1]}%'
 ORDER BY startdate;"""
         
         # AND contentbits = {contentbitmask}
