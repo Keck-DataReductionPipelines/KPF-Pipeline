@@ -84,10 +84,10 @@ class GetCalibrations:
                 if lookup == 'etalon':
                     try:
                         new_dt = getheader(wls_files[0])['DATE-BEG']
+                        self.datetime = new_dt
                     except:  # no DB available
                         pass
                     self.lookup_map['etalonmask'] = 'database'
-                    self.datetime = new_dt
                     output_cals[cal] = self.lookup(subset=['etalonmask'])
 
         return output_cals
