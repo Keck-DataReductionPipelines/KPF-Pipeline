@@ -229,7 +229,8 @@ class AnalyzeTimeSeries:
         """
         Ingest files into the database from a list of strings 'ObsID_list'.  
         """
-        for ObsID in ObsID_list:
+        t = self.tqdm(ObsID_list, desc=f'ObsIDs', leave=True)
+        for ObsID in t:
             L0_filename = ObsID + '.fits'
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
             file_path = os.path.join(dir_path, L0_filename)
@@ -574,9 +575,10 @@ class AnalyzeTimeSeries:
             only_object (string) - object name to include in query
             object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
+            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
             end_date (datetime object) - only return observations after end_date
-            false (boolean) - if True, prints the SQL query
+            verbose (boolean) - if True, prints the SQL query
 
         Returns:
             Pandas dataframe of the specified columns matching the constraints.
@@ -628,6 +630,26 @@ class AnalyzeTimeSeries:
 
         return df
 
+    def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
+        """
+        Returns a list of ObsIDs for the observations of object_name.
+
+        Args:
+            object_name (string) - name of object (e.g., '4614')
+            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
+
+        Returns:
+            Pandas dataframe of the specified columns matching the constraints.
+        """
+        # to-do: check if object_name is in the database before trying to create the df
+        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
+                                    start_date=start_date, end_date=end_date, 
+                                    not_junk=not_junk)
+        
+        return df['ObsID'].tolist()
+        
 
     def map_data_type_to_sql(self, dtype):
         """
