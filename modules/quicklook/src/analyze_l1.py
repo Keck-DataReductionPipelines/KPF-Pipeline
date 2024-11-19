@@ -557,12 +557,14 @@ class AnalyzeL1:
         # Add axis labels
 
         if variance:
+            title = 'L1 Variance Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
             ylabel = 'Variance (e-) in ' + orderlet.upper()
         elif data_over_sqrt_variance:
+            title = 'L1 SNR Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
             ylabel = r'SNR (Counts / Variance$^{1/2}$) in ' + orderlet.upper()
         else:
+            title = 'L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
             ylabel = 'Counts (e-) in ' + orderlet.upper()
-
 
         low, high = np.nanpercentile(flux,[0.1,99.9])
         ax[int(np.shape(wav)[0]/n_orders_per_panel/2)].set_ylabel(ylabel,fontsize = 28)
@@ -572,7 +574,7 @@ class AnalyzeL1:
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=28)
+        ax.set_title(title, fontsize=28)
         plt.tight_layout()
 
         # Create a timestamp and annotate in the lower right corner
