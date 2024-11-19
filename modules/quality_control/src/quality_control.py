@@ -527,7 +527,7 @@ class QCDefinitions:
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
         self.required_data_products[name14] = ['HK'] 
-        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_keywords[name14] = 'CAHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
         self.fits_keyword_fail_value[name14] = 0
