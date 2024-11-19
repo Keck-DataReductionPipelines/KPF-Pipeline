@@ -486,7 +486,7 @@ class AnalyzeTimeSeries:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
-        TO-DO: should this method just call display_dataframe_from_db()?
+        TO-DO: should this method just call dataframe_from_db()?
         
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
@@ -494,7 +494,7 @@ class AnalyzeTimeSeries:
         that are on-sky/off-sky and after start_date and/or before end_date. 
 
         Args:
-            columns (string or list of strings) - database columns to query
+            columns (string, list of strings, or '*' for all) - database columns to query
             only_object (string or list of strings) - object names to include in query
             object_like (string or list of strings) - partial object names to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
@@ -508,7 +508,10 @@ class AnalyzeTimeSeries:
         conn = sqlite3.connect(self.db_path)
         
         # Enclose column names in double quotes
-        quoted_columns = [f'"{column}"' for column in columns]
+        if columns == '*':
+            quoted_columns = '*'
+        else:
+            quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
 
         # Append WHERE clauses
