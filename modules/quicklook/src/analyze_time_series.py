@@ -225,6 +225,23 @@ class AnalyzeTimeSeries:
                 self.logger.error(e)
 
 
+    def add_ObsIDs_to_db(self, ObsID_list):
+        """
+        Ingest files into the database from a list of strings 'ObsID_list'.  
+        """
+        for ObsID in ObsID_list:
+            L0_filename = ObsID + '.fits'
+            dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
+            file_path = os.path.join(dir_path, L0_filename)
+            base_filename = L0_filename.split('.fits')[0]
+            t.set_description(base_filename)
+            t.refresh() 
+            try:
+                self.ingest_one_observation(dir_path, L0_filename) 
+            except Exception as e:
+                self.logger.error(e)
+
+
     def ingest_one_observation(self, dir_path, L0_filename):
         """
         Ingest a single observation into the database.
