@@ -571,6 +571,32 @@ class QCDefinitions:
         self.db_columns[name17] = None
         self.fits_keyword_fail_value[name17] = -1
 
+        name19 = 'L1_check_snr_lfc'
+        self.names.append(name19)
+        self.kpf_data_levels[name19] = ['L1']#, '2D', 'L1', 'L2']
+        self.descriptions[name19] = 'QC test for identifying saturated LFC frames.'
+        self.data_types[name19] = 'float'
+        self.spectrum_types[name19] = ['all', ]
+        self.master_types[name19] = ['lfc', ]
+        self.required_data_products[name19] = ['L1',] # no required data products
+        self.fits_keywords[name19] = 'LFCSAT'
+        self.fits_comments[name19] = 'LFC is saturated'
+        self.db_columns[name19] = None
+        self.fits_keyword_fail_value[name19] = 0
+
+        name18 = 'L0_bad_readout_check'
+        self.names.append(name18)
+        self.kpf_data_levels[name18] = ['L0']#, '2D', 'L1', 'L2']
+        self.descriptions[name18] = 'Check Texp that identifies error in reading out CCD'
+        self.data_types[name18] = 'float'
+        self.spectrum_types[name18] = ['all', ]
+        self.master_types[name18] = ['all', ]
+        self.required_data_products[name18] = [] # no required data products
+        self.fits_keywords[name18] = 'GOODREAD'  
+        self.fits_comments[name18] = 'QC: CCD readout properly'
+        self.db_columns[name18] = None
+        self.fits_keyword_fail_value[name18] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -1203,6 +1229,46 @@ class QCL0(QC):
             
         return QC_pass
 
+    def L0_bad_readout_check(L0, data_products=['L0'], debug=False):
+        """
+        This Quality Control function checks if desired readout time
+        matches the expected readout time (within some limit). This 
+        mismatch idetifies a 'smeared' readout scenario that we want to junk.
+        Bad readout states can also have no value for Greed/Red elapsed time.
+        Bad readouts have elapsed time between 6 and 7 seconds.
+        This occurs a few times per day on both cals and stars.
+
+        Edge case: If a star has a desired exposure time larger than 7 seconds
+        but the exposure meter properly terminates the exposure between
+        6.0 and 6.7 seconds, the star will be improperly failed. (very rare)
+        
+        Args:
+            L0 - an L0 object
+            data_products - L0 data_products to check (list)
+                            possible elements = 'auto', 'all',
+                                                'Green', 'Red', 'CaHK', 'ExpMeter',
+                                                'Guider', 'Telemetry', 'Pyrheliometer'
+                                                (note that 'all' should be used rarely since good data
+                                                could be missing some extensions, e.g. CaHK, Pyrheliometer)
+            debug - an optional flag.  If True, missing data products are noted.
+
+            Example that should fail this QC test: KP.20241008.31459.57
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        # Check primary header
+        Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
+        Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
+        # print('Desired exposure time: ', Texp_desired)
+        # print('Actual exposure time:  ', Texp_actual)
+
+        if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
+            QC_pass = False
+        else:
+            QC_pass = True
+
+        return QC_pass
 
 #####################################################################
 
@@ -1708,6 +1774,38 @@ class QCL1(QC):
         
         return QC_pass
 
+    def L1_check_snr_lfc(L1, data_products=['auto']):
+        """
+        This Quality Control function checks checks the SNR of
+        LFC frames, marking satured frames as failing the test.
+        
+        Args:
+            L1 - an L1 object
+            data_products - L1 data_products to check (list)
+            
+            This file should pass: KP.20240711.11549.10_L1.fits
+            This file should fail: KP.20240506.33962.36_L1.fits
+        Returns:
+            QC_pass - a boolean signifying that the QC passed or failed
+        """
+
+        # Check L1 header
+        # SNR_452 = L1.header['PRIMARY']['SNRSC452'] # Not used for LFC
+        SNR_548 = L1.header['PRIMARY']['SNRSC548'] # 
+        # SNR_652 = L1.header['PRIMARY']['SNRSC652'] # # Not used for LFC
+        SNR_747 = L1.header['PRIMARY']['SNRSC747'] # 
+        object_name  = L1.header['PRIMARY']['OBJECT']
+
+        if object_name in 'autocal-lfc':
+            SNR_limit = 2800 # Optimistic limit. Could be lower.
+            if (SNR_548 >= SNR_limit) or (SNR_747 >= SNR_limit):
+                QC_pass = False
+            else:
+                QC_pass = True
+        else:
+            QC_pass = True
+            
+        return QC_pass
 
 #####################################################################
 

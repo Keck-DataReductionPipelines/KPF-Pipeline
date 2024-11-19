@@ -128,7 +128,7 @@ FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 AND level = '{cal_file_level}'
 AND caltype = '{cal_type_pair[0].lower()}'
-AND object = '{cal_type_pair[1]}'
+AND object like '%{cal_type_pair[1]}%'
 ORDER BY startdate;"""
         
         # AND contentbits = {contentbitmask}
@@ -186,9 +186,14 @@ ORDER BY startdate;"""
 
         mjds = []
         for i, row in df.iterrows():
-            if np.isfinite(row['minmjd']) and np.isfinite(row['maxmjd']):
-                mjds.append((row['maxmjd'] + row['minmjd']) / 2)
-            else:
+            try:
+                minmjd_check = pd.isna(row['minmjd'])
+                maxmjd_check = pd.isna(row['maxmjd'])
+                if minmjd_check or maxmjd_check:
+                    raise ValueError("Min MJD and/or max MJD is not numeric.")
+                else:
+                    mjds.append((row['maxmjd'] + row['minmjd']) / 2)
+            except ValueError:
                 fname = '/' + row['filename']
                 l1 = KPF1.from_fits(fname)
                 dt = l1.header['PRIMARY']['DATE-MID']
