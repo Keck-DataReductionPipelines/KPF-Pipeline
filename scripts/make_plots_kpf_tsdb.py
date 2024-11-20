@@ -1,5 +1,45 @@
 #!/usr/bin/env python3
 
+"""
+Script Name: make_plots_kpf_tsdb.py
+
+Description:
+    This script generates standard KPF Time Series plots from the database. 
+    It supports plotting data over specific intervals such as day, month, year, 
+    decade, or custom ranges like the last N days. The plots are saved to 
+    predefined directories for further use or analysis.
+
+Features:
+    - Creates time series plots for various intervals (day, month, year, decade).
+    - Supports custom ranges like "last N days".
+    - Saves plots in a structured directory format.
+    - Includes configurable wait times for process orchestration.
+
+Usage:
+    Run this script with required arguments to specify the database path, 
+    interval, and wait time:
+
+        python make_plots_kpf_tsdb.py --db_path /path/to/database.db --interval <interval> --wait_time <seconds>
+
+Options:
+    --db_path       Path to the time series database file. 
+                    Default: /data/time_series/kpf_ts.db
+    --interval      Interval for plotting. Supported values:
+                    - 'day', 'month', 'year', 'decade'
+                    - 'last_<N>_days' (e.g., 'last_7_days' for the last 7 days)
+    --wait_time     Time (in seconds) to wait before exiting the script.
+
+Examples:
+    1. Generate plots for the current year:
+        python make_plots_kpf_tsdb.py --interval year --wait_time 10
+
+    2. Generate plots for the last 30 days:
+        python make_plots_kpf_tsdb.py --interval last_30_days --wait_time 10
+
+    3. Generate daily plots and specify a custom database path:
+        python make_plots_kpf_tsdb.py --db_path /custom/path/to/kpf_ts.db --interval day --wait_time 5
+"""
+
 import os
 import time
 import argparse
