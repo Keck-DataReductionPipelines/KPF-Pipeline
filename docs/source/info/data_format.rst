@@ -9,7 +9,7 @@ KPF data products are defined for these data levels:
 * **Level 0 (L0)**: Raw data products produced by KPF at the W. M. Keck Observatory
 * **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1 but is not fundamental and is frequently not archived.
 * **Level 1 (L1)**: Extracted, wavelength-calibrated spectra
-* **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators
+* **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators.
 
 Each of these data levels is a standardized, multi-extension FITS format, and can be read using standard fits tools (e.g., `astropy.fits.io <https://docs.astropy.org/en/stable/io/fits/>`_) and the `KPF-Pipeline <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_.
 
