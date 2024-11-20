@@ -11,8 +11,8 @@ Description:
     ingested.
 
 Features:
-    - Watches multiple directories for new or modified KPF files.
     - Ingests file metadata and telemetry into the database.
+    - Watches multiple directories for new or modified KPF files.
     - Performs periodic scans of data directories.
     - Supports multithreaded execution.
 
