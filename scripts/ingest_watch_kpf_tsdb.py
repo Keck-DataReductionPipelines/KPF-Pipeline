@@ -30,7 +30,6 @@ Examples:
 
     2. Specifying a custom database path:
         python ingest_watch_kpf_tsdb.py --db_path /custom/path/to/kpf_ts.db
-
 """
 
 import os
