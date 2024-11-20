@@ -670,6 +670,8 @@ class AnalyzeTimeSeries:
 #            keyword_types = {
 #                'ABCD1234': 'string', #placeholder for now
 #            }
+#
+#       Note that CCD1RV1, etc. are in the header for the RV extension table now.  Check on code below.  Only CCFRV is read.
 
         # L2 RV extension    
         elif level == 'L2_RV_header':
