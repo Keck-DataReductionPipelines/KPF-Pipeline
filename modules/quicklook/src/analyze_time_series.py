@@ -684,10 +684,9 @@ class AnalyzeTimeSeries:
         return keyword_types
 
   
-    
-    def plot_nobs_histogram(self, interval='full', date=None, fig_path=None, show_plot=False):
+    def plot_nobs_histogram(self, interval='full', date=None, fig_path=None, plot_junk=False, show_plot=False):
         """
-        Plot a histogram of the number of observations per day or hour
+        Plot a histogram of the number of observations per day or hour, optionally color-coded by 'NOTJUNK'.
 
         Args:
             interval (string) - time interval over which plot is made
@@ -696,13 +695,17 @@ class AnalyzeTimeSeries:
             date (string)     - one date in the interval (format: 'YYYYMMDD' or 'YYYY-MM-DD')
             fig_path (string) - set to the path for the file to be generated
             show_plot (boolean) - show the plot in the current environment
+            plot_junk (boolean) - if True, will color-code based on 'NOTJUNK' column
             
         Returns:
             PNG plot in fig_path or shows the plot in the current environment
             (e.g., in a Jupyter Notebook).
         """
-        df = self.dataframe_from_db(['DATE-BEG', 'OBJECT'])
-        df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'])
+        df = self.dataframe_from_db(['DATE-BEG', 'NOTJUNK'])
+        df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'], errors='coerce')
+
+        # Remove rows where DATE-BEG is NaT
+        df = df.dropna(subset=['DATE-BEG'])
         
         # Parse the date string into a timestamp
         if date is not None:
@@ -742,57 +745,61 @@ class AnalyzeTimeSeries:
             end_date = start_date + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['HOUR'] = df['DATE-BEG'].dt.hour
-            entry_counts = df['HOUR'].value_counts().sort_index()
 
+            entry_counts = df['HOUR'].value_counts().sort_index()
             # Reindex for full hourly range
             hourly_range = pd.Index(range(24))  # 0 through 23 hours
             entry_counts = entry_counts.reindex(hourly_range, fill_value=0)
-            
+
             major_locator = plt.MultipleLocator(1)  # Tick every hour
             major_formatter = lambda x, _: f"{int(x):02d}:00"  # Format as HH:00
             minor_locator = None
         else:
             # Default: 'full' interval
             df['DATE'] = df['DATE-BEG'].dt.date
+
             entry_counts = df['DATE'].value_counts().sort_index()
+
             major_locator = AutoDateLocator()
             major_formatter = DateFormatter("%Y-%m")
             minor_locator = None
 
             # Define start_date and end_date based on the full range of data
-            start_date = entry_counts.index.min()
-            end_date = entry_counts.index.max()
+            start_date = df['DATE'].min()
+            end_date = df['DATE'].max()
 
-        # Group data by day if not 'day' interval
-        if interval != 'day':
-            df['DATE'] = df['DATE-BEG'].dt.date
-            entry_counts = df['DATE'].value_counts().sort_index()
-        
-        # Ensure full date range is displayed
-        if interval != 'full' and interval != 'day':
-            entry_counts = entry_counts.reindex(pd.date_range(start=start_date, end=end_date, freq='D'), fill_value=0)
+            # Ensure full date range is displayed
+            full_range = pd.date_range(start=start_date, end=end_date, freq='D')
+            entry_counts = entry_counts.reindex(full_range, fill_value=0)
 
         # Shift bars to align properly with the intervals
-        if len(entry_counts) > 1:
-            if interval == 'day':
-                bar_width = 1  # Bar width for hours
-            else:
-                bar_width = (entry_counts.index[1] - entry_counts.index[0]).total_seconds() / (60 * 60 * 24)  # Bar width in days
-        else:
-            bar_width = 1  # Default to 1 day or 1 hour if there's only one data point
-
         if interval == 'day':
-            shifted_positions = entry_counts.index + 0.5  # Shift hour bars to center
+            bar_positions = range(24)  # Hours 0-23
+            bar_width = 1
         else:
-            shifted_positions = entry_counts.index + pd.Timedelta(days=bar_width / 2)
+            bar_positions = entry_counts.index
+            bar_width = 1  # Default bar width
 
         # Plot histogram
         plt.figure(figsize=(15, 4))
-        plt.bar(shifted_positions, entry_counts.values, width=bar_width, align='center', zorder=3)
+
+        if plot_junk:
+            notjunk_counts = df[df['NOTJUNK'] == True]['DATE' if interval != 'day' else 'HOUR'].value_counts().sort_index()
+            junk_counts = df[df['NOTJUNK'] == False]['DATE' if interval != 'day' else 'HOUR'].value_counts().sort_index()
+
+            notjunk_counts = notjunk_counts.reindex(entry_counts.index, fill_value=0)
+            junk_counts = junk_counts.reindex(entry_counts.index, fill_value=0)
+
+            plt.bar(bar_positions, notjunk_counts.values, width=bar_width, align='center', color='green', label='Not Junk', zorder=3)
+            plt.bar(bar_positions,    junk_counts.values, width=bar_width, align='center', color='red', label='Junk', zorder=3, bottom=notjunk_counts.values)
+            plt.legend()
+        else:
+            plt.bar(bar_positions, entry_counts.values, width=bar_width, align='center', zorder=3)
+
         plt.xlabel("Date", fontsize=14)
         plt.ylabel("Number of Observations", fontsize=14)
         plt.title(f"Observations ({interval.capitalize()})", fontsize=14)
-        
+
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
         ax.xaxis.set_major_formatter(plt.FuncFormatter(major_formatter))
@@ -803,14 +810,12 @@ class AnalyzeTimeSeries:
 
         # Set x-axis limits to remove extra range
         if interval == 'day':
-            ax.set_xlim(0, 24)  # 0 to 24 hours for hourly plots
+            ax.set_xlim(-0.5, 23.5)  # 0 to 24 hours for hourly plots
         else:
             ax.set_xlim(start_date, end_date)
 
-        # Commenting out tick rotation
-        # plt.xticks(rotation=45)
         plt.tight_layout()
-        
+
         # Save or show the plot
         if fig_path is not None:
             plt.savefig(fig_path, dpi=300, facecolor='w')
