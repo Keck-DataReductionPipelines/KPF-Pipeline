@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
+from matplotlib.dates import MonthLocator, AutoDateLocator, DateFormatter
 
 class AnalyzeTimeSeries:
 
@@ -681,7 +682,69 @@ class AnalyzeTimeSeries:
             keyword_types = {}
         
         return keyword_types
-       
+
+  
+    def plot_nobs_histogram(self, fig_path=None, show_plot=False):
+        """
+        Plot a histogram of the number of observations per day
+
+        Args:
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
+            
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+            
+        To-do:
+        	Make plots for years and months
+        	Make plots by type of files
+        """
+
+        df = self.dataframe_from_db(['DATE-BEG'])
+        df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'])
+        df['DATE'] = df['DATE-BEG'].dt.date
+        entry_counts = df['DATE'].value_counts().sort_index()
+        entry_counts.index = pd.to_datetime(entry_counts.index)
+        
+        start_date = entry_counts.index.min()
+        end_date = entry_counts.index.max()
+        total_months = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1
+        
+        if total_months <= 15:
+            major_locator = MonthLocator(bymonthday=1)  # Tick at the start of every month
+            minor_locator = None
+        else:
+            interval = max(2, total_months // 15)  # Interval of major ticks
+            major_locator = MonthLocator(interval=interval, bymonthday=1)  # Ticks at interval of months
+            minor_locator = MonthLocator(bymonthday=1)  # Ticks at every month
+        
+        plt.figure(figsize=(15, 6))
+        plt.bar(entry_counts.index, entry_counts.values, width=1.0, align='center')
+        plt.xlabel("Date", fontsize=14)
+        plt.ylabel("Number of Observations", fontsize=14)
+        plt.title("Observations Per Day in Database", fontsize=14)
+        
+        ax = plt.gca()
+        ax.xaxis.set_major_locator(major_locator)
+        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m"))
+        if minor_locator:
+            ax.xaxis.set_minor_locator(minor_locator)
+        #plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
+
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+            if log_savefig_timing:
+                self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+         
  
     def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
                                     clean=False, fig_path=None, show_plot=False, 
