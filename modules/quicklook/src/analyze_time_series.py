@@ -356,8 +356,8 @@ class AnalyzeTimeSeries:
         """
         Extract telemetry from the 'TELEMETRY' extension in an KPF L0 file.
         """
-        df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
         try:
+            df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
             df_telemetry = df_telemetry[['keyword', 'average']]
         except:
             self.logger.info('Bad TELEMETRY extension in: ' + file_path)
