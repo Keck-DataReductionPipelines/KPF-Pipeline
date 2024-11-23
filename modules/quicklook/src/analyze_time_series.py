@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
-from matplotlib.dates import MonthLocator, AutoDateLocator, DateFormatter
+from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
 
 class AnalyzeTimeSeries:
 
@@ -684,64 +684,137 @@ class AnalyzeTimeSeries:
         return keyword_types
 
   
-    def plot_nobs_histogram(self, fig_path=None, show_plot=False):
+    
+    def plot_nobs_histogram(self, interval='full', date=None, fig_path=None, show_plot=False):
         """
-        Plot a histogram of the number of observations per day
+        Plot a histogram of the number of observations per day or hour
 
         Args:
+            interval (string) - time interval over which plot is made
+                                default: 'full',
+                                possible values: 'full', 'decade', 'year', 'month', 'day'
+            date (string)     - one date in the interval (format: 'YYYYMMDD' or 'YYYY-MM-DD')
             fig_path (string) - set to the path for the file to be generated
             show_plot (boolean) - show the plot in the current environment
             
         Returns:
-            PNG plot in fig_path or shows the plot it the current environment
+            PNG plot in fig_path or shows the plot in the current environment
             (e.g., in a Jupyter Notebook).
-            
-        To-do:
-        	Make plots for years and months
-        	Make plots by type of files
         """
-
-        df = self.dataframe_from_db(['DATE-BEG'])
+        df = self.dataframe_from_db(['DATE-BEG', 'OBJECT'])
         df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'])
-        df['DATE'] = df['DATE-BEG'].dt.date
-        entry_counts = df['DATE'].value_counts().sort_index()
-        entry_counts.index = pd.to_datetime(entry_counts.index)
         
-        start_date = entry_counts.index.min()
-        end_date = entry_counts.index.max()
-        total_months = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1
-        
-        if total_months <= 15:
-            major_locator = MonthLocator(bymonthday=1)  # Tick at the start of every month
+        # Parse the date string into a timestamp
+        if date is not None:
+            date = pd.to_datetime(date, format='%Y%m%d', errors='coerce')  # Handle YYYYMMDD format
+            if pd.isna(date):
+                date = pd.to_datetime(date, errors='coerce')  # Handle other formats like YYYY-MM-DD
+            if pd.isna(date):
+                raise ValueError(f"Invalid date format: {date}")
+
+        # Filter data based on interval
+        if interval == 'decade':
+            start_date = pd.Timestamp(f"{date.year // 10 * 10}-01-01")
+            end_date = pd.Timestamp(f"{date.year // 10 * 10 + 9}-12-31")
+            df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
+            major_locator = YearLocator()
+            major_formatter = DateFormatter("%Y")
+            minor_locator = None
+
+        elif interval == 'year':
+            start_date = pd.Timestamp(f"{date.year}-01-01")
+            end_date = pd.Timestamp(f"{date.year}-12-31")
+            df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
+            major_locator = MonthLocator()
+            major_formatter = DateFormatter("%b")
+            minor_locator = None
+
+        elif interval == 'month':
+            start_date = pd.Timestamp(f"{date.year}-{date.month:02d}-01")
+            end_date = (start_date + pd.offsets.MonthEnd(0))
+            df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
+            major_locator = DayLocator()
+            major_formatter = DateFormatter("%d")
+            minor_locator = None
+
+        elif interval == 'day':
+            start_date = pd.Timestamp(f"{date.year}-{date.month:02d}-{date.day:02d}")
+            end_date = start_date + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
+            df['HOUR'] = df['DATE-BEG'].dt.hour
+            entry_counts = df['HOUR'].value_counts().sort_index()
+
+            # Reindex for full hourly range
+            hourly_range = pd.Index(range(24))  # 0 through 23 hours
+            entry_counts = entry_counts.reindex(hourly_range, fill_value=0)
+            
+            major_locator = plt.MultipleLocator(1)  # Tick every hour
+            major_formatter = lambda x, _: f"{int(x):02d}:00"  # Format as HH:00
             minor_locator = None
         else:
-            interval = max(2, total_months // 15)  # Interval of major ticks
-            major_locator = MonthLocator(interval=interval, bymonthday=1)  # Ticks at interval of months
-            minor_locator = MonthLocator(bymonthday=1)  # Ticks at every month
+            # Default: 'full' interval
+            df['DATE'] = df['DATE-BEG'].dt.date
+            entry_counts = df['DATE'].value_counts().sort_index()
+            major_locator = AutoDateLocator()
+            major_formatter = DateFormatter("%Y-%m")
+            minor_locator = None
+
+            # Define start_date and end_date based on the full range of data
+            start_date = entry_counts.index.min()
+            end_date = entry_counts.index.max()
+
+        # Group data by day if not 'day' interval
+        if interval != 'day':
+            df['DATE'] = df['DATE-BEG'].dt.date
+            entry_counts = df['DATE'].value_counts().sort_index()
         
-        plt.figure(figsize=(15, 6))
-        plt.bar(entry_counts.index, entry_counts.values, width=1.0, align='center')
+        # Ensure full date range is displayed
+        if interval != 'full' and interval != 'day':
+            entry_counts = entry_counts.reindex(pd.date_range(start=start_date, end=end_date, freq='D'), fill_value=0)
+
+        # Shift bars to align properly with the intervals
+        if len(entry_counts) > 1:
+            if interval == 'day':
+                bar_width = 1  # Bar width for hours
+            else:
+                bar_width = (entry_counts.index[1] - entry_counts.index[0]).total_seconds() / (60 * 60 * 24)  # Bar width in days
+        else:
+            bar_width = 1  # Default to 1 day or 1 hour if there's only one data point
+
+        if interval == 'day':
+            shifted_positions = entry_counts.index + 0.5  # Shift hour bars to center
+        else:
+            shifted_positions = entry_counts.index + pd.Timedelta(days=bar_width / 2)
+
+        # Plot histogram
+        plt.figure(figsize=(15, 4))
+        plt.bar(shifted_positions, entry_counts.values, width=bar_width, align='center', zorder=3)
         plt.xlabel("Date", fontsize=14)
         plt.ylabel("Number of Observations", fontsize=14)
-        plt.title("Observations Per Day in Database", fontsize=14)
+        plt.title(f"Observations ({interval.capitalize()})", fontsize=14)
         
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
-        ax.xaxis.set_major_formatter(DateFormatter("%Y-%m"))
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(major_formatter))
         if minor_locator:
             ax.xaxis.set_minor_locator(minor_locator)
-        #plt.xticks(rotation=45)
+        ax.grid(visible=True, which='major', axis='both', linestyle='--', color='lightgray', zorder=1)
+        ax.set_axisbelow(True)
+
+        # Set x-axis limits to remove extra range
+        if interval == 'day':
+            ax.set_xlim(0, 24)  # 0 to 24 hours for hourly plots
+        else:
+            ax.set_xlim(start_date, end_date)
+
+        # Commenting out tick rotation
+        # plt.xticks(rotation=45)
         plt.tight_layout()
-        plt.show()
-
-
-        # Display the plot
-        if fig_path != None:
-            t0 = time.process_time()
+        
+        # Save or show the plot
+        if fig_path is not None:
             plt.savefig(fig_path, dpi=300, facecolor='w')
-            if log_savefig_timing:
-                self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-        if show_plot == True:
+        if show_plot:
             plt.show()
         plt.close('all')
          
