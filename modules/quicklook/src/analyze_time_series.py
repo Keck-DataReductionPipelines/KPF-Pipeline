@@ -343,12 +343,15 @@ class AnalyzeTimeSeries:
         """
         header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
-            with fits.open(file_path, memmap=True) as hdul:
-                header = hdul[extension].header
-                # Use set intersection to find common keys
-                common_keys = set(header.keys()) & header_data.keys()
-                for key in common_keys:
-                    header_data[key] = header[key]
+            try:
+                with fits.open(file_path, memmap=True) as hdul:
+                    header = hdul[extension].header
+                    # Use set intersection to find common keys
+                    common_keys = set(header.keys()) & header_data.keys()
+                    for key in common_keys:
+                        header_data[key] = header[key]
+            except:
+            	self.logger.info("Bad file: " + file_path)
         return header_data
 
 
