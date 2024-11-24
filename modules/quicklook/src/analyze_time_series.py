@@ -16,6 +16,7 @@ from astropy.table import Table
 from astropy.io import fits
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
@@ -129,6 +130,7 @@ class AnalyzeTimeSeries:
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
+        columns += ['"Source" TEXT']
         create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
         
@@ -321,6 +323,7 @@ class AnalyzeTimeSeries:
                 header_data['D2_header_read_time'] = now_str
                 header_data['L1_header_read_time'] = now_str
                 header_data['L2_header_read_time'] = now_str
+                header_data['Source'] = self.get_source(L0_header_data)
     
                 batch_data.append(header_data)
 
@@ -338,6 +341,50 @@ class AnalyzeTimeSeries:
             conn.close()
 
 
+    def get_source(self, L0_dict):
+        """
+        Returns the name of the source in a spectrum.  For stellar observations, this 
+        it returns 'Star'.  For calibration spectra, this is the lamp name 
+        (ThAr, UNe, LFC, etalon) or bias/dark.  
+        Flats using KPF's regular fibers are distinguished from wide flats.                           
+
+        Returns:
+            the source/image name
+            possible values: 'Bias', 'Dark', 'Flat', 'Wide Flat', 
+                             'LFC', 'Etalon', 'ThAr', 'UNe',
+                             'Sun', 'Star'
+        """
+
+        try: 
+            if (('ELAPSED' in L0_dict) and 
+                ((L0_dict['IMTYPE'] == 'Bias') or (L0_dict['ELAPSED'] == 0))):
+                    return 'Bias'
+            elif L0_dict['IMTYPE'] == 'Dark':
+                return 'Dark' 
+            elif L0_dict['FFFB'].strip().lower() == 'yes':
+                    return 'Wide Flat' # Flatfield Fiber (wide flats)
+            elif L0_dict['IMTYPE'].strip().lower() == 'flatlamp':
+                 if 'brdband' in L0_dict['OCTAGON'].strip().lower():
+                    return 'Flat' # Flat through regular fibers
+            elif L0_dict['IMTYPE'].strip().lower() == 'arclamp':
+                if 'lfc' in L0_dict['OCTAGON'].strip().lower():
+                    return 'LFC'
+                if 'etalon' in L0_dict['OCTAGON'].strip().lower():
+                    return 'Etalon'
+                if 'th_' in L0_dict['OCTAGON'].strip().lower():
+                    return 'ThAr'
+                if 'u_' in L0_dict['OCTAGON'].strip().lower():
+                    return 'UNe'
+            elif ((L0_dict['TARGNAME'].strip().lower() == 'sun') or 
+                  (L0_dict['TARGNAME'].strip().lower() == 'socal')):
+                return 'Sun' # SoCal
+            if ('OBJECT' in L0_dict) and ('FIUMODE' in L0_dict):
+                if (L0_dict['FIUMODE'] == 'Observing'):
+                    return 'Star'
+        except:
+            return 'Unknown'
+        
+    
     def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
@@ -684,29 +731,56 @@ class AnalyzeTimeSeries:
         return keyword_types
 
 
-    def plot_nobs_histogram(self, interval='full', date=None, fig_path=None, show_plot=False, plot_junk=False):
+    def plot_nobs_histogram(self, interval='full', date=None, exclude_junk=False, 
+                            plot_junk=False, plot_source=False, 
+                            fig_path=None, show_plot=False):
         """
-        Plot a histogram of the number of observations per day or hour, optionally color-coded by 'NOTJUNK'.
-
+        Plot a histogram of the number of observations per day or hour, optionally color-coded by 'NOTJUNK' or 'Source'.
+    
         Args:
-            interval (string) - time interval over which plot is made
-                                default: 'full',
-                                possible values: 'full', 'decade', 'year', 'month', 'day'
-            date (string)     - one date in the interval (format: 'YYYYMMDD' or 'YYYY-MM-DD')
-            fig_path (string) - set to the path for the file to be generated
-            show_plot (boolean) - show the plot in the current environment
-            plot_junk (boolean) - if True, will color-code based on 'NOTJUNK' column
+            interval (string)      - time interval over which plot is made
+                                     default: 'full',
+                                     possible values: 'full', 'decade', 'year', 'month', 'day'
+            date (string)          - one date in the interval (format: 'YYYYMMDD' or 'YYYY-MM-DD')
+            exclude_junk (boolean) - if True, observations with NOTJUNK=False are removed
+            plot_junk (boolean)    - if True, will color-code based on 'NOTJUNK' column
+            plot_source (boolean)  - if True, will color-code based on 'Source' column
+            fig_path (string)      - set to the path for the file to be generated
+            show_plot (boolean)    - show the plot in the current environment
             
         Returns:
             PNG plot in fig_path or shows the plot in the current environment
             (e.g., in a Jupyter Notebook).
-        """
-        df = self.dataframe_from_db(['DATE-BEG', 'DATE-END', 'NOTJUNK'])
-        df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'], errors='coerce')
-
-        # Remove rows where DATE-BEG is NaT
-        df = df.dropna(subset=['DATE-BEG'])
         
+        To-do: 
+        	Add plotting of QC tests
+        """
+
+        # Define the source categories and their colors
+        source_order = ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+        source_colors = {
+            'Bias': 'gray',
+            'Dark': 'black',
+            'Flat': 'gainsboro',
+            'Wide Flat': 'silver',
+            'LFC': 'gold',
+            'Etalon': 'chocolate',
+            'ThAr': 'orange',
+            'UNe': 'forestgreen',
+            'Sun': 'cornflowerblue',
+            'Star': 'royalblue'
+        }
+    
+        # Load data
+        df = self.dataframe_from_db(['DATE-BEG', 'DATE-END', 'NOTJUNK', 'Source'])
+        df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'], errors='coerce')
+        df['DATE-END'] = pd.to_datetime(df['DATE-END'], errors='coerce')
+        df = df.dropna(subset=['DATE-BEG'])
+        df = df.dropna(subset=['DATE-END'])
+
+        if exclude_junk:
+            df = df[df['NOTJUNK'] == 1.0]      
+    
         # Parse the date string into a timestamp
         if date is not None:
             date = pd.to_datetime(date, format='%Y%m%d', errors='coerce')  # Handle YYYYMMDD format
@@ -714,7 +788,7 @@ class AnalyzeTimeSeries:
                 date = pd.to_datetime(date, errors='coerce')  # Handle other formats like YYYY-MM-DD
             if pd.isna(date):
                 raise ValueError(f"Invalid date format: {date}")
-
+    
         # Filter data based on interval
         if interval == 'decade':
             start_date = pd.Timestamp(f"{date.year // 10 * 10}-01-01")
@@ -722,50 +796,50 @@ class AnalyzeTimeSeries:
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DATE'] = df['DATE-BEG'].dt.date
             entry_counts = df['DATE'].value_counts().sort_index()
-
+    
             major_locator = YearLocator()
             major_formatter = DateFormatter("%Y")
             minor_locator = None
             column_to_count = 'DATE'
             plot_title = f"Observations (Decade: {start_date.year}-{end_date.year})"
-
+    
         elif interval == 'year':
             start_date = pd.Timestamp(f"{date.year}-01-01")
             end_date = pd.Timestamp(f"{date.year}-12-31")
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DATE'] = df['DATE-BEG'].dt.date
             entry_counts = df['DATE'].value_counts().sort_index()
-
+    
             major_locator = MonthLocator()
             major_formatter = DateFormatter("%b")  # Format ticks as month names (Jan, Feb, etc.)
             minor_locator = None
             column_to_count = 'DATE'
             plot_title = f"Observations (Year: {date.year})"
-
+    
         elif interval == 'month':
             start_date = pd.Timestamp(f"{date.year}-{date.month:02d}-01")
             end_date = (start_date + pd.offsets.MonthEnd(0) + timedelta(days=1) - timedelta(seconds=0.1))
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DAY'] = df['DATE-BEG'].dt.day
             entry_counts = df['DAY'].value_counts().sort_index()
-
+    
             major_locator = DayLocator()
             major_formatter = lambda x, _: f"{int(x)}" if 1 <= x <= end_date.day else ""
             minor_locator = None
             column_to_count = 'DAY'
             plot_title = f"Observations (Month: {date.year}-{date.month:02d})"
-
+    
         elif interval == 'day':
             start_date = pd.Timestamp(f"{date.year}-{date.month:02d}-{date.day:02d}")
-            end_date = start_date + timedelta(days=1) - timedelta(seconds=1)
+            end_date = start_date + timedelta(days=1)# - timedelta(seconds=1)
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['HOUR'] = df['DATE-BEG'].dt.hour
             entry_counts = df['HOUR'].value_counts().sort_index()
-
+    
             # Reindex for full hourly range
             hourly_range = pd.Index(range(24))  # 0 through 23 hours
             entry_counts = entry_counts.reindex(hourly_range, fill_value=0)
-
+    
             major_locator = plt.MultipleLocator(1)  # Tick every hour
             major_formatter = lambda x, _: f"{int(x):02d}:00" if 0 <= x <= 23 else ""
             minor_locator = None
@@ -775,29 +849,26 @@ class AnalyzeTimeSeries:
             # Default: 'full' interval
             df['DATE'] = df['DATE-BEG'].dt.date
             entry_counts = df['DATE'].value_counts().sort_index()
-
+    
             major_locator = AutoDateLocator()
             major_formatter = DateFormatter("%Y-%m")
             minor_locator = None
             column_to_count = 'DATE'
-            plot_title = "Observations (Full Range)"
-
-            # Define start_date and end_date based on the full range of data
             start_date = df['DATE'].min()
             end_date = df['DATE'].max()
-
+            plot_title = f"Observations (Full Range: {start_date.year}-{start_date.month:02d}-{start_date.day:02d} - {end_date.year}-{end_date.month:02d}-{end_date.day:02d})"
+    
             # Ensure full date range is displayed
             full_range = pd.date_range(start=start_date, end=end_date, freq='D')
             entry_counts = entry_counts.reindex(full_range, fill_value=0)
-
+    
         # Ensure all index values are datetime.date for consistent processing
         if isinstance(entry_counts.index, pd.DatetimeIndex):
             entry_counts.index = entry_counts.index.map(lambda x: x.date())
-
+    
         # Adjust bar positions and plot edges for proper alignment
         bar_positions = entry_counts.index.map(
             lambda x: x.toordinal() if type(x) == type(datetime(2024, 1, 1, 1, 1, 1)) else x
-
         )
         if interval == 'decade':
             x_min = datetime(bar_positions[0].year // 10 * 10, 1, 1)
@@ -815,14 +886,52 @@ class AnalyzeTimeSeries:
             x_min = bar_positions.min() 
             x_max = bar_positions.max() 
 
-        plt.figure(figsize=(15, 4))
+        if plot_source and interval == 'day':
+            plt.figure(figsize=(12, 4))
+        else:
+            plt.figure(figsize=(15, 4))
+    
+        # Plot stacked source data
+        if plot_source:
+            bottom_values = [0] * len(bar_positions)
+            legend_labels = []  # Store labels with counts for the legend
+            for source in source_order:
+                source_counts = df[df['Source'] == source][column_to_count].value_counts().sort_index()
+                source_counts = source_counts.reindex(entry_counts.index, fill_value=0)
+    
+                if interval == 'day':
+                    plt.bar(bar_positions, source_counts.values, width=1, align='edge',
+                            color=source_colors[source], label=source, bottom=bottom_values, zorder=3)
+                else: 
+                    plt.bar(bar_positions, source_counts.values, width=1, align='center',
+                            color=source_colors[source], label=source, bottom=bottom_values, zorder=3)
+                bottom_values = [b + s for b, s in zip(bottom_values, source_counts.values)]
 
-        if plot_junk:
+                # Add source label with count for 'day' interval
+                if interval in ['month', 'day']:
+                    total_source_count = source_counts.sum()
+                    legend_labels.append(f"{source} ({int(total_source_count)})")
+                else:
+                    legend_labels.append(source)
+
+            # Place legend outside of the plot on the right
+            handles, _ = plt.gca().get_legend_handles_labels()
+            handles = handles[::-1]  # Reverse handles to match legend_labels order
+            legend_labels = legend_labels[::-1]  # Reverse labels for proper order
+
+            plt.legend(
+                handles, legend_labels,  # Use updated labels
+                title="Sources",
+                loc='center left',
+                bbox_to_anchor=(1.01, 0.5),  # Adjust legend position (to the right of the plot)
+                fontsize=10
+            )
+            plt.gcf().set_size_inches(15, 4)  # Increase the figure width
+        elif plot_junk:
             notjunk_counts = df[df['NOTJUNK'] == True][column_to_count].value_counts().sort_index()
             junk_counts    = df[df['NOTJUNK'] == False][column_to_count].value_counts().sort_index()
-
             notjunk_counts = notjunk_counts.reindex(entry_counts.index, fill_value=0)
-            junk_counts = junk_counts.reindex(entry_counts.index, fill_value=0)
+            junk_counts    = junk_counts.reindex(entry_counts.index, fill_value=0)
 
             if interval == 'day':
                 plt.bar(bar_positions, notjunk_counts.values, width=1, align='edge', color='green', label='Not Junk', zorder=3)
@@ -841,7 +950,7 @@ class AnalyzeTimeSeries:
         plt.xlabel("Date", fontsize=14)
         plt.ylabel("Number of Observations", fontsize=14)
         plt.title(plot_title, fontsize=14)
-
+    
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
         ax.xaxis.set_major_formatter(major_formatter)
@@ -851,12 +960,11 @@ class AnalyzeTimeSeries:
             ax.xaxis.set_minor_locator(minor_locator)
         ax.grid(visible=True, which='major', axis='both', linestyle='--', color='lightgray', zorder=1)
         ax.set_axisbelow(True)
-
-        # Set x-axis limits to remove extra range
+    
         ax.set_xlim(x_min, x_max)
-
-        plt.tight_layout()
-
+        plt.tight_layout(rect=[0, 0, 0.85, 1])  # Adjust plot area to leave space for the legend
+        #plt.tight_layout()
+    
         # Save or show the plot
         if fig_path is not None:
             plt.savefig(fig_path, dpi=300, facecolor='w')
