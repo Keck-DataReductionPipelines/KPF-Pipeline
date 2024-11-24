@@ -172,6 +172,7 @@ TARGTEFF  5398.0                                      Target effective temperatu
 OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
 TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
 IMTYPE    Object                                      Image Type
+TARGNAME  Object                                      Target Name
 CAL-OBJ   None                                        Calibration fiber source
 SKY-OBJ   Sky                                         Sky fiber source
 SCI-OBJ   Target                                      Science fiber source
