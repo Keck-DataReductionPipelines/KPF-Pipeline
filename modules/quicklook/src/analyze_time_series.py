@@ -960,10 +960,14 @@ class AnalyzeTimeSeries:
             ax.xaxis.set_minor_locator(minor_locator)
         ax.grid(visible=True, which='major', axis='both', linestyle='--', color='lightgray', zorder=1)
         ax.set_axisbelow(True)
-    
         ax.set_xlim(x_min, x_max)
         plt.tight_layout(rect=[0, 0, 0.85, 1])  # Adjust plot area to leave space for the legend
-        #plt.tight_layout()
+    
+        # Add black box around the axes
+        for spine in ax.spines.values():
+            spine.set_edgecolor('black')
+            spine.set_linewidth(1)
+            spine.set_visible(True)
     
         # Save or show the plot
         if fig_path is not None:
