@@ -967,6 +967,7 @@ class AnalyzeTimeSeries:
         for spine in ax.spines.values():
             spine.set_edgecolor('black')
             spine.set_linewidth(1)
+            spine.set_zorder(4)
             spine.set_visible(True)
     
         # Save or show the plot
