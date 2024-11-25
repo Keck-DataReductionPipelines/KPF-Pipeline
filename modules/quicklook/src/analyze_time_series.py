@@ -22,6 +22,10 @@ from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
 from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
 
+import cProfile
+import pstats
+from io import StringIO
+
 class AnalyzeTimeSeries:
 
     """
@@ -732,21 +736,25 @@ class AnalyzeTimeSeries:
 
 
     def plot_nobs_histogram(self, interval='full', date=None, exclude_junk=False, 
+                            only_sources=['all'], only_autocal=False,
                             plot_junk=False, plot_source=False, 
                             fig_path=None, show_plot=False):
         """
         Plot a histogram of the number of observations per day or hour, optionally color-coded by 'NOTJUNK' or 'Source'.
     
         Args:
-            interval (string)      - time interval over which plot is made
-                                     default: 'full',
-                                     possible values: 'full', 'decade', 'year', 'month', 'day'
-            date (string)          - one date in the interval (format: 'YYYYMMDD' or 'YYYY-MM-DD')
+            interval (string) - time interval over which plot is made
+                                default: 'full',
+                                possible values: 'full', 'decade', 'year', 'month', 'day'
+            date (string) - one date in the interval (format: 'YYYYMMDD' or 'YYYY-MM-DD')
+            only_sources (array of strings) - only observations whose Source name matches an element of only_strings are used
+                                              possible sources = 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'
+            only_autocal - only observations OBJECT name includes 'autocal' are used
             exclude_junk (boolean) - if True, observations with NOTJUNK=False are removed
-            plot_junk (boolean)    - if True, will color-code based on 'NOTJUNK' column
-            plot_source (boolean)  - if True, will color-code based on 'Source' column
-            fig_path (string)      - set to the path for the file to be generated
-            show_plot (boolean)    - show the plot in the current environment
+            plot_junk (boolean) - if True, will color-code based on 'NOTJUNK' column
+            plot_source (boolean) - if True, will color-code based on 'Source' column
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
             
         Returns:
             PNG plot in fig_path or shows the plot in the current environment
@@ -772,15 +780,24 @@ class AnalyzeTimeSeries:
         }
     
         # Load data
-        df = self.dataframe_from_db(['DATE-BEG', 'DATE-END', 'NOTJUNK', 'Source'])
+        columns = ['DATE-BEG', 'NOTJUNK', 'Source', 'OBJECT']
+        df = self.dataframe_from_db(columns)
         df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'], errors='coerce')
-        df['DATE-END'] = pd.to_datetime(df['DATE-END'], errors='coerce')
+        #df['DATE-END'] = pd.to_datetime(df['DATE-END'], errors='coerce')
         df = df.dropna(subset=['DATE-BEG'])
-        df = df.dropna(subset=['DATE-END'])
+        #df = df.dropna(subset=['DATE-END'])
+        start_date = df['DATE-BEG'].dt.date.min()
+        end_date   = df['DATE-BEG'].dt.date.max()
 
         if exclude_junk:
             df = df[df['NOTJUNK'] == 1.0]      
     
+        if not ('all' in only_sources):
+            df = df[df['Source'].isin(only_sources)]
+            
+        if only_autocal:
+            df = df[df['OBJECT'].str.contains('autocal', na=False)]
+        
         # Parse the date string into a timestamp
         if date is not None:
             date = pd.to_datetime(date, format='%Y%m%d', errors='coerce')  # Handle YYYYMMDD format
@@ -795,39 +812,42 @@ class AnalyzeTimeSeries:
             end_date = pd.Timestamp(f"{date.year // 10 * 10 + 9}-12-31")
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DATE'] = df['DATE-BEG'].dt.date
+            full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
             entry_counts = df['DATE'].value_counts().sort_index()
-    
+            entry_counts = entry_counts.reindex(full_range, fill_value=0)
             major_locator = YearLocator()
             major_formatter = DateFormatter("%Y")
             minor_locator = None
             column_to_count = 'DATE'
-            plot_title = f"Observations (Decade: {start_date.year}-{end_date.year})"
+            plot_title = f"Observations (Decade: {start_date.year}-{end_date.year}"
     
         elif interval == 'year':
             start_date = pd.Timestamp(f"{date.year}-01-01")
             end_date = pd.Timestamp(f"{date.year}-12-31")
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DATE'] = df['DATE-BEG'].dt.date
+            full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
             entry_counts = df['DATE'].value_counts().sort_index()
-    
+            entry_counts = entry_counts.reindex(full_range, fill_value=0)
             major_locator = MonthLocator()
             major_formatter = DateFormatter("%b")  # Format ticks as month names (Jan, Feb, etc.)
             minor_locator = None
             column_to_count = 'DATE'
-            plot_title = f"Observations (Year: {date.year})"
+            plot_title = f"Observations (Year: {date.year}"
     
         elif interval == 'month':
             start_date = pd.Timestamp(f"{date.year}-{date.month:02d}-01")
             end_date = (start_date + pd.offsets.MonthEnd(0) + timedelta(days=1) - timedelta(seconds=0.1))
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
-            df['DAY'] = df['DATE-BEG'].dt.day
+            df['DAY'] = df['DATE-BEG'].dt.day    
+            full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
             entry_counts = df['DAY'].value_counts().sort_index()
-    
+            entry_counts = entry_counts.reindex(full_range, fill_value=0)
             major_locator = DayLocator()
             major_formatter = lambda x, _: f"{int(x)}" if 1 <= x <= end_date.day else ""
             minor_locator = None
             column_to_count = 'DAY'
-            plot_title = f"Observations (Month: {date.year}-{date.month:02d})"
+            plot_title = f"Observations (Month: {date.year}-{date.month:02d}"
     
         elif interval == 'day':
             start_date = pd.Timestamp(f"{date.year}-{date.month:02d}-{date.day:02d}")
@@ -835,33 +855,36 @@ class AnalyzeTimeSeries:
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['HOUR'] = df['DATE-BEG'].dt.hour
             entry_counts = df['HOUR'].value_counts().sort_index()
-    
-            # Reindex for full hourly range
             hourly_range = pd.Index(range(24))  # 0 through 23 hours
             entry_counts = entry_counts.reindex(hourly_range, fill_value=0)
-    
             major_locator = plt.MultipleLocator(1)  # Tick every hour
             major_formatter = lambda x, _: f"{int(x):02d}:00" if 0 <= x <= 23 else ""
             minor_locator = None
             column_to_count = 'HOUR'
-            plot_title = f"Observations (Day: {date.year}-{date.month:02d}-{date.day:02d})"
-        else:
-            # Default: 'full' interval
+            plot_title = f"Observations (Day: {date.year}-{date.month:02d}-{date.day:02d}"
+        else: # Default: 'full' interval
             df['DATE'] = df['DATE-BEG'].dt.date
+            full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
             entry_counts = df['DATE'].value_counts().sort_index()
-    
+            entry_counts = entry_counts.reindex(full_range, fill_value=0)
             major_locator = AutoDateLocator()
             major_formatter = DateFormatter("%Y-%m")
             minor_locator = None
             column_to_count = 'DATE'
-            start_date = df['DATE'].min()
-            end_date = df['DATE'].max()
-            plot_title = f"Observations (Full Range: {start_date.year}-{start_date.month:02d}-{start_date.day:02d} - {end_date.year}-{end_date.month:02d}-{end_date.day:02d})"
-    
+            plot_title = f"Observations (Full Range: {start_date.year}-{start_date.month:02d}-{start_date.day:02d} - {end_date.year}-{end_date.month:02d}-{end_date.day:02d}"
+            
             # Ensure full date range is displayed
             full_range = pd.date_range(start=start_date, end=end_date, freq='D')
             entry_counts = entry_counts.reindex(full_range, fill_value=0)
-    
+
+        if not ('all' in only_sources):
+            plot_title = plot_title + " - " + ', '.join(only_sources)
+        if only_autocal:
+            plot_title = plot_title + " - only autocal"
+        if exclude_junk:
+            plot_title = plot_title + " - junk excluded"
+        plot_title = plot_title + ")"
+        
         # Ensure all index values are datetime.date for consistent processing
         if isinstance(entry_counts.index, pd.DatetimeIndex):
             entry_counts.index = entry_counts.index.map(lambda x: x.date())
@@ -870,6 +893,7 @@ class AnalyzeTimeSeries:
         bar_positions = entry_counts.index.map(
             lambda x: x.toordinal() if type(x) == type(datetime(2024, 1, 1, 1, 1, 1)) else x
         )
+
         if interval == 'decade':
             x_min = datetime(bar_positions[0].year // 10 * 10, 1, 1)
             x_max = datetime(bar_positions[0].year // 10 * 10 + 10, 1, 1)
@@ -946,8 +970,12 @@ class AnalyzeTimeSeries:
                 plt.bar(bar_positions, entry_counts.values, width=1, align='edge', zorder=3)
             else: 
                 plt.bar(bar_positions, entry_counts.values, width=1, align='center', zorder=3)
-
-        plt.xlabel("Date", fontsize=14)
+        if interval == 'day':
+            plt.xlabel("Hour", fontsize=14)
+        if interval == 'month':
+            plt.xlabel("Day", fontsize=14)
+        else:
+            plt.xlabel("Date", fontsize=14)
         plt.ylabel("Number of Observations", fontsize=14)
         plt.title(plot_title, fontsize=14)
     
