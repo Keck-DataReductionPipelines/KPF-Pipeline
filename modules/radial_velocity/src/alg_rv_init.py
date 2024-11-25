@@ -307,7 +307,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 # default_mask = dfm
             else:
                 self.mask_path = stellar_dir + mask_file_map[default_mask][0]
-    
+
             self.mask_type = default_mask
             self.mask_wavelengths = mask_file_map[default_mask][1]
             self.mask_orderlet[fobj] = {"obj": fiber_obj,

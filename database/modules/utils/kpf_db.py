@@ -209,17 +209,21 @@ ORDER BY startdate;"""
         try:
             best_before = before_df.loc[before_df['delta'].idxmin()]
             fname_before = os.path.join('/', best_before['filename'])
+            if not os.path.exists(fname_before):
+                raise IOError(f"{fname_before} does not exist.")
             self.verify_checksum(fname_before, best_before['checksum'])
             before_code = 0
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IOError):
             fname_before = None
             before_code = 1
         try:
             best_after = after_df.loc[after_df['delta'].idxmin()]
             fname_after = os.path.join('/', best_after['filename'])
+            if not os.path.exists(fname_after):
+                raise IOError(f"{fname_after} does not exist.")
             self.verify_checksum(fname_after, best_after['checksum'])
             after_code = 0
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IOError):
             fname_after = None
             after_code = 1
 
