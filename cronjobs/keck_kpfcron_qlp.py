@@ -28,13 +28,12 @@ class KPFPipeQuickLook(KPFPipeCronBase):
         self.recipe = 'recipes/quicklook_watch.recipe'
         self.config = 'configs/keck_quicklook_watch.cfg'
 
-    # def set_stdout_log(self):
-    #     logs_root_docker = self.logs_root.replace(self.data_drp, '/data/')
-    #     self.stdout_log = f"{logs_root_docker}/{self.log_name}.stdout"
-    #     self.reset_log(self.stdout_log)
-    #
-    #     self.log.info(f'External log location: {self.logs_root}')
-    #     self.log.info(f'Docker log location: {self.stdout_log}')
+    def set_log_dir(self):
+        """
+        Set the location to write the logs
+        """
+        self.logs_root = f"{self.data_drp}/logs/QLP/{self.procdate}"
+        self.logs_root_docker = f"/data/logs/QLP/{self.procdate}"
 
     def define_docker_script(self):
         self.docker_bash_script = f"""
@@ -72,6 +71,8 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             """
 
     def define_docker_cmd(self):
+        super().define_docker_cmd()
+
         self.dockerruncmd = (
             f"docker run -d --name {self.containername} "
             f"-v {self.kpfdrp_dir}:/code/KPF-Pipeline -v {self.data_drp}:/data "

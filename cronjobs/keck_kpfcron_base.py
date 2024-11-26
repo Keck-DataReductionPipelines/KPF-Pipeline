@@ -175,10 +175,6 @@ class KPFPipeCronBase:
         Write the docker Bash script,  start the docker container,  run the
         Bash script.
         """
-        uniq_str = f"{self.procdate}-{datetime.now().strftime('%s')}"
-        self.dockercmdscript = f'jobs/kpf_{self.procname}_{uniq_str}'
-        self.containerimage = 'kpf-drp:latest'
-
         # write the docker script to be read by the docker container
         with open(self.dockercmdscript, "w") as file:
             file.write(self.docker_bash_script)
@@ -216,12 +212,10 @@ class KPFPipeCronBase:
         """
         # wait for the bash script to complete in the container
         completed = self.wait_container_complete()
-        if not completed:
-            self.log.error('Issue starting the docker process!')
-
-        success = utils.chk_rm_docker_container(self.containername, self.log)
-        if not success:
-            self.log.warning(f'could not remove the Docker Container: {self.containername}')
+        if completed:
+            success = utils.chk_rm_docker_container(self.containername, self.log)
+            if not success:
+                self.log.warning(f'could not remove the Docker Container: {self.containername}')
 
         utils.log_stub('Ending', f'{self.procname.title()}-Processing', self.procdate, self.log)
 
@@ -251,7 +245,7 @@ class KPFPipeCronBase:
             chk_log_name (str): optional,  the log file to check if it updated recently.
             wait_time (int): optional, the time frequency to poll at
 
-        Returns (bool): True when the container process has exited cleanly.
+        Returns (bool): True when the container process is still running.
 
         """
         if self.pid == 0:
@@ -260,34 +254,39 @@ class KPFPipeCronBase:
 
         # start a timer for the 'max_wait_time'
         start_time = time.time()
-        iter = 0
+        n_iter = 0
 
         # Monitor the container's PID
         while True:
             elapsed_time = time.time() - start_time
             if self.exit_timer and elapsed_time > self.exit_timer:
-                self.log.info(f"Time over, {self.exit_timer // 3600} hours passed. Exiting...")
+                self.log.info(f"Time over, {self.exit_timer // 3600} hours "
+                              f"passed. Exiting...")
                 return True
 
             # Check if the process is still running,  if not it is complete
             try:
                 subprocess.check_output(f"ps -p {self.pid}", shell=True)
-                self.log.info(f"Container {self.containername} with PID {self.pid} is running.")
+                self.log.info(f"Container {self.containername} with PID "
+                              f"{self.pid} is running.")
             except subprocess.CalledProcessError as err:
                 self.log.info(f'Exception: {err}')
                 utc_time = datetime.now(timezone.utc).strftime('%H:%M:%S')
-                self.log.info(f"{utc_time} {self.containername} is complete!")
-                break
+                self.log.info(f"{utc_time} Docker container: "
+                              f"{self.containername} has exited.")
+                return False
 
-            if iter != 0 and self.log_chk and utils.is_log_file_done(self.log_chk):
-                self.log.info(f"Log file {self.log_chk} has been idle,  stopping pipeline.")
+            if (self.log_chk and n_iter != 0 and
+                    utils.is_log_file_done(self.log_chk)):
+                self.log.info(f"Log file {self.log_chk} has been"
+                              f"idle,  stopping pipeline.")
                 stop_command = f"docker exec {self.containername} pkill -f kpf"
                 subprocess.run(stop_command, shell=True)
                 time.sleep(120)
                 continue
 
             # Add to log and sleep
-            iter += 1
+            n_iter += 1
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.log.info(f"[{timestamp}] Sleeping {self.wait_interval} seconds...")
             time.sleep(self.wait_interval)
@@ -311,5 +310,7 @@ class KPFPipeCronBase:
         """
         Need to define the bash script run by the docker container.
         """
-        raise NotImplementedError(f"{sys._getframe().f_code.co_name} has not been implemented!")
+        uniq_str = f"{self.procdate}-{datetime.now().strftime('%s')}"
+        self.dockercmdscript = f'jobs/kpf_{self.procname}_{uniq_str}'
+        self.containerimage = 'kpf-drp:latest'
 

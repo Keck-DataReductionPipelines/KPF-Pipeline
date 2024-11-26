@@ -57,6 +57,8 @@ class KPFPipeMastersRegister(KPFPipeCronBase):
         """
         The command used to start the docker container and run the bash script.
         """
+        super().define_docker_cmd()
+
         self.dockerruncmd = (
             f"docker run -d --name {self.containername} "
             f"-v {self.logs_base}:/logs -v {self.kpfdrp_dir}:/code/KPF-Pipeline "
