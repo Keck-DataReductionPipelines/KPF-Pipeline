@@ -23,7 +23,10 @@ OBJECT|string|comment
 GAIAMAG|float|comment
 2MASSMAG|float|comment
 AIRMASS|float|comment
+OCTAGON|string|comment
 IMTYPE|string|comment
+FFFB|string|comment
+TARGNAME|string|comment
 GREEN|string|comment
 RED|string|comment
 GREEN|string|comment
