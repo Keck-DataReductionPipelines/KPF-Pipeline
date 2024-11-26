@@ -13,4 +13,3 @@ Welcome! This is the documentation for the KPF Data Reduction Pipeline.
    primitives/primitives.rst
    tutorials/KPF_Data_Tutorial_Quality_Control
    analysis/analysis.rst
-   tutorials/Processing_Scripts
