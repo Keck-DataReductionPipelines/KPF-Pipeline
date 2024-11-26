@@ -34,6 +34,9 @@ class KPFPipeCronBase:
         self.procdate = None
         self.logs_root = None
         self.dockerruncmd = None
+        self.containerimage = None
+        self.dockercmdscript = None
+        self.logs_root_docker = None
         self.docker_bash_script = None
 
         # cfg file parameters
@@ -76,11 +79,6 @@ class KPFPipeCronBase:
         # change to the code directory
         os.chdir(self.kpfdrp_dir)
 
-        # create the script to run inside docker
-        uniq_str = f"{self.procdate}-{datetime.now().strftime('%s')}"
-        self.dockercmdscript = f'jobs/kpf_{procname}_{uniq_str}'
-        self.containerimage = 'kpf-drp:latest'
-
         # prepare the std out file
         self.set_stdout_log()
 
@@ -120,7 +118,9 @@ class KPFPipeCronBase:
             self.ncpu = args.ncpu
 
     def read_cron_cfg(self):
-        # the Cronjob Configuration file
+        """
+        Read the configuration for this base class and crons that extend it.
+        """
         cfg_name = 'keck_kpfcron.cfg'
         cfg = utils.cfg_init(APP_PATH, cfg_name)
 
@@ -160,14 +160,14 @@ class KPFPipeCronBase:
         self.logs_root_docker = f"/data/logs/{self.procdate}"
 
     def set_stdout_log(self):
-        # logs_root_docker = self.logs_root.replace(self.data_workspace, '/data/')
-        # self.logs_root_docker = self.logs_root.replace(self.data_drp, '/data/')
+        """
+        Define the standard out log,  primarily needed in testing.
+        """
         self.stdout_log = f"{self.logs_root_docker}/{self.log_name}.stdout"
 
         # this is done outside of docker
         self.reset_log(f"{self.logs_root}/{self.log_name}.stdout")
 
-        # self.log.info(f'External log location: {self.logs_root} {self.data_workspace}')
         self.log.info(f'Docker log location: {self.stdout_log}')
 
     def start_docker(self):
@@ -175,6 +175,10 @@ class KPFPipeCronBase:
         Write the docker Bash script,  start the docker container,  run the
         Bash script.
         """
+        uniq_str = f"{self.procdate}-{datetime.now().strftime('%s')}"
+        self.dockercmdscript = f'jobs/kpf_{self.procname}_{uniq_str}'
+        self.containerimage = 'kpf-drp:latest'
+
         # write the docker script to be read by the docker container
         with open(self.dockercmdscript, "w") as file:
             file.write(self.docker_bash_script)

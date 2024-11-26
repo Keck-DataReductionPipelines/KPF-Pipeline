@@ -6,7 +6,7 @@ import subprocess
 import argparse
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 def get_pgpass(dbname, dbuser):
