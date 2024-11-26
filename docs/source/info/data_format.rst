@@ -9,7 +9,7 @@ KPF data products are defined for these data levels:
 * **Level 0 (L0)**: Raw data products produced by KPF at the W. M. Keck Observatory
 * **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1 but is not fundamental and is frequently not archived.
 * **Level 1 (L1)**: Extracted, wavelength-calibrated spectra
-* **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators
+* **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators.
 
 Each of these data levels is a standardized, multi-extension FITS format, and can be read using standard fits tools (e.g., `astropy.fits.io <https://docs.astropy.org/en/stable/io/fits/>`_) and the `KPF-Pipeline <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_.
 
@@ -172,11 +172,13 @@ TARGTEFF  5398.0                                      Target effective temperatu
 OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
 TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
 IMTYPE    Object                                      Image Type
+TARGNAME  Object                                      Target Name
 CAL-OBJ   None                                        Calibration fiber source
 SKY-OBJ   Sky                                         Sky fiber source
 SCI-OBJ   Target                                      Science fiber source
 AGITSTA   Running                                     Agitator status
 FIUMODE   Observing                                   FIU operating mode
+FFFB      Yes                                         Flatfield fiber on
 TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
