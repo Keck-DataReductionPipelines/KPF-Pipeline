@@ -43,3 +43,27 @@ TOTCORR|string|need to correct this to split 498.12 604.38 710.62 816.88 / Wavel
 USTHRSH|string|comment
 THRSHLD|float|comment
 THRSBIN|float|comment
+TARGNAME|string|KPF Target name
+DCSNAME|string|DCS Target name - may not make any sense
+TARGRA|string|[h] DCS Target RA
+TARGDEC|string|[deg] DCS Target Dec
+TARGEPOC|float|DCS Target epoch
+TARGEQUI|float|DCS Target equinox
+TARGPLAX|float|[arcsec] target parallax
+TARGPMDC|float|[arcsec/yr] target proper motion dec
+TARGPMRA|float|[s/yr] target proper motion ra
+TARGRADV|float|[km/s] target radial velocity
+TARGWAVE|float|target-wavelength
+TARGFRAM|string|target-frame
+FULLTARG|string|Full Target name from kpfconfig
+GAIAID|string|GAIA Target name from kpfconfig
+2MASSID|string|2MASS Target name from kpfconfig
+GAIAMAG|string|GAIA G band magnitude
+2MASSMAG|string|2MASS J band magnitude
+TARGTEFF|float|Target effective temperature (K)
+RA|string|[h] Right ascension
+DEC|string|[deg] Declination
+EQUINOX|float|DCS Equinox
+MJD-OBS|float|Modified Julian day
+PMFM|float|PMFM value
+LFCMODE|string|LFC Operation Mode
