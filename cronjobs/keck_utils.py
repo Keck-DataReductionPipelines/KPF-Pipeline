@@ -61,8 +61,6 @@ def chk_rm_docker_container(container_name, log):
         subprocess.run(f"docker stop {container_id}", shell=True)
         subprocess.run(f"docker rm {container_id}", shell=True)
         log.info(f"Container '{container_name}' has been stopped / removed.")
-    else:
-        log.info(f"Container '{container_name}' does not exist.")
 
 
 def cmd_line_args(start_msg):
@@ -77,6 +75,7 @@ def cmd_line_args(start_msg):
     parser = argparse.ArgumentParser(description=start_msg)
 
     parser.add_argument("--date", type=str, required=False, help="The UT date.")
+    parser.add_argument("--ncpu", type=str, required=False, help="The Number of Cores to use.")
 
     args = parser.parse_args()
 
@@ -220,54 +219,6 @@ def is_log_file_done(log_file, timeout=120):
     return (current_time - last_mod_time) > timeout
 
 
-def wait_container_complete(pid, containername, log, chk_log_name=None, wait_time=300):
-    """
-    Wait for the docker container to complete.
-
-    Args:
-        pid (str): The process ID of the docker container
-        containername (str): the name of the container
-        log (obj): the log file object
-        chk_log_name (str): optional,  the log file to check if it updated recently.
-        wait_time (int): optional, the time frequency to poll at
-
-    Returns (bool): True when the container process has exited cleanly.
-
-    """
-    if pid == 0:
-        log.warning(f'Docker Process never started,  PID: {pid}')
-        return False
-
-    iter = 0
-
-    # Monitor the container's PID
-    while True:
-        # Check if the process is still running,  if not it is complete
-        try:
-            subprocess.check_output(f"ps -p {pid}", shell=True)
-            log.info(f"Container {containername} with PID {pid} is running.")
-        except subprocess.CalledProcessError as err:
-            log.info(f'Exception: {err}')
-            utc_time = datetime.now(timezone.utc).strftime('%H:%M:%S')
-            log.info(f"{utc_time} {containername} is complete!")
-            break
-
-        if iter != 0 and chk_log_name and is_log_file_done(chk_log_name):
-            log.info(f"Log file {chk_log_name} has been idle,  stopping pipeline.")
-            stop_command = f"docker exec {containername} pkill -f kpf"
-            subprocess.run(stop_command, shell=True)
-            time.sleep(120)
-            continue
-
-        # Add to log and sleep
-        iter += 1
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log.info(f"[{timestamp}] Sleeping {wait_time} seconds...")
-        time.sleep(wait_time)
-
-    return True
-
-
 def sync_files(data_workspace, procdate, log):
     """
     Sync the files from koadata to the workspace used for processing the
@@ -316,10 +267,63 @@ def log_stub(prefix, proc_type, procdate, log):
     Returns:
 
     """
-    msg = f"{prefix} Keck {proc_type} Masters reduction for {procdate}"
+    msg = f"{prefix} Keck {proc_type} reduction for {procdate}"
     msg_wrap = "=" * len(msg)
     log.info(msg_wrap)
     log.info(msg)
     log.info(msg_wrap)
+
+
+def get_dated_cfg(procdate, cfg_dir, cfg_prefix):
+    """
+    Find the dated configuration files that are closed in the past,  any
+    configurations with a later date will be newer than the data and be
+    used when there are instrument changes,  ie service or shifts in the
+    calibrations.
+
+    The configuration file date is the most recent FITS (or other calibration)
+    file used within the file.
+
+    Args:
+        cfg_dir (str): The directory to search for the configuration files.
+        cfg_prefix (str): the file prefix,  ie keck_kpf_drp_ would be used to
+                          find keck_kpf_drp_20241120.cfg
+
+    Returns (str): The filename (including cfg_dir) that is the closest match.
+    """
+    cfg_suffix = ".cfg"
+
+    # add the '_' between prefix and date
+    if cfg_prefix[-1] != '_':
+        cfg_prefix += '_'
+
+    len_prefix = len(cfg_prefix)
+    len_suffix = len(cfg_suffix)
+    today_dt = datetime.strptime(procdate, "%Y%m%d")
+
+    # find the file is closest but in the past
+    closest_file = None
+    closest_date = None
+
+    # Iterate over all files in the directory
+    for file in os.listdir(cfg_dir):
+        
+        # ignore files that don't match
+        if not file.startswith(cfg_prefix) or not file.endswith(cfg_suffix):
+            continue
+            
+        # get the date from the filename, fmt: 20241120
+        date_str = file[len_prefix:-len_suffix]
+        try:
+            file_date = datetime.strptime(date_str, "%Y%m%d")
+            if file_date < today_dt and (
+                    closest_date is None or file_date > closest_date):
+                closest_file = os.path.join(cfg_dir, file)
+                closest_date = file_date
+        except ValueError:
+            # invalid date formats
+            continue
+
+    return closest_file
 
 

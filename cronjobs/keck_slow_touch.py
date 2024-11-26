@@ -66,5 +66,5 @@ if __name__ == '__main__':
         # Update the access and modification times to the current time
         os.utime(fits_file, None)
         log.info(f"Touched {fits_file}")
-        # Wait for 1 second before processing the next file
-        time.sleep(1)
+        # Wait for 30 second before processing the next file
+        time.sleep(30)
