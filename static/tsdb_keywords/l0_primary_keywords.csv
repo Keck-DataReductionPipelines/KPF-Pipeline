@@ -10,26 +10,19 @@ EMDATE-B|datetime|Date-Beg of first observation Kwd expmeter
 EMDATE-E|datetime|Date-End of last observation Kwd expmeter
 GCDATE-B|datetime|sequence begin Kwd guide DATE-BEG
 GCDATE-E|datetime|sequence end Kwd guide DATE-END
-MJD-OBS|float|comment
 EXPTIME|float|comment
 ELAPSED|float|comment
 FRAMENO|int|comment
 PROGNAME|string|comment
-TARGRA|string|comment
-TARGDEC|string|comment
 EL|float|comment
 AZ|float|comment
 OBJECT|string|comment
-GAIAMAG|float|comment
-2MASSMAG|float|comment
 AIRMASS|float|comment
 OCTAGON|string|comment
 IMTYPE|string|comment
 FFFB|string|comment
-TARGNAME|string|comment
 GREEN|string|comment
 RED|string|comment
-GREEN|string|comment
 CA_HK|string|comment
 EXPMETER|string|comment
 GUIDE|string|comment
@@ -67,6 +60,4 @@ TARGTEFF|float|Target effective temperature (K)
 RA|string|[h] Right ascension
 DEC|string|[deg] Declination
 EQUINOX|float|DCS Equinox
-MJD-OBS|float|Modified Julian day
-PMFM|float|PMFM value
-LFCMODE|string|LFC Operation Mode
+MJD-OBS|float|Modified Julian days
