@@ -5,7 +5,7 @@ from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
 def main(start_date, end_date, db_path):
     """
-    Script Name: ingest_kpf_tsdb.py
+    Script Name: ingest_dates_kpf_tsdb.py
    
     Description:
       This script is used to ingest KPF observations over a date range into a 
