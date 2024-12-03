@@ -840,7 +840,8 @@ class AnalyzeTimeSeries:
             end_date = (start_date + pd.offsets.MonthEnd(0) + timedelta(days=1) - timedelta(seconds=0.1))
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DAY'] = df['DATE-BEG'].dt.day    
-            full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
+            #full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
+            full_range = range(1, end_date.day + 1) 
             entry_counts = df['DAY'].value_counts().sort_index()
             entry_counts = entry_counts.reindex(full_range, fill_value=0)
             major_locator = DayLocator()
