@@ -1,5 +1,41 @@
 #!/usr/bin/env python3
 
+"""
+Script Name: generate_time_series_plots.py
+
+Description:
+    This script generates KPF time series plots over various time intervals and
+    saves the results to predefined directories. It supports multithreaded execution
+    for tasks with different intervals and date ranges, including daily, monthly,
+    yearly, and decade-based plots. Additionally, the script monitors the status
+    of running threads and reports on their activity.
+
+Features:
+    - Generates plots for multiple time intervals (day, month, year, decade).
+    - Supports custom date ranges for plot generation.
+    - Multithreaded execution for efficiency, allowing simultaneous tasks.
+    - Monitors thread status and execution time for each task.
+    - Saves results in a structured format for further analysis.
+
+Usage:
+    Run this script with optional arguments to specify the database path:
+
+        python generate_time_series_plots.py --db_path /path/to/database.db
+
+Options:
+    --db_path   Path to the time series database file. Default: /data/time_series/kpf_ts.db
+
+Examples:
+    1. Using the default database path:
+        python generate_time_series_plots.py
+
+    2. Specifying a custom database path:
+        python generate_time_series_plots.py --db_path /custom/path/to/kpf_ts.db
+
+    3. Monitoring thread statuses:
+        The script automatically reports on thread activity and execution times every 5 minutes.
+"""
+
 import time
 import argparse
 from threading import Thread
