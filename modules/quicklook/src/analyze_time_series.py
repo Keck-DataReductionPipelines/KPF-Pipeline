@@ -309,14 +309,14 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
-                L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
+                L0_header_data  = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
+                D2_header_data  = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
+                L1_header_data  = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
+                L2_header_data1 = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L2_header_data2 = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
+                L0_telemetry    = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data1, **L2_header_data2, **L0_telemetry}
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
                 header_data['L0_filename'] = os.path.basename(L0_file_path)
@@ -595,8 +595,8 @@ class AnalyzeTimeSeries:
         conn.close()
         print(df)
 
-   
-    def dataframe_from_db(self, columns, 
+
+    def dataframe_from_db(self, columns=None, 
                           start_date=None, end_date=None, 
                           only_object=None, object_like=None, 
                           on_sky=None, not_junk=None, 
@@ -606,26 +606,34 @@ class AnalyzeTimeSeries:
         observations in the DB. The query can be restricted to observations matching a 
         particular object name(s).  The query can also be restricted to observations 
         that are on-sky/off-sky and after start_date and/or before end_date. 
-
+    
         Args:
-            columns (string or list of strings) - database columns to query
+            columns (string or list of strings, optional) - database columns to query. 
+                                                            If None, all columns are retrieved.
+                                                            Retrieving all columns can be time consuming.  With two years of observations in the database, retrieving 1, 10, 100, 1000 days takes 0.13, 0.75, 2.05, 44 seconds.
             only_object (string) - object name to include in query
             object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
             end_date (datetime object) - only return observations after end_date
-            false (boolean) - if True, prints the SQL query
-
+            verbose (boolean) - if True, prints the SQL query
+    
         Returns:
             Pandas dataframe of the specified columns matching the constraints.
         """
         
         conn = sqlite3.connect(self.db_path)
-        
+    
+        # Get all column names if columns are not specified
+        if columns is None:
+            query_get_columns = "PRAGMA table_info(kpfdb)"
+            all_columns_info = pd.read_sql_query(query_get_columns, conn)
+            columns = all_columns_info['name'].tolist()
+    
         # Enclose column names in double quotes
         quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
-
+    
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
@@ -657,13 +665,13 @@ class AnalyzeTimeSeries:
             where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
         if where_queries != []:
             query += " WHERE " + ' AND '.join(where_queries)
-
+    
         if verbose:
             print('query = ' + query)
-
+    
         df = pd.read_sql_query(query, conn)
         conn.close()
-
+    
         return df
 
 
