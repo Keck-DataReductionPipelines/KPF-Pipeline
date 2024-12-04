@@ -110,6 +110,7 @@ for raw_file_path in file_list:
         masterbias_path = cals['bias']
         masterdark_path = cals['dark']
         masterflat_path = cals['flat']
+
         # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
         kpf_object = l0
@@ -154,21 +155,21 @@ for raw_file_path in file_list:
 
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
 
-        # why isn't twod saved?  It it an extension?  Does it have an extension added?
-        twod = flat_applied
+        # Apply bad-pixel mask(s).
+        bpm_applied = flat_applied
         for bpm in bad_pixel_masks:
-            pixels_masked = ImageProcessing(twod, bpm, lev0_ffi_exts, data_type, quicklook)
-            twod = pixels_masked
+            pixels_masked = ImageProcessing(bpm_applied, bpm, lev0_ffi_exts, data_type, quicklook)
+            bpm_applied = pixels_masked
 
         # Diagnostics & Quality Control - 2D level
-        kpf_object = flat_applied
+        kpf_object = bpm_applied
         data_level_str = '2D'
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
-        flat_applied = kpf_object
-      
+        bpm_applied = kpf_object
+
         # Write file
-        recipe_complete = to_fits(flat_applied, output_file_name)
+        recipe_complete = to_fits(bpm_applied, output_file_name)
 
         # Query database for QC information and update header of 2D FITS file.
         rid = quality_control_rid

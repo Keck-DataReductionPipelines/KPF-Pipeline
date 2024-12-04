@@ -80,8 +80,7 @@ class HeaderParse:
             the source/image name
             possible values: 'Bias', 'Dark', 'Flat', 'Wide Flat', 
                              'LFC', 'Etalon', 'ThAr', 'UNe',
-                             'Sun', 'Star', <starname>,
-                             ''
+                             'Sun', 'Star', <starname>
         """
         try: 
             if 'IMTYPE' in self.header:
@@ -279,10 +278,76 @@ def is_ObsID(ObsID):
     return is_ObsID_bool
 
 
+def get_data_products_expected(kpf_object, data_level):
+    """
+    Returns a list of data products that are expected to be available in a 
+    KPF object of a given data level.
+    Possible data products:
+        L0: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Pyrheliometer
+        2D: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
+        L1: Green, Red, CaHK, BC, Telemetry, Config, Receipt
+        L2: Green CCF, Red CCF, Green CCF RW, Red CCF RW, RV, Activity, Telemetry, Config, Receipt
+
+    Args:
+        kpf_object - a KPF L0 object 
+        data_level - 'L0', '2D', 'L1', or 'L2'
+
+    Returns:
+        array of data expected data products
+    """
+    primary_header = HeaderParse(kpf_object, 'PRIMARY').header
+    header = primary_header.header
+    name = primary_header.get_name() # 'Star','Sun','LFC', etc.
+    data_products = ['Telemetry']
+    if data_level in ['2D', 'L1', 'L2']:
+        data_products.append('Config')
+        data_products.append('Receipt')
+    if 'GREEN' in header:
+        if header['GREEN'] == 'YES':
+            if data_level in ['L0', '2D', 'L1']:
+                data_products.append('Green')
+            if data_level in ['L2']:
+                data_products.append('Green CCF')
+                data_products.append('Green CCF RW')
+    if 'RED' in header:
+        if header['RED'] == 'YES':
+            if data_level in ['L0', '2D', 'L1']:
+                data_products.append('Red')
+            if data_level in ['L2']:
+                data_products.append('Red CCF')
+                data_products.append('Red CCF RW')
+    if 'CA_HK' in header:
+        if header['CA_HK'] == 'YES':
+            if data_level in ['L0', '2D', 'L1']:
+                data_products.append('CaHK')
+            if data_level in ['L2']:
+                if name in ['Star', 'Sun']:
+                    data_products.append('Activity') # need a better way to determine (what about FWHM, etc.)
+    if 'EXPMETER' in header:
+        if header['EXPMETER'] == 'YES':
+            if data_level in ['L0', '2D']:
+                data_products.append('ExpMeter')
+            if data_level in ['L1']:
+                if name in ['Star', 'Sun']:
+                    data_products.append('BC') # Is this the best way to determine if BC is present?
+    if data_level in ['L2']:
+        if name in ['Star', 'Sun', 'LFC', 'Etalon', 'ThAr', 'UNe']:
+            data_products.append('RV') # Is this the best way to determine if RV is present?  Should it be there for the calibrations?
+    if 'GUIDE' in header: 
+        if header['GUIDE'] == 'YES':
+            if data_level in ['L0', '2D']:
+                data_products.append('Guider')
+    if hasattr(kpf_object, 'SOCAL PYRHELIOMETER'): # Is this the best way to determine if Pyrheliometer data *should* be present?
+        if kpf_object['SOCAL PYRHELIOMETER'].size > 1:
+            data_products.append('Pyrheliometer') 
+
+    return data_products
+
+
 def get_data_products_L0(L0):
     """
     Returns a list of data products available in an L0 file, which are:
-    Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config
+    Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Pyrheliometer
 
     Args:
         L0 - a KPF L0 object 

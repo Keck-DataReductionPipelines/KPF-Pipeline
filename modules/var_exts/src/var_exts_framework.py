@@ -406,6 +406,15 @@ class VarExtsFramework(KPF0_Primitive):
             fits_obj[ext] = img.astype(np.float32)
             fits_obj.header[ext]['BUNIT'] = ('electrons','Units of variance')
 
+        # Remove any AMP extensions (which are automatically re-added as empty extensions for L0 FITS objects).
+
+        del_ext_list = ['GREEN_AMP1','GREEN_AMP2','GREEN_AMP3','GREEN_AMP4','RED_AMP1','RED_AMP2','RED_AMP3','RED_AMP4']
+        for ext in del_ext_list:
+            try:
+                fits_obj.del_extension(ext)
+            except:
+                pass
+
         fits_obj.to_fits(fits_filename)
 
         return

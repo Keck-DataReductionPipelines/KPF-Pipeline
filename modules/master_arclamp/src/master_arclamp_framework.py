@@ -7,6 +7,7 @@ from astropy.io import fits
 from astropy.time import Time
 
 import database.modules.utils.kpf_db as db
+import modules.quality_control.src.quality_control as qc
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -60,7 +61,9 @@ class MasterArclampFramework(KPF0_Primitive):
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
         skip_flattening (int): Set to 1 to skip flattening of the inputs; otherwise zero.
-        max_num_frames_to_stack(int): Maximum number of frames allowed in the stack.
+        max_num_frames_to_stack (int): Maximum number of frames allowed in the stack.
+        min_num_frames_to_stack_with_outlier_rejection (int): Minimum number of frames to stack_with_outlier_rejection
+                                                              (if less than this minimum and >=2, then use simple median)
 
     Outputs:
         Full-frame-image FITS extensions in output master arclamp:
@@ -118,8 +121,11 @@ class MasterArclampFramework(KPF0_Primitive):
 
         self.skip_flattening = int(module_param_cfg.get('skip_flattening', 0))
         self.max_num_frames_to_stack = int(module_param_cfg.get('max_num_frames_to_stack', 50))
+        self.min_num_frames_to_stack_with_outlier_rejection = int(module_param_cfg.get('min_num_frames_to_stack_with_outlier_rejection', 4))
 
         self.logger.info('self.skip_flattening = {}'.format(self.skip_flattening))
+        self.logger.info('self.max_num_frames_to_stack = {}'.format(self.max_num_frames_to_stack))
+        self.logger.info('self.min_num_frames_to_stack_with_outlier_rejection = {}'.format(self.min_num_frames_to_stack_with_outlier_rejection))
 
 
     def _perform(self):
@@ -142,6 +148,7 @@ class MasterArclampFramework(KPF0_Primitive):
 
         master_arclamp_exit_code = 0
         master_arclamp_infobits = 0
+        input_master_type = 'all'
 
 
         # Filter arclamp files with IMTYPE=‘arclamp’ and that match the input object specification with OBJECT.
@@ -345,13 +352,14 @@ class MasterArclampFramework(KPF0_Primitive):
                 path = all_arclamp_files[i]
                 obj = KPF0.from_fits(path)
 
-                try:
-                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
-                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
-                    if obj_not_junk != 1:
-                        continue
-                except KeyError as err:
-                    pass
+
+                # Check QC keywords and skip image if it does not pass QC checking.
+
+                skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
+                self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
+                if skip:
+                    continue
+
 
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
@@ -418,7 +426,12 @@ class MasterArclampFramework(KPF0_Primitive):
             normalized_frames_data = np.array(normalized_frames_data)
 
             fs = FrameStacker(normalized_frames_data,self.n_sigma,self.logger)
-            stack_avg,stack_var,cnt,stack_unc = fs.compute()
+            if n_frames >= self.min_num_frames_to_stack_with_outlier_rejection:
+                self.logger.debug('Computing stack average with outlier rejection...')
+                stack_avg,stack_var,cnt,stack_unc = fs.compute()
+            else:
+                self.logger.debug('Computing stack median (no outlier rejection)...')
+                stack_avg,stack_var,cnt,stack_unc = fs.compute_stack_median()
 
             arclamp = stack_avg
             arclamp_unc = stack_unc

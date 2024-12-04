@@ -276,7 +276,7 @@ class AnalyzeL0:
                     rn_text += f"{self.read_noise_overscan[region]:.2f}"
                     if i < nregions-1:
                         rn_text += ', '
-            rn_text += ' e-'
+            rn_text += r' e- (rms of overscan; 5-$\sigma$ outlier rej.)'
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

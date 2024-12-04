@@ -165,3 +165,62 @@ def get_kpf_echelle_order(lambda_ang):
             ech_order = key
             
     return ech_order
+
+def styled_text(message, style="", color="", background=""):
+    """
+    Returns a message with the specified style, color, and background color using ANSI escape codes.
+
+    Parameters:
+    message (str): The message to be styled.
+    style (str): The style to apply. Options are:
+                 "Bold", "Dim", "Underline", "Blink", "Reverse", "Hidden"
+    color (str): The text color to apply. Options are:
+                 "Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"
+    background (str): The background color to apply. Options are:
+                      "BgBlack", "BgRed", "BgGreen", "BgYellow", "BgBlue", "BgMagenta", "BgCyan", "BgWhite"
+
+    Returns:
+    str: The styled message.
+
+    Usage:
+    print(styled_text("This is a bold message.", style="Bold"))
+    print(styled_text("This is a red message.", color="Red"))
+    print(styled_text("This is a green message with blue background.", color="Green", background="BgBlue"))
+    """
+    
+    # Define ANSI escape codes
+    codes = {
+        "Reset": "\033[0m",
+        "Bold": "\033[1m",
+        "Dim": "\033[2m",
+        "Underline": "\033[4m",
+        "Blink": "\033[5m",
+        "Reverse": "\033[7m",
+        "Hidden": "\033[8m",
+        "Black": "\033[30m",
+        "Red": "\033[31m",
+        "Green": "\033[32m",
+        "Yellow": "\033[33m",
+        "Blue": "\033[34m",
+        "Magenta": "\033[35m",
+        "Cyan": "\033[36m",
+        "White": "\033[37m",
+        "BgBlack": "\033[40m",
+        "BgRed": "\033[41m",
+        "BgGreen": "\033[42m",
+        "BgYellow": "\033[43m",
+        "BgBlue": "\033[44m",
+        "BgMagenta": "\033[45m",
+        "BgCyan": "\033[46m",
+        "BgWhite": "\033[47m"
+    }
+
+    # Retrieve the ANSI codes from the dictionary
+    style_code = codes.get(style, "")
+    color_code = codes.get(color, "")
+    background_code = codes.get(background, "")
+    reset_code = codes["Reset"]
+
+    # Construct the styled message
+    styled_message = f"{style_code}{color_code}{background_code}{message}{reset_code}"
+    return styled_message

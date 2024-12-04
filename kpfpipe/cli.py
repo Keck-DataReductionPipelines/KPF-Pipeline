@@ -43,6 +43,8 @@ def _parseArguments(in_args: list) -> argparse.Namespace:
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
     parser.add_argument('--reprocess', dest='reprocess', action='store_true',
                         help="For use in watch mode. Process any existing files found in the watch mode path.")
+    parser.add_argument('--masters', dest='masters', action='store_true',
+                        help="For use in watch mode. Process any existing files found in the watch mode path. Use if processing a directory of masters files. Will only look for files without 'WLS', 'L1', or 'L2' in the filename")
     parser.add_argument('-r', '--recipe', required=True, dest='recipe', type=str, help="Recipe file with list of actions to take.")
     parser.add_argument('-c', '--config', required=True, dest="config_file", type=str, help="Configuration file")
     parser.add_argument('--date', dest='date', type=str, default=None, help="Date for the data to be processed.")
@@ -93,7 +95,7 @@ class FileAlarm(PatternMatchingEventHandler):
     def __init__(self, framework, arg, patterns=["*"], cooldown=1):
         PatternMatchingEventHandler.__init__(self, patterns=patterns,
                                              ignore_patterns=['*/.*', '*/*~'])
-        
+
         self.framework = framework
         self.arg = arg
         self.arg.watch = True
@@ -114,7 +116,7 @@ class FileAlarm(PatternMatchingEventHandler):
                 return False
 
         self.file_cache[key] = time.time()
-        return True            
+        return True
 
     def process(self, event):
         if os.path.basename(event.src_path).startswith('.'):
@@ -153,12 +155,12 @@ class FileAlarm(PatternMatchingEventHandler):
 
 def main():
     '''
-    This is executed when 'kpfpipe' is called from commandline 
+    This is executed when 'kpfpipe' is called from commandline
     '''
     args = _parseArguments(sys.argv)
     # Set the pipeline and read the config file.
     # Using configparser for any configuration reading on the pipeline's
-    # level and below. 
+    # level and below.
     pipe_config = args.config_file
     pipe = KPFPipeline
     recipe = args.recipe
@@ -183,7 +185,7 @@ def main():
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='cfg') as tp:
         frame_config.write(tp)
-    
+
     frame_config = tp.name
 
     # Using the multiprocessing library, create the specified number of instances
@@ -213,7 +215,18 @@ def main():
         framework.pipeline.logger.info("Waiting for files to appear in {}".format(args.watch))
         framework.pipeline.logger.info("Getting existing file list.")
         infiles = sorted(glob(args.watch + "*.fits"), reverse=True) + \
-                    sorted(glob(args.watch + "20*/*.fits"), reverse=True)
+                sorted(glob(args.watch + "20*/*.fits"), reverse=True)
+
+        if args.masters:
+            infiles_all_fits = sorted(glob(args.watch + "*.fits"), reverse=True)
+
+            infiles = []
+            for f in infiles_all_fits:
+                if "L1" in f:
+                    continue
+                if "L2" in f:
+                    continue
+                infiles.append(f)
 
         observer = PollingObserver(framework.config.monitor_interval)
         al = FileAlarm(framework, arg, patterns=[args.watch+"*.fits*",
@@ -223,8 +236,10 @@ def main():
 
         if args.reprocess:
             framework.pipeline.logger.info("Found {:d} files to process.".format(len(infiles)))
-
             for fname in infiles:
+                if args.masters and ('L1' in fname or 'L2' in fname):
+                    framework.pipeline.logger.info("Skipping reduced file {}.".format(fname))
+                    continue
                 arg = arg
                 arg.date_dir = datestr
                 arg.file_path = fname
