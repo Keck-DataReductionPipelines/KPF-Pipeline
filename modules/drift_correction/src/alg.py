@@ -12,10 +12,14 @@ class ModifyWLS:
     modifies the WLS then adds the appropriate keywords.
 
     """
-    def __init__(self, l1_obj, default_config_path, logger=None):
+    def __init__(self, l1_obj, default_config_path, logger=None, etalon_table=None):
 
         # Connect to TS DB
-        # self.db_lookup = AnalyzeTSDatabase(self.action, self.context)
+        if etalon_table is None:
+            pass
+            # self.db_lookup = AnalyzeTSDatabase(self.action, self.context)
+        else:
+            self.df = pd.read_csv(etalon_table)
 
         #Input arguments
         self.l1_obj = l1_obj   # KPF L1 object
@@ -25,14 +29,24 @@ class ModifyWLS:
         else:
             self.log = logger
 
+        self.date_mid = self.l1_obj.header['PRIMARY']['DATE-MID']
+        self.wls_file1 = self.l1_obj.header['PRIMARY']['WLSFILE']
+        self.drptag = self.l1_obj.header['PRIMARY']['DRPTAG']
+
 
     def apply_drift(self, method):
-        date_mid = self.l1_obj.header['PRIMARY']['DATE-MID']
-        wls_file1 = self.l1_obj.header['PRIMARY']['WLS_FILE']
-        drptag = self.l1_obj.header['PRIMARY']['DRPTAG']
 
-        dt = datetime.strptime(date_mid, "%Y-%m-%dT%H:%M:%S.%f")
+        dt = datetime.strptime(self.date_mid, "%Y-%m-%dT%H:%M:%S.%f")
         date_str = datetime.strftime(dt, "%Y%m%d")
+
+        try:
+            clsmethod = self.__getattribute__(method)
+        except AttributeError:
+            self.log.error(f'Drift correction method {method} not implemented.')
+
+            raise(AttributeError)
+
+        out_l1 = clsmethod()
 
         return out_l1
 
