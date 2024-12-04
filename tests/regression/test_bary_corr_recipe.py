@@ -6,8 +6,9 @@ from modules.Utils.string_proc import str_replace
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 
 # obsid = 'KP.20230623.72898.50'
-obsid = 'KP.20241125.52802.75'
-date_dir='20241125/'
+# obsid = 'KP.20241125.52802.75'
+obsid = 'KP.20230114.03263.62'
+date_dir='20230114/'
 
 data_type = config.ARGUMENT.data_type
 orders_per_ccd = config.ARGUMENT.orders_per_ccd
