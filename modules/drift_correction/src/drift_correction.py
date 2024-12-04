@@ -48,6 +48,7 @@ class DriftCorrection(KPF1_Primitive):
 
         #Input arguments
         self.l1_obj = self.action.args[0]   # KPF L1 object
+        self.method = self.action.args[1]   # string of method to use
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -61,7 +62,8 @@ class DriftCorrection(KPF1_Primitive):
 
     def _perform(self):
 
-        out_l1 = DriftCorrection(self.l1_obj, self.config_path)
+        dc = ModifyWLS(self.l1_obj, self.config_path)
+        out_l1 = dc.apply_drift(method=self.method)
 
         return Arguments(out_l1)
 
