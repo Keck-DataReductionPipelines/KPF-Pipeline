@@ -280,3 +280,41 @@ class filename_from_fullfile(KPF_Primitive):
         filename = fullpath.rsplit('/', 1)[-1]  # e.g., 'KP.20230720.12345.67.fits'
         
         return Arguments(filename) 
+
+def print_shell_script_docstring(script_path):
+    """
+    Extracts and prints the docstring of a shell script.
+    """
+    try:
+        with open(script_path, "r") as file:
+            script_lines = file.readlines()
+
+        # Define the start and end markers for the docstring
+        docstring_start = "read -r -d '' SCRIPT_DOC <<'EOF'"
+        docstring_end = "EOF"
+
+        # Initialize variables
+        in_docstring = False
+        docstring = []
+
+        # Parse lines to find the docstring
+        for line in script_lines:
+            if docstring_start in line:
+                in_docstring = True
+                continue
+            if docstring_end in line:
+                in_docstring = False
+                continue
+            if in_docstring:
+                docstring.append(line.rstrip())
+
+        # Print the docstring
+        if docstring:
+            print("\n".join(docstring))
+        else:
+            print("No docstring found in the script.")
+
+    except FileNotFoundError:
+        print(f"Error: File not found at {script_path}")
+    except Exception as e:
+        print(f"An error occurred: {e}")

@@ -72,8 +72,14 @@ class Analyze2D:
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
-        self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
-        self.red_percentile_99,   self.red_percentile_90,   self.red_percentile_50,   self.red_percentile_10   = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+        try:
+            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+        except:
+            self.logger.error('Problem computing SNR for Green 2D image')
+        try:
+            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+        except:
+            self.logger.error('Problem computing SNR for Green 2D image')
 
     def measure_2D_dark_current(self, chip=None):
         """

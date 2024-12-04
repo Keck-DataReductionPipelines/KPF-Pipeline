@@ -88,7 +88,7 @@ class GetCalibrations:
                     except:  # no DB available
                         pass
                     self.lookup_map['etalonmask'] = 'database'
-                    output_cals[cal] = self.lookup(subset=['etalonmask'])
+                    output_cals[cal] = self.lookup(subset=['etalonmask'])['etalonmask']
 
         return output_cals
 

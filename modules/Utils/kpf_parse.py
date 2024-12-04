@@ -80,8 +80,7 @@ class HeaderParse:
             the source/image name
             possible values: 'Bias', 'Dark', 'Flat', 'Wide Flat', 
                              'LFC', 'Etalon', 'ThAr', 'UNe',
-                             'Sun', 'Star', <starname>,
-                             ''
+                             'Sun', 'Star', <starname>
         """
         try: 
             if 'IMTYPE' in self.header:
