@@ -56,6 +56,7 @@ class AnalyzeTimeSeries:
         L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
+        L2_RV_ccf_keyword_types (dictionary) - specifies data types for L2 CCF header keywords
 
     Related Commandline Scripts:
         'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
@@ -96,8 +97,9 @@ class AnalyzeTimeSeries:
         self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
         self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
         self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
-        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
         self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L2_CCF_header_keyword_types = self.get_keyword_types(level='L2_CCF_header')
         
         if drop:
             self.drop_table()
@@ -130,7 +132,8 @@ class AnalyzeTimeSeries:
         L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
         L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns
+        L2_CCF_header_columns =[f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
+        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns + L2_CCF_header_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -252,15 +255,17 @@ class AnalyzeTimeSeries:
             D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
             L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
             L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
 
             header_data = {**L0_header_data, 
                            **D2_header_data, 
                            **L1_header_data, 
                            **L2_header_data, 
+                           **L0_telemetry,
                            **L2_RV_header_data, 
-                           **L0_telemetry
+                           **L2_CCF_header_data, 
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
@@ -313,10 +318,11 @@ class AnalyzeTimeSeries:
                 D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
                 L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
                 L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
-                L2_RV_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
+                L2_RV_header_data = self.extract_kwd(L2_file_path,    self.L2_RV_header_keyword_types, extension='RV')   
+                L2_CCF_header_data = self.extract_kwd(L2_file_path,   self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
 
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_header_data, **L0_telemetry}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
                 header_data['L0_filename'] = os.path.basename(L0_file_path)
@@ -725,15 +731,15 @@ class AnalyzeTimeSeries:
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
-#        # L2 RV extension
-#        elif level == 'L2_RV':
-#            keyword_types = {
-#                'ABCD1234': 'string', #placeholder for now
-#            }
-
         # L2 RV extension    
         elif level == 'L2_RV_header':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 CCF extension    
+        elif level == 'L2_CCF_header':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
