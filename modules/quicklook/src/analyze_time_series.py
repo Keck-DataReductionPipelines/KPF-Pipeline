@@ -176,22 +176,23 @@ class AnalyzeTimeSeries:
             dir_path for dir_path in sorted_dir_paths
             if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
-        t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
-        for dir_path in t1:
-            t1.set_description(dir_path.split('/')[-1])
-            t1.refresh() 
-            t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
-            batch = []
-            for L0_filename in t2:
-                if L0_filename.endswith(".fits"):
-                    file_path = os.path.join(dir_path, L0_filename)
-                    batch.append(file_path)
-                    if len(batch) >= batch_size:
-                        self.ingest_batch_observation(batch)
-                        batch = []
-            if batch:
-                self.ingest_batch_observation(batch)
-
+        if len(filtered_dir_paths) > 0:
+            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
+            for dir_path in t1:
+                t1.set_description(dir_path.split('/')[-1])
+                t1.refresh() 
+                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
+                batch = []
+                for L0_filename in t2:
+                    if L0_filename.endswith(".fits"):
+                        file_path = os.path.join(dir_path, L0_filename)
+                        batch.append(file_path)
+                        if len(batch) >= batch_size:
+                            self.ingest_batch_observation(batch)
+                            batch = []
+                if batch:
+                    self.ingest_batch_observation(batch)
+        self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
         """
