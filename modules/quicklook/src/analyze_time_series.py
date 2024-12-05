@@ -252,7 +252,7 @@ class AnalyzeTimeSeries:
             D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
             L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
             L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
             header_data = {**L0_header_data, 
@@ -309,14 +309,14 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data  = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
-                D2_header_data  = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
-                L1_header_data  = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
-                L2_header_data1 = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
-                L2_header_data2 = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
-                L0_telemetry    = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L2_RV_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
+                L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data1, **L2_header_data2, **L0_telemetry}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_header_data, **L0_telemetry}
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
                 header_data['L0_filename'] = os.path.basename(L0_file_path)
