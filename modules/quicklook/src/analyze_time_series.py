@@ -554,7 +554,7 @@ class AnalyzeTimeSeries:
             object_like (string or list of strings) - partial object names to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
+            end_date (datetime object) - only return observations before end_date
             false (boolean) - if True, prints the SQL query
 
         Returns:
@@ -591,6 +591,7 @@ class AnalyzeTimeSeries:
             query += " WHERE " + ' AND '.join(where_queries)
     
         # Execute query
+        print(query)
         df = pd.read_sql_query(query, conn, params=(only_object,) if only_object is not None else None)
         conn.close()
         print(df)
