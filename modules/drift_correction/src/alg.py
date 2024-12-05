@@ -10,7 +10,7 @@ from kpfpipe.logger import start_logger
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
 # db_path = '/data/time_series/kpf_ts.db' # this is the standard database used for plotting, etc.
-db_path = 'kpf_ts_temp.db'
+db_path = '/data/time_series/kpf_ts_dec5.db'
 
 class ModifyWLS:
     """This utility determines the drift correction derived from etalon frames and
@@ -44,6 +44,17 @@ class ModifyWLS:
         self.df = self.prepare_table()
 
     def apply_drift(self, method):
+
+        try:
+            drift_ext = self.l1_obj['DRIFT']
+            drift_done = self.l1_obj.header['DRIFT']['DRFTCOR']
+            if drift_done:
+                self.log.warning(f'Drift correction already performed on file {self.l1_obj.filename}')
+                
+                return self.l1_obj
+
+        except KeyError:
+            pass
 
         try:
             clsmethod = self.__getattribute__(method)
@@ -103,14 +114,15 @@ class ModifyWLS:
     def adjust_wls(self, drift_rv):
         for ext in self.l1_obj.extensions:
             if 'WAVE' in ext.upper() and 'CA_HK' not in ext.upper():
-                self.l1_obj[ext] = self.l1_obj[ext] * (1 + drift_rv/c.to('km/s').value)
+                self.l1_obj[ext] = self.l1_obj[ext] * (1 - drift_rv/c.to('km/s').value)
 
 
 
     def add_keywords(self, drift_rv):
         header = self.l1_obj.header['DRIFT']
-        header['DRIFTCOR'] = 1
-        header['DRIFTRV'] = np.median(drift_rv)
+        header['DRFTCOR'] = 1
+        header['DRFTRV'] = np.median(drift_rv)
+        header['DRFTMETH'] = self.
 
 
     def nearest_neighbor(self):
