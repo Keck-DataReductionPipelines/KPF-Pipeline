@@ -1,0 +1,9 @@
+keyword|datatype|comment
+CCD1ROW|float|Row number in the RV table (below) of the bluest order on the Green CCD
+
+SCI_MASK|string|Mask name for SCI
+SCIMPATH|string|Mask path for SCI
+CAL_MASK|string|Mask name for CAL
+CALMPATH|string|Mask path for CAL
+SKY_MASK|string|Mask name for SKY
+SKYMPATH|string|Mask path for SKY
