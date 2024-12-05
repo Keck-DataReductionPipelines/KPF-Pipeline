@@ -34,7 +34,6 @@ class ModifyWLS:
         for session in ['eve', 'morn', 'midnight']:
             if session in self.l1_obj.header['PRIMARY']['WLSFILE']:
                 self.wls_session = session
-        print(self.wls_session)
 
         # Connect to TS DB
         myTS = AnalyzeTimeSeries(db_path=db_path)
@@ -43,7 +42,7 @@ class ModifyWLS:
         start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=1)
         end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=1)
 
-        cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548']
+        cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
         self.df = myTS.dataframe_from_db(start_date=start_date, end_date=end_date,columns=cols)
         self.df = self.prepare_table()
 
@@ -106,12 +105,11 @@ class ModifyWLS:
         df['date_code_wls_file'] = df['WLSFILE'].str.extract(r'(\d{8})')
         df['date_code_wls_file2'] = df['WLSFILE2'].str.extract(r'(\d{8})')
 
-        # df['etalon_mask_date'] = df['SCIMPATH'].str.split('/')[-1][0:8]
-        # df = df[df['date_code_wls_file'] == df['etalon_mask_date']]
+        df['etalon_mask_date'] = df['SCIMPATH'].str.split('/').str[-1].str[0:8]
+        df = df[df['date_code_wls_file'] == df['etalon_mask_date']]
 
-        # TODO check that etalon mask came from same calibration session as WLSFILE
-        # df[df['SCIMPATH'].contains(self.wls_session)]
-
+        # TODO check that etalon mask came from same calibration session as it's WLSFILE
+        # df[df['SCIMPATH'].str.contains(self.wls_session)]
 
         df['datetime'] = pd.to_datetime(df['DATE-MID'])
 
@@ -202,9 +200,5 @@ class ModifyWLS:
 
         self.adjust_wls(drift_rv)
         self.add_keywords(drift_rv)
-
-        print(before_rv*1000, after_rv*1000, drift_rv*1000)
-        print(before_dt, after_dt)
-
 
         return self.l1_obj
