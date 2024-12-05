@@ -53,6 +53,13 @@ class ModifyWLS:
         if is_solar:
             self.log.warning(f'Drift correction not implemented for SoCal data')
             return self.l1_obj
+        
+        is_science = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('Target')
+        if not is_science:
+            obj = self.l1_obj.header['PRIMARY']['OBJECT']
+            self.log.warning(f'No drift correction for OBJECT {obj}')
+
+            return self.l1_obj
 
         try:
             drift_ext = self.l1_obj['DRIFT']
@@ -107,6 +114,7 @@ class ModifyWLS:
 
         df['etalon_mask_date'] = df['SCIMPATH'].str.split('/').str[-1].str[0:8]
         df = df[df['date_code_wls_file'] == df['etalon_mask_date']]
+
 
         # TODO check that etalon mask came from same calibration session as it's WLSFILE
         # df[df['SCIMPATH'].str.contains(self.wls_session)]
@@ -169,6 +177,10 @@ class ModifyWLS:
         after = self.df.query('time_delta >= 0')
         before = self.df.query('time_delta < 0')
 
+        if len(after) == 0 or len(before) == 0:
+            self.log.warning('Could not find bracketing files for nearest interpolation method. Defaulting to nearest_neighbor method.')
+            return self.nearest_neighbor()
+        
         best_before = np.argmax(before['time_delta'])
         best_after = np.argmin(after['time_delta'])
 

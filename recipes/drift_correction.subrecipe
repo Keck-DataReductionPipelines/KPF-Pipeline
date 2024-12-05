@@ -1,0 +1,16 @@
+from modules.drift_correction.src.drift_correction import DriftCorrection
+from modules.Utils.string_proc import str_replace
+
+
+do_only_drift = config.ARGUMENT.do_only_drift
+
+if not do_only_drift:
+    input_l1 = output_data
+    output_l1 = DriftCorrection(input_l1, 'nearest_interpolation')
+else:
+    file_path = context.file_path
+    # string replace 2D with L1
+    l1_filename = str_replace(file_path, '2D', 'L1')
+    input_l1 = kpf1_from_fits(l1_filename, data_type = 'KPF') 
+    output_l1 = DriftCorrection(input_l1, 'nearest_interpolation')
+    to_fits(output_l1, l1_filename)

@@ -58,7 +58,7 @@ class DriftCorrection(KPF1_Primitive):
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
 
-        self.ts_db = self.config['PARAM']['ts_db_path']
+        # self.ts_db = self.config['PARAM']['ts_db_path']
 
     def _perform(self):
 
@@ -67,3 +67,9 @@ class DriftCorrection(KPF1_Primitive):
 
         return Arguments(out_l1)
 
+
+    def _pre(self):
+        pass
+
+    def _post(self):
+        pass
