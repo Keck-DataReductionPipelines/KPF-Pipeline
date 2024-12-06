@@ -459,6 +459,33 @@ class AnalyzeTimeSeries:
         return df
 
 
+    def get_first_last_dates(self):
+        """
+        Returns a tuple of datetime objects containing the first and last dates 
+        in the database.  DATE-MID is used for the date.
+        """
+
+        conn = sqlite3.connect(self.db_path)
+    
+        # Query for the minimum and maximum dates in the 'DATE-MID' column
+        query = """
+            SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
+            FROM kpfdb
+        """
+        result = pd.read_sql_query(query, conn)
+        conn.close()
+    
+        # Extract dates from the result and convert them to datetime objects
+        min_date_str = result['min_date'][0]
+        max_date_str = result['max_date'][0]
+    
+        # Convert strings to datetime objects, handling None values gracefully
+        date_format = '%Y-%m-%dT%H:%M:%S.%f'
+        first_date = datetime.strptime(min_date_str, date_format) if min_date_str else None
+        last_date = datetime.strptime(max_date_str, date_format) if max_date_str else None
+    
+        return first_date, last_date
+
     def is_notebook(self):
         """
         Determine if the code is being executed in a Jupyter Notebook.  
@@ -2294,6 +2321,15 @@ class AnalyzeTimeSeries:
             PNG plots in the output director or shows the plots it the current 
             environment (e.g., in a Jupyter Notebook).
         """
+        if start_date == None or end_date == None:
+            dates = self.get_first_last_dates()
+            if start_date == None:
+                start_date = dates[0]
+            if end_date == None:
+                end_date = dates[1]
+        
+        print(start_date)
+        print(end_date)
         time_range_type = time_range_type.lower()
         if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
             time_range_type = 'all'

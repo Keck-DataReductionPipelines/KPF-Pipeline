@@ -128,10 +128,10 @@ if __name__ == "__main__":
     args = parser.parse_args()   
 
     tasks = [
-        {"thread_name": "All Days Thread",    "interval": 72*3600, "time_range_type": "day",    "date_range": (datetime(2024,  1,  1), datetime(2024, 12, 24))},
-        {"thread_name": "All Months Thread",  "interval": 12*3600, "time_range_type": "month",  "date_range": (datetime(2024,  1,  1), datetime(2024, 12,  1))},
-        {"thread_name": "All Years Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": (datetime(2024,  1,  1), datetime(2024, 12,  1))},
-        {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (datetime(2020,  1,  1), datetime(2024, 12,  1))},
+        {"thread_name": "All Days Thread",    "interval": 72*3600, "time_range_type": "day",    "date_range": ('None', 'None')},
+        {"thread_name": "All Months Thread",  "interval": 12*3600, "time_range_type": "month",  "date_range": ('None', 'None')},
+        {"thread_name": "All Years Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": ('None', 'None')},
+        {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": ('None', 'None')},
         {"thread_name": "Today Thread",       "interval":  1* 900, "time_range_type": "day",    "date_range": 'this_day'},
         {"thread_name": "This Month Thread",  "interval":  1*1800, "time_range_type": "month",  "date_range": 'this_month'},
         {"thread_name": "This Year Thread",   "interval":  1*3600, "time_range_type": "year",   "date_range": 'this_year'},
