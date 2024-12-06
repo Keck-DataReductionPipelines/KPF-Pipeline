@@ -431,21 +431,31 @@ class AnalyzeTimeSeries:
         """
         Remove known outliers from a dataframe.
         """
+        # CCD Read Noise
+        cols = ['RNGREEN1', 'RNGREEN2', 'RNGREEN3', 'RNGREEN4', 'RNRED1', 'RNRED2', 'RNRED3', 'RNRED4']
+        for col in cols:
+            if col in df.columns:
+                df = df.loc[df[col] < 500]
+        
         # Hallway temperature
         if 'kpfmet.TEMP' in df.columns:
             df = df.loc[df['kpfmet.TEMP'] > 15]
+        
         # Fiber temperatures
         kwrds = ['kpfmet.SIMCAL_FIBER_STG', 'kpfmet.SIMCAL_FIBER_STG']
         for key in kwrds:
             if key in df.columns:
                 df = df.loc[df[key] > 0]
+        
         # Dark Current
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
                  'FLXREG3R', 'FLXREG4R', 'FLXREG5R', 'FLXREG6R']
+        
         #for key in kwrds:
         #    if key in df.columns:
         #        df = df.loc[df[key] < 10000]
+        
         return df
 
 
@@ -1313,6 +1323,11 @@ class AnalyzeTimeSeries:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
+            
+        To do:
+            * Make a standard plot type that excludes outliers using ranges set 
+              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
+              rejection.  This should be in Delta values.
         """
 
         if plot_name == 'hallway_temp':
