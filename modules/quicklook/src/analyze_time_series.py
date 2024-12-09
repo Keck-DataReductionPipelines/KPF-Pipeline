@@ -1245,13 +1245,26 @@ class AnalyzeTimeSeries:
                     axs[p].step(t, data, **plot_attributes)
                 if plot_type == 'state':
                     # Map states (e.g., DRP version number) to a numerical scale
-                    states = np.array(['None' if s is None or s == 'NaN' else s for s in states])
-                    states = [x for x in states if not (isinstance(x, (int, float, complex)) and np.isnan(x))] # remove NaN values
-                    unique_states = sorted(set(states))  # Remove duplicates and sort
-                    state_to_num = {state: i for i, state in enumerate(unique_states)}
-                    mapped_states = [state_to_num[state] for state in states]
-                    colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
-                    for state, color in zip(unique_states, colors):
+                    # Convert states to a consistent type for comparison
+                    states = [float(s) if isinstance(s, (int, float, str)) and s not in ['None'] else s for s in states]
+                    # Separate numeric and non-numeric states for sorting
+                    numeric_states = sorted(s for s in states if isinstance(s, float))
+                    non_numeric_states = sorted(s for s in states if isinstance(s, str))
+                    unique_states = numeric_states + non_numeric_states  # Combine sorted lists
+                    unique_states = sorted(set(unique_states))
+                    # Check if unique_states contains only 0, 1, and None - QC test
+                    if set(unique_states).issubset({0.0, 1.0, 'None'}):
+                        state_to_color = {0.0: 'indianred', 1.0: 'limegreen', 'None': 'cornflowerblue'}
+                        mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
+                        colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
+                        color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
+                    else:
+                        state_to_num = {state: i for i, state in enumerate(unique_states)}
+                        mapped_states = [state_to_num[state] for state in states]
+                        colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
+                        color_map = {state: colors[i] for i, state in enumerate(unique_states)}
+                    for state in unique_states:
+                        color = color_map[state]
                         indices = [i for i, s in enumerate(states) if s == state]
                         axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
                     axs[p].set_yticks(range(len(unique_states)))
@@ -1931,7 +1944,6 @@ class AnalyzeTimeSeries:
 #   Name: data_2D_red_green
 #   Name: data_L1_red_green
 #   Name: data_L2
-
 
         elif plot_name=='qc_time_check':
             dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
