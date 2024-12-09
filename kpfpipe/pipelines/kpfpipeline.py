@@ -277,3 +277,9 @@ class KPFPipeline(BasePipeline):
         time.sleep(1)
 
         return Arguments(name="wait_complete")
+
+    def _pre(self):
+        pass
+
+    def _post(self):
+        pass

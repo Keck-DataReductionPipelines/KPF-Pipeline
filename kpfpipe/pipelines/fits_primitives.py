@@ -73,6 +73,12 @@ class FromFitsBasePrimitive(BasePrimitive):
 
         return Arguments(data_model, name=name+'_from_fits_result')
 
+    def _pre(self):
+        pass
+
+    def _post(self):
+        pass
+    
 
 class kpf0_from_fits(FromFitsBasePrimitive):
     """
