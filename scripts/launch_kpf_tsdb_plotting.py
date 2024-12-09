@@ -4,6 +4,8 @@
 # They are launched here, instead of using threads in that script, 
 # because matplotlib is not thread-safe.
 
+#### IS THIS STILL USED?
+
 import subprocess
 import time
 
