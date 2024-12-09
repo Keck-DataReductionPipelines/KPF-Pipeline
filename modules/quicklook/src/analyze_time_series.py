@@ -1910,7 +1910,6 @@ class AnalyzeTimeSeries:
                          'paneldict': thispaneldict}
             panel_arr = [junkpanel]
 
-        # to-do: add 2D, L1, L2 QC keywords to the two panels below when those keywords are made
         elif plot_name=='qc_data_keywords_present':
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
@@ -1926,6 +1925,13 @@ class AnalyzeTimeSeries:
             keywords_present_panel = {'panelvars': thispanelvars,
                                       'paneldict': thispaneldict}
             panel_arr = [data_present_panel, keywords_present_panel]
+
+# Add above
+#   Name: data_2D_CaHK
+#   Name: data_2D_red_green
+#   Name: data_L1_red_green
+#   Name: data_L2
+
 
         elif plot_name=='qc_time_check':
             dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
@@ -1958,6 +1964,62 @@ class AnalyzeTimeSeries:
             emneg_panel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             panel_arr = [emsat_panel, emneg_panel]
+
+        elif plot_name=='qc_monotonic_wls':
+            dict1 = {'col': 'MONOTWLS', 'plot_type': 'state', 'plot_attr': {'label': 'Montonic WLS', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Monotonic WLS\n(1=True)',
+                             'title': 'Quality Control - Monotonic WLS in L1',
+                             'legend_frac_size': 0.10}
+            monot_wls_panel = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [monot_wls_panel]
+
+#        elif plot_name=='qc_pos_2d_snr':
+#            dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Not Negative 2D SNR\n(1=True)',
+#                             'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
+#                             'legend_frac_size': 0.10}
+#            monot_wls_panel = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [monot_wls_panel]
+
+#        elif plot_name=='qc_lfc':
+#            dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'LFC Not Saturated \n(1=True)',
+#                             'title': 'Quality Control - LFC Metrics',
+#                             'legend_frac_size': 0.10}
+#            lfc_sat_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [lfc_sat_panel]
+
+#        elif plot_name=='qc_goodread':
+#            dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Green/Red CCDs\nGood Read(1=True)',
+#                             'title': 'Quality Control - Good Read Metric (T$_{exp}$ !$approx$ 6 sec)',
+#                             'legend_frac_size': 0.10}
+#            goodread_panel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            panel_arr = [goodread_panel]
+
+#        elif plot_name=='qc_low_flux':
+#            dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
+#            dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Not 2D Low Bias\nFlux (1=True)',
+#                             'legend_frac_size': 0.10}
+#            lowbias_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'Not 2D Low Dark\nFlux (1=True)',
+#                             'title': 'Quality Control - Low Dark and Bias Flux',
+#                             'legend_frac_size': 0.10}
+#            lowdark_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [lowbias_panel, lowdark_panel]
 
         elif plot_name=='autocal-flat_snr':
             dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
@@ -2205,6 +2267,11 @@ class AnalyzeTimeSeries:
             "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
             "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
             "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
+            "p8e":  {"plot_name": "qc_monotonic_wls",         "subdir": "QC",        "desc": "Quality Control: monotonic WLS"}, 
+            "p8f":  {"plot_name": "qc_pos_2d_snr",            "subdir": "QC",        "desc": "Quality Control: 2D SNR positive"}, 
+            "p8g":  {"plot_name": "qc_lfc",                   "subdir": "QC",        "desc": "Quality Control: LFC quality"}, 
+            "p8h":  {"plot_name": "qc_goodread",              "subdir": "QC",        "desc": "Quality Control: L0 Good Read metric"}, 
+            "p8i":  {"plot_name": "qc_low_flux",              "subdir": "QC",        "desc": "Quality Control: 2D low flux check"}, 
             "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
         }
         if print_plot_names:
