@@ -1,0 +1,7 @@
+keyword|datatype|comment
+SCI_MASK|string|Mask name for SCI
+SCIMPATH|string|Mask path for SCI
+CAL_MASK|string|Mask name for CAL
+CALMPATH|string|Mask path for CAL
+SKY_MASK|string|Mask name for SKY
+SKYMPATH|string|Mask path for SKY
