@@ -1,16 +1,29 @@
 from modules.drift_correction.src.drift_correction import DriftCorrection
 from modules.Utils.string_proc import str_replace
-
+from modules.Utils.data_handler import GetHeaderValue
+from modules.Utils.data_handler import SetHeaderValue
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+from modules.wavelength_cal.src.alg import WaveInterpolation          
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate 
 
 do_only_drift = config.ARGUMENT.do_only_drift
 
-if not do_only_drift:
+if do_only_drift:
+    file_path = context.file_path
+
+    data_type = 'KPF'
+    l1_filename = str_replace(file_path, '2D', 'L1')
+    input_l1 = kpf1_from_fits(l1_filename, data_type = 'KPF')
+    obs_date_time = GetHeaderValue(input_l1,'DATE-MID')
+
+    output_data = input_l1
+    invoke_subrecipe("recipes/wls_interpolation.subrecipe")
+
+    output_l1 = DriftCorrection(interpolated_l1, 'nearest_interpolation')
+    # to_fits(interpolated_l1, l1_filename)
+
+    to_fits(output_l1, l1_filename)
+
+else:
     input_l1 = output_data
     output_l1 = DriftCorrection(input_l1, 'nearest_interpolation')
-else:
-    file_path = context.file_path
-    # string replace 2D with L1
-    l1_filename = str_replace(file_path, '2D', 'L1')
-    input_l1 = kpf1_from_fits(l1_filename, data_type = 'KPF') 
-    output_l1 = DriftCorrection(input_l1, 'nearest_interpolation')
-    to_fits(output_l1, l1_filename)

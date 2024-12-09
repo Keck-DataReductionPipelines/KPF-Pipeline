@@ -7,6 +7,7 @@ from astropy.constants import c
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
 
+from modules.Utils.config_parser import ConfigHandler
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
 # db_path = '/data/time_series/kpf_ts.db' # this is the standard database used for plotting, etc.
@@ -25,18 +26,30 @@ class ModifyWLS:
         else:
             self.log = logger
 
+        cfg_params = ConfigHandler(self.config, 'PARAM')
+        self.db_path = cfg_params.get_config_value('ts_db_path')
+        print(self.db_path)
+
         self.l1_obj = l1_obj   # KPF L1 object
         self.date_mid = self.l1_obj.header['PRIMARY']['DATE-MID']
         self.dt = datetime.strptime(self.date_mid, "%Y-%m-%dT%H:%M:%S.%f")
         self.wls_file1 = self.l1_obj.header['PRIMARY']['WLSFILE']
         self.drptag = self.l1_obj.header['PRIMARY']['DRPTAG']
-        self.readmode = self.l1_obj.header['PRIMARY']['READSPED']
+
+        try:
+            self.readmode = self.l1_obj.header['PRIMARY']['READSPED']
+        except KeyError:
+            if 'regular' in self.l1_obj.header['PRIMARY']['GRACF']:
+                self.readmode = 'regular'
+            else:
+                self.readmode = 'fast'
+        
         for session in ['eve', 'morn', 'midnight']:
             if session in self.l1_obj.header['PRIMARY']['WLSFILE']:
                 self.wls_session = session
 
         # Connect to TS DB
-        myTS = AnalyzeTimeSeries(db_path=db_path)
+        myTS = AnalyzeTimeSeries(db_path=self.db_path)
 
         date = self.dt.strftime(format='%Y%m%d')
         start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=1)
@@ -62,19 +75,6 @@ class ModifyWLS:
             return self.l1_obj
 
         try:
-            drift_ext = self.l1_obj['DRIFT']
-            drift_done = self.l1_obj.header['DRIFT']['DRFTCOR']
-            if drift_done:
-                self.log.warning(f'Drift correction already performed on file {self.l1_obj.filename}')
-                method_performed = self.l1_obj.header['DRIFT']['DRFTMETH']
-                if self.method != method_performed:
-                    self.log.warning(f'Drift correction method {self.method} requested but method {method_performed} already performed')
-                return self.l1_obj
-
-        except (KeyError, AttributeError):
-            pass
-
-        try:
             clsmethod = self.__getattribute__(method)
         except AttributeError:
             self.log.error(f'Drift correction method {method} not implemented.')
@@ -93,7 +93,7 @@ class ModifyWLS:
         df = df[(df['NOTJUNK'] == True)]
 
         # All fibers illuminated:
-        df = df[df['OBJECT'].str.contains("etalon-all", na=False)]
+        df = df[df['OBJECT'].str.contains(r'etalon-all|slewcal', na=False)]
 
         current_drp_tag = self.drptag
         df = df[(df['DRPTAG'] == current_drp_tag)]
@@ -115,7 +115,6 @@ class ModifyWLS:
         df['etalon_mask_date'] = df['SCIMPATH'].str.split('/').str[-1].str[0:8]
         df = df[df['date_code_wls_file'] == df['etalon_mask_date']]
 
-
         # TODO check that etalon mask came from same calibration session as it's WLSFILE
         # df[df['SCIMPATH'].str.contains(self.wls_session)]
 
@@ -135,7 +134,7 @@ class ModifyWLS:
 
 
     def add_keywords(self, drift_rv):
-        header = self.l1_obj.header['DRIFT']
+        header = self.l1_obj.header['PRIMARY']
         header['DRFTCOR'] = 1
         header['DRFTRV'] = np.median(drift_rv)
         header['DRFTMETH'] = self.method
@@ -161,9 +160,9 @@ class ModifyWLS:
         self.l1_obj['DRIFT'] = np.array([drift_rv])  # Ensure correct data structure
         
         # Update headers with observational details
-        self.l1_obj.header['DRIFT']['DRFTOBS'] = best_row['ObsID']
+        self.l1_obj.header['PRIMARY']['DRFTOBS'] = best_row['ObsID']
         time_delta_hours = best_row['time_delta'] / 3600  # Convert seconds to hours
-        self.l1_obj.header['DRIFT']['DRFTDEL'] = time_delta_hours
+        self.l1_obj.header['PRIMARY']['DRFTDEL'] = time_delta_hours
 
         # Apply drift correction in RV space
         self.adjust_wls(drift_rv)
@@ -201,14 +200,14 @@ class ModifyWLS:
         self.l1_obj['DRIFT'] = np.array([drift_rv])  # Ensure correct data structure
         
         # Update headers with observational details
-        self.l1_obj.header['DRIFT']['DRFTOBS'] = before.iloc[best_before]['ObsID']
-        self.l1_obj.header['DRIFT']['DRFTOBS2'] = after.iloc[best_after]['ObsID']
+        self.l1_obj.header['PRIMARY']['DRFTOBS'] = before.iloc[best_before]['ObsID']
+        self.l1_obj.header['PRIMARY']['DRFTOBS2'] = after.iloc[best_after]['ObsID']
 
         before_time_delta_hours = before_dt / 3600  # Convert seconds to hours
         after_time_delta_hours = after_dt / 3600
 
-        self.l1_obj.header['DRIFT']['DRFTDEL'] = before_time_delta_hours
-        self.l1_obj.header['DRIFT']['DRFTDEL2'] = after_time_delta_hours
+        self.l1_obj.header['PRIMARY']['DRFTDEL'] = before_time_delta_hours
+        self.l1_obj.header['PRIMARY']['DRFTDEL2'] = after_time_delta_hours
 
         self.adjust_wls(drift_rv)
         self.add_keywords(drift_rv)
