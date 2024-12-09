@@ -1283,12 +1283,11 @@ class AnalyzeTimeSeries:
                 if plot_type == 'state':
                     # Map states (e.g., DRP version number) to a numerical scale
                     # Convert states to a consistent type for comparison
-                    states = [float(s) if isinstance(s, (int, float, str)) and s not in ['None'] else s for s in states]
+                    states = [float(s) if is_numeric(s) else s for s in states]
                     # Separate numeric and non-numeric states for sorting
                     numeric_states = sorted(s for s in states if isinstance(s, float))
                     non_numeric_states = sorted(s for s in states if isinstance(s, str))
-                    unique_states = numeric_states + non_numeric_states  # Combine sorted lists
-                    unique_states = sorted(set(unique_states))
+                    unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
                     # Check if unique_states contains only 0, 1, and None - QC test
                     if set(unique_states).issubset({0.0, 1.0, 'None'}):
                         state_to_color = {0.0: 'indianred', 1.0: 'limegreen', 'None': 'cornflowerblue'}
@@ -2516,3 +2515,12 @@ def convert_to_list_if_array(string):
     else:
         # The string does not look like a JSON array
         return string
+
+def is_numeric(value):
+    if value is None:  # Explicitly handle NoneType
+        return False
+    try:
+        float(value)  # Attempt to convert to float
+        return True
+    except (ValueError, TypeError):
+        return False
