@@ -577,8 +577,8 @@ if do_spectral_extraction or do_hk or do_bc:
 					output_data = interpolated_l1
 					
 					# etalon drift correction
-					invoke_subrecipe("recipes/drift_correction.subrecipe")
-					output_data = output_l1
+					# invoke_subrecipe("recipes/drift_correction.subrecipe")
+					# output_data = output_l1
 
 				else:
 					for idx in ccd_idx:
