@@ -1,2 +1,3 @@
 keyword|datatype|comment
 TIMCHKL2|string|Quality Control: 1 = consistent times in L2 file
+WLSL2|string|Quality Control: 1 = L2 WLS file check passed
