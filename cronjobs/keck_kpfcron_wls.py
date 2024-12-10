@@ -57,7 +57,6 @@ class KPFPipeMastersWLS(KPFPipeCronBase):
             cp -p /data/masters/wlpixelfiles/*kpf_{self.procdate}* /masters/{self.procdate}/wlpixelfiles >> {self.stdout_log} 2>&1; 
             cp -p /code/KPF-Pipeline/pipeline_{self.procdate}.log /masters/{self.procdate}/pipeline_wls_auto_{self.procdate}.log >> {self.stdout_log} 2>&1; 
             mkdir -p /logs/{self.procdate} 2>&1; 
-            cp -p /masters/{self.procdate}/*logs /logs/{self.procdate}/ >> {self.stdout_log} 2>&1;
             rm /code/KPF-Pipeline/pipeline_{self.procdate}.log; 
             exit; 
         """

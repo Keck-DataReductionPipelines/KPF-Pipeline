@@ -20,8 +20,11 @@ class KPFPipeNightly(KPFPipeCronBase):
     def __init__(self, procname):
         super(KPFPipeNightly, self).__init__(procname)
 
-        # exit after 12 hours (12 hrs * 60 minutes * 60 seconds)
-        self.exit_timer = 9 * 60 * 60
+        # dial back the ncpu since it is running at night with the QLP
+        self.ncpu = 120
+
+        # exit after 14 hours (6pm to 8am) (18 hrs * 60 minutes * 60 seconds)
+        self.exit_timer = 14 * 60 * 60
 
     def set_recipe(self):
         """
@@ -29,7 +32,7 @@ class KPFPipeNightly(KPFPipeCronBase):
         """
         self.recipe = 'recipes/kpf_drp.recipe'
         cfg_dir = 'configs'
-        self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp')
+        self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp_watch')
         if not self.config:
             self.log.error(f'config not found for {self.procdate}, {cfg_dir}, keck_kpf_drp')
             exit()
@@ -38,8 +41,8 @@ class KPFPipeNightly(KPFPipeCronBase):
         """
         Set the location to write the logs
         """
-        self.logs_root = f"{self.data_drp}/logs/{self.procdate}"
-        self.logs_root_docker = f"/data/logs/{self.procdate}"
+        self.logs_root = f"{self.data_drp}/logs/watch/{self.procdate}"
+        self.logs_root_docker = f"/data/logs/watch/{self.procdate}"
 
     def define_docker_script(self):
         """
@@ -48,12 +51,10 @@ class KPFPipeNightly(KPFPipeCronBase):
         self.docker_bash_script = f"""
             #!/bin/bash
 
-            source /home/kpfdrprun/.bash_profile;  
-
             # mkdirs if they don't exist
-            mkdir -p /data/logs/{self.procdate};
-            mkdir -p /data/L1/{self.procdate};
-            mkdir -p /data/L2/{self.procdate};
+            mkdir -p /data/logs/{self.procdate}; 
+            mkdir -p /data/L1/{self.procdate}; 
+            mkdir -p /data/L2/{self.procdate}; 
 
             # make the symlinks
             ln -fs /data_workspace/L0/{self.procdate} /data/L0/{self.procdate};
@@ -64,15 +65,9 @@ class KPFPipeNightly(KPFPipeCronBase):
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
 
-            # touch the files so the pipe recognized them as new
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/L0 --log /data/logs/ &
-
             # run the pipeline for all data in the directory
             kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
-
-            # keep the log
-            mkdir -p /logs/{self.procdate} 2>&1; 
-            cp -p /code/KPF-Pipeline/logs/pipeline_{self.procdate}.log /logs/{self.procdate}/kpf_pipeline_nightly_{self.procdate}.log >> {self.stdout_log} 2>&1;
+            kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
 
             # remove the symlinks
             rm -f /data/masters;
@@ -102,7 +97,7 @@ class KPFPipeNightly(KPFPipeCronBase):
 
 if __name__ == '__main__':
 
-    cron_obj = KPFPipeNightly('nightly')
+    cron_obj = KPFPipeNightly('nightly_watch')
     cron_obj.run()
 
 

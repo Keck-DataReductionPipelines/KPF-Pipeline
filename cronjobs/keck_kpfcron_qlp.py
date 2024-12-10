@@ -19,8 +19,11 @@ class KPFPipeQuickLook(KPFPipeCronBase):
     def __init__(self, procname):
         super(KPFPipeQuickLook, self).__init__(procname)
 
+        # dial back the ncpu since it is running at night with the Quicklook Watch Pipeline
+        self.ncpu = 120
+
         # exit after 12 hours
-        self.stop_tmr = 12 * 60 * 60
+        self.exit_timer = 14 * 60 * 60
 
     def set_recipe(self):
 
@@ -54,14 +57,13 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             make init >> {self.stdout_log} 2>&1;
     
             # touch the files so the pipe recognized them as new
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/L0 --log /data/logs/{self.procdate} &
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/L0 --log /data/logs/QLP/ &
     
             # run the pipeline for all data in the directory
             kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
-    
-            # keep the log
-            mkdir -p /logs/{self.procdate} 2>&1; 
-            cp -p /code/KPF-Pipeline/logs/pipeline_{self.procdate}.log /logs/{self.procdate}/kpf_pipeline_nightly_{self.procdate}.log >> {self.stdout_log} 2>&1;
+            
+            # once it catches up,  if it exits,  run again without the reprocess to avoid exiting early
+            kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
     
             # remove the symlinks
             rm -f /data/masters;
