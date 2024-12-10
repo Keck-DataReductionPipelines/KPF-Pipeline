@@ -501,7 +501,7 @@ class QCDefinitions:
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
         self.required_data_products[name12] = ['HK'] 
-        self.fits_keywords[name12] = 'CaHKPRL1'
+        self.fits_keywords[name12] = 'CAHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
         self.fits_keyword_fail_value[name12] = 0
@@ -527,7 +527,7 @@ class QCDefinitions:
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
         self.required_data_products[name14] = ['HK'] 
-        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_keywords[name14] = 'CAHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
         self.fits_keyword_fail_value[name14] = 0
