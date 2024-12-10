@@ -1367,6 +1367,8 @@ class AnalyzeTimeSeries:
             * Make a standard plot type that excludes outliers using ranges set 
               to, say, +/- 4-sigma where sigma is determined by aggressive outlier
               rejection.  This should be in Delta values.
+            * Make standard correlation plots.
+            * Make standard phased plots (by day)
         """
 
         if plot_name == 'hallway_temp':
