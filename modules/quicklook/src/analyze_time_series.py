@@ -97,6 +97,7 @@ class AnalyzeTimeSeries:
         self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
         self.L2_CCF_header_keyword_types = self.get_keyword_types(level='L2_CCF_header')
+        # need to add a line here for RV extension in L2
         
         if drop:
             self.drop_table()
@@ -254,10 +255,10 @@ class AnalyzeTimeSeries:
             L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types,    extension='PRIMARY') 
             L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types,    extension='PRIMARY') 
             L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_RV_data        = self.extract_rvs(L2_file_path) 
+            #L2_RV_data        = self.extract_rvs(L2_file_path) 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
             L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            #L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
+            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
 
             header_data = {**L0_header_data, 
                            **D2_header_data, 
@@ -265,8 +266,8 @@ class AnalyzeTimeSeries:
                            **L2_header_data, 
                            **L0_telemetry,
                            **L2_RV_header_data, 
-                           **L2_RV_data, 
-                           #**L2_CCF_header_data, 
+                           #**L2_RV_data, 
+                           **L2_CCF_header_data, 
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
@@ -320,13 +321,13 @@ class AnalyzeTimeSeries:
                 L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,    extension='PRIMARY')   
                 L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,    extension='PRIMARY')   
                 L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
-                L2_RV_data     = self.extract_rvs(L2_file_path)   
+                #L2_RV_data     = self.extract_rvs(L2_file_path)   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
                 L2_RV_header_data = self.extract_kwd(L2_file_path,    self.L2_RV_header_keyword_types, extension='RV')   
-                #L2_CCF_header_data = self.extract_kwd(L2_file_path,   self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
+                L2_CCF_header_data = self.extract_kwd(L2_file_path,   self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
 
-                #header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry, **L2_RV_header_data}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
 
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
