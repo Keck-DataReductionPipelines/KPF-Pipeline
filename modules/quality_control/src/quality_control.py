@@ -1473,12 +1473,16 @@ class QC2D(QC):
         mean_GREEN = D2["GREEN_CCD"].flatten().mean()
         mean_RED = D2["RED_CCD"].flatten().mean()
 
+        max_allowed_mean_flux_green = 11
+        max_allowed_mean_flux_red = 13
+
         if debug:
             print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
             print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-            print("Max allowed mean flux =", 10)
+            print("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
+            print("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
 
-        if (mean_GREEN > 10) | (mean_RED > 10):
+        if (mean_GREEN > max_allowed_mean_flux_green) | (mean_RED > max_allowed_mean_flux_red):
             if debug:
                 print("One of the CCDs has a high flux")
             QC_pass = False
