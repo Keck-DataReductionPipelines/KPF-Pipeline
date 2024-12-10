@@ -1297,7 +1297,7 @@ class AnalyzeTimeSeries:
                     unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
                     # Check if unique_states contains only 0, 1, and None - QC test
                     if set(unique_states).issubset({0.0, 1.0, 'None'}):
-                        state_to_color = {0.0: 'indianred', 1.0: 'limegreen', 'None': 'cornflowerblue'}
+                        state_to_color = {0.0: 'indianred', 1.0: 'forestgreen', 'None': 'cornflowerblue'}
                         mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
                         colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                         color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
