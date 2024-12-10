@@ -432,23 +432,60 @@ class AnalyzeTimeSeries:
         """
         Remove known outliers from a dataframe.
         """
+        # CCD Read Noise
+        cols = ['RNGREEN1', 'RNGREEN2', 'RNGREEN3', 'RNGREEN4', 'RNRED1', 'RNRED2', 'RNRED3', 'RNRED4']
+        for col in cols:
+            if col in df.columns:
+                df = df.loc[df[col] < 500]
+        
         # Hallway temperature
         if 'kpfmet.TEMP' in df.columns:
             df = df.loc[df['kpfmet.TEMP'] > 15]
+        
         # Fiber temperatures
         kwrds = ['kpfmet.SIMCAL_FIBER_STG', 'kpfmet.SIMCAL_FIBER_STG']
         for key in kwrds:
             if key in df.columns:
                 df = df.loc[df[key] > 0]
+        
         # Dark Current
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
                  'FLXREG3R', 'FLXREG4R', 'FLXREG5R', 'FLXREG6R']
-        for key in kwrds:
-            if key in df.columns:
-                df = df.loc[df[key] < 10000]
+        
+        #for key in kwrds:
+        #    if key in df.columns:
+        #        df = df.loc[df[key] < 10000]
+        
         return df
 
+
+    def get_first_last_dates(self):
+        """
+        Returns a tuple of datetime objects containing the first and last dates 
+        in the database.  DATE-MID is used for the date.
+        """
+
+        conn = sqlite3.connect(self.db_path)
+    
+        # Query for the minimum and maximum dates in the 'DATE-MID' column
+        query = """
+            SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
+            FROM kpfdb
+        """
+        result = pd.read_sql_query(query, conn)
+        conn.close()
+    
+        # Extract dates from the result and convert them to datetime objects
+        min_date_str = result['min_date'][0]
+        max_date_str = result['max_date'][0]
+    
+        # Convert strings to datetime objects, handling None values gracefully
+        date_format = '%Y-%m-%dT%H:%M:%S.%f'
+        first_date = datetime.strptime(min_date_str, date_format) if min_date_str else None
+        last_date = datetime.strptime(max_date_str, date_format) if max_date_str else None
+    
+        return first_date, last_date
 
     def is_notebook(self):
         """
@@ -1342,6 +1379,11 @@ class AnalyzeTimeSeries:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
+            
+        To do:
+            * Make a standard plot type that excludes outliers using ranges set 
+              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
+              rejection.  This should be in Delta values.
         """
 
         if plot_name == 'hallway_temp':
@@ -1509,19 +1551,19 @@ class AnalyzeTimeSeries:
         elif plot_name=='ccd_readnoise':
             dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
+#            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
             dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
-            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            thispanelvars = [dict1, dict2, dict1b, dict2b]
+#            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
+#            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
                              'not_junk': 'true',
                              'legend_frac_size': 0.25}
             readnoisepanel1 = {'panelvars': thispanelvars,
                                'paneldict': thispaneldict}
-            thispanelvars = [dict3, dict4, dict3b, dict4b]
+            thispanelvars = [dict3, dict4]
             thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
                              'title': 'CCD Read Noise',
                              'not_junk': 'true',
@@ -2308,6 +2350,15 @@ class AnalyzeTimeSeries:
             PNG plots in the output director or shows the plots it the current 
             environment (e.g., in a Jupyter Notebook).
         """
+        if start_date == None or end_date == None:
+            dates = self.get_first_last_dates()
+            if start_date == None:
+                start_date = dates[0]
+            if end_date == None:
+                end_date = dates[1]
+        
+        print(start_date)
+        print(end_date)
         time_range_type = time_range_type.lower()
         if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
             time_range_type = 'all'
