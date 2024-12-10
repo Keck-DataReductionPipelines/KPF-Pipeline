@@ -1083,6 +1083,13 @@ class AnalyzeTimeSeries:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
+            
+        To do:
+            * Make a standard plot type that excludes outliers using ranges set 
+              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
+              rejection.  This should be in Delta values.
+            * Make standard correlation plots.
+            * Make standard phased plots (by day)
         """
 
         def num_fmt(n: float, sf: int = 3) -> str:
@@ -1362,13 +1369,6 @@ class AnalyzeTimeSeries:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
-            
-        To do:
-            * Make a standard plot type that excludes outliers using ranges set 
-              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
-              rejection.  This should be in Delta values.
-            * Make standard correlation plots.
-            * Make standard phased plots (by day)
         """
 
         if plot_name == 'hallway_temp':
