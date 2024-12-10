@@ -69,14 +69,11 @@ class AnalyzeTimeSeries:
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
         * Check for proper data types (float vs. str) before plotting
-        * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * Add histogram plots, e.g. for DRPTAG
-        * Add the capability of using Jump queries to find files for ingestion or plotting
+        * Add the capability of using one DB for ingestion into another or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
-        * Ingest information from masters, especially WLS masters
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -248,11 +245,12 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types) 
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types,    extension='PRIMARY') 
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types,    extension='PRIMARY') 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types,    extension='PRIMARY') 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types,    extension='PRIMARY') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_RV_data        = self.extract_rvs(L2_file_path) 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
 
             header_data = {**L0_header_data, 
@@ -260,6 +258,7 @@ class AnalyzeTimeSeries:
                            **L1_header_data, 
                            **L2_header_data, 
                            **L2_RV_header_data, 
+                           **L2_RV_data, 
                            **L0_telemetry
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
@@ -309,14 +308,15 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types,    extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types,    extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,    extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,    extension='PRIMARY')   
                 L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
+                L2_RV_data     = self.extract_rvs(L2_file_path)   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
 
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry}
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
                 header_data['L0_filename'] = os.path.basename(L0_file_path)
@@ -427,6 +427,53 @@ class AnalyzeTimeSeries:
         return telemetry_dict
 
 
+    def extract_rvs(self, file_path):
+        """
+        Extract RVs from the 'RV' extension in a KPF L2 file.
+        """
+    
+        mapping = {
+            'orderlet1': 'RV1{}',
+            'orderlet2': 'RV2{}',
+            'orderlet3': 'RV3{}',
+            'RV': 'RVS{}',
+            'RV error': 'ERVS{}',
+            'CAL RV': 'RVC{}',
+            'CAL error': 'ERVC{}',
+            'SKY RV': 'RVY{}',
+            'SKY error': 'ERVY{}',
+            'CCFBJD': 'CCFBJD{}',
+            'Bary_RVC': 'BCRV{}'
+        }
+    
+        try:
+            df_rv = Table.read(file_path, format='fits', hdu='RV').to_pandas()
+            df_rv = df_rv[['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 'CAL RV', 'RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 'Bary_RVC']]
+        except Exception as e:
+            self.logger.info('Bad RV extension in: ' + file_path)
+            self.logger.info(e)
+            keys = []
+            for i in range(0, 67):
+                NN = f"{i:02d}"  # two-digit row number, from 00 to 66
+                for pattern in mapping.values():
+                    keys.append(pattern.format(NN))
+            rv_dict = {
+                key: None 
+                for key in keys
+            }
+            return rv_dict
+    
+        df_filtered = df_rv[list(mapping.keys())]
+        stacked = df_filtered.stack()
+        keyed = stacked.reset_index()
+        keyed.columns = ['row_idx', 'col', 'val']
+        keyed['NN'] = keyed['row_idx'].apply(lambda x: f"{x:02d}")  # direct zero-based indexing
+        keyed['key'] = keyed['col'].map(mapping)
+        keyed['key'] = keyed['key'].str[:-2] + keyed['NN']
+        rv_dict = dict(zip(keyed['key'], keyed['val']))
+        return rv_dict
+        
+        
     def clean_df(self, df):
         """
         Remove known outliers from a dataframe.
