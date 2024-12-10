@@ -102,6 +102,24 @@ class KPFPipeCronBase:
         self.start_docker()
         self.wait_to_complete()
 
+    def clean_up(self):
+        self.log.info(f"Cleaning up before exiting...")
+        created_links =['masters', 'reference_fits', f'L0/{self.procdate}',
+                        f'2D/{self.procdate}']
+        for symlink in created_links:
+            full_path = os.path.join(self.data_drp, symlink)
+            if os.path.islink(full_path):
+                os.unlink(full_path)
+
+        try:
+            subprocess.run(["docker", "stop", self.containername], check=True)
+            self.log.info(f"Stopped Docker container: {self.containername}")
+        except subprocess.CalledProcessError as e:
+            self.log.info(f"Error stopping Docker container {self.containername}: {e}")
+        except FileNotFoundError:
+            self.log.info("Docker command not found. Is Docker installed and in your PATH?")
+
+
     def read_cmd_line(self):
         args = utils.cmd_line_args(f"Start the KPF DRP {self.procname.title()} Reduction.")
 

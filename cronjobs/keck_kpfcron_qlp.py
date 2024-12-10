@@ -6,11 +6,12 @@ is meant to be used to run the pipeline in-house and Keck.
 
 """
 import os
+import sys
+import signal
 
 from keck_kpfcron_base import KPFPipeCronBase
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
-
 
 class KPFPipeQuickLook(KPFPipeCronBase):
     """
@@ -86,10 +87,30 @@ class KPFPipeQuickLook(KPFPipeCronBase):
         )
 
 
-if __name__ == '__main__':
-
+def main():
     cron_obj = KPFPipeQuickLook('quicklook')
-    cron_obj.run()
+
+    def exit_cleanly(signum, frame):
+        print(f"Received signal {signum}.")
+        cron_obj.clean_up()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, exit_cleanly)
+    signal.signal(signal.SIGINT, exit_cleanly)
+
+    try:
+        cron_obj.run()
+    except Exception as e:
+        print(f"Exception occurred: {e}")
+        cron_obj.clean_up()
+        sys.exit(1)
+    else:
+        cron_obj.clean_up()
+
+
+if __name__ == '__main__':
+    main()
+
 
 
 

@@ -6,6 +6,8 @@ is meant to be used to run the pipeline in-house and Keck.
 
 """
 import os
+import sys
+import signal
 import keck_utils as utils
 
 from keck_kpfcron_base import KPFPipeCronBase
@@ -69,11 +71,6 @@ class KPFPipeNightly(KPFPipeCronBase):
             kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
 
-            # remove the symlinks
-            rm -f /data/masters;
-            rm -f /data/reference_fits;
-            rm -f /data/L0/{self.procdate};
-            rm -f /data/2D/{self.procdate};
             """
 
     def define_docker_cmd(self):
@@ -95,11 +92,29 @@ class KPFPipeNightly(KPFPipeCronBase):
         )
 
 
-if __name__ == '__main__':
-
+def main():
     cron_obj = KPFPipeNightly('nightly_watch')
-    cron_obj.run()
 
+    def exit_cleanly(signum, frame):
+        print(f"Received signal {signum}.")
+        cron_obj.clean_up()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, exit_cleanly)
+    signal.signal(signal.SIGINT, exit_cleanly)
+
+    try:
+        cron_obj.run()
+    except Exception as e:
+        print(f"Exception occurred: {e}")
+        cron_obj.clean_up()
+        sys.exit(1)
+    else:
+        cron_obj.clean_up()
+
+
+if __name__ == '__main__':
+    main()
 
 
 
