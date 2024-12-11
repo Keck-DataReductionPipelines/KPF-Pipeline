@@ -91,13 +91,13 @@ class AnalyzeTimeSeries:
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
         self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
+        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
         self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
         self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
-        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
-        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
         self.L2_CCF_header_keyword_types = self.get_keyword_types(level='L2_CCF_header')
-        # need to add a line here for RV extension in L2
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L2_RV_keyword_types         = self.get_keyword_types(level='L2_RV')
         
         if drop:
             self.drop_table()
@@ -124,19 +124,20 @@ class AnalyzeTimeSeries:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
-        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
-        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
-        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
-        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
-        L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        L2_CCF_header_columns =[f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns + L2_CCF_header_columns
-        columns += ['"datecode" TEXT', '"ObsID" TEXT']
-        columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
-        columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
-        columns += ['"Source" TEXT']
-        create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
+        L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+        L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
+        D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+        L1_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+        L2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
+        L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
+        L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+        L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
+        cols = L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
+        cols += ['"datecode" TEXT', '"ObsID" TEXT']
+        cols += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
+        cols += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
+        cols += ['"Source" TEXT']
+        create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(cols)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
         
         # Define indexed columns
@@ -250,24 +251,48 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types,    extension='PRIMARY') 
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types,    extension='PRIMARY') 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types,    extension='PRIMARY') 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types,    extension='PRIMARY') 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            #L2_RV_data        = self.extract_rvs(L2_file_path) 
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
             L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
             L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_RV_data        = self.extract_rvs(L2_file_path) 
+
+#            print('L0_header_data = ' )
+#            print(L0_header_data)
+#            print()
+#            print('L0_telemetry = ')
+#            print(L0_telemetry)
+#            print()
+#            print('D2_header_data = ' )
+#            print(D2_header_data)
+#            print()
+#            print('L1_header_data = ' )
+#            print(L1_header_data)
+#            print()
+#            print('L2_header_data = ' )
+#            print(L2_header_data)
+#            print()
+#            print('L2_CCF_header_data = ')
+#            print(L2_CCF_header_data)
+#            print()
+#            print('L2_RV_header_data = ')
+#            print(L2_RV_header_data)
+#            print()
+#            print('L2_RV_data = ')
+#            print(L2_RV_data)
 
             header_data = {**L0_header_data, 
+                           **L0_telemetry,
                            **D2_header_data, 
                            **L1_header_data, 
                            **L2_header_data, 
-                           **L0_telemetry,
-                           **L2_RV_header_data, 
-                           #**L2_RV_data, 
                            **L2_CCF_header_data, 
+                           **L2_RV_header_data, 
+                           **L2_RV_data, 
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
@@ -316,18 +341,16 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types,    extension='PRIMARY')   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types,    extension='PRIMARY')   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,    extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,    extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
-                #L2_RV_data     = self.extract_rvs(L2_file_path)   
-                L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
-                L2_RV_header_data = self.extract_kwd(L2_file_path,    self.L2_RV_header_keyword_types, extension='RV')   
-                L2_CCF_header_data = self.extract_kwd(L2_file_path,   self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
+                L0_header_data     = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types,     extension='PRIMARY')   
+                L0_telemetry       = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
+                D2_header_data     = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types,     extension='PRIMARY')   
+                L1_header_data     = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,     extension='PRIMARY')   
+                L2_header_data     = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,     extension='PRIMARY')   
+                L2_CCF_header_data = self.extract_kwd(L2_file_path,       self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
+                L2_RV_header_data  = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types,  extension='RV')   
+                L2_RV_data         = self.extract_rvs(L2_file_path)   
 
-                #header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
+                header_data = {**L0_header_data, **L0_telemetry, **D2_header_data, **L1_header_data, **L2_header_data, **L2_CCF_header_data, **L2_RV_header_data, **L2_RV_data}
 
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
@@ -445,25 +468,26 @@ class AnalyzeTimeSeries:
         """
     
         mapping = {
-            'orderlet1': 'RV1{}',
-            'orderlet2': 'RV2{}',
-            'orderlet3': 'RV3{}',
-            'RV': 'RVS{}',
-            'RV error': 'ERVS{}',
-            'CAL RV': 'RVC{}',
-            'CAL error': 'ERVC{}',
-            'SKY RV': 'RVY{}',
-            'SKY error': 'ERVY{}',
-            'CCFBJD': 'CCFBJD{}',
-            'Bary_RVC': 'BCRV{}'
+            'orderlet1':   'RV1{}',
+            'orderlet2':   'RV2{}',
+            'orderlet3':   'RV3{}',
+            'RV':          'RVS{}',
+            'RV error':    'ERVS{}',
+            'CAL RV':      'RVC{}',
+            'CAL error':   'ERVC{}',
+            'SKY RV':      'RVY{}',
+            'SKY error':   'ERVY{}',
+            'CCFBJD':      'CCFBJD{}',
+            'Bary_RVC':    'BCRV{}',
+            'CCF Weights': 'CCFW{}',
         }
     
         try:
             df_rv = Table.read(file_path, format='fits', hdu='RV').to_pandas()
-            df_rv = df_rv[['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 'CAL RV', 'RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 'Bary_RVC']]
+            df_rv = df_rv[['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 'CAL RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 'Bary_RVC', 'CCF Weights']]
         except Exception as e:
-            self.logger.info('Bad RV extension in: ' + file_path)
-            self.logger.info(e)
+            #self.logger.info('Bad RV extension in: ' + file_path)
+            #self.logger.info(e)
             keys = []
             for i in range(0, 67):
                 NN = f"{i:02d}"  # two-digit row number, from 00 to 66
@@ -510,11 +534,7 @@ class AnalyzeTimeSeries:
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
                  'FLXREG3R', 'FLXREG4R', 'FLXREG5R', 'FLXREG6R']
-        
-        #for key in kwrds:
-        #    if key in df.columns:
-        #        df = df.loc[df[key] < 10000]
-        
+
         return df
 
 
@@ -834,9 +854,15 @@ class AnalyzeTimeSeries:
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
+        # L2 RV data    
+        elif level == 'L2_RV':
+            prefixes = ['RV1', 'RV2', 'RV3', 'RVS', 'ERVS', 'RVC', 'ERVC', 'RVY', 'ERVY', 'CCFBJD', 'BCRV', 'CCFW']
+            nums = [f"{i:02d}" for i in range(67)]
+            keyword_types = {f"{prefix}{num}": 'REAL' for num in nums for prefix in prefixes}
+
         else:
             keyword_types = {}
-        
+
         return keyword_types
 
 
