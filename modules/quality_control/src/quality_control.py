@@ -272,6 +272,9 @@ def check_all_QC_keywords_present(kpf_object, logger=None):
     if data_level == 'L2':
         data_levels = data_levels = ['L0', '2D', 'L1', 'L2']
 
+# To do:
+#   * write a method to check that all QC keywords defined below are in the 
+#     appropriate .csv files for the TSDB.
 
 #####################################################################
 
