@@ -411,7 +411,11 @@ class MasterArclampFramework(KPF0_Primitive):
 
                 # Subtract off exposure time times master-dark-current rate.
 
-                single_normalized_frame_data = single_frame_data - exp_time * np.array(master_dark_data[ffi])
+                try:
+                    single_normalized_frame_data = single_frame_data - exp_time * np.array(master_dark_data[ffi])
+                except:
+                    single_normalized_frame_data = single_frame_data
+                    self.logger.debug('Could not subtract dark: np.shape(np.array(master_dark_data[ffi])) = {},{},{}'.format(i,ffi,np.shape(np.array(master_dark_data[ffi]))))
 
                 if self.skip_flattening == 0:
                     #self.logger.debug('Flattening arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))

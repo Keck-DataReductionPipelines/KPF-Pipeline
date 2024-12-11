@@ -61,6 +61,7 @@ FRS2M852|float|median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRS2U852|float|uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852|float|median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852|float|uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-DATAPR2D|bool|QC: 2D red and green data present check
 MONOTWLS|bool|QC: Monotonic wavelength-solution
 DATAPRL1|bool|QC: L1 red and green data present check
+WLSFILE|string|first wavelength interpolation reference
+WLSFILE2|string|second wavelength interpolation reference

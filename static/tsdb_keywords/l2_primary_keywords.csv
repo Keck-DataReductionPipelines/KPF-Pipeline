@@ -1,3 +1,7 @@
 keyword|datatype|comment
 TIMCHKL2|bool|QC: L2 times consistent
 DATAPRL2|bool|QC: L2 data present check
+CCFRV|float|Average of CCD1RV and CCD2RV using weights from RV table
+CCFERV|float|Error on CCFRV
+CCFRVC|float|Average of CCD1RVC and CCD2RVC using weights from RV table
+CCFERVC|float|Error on CCFRVC

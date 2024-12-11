@@ -22,8 +22,8 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
     Script Name: qlp_parallel.py
    
     Description:
-      This script uses the 'parallel' utility to execute the recipe called 
-      'recipes/quicklook_match.recipe' to generate standard Quicklook data 
+      This commandn line script uses the 'parallel' utility to execute the recipe 
+      called 'recipes/quicklook_match.recipe' to generate standard Quicklook data 
       products.  The script selects all KPF files based on their
       type (L0/2D/L1/L2/master) from the standard data directory using a date 
       range specified by the parameters start_date and end_date.  L0 files are 

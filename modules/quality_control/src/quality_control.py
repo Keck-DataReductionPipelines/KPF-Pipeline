@@ -501,7 +501,7 @@ class QCDefinitions:
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
         self.required_data_products[name12] = ['HK'] 
-        self.fits_keywords[name12] = 'CaHKPRL1'
+        self.fits_keywords[name12] = 'CAHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
         self.fits_keyword_fail_value[name12] = 0
@@ -527,7 +527,7 @@ class QCDefinitions:
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
         self.required_data_products[name14] = ['HK'] 
-        self.fits_keywords[name14] = 'CaHKPR2D'
+        self.fits_keywords[name14] = 'CAHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
         self.fits_keyword_fail_value[name14] = 0
@@ -596,6 +596,32 @@ class QCDefinitions:
         self.fits_comments[name18] = 'QC: CCD readout properly'
         self.db_columns[name18] = None
         self.fits_keyword_fail_value[name18] = 0
+
+        name20 = 'L1_correct_wls_check'
+        self.names.append(name20)
+        self.kpf_data_levels[name20] = ['L1']
+        self.descriptions[name20] = 'Check WLS files used by L1 file'
+        self.data_types[name20] = 'int'
+        self.spectrum_types[name20] = ['all', ]
+        self.master_types[name20] = ['all', ]
+        self.required_data_products[name20] = [] # no required data products
+        self.fits_keywords[name20] = 'WLSL1'
+        self.fits_comments[name20] = 'QC: WLS files are correct'
+        self.db_columns[name20] = None
+        self.fits_keyword_fail_value[name20] = 0
+        
+        name21 = 'L2_correct_wls_check'
+        self.names.append(name21)
+        self.kpf_data_levels[name21] = ['L2']
+        self.descriptions[name21] = 'Check WLS files used by L2 file'
+        self.data_types[name21] = 'int'
+        self.spectrum_types[name21] = ['all', ]
+        self.master_types[name21] = ['all', ]
+        self.required_data_products[name21] = [] # no required data products
+        self.fits_keywords[name21] = 'WLSL2'
+        self.fits_comments[name21] = 'QC: WLS files are correct'
+        self.db_columns[name21] = None
+        self.fits_keyword_fail_value[name21] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -1447,12 +1473,16 @@ class QC2D(QC):
         mean_GREEN = D2["GREEN_CCD"].flatten().mean()
         mean_RED = D2["RED_CCD"].flatten().mean()
 
+        max_allowed_mean_flux_green = 11
+        max_allowed_mean_flux_red = 13
+
         if debug:
             print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
             print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-            print("Max allowed mean flux =", 10)
+            print("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
+            print("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
 
-        if (mean_GREEN > 10) | (mean_RED > 10):
+        if (mean_GREEN > max_allowed_mean_flux_green) | (mean_RED > max_allowed_mean_flux_red):
             if debug:
                 print("One of the CCDs has a high flux")
             QC_pass = False
@@ -1807,6 +1837,82 @@ class QCL1(QC):
             
         return QC_pass
 
+    def L1_correct_wls_check(self, debug=False):
+        """
+        This Quality Control function checks if the WLS files used by a given L1
+        file are correct. Failure states are as follows:
+            (1) The two WLS files do not exist or cannot be opened.
+            (2) The two WLS files are the same.
+            (3) If data was taken at night, the first WLS file does not correspond
+                to that from the prior evening and/or the second WLS file does
+                not correspond to that from the following morning.
+            (4) If data was taken during the day, the first WLS file does not
+                correspond to that from the prior morning and/or the second
+                WLS file does not correspond to that from the following evening.
+    
+        Args:
+             L1 - an L1 object
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed for failed
+        """
+        
+        L1 = self.kpf_object
+        QC_pass = True
+    
+        # First, check if WLS files exist
+        try:
+            WLSFILE = L1.header["PRIMARY"]["WLSFILE"]
+            WLSFILE2 = L1.header["PRIMARY"]["WLSFILE2"]
+            from kpfpipe.models.level1 import KPF1
+            WLSFILE_L1 = KPF1.from_fits(WLSFILE)
+            WLSFILE2_L1 = KPF1.from_fits(WLSFILE2)
+        except:
+            QC_pass = False
+            if debug:
+                print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
+            return QC_pass
+    
+        # Next, check if the two WLS files are the same (they should not be)
+        if WLSFILE == WLSFILE2:
+            QC_pass = False
+            if debug:
+                print("WLSFILE and WLSFILE2 are the same.")
+            return QC_pass        
+            
+        # Check if the observations are Keck or SoCal observations
+        is_day = False
+        if L1.header["PRIMARY"]["OBJECT"] == "SoCal":
+            is_day = True
+    
+        # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
+        # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
+        date_format = "%Y-%m-%d"
+        DATE_OBS = datetime.strptime(L1.header["PRIMARY"]["DATE-OBS"], date_format)
+        WLSFILE_DATE = datetime.strptime(WLSFILE_L1.header["PRIMARY"]["DATE-OBS"], date_format)
+        WLSFILE2_DATE = datetime.strptime(WLSFILE2_L1.header["PRIMARY"]["DATE-OBS"], date_format)
+        if is_day == False:
+            if DATE_OBS != WLSFILE_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE not the same as date of obs.")
+            if DATE_OBS != WLSFILE2_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE2 not the same as date of obs.")
+        else:
+            if DATE_OBS != WLSFILE_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE not the same as date of obs.")
+            if DATE_OBS >= WLSFILE2_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
+            
+        return QC_pass
+
 #####################################################################
 
 class QCL2(QC):
@@ -1989,3 +2095,79 @@ class QCL2(QC):
             QC_pass = False
             
         return QC_pass    
+
+    def L2_correct_wls_check(self, debug=False):
+        """
+        This Quality Control function checks if the WLS files used by a given L2
+        file are correct. Failure states are as follows:
+            (1) The two WLS files do not exist or cannot be opened.
+            (2) The two WLS files are the same.
+            (3) If data was taken at night, the first WLS file does not correspond
+                to that from the prior evening and/or the second WLS file does
+                not correspond to that from the following morning.
+            (4) If data was taken during the day, the first WLS file does not
+                correspond to that from the prior morning and/or the second
+                WLS file does not correspond to that from the following evening.
+    
+        Args:
+             L2 - an L2 object
+             debug - an optional flag.  If True, missing data products are noted.
+    
+         Returns:
+             QC_pass - a boolean signifying that the QC passed for failed
+        """
+        
+        L2 = self.kpf_object
+        QC_pass = True
+    
+        # First, check if WLS files exist
+        try:
+            WLSFILE = L2.header["PRIMARY"]["WLSFILE"]
+            WLSFILE2 = L2.header["PRIMARY"]["WLSFILE2"]
+            from kpfpipe.models.level2 import KPF2
+            WLSFILE_L2 = KPF2.from_fits(WLSFILE)
+            WLSFILE2_L2 = KPF2.from_fits(WLSFILE2)
+        except:
+            QC_pass = False
+            if debug:
+                print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
+            return QC_pass
+    
+        # Next, check if the two WLS files are the same (they should not be)
+        if WLSFILE == WLSFILE2:
+            QC_pass = False
+            if debug:
+                print("WLSFILE and WLSFILE2 are the same.")
+            return QC_pass        
+            
+        # Check if the observations are Keck or SoCal observations
+        is_day = False
+        if L2.header["PRIMARY"]["OBJECT"] == "SoCal":
+            is_day = True
+    
+        # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
+        # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
+        date_format = "%Y-%m-%d"
+        DATE_OBS = datetime.strptime(L2.header["PRIMARY"]["DATE-OBS"], date_format)
+        WLSFILE_DATE = datetime.strptime(WLSFILE_L2.header["PRIMARY"]["DATE-OBS"], date_format)
+        WLSFILE2_DATE = datetime.strptime(WLSFILE2_L2.header["PRIMARY"]["DATE-OBS"], date_format)
+        if is_day == False:
+            if DATE_OBS != WLSFILE_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE not the same as date of obs.")
+            if DATE_OBS != WLSFILE2_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE2 not the same as date of obs.")
+        else:
+            if DATE_OBS != WLSFILE_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE not the same as date of obs.")
+            if DATE_OBS >= WLSFILE2_DATE:
+                QC_pass = False
+                if debug:
+                    print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
+            
+        return QC_pass
