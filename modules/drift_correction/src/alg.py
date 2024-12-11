@@ -7,10 +7,11 @@ from astropy.constants import c
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
 
+from modules.Utils.config_parser import ConfigHandler
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
 # db_path = '/data/time_series/kpf_ts.db' # this is the standard database used for plotting, etc.
-db_path = 'kpf_ts_temp.db'
+db_path = '/data/time_series/kpf_ts_dec5b.db'
 
 class ModifyWLS:
     """This utility determines the drift correction derived from etalon frames and
@@ -25,25 +26,53 @@ class ModifyWLS:
         else:
             self.log = logger
 
+        cfg_params = ConfigHandler(self.config, 'PARAM')
+        self.db_path = cfg_params.get_config_value('ts_db_path')
+        print(self.db_path)
+
         self.l1_obj = l1_obj   # KPF L1 object
         self.date_mid = self.l1_obj.header['PRIMARY']['DATE-MID']
         self.dt = datetime.strptime(self.date_mid, "%Y-%m-%dT%H:%M:%S.%f")
         self.wls_file1 = self.l1_obj.header['PRIMARY']['WLSFILE']
         self.drptag = self.l1_obj.header['PRIMARY']['DRPTAG']
-        self.readmode = self.l1_obj.header['PRIMARY']['READSPED']
+
+        try:
+            self.readmode = self.l1_obj.header['PRIMARY']['READSPED']
+        except KeyError:
+            if 'regular' in self.l1_obj.header['PRIMARY']['GRACF']:
+                self.readmode = 'regular'
+            else:
+                self.readmode = 'fast'
+        
+        for session in ['eve', 'morn', 'midnight']:
+            if session in self.l1_obj.header['PRIMARY']['WLSFILE']:
+                self.wls_session = session
 
         # Connect to TS DB
-        myTS = AnalyzeTimeSeries(db_path=db_path)
+        myTS = AnalyzeTimeSeries(db_path=self.db_path)
 
         date = self.dt.strftime(format='%Y%m%d')
-        start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=2)
-        end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=2)
+        start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=1)
+        end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=1)
 
-        cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548']
+        cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
         self.df = myTS.dataframe_from_db(start_date=start_date, end_date=end_date,columns=cols)
         self.df = self.prepare_table()
 
     def apply_drift(self, method):
+        self.method = method
+
+        is_solar = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('SoCal')
+        if is_solar:
+            self.log.warning(f'Drift correction not implemented for SoCal data')
+            return self.l1_obj
+        
+        is_science = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('Target')
+        if not is_science:
+            obj = self.l1_obj.header['PRIMARY']['OBJECT']
+            self.log.warning(f'No drift correction for OBJECT {obj}')
+
+            return self.l1_obj
 
         try:
             clsmethod = self.__getattribute__(method)
@@ -60,12 +89,11 @@ class ModifyWLS:
     def prepare_table(self):
         df = self.df
 
-        # TODO when wls_file2 is in TS DB
-        # df = df[(df['wls_file'] != df['wls_file2'])]
+        # df = df[(df['WLSFILE'] != df['WLSFILE2'])]
         df = df[(df['NOTJUNK'] == True)]
 
         # All fibers illuminated:
-        df = df[df['OBJECT'].str.contains("etalon-all", na=False)]
+        df = df[df['OBJECT'].str.contains(r'etalon-all|slewcal', na=False)]
 
         current_drp_tag = self.drptag
         df = df[(df['DRPTAG'] == current_drp_tag)]
@@ -81,21 +109,19 @@ class ModifyWLS:
         df['date_code_utctime'] = df['DATE-MID'].str[:10].str.replace('-', '')
 
         # Extract 8-digit date code from wls_file and wls_file2
-        is_solar = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('SoCal')
-        if is_solar:
-            pass    # TODO implement logic for solar data
-        else:
-            df['date_code_wls_file'] = df['WLSFILE'].str.extract(r'(\d{8})')
-            # df['date_code_wls_file2'] = df['WLSFILE2'].str.extract(r'(\d{8})')
+        df['date_code_wls_file'] = df['WLSFILE'].str.extract(r'(\d{8})')
+        df['date_code_wls_file2'] = df['WLSFILE2'].str.extract(r'(\d{8})')
 
-        # Compare the extracted date codes
-        df['wls_match'] = (df['date_code_utctime'] == df['date_code_wls_file'])#  & (df['date_code_utctime'] == df['date_code_wls_file2'])            
-        df = df[df['wls_match'] == True]
+        df['etalon_mask_date'] = df['SCIMPATH'].str.split('/').str[-1].str[0:8]
+        df = df[df['date_code_wls_file'] == df['etalon_mask_date']]
+
+        # TODO check that etalon mask came from same calibration session as it's WLSFILE
+        # df[df['SCIMPATH'].str.contains(self.wls_session)]
 
         df['datetime'] = pd.to_datetime(df['DATE-MID'])
 
-        # TODO figure out ingestion problem for CCFRV
-        # df['CCFRV'] = (df['CCD1RV'] + df['CCD2RV']) / 2
+        # don't allow it to choose itself as the drift correction
+        df = df[(df['ObsID'] != self.l1_obj.filename.split('_')[0])]
 
         return df
 
@@ -103,14 +129,15 @@ class ModifyWLS:
     def adjust_wls(self, drift_rv):
         for ext in self.l1_obj.extensions:
             if 'WAVE' in ext.upper() and 'CA_HK' not in ext.upper():
-                self.l1_obj[ext] = self.l1_obj[ext] * (1 + drift_rv/c.to('km/s').value)
+                self.l1_obj[ext] = self.l1_obj[ext] * (1 - drift_rv/c.to('km/s').value)
 
 
 
     def add_keywords(self, drift_rv):
-        header = self.l1_obj.header['DRIFT']
-        header['DRIFTCOR'] = 1
-        header['DRIFTRV'] = np.median(drift_rv)
+        header = self.l1_obj.header['PRIMARY']
+        header['DRFTCOR'] = 1
+        header['DRFTRV'] = np.median(drift_rv)
+        header['DRFTMETH'] = self.method
 
 
     def nearest_neighbor(self):
@@ -133,9 +160,9 @@ class ModifyWLS:
         self.l1_obj['DRIFT'] = np.array([drift_rv])  # Ensure correct data structure
         
         # Update headers with observational details
-        self.l1_obj.header['DRIFT']['DRFTOBS'] = best_row['ObsID']
+        self.l1_obj.header['PRIMARY']['DRFTOBS'] = best_row['ObsID']
         time_delta_hours = best_row['time_delta'] / 3600  # Convert seconds to hours
-        self.l1_obj.header['DRIFT']['DRFTDEL'] = time_delta_hours
+        self.l1_obj.header['PRIMARY']['DRFTDEL'] = time_delta_hours
 
         # Apply drift correction in RV space
         self.adjust_wls(drift_rv)
@@ -145,14 +172,44 @@ class ModifyWLS:
 
 
     def nearest_interpolation(self):
-        self.df['time_delta'] = self.dt - self.df['datetime']
-        after = self.df.query('time_delta <= 0')
-        before = self.df.query('time_delta > 0')
+        self.df['time_delta'] = (self.df['datetime'] - self.dt).dt.total_seconds()
+        after = self.df.query('time_delta >= 0')
+        before = self.df.query('time_delta < 0')
 
-        best_before = np.argmin(before['time_delta'])
+        if len(after) == 0 or len(before) == 0:
+            self.log.warning('Could not find bracketing files for nearest interpolation method. Defaulting to nearest_neighbor method.')
+            return self.nearest_neighbor()
+        
+        best_before = np.argmax(before['time_delta'])
         best_after = np.argmin(after['time_delta'])
 
-        before_rv = self.df.iloc[best_before]['CCFRV']
+        before_rv = before.iloc[best_before]['CCFRV']
+        after_rv = after.iloc[best_after]['CCFRV']
 
+        before_dt = before.iloc[best_before]['time_delta']
+        after_dt = after.iloc[best_after]['time_delta']
+
+        # linear interpolation
+        drift_rv = before_rv + (before_dt / (before_dt - after_dt)) * (after_rv - before_rv)
+
+        # Add DRIFT extension if it doesn't already exist
+        if 'DRIFT' not in self.l1_obj.extensions:
+            self.l1_obj.create_extension('DRIFT', np.array)
+        
+        # Update DRIFT extension
+        self.l1_obj['DRIFT'] = np.array([drift_rv])  # Ensure correct data structure
+        
+        # Update headers with observational details
+        self.l1_obj.header['PRIMARY']['DRFTOBS'] = before.iloc[best_before]['ObsID']
+        self.l1_obj.header['PRIMARY']['DRFTOBS2'] = after.iloc[best_after]['ObsID']
+
+        before_time_delta_hours = before_dt / 3600  # Convert seconds to hours
+        after_time_delta_hours = after_dt / 3600
+
+        self.l1_obj.header['PRIMARY']['DRFTDEL'] = before_time_delta_hours
+        self.l1_obj.header['PRIMARY']['DRFTDEL2'] = after_time_delta_hours
+
+        self.adjust_wls(drift_rv)
+        self.add_keywords(drift_rv)
 
         return self.l1_obj
