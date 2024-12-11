@@ -1741,7 +1741,7 @@ class AnalyzeTimeSeries:
             dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'CCD Amplifier\nDark Current [e-/hr]',
+            thispaneldict = {'ylabel': 'CCD Amplifier Dark\nCurrent (Edge Glow) [e-/hr]',
                              'title': 'CCD Dark Current',
                              'legend_frac_size': 0.35}
             amppanel = {'panelvars': thispanelvars,
