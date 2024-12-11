@@ -9,6 +9,7 @@ DRPTAG|string|Git version number of KPF-Pipeline used for processing
 DRPHASH|string|Git commit hash version of KPF-Pipeline used for processing
 NOTJUNK|bool|Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0|bool|Quality Control: 1 = L0 data products present with non-zero array sizes
+DATAPR2D|bool|Quality Control: 2D red and green data present check
 KWRDPRL0|bool|Quality Control: 1 = L0 expected keywords present
 TIMCHKL0|bool|Quality Control: 1 = consistent times in L0 file
 EMSAT|float|Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
