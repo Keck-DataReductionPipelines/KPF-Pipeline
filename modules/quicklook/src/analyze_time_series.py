@@ -218,19 +218,20 @@ class AnalyzeTimeSeries:
         else:
             df = df.sort_values(by='ObsID', ascending=True)
 
-        self.logger.info('{ObsID_filename} read with ' + str(len(df)) + ' properly formatted ObsIDs.')
+        self.logger.info(f'{ObsID_filename} read with {str(len(df))} properly formatted ObsIDs.')
 
         #t = tqdm_notebook(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         t = self.tqdm(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:
-            L0_filename = ObsID + '.fits'
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
-            file_path = os.path.join(dir_path, L0_filename)
-            base_filename = L0_filename.split('.fits')[0]
+            filename = ObsID + '.fits'
+            file_path = os.path.join(dir_path, filename)
+            base_filename = filename.split('.fits')[0]
             t.set_description(base_filename)
             t.refresh() 
             try:
-                self.ingest_one_observation(dir_path, L0_filename) 
+                if os.path.exists(ObsID_filename):
+                    self.ingest_one_observation(dir_path, filename) 
             except Exception as e:
                 self.logger.error(e)
 
@@ -426,7 +427,7 @@ class AnalyzeTimeSeries:
     
     def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
-        Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
+        Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
         """
         header_data = {key: None for key in keyword_types.keys()}
         if os.path.isfile(file_path):
@@ -657,7 +658,7 @@ class AnalyzeTimeSeries:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
-        TO-DO: should this method just call display_dataframe_from_db()?
+        TO-DO: should this method just call dataframe_from_db()?
         
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
@@ -665,7 +666,7 @@ class AnalyzeTimeSeries:
         that are on-sky/off-sky and after start_date and/or before end_date. 
 
         Args:
-            columns (string or list of strings) - database columns to query
+            columns (string, list of strings, or '*' for all) - database columns to query
             only_object (string or list of strings) - object names to include in query
             object_like (string or list of strings) - partial object names to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
@@ -679,7 +680,10 @@ class AnalyzeTimeSeries:
         conn = sqlite3.connect(self.db_path)
         
         # Enclose column names in double quotes
-        quoted_columns = [f'"{column}"' for column in columns]
+        if columns == '*':
+            quoted_columns = '*'
+        else:
+            quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
 
         # Append WHERE clauses
@@ -1196,10 +1200,6 @@ class AnalyzeTimeSeries:
             """ For formatting of log plots """
             return num_fmt(value, sf=2)
 
-        if start_date == None:
-            start_date = min(df['DATE-MID'])
-        if end_date == None:
-            end_date = max(df['DATE-MID'])
         npanels = len(panel_arr)
         unique_cols = set()
         unique_cols.add('DATE-MID')
@@ -1207,8 +1207,9 @@ class AnalyzeTimeSeries:
         unique_cols.add('OBJECT')
         for panel in panel_arr:
             for d in panel['panelvars']:
-                col_value = d['col']
-                unique_cols.add(col_value)
+                unique_cols.add(d['col'])
+                if 'col_err' in d:
+                    unique_cols.add(d['col_err'])
         # add this logic
         #if 'only_object' in thispanel['paneldict']:
         #if 'object_like' in thispanel['paneldict']:
@@ -1237,6 +1238,18 @@ class AnalyzeTimeSeries:
 #                    object_like = True
 #                elif (thispanel['paneldict']['object_like']).lower() == 'false':
 #                    object_like = False
+
+            if start_date == None:
+                start_date = datetime(2020, 1,  1)
+                start_date_was_none = True
+            else:
+                start_date_was_none = False
+            if end_date == None:
+                end_date = datetime(2300, 1,  1)
+                end_date_was_none = True
+            else:
+                end_date_was_none = False
+
             df = self.dataframe_from_db(unique_cols, 
                                         start_date=start_date, 
                                         end_date=end_date, 
@@ -1245,6 +1258,12 @@ class AnalyzeTimeSeries:
                                         object_like=object_like,
                                         verbose=False)
             df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+
+            if start_date_was_none == True:
+                start_date = min(df['DATE-MID'])
+            if end_date_was_none == True:
+                end_date = max(df['DATE-MID'])
+
             df = df.sort_values(by='DATE-MID')
             if clean:
                 df = self.clean_df(df)
@@ -1324,12 +1343,18 @@ class AnalyzeTimeSeries:
                 else:
                     plot_type = 'scatter'
                 col_data = df[thispanel['panelvars'][i]['col']]
-                col_data_replaced = col_data.replace('NaN', np.nan)
+                col_data_replaced = col_data.replace('NaN',  np.nan)
                 col_data_replaced = col_data.replace('null', np.nan)
+                if 'col_err' in thispanel['panelvars'][i]:
+                    col_data_err = df[thispanel['panelvars'][i]['col_err']]
+                    col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
+                    col_data_err_replaced = col_data_err.replace('null', np.nan)
                 if plot_type == 'state':
                     states = np.array(col_data_replaced)
                 else:
                     data = np.array(col_data_replaced, dtype='float')
+                    if plot_type == 'errorbar':
+                        data_err = np.array(col_data_err_replaced, dtype='float')
                 plot_attributes = {}
                 if plot_type != 'state':
                     if np.count_nonzero(~np.isnan(data)) > 0:
@@ -1370,6 +1395,8 @@ class AnalyzeTimeSeries:
                            plot_attributes = {}
                 if plot_type == 'scatter':
                     axs[p].scatter(t, data, **plot_attributes)
+                if plot_type == 'errorbar':
+                    axs[p].errorbar(t, data, yerr=data_err, **plot_attributes)
                 if plot_type == 'plot':
                     axs[p].plot(t, data, **plot_attributes)
                 if plot_type == 'step':
@@ -1658,11 +1685,11 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Red CCD\nDark Current [e-/hr]',
                              'not_junk': 'true',
@@ -1672,7 +1699,7 @@ class AnalyzeTimeSeries:
             
             # Green CCD panel - ion pump current
             dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
                              'yscale': 'log',
@@ -1690,7 +1717,7 @@ class AnalyzeTimeSeries:
             
             # Red CCD panel - ion pump current
             dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
                              'yscale': 'log',
