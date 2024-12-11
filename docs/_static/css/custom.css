@@ -1,0 +1,11 @@
+/* Increase the maximum width of content area */
+.wy-nav-content {
+    max-width: 2800px; /* Adjust as needed */
+}
+
+/* Adjust code block/pre width and wrapping */
+div.highlight pre {
+    max-width: 2800px; /* Set desired width */
+    white-space: pre-wrap; /* Allows line wrapping if you prefer */
+    overflow: auto; /* Ensures horizontal scrolling if content overflows */
+}
