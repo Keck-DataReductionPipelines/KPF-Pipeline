@@ -9,7 +9,7 @@ KPF data products are defined for these data levels:
 * **Level 0 (L0)**: Raw data products produced by KPF at the W. M. Keck Observatory
 * **2D**: Assembled CCD images with minimal processing.  This data product is produced by the DRP during processing from L0 to L1 but is not fundamental and is frequently not archived.
 * **Level 1 (L1)**: Extracted, wavelength-calibrated spectra
-* **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators
+* **Level 2 (L2)**: Derived data products including cross-correlation functions, radial velocities, and activity indicators.
 
 Each of these data levels is a standardized, multi-extension FITS format, and can be read using standard fits tools (e.g., `astropy.fits.io <https://docs.astropy.org/en/stable/io/fits/>`_) and the `KPF-Pipeline <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_.
 
@@ -158,12 +158,17 @@ TARGPLAX  14.7                                        Target parallax [arcsec] f
 TARGPMDC  0.0                                         Target proper motion [arcsec/yr] in declination from DCS
 TARGPMRA  0.0                                         Target proper motion [s/yr] in right ascension from DCS
 TARGRADV  81.87                                       Target radial velocity [km/s]
+TARGFRAM  FK5                                         Target frame
 AIRMASS   1.26                                        Airmass from DCS
 PARANTEL  23.58                                       Parallactic angle of the telescope from DCS
 HA        +01:01:37.22                                Hour angle
 EL        52.46                                       Elevation [deg]
 AZ        204.46                                      Azimuth [deg]
 LST       07:13:51.02                                 Local sidereal time
+RA        06:12:13.80                                 [h] Right ascension
+DEC       -14:38:56.0                                 [deg] Declination
+EQUINOX   2000.0                                      DCS Equinox
+MJD-OBS   60310.21291                                 Modified Julian days
 GAIAID    DR3 2993561629444856960                     GAIA Target name
 2MASSID   J06121397-1439002                           2MASS Target name
 GAIAMAG   9.28                                        GAIA G band magnitude
@@ -172,11 +177,15 @@ TARGTEFF  5398.0                                      Target effective temperatu
 OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
 TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
 IMTYPE    Object                                      Image Type
+TARGNAME  42813                                       KPF Target Name
+DCSNAME   42813                                       DCS Target Name
+FULLTARG  42813                                       Full Target name from kpfconfig
 CAL-OBJ   None                                        Calibration fiber source
 SKY-OBJ   Sky                                         Sky fiber source
 SCI-OBJ   Target                                      Science fiber source
 AGITSTA   Running                                     Agitator status
 FIUMODE   Observing                                   FIU operating mode
+FFFB      Yes                                         Flatfield fiber on
 TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
@@ -372,6 +381,9 @@ FRS2M852  0.9000                                                                
 FRS2U852  0.0010                                                                  uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852  0.9000                                                                  median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852  0.0010                                                                  uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+DATAPR2D  1                                                                       Quality Control: 1 = 2D red and green data present
+MONOTWLS  1                                                                       Quality Control: 1 = Monotonic wavelength-solution
+DATAPRL1  1                                                                       Quality Control: 1 = L1 red and green data present
 ========  ======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
@@ -395,6 +407,7 @@ The L2 file inherits all Level 0, 2D, and Level 1 keywords.  Below are additiona
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 TIMCHKL2  1                                           Quality Control: 1 = consistent times in L2 file
+DATAPRL2  1                                           Quality Control: 1 = L2 data is present
 ========  ==========================================  =========
 
 Radial Velocities

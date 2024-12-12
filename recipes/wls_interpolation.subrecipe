@@ -7,3 +7,6 @@ master_file_after  = cals['wls'][1]
 master_file_before_l1 = kpf1_from_fits(master_file_before,data_type=data_type)
 master_file_after_l1  = kpf1_from_fits(master_file_after,data_type=data_type)
 interpolated_l1 = WaveInterpolate(master_file_before_l1,master_file_after_l1,output_data)
+
+SetHeaderValue(output_data, 'WLSFILE', master_file_before) # db_rec_before from subrecipe
+SetHeaderValue(output_data, 'WLSFILE2', master_file_after) # db_rec_after from subrecipe

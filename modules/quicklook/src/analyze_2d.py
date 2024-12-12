@@ -72,8 +72,14 @@ class Analyze2D:
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
-        self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
-        self.red_percentile_99,   self.red_percentile_90,   self.red_percentile_50,   self.red_percentile_10   = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+        try:
+            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+        except:
+            self.logger.error('Problem computing SNR for Green 2D image')
+        try:
+            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+        except:
+            self.logger.error('Problem computing SNR for Green 2D image')
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -251,6 +257,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -484,6 +491,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -541,6 +549,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -614,7 +623,9 @@ class Analyze2D:
         plt.close('all')
 
 
-    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False):
+    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False, 
+                               width=200, height=200, 
+                               start_x_arr='default', start_y_arr='default'):
         """
         Overlay the order trace on the 2D image in a 3x3 array of zoom-in plots.  
 
@@ -627,6 +638,7 @@ class Analyze2D:
             PNG plot in fig_path or shows the plot it in the current environment 
             (e.g., in a Jupyter Notebook).
         """
+        chip = chip.lower()
         
         # Set parameters based on the chip selected
         obs_date = Time(self.header['DATE-MID'])
@@ -639,10 +651,10 @@ class Analyze2D:
                     order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
                 else:
                     order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
-                width  = 200
-                height = 200
-                start_x_arr = [ 0, 3600,  0, 3600]
-                start_y_arr = [1200, 1200,  545,  545]
+                if start_x_arr == 'default':
+                    start_x_arr = [ 0, 3600,  0, 3600]
+                if start_y_arr == 'default':
+                    start_y_arr = [1200, 1200,  545,  545]
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
@@ -650,10 +662,10 @@ class Analyze2D:
                     order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
                 else:
                     order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
-                width  = 200
-                height = 200
-                start_x_arr = [ 0, 3600,  0, 3600]
-                start_y_arr = [1538, 1538,  545,  550]
+                if start_x_arr == 'default':
+                    start_x_arr = [ 0, 3600,  0, 3600]
+                if start_y_arr == 'default':
+                    start_y_arr = [1538, 1538,  545,  550]
             image = np.array(self.D2[CHIP + '_CCD'].data)
             order_trace_master = pd.read_csv(order_trace_master_file)
         else:
@@ -664,13 +676,13 @@ class Analyze2D:
         fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
         for i in range(2):
             for j in range(2):
-                # Calculate the top left corner of each sub-image
+                # Calculate the top left corner of each subimage
                 start_x = start_x_arr[2*i+j]
                 start_y = start_y_arr[2*i+j]
-                end_x = min(start_x+width, image.shape[0])
+                end_x = min(start_x+width,  image.shape[0])
                 end_y = min(start_y+height, image.shape[1])
 
-                # Slice out and display the sub-image
+                # Slice out and display the subimage
                 sub_img = image[start_y:end_y, start_x:end_x]
                 im = axs[i, j].imshow(sub_img, origin='lower', 
                                  extent=[start_x, end_x, start_y, end_y], # these indices appear backwards, but work
@@ -680,6 +692,7 @@ class Analyze2D:
                                  cmap='viridis')
                 axs[i, j].set_xlim(start_x, start_x+width)
                 axs[i, j].set_ylim(start_y, start_y+height)
+                
                 # Overplot order trace
                 for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
                     x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
@@ -703,8 +716,6 @@ class Analyze2D:
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
-#        plt.tight_layout()
-        #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)

@@ -390,11 +390,14 @@ class AnalyzeL1:
         plt.close('all')
 
 
-    def plot_L1_spectrum(self, orderlet=None, fig_path=None, show_plot=False):
+    def plot_L1_spectrum(self, variance=False, data_over_sqrt_variance=False, 
+                         orderlet=None, fig_path=None, show_plot=False):
         """
         Generate a rainbow-colored plot L1 spectrum.  One must select an orderlet.
 
         Args:
+            variance - plot variance (VAR extensions) instead of signal (CCD extensions)
+            data_over_sqrt_variance - plot data divided by sqrt(variance), an approximate SNR spectrum
             orderlet (string) - "CAL", "SCI1", "SCI2", "SCI3", "SKY"
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -406,33 +409,109 @@ class AnalyzeL1:
         
         # Parameters
         n_orders_per_panel = 8 # int(self.config['L1']['n_per_row']) #number of orders per panel
-        
+
         # Define wavelength and flux arrays
         if orderlet.lower() == 'sci1':
             wav_green  = np.array(self.L1['GREEN_SCI_WAVE1'].data,'d')
             wav_red    = np.array(self.L1['RED_SCI_WAVE1'].data,'d')
-            flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
-            flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
+            if variance:
+                flux_green = np.array(self.L1['GREEN_SCI_VAR1'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_VAR1'].data,'d')
+            elif data_over_sqrt_variance:
+                flux_green = np.divide(np.array(self.L1['GREEN_SCI_FLUX1'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR1'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['GREEN_SCI_FLUX1'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR1'].data,'d'))) != 0)
+                flux_red   = np.divide(np.array(self.L1['RED_SCI_FLUX1'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR1'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['RED_SCI_FLUX1'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR1'].data,'d'))) != 0)
+                #flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR1'].data,'d')))
+                #flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR1'].data,'d')))
+            else:
+                flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
+
         elif orderlet.lower() == 'sci2':
             wav_green  = np.array(self.L1['GREEN_SCI_WAVE2'].data,'d')
             wav_red    = np.array(self.L1['RED_SCI_WAVE2'].data,'d')
-            flux_green = np.array(self.L1['GREEN_SCI_FLUX2'].data,'d')
-            flux_red   = np.array(self.L1['RED_SCI_FLUX2'].data,'d')
+            if variance:
+                flux_green = np.array(self.L1['GREEN_SCI_VAR2'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_VAR2'].data,'d')
+            elif data_over_sqrt_variance:
+                flux_green = np.divide(np.array(self.L1['GREEN_SCI_FLUX2'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR2'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['GREEN_SCI_FLUX2'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR2'].data,'d'))) != 0)
+                flux_red   = np.divide(np.array(self.L1['RED_SCI_FLUX2'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR2'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['RED_SCI_FLUX2'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR2'].data,'d'))) != 0)
+                #flux_green = np.array(self.L1['GREEN_SCI_FLUX2'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR2'].data,'d')))
+                #flux_red   = np.array(self.L1['RED_SCI_FLUX2'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR2'].data,'d')))
+            else:
+                flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
         elif orderlet.lower() == 'sci3':
             wav_green  = np.array(self.L1['GREEN_SCI_WAVE3'].data,'d')
             wav_red    = np.array(self.L1['RED_SCI_WAVE3'].data,'d')
-            flux_green = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d')
-            flux_red   = np.array(self.L1['RED_SCI_FLUX3'].data,'d')
+            if variance:
+                flux_green = np.array(self.L1['GREEN_SCI_VAR3'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_VAR3'].data,'d')
+            elif data_over_sqrt_variance:
+                flux_green = np.divide(np.array(self.L1['GREEN_SCI_FLUX3'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR3'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['GREEN_SCI_FLUX3'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR3'].data,'d'))) != 0)
+                flux_red   = np.divide(np.array(self.L1['RED_SCI_FLUX3'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR3'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['RED_SCI_FLUX3'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR3'].data,'d'))) != 0)
+                #flux_green = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR3'].data,'d')))
+                #flux_red   = np.array(self.L1['RED_SCI_FLUX3'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR3'].data,'d')))
+            else:
+                flux_green = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_FLUX3'].data,'d')
         elif orderlet.lower() == 'sky':
             wav_green  = np.array(self.L1['GREEN_SKY_WAVE'].data,'d')
             wav_red    = np.array(self.L1['RED_SKY_WAVE'].data,'d')
-            flux_green = np.array(self.L1['GREEN_SKY_FLUX'].data,'d')
-            flux_red   = np.array(self.L1['RED_SKY_FLUX'].data,'d')
+            if variance:
+                flux_green = np.array(self.L1['GREEN_SKY_VAR'].data,'d')
+                flux_red   = np.array(self.L1['RED_SKY_VAR'].data,'d')
+            elif data_over_sqrt_variance:
+                flux_green = np.divide(np.array(self.L1['GREEN_SKY_FLUX'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['GREEN_SKY_VAR'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['GREEN_SKY_FLUX'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['GREEN_SKY_VAR'].data,'d'))) != 0)
+                flux_red   = np.divide(np.array(self.L1['RED_SKY_FLUX'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['RED_SKY_VAR'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['RED_SKY_FLUX'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['RED_SKY_VAR'].data,'d'))) != 0)
+                #flux_green = np.array(self.L1['GREEN_SKY_FLUX'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SKY_VAR'].data,'d')))
+                #flux_red   = np.array(self.L1['RED_SKY_FLUX'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SKY_VAR'].data,'d')))
+            else:
+                flux_green = np.array(self.L1['GREEN_SKY_FLUX'].data,'d')
+                flux_red   = np.array(self.L1['RED_SKY_FLUX'].data,'d')
         elif orderlet.lower() == 'cal':
             wav_green  = np.array(self.L1['GREEN_CAL_WAVE'].data,'d')
             wav_red    = np.array(self.L1['RED_CAL_WAVE'].data,'d')
-            flux_green = np.array(self.L1['GREEN_CAL_FLUX'].data,'d')
-            flux_red   = np.array(self.L1['RED_CAL_FLUX'].data,'d')
+            if variance:
+                flux_green = np.array(self.L1['GREEN_CAL_VAR'].data,'d')
+                flux_red   = np.array(self.L1['RED_CAL_VAR'].data,'d')
+            elif data_over_sqrt_variance:
+                flux_green = np.divide(np.array(self.L1['GREEN_CAL_FLUX'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['GREEN_CAL_VAR'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['GREEN_CAL_FLUX'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['GREEN_CAL_VAR'].data,'d'))) != 0)
+                flux_red   = np.divide(np.array(self.L1['RED_CAL_FLUX'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1['RED_CAL_VAR'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1['RED_CAL_FLUX'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1['RED_CAL_VAR'].data,'d'))) != 0)
+                #flux_green = np.array(self.L1['GREEN_CAL_FLUX'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_CAL_VAR'].data,'d')))
+                #flux_red   = np.array(self.L1['RED_CAL_FLUX'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_CAL_VAR'].data,'d')))
+            else:
+                flux_green = np.array(self.L1['GREEN_CAL_FLUX'].data,'d')
+                flux_red   = np.array(self.L1['RED_CAL_FLUX'].data,'d')
         else:
             self.logger.error('plot_1D_spectrum: orderlet not specified properly.')
         if np.shape(flux_green)==(0,):flux_green = wav_green*0. # placeholder when there is no data
@@ -476,15 +555,26 @@ class AnalyzeL1:
             ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
 
         # Add axis labels
+
+        if variance:
+            title = 'L1 Variance Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
+            ylabel = 'Variance (e-) in ' + orderlet.upper()
+        elif data_over_sqrt_variance:
+            title = 'L1 SNR Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
+            ylabel = r'SNR (Counts / Variance$^{1/2}$) in ' + orderlet.upper()
+        else:
+            title = 'L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
+            ylabel = 'Counts (e-) in ' + orderlet.upper()
+
         low, high = np.nanpercentile(flux,[0.1,99.9])
-        ax[int(np.shape(wav)[0]/n_orders_per_panel/2)].set_ylabel('Counts (e-) in ' + orderlet.upper(),fontsize = 28)
+        ax[int(np.shape(wav)[0]/n_orders_per_panel/2)].set_ylabel(ylabel,fontsize = 28)
         plt.xlabel('Wavelength (Ang)',fontsize = 28)
 
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('L1 Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name, fontsize=28)
+        ax.set_title(title, fontsize=28)
         plt.tight_layout()
 
         # Create a timestamp and annotate in the lower right corner

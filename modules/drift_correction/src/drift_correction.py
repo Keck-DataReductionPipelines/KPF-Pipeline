@@ -1,14 +1,14 @@
 
 import configparser
 
-from kpfpipe.primitives.level0 import KPF0_Primitive
-from modules.calibration_lookup.src.alg import GetCalibrations
+from kpfpipe.primitives.level1 import KPF1_Primitive
+from modules.drift_correction.src.alg import ModifyWLS
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/calibration_lookup/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/drift_correction/configs/default.cfg'
 
-class CalibrationLookup(KPF0_Primitive):
+class DriftCorrection(KPF1_Primitive):
     """This utility looks up the associated calibrations for a given datetime and
        returns a dictionary with all calibration types.
 
@@ -44,30 +44,32 @@ class CalibrationLookup(KPF0_Primitive):
     def __init__(self, action, context):
 
         #Initialize parent class
-        KPF0_Primitive.__init__(self, action, context)
+        KPF1_Primitive.__init__(self, action, context)
 
         #Input arguments
-        self.datetime = self.action.args[0]   # ISO datetime string
-        try:
-            self.subset = self.action.args["subset"]
-        except KeyError:
-            self.subset = None
+        self.l1_obj = self.action.args[0]   # KPF L1 object
+        self.method = self.action.args[1]   # string of method to use
 
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            self.config_path = context.config_path['calibration_lookup']
+            self.config_path = context.config_path['drift_correction']
         except:
             self.config_path = DEFAULT_CFG_PATH
         self.config.read(self.config_path)
 
-        self.caldate_files = self.config['PARAM']['date_files']
-        self.caltypes = self.config['PARAM']['lookup_map']
+        # self.ts_db = self.config['PARAM']['ts_db_path']
 
     def _perform(self):
 
-        cal_look = GetCalibrations(self.datetime, self.config_path)
-        output_cals = cal_look.lookup(subset=self.subset)
+        dc = ModifyWLS(self.l1_obj, self.config_path)
+        out_l1 = dc.apply_drift(method=self.method)
 
-        return Arguments(output_cals)
+        return Arguments(out_l1)
 
+
+    def _pre(self):
+        pass
+
+    def _post(self):
+        pass
