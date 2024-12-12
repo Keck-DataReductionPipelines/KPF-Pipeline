@@ -161,11 +161,10 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=50):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
-        To-do: scan for observations that have already been ingested at a higher level.
         """
         self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
@@ -175,6 +174,11 @@ class AnalyzeTimeSeries:
             if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
         if len(filtered_dir_paths) > 0:
+            # Reverse dates if the reverse flag is set
+            if reverse:
+                filtered_dir_paths.reverse()
+            
+            # Iterate over date directories
             t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
             for dir_path in t1:
                 t1.set_description(dir_path.split('/')[-1])
@@ -191,6 +195,7 @@ class AnalyzeTimeSeries:
                 if batch:
                     self.ingest_batch_observation(batch)
         self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
+
 
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
         """
@@ -406,37 +411,59 @@ class AnalyzeTimeSeries:
         """
         Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
         """
+        # Initialize the result dictionary with None for all keywords
         header_data = {key: None for key in keyword_types.keys()}
-        if os.path.isfile(file_path):
-            try:
-                with fits.open(file_path, memmap=True) as hdul:
-                    header = hdul[extension].header
-                    # Use set intersection to find common keys
-                    common_keys = set(header.keys()) & header_data.keys()
-                    for key in common_keys:
-                        header_data[key] = header[key]
-            except:
-            	self.logger.info("Bad file: " + file_path)
+    
+        # Check if the file exists before proceeding
+        if not os.path.isfile(file_path):
+            return header_data
+    
+        try:
+            # Open the FITS file and read the specified header
+            with fits.open(file_path, memmap=True) as hdul:
+                header = hdul[extension].header
+    
+                # Use dictionary comprehension to populate header_data
+                header_data = {key: header.get(key, None) for key in keyword_types.keys()}
+        except Exception as e:
+            # Log any issues with the file
+            self.logger.info(f"Bad file: {file_path}. Error: {e}")
+    
         return header_data
 
 
     def extract_telemetry(self, file_path, keyword_types):
         """
-        Extract telemetry from the 'TELEMETRY' extension in an KPF L0 file.
+        Extract telemetry from the 'TELEMETRY' extension in a KPF L0 file.
         """
         try:
-            df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
-            df_telemetry = df_telemetry[['keyword', 'average']]
-        except:
-            self.logger.info('Bad TELEMETRY extension in: ' + file_path)
-            telemetry_dict = {key: None
-                              for key in keyword_types}
-            return telemetry_dict
-        df_telemetry = df_telemetry.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
-        df_telemetry.replace({'-nan': np.nan, 'nan': np.nan, -999: np.nan}, inplace=True)
-        df_telemetry.set_index("keyword", inplace=True)
-        telemetry_dict = {key: float(df_telemetry.at[key, 'average']) if key in df_telemetry.index else None 
-                          for key in keyword_types}
+            # Use astropy's Table to load only necessary data
+            telemetry_table = Table.read(file_path, format='fits', hdu='TELEMETRY')
+            keywords = telemetry_table['keyword']
+            averages = telemetry_table['average']
+        except Exception as e:
+            self.logger.info(f"Bad TELEMETRY extension in: {file_path}. Error: {e}")
+            return {key: None for key in keyword_types}
+    
+        try:
+            # Decode and sanitize 'keyword' column
+            keywords = [k.decode('utf-8') if isinstance(k, bytes) else k for k in keywords]
+    
+            # Replace invalid values efficiently using NumPy
+            averages = np.array(averages, dtype=object)  # Convert to object to allow mixed types
+            mask_invalid = np.isin(averages, ['-nan', 'nan', -999]) | np.isnan(pd.to_numeric(averages, errors='coerce'))
+            averages[mask_invalid] = np.nan
+            averages = averages.astype(float)  # Convert valid data to float
+    
+            # Create the telemetry dictionary
+            telemetry_data = dict(zip(keywords, averages))
+    
+            # Build the output dictionary for the requested keywords
+            telemetry_dict = {key: float(telemetry_data.get(key, np.nan)) for key in keyword_types}
+        except Exception as e:
+            self.logger.info(f"Error processing TELEMETRY data in: {file_path}. Error: {e}")
+            telemetry_dict = {key: None for key in keyword_types}
+    
         return telemetry_dict
 
 
@@ -591,7 +618,7 @@ class AnalyzeTimeSeries:
             D2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(D2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
         except FileNotFoundError:
             D2_file_mod_time = '1000-01-01 01:01'
-        if D2_file_mod_time > result[0]:
+        if D2_file_mod_time > result[1]:
             return True # 2D file was modified
 
         L1_file_path = f"{D2_file_path.replace('2D', 'L1')}"
@@ -599,7 +626,7 @@ class AnalyzeTimeSeries:
             L1_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L1_file_path)).strftime("%Y-%m-%d %H:%M:%S")
         except FileNotFoundError:
             L1_file_mod_time = '1000-01-01 01:01'
-        if L1_file_mod_time > result[0]:
+        if L1_file_mod_time > result[2]:
             return True # L1 file was modified
 
         L2_file_path = f"{L0_file_path.replace('L1', 'L2')}"
@@ -607,7 +634,7 @@ class AnalyzeTimeSeries:
             L2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
         except FileNotFoundError:
             L2_file_mod_time = '1000-01-01 01:01'
-        if L2_file_mod_time > result[0]:
+        if L2_file_mod_time > result[3]:
             return True # L2 file was modified
                     
         return False # DB modification times are all more recent than file modification times
