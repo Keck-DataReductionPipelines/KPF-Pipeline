@@ -162,12 +162,13 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
         """
-        self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
+        if not quiet:
+            self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date_str > end_date_str)
         filtered_dir_paths = [
@@ -180,11 +181,11 @@ class AnalyzeTimeSeries:
                 filtered_dir_paths.reverse()
             
             # Iterate over date directories
-            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
+            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1], disable=quiet)
             for dir_path in t1:
                 t1.set_description(dir_path.split('/')[-1])
                 t1.refresh() 
-                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
+                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False, disable=quiet)
                 batch = []
                 for L0_filename in t2:
                     if L0_filename.endswith(".fits"):
@@ -195,7 +196,8 @@ class AnalyzeTimeSeries:
                             batch = []
                 if batch:
                     self.ingest_batch_observation(batch)
-        self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
+        if not quiet:
+            self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
 
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
@@ -346,12 +348,13 @@ class AnalyzeTimeSeries:
 
     def ingest_batch_observation(self, batch):
         """
-        Ingest a set of observations into the database.
+        Ingest a batch of observations into the database.
         """
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         batch_data = []
         for file_path in batch:
             base_filename = os.path.basename(file_path).split('.fits')[0]
+            print(base_filename)
             L0_filename = base_filename.split('.fits')[0]
             L0_filename = L0_filename.split('/')[-1]
             D2_filename  = f"{L0_filename.replace('L0', '2D')}"
@@ -531,6 +534,7 @@ class AnalyzeTimeSeries:
         try:
             df_rv = Table.read(file_path, format='fits', hdu='RV').to_pandas()
             df_rv = df_rv[['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 'CAL RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 'Bary_RVC', 'CCF Weights']]
+            print(shape(df_rv))
         except Exception as e:
             #self.logger.info('Bad RV extension in: ' + file_path)
             #self.logger.info(e)
@@ -552,6 +556,7 @@ class AnalyzeTimeSeries:
         keyed['NN'] = keyed['row_idx'].apply(lambda x: f"{x:02d}")  # direct zero-based indexing
         keyed['key'] = keyed['col'].map(mapping)
         keyed['key'] = keyed['key'].str[:-2] + keyed['NN']
+        print(len(keyed))
         rv_dict = dict(zip(keyed['key'], keyed['val']))
         return rv_dict
         
