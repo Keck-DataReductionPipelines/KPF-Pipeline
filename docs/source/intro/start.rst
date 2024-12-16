@@ -53,6 +53,7 @@ for instructions on how to initially set up the pipeline operations database.
     install_develop.rst
     example_trivial.rst
     process_night.rst
+    processscripts.rst
     logging.rst
     config.rst
     database_setup.rst

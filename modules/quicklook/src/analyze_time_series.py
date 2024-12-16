@@ -56,6 +56,7 @@ class AnalyzeTimeSeries:
         L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
+        L2_RV_ccf_keyword_types (dictionary) - specifies data types for L2 CCF header keywords
 
     Related Commandline Scripts:
         'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
@@ -69,14 +70,11 @@ class AnalyzeTimeSeries:
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
         * Check for proper data types (float vs. str) before plotting
-        * Add "Last N Days" and implement N=10 on Jump
         * Add separate junk test from list of junked files
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * Add histogram plots, e.g. for DRPTAG
-        * Add the capability of using Jump queries to find files for ingestion or plotting
+        * Add the capability of using one DB for ingestion into another or plotting
         * Determine earliest observation with a TELEMETRY extension and act accordingly
-        * Ingest information from masters, especially WLS masters
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -96,8 +94,10 @@ class AnalyzeTimeSeries:
         self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
         self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
         self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
-        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
         self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L2_CCF_header_keyword_types = self.get_keyword_types(level='L2_CCF_header')
+        # need to add a line here for RV extension in L2
         
         if drop:
             self.drop_table()
@@ -130,7 +130,8 @@ class AnalyzeTimeSeries:
         L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
         L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
         L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns
+        L2_CCF_header_columns =[f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
+        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns + L2_CCF_header_columns
         columns += ['"datecode" TEXT', '"ObsID" TEXT']
         columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
         columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
@@ -160,11 +161,10 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=50):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
-        To-do: scan for observations that have already been ingested at a higher level.
         """
         self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
@@ -173,21 +173,28 @@ class AnalyzeTimeSeries:
             dir_path for dir_path in sorted_dir_paths
             if start_date_str <= os.path.basename(dir_path) <= end_date_str
         ]
-        t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
-        for dir_path in t1:
-            t1.set_description(dir_path.split('/')[-1])
-            t1.refresh() 
-            t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
-            batch = []
-            for L0_filename in t2:
-                if L0_filename.endswith(".fits"):
-                    file_path = os.path.join(dir_path, L0_filename)
-                    batch.append(file_path)
-                    if len(batch) >= batch_size:
-                        self.ingest_batch_observation(batch)
-                        batch = []
-            if batch:
-                self.ingest_batch_observation(batch)
+        if len(filtered_dir_paths) > 0:
+            # Reverse dates if the reverse flag is set
+            if reverse:
+                filtered_dir_paths.reverse()
+            
+            # Iterate over date directories
+            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
+            for dir_path in t1:
+                t1.set_description(dir_path.split('/')[-1])
+                t1.refresh() 
+                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
+                batch = []
+                for L0_filename in t2:
+                    if L0_filename.endswith(".fits"):
+                        file_path = os.path.join(dir_path, L0_filename)
+                        batch.append(file_path)
+                        if len(batch) >= batch_size:
+                            self.ingest_batch_observation(batch)
+                            batch = []
+                if batch:
+                    self.ingest_batch_observation(batch)
+        self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
 
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
@@ -215,10 +222,29 @@ class AnalyzeTimeSeries:
         else:
             df = df.sort_values(by='ObsID', ascending=True)
 
-        self.logger.info('{ObsID_filename} read with ' + str(len(df)) + ' properly formatted ObsIDs.')
+        self.logger.info(f'{ObsID_filename} read with {str(len(df))} properly formatted ObsIDs.')
 
         #t = tqdm_notebook(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         t = self.tqdm(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        for ObsID in t:
+            dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
+            filename = ObsID + '.fits'
+            file_path = os.path.join(dir_path, filename)
+            base_filename = filename.split('.fits')[0]
+            t.set_description(base_filename)
+            t.refresh() 
+            try:
+                if os.path.exists(ObsID_filename):
+                    self.ingest_one_observation(dir_path, filename) 
+            except Exception as e:
+                self.logger.error(e)
+
+
+    def add_ObsIDs_to_db(self, ObsID_list):
+        """
+        Ingest files into the database from a list of strings 'ObsID_list'.  
+        """
+        t = self.tqdm(ObsID_list, desc=f'ObsIDs', leave=True)
         for ObsID in t:
             L0_filename = ObsID + '.fits'
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
@@ -248,19 +274,24 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types) 
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types) 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types) 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types) 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types) 
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types,    extension='PRIMARY') 
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types,    extension='PRIMARY') 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types,    extension='PRIMARY') 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types,    extension='PRIMARY') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            #L2_RV_data        = self.extract_rvs(L2_file_path) 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
 
             header_data = {**L0_header_data, 
                            **D2_header_data, 
                            **L1_header_data, 
                            **L2_header_data, 
+                           **L0_telemetry,
                            **L2_RV_header_data, 
-                           **L0_telemetry
+                           #**L2_RV_data, 
+                           **L2_CCF_header_data, 
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
@@ -309,14 +340,19 @@ class AnalyzeTimeSeries:
 
             # If any associated file has been updated, proceed
             if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types, extension='PRIMARY')   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types, extension='PRIMARY')   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types, extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types, extension='PRIMARY')   
+                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types,    extension='PRIMARY')   
+                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types,    extension='PRIMARY')   
+                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,    extension='PRIMARY')   
+                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,    extension='PRIMARY')   
                 L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
+                #L2_RV_data     = self.extract_rvs(L2_file_path)   
                 L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
+                L2_RV_header_data = self.extract_kwd(L2_file_path,    self.L2_RV_header_keyword_types, extension='RV')   
+                L2_CCF_header_data = self.extract_kwd(L2_file_path,   self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
 
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry}
+                #header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
+                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
+
                 header_data['ObsID'] = base_filename
                 header_data['datecode'] = get_datecode(base_filename)
                 header_data['L0_filename'] = os.path.basename(L0_file_path)
@@ -391,63 +427,169 @@ class AnalyzeTimeSeries:
     
     def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
-        Extract keywords from keyword_types.keys from a L0/2D/L1/L2 file.
+        Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
         """
+        # Initialize the result dictionary with None for all keywords
         header_data = {key: None for key in keyword_types.keys()}
-        if os.path.isfile(file_path):
-            try:
-                with fits.open(file_path, memmap=True) as hdul:
-                    header = hdul[extension].header
-                    # Use set intersection to find common keys
-                    common_keys = set(header.keys()) & header_data.keys()
-                    for key in common_keys:
-                        header_data[key] = header[key]
-            except:
-            	self.logger.info("Bad file: " + file_path)
+    
+        # Check if the file exists before proceeding
+        if not os.path.isfile(file_path):
+            return header_data
+    
+        try:
+            # Open the FITS file and read the specified header
+            with fits.open(file_path, memmap=True) as hdul:
+                header = hdul[extension].header
+    
+                # Use dictionary comprehension to populate header_data
+                header_data = {key: header.get(key, None) for key in keyword_types.keys()}
+        except Exception as e:
+            # Log any issues with the file
+            self.logger.info(f"Bad file: {file_path}. Error: {e}")
+    
         return header_data
 
 
     def extract_telemetry(self, file_path, keyword_types):
         """
-        Extract telemetry from the 'TELEMETRY' extension in an KPF L0 file.
+        Extract telemetry from the 'TELEMETRY' extension in a KPF L0 file.
         """
         try:
-            df_telemetry = Table.read(file_path, format='fits', hdu='TELEMETRY').to_pandas()
-            df_telemetry = df_telemetry[['keyword', 'average']]
-        except:
-            self.logger.info('Bad TELEMETRY extension in: ' + file_path)
-            telemetry_dict = {key: None
-                              for key in keyword_types}
-            return telemetry_dict
-        df_telemetry = df_telemetry.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
-        df_telemetry.replace({'-nan': np.nan, 'nan': np.nan, -999: np.nan}, inplace=True)
-        df_telemetry.set_index("keyword", inplace=True)
-        telemetry_dict = {key: float(df_telemetry.at[key, 'average']) if key in df_telemetry.index else None 
-                          for key in keyword_types}
+            # Use astropy's Table to load only necessary data
+            telemetry_table = Table.read(file_path, format='fits', hdu='TELEMETRY')
+            keywords = telemetry_table['keyword']
+            averages = telemetry_table['average']
+        except Exception as e:
+            self.logger.info(f"Bad TELEMETRY extension in: {file_path}. Error: {e}")
+            return {key: None for key in keyword_types}
+    
+        try:
+            # Decode and sanitize 'keyword' column
+            keywords = [k.decode('utf-8') if isinstance(k, bytes) else k for k in keywords]
+    
+            # Replace invalid values efficiently using NumPy
+            averages = np.array(averages, dtype=object)  # Convert to object to allow mixed types
+            mask_invalid = np.isin(averages, ['-nan', 'nan', -999]) | np.isnan(pd.to_numeric(averages, errors='coerce'))
+            averages[mask_invalid] = np.nan
+            averages = averages.astype(float)  # Convert valid data to float
+    
+            # Create the telemetry dictionary
+            telemetry_data = dict(zip(keywords, averages))
+    
+            # Build the output dictionary for the requested keywords
+            telemetry_dict = {key: float(telemetry_data.get(key, np.nan)) for key in keyword_types}
+        except Exception as e:
+            self.logger.info(f"Error processing TELEMETRY data in: {file_path}. Error: {e}")
+            telemetry_dict = {key: None for key in keyword_types}
+    
         return telemetry_dict
 
 
+    def extract_rvs(self, file_path):
+        """
+        Extract RVs from the 'RV' extension in a KPF L2 file.
+        """
+    
+        mapping = {
+            'orderlet1': 'RV1{}',
+            'orderlet2': 'RV2{}',
+            'orderlet3': 'RV3{}',
+            'RV': 'RVS{}',
+            'RV error': 'ERVS{}',
+            'CAL RV': 'RVC{}',
+            'CAL error': 'ERVC{}',
+            'SKY RV': 'RVY{}',
+            'SKY error': 'ERVY{}',
+            'CCFBJD': 'CCFBJD{}',
+            'Bary_RVC': 'BCRV{}'
+        }
+    
+        try:
+            df_rv = Table.read(file_path, format='fits', hdu='RV').to_pandas()
+            df_rv = df_rv[['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 'CAL RV', 'RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 'Bary_RVC']]
+        except Exception as e:
+            self.logger.info('Bad RV extension in: ' + file_path)
+            self.logger.info(e)
+            keys = []
+            for i in range(0, 67):
+                NN = f"{i:02d}"  # two-digit row number, from 00 to 66
+                for pattern in mapping.values():
+                    keys.append(pattern.format(NN))
+            rv_dict = {
+                key: None 
+                for key in keys
+            }
+            return rv_dict
+    
+        df_filtered = df_rv[list(mapping.keys())]
+        stacked = df_filtered.stack()
+        keyed = stacked.reset_index()
+        keyed.columns = ['row_idx', 'col', 'val']
+        keyed['NN'] = keyed['row_idx'].apply(lambda x: f"{x:02d}")  # direct zero-based indexing
+        keyed['key'] = keyed['col'].map(mapping)
+        keyed['key'] = keyed['key'].str[:-2] + keyed['NN']
+        rv_dict = dict(zip(keyed['key'], keyed['val']))
+        return rv_dict
+        
+        
     def clean_df(self, df):
         """
         Remove known outliers from a dataframe.
         """
+        # CCD Read Noise
+        cols = ['RNGREEN1', 'RNGREEN2', 'RNGREEN3', 'RNGREEN4', 'RNRED1', 'RNRED2', 'RNRED3', 'RNRED4']
+        for col in cols:
+            if col in df.columns:
+                df = df.loc[df[col] < 500]
+        
         # Hallway temperature
         if 'kpfmet.TEMP' in df.columns:
             df = df.loc[df['kpfmet.TEMP'] > 15]
+        
         # Fiber temperatures
         kwrds = ['kpfmet.SIMCAL_FIBER_STG', 'kpfmet.SIMCAL_FIBER_STG']
         for key in kwrds:
             if key in df.columns:
                 df = df.loc[df[key] > 0]
+        
         # Dark Current
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
                  'FLXREG3R', 'FLXREG4R', 'FLXREG5R', 'FLXREG6R']
-        for key in kwrds:
-            if key in df.columns:
-                df = df.loc[df[key] < 10000]
+        
+        #for key in kwrds:
+        #    if key in df.columns:
+        #        df = df.loc[df[key] < 10000]
+        
         return df
 
+
+    def get_first_last_dates(self):
+        """
+        Returns a tuple of datetime objects containing the first and last dates 
+        in the database.  DATE-MID is used for the date.
+        """
+
+        conn = sqlite3.connect(self.db_path)
+    
+        # Query for the minimum and maximum dates in the 'DATE-MID' column
+        query = """
+            SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
+            FROM kpfdb
+        """
+        result = pd.read_sql_query(query, conn)
+        conn.close()
+    
+        # Extract dates from the result and convert them to datetime objects
+        min_date_str = result['min_date'][0]
+        max_date_str = result['max_date'][0]
+    
+        # Convert strings to datetime objects, handling None values gracefully
+        date_format = '%Y-%m-%dT%H:%M:%S.%f'
+        first_date = datetime.strptime(min_date_str, date_format) if min_date_str else None
+        last_date = datetime.strptime(max_date_str, date_format) if max_date_str else None
+    
+        return first_date, last_date
 
     def is_notebook(self):
         """
@@ -494,7 +636,7 @@ class AnalyzeTimeSeries:
             D2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(D2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
         except FileNotFoundError:
             D2_file_mod_time = '1000-01-01 01:01'
-        if D2_file_mod_time > result[0]:
+        if D2_file_mod_time > result[1]:
             return True # 2D file was modified
 
         L1_file_path = f"{D2_file_path.replace('2D', 'L1')}"
@@ -502,7 +644,7 @@ class AnalyzeTimeSeries:
             L1_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L1_file_path)).strftime("%Y-%m-%d %H:%M:%S")
         except FileNotFoundError:
             L1_file_mod_time = '1000-01-01 01:01'
-        if L1_file_mod_time > result[0]:
+        if L1_file_mod_time > result[2]:
             return True # L1 file was modified
 
         L2_file_path = f"{L0_file_path.replace('L1', 'L2')}"
@@ -510,7 +652,7 @@ class AnalyzeTimeSeries:
             L2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
         except FileNotFoundError:
             L2_file_mod_time = '1000-01-01 01:01'
-        if L2_file_mod_time > result[0]:
+        if L2_file_mod_time > result[3]:
             return True # L2 file was modified
                     
         return False # DB modification times are all more recent than file modification times
@@ -541,7 +683,7 @@ class AnalyzeTimeSeries:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
-        TO-DO: should this method just call display_dataframe_from_db()?
+        TO-DO: should this method just call dataframe_from_db()?
         
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
@@ -549,12 +691,12 @@ class AnalyzeTimeSeries:
         that are on-sky/off-sky and after start_date and/or before end_date. 
 
         Args:
-            columns (string or list of strings) - database columns to query
+            columns (string, list of strings, or '*' for all) - database columns to query
             only_object (string or list of strings) - object names to include in query
             object_like (string or list of strings) - partial object names to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
+            end_date (datetime object) - only return observations before end_date
             false (boolean) - if True, prints the SQL query
 
         Returns:
@@ -563,7 +705,10 @@ class AnalyzeTimeSeries:
         conn = sqlite3.connect(self.db_path)
         
         # Enclose column names in double quotes
-        quoted_columns = [f'"{column}"' for column in columns]
+        if columns == '*':
+            quoted_columns = '*'
+        else:
+            quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
 
         # Append WHERE clauses
@@ -591,12 +736,13 @@ class AnalyzeTimeSeries:
             query += " WHERE " + ' AND '.join(where_queries)
     
         # Execute query
+        print(query)
         df = pd.read_sql_query(query, conn, params=(only_object,) if only_object is not None else None)
         conn.close()
         print(df)
 
-   
-    def dataframe_from_db(self, columns, 
+
+    def dataframe_from_db(self, columns=None, 
                           start_date=None, end_date=None, 
                           only_object=None, object_like=None, 
                           on_sky=None, not_junk=None, 
@@ -606,26 +752,35 @@ class AnalyzeTimeSeries:
         observations in the DB. The query can be restricted to observations matching a 
         particular object name(s).  The query can also be restricted to observations 
         that are on-sky/off-sky and after start_date and/or before end_date. 
-
+    
         Args:
-            columns (string or list of strings) - database columns to query
+            columns (string or list of strings, optional) - 
+               database columns to query. 
+               If None, all columns are retrieved.
+               Retrieving all columns can be time consuming.  
+               With two years of observations in the database, 
+               retrieving 1, 10, 100, 1000 days takes 0.13, 0.75, 2.05, 44 seconds.
             only_object (string) - object name to include in query
             object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
+            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
             end_date (datetime object) - only return observations after end_date
-            false (boolean) - if True, prints the SQL query
-
-        Returns:
-            Pandas dataframe of the specified columns matching the constraints.
+            verbose (boolean) - if True, prints the SQL query
         """
         
         conn = sqlite3.connect(self.db_path)
-        
+    
+        # Get all column names if columns are not specified
+        if columns is None:
+            query_get_columns = "PRAGMA table_info(kpfdb)"
+            all_columns_info = pd.read_sql_query(query_get_columns, conn)
+            columns = all_columns_info['name'].tolist()
+    
         # Enclose column names in double quotes
         quoted_columns = [f'"{column}"' for column in columns]
         query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
-
+    
         # Append WHERE clauses
         where_queries = []
         if only_object is not None:
@@ -657,15 +812,35 @@ class AnalyzeTimeSeries:
             where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
         if where_queries != []:
             query += " WHERE " + ' AND '.join(where_queries)
-
+    
         if verbose:
             print('query = ' + query)
-
+    
         df = pd.read_sql_query(query, conn)
         conn.close()
-
+    
         return df
 
+    def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
+        """
+        Returns a list of ObsIDs for the observations of object_name.
+
+        Args:
+            object_name (string) - name of object (e.g., '4614')
+            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
+
+        Returns:
+            Pandas dataframe of the specified columns matching the constraints.
+        """
+        # to-do: check if object_name is in the database before trying to create the df
+        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
+                                    start_date=start_date, end_date=end_date, 
+                                    not_junk=not_junk)
+        
+        return df['ObsID'].tolist()
+        
 
     def map_data_type_to_sql(self, dtype):
         """
@@ -717,15 +892,15 @@ class AnalyzeTimeSeries:
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
-#        # L2 RV extension
-#        elif level == 'L2_RV':
-#            keyword_types = {
-#                'ABCD1234': 'string', #placeholder for now
-#            }
-
         # L2 RV extension    
         elif level == 'L2_RV_header':
             keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 CCF extension    
+        elif level == 'L2_CCF_header':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
@@ -840,7 +1015,8 @@ class AnalyzeTimeSeries:
             end_date = (start_date + pd.offsets.MonthEnd(0) + timedelta(days=1) - timedelta(seconds=0.1))
             df = df[(df['DATE-BEG'] >= start_date) & (df['DATE-BEG'] <= end_date)]
             df['DAY'] = df['DATE-BEG'].dt.day    
-            full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
+            #full_range = pd.date_range(start=f'{start_date.year}-{start_date.month}-{start_date.day}', end=f'{end_date.year}-{end_date.month}-{end_date.day}', freq='D')
+            full_range = range(1, end_date.day + 1) 
             entry_counts = df['DAY'].value_counts().sort_index()
             entry_counts = entry_counts.reindex(full_range, fill_value=0)
             major_locator = DayLocator()
@@ -1045,6 +1221,13 @@ class AnalyzeTimeSeries:
         Returns:
             PNG plot in fig_path or shows the plot it the current environment
             (e.g., in a Jupyter Notebook).
+            
+        To do:
+            * Make a standard plot type that excludes outliers using ranges set 
+              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
+              rejection.  This should be in Delta values.
+            * Make standard correlation plots.
+            * Make standard phased plots (by day)
         """
 
         def num_fmt(n: float, sf: int = 3) -> str:
@@ -1064,10 +1247,6 @@ class AnalyzeTimeSeries:
             """ For formatting of log plots """
             return num_fmt(value, sf=2)
 
-        if start_date == None:
-            start_date = min(df['DATE-MID'])
-        if end_date == None:
-            end_date = max(df['DATE-MID'])
         npanels = len(panel_arr)
         unique_cols = set()
         unique_cols.add('DATE-MID')
@@ -1075,8 +1254,9 @@ class AnalyzeTimeSeries:
         unique_cols.add('OBJECT')
         for panel in panel_arr:
             for d in panel['panelvars']:
-                col_value = d['col']
-                unique_cols.add(col_value)
+                unique_cols.add(d['col'])
+                if 'col_err' in d:
+                    unique_cols.add(d['col_err'])
         # add this logic
         #if 'only_object' in thispanel['paneldict']:
         #if 'object_like' in thispanel['paneldict']:
@@ -1105,6 +1285,18 @@ class AnalyzeTimeSeries:
 #                    object_like = True
 #                elif (thispanel['paneldict']['object_like']).lower() == 'false':
 #                    object_like = False
+
+            if start_date == None:
+                start_date = datetime(2020, 1,  1)
+                start_date_was_none = True
+            else:
+                start_date_was_none = False
+            if end_date == None:
+                end_date = datetime(2300, 1,  1)
+                end_date_was_none = True
+            else:
+                end_date_was_none = False
+
             df = self.dataframe_from_db(unique_cols, 
                                         start_date=start_date, 
                                         end_date=end_date, 
@@ -1113,6 +1305,12 @@ class AnalyzeTimeSeries:
                                         object_like=object_like,
                                         verbose=False)
             df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+
+            if start_date_was_none == True:
+                start_date = min(df['DATE-MID'])
+            if end_date_was_none == True:
+                end_date = max(df['DATE-MID'])
+
             df = df.sort_values(by='DATE-MID')
             if clean:
                 df = self.clean_df(df)
@@ -1192,12 +1390,18 @@ class AnalyzeTimeSeries:
                 else:
                     plot_type = 'scatter'
                 col_data = df[thispanel['panelvars'][i]['col']]
-                col_data_replaced = col_data.replace('NaN', np.nan)
+                col_data_replaced = col_data.replace('NaN',  np.nan)
                 col_data_replaced = col_data.replace('null', np.nan)
+                if 'col_err' in thispanel['panelvars'][i]:
+                    col_data_err = df[thispanel['panelvars'][i]['col_err']]
+                    col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
+                    col_data_err_replaced = col_data_err.replace('null', np.nan)
                 if plot_type == 'state':
                     states = np.array(col_data_replaced)
                 else:
                     data = np.array(col_data_replaced, dtype='float')
+                    if plot_type == 'errorbar':
+                        data_err = np.array(col_data_err_replaced, dtype='float')
                 plot_attributes = {}
                 if plot_type != 'state':
                     if np.count_nonzero(~np.isnan(data)) > 0:
@@ -1238,19 +1442,33 @@ class AnalyzeTimeSeries:
                            plot_attributes = {}
                 if plot_type == 'scatter':
                     axs[p].scatter(t, data, **plot_attributes)
+                if plot_type == 'errorbar':
+                    axs[p].errorbar(t, data, yerr=data_err, **plot_attributes)
                 if plot_type == 'plot':
                     axs[p].plot(t, data, **plot_attributes)
                 if plot_type == 'step':
                     axs[p].step(t, data, **plot_attributes)
                 if plot_type == 'state':
                     # Map states (e.g., DRP version number) to a numerical scale
-                    states = np.array(['None' if s is None or s == 'NaN' else s for s in states])
-                    states = [x for x in states if not (isinstance(x, (int, float, complex)) and np.isnan(x))] # remove NaN values
-                    unique_states = sorted(set(states))  # Remove duplicates and sort
-                    state_to_num = {state: i for i, state in enumerate(unique_states)}
-                    mapped_states = [state_to_num[state] for state in states]
-                    colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
-                    for state, color in zip(unique_states, colors):
+                    # Convert states to a consistent type for comparison
+                    states = [float(s) if is_numeric(s) else s for s in states]
+                    # Separate numeric and non-numeric states for sorting
+                    numeric_states = sorted(s for s in states if isinstance(s, float))
+                    non_numeric_states = sorted(s for s in states if isinstance(s, str))
+                    unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
+                    # Check if unique_states contains only 0, 1, and None - QC test
+                    if set(unique_states).issubset({0.0, 1.0, 'None'}):
+                        state_to_color = {0.0: 'indianred', 1.0: 'forestgreen', 'None': 'cornflowerblue'}
+                        mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
+                        colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
+                        color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
+                    else:
+                        state_to_num = {state: i for i, state in enumerate(unique_states)}
+                        mapped_states = [state_to_num[state] for state in states]
+                        colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
+                        color_map = {state: colors[i] for i, state in enumerate(unique_states)}
+                    for state in unique_states:
+                        color = color_map[state]
                         indices = [i for i, s in enumerate(states) if s == state]
                         axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
                     axs[p].set_yticks(range(len(unique_states)))
@@ -1479,19 +1697,19 @@ class AnalyzeTimeSeries:
         elif plot_name=='ccd_readnoise':
             dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
             dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
+#            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
             dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
-            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            thispanelvars = [dict1, dict2, dict1b, dict2b]
+#            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
+#            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            thispanelvars = [dict1, dict2]
             thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
                              'not_junk': 'true',
                              'legend_frac_size': 0.25}
             readnoisepanel1 = {'panelvars': thispanelvars,
                                'paneldict': thispaneldict}
-            thispanelvars = [dict3, dict4, dict3b, dict4b]
+            thispanelvars = [dict3, dict4]
             thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
                              'title': 'CCD Read Noise',
                              'not_junk': 'true',
@@ -1521,11 +1739,11 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
             thispaneldict = {'ylabel': 'Red CCD\nDark Current [e-/hr]',
                              'not_junk': 'true',
@@ -1535,7 +1753,7 @@ class AnalyzeTimeSeries:
             
             # Green CCD panel - ion pump current
             dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
                              'yscale': 'log',
@@ -1553,7 +1771,7 @@ class AnalyzeTimeSeries:
             
             # Red CCD panel - ion pump current
             dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',    'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict1]
             thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
                              'yscale': 'log',
@@ -1909,7 +2127,6 @@ class AnalyzeTimeSeries:
                          'paneldict': thispaneldict}
             panel_arr = [junkpanel]
 
-        # to-do: add 2D, L1, L2 QC keywords to the two panels below when those keywords are made
         elif plot_name=='qc_data_keywords_present':
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
@@ -1925,6 +2142,12 @@ class AnalyzeTimeSeries:
             keywords_present_panel = {'panelvars': thispanelvars,
                                       'paneldict': thispaneldict}
             panel_arr = [data_present_panel, keywords_present_panel]
+
+# Add above
+#   Name: data_2D_CaHK
+#   Name: data_2D_red_green
+#   Name: data_L1_red_green
+#   Name: data_L2
 
         elif plot_name=='qc_time_check':
             dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
@@ -1957,6 +2180,62 @@ class AnalyzeTimeSeries:
             emneg_panel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             panel_arr = [emsat_panel, emneg_panel]
+
+        elif plot_name=='qc_monotonic_wls':
+            dict1 = {'col': 'MONOTWLS', 'plot_type': 'state', 'plot_attr': {'label': 'Montonic WLS', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Monotonic WLS\n(1=True)',
+                             'title': 'Quality Control - Monotonic WLS in L1',
+                             'legend_frac_size': 0.10}
+            monot_wls_panel = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [monot_wls_panel]
+
+#        elif plot_name=='qc_pos_2d_snr':
+#            dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Not Negative 2D SNR\n(1=True)',
+#                             'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
+#                             'legend_frac_size': 0.10}
+#            monot_wls_panel = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [monot_wls_panel]
+
+#        elif plot_name=='qc_lfc':
+#            dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'LFC Not Saturated \n(1=True)',
+#                             'title': 'Quality Control - LFC Metrics',
+#                             'legend_frac_size': 0.10}
+#            lfc_sat_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [lfc_sat_panel]
+
+#        elif plot_name=='qc_goodread':
+#            dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Green/Red CCDs\nGood Read(1=True)',
+#                             'title': 'Quality Control - Good Read Metric (T$_{exp}$ !$approx$ 6 sec)',
+#                             'legend_frac_size': 0.10}
+#            goodread_panel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            panel_arr = [goodread_panel]
+
+#        elif plot_name=='qc_low_flux':
+#            dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
+#            dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Not 2D Low Bias\nFlux (1=True)',
+#                             'legend_frac_size': 0.10}
+#            lowbias_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'Not 2D Low Dark\nFlux (1=True)',
+#                             'title': 'Quality Control - Low Dark and Bias Flux',
+#                             'legend_frac_size': 0.10}
+#            lowdark_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [lowbias_panel, lowdark_panel]
 
         elif plot_name=='autocal-flat_snr':
             dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
@@ -2204,6 +2483,11 @@ class AnalyzeTimeSeries:
             "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
             "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
             "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
+            "p8e":  {"plot_name": "qc_monotonic_wls",         "subdir": "QC",        "desc": "Quality Control: monotonic WLS"}, 
+            "p8f":  {"plot_name": "qc_pos_2d_snr",            "subdir": "QC",        "desc": "Quality Control: 2D SNR positive"}, 
+            "p8g":  {"plot_name": "qc_lfc",                   "subdir": "QC",        "desc": "Quality Control: LFC quality"}, 
+            "p8h":  {"plot_name": "qc_goodread",              "subdir": "QC",        "desc": "Quality Control: L0 Good Read metric"}, 
+            "p8i":  {"plot_name": "qc_low_flux",              "subdir": "QC",        "desc": "Quality Control: 2D low flux check"}, 
             "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
         }
         if print_plot_names:
@@ -2278,6 +2562,15 @@ class AnalyzeTimeSeries:
             PNG plots in the output director or shows the plots it the current 
             environment (e.g., in a Jupyter Notebook).
         """
+        if start_date == None or end_date == None:
+            dates = self.get_first_last_dates()
+            if start_date == None:
+                start_date = dates[0]
+            if end_date == None:
+                end_date = dates[1]
+        
+        print(start_date)
+        print(end_date)
         time_range_type = time_range_type.lower()
         if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
             time_range_type = 'all'
@@ -2385,3 +2678,12 @@ def convert_to_list_if_array(string):
     else:
         # The string does not look like a JSON array
         return string
+
+def is_numeric(value):
+    if value is None:  # Explicitly handle NoneType
+        return False
+    try:
+        float(value)  # Attempt to convert to float
+        return True
+    except (ValueError, TypeError):
+        return False
