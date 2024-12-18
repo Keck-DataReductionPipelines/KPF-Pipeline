@@ -1,6 +1,12 @@
 
-from datetime import datetime
+import sys
+if sys.version_info >= (3, 9):
+    from importlib import resources
+else:
+    import importlib_resources as resources
+
 import pandas as pd
+from datetime import datetime
 
 from database.modules.utils.kpf_db import KPFDB
 from keckdrpframework.models.arguments import Arguments
@@ -48,7 +54,10 @@ class GetCalibrations:
                 continue
             if lookup == 'file':
                 filename = self.caldate_files[cal]
-                df = pd.read_csv(filename, header=0, skipinitialspace=True)
+                fndir, fn = filename.split("/", 1)
+                # Use resources.open_text() to read the .csv because it has a relative path within repo
+                with resources.open_text(fndir, fn) as f:
+                    df = pd.read_csv(f, header=0, skipinitialspace=True)
                 for i, row in df.iterrows():
                     start = datetime.strptime(row['UT_start_date'], "%Y-%m-%d %H:%M:%S")
                     end = datetime.strptime(row['UT_end_date'], "%Y-%m-%d %H:%M:%S")
