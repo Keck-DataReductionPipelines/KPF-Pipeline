@@ -283,7 +283,7 @@ class AnalyzeTimeSeries:
             L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
             L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
             L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
+            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF') 
             L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
             L2_RV_data        = self.extract_rvs(L2_file_path) 
 
