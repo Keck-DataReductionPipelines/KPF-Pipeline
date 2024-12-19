@@ -353,7 +353,7 @@ class AnalyzeTimeSeries:
         partial_process_file = partial(process_file, **args)
 
         # Run extraction in parallel using a worker pool
-        max_workers = min([len(batch), 50, os.cpu_count()])
+        max_workers = min([len(batch), 25, os.cpu_count()])
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(partial_process_file, batch))
 
