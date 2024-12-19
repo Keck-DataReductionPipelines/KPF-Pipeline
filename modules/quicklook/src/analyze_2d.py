@@ -623,7 +623,9 @@ class Analyze2D:
         plt.close('all')
 
 
-    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False, 
+
+    def plot_2D_order_trace2x2(self, chip=None, order_trace_master_file='auto',
+                               fig_path=None, show_plot=False, 
                                width=200, height=200, 
                                start_x_arr='default', start_y_arr='default'):
         """
@@ -631,6 +633,7 @@ class Analyze2D:
 
         Args:
             chip (string) - "green" or "red"
+            order_trace_master_file (string) - path to order trace file; auto means use defaults
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -647,10 +650,11 @@ class Analyze2D:
             if chip == 'green':
                 CHIP = 'GREEN'
                 chip_title = 'Green'
-                if obs_date < service_mission_date1:
-                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
-                else:
-                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
+                if order_trace_master_file == 'auto':
+                    if obs_date < service_mission_date1:
+                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                    else:
+                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
                 if start_x_arr == 'default':
                     start_x_arr = [ 0, 3600,  0, 3600]
                 if start_y_arr == 'default':
@@ -658,10 +662,11 @@ class Analyze2D:
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-                if obs_date < service_mission_date1:
-                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
-                else:
-                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
+                if order_trace_master_file == 'auto':
+                    if obs_date < service_mission_date1:
+                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                    else:
+                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
                 if start_x_arr == 'default':
                     start_x_arr = [ 0, 3600,  0, 3600]
                 if start_y_arr == 'default':
