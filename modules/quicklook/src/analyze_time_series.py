@@ -20,6 +20,8 @@ import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
+from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
 
 import cProfile
@@ -91,13 +93,13 @@ class AnalyzeTimeSeries:
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
         self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
+        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
         self.L1_header_keyword_types     = self.get_keyword_types(level='L1')
         self.L2_header_keyword_types     = self.get_keyword_types(level='L2')
-        self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
-        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
         self.L2_CCF_header_keyword_types = self.get_keyword_types(level='L2_CCF_header')
-        # need to add a line here for RV extension in L2
+        self.L2_RV_header_keyword_types  = self.get_keyword_types(level='L2_RV_header')
+        self.L2_RV_keyword_types         = self.get_keyword_types(level='L2_RV')
         
         if drop:
             self.drop_table()
@@ -124,19 +126,20 @@ class AnalyzeTimeSeries:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
-        L0_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
-        D2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
-        L1_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
-        L2_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
-        L0_telemetry_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        L2_RV_header_columns = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        L2_CCF_header_columns =[f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
-        columns = L0_columns + D2_columns + L1_columns + L2_columns + L0_telemetry_columns + L2_RV_header_columns + L2_CCF_header_columns
-        columns += ['"datecode" TEXT', '"ObsID" TEXT']
-        columns += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
-        columns += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
-        columns += ['"Source" TEXT']
-        create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(columns)}, UNIQUE(ObsID))'
+        L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+        L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
+        D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+        L1_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+        L2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
+        L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
+        L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+        L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
+        cols = L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
+        cols += ['"datecode" TEXT', '"ObsID" TEXT']
+        cols += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
+        cols += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
+        cols += ['"Source" TEXT']
+        create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(cols)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
         
         # Define indexed columns
@@ -161,12 +164,13 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
         """
-        self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
+        if not quiet:
+            self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date_str > end_date_str)
         filtered_dir_paths = [
@@ -179,11 +183,11 @@ class AnalyzeTimeSeries:
                 filtered_dir_paths.reverse()
             
             # Iterate over date directories
-            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1])
+            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1], disable=quiet)
             for dir_path in t1:
                 t1.set_description(dir_path.split('/')[-1])
                 t1.refresh() 
-                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False)
+                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False, disable=quiet)
                 batch = []
                 for L0_filename in t2:
                     if L0_filename.endswith(".fits"):
@@ -194,7 +198,8 @@ class AnalyzeTimeSeries:
                             batch = []
                 if batch:
                     self.ingest_batch_observation(batch)
-        self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
+        if not quiet:
+            self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
 
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
@@ -274,24 +279,24 @@ class AnalyzeTimeSeries:
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types,    extension='PRIMARY') 
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types,    extension='PRIMARY') 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types,    extension='PRIMARY') 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types,    extension='PRIMARY') 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            #L2_RV_data        = self.extract_rvs(L2_file_path) 
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
             L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='CCF') 
+            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_RV_data        = self.extract_rvs(L2_file_path) 
 
             header_data = {**L0_header_data, 
+                           **L0_telemetry,
                            **D2_header_data, 
                            **L1_header_data, 
                            **L2_header_data, 
-                           **L0_telemetry,
-                           **L2_RV_header_data, 
-                           #**L2_RV_data, 
                            **L2_CCF_header_data, 
+                           **L2_RV_header_data, 
+                           **L2_RV_data, 
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
@@ -321,58 +326,47 @@ class AnalyzeTimeSeries:
 
     def ingest_batch_observation(self, batch):
         """
-        Ingest a set of observations into the database.
+        Ingest a batch of observations into the database in parallel using 
+        ProcessPoolExecutor.
         """
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        batch_data = []
-        for file_path in batch:
-            base_filename = os.path.basename(file_path).split('.fits')[0]
-            L0_filename = base_filename.split('.fits')[0]
-            L0_filename = L0_filename.split('/')[-1]
-            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
 
-            L0_file_path = file_path
-            D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
-            L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
-            L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
+        # Prepare arguments for parallel execution
+        args = {
+            'now_str': now_str,
+            'L0_header_keyword_types': self.L0_header_keyword_types,
+            'L0_telemetry_types': self.L0_telemetry_types,
+            'D2_header_keyword_types': self.D2_header_keyword_types,
+            'L1_header_keyword_types': self.L1_header_keyword_types,
+            'L2_header_keyword_types': self.L2_header_keyword_types,
+            'L2_CCF_header_keyword_types': self.L2_CCF_header_keyword_types,
+            'L2_RV_header_keyword_types': self.L2_RV_header_keyword_types,
+            'extract_kwd_func': self.extract_kwd,
+            'extract_telemetry_func': self.extract_telemetry,
+            'extract_rvs_func': self.extract_rvs,
+            'is_any_file_updated_func': self.is_any_file_updated,
+            'get_source_func': self.get_source,
+            'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
+        }
 
-            # If any associated file has been updated, proceed
-            if self.is_any_file_updated(L0_file_path):
-                L0_header_data = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types,    extension='PRIMARY')   
-                D2_header_data = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types,    extension='PRIMARY')   
-                L1_header_data = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,    extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,    extension='PRIMARY')   
-                L2_header_data = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types, extension='RV')   
-                #L2_RV_data     = self.extract_rvs(L2_file_path)   
-                L0_telemetry   = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
-                L2_RV_header_data = self.extract_kwd(L2_file_path,    self.L2_RV_header_keyword_types, extension='RV')   
-                L2_CCF_header_data = self.extract_kwd(L2_file_path,   self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
+        # Create a partial function that bundles all these arguments
+        partial_process_file = partial(process_file, **args)
 
-                #header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L2_RV_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
-                header_data = {**L0_header_data, **D2_header_data, **L1_header_data, **L2_header_data, **L0_telemetry, **L2_RV_header_data, **L2_CCF_header_data}
+        # Run extraction in parallel using a worker pool
+        max_workers = min([len(batch), 25, os.cpu_count()])
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(partial_process_file, batch))
 
-                header_data['ObsID'] = base_filename
-                header_data['datecode'] = get_datecode(base_filename)
-                header_data['L0_filename'] = os.path.basename(L0_file_path)
-                header_data['D2_filename'] = os.path.basename(D2_file_path)
-                header_data['L1_filename'] = os.path.basename(L1_file_path)
-                header_data['L2_filename'] = os.path.basename(L2_file_path)
-                header_data['L0_header_read_time'] = now_str
-                header_data['D2_header_read_time'] = now_str
-                header_data['L1_header_read_time'] = now_str
-                header_data['L2_header_read_time'] = now_str
-                header_data['Source'] = self.get_source(L0_header_data)
-    
-                batch_data.append(header_data)
+        # Filter out None results (files that were not updated)
+        batch_data = [res for res in results if res is not None]
 
-        # Perform batch insertion/update in the database
-        if batch_data != []:
+        # Perform bulk insert
+        if batch_data:
             columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
             placeholders = ', '.join(['?'] * len(batch_data[0]))
             insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
             data_tuples = [tuple(data.values()) for data in batch_data]
+
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("PRAGMA cache_size = -2000000;")
@@ -489,48 +483,59 @@ class AnalyzeTimeSeries:
         """
         Extract RVs from the 'RV' extension in a KPF L2 file.
         """
-    
         mapping = {
-            'orderlet1': 'RV1{}',
-            'orderlet2': 'RV2{}',
-            'orderlet3': 'RV3{}',
-            'RV': 'RVS{}',
-            'RV error': 'ERVS{}',
-            'CAL RV': 'RVC{}',
-            'CAL error': 'ERVC{}',
-            'SKY RV': 'RVY{}',
-            'SKY error': 'ERVY{}',
-            'CCFBJD': 'CCFBJD{}',
-            'Bary_RVC': 'BCRV{}'
+            'orderlet1':   'RV1{}',
+            'orderlet2':   'RV2{}',
+            'orderlet3':   'RV3{}',
+            'RV':          'RVS{}',
+            'RV error':    'ERVS{}',
+            'CAL RV':      'RVC{}',
+            'CAL error':   'ERVC{}',
+            'SKY RV':      'RVY{}',
+            'SKY error':   'ERVY{}',
+            'CCFBJD':      'CCFBJD{}',
+            'Bary_RVC':    'BCRV{}',
+            'CCF Weights': 'CCFW{}',
         }
     
-        try:
-            df_rv = Table.read(file_path, format='fits', hdu='RV').to_pandas()
-            df_rv = df_rv[['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 'CAL RV', 'RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 'Bary_RVC']]
-        except Exception as e:
-            self.logger.info('Bad RV extension in: ' + file_path)
-            self.logger.info(e)
+        cols = ['orderlet1', 'orderlet2', 'orderlet3', 'RV', 'RV error', 
+                'CAL RV', 'CAL error', 'SKY RV', 'SKY error', 'CCFBJD', 
+                'Bary_RVC', 'CCF Weights']
+    
+        expected_count = 67 * len(cols)
+    
+        def make_dummy_dict():
             keys = []
             for i in range(0, 67):
                 NN = f"{i:02d}"  # two-digit row number, from 00 to 66
                 for pattern in mapping.values():
                     keys.append(pattern.format(NN))
-            rv_dict = {
-                key: None 
-                for key in keys
-            }
+            return {key: None for key in keys}
+        
+        try:
+            df_rv = Table.read(file_path, format='fits', hdu='RV').to_pandas()
+            df_rv = df_rv[cols]
+        except Exception as e:
+            # If we can't read RVs, return a dict with None values for all expected keys
+            rv_dict = make_dummy_dict()
             return rv_dict
     
         df_filtered = df_rv[list(mapping.keys())]
         stacked = df_filtered.stack()
         keyed = stacked.reset_index()
         keyed.columns = ['row_idx', 'col', 'val']
-        keyed['NN'] = keyed['row_idx'].apply(lambda x: f"{x:02d}")  # direct zero-based indexing
+        keyed['NN'] = keyed['row_idx'].apply(lambda x: f"{x:02d}")  # zero-based indexing
         keyed['key'] = keyed['col'].map(mapping)
         keyed['key'] = keyed['key'].str[:-2] + keyed['NN']
         rv_dict = dict(zip(keyed['key'], keyed['val']))
-        return rv_dict
-        
+    
+        # Check the count - if data wasn't computed for Green or Red, the database will give an error on insertion
+        if len(rv_dict) != expected_count:
+            # If count doesn't match, return the dummy dictionary of None values
+            rv_dict = make_dummy_dict()
+            
+        return rv_dict        
+
         
     def clean_df(self, df):
         """
@@ -556,11 +561,7 @@ class AnalyzeTimeSeries:
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
                  'FLXREG3R', 'FLXREG4R', 'FLXREG5R', 'FLXREG6R']
-        
-        #for key in kwrds:
-        #    if key in df.columns:
-        #        df = df.loc[df[key] < 10000]
-        
+
         return df
 
 
@@ -904,9 +905,15 @@ class AnalyzeTimeSeries:
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
+        # L2 RV data    
+        elif level == 'L2_RV':
+            prefixes = ['RV1', 'RV2', 'RV3', 'RVS', 'ERVS', 'RVC', 'ERVC', 'RVY', 'ERVY', 'CCFBJD', 'BCRV', 'CCFW']
+            nums = [f"{i:02d}" for i in range(67)]
+            keyword_types = {f"{prefix}{num}": 'REAL' for num in nums for prefix in prefixes}
+
         else:
             keyword_types = {}
-        
+
         return keyword_types
 
 
@@ -1795,7 +1802,7 @@ class AnalyzeTimeSeries:
             dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
             dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
             thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'CCD Amplifier\nDark Current [e-/hr]',
+            thispaneldict = {'ylabel': 'CCD Amplifier Dark\nCurrent (Edge Glow) [e-/hr]',
                              'title': 'CCD Dark Current',
                              'legend_frac_size': 0.35}
             amppanel = {'panelvars': thispanelvars,
@@ -2638,6 +2645,66 @@ class AnalyzeTimeSeries:
                     self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
                 except Exception as e:
                     self.logger.error(e)
+
+
+def process_file(file_path, now_str,
+                 L0_header_keyword_types, L0_telemetry_types, D2_header_keyword_types,
+                 L1_header_keyword_types, L2_header_keyword_types, L2_CCF_header_keyword_types, L2_RV_header_keyword_types,
+                 extract_kwd_func, extract_telemetry_func, extract_rvs_func, 
+                 is_any_file_updated_func, get_source_func, get_datecode_func):
+    """
+    This method runs in a worker process. It returns the extracted header data for one file.
+    """
+    base_filename = os.path.basename(file_path).split('.fits')[0]
+    L0_filename = base_filename.split('.fits')[0].split('/')[-1]
+    
+    D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+    L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+    L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+
+    L0_file_path = file_path
+    D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
+    L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
+    L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
+
+    # Check if updated
+    if not is_any_file_updated_func(L0_file_path):
+        return None
+
+    # Extract headers and telemetry
+    L0_header_data     = extract_kwd_func(L0_file_path, L0_header_keyword_types, extension='PRIMARY')   
+    L0_telemetry       = extract_telemetry_func(L0_file_path, L0_telemetry_types) 
+    D2_header_data     = extract_kwd_func(D2_file_path, D2_header_keyword_types, extension='PRIMARY')   
+    L1_header_data     = extract_kwd_func(L1_file_path, L1_header_keyword_types, extension='PRIMARY')   
+    L2_header_data     = extract_kwd_func(L2_file_path, L2_header_keyword_types, extension='PRIMARY')   
+    L2_CCF_header_data = extract_kwd_func(L2_file_path, L2_CCF_header_keyword_types, extension='GREEN_CCF')   
+    L2_RV_header_data  = extract_kwd_func(L2_file_path, L2_RV_header_keyword_types, extension='RV')   
+    L2_RV_data         = extract_rvs_func(L2_file_path)   
+
+    header_data = {
+        **L0_header_data,
+        **L0_telemetry,
+        **D2_header_data,
+        **L1_header_data,
+        **L2_header_data,
+        **L2_CCF_header_data,
+        **L2_RV_header_data,
+        **L2_RV_data
+    }
+
+    header_data['ObsID'] = base_filename
+    header_data['datecode'] = get_datecode_func(base_filename)
+    header_data['L0_filename'] = os.path.basename(L0_file_path)
+    header_data['D2_filename'] = os.path.basename(D2_file_path)
+    header_data['L1_filename'] = os.path.basename(L1_file_path)
+    header_data['L2_filename'] = os.path.basename(L2_file_path)
+    header_data['L0_header_read_time'] = now_str
+    header_data['D2_header_read_time'] = now_str
+    header_data['L1_header_read_time'] = now_str
+    header_data['L2_header_read_time'] = now_str
+    header_data['Source'] = get_source_func(L0_header_data)
+
+    return header_data
 
 
 def add_one_month(inputdate):
