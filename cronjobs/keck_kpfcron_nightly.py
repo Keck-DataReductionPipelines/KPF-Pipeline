@@ -50,24 +50,17 @@ class KPFPipeNightly(KPFPipeCronBase):
         self.docker_bash_script = f"""
             #!/bin/bash
 
-            source /home/kpfdrprun/.bash_profile;  
-
             # mkdirs if they don't exist
-            mkdir -p /data/logs/{self.procdate};
-            mkdir -p /data/L1/{self.procdate};
-            mkdir -p /data/L2/{self.procdate};
+            {self.make_directories_str()}
 
             # make the symlinks
-            ln -fs /data_workspace/L0/{self.procdate} /data/L0/{self.procdate};
-            ln -fs /data_workspace/2D/{self.procdate} /data/2D/{self.procdate};
-            ln -fs /masters /data/masters;
-            ln -fs /data_root/reference_fits /data/reference_fits;
+            {self.link_wrkspace_drp()}
 
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
 
             # touch the files so the pipe recognized them as new
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/L0 --log /data/logs/ &
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --log /data/logs/ &
 
             # run the pipeline for all data in the directory
             kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;

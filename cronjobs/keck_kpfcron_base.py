@@ -8,6 +8,7 @@ is meant to be used to run the pipeline in-house and Keck.
 import os
 import sys
 import time
+import argparse
 import subprocess
 
 import keck_utils as utils
@@ -24,11 +25,12 @@ class KPFPipeCronBase:
     def __init__(self, procname):
 
         self.procname = procname
-        self.default_ncpu = 232
+        self.default_ncpu = 192
 
         # will be defined later
         self.pid = None
         self.ncpu = None
+        self.level = None
         self.recipe = None
         self.config = None
         self.procdate = None
@@ -65,11 +67,15 @@ class KPFPipeCronBase:
         self.log_chk = None
 
         # create the output directories
-        utils.mk_output_dirs(self.data_workspace, self.masters_perm_dir, self.procdate)
+        utils.mk_output_dirs(self.data_workspace, self.masters_perm_dir,
+                             self.procdate)
 
         # override to move the location elsewhere
         self.set_log_dir()
         self.log_name = f'keck_kpf_{procname}_{self.procdate}'
+        if self.level:
+            self.log_name += f'_{self.level}'
+
         os.makedirs(self.logs_root, exist_ok=True)
 
         self.log = utils.configure_logger(self.logs_root, f"{self.log_name}")
@@ -83,7 +89,8 @@ class KPFPipeCronBase:
         self.set_stdout_log()
 
         # log start
-        utils.log_stub('Starting', f'{procname.title()}-Processing', self.procdate, self.log)
+        utils.log_stub('Starting', f'{procname.title()}-Processing',
+                       self.procdate, self.log)
 
     def run(self):
         """
@@ -104,12 +111,6 @@ class KPFPipeCronBase:
 
     def clean_up(self):
         self.log.info(f"Cleaning up before exiting...")
-        created_links =['masters', 'reference_fits', f'L0/{self.procdate}',
-                        f'2D/{self.procdate}']
-        for symlink in created_links:
-            full_path = os.path.join(self.data_drp, symlink)
-            if os.path.islink(full_path):
-                os.unlink(full_path)
 
         try:
             subprocess.run(["docker", "stop", self.containername], check=True)
@@ -117,11 +118,32 @@ class KPFPipeCronBase:
         except subprocess.CalledProcessError as e:
             self.log.info(f"Error stopping Docker container {self.containername}: {e}")
         except FileNotFoundError:
-            self.log.info("Docker command not found. Is Docker installed and in your PATH?")
+            self.log.info("Docker command not found.")
 
+
+    def cmd_line_args(self, start_msg):
+        """
+        Parse the command line arguments for the DRP scripts.
+
+        Args:
+            start_msg (str): the log message for starting the pipeline.
+
+        Returns:
+        """
+        parser = argparse.ArgumentParser(description=start_msg)
+
+        parser.add_argument("--date", type=str, required=False, help="The UT date.")
+        parser.add_argument("--ncpu", type=str, required=False, help="The Number of Cores to use.")
+        parser.add_argument("--level", type=str, required=False, help="The level to watch",
+                            choices=['L0', 'L1', 'L2', '2D', 'masters'])
+        parser.add_argument("--timer", type=float, required=False, help="Set an exit timer (hrs)")
+
+        args = parser.parse_args()
+
+        return args
 
     def read_cmd_line(self):
-        args = utils.cmd_line_args(f"Start the KPF DRP {self.procname.title()} Reduction.")
+        args = self.cmd_line_args(f"Start the KPF DRP {self.procname.title()} Reduction.")
 
         # get the date to process and the unique string for docker and logs
         if not args.date:
@@ -134,6 +156,13 @@ class KPFPipeCronBase:
             self.ncpu = self.default_ncpu
         else:
             self.ncpu = args.ncpu
+
+        if args.level:
+            self.level = args.level
+
+        if args.timer:
+            # cmd line should be in hours
+            self.exit_timer = args.timer * 60 * 60
 
     def read_cron_cfg(self):
         """
@@ -165,6 +194,8 @@ class KPFPipeCronBase:
             cfg, 'docker_names', f'{self.procname}_container_base'
         )
         self.containername = f"{container_base}_{self.procdate}"
+        if self.level:
+            self.containername += f"_{self.level}"
 
         # database info,  config and ~/.pgpass file
         self.dbuser = utils.get_cfg(cfg, 'db', 'dbuser')
@@ -252,6 +283,27 @@ class KPFPipeCronBase:
         with open(filename, 'w') as file:
             file.write(f"Standard Output for {self.procname.title()}\n")
 
+    def is_container_running(self):
+        """
+        Check if a container of name = self.containername is running.
+
+        Returns (bool): True if the container is running,  else False
+        """
+        try:
+            result = subprocess.run(
+                ['docker', 'inspect', '-f', '{{.State.Running}}', self.containername],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+
+            if result.returncode == 0 and result.stdout.strip() == 'true':
+                return True
+        except subprocess.CalledProcessError as e:
+            self.log.error(f"Error determining container information {self.containername}: {e}")
+            return False
+
+        self.log.info(f"Container {self.containername} is no longer running")
+        return False
+
     def wait_container_complete(self):
         """
         Wait for the docker container to complete.
@@ -266,8 +318,8 @@ class KPFPipeCronBase:
         Returns (bool): True when the container process is still running.
 
         """
-        if self.pid == 0:
-            self.log.warning(f'Docker Process never started,  PID: {self.pid}')
+        if not self.is_container_running():
+            self.log.warning(f'Docker Process never started,  PID: {self.containername}')
             return False
 
         # start a timer for the 'max_wait_time'
@@ -282,23 +334,15 @@ class KPFPipeCronBase:
                               f"passed. Exiting...")
                 return True
 
-            # Check if the process is still running,  if not it is complete
-            try:
-                subprocess.check_output(f"ps -p {self.pid}", shell=True)
-                self.log.info(f"Container {self.containername} with PID "
-                              f"{self.pid} is running.")
-            except subprocess.CalledProcessError as err:
-                self.log.info(f'Exception: {err}')
-                utc_time = datetime.now(timezone.utc).strftime('%H:%M:%S')
-                self.log.info(f"{utc_time} Docker container: "
-                              f"{self.containername} has exited.")
+            if not self.is_container_running():
                 return False
 
             if (self.log_chk and n_iter != 0 and
                     utils.is_log_file_done(self.log_chk)):
                 self.log.info(f"Log file {self.log_chk} has been"
                               f"idle,  stopping pipeline.")
-                stop_command = f"docker exec {self.containername} pkill -f kpf"
+                
+                stop_command = f"docker stop {self.containername}"
                 subprocess.run(stop_command, shell=True)
                 time.sleep(120)
                 continue
@@ -332,3 +376,22 @@ class KPFPipeCronBase:
         self.dockercmdscript = f'jobs/kpf_{self.procname}_{uniq_str}'
         self.containerimage = 'kpf-drp:latest'
 
+    def link_wrkspace_drp(self):
+        symlink_str = f"""
+            [ ! -e /data/L0/{self.procdate} ] && ln -s /data_workspace/L0/{self.procdate} /data/L0/{self.procdate}; 
+            [ ! -e /data/2D/{self.procdate} ] && ln -s /data_workspace/2D/{self.procdate} /data/2D/{self.procdate}; 
+            [ ! -e /data/masters ] && ln -s /masters /data/masters; 
+            [ ! -e /data/reference_fits ] && ln -s /data_root/reference_fits /data/reference_fits; 
+            """
+
+        return symlink_str
+
+    def make_directories_str(self):
+        mk_dir_str = f"""
+            mkdir -p /data/logs/QLP/{self.procdate};
+            mkdir -p /data/logs/watch/{self.procdate};
+            mkdir -p /data/L1/{self.procdate};
+            mkdir -p /data/L2/{self.procdate};
+        """
+
+        return mk_dir_str

@@ -8,8 +8,6 @@ is meant to be used to run the pipeline in-house and Keck.
 import os
 import keck_utils as utils
 
-from datetime import datetime, timezone
-
 from keck_kpfcron_base import KPFPipeCronBase
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -45,7 +43,6 @@ class KPFPipeMastersLevel0(KPFPipeCronBase):
             #! /bin/bash 
     
             # setup the full log
-            mkdir -p {self.logs_root};  
             rm -f {self.stdout_log}; 
             touch  {self.stdout_log};
     

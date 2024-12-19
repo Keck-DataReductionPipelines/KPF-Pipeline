@@ -2,8 +2,8 @@ import configparser
 import sys
 import os
 import time
+import signal
 import subprocess
-import argparse
 
 import logging
 from datetime import datetime
@@ -61,25 +61,6 @@ def chk_rm_docker_container(container_name, log):
         subprocess.run(f"docker stop {container_id}", shell=True)
         subprocess.run(f"docker rm {container_id}", shell=True)
         log.info(f"Container '{container_name}' has been stopped / removed.")
-
-
-def cmd_line_args(start_msg):
-    """
-    Parse the command line arguments for the DRP scripts.
-
-    Args:
-        start_msg (str): the log message for starting the pipeline.
-
-    Returns:
-    """
-    parser = argparse.ArgumentParser(description=start_msg)
-
-    parser.add_argument("--date", type=str, required=False, help="The UT date.")
-    parser.add_argument("--ncpu", type=str, required=False, help="The Number of Cores to use.")
-
-    args = parser.parse_args()
-
-    return args
 
 
 def get_log(log_name):
@@ -327,3 +308,41 @@ def get_dated_cfg(procdate, cfg_dir, cfg_prefix):
     return closest_file
 
 
+def kill_exist_proc(script_name, log=None):
+    """
+    Kill an existing process by the name of the script.
+
+    Args:
+        script_name ():
+        log (): the logger object
+
+    Returns:
+
+    """
+    def get_cmdline_info(pid):
+        try:
+            with open(f"/proc/{pid}/cmdline", "r") as f:
+                return f.read().split("\0")
+        except Exception as e:
+            return []
+
+    current_pid = os.getpid()
+    for pid in os.listdir("/proc"):
+        if pid.isdigit():
+            try:
+                # don't commit Hari-Kari
+                if int(pid) == current_pid:
+                    continue
+
+                cmdline = get_cmdline_info(pid)
+                if cmdline:
+                    if any(script_name in arg for arg in cmdline):
+                        msg = f"Killing process '{script_name}' with PID {pid}"
+                        if log:
+                            log.info(msg)
+                        else:
+                            print(msg)
+
+                        os.kill(int(pid), signal.SIGTERM)
+            except (ProcessLookupError, PermissionError) as err:
+                pass

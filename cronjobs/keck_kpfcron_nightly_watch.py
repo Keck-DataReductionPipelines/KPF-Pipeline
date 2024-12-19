@@ -23,10 +23,11 @@ class KPFPipeNightly(KPFPipeCronBase):
         super(KPFPipeNightly, self).__init__(procname)
 
         # dial back the ncpu since it is running at night with the QLP
-        self.ncpu = 120
+        # self.ncpu = 192
 
-        # exit after 14 hours (6pm to 8am) (18 hrs * 60 minutes * 60 seconds)
-        self.exit_timer = 14 * 60 * 60
+        # exit after 14 hours (6pm to 8am)
+        if not self.exit_timer:
+            self.exit_timer = 16.5 * 60 * 60
 
     def set_recipe(self):
         """
@@ -35,6 +36,7 @@ class KPFPipeNightly(KPFPipeCronBase):
         self.recipe = 'recipes/kpf_drp.recipe'
         cfg_dir = 'configs'
         self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp_watch')
+        # self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp_local')
         if not self.config:
             self.log.error(f'config not found for {self.procdate}, {cfg_dir}, keck_kpf_drp')
             exit()
@@ -54,15 +56,10 @@ class KPFPipeNightly(KPFPipeCronBase):
             #!/bin/bash
 
             # mkdirs if they don't exist
-            mkdir -p /data/logs/{self.procdate}; 
-            mkdir -p /data/L1/{self.procdate}; 
-            mkdir -p /data/L2/{self.procdate}; 
+            {self.make_directories_str()}
 
             # make the symlinks
-            ln -fs /data_workspace/L0/{self.procdate} /data/L0/{self.procdate};
-            ln -fs /data_workspace/2D/{self.procdate} /data/2D/{self.procdate};
-            ln -fs /masters /data/masters;
-            ln -fs /data_root/reference_fits /data/reference_fits;
+            {self.link_wrkspace_drp()}
 
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;

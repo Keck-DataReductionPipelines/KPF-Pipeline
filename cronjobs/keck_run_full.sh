@@ -18,6 +18,7 @@ while [[ "$#" -gt 0 ]]; do
         --date) procdate="$2"; shift ;; # date to process
         --mastersonly) mastersonly=1 ;; # run only the masters
         --wls) wls=1 ;;
+        --timer) timer="$2"; shift ;;  # add exit timer
     esac
     shift
 done

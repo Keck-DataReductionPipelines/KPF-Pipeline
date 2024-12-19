@@ -5,6 +5,7 @@ The keck KPF DRP Data Products Scrubber
 
 """
 import os
+import shutil
 import argparse
 import keck_utils as utils
 
@@ -17,9 +18,6 @@ class KPFScrubDRP:
     The KPF Data Scrubber
     """
     def __init__(self, today):
-
-        # will be defined later
-        self.logs_root = None
 
         # cfg file parameters
         self.data_drp = None
@@ -48,8 +46,7 @@ class KPFScrubDRP:
         self.data_workspace = utils.get_cfg(cfg, 'dirs', 'data_workspace')
         self.data_drp = utils.get_cfg(cfg, 'dirs', 'data_drp')
         self.data_root = utils.get_cfg(cfg, 'dirs', 'data_root')
-        self.logs_base = f"{utils.get_cfg(cfg, 'dirs', 'logs_base')}"
-
+        self.logs_base = utils.get_cfg(cfg, 'dirs', 'logs_base')
 
     def scrub_workspace(self, utd):
         """
@@ -60,10 +57,10 @@ class KPFScrubDRP:
         Args:
             utd (str): the UTD date in format: YYYYMMDD
         """
-        dirs_to_scrub = ['L0', '2D', 'masters', 'logs']
+        dirs_to_scrub = ['L0', '2D', 'logs']
         for direct in dirs_to_scrub:
             scrub_dir = os.path.join(self.data_workspace, direct, utd)
-            self.scrub_all_files(scrub_dir)
+            self.scrub_directory(scrub_dir)
 
     def scrub_data_drp(self, utd):
         """
@@ -73,39 +70,44 @@ class KPFScrubDRP:
         Args:
             utd (str): the UTD date in format: YYYYMMDD
         """
-        dirs_to_scrub = ['L1', 'L2', 'QLP', 'logs', 'logs/QLP', 'logs/watch']
+        dirs_to_scrub = ['L0', '2D', 'L1', 'L2', 'QLP', 'logs', 'logs/QLP', 'logs/watch']
         for direct in dirs_to_scrub:
             scrub_dir = os.path.join(self.data_drp, direct, utd)
-            self.scrub_all_files(scrub_dir)
+            self.scrub_directory(scrub_dir)
 
         dated_files_dir = os.path.join(self.data_drp, 'outliers')
         self.scrub_dated_files(dated_files_dir, utd)
 
-    def scrub_all_files(self, direct):
+    def scrub_directory(self, direct):
         """
         Scrub all files in a directory.
 
         Args:
             direct (str): the full path to the direct to clean.
         """
+
+        # remove left behind links
+        if os.path.islink(direct):
+            self.log.info(f'removing symlink: {direct}')
+            os.unlink(direct)
+            return
+
         if not os.path.isdir(direct):
             return
 
         self.log.info(f'removing all files in: {direct}')
 
         try:
-            files = [f for f in os.listdir(direct)
-                     if os.path.isfile(os.path.join(direct, f))]
-
-            for file in files:
-                file_path = os.path.join(direct, file)
-                os.remove(file_path)
+            shutil.rmtree(direct)
         except FileNotFoundError:
             self.log.error(f"Directory {direct} does not exist.")
         except PermissionError:
             self.log.error("Permission denied.")
         except Exception as e:
             self.log.error(f"Error: {e}")
+
+        # remove the empty directory
+
 
     def scrub_dated_files(self, direct, utd):
         """
@@ -118,18 +120,26 @@ class KPFScrubDRP:
         files = [f for f in os.listdir(direct)
                  if os.path.isfile(os.path.join(direct, f))]
 
-        if not files:
+        file_list = []
+        for file in files:
+            if utd not in file:
+                continue
+            file_list.append(file)
+
+        if not file_list:
             return
 
         self.log.info(f'removing all files in: {direct} with date: {utd}')
 
-        for file in files:
-            if utd in file:
-                file_path = os.path.join(direct, file)
-                try:
-                    os.remove(file_path)
-                except Exception as e:
-                    self.log.error(f"Error removing {file_path}: {e}")
+        for file in file_list:
+            if utd not in file:
+                continue
+
+            file_path = os.path.join(direct, file)
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                self.log.error(f"Error removing {file_path}: {e}")
 
 
 def get_dates_range(utd1, utd2):
@@ -165,8 +175,8 @@ def read_cmd_line():
         default=(datetime.now(timezone.utc) - timedelta(days=19)).strftime('%Y%m%d')
     )
     parser.add_argument(
-        "--utd2wrk", type=str, required=False, help=f"Start {hstr} workspace.",
-        default=(datetime.now(timezone.utc) - timedelta(days=5)).strftime('%Y%m%d')
+        "--utd2wrk", type=str, required=False, help=f"End {hstr} workspace.",
+        default=(datetime.now(timezone.utc) - timedelta(days=2)).strftime('%Y%m%d')
     )
     parser.add_argument(
         "--utd1drp", type=str, required=False, help=f"Start {hstr} DRP.",
@@ -174,7 +184,7 @@ def read_cmd_line():
     )
     parser.add_argument(
         "--utd2drp", type=str, required=False, help=f"End {hstr} DRP.",
-        default=(datetime.now(timezone.utc) - timedelta(days=10)).strftime('%Y%m%d')
+        default=(datetime.now(timezone.utc) - timedelta(days=4)).strftime('%Y%m%d')
     )
 
     args = parser.parse_args()

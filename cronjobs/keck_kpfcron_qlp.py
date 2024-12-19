@@ -20,11 +20,13 @@ class KPFPipeQuickLook(KPFPipeCronBase):
     def __init__(self, procname):
         super(KPFPipeQuickLook, self).__init__(procname)
 
-        # dial back the ncpu since it is running at night with the Quicklook Watch Pipeline
-        self.ncpu = 120
+        # dial back the ncpu since it is running at night with the
+        # Nightly Watch Pipeline
+        self.ncpu = 8
 
-        # exit after 12 hours
-        self.exit_timer = 14 * 60 * 60
+        # exit after 23.5 hours,  start 1pm UT to 00:30 UT (next day)
+        if not self.exit_timer:
+            self.exit_timer = 23.6 * 60 * 60
 
     def set_recipe(self):
 
@@ -44,33 +46,21 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             #!/bin/bash
     
             # mkdirs if they don't exist
-            mkdir -p /data/logs/QLP/{self.procdate};
-            mkdir -p /data/L1/{self.procdate};
-            mkdir -p /data/L2/{self.procdate};
+            {self.make_directories_str()}
     
             # make the symlinks
-            ln -fs /data_workspace/L0/{self.procdate} /data/L0/{self.procdate};
-            ln -fs /data_workspace/2D/{self.procdate} /data/2D/{self.procdate};
-            ln -fs /masters /data/masters;
-            ln -fs /data_root/reference_fits /data/reference_fits;
-    
+            {self.link_wrkspace_drp()}
+
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
     
             # touch the files so the pipe recognized them as new
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/L0 --log /data/logs/QLP/ &
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --log /data/logs/QLP/ --fits /data/{self.level} &
     
             # run the pipeline for all data in the directory
-            kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
+            # kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
+            kpf --watch /data/{self.level}/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             
-            # once it catches up,  if it exits,  run again without the reprocess to avoid exiting early
-            kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
-    
-            # remove the symlinks
-            rm -f /data/masters;
-            rm -f /data/reference_fits;
-            rm -f /data/L0/{self.procdate};
-            rm -f /data/2D/{self.procdate};
             """
 
     def define_docker_cmd(self):
