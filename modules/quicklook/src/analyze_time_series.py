@@ -194,7 +194,7 @@ class AnalyzeTimeSeries:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation_parallel(batch)
+                            self.ingest_batch_observation(batch)
                             batch = []
                 if batch:
                     self.ingest_batch_observation(batch)
@@ -325,72 +325,6 @@ class AnalyzeTimeSeries:
 
 
     def ingest_batch_observation(self, batch):
-        """
-        Ingest a batch of observations into the database.
-        """
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        batch_data = []
-        for file_path in batch:
-            base_filename = os.path.basename(file_path).split('.fits')[0]
-            #print(base_filename)
-            L0_filename = base_filename.split('.fits')[0]
-            L0_filename = L0_filename.split('/')[-1]
-            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
-
-            L0_file_path = file_path
-            D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
-            L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
-            L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
-
-            # If any associated file has been updated, proceed
-            if self.is_any_file_updated(L0_file_path):
-                L0_header_data     = self.extract_kwd(L0_file_path,       self.L0_header_keyword_types,     extension='PRIMARY')   
-                L0_telemetry       = self.extract_telemetry(L0_file_path, self.L0_telemetry_types) 
-                D2_header_data     = self.extract_kwd(D2_file_path,       self.D2_header_keyword_types,     extension='PRIMARY')   
-                L1_header_data     = self.extract_kwd(L1_file_path,       self.L1_header_keyword_types,     extension='PRIMARY')   
-                L2_header_data     = self.extract_kwd(L2_file_path,       self.L2_header_keyword_types,     extension='PRIMARY')   
-                L2_CCF_header_data = self.extract_kwd(L2_file_path,       self.L2_CCF_header_keyword_types, extension='GREEN_CCF')   
-                L2_RV_header_data  = self.extract_kwd(L2_file_path,       self.L2_RV_header_keyword_types,  extension='RV')   
-                L2_RV_data         = self.extract_rvs(L2_file_path)   
-
-                header_data = {**L0_header_data, **L0_telemetry, **D2_header_data, **L1_header_data, **L2_header_data, **L2_CCF_header_data, **L2_RV_header_data, **L2_RV_data}
-
-                header_data['ObsID'] = base_filename
-                header_data['datecode'] = get_datecode(base_filename)
-                header_data['L0_filename'] = os.path.basename(L0_file_path)
-                header_data['D2_filename'] = os.path.basename(D2_file_path)
-                header_data['L1_filename'] = os.path.basename(L1_file_path)
-                header_data['L2_filename'] = os.path.basename(L2_file_path)
-                header_data['L0_header_read_time'] = now_str
-                header_data['D2_header_read_time'] = now_str
-                header_data['L1_header_read_time'] = now_str
-                header_data['L2_header_read_time'] = now_str
-                header_data['Source'] = self.get_source(L0_header_data)
-    
-                batch_data.append(header_data)
-
-        # Perform batch insertion/update in the database
-        if batch_data != []:
-            try:
-                columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
-                placeholders = ', '.join(['?'] * len(batch_data[0]))
-                insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
-                data_tuples = [tuple(data.values()) for data in batch_data]
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA cache_size = -2000000;")
-                cursor.executemany(insert_query, data_tuples)
-                conn.commit()
-                conn.close()
-            except Exception as e:
-                print(e)
-                print('data = ')
-                print(batch_data)
-
-
-    def ingest_batch_observation_parallel(self, batch):
         """
         Ingest a batch of observations into the database in parallel using 
         ProcessPoolExecutor.
