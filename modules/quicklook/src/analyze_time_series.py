@@ -1488,12 +1488,8 @@ class AnalyzeTimeSeries:
                         state_to_color = {'Fail': 'indianred', 'Pass': 'forestgreen', 'None': 'cornflowerblue'}
                         if thispanel['paneldict']['ylabel'] == 'Junk Status':
                             states = ['Not Junk' if s == 'Pass' else 'Junk' if s == 'Fail' else s for s in states]
-                            unique_states = ['Not Junk', 'Junk']
+                            unique_states = ['Junk', 'Not Junk']
                             state_to_color = {'Junk': 'indianred', 'Not Junk': 'forestgreen', 'None': 'cornflowerblue'}
-                           
-                           
-                           
-                           
                         mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
                         colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                         color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
@@ -1524,13 +1520,7 @@ class AnalyzeTimeSeries:
                         else:
                             legend_frac_size = 0.20
                         handles, labels = axs[p].get_legend_handles_labels()
-                        print(thispanel['paneldict']['ylabel'])
-                        print(thispanel['paneldict']['ylabel'] == 'Junk Status')
-                        if thispanel['paneldict']['ylabel'] == 'Junk Status':
-                            "got here"
-                            sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=False)
-                        else:
-                            sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=False)
+                        sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
                         handles, labels = zip(*sorted_pairs)
                         axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
                 if ylim:
@@ -2176,12 +2166,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'L0 Data Present\n(1=Pass)',
+            thispaneldict = {'ylabel': 'L0 Data Present',
                              'legend_frac_size': 0.10}
             data_present_panel = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'L0 Keywords Present\n(1=Pass)',
+            thispaneldict = {'ylabel': 'L0 Keywords Present',
                              'title': 'Quality Control - L0 Data and Keywords Products Present',
                              'legend_frac_size': 0.10}
             keywords_present_panel = {'panelvars': thispanelvars,
@@ -2198,12 +2188,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
             dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'L0 Time Check\n(1=Pass)',
+            thispaneldict = {'ylabel': 'L0 Time Check',
                              'legend_frac_size': 0.10}
             time_check_l0_panel = {'panelvars': thispanelvars,
                                    'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'L2 Time Check\n(1=Pass)',
+            thispaneldict = {'ylabel': 'L2 Time Check',
                              'title': 'Quality Control - L0 and L2 Times Consistent',
                              'legend_frac_size': 0.10}
             time_check_l2_panel = {'panelvars': thispanelvars,
@@ -2214,12 +2204,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
             dict2 = {'col': 'EMNEG', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Netative Flux', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'EM Not Saturated\n(1=Pass)',
+            thispaneldict = {'ylabel': 'EM Not Saturated',
                              'legend_frac_size': 0.10}
             emsat_panel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'EM Not Netative Flux\n(1=Pass)',
+            thispaneldict = {'ylabel': 'EM Not Netative Flux',
                              'title': 'Quality Control - Exposure Meter',
                              'legend_frac_size': 0.10}
             emneg_panel = {'panelvars': thispanelvars,
@@ -2229,7 +2219,7 @@ class AnalyzeTimeSeries:
         elif plot_name=='qc_monotonic_wls':
             dict1 = {'col': 'MONOTWLS', 'plot_type': 'state', 'plot_attr': {'label': 'Montonic WLS', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Monotonic WLS\n(1=Pass)',
+            thispaneldict = {'ylabel': 'Monotonic WLS',
                              'title': 'Quality Control - Monotonic WLS in L1',
                              'legend_frac_size': 0.10}
             monot_wls_panel = {'panelvars': thispanelvars,
@@ -2239,7 +2229,7 @@ class AnalyzeTimeSeries:
         elif plot_name=='qc_pos_2d_snr':
             dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Not Negative 2D SNR\n(1=Pass)',
+            thispaneldict = {'ylabel': 'Not Negative 2D SNR',
                              'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
                              'legend_frac_size': 0.10}
             monot_wls_panel = {'panelvars': thispanelvars,
@@ -2249,7 +2239,7 @@ class AnalyzeTimeSeries:
         elif plot_name=='qc_lfc':
             dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'LFC Not Saturated \n(1=Pass)',
+            thispaneldict = {'ylabel': 'LFC Not Saturated)',
                              'title': 'Quality Control - LFC Metrics',
                              'legend_frac_size': 0.10}
             lfc_sat_panel = {'panelvars': thispanelvars,
@@ -2259,7 +2249,7 @@ class AnalyzeTimeSeries:
         elif plot_name=='qc_goodread':
             dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Green/Red CCDs\nGood Read(1=Pass)',
+            thispaneldict = {'ylabel': 'Good Read Green/Red CCDs',
                              'title': r'Quality Control - Good Read Metric (T$_{exp}$ !$\approx$ 6 sec)',
                              'legend_frac_size': 0.10}
             goodread_panel = {'panelvars': thispanelvars,
@@ -2270,12 +2260,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
             dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Not 2D Low Bias\nFlux (1=Pass)',
+            thispaneldict = {'ylabel': 'Not 2D Low Bias Flux',
                              'legend_frac_size': 0.10}
             lowbias_panel = {'panelvars': thispanelvars,
                              'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Not 2D Low Dark\nFlux (1=Pass)',
+            thispaneldict = {'ylabel': 'Not 2D Low Dark Flux',
                              'title': 'Quality Control - Low Dark and Bias Flux',
                              'legend_frac_size': 0.10}
             lowdark_panel = {'panelvars': thispanelvars,
@@ -2328,7 +2318,7 @@ class AnalyzeTimeSeries:
             dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
             dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
             thispanelvars = [dict1, dict2, dict3, dict4]
-            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)', 
                              'title': 'SoCal SNR & Flux Ratio',
                              'only_object': 'SoCal',
                              'narrow_xlim_daily': 'true',
