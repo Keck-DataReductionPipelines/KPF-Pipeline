@@ -1514,7 +1514,10 @@ class AnalyzeTimeSeries:
                         legend_frac_size = thispanel['paneldict']['legend_frac_size']
                     else:
                         legend_frac_size = 0.20
-                    axs[p].legend(loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+                    handles, labels = axs[p].get_legend_handles_labels()
+                    sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
+                    handles, labels = zip(*sorted_pairs)
+                    axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
                 if ylim:
                     axs[p].set_ylim(ylim)
             axs[p].grid(color='lightgray')
