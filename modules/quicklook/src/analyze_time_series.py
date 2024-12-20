@@ -1504,6 +1504,12 @@ class AnalyzeTimeSeries:
                         axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
                     axs[p].set_yticks(range(len(unique_states)))
                     axs[p].set_yticklabels(unique_states)
+                
+                if len(t) < 1:
+                    axs[p].text(0.5, 0.5, 'No Data', 
+                                horizontalalignment='center', verticalalignment='center', 
+                                fontsize=24, transform=axs[p].transAxes)
+
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
                 if 'axhspan' in thispanel['paneldict']:
