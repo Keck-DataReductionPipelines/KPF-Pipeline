@@ -22,7 +22,7 @@ class KPFPipeQuickLook(KPFPipeCronBase):
 
         # dial back the ncpu since it is running at night with the
         # Nightly Watch Pipeline
-        self.ncpu = 8
+        self.ncpu = 4
 
         # exit after 23.5 hours,  start 1pm UT to 00:30 UT (next day)
         if not self.exit_timer:

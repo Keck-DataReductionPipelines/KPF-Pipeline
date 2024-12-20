@@ -52,7 +52,7 @@ if __name__ == '__main__':
     os.makedirs(logs_root, exist_ok=True)
     log_name = f'keck_slow_touch_{procdate}'
 
-    tm_sleep_before_start = 60
+    tm_sleep_before_start = 5
 
     log = utils.configure_logger(logs_root, f"{log_name}")
     log.info(f'starting slow touch,  sleeping {tm_sleep_before_start}')
