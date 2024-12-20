@@ -1486,6 +1486,14 @@ class AnalyzeTimeSeries:
                         if (unique_states == ['Pass', 'Fail']) or (unique_states == ['Pass']) or (unique_states == ['Fail']):
                              unique_states = ['Fail', 'Pass']  # put Pass on the top of the plot
                         state_to_color = {'Fail': 'indianred', 'Pass': 'forestgreen', 'None': 'cornflowerblue'}
+                        if thispanel['paneldict']['ylabel'] == 'Junk Status':
+                            states = ['Not Junk' if s == 'Pass' else 'Junk' if s == 'Fail' else s for s in states]
+                            unique_states = ['Not Junk', 'Junk']
+                            state_to_color = {'Junk': 'indianred', 'Not Junk': 'forestgreen', 'None': 'cornflowerblue'}
+                           
+                           
+                           
+                           
                         mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
                         colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                         color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
@@ -1510,14 +1518,21 @@ class AnalyzeTimeSeries:
                         alp  = axh['alpha']
                         axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
                 if makelegend:
-                    if 'legend_frac_size' in thispanel['paneldict']:
-                        legend_frac_size = thispanel['paneldict']['legend_frac_size']
-                    else:
-                        legend_frac_size = 0.20
-                    handles, labels = axs[p].get_legend_handles_labels()
-                    sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
-                    handles, labels = zip(*sorted_pairs)
-                    axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+                    if len(t) > 0:
+                        if 'legend_frac_size' in thispanel['paneldict']:
+                            legend_frac_size = thispanel['paneldict']['legend_frac_size']
+                        else:
+                            legend_frac_size = 0.20
+                        handles, labels = axs[p].get_legend_handles_labels()
+                        print(thispanel['paneldict']['ylabel'])
+                        print(thispanel['paneldict']['ylabel'] == 'Junk Status')
+                        if thispanel['paneldict']['ylabel'] == 'Junk Status':
+                            "got here"
+                            sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=False)
+                        else:
+                            sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=False)
+                        handles, labels = zip(*sorted_pairs)
+                        axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
                 if ylim:
                     axs[p].set_ylim(ylim)
             axs[p].grid(color='lightgray')
@@ -2150,7 +2165,7 @@ class AnalyzeTimeSeries:
         elif plot_name=='junk_status':
             dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Junk Status (1 = not junk)',
+            thispaneldict = {'ylabel': 'Junk Status',
                              'title': 'Junk Status',
                              'legend_frac_size': 0.10}
             junkpanel = {'panelvars': thispanelvars,
