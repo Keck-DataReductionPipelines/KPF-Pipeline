@@ -1312,13 +1312,12 @@ class AnalyzeTimeSeries:
                                         object_like=object_like,
                                         verbose=False)
             df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
-
             if start_date_was_none == True:
                 start_date = min(df['DATE-MID'])
             if end_date_was_none == True:
                 end_date = max(df['DATE-MID'])
-
             df = df.sort_values(by='DATE-MID')
+
             if clean:
                 df = self.clean_df(df)
 
@@ -1391,14 +1390,19 @@ class AnalyzeTimeSeries:
                 if (thispanel['paneldict']['subtractmedian']).lower() == 'true':
                     subtractmedian = True
             nvars = len(thispanel['panelvars'])
+            df_initial = df
             for i in np.arange(nvars):
+                df = df_initial # start fresh for each panel in case NaN values were removed.
                 if 'plot_type' in thispanel['panelvars'][i]:
                     plot_type = thispanel['panelvars'][i]['plot_type']
                 else:
                     plot_type = 'scatter'
-                col_data = df[thispanel['panelvars'][i]['col']]
-                col_data_replaced = col_data.replace('NaN',  np.nan)
-                col_data_replaced = col_data.replace('null', np.nan)
+                col_name = thispanel['panelvars'][i]['col']
+                df = df[~df[col_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
+                col_data = df[col_name]
+                #col_data_replaced = col_data.replace('NaN',  np.nan)
+                #col_data_replaced = col_data.replace('null', np.nan)
+                col_data_replaced = col_data
                 if 'col_err' in thispanel['panelvars'][i]:
                     col_data_err = df[thispanel['panelvars'][i]['col_err']]
                     col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
@@ -1409,6 +1413,16 @@ class AnalyzeTimeSeries:
                     data = np.array(col_data_replaced, dtype='float')
                     if plot_type == 'errorbar':
                         data_err = np.array(col_data_err_replaced, dtype='float')
+
+                if abs((end_date - start_date).days) <= 1.2:
+                    t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
+                elif abs((end_date - start_date).days) <= 3:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                elif abs((end_date - start_date).days) < 32:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                else:
+                    t = df['DATE-MID'] # dates
+
                 plot_attributes = {}
                 if plot_type != 'state':
                     if np.count_nonzero(~np.isnan(data)) > 0:
@@ -1456,16 +1470,22 @@ class AnalyzeTimeSeries:
                 if plot_type == 'step':
                     axs[p].step(t, data, **plot_attributes)
                 if plot_type == 'state':
-                    # Map states (e.g., DRP version number) to a numerical scale
+                    # Plot states (e.g., DRP version number or QC result)
                     # Convert states to a consistent type for comparison
                     states = [float(s) if is_numeric(s) else s for s in states]
                     # Separate numeric and non-numeric states for sorting
                     numeric_states = sorted(s for s in states if isinstance(s, float))
                     non_numeric_states = sorted(s for s in states if isinstance(s, str))
                     unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
+                    unique_states = list(set(unique_states))
                     # Check if unique_states contains only 0, 1, and None - QC test
                     if set(unique_states).issubset({0.0, 1.0, 'None'}):
-                        state_to_color = {0.0: 'indianred', 1.0: 'forestgreen', 'None': 'cornflowerblue'}
+                        states = ['Pass' if s == 1.0 else 'Fail' if s == 0.0 else s for s in states]
+                        unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
+                        unique_states = list(set(unique_states))
+                        if (unique_states == ['Pass', 'Fail']) or (unique_states == ['Pass']) or (unique_states == ['Fail']):
+                             unique_states = ['Fail', 'Pass']  # put Pass on the top of the plot
+                        state_to_color = {'Fail': 'indianred', 'Pass': 'forestgreen', 'None': 'cornflowerblue'}
                         mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
                         colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                         color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
@@ -2138,12 +2158,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
             dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'L0 Data Present\n(1=True)',
+            thispaneldict = {'ylabel': 'L0 Data Present\n(1=Pass)',
                              'legend_frac_size': 0.10}
             data_present_panel = {'panelvars': thispanelvars,
                                   'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'L0 Keywords Present\n(1=True)',
+            thispaneldict = {'ylabel': 'L0 Keywords Present\n(1=Pass)',
                              'title': 'Quality Control - L0 Data and Keywords Products Present',
                              'legend_frac_size': 0.10}
             keywords_present_panel = {'panelvars': thispanelvars,
@@ -2160,12 +2180,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
             dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'L0 Time Check\n(1=True)',
+            thispaneldict = {'ylabel': 'L0 Time Check\n(1=Pass)',
                              'legend_frac_size': 0.10}
             time_check_l0_panel = {'panelvars': thispanelvars,
                                    'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'L2 Time Check\n(1=True)',
+            thispaneldict = {'ylabel': 'L2 Time Check\n(1=Pass)',
                              'title': 'Quality Control - L0 and L2 Times Consistent',
                              'legend_frac_size': 0.10}
             time_check_l2_panel = {'panelvars': thispanelvars,
@@ -2176,12 +2196,12 @@ class AnalyzeTimeSeries:
             dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
             dict2 = {'col': 'EMNEG', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Netative Flux', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'EM Not Saturated\n(1=True)',
+            thispaneldict = {'ylabel': 'EM Not Saturated\n(1=Pass)',
                              'legend_frac_size': 0.10}
             emsat_panel = {'panelvars': thispanelvars,
                            'paneldict': thispaneldict}
             thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'EM Not Netative Flux\n(1=True)',
+            thispaneldict = {'ylabel': 'EM Not Netative Flux\n(1=Pass)',
                              'title': 'Quality Control - Exposure Meter',
                              'legend_frac_size': 0.10}
             emneg_panel = {'panelvars': thispanelvars,
@@ -2191,58 +2211,58 @@ class AnalyzeTimeSeries:
         elif plot_name=='qc_monotonic_wls':
             dict1 = {'col': 'MONOTWLS', 'plot_type': 'state', 'plot_attr': {'label': 'Montonic WLS', 'marker': '.'}}
             thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Monotonic WLS\n(1=True)',
+            thispaneldict = {'ylabel': 'Monotonic WLS\n(1=Pass)',
                              'title': 'Quality Control - Monotonic WLS in L1',
                              'legend_frac_size': 0.10}
             monot_wls_panel = {'panelvars': thispanelvars,
                                'paneldict': thispaneldict}
             panel_arr = [monot_wls_panel]
 
-#        elif plot_name=='qc_pos_2d_snr':
-#            dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
-#            thispanelvars = [dict1]
-#            thispaneldict = {'ylabel': 'Not Negative 2D SNR\n(1=True)',
-#                             'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
-#                             'legend_frac_size': 0.10}
-#            monot_wls_panel = {'panelvars': thispanelvars,
-#                               'paneldict': thispaneldict}
-#            panel_arr = [monot_wls_panel]
+        elif plot_name=='qc_pos_2d_snr':
+            dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Not Negative 2D SNR\n(1=Pass)',
+                             'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
+                             'legend_frac_size': 0.10}
+            monot_wls_panel = {'panelvars': thispanelvars,
+                               'paneldict': thispaneldict}
+            panel_arr = [monot_wls_panel]
 
-#        elif plot_name=='qc_lfc':
-#            dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
-#            thispanelvars = [dict1]
-#            thispaneldict = {'ylabel': 'LFC Not Saturated \n(1=True)',
-#                             'title': 'Quality Control - LFC Metrics',
-#                             'legend_frac_size': 0.10}
-#            lfc_sat_panel = {'panelvars': thispanelvars,
-#                             'paneldict': thispaneldict}
-#            panel_arr = [lfc_sat_panel]
+        elif plot_name=='qc_lfc':
+            dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'LFC Not Saturated \n(1=Pass)',
+                             'title': 'Quality Control - LFC Metrics',
+                             'legend_frac_size': 0.10}
+            lfc_sat_panel = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            panel_arr = [lfc_sat_panel]
 
-#        elif plot_name=='qc_goodread':
-#            dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
-#            thispanelvars = [dict1]
-#            thispaneldict = {'ylabel': 'Green/Red CCDs\nGood Read(1=True)',
-#                             'title': 'Quality Control - Good Read Metric (T$_{exp}$ !$approx$ 6 sec)',
-#                             'legend_frac_size': 0.10}
-#            goodread_panel = {'panelvars': thispanelvars,
-#                              'paneldict': thispaneldict}
-#            panel_arr = [goodread_panel]
+        elif plot_name=='qc_goodread':
+            dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Green/Red CCDs\nGood Read(1=Pass)',
+                             'title': r'Quality Control - Good Read Metric (T$_{exp}$ !$\approx$ 6 sec)',
+                             'legend_frac_size': 0.10}
+            goodread_panel = {'panelvars': thispanelvars,
+                              'paneldict': thispaneldict}
+            panel_arr = [goodread_panel]
 
-#        elif plot_name=='qc_low_flux':
-#            dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
-#            dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
-#            thispanelvars = [dict1]
-#            thispaneldict = {'ylabel': 'Not 2D Low Bias\nFlux (1=True)',
-#                             'legend_frac_size': 0.10}
-#            lowbias_panel = {'panelvars': thispanelvars,
-#                             'paneldict': thispaneldict}
-#            thispanelvars = [dict2]
-#            thispaneldict = {'ylabel': 'Not 2D Low Dark\nFlux (1=True)',
-#                             'title': 'Quality Control - Low Dark and Bias Flux',
-#                             'legend_frac_size': 0.10}
-#            lowdark_panel = {'panelvars': thispanelvars,
-#                             'paneldict': thispaneldict}
-#            panel_arr = [lowbias_panel, lowdark_panel]
+        elif plot_name=='qc_low_flux':
+            dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
+            dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
+            thispanelvars = [dict1]
+            thispaneldict = {'ylabel': 'Not 2D Low Bias\nFlux (1=Pass)',
+                             'legend_frac_size': 0.10}
+            lowbias_panel = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            thispanelvars = [dict2]
+            thispaneldict = {'ylabel': 'Not 2D Low Dark\nFlux (1=Pass)',
+                             'title': 'Quality Control - Low Dark and Bias Flux',
+                             'legend_frac_size': 0.10}
+            lowdark_panel = {'panelvars': thispanelvars,
+                             'paneldict': thispaneldict}
+            panel_arr = [lowbias_panel, lowdark_panel]
 
         elif plot_name=='autocal-flat_snr':
             dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
@@ -2576,8 +2596,6 @@ class AnalyzeTimeSeries:
             if end_date == None:
                 end_date = dates[1]
         
-        print(start_date)
-        print(end_date)
         time_range_type = time_range_type.lower()
         if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
             time_range_type = 'all'
@@ -2603,7 +2621,7 @@ class AnalyzeTimeSeries:
             for day in days:
                 try:
                     if base_dir != None:
-                        savedir = base_dir + day.strftime("%Y%m%d") + '/Masters/'
+                        savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/'
                     else:
                         savedir = None
                     self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
@@ -2615,7 +2633,7 @@ class AnalyzeTimeSeries:
             for month in months:
                 try:
                     if base_dir != None:
-                        savedir = base_dir + month.strftime("%Y%m") + '00/Masters/'
+                        savedir = base_dir + month.strftime("%Y%m") + '00/Time_Series/'
                     else:
                         savedir = None
                     self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
@@ -2627,7 +2645,7 @@ class AnalyzeTimeSeries:
             for year in years:
                 try:
                     if base_dir != None:
-                        savedir = base_dir + year.strftime("%Y") + '0000/Masters/'
+                        savedir = base_dir + year.strftime("%Y") + '0000/Time_Series/'
                     else:
                         savedir = None
                     self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
@@ -2639,7 +2657,7 @@ class AnalyzeTimeSeries:
             for decade in decades:
                 try:
                     if base_dir != None:
-                        savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Masters/' 
+                        savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Time_Series/' 
                     else:
                         savedir = None
                     self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
