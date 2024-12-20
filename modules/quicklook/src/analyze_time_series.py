@@ -269,16 +269,17 @@ class AnalyzeTimeSeries:
         """
         base_filename = L0_filename.split('.fits')[0]
         L0_file_path = f"{dir_path}/{base_filename}.fits"
-        D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
-        L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
-        L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
-        D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-        L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-        L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
 
         # update the DB if necessary
         if self.is_any_file_updated(L0_file_path):
         
+            D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
+            L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
+            L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
+            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+
             L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
             L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
             D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
@@ -2689,19 +2690,19 @@ def process_file(file_path, now_str,
     """
     base_filename = os.path.basename(file_path).split('.fits')[0]
     L0_filename = base_filename.split('.fits')[0].split('/')[-1]
-    
-    D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-    L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-    L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
-
     L0_file_path = file_path
-    D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
-    L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
-    L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
+    
 
     # Check if updated
     if not is_any_file_updated_func(L0_file_path):
         return None
+
+    D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+    L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+    L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+    D2_file_path = file_path.replace('L0', '2D').replace('.fits', '_2D.fits')
+    L1_file_path = file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')
+    L2_file_path = file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')
 
     # Extract headers and telemetry
     L0_header_data     = extract_kwd_func(L0_file_path, L0_header_keyword_types, extension='PRIMARY')   
