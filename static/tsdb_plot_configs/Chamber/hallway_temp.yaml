@@ -1,0 +1,13 @@
+description: Hallway temperature
+panelvars:
+  - col: kpfmet.TEMP
+    plot_type: scatter
+    unit: K
+    plot_attr:
+      label: Hallway
+      marker: .
+      linewidth: 0.5
+paneldict:
+  ylabel: "Hallway\\n Temperature ($^{\\circ}$C)"
+  title: KPF Hallway Temperature
+  legend_frac_size: 0.3
