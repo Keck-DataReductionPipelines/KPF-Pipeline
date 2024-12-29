@@ -1,4 +1,4 @@
-description: Vacuum chamber temperatures
+description: KPF Spectrometer Temperatures
 panels:
   - panelvars:
       - col: kpfmet.TEMP
