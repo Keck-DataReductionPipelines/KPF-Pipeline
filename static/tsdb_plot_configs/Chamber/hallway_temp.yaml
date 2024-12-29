@@ -1,4 +1,4 @@
-description: Hallway temperature
+description: KPF Hallway Temperature
 panels:
   - panelvars:
       - col: kpfmet.TEMP
