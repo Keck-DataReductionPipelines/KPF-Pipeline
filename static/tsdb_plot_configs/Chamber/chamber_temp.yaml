@@ -1,0 +1,201 @@
+description: Vacuum chamber temperatures
+panels:
+  - panelvars:
+      - col: kpfmet.TEMP
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: .
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Hallway\n Temperature ($^{\\circ}$C)"
+      not_junk: true
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.GREEN_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Green LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: kpfmet.RED_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Red LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: kpfmet.CHAMBER_EXT_BOTTOM
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Chamber Ext Bot
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Exterior\n Temperatures ($^{\\circ}$C)"
+      not_junk: true
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.GREEN_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Green LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: kpfmet.RED_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Red LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: kpfmet.CHAMBER_EXT_BOTTOM
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Chamber Ext Bot
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Exterior\n $\\Delta$Temperature (K)"
+      not_junk: true
+      title: KPF Hallway Temperatures
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Bench$\\downarrow$ Cams"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.BENCH_TOP_BETWEEN_CAMERAS
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: Bench Cams
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.ECHELLE_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Echelle$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.GREEN_CAMERA_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Green Cam$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.RED_CAMERA_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Red Cam$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.GREEN_GRISM_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Green Grism$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.RED_GRISM_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Red Grism$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.REFORMATTER
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: Reformatter
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Spectrometer\nTemperature ($^{\\circ}$C)"
+      not_junk: true
+      nolegend: false
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Bench$\\downarrow$ Cams"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.BENCH_TOP_BETWEEN_CAMERAS
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: Bench Cams
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.ECHELLE_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Echelle$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.GREEN_CAMERA_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Green Cam$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.RED_CAMERA_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Red Cam$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.GREEN_GRISM_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Green Grism$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.RED_GRISM_TOP
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: "Red Grism$\\uparrow$"
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.REFORMATTER
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: Reformatter
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Spectrometer\n $\\Delta$Temperature (K)"
+      title: KPF Spectrometer Temperatures
+      not_junk: true
+      nolegend: false
+      subtractmedian: true
+      legend_frac_size: 0.3
