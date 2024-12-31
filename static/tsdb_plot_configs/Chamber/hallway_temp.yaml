@@ -1,5 +1,5 @@
 description: KPF Hallway Temperature
-panels:
+panel_arr:
   - panelvars:
       - col: kpfmet.TEMP
         plot_type: scatter

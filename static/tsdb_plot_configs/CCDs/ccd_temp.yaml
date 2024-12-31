@@ -1,5 +1,5 @@
 description: CCD temperatures
-panels:
+panel_arr:
   - panelvars:
       - col: kpfgreen.KPF_CCD_T
         plot_type: plot
