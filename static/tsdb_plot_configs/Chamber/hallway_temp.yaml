@@ -1,4 +1,5 @@
 description: KPF Hallway Temperature
+plot_type: time_series
 panel_arr:
   - panelvars:
       - col: kpfmet.TEMP
@@ -9,6 +10,6 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: "Hallway\\n Temperature ($^{\\circ}$C)"
+      ylabel: "Hallway\n Temperature ($^{\\circ}$C)"
       title: KPF Hallway Temperature
       legend_frac_size: 0.3

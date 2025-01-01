@@ -4,6 +4,7 @@ import time
 import glob
 import copy
 import json
+import yaml
 import sqlite3
 import calendar
 import numpy as np
@@ -23,6 +24,12 @@ from modules.Utils.kpf_parse import get_datecode
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
 from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
+
+import sys
+if sys.version_info >= (3, 9):
+    from importlib import resources
+else:
+    import importlib_resources as resources
 
 import cProfile
 import pstats
@@ -557,6 +564,12 @@ class AnalyzeTimeSeries:
         for key in kwrds:
             if key in df.columns:
                 df = df.loc[df[key] > 0]
+                
+        # CCD temperatures
+#        kwrds = ['kpfgreen.STA_CCD_T', 'kpfred.STA_CCD_T']
+#        for key in kwrds:
+#            if key in df.columns:
+#                df = df.loc[df[key] > -200]
         
         # Dark Current
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
@@ -1190,7 +1203,7 @@ class AnalyzeTimeSeries:
         plt.close('all')
 
 
-    def plot_time_series_multipanel(self, panel_arr, start_date=None, end_date=None, 
+    def plot_time_series_multipanel(self, panel_dict, start_date=None, end_date=None, 
                                     clean=False, 
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=True):
@@ -1201,7 +1214,8 @@ class AnalyzeTimeSeries:
         this method.
 
         Args:
-            panel_dict (array of dictionaries) - each dictionary in the array has keys:
+            panel_dict makes panel_arr ...
+            panel_arr (array of dictionaries) - each dictionary in the array has keys:
                 panelvars: a dictionary of matplotlib attributes including:
                     ylabel - text for y-axis label
                 paneldict: a dictionary containing:
@@ -1256,6 +1270,8 @@ class AnalyzeTimeSeries:
             """ For formatting of log plots """
             return num_fmt(value, sf=2)
 
+        panel_arr = panel_dict['panel_arr']
+        
         npanels = len(panel_arr)
         unique_cols = set()
         unique_cols.add('DATE-MID')
@@ -1282,18 +1298,18 @@ class AnalyzeTimeSeries:
             thispanel = panel_arr[p]            
             not_junk = None
             if 'not_junk' in thispanel['paneldict']:
-                if (thispanel['paneldict']['not_junk']).lower() == 'true':
+                if str(thispanel['paneldict']['not_junk']).lower() == 'true':
                     not_junk = True
-                elif (thispanel['paneldict']['not_junk']).lower() == 'false':
+                elif str(thispanel['paneldict']['not_junk']).lower() == 'false':
                     not_junk = False
             only_object = None
             if 'only_object' in thispanel['paneldict']:
                 only_object = thispanel['paneldict']['only_object']
             object_like = None
 #            if 'object_like' in thispanel['paneldict']:
-#                if (thispanel['paneldict']['object_like']).lower() == 'true':
+#                if str(thispanel['paneldict']['object_like']).lower() == 'true':
 #                    object_like = True
-#                elif (thispanel['paneldict']['object_like']).lower() == 'false':
+#                elif str(thispanel['paneldict']['object_like']).lower() == 'false':
 #                    object_like = False
 
             if start_date == None:
@@ -1325,9 +1341,9 @@ class AnalyzeTimeSeries:
                 df = self.clean_df(df)
 
             if 'on_sky' in thispanel['paneldict']:
-                if (thispanel['paneldict']['on_sky']).lower() == 'true':
+                if str(thispanel['paneldict']['on_sky']).lower() == 'true':
                     df = df[df['FIUMODE'] == 'Observing']
-                elif (thispanel['paneldict']['on_sky']).lower() == 'false':
+                elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
                     df = df[df['FIUMODE'] == 'Calibration']
 
             thistitle = ''
@@ -1338,7 +1354,7 @@ class AnalyzeTimeSeries:
                     thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
                 if 'narrow_xlim_daily' in thispanel['paneldict']:
-                    if thispanel['paneldict']['narrow_xlim_daily'] == 'true':
+                    if str(thispanel['paneldict']['narrow_xlim_daily']).lower() == 'true':
                         if len(t) > 1:
                             axs[p].set_xlim(min(t), max(t))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
@@ -1386,11 +1402,11 @@ class AnalyzeTimeSeries:
                     ylim = ast.literal_eval(thispanel['paneldict']['ylim'])
             makelegend = True
             if 'nolegend' in thispanel['paneldict']:
-                if (thispanel['paneldict']['nolegend']).lower() == 'true':
+                if str(thispanel['paneldict']['nolegend']).lower() == 'true':
                     makelegend = False
             subtractmedian = False
             if 'subtractmedian' in thispanel['paneldict']:
-                if (thispanel['paneldict']['subtractmedian']).lower() == 'true':
+                if str(thispanel['paneldict']['subtractmedian']).lower() == 'true':
                     subtractmedian = True
             nvars = len(thispanel['panelvars'])
             df_initial = df
@@ -2507,6 +2523,32 @@ class AnalyzeTimeSeries:
                                          log_savefig_timing=False)        
 
 
+    def plot_standard_time_series_new(self, plot_dict, start_date=None, end_date=None, 
+                                  clean=False, 
+                                  fig_path=None, show_plot=False):
+        """
+        Generate one of several standard time-series plots of KPF data.
+
+        Args:
+            [UPDATE THIS]
+            plot_name (string): chamber_temp - 4-panel plot showing KPF chamber temperatures
+                                abc - ...
+            start_date (datetime object) - start date for plot
+            end_date (datetime object) - end date for plot
+            fig_path (string) - set to the path for a SNR vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        self.plot_time_series_multipanel(plot_dict, start_date=start_date, end_date=end_date, 
+                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
+                                         log_savefig_timing=False)        
+
+
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
                                  last_n_days=None,
                                  fig_dir=None, show_plot=False, 
@@ -2518,7 +2560,7 @@ class AnalyzeTimeSeries:
 
         Args:
             start_date (datetime object) - start date for plot
-            interval (string) - 'day', 'week', 'year', or 'decade'
+            interval (string) - 'day', 'month', 'year', or 'decade'
             last_n_days (int) - overrides start_date and makes a plot over the last n days
             fig_path (string) - set to the path for the files to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -2611,6 +2653,119 @@ class AnalyzeTimeSeries:
             else:
                 fig_path = None
             self.plot_standard_time_series(plot_name, start_date=start_date, end_date=end_date, 
+                                           fig_path=fig_path, show_plot=show_plot, clean=clean)
+
+
+    def yaml_to_dict(self, filepath):
+        """
+        Read a plotting configuration yaml file and return the contents as a dictionary.
+        The standard yaml files are stored in the repository in subdirectories of 
+        static/tsdb_plot_configs/, e.g., static/tsdb_plot_configs/CCDs/ccd_temps.yaml. 
+        See files in those directories for formatting examples.
+        """
+        
+        with open(filepath, 'r') as f:
+            plotdict = yaml.safe_load(f)
+        
+        return plotdict
+
+
+    def plot_all_quicklook_new(self, start_date=None, interval=None, clean=True, 
+                                last_n_days=None,
+                                fig_dir=None, show_plot=False, 
+                                print_plot_names=False):
+        """
+        Generate all of the standard time series plots for the quicklook.  
+        Depending on the value of the input 'interval', the plots have time ranges 
+        that are daily, weekly, yearly, or decadal.
+
+        Args:
+            start_date (datetime object) - start date for plot
+            interval (string) - 'day', 'month', 'year', or 'decade'
+            last_n_days (int) - overrides start_date and makes a plot over the last n days
+            fig_path (string) - set to the path for the files to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+            print_plot_names (boolean) - prints the names of possible plots and exits
+
+        Returns:
+            PNG plot in fig_path or shows the plots it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        plots = {}
+        
+        import static.tsdb_plot_configs
+        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py        
+        for this_yaml_path in all_yaml:
+            print(this_yaml_path)
+            thisplotconfigdict = self.yaml_to_dict(this_yaml_path)
+            plot_name = str.split(str.split(this_yaml_path,'/')[-1], '.')[0]
+            subdir = str.split(os.path.dirname(this_yaml_path),'/')[-1]
+            tempdict = {
+                "plot_name": plot_name,
+                "subdir": subdir,
+                "description": thisplotconfigdict.get("description", ""),
+                "panel_arr": thisplotconfigdict["panel_arr"],
+            }
+            #print(plot_name)
+            #print(subdir)
+            #print(plot_name)
+            #print(thisplotconfigdict.get("description", ""))
+            #print(thisplotconfigdict["panel_arr"])
+            #print()
+            print()
+            plots[plot_name] = tempdict
+
+        if print_plot_names:
+            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
+            for p in plots:
+                print("    '" + plots[p]["plot_name"] + "': " + plots[p]["description"])
+            return
+
+        if (last_n_days != None) and (type(last_n_days) == type(1)):
+            now = datetime.now()
+            if last_n_days > 3:
+                end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                end_date = now
+            start_date = end_date - timedelta(days=last_n_days)
+
+        if not isinstance(start_date, datetime):
+            self.logger.error("'start_date' must be a datetime object.")
+            return        
+        
+        for p in plots:
+            plot_name = plots[p]["plot_name"]
+            if interval == 'day':
+                end_date = start_date + timedelta(days=1)
+                filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
+            elif interval == 'month':
+                end_date = add_one_month(start_date)
+                filename = 'kpf_' + start_date.strftime("%Y%m") + '_telemetry_' + plot_name + '.png' 
+            elif interval == 'year':
+                end_date = datetime(start_date.year+1, start_date.month, start_date.day)
+                filename = 'kpf_' + start_date.strftime("%Y") + '_telemetry_' + plot_name + '.png' 
+            elif interval == 'decade':
+                end_date = datetime(start_date.year+10, start_date.month, start_date.day)
+                filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+            elif (last_n_days != None) and (type(last_n_days) == type(1)):
+                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
+            else:
+                self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
+                return
+
+            if fig_dir != None:
+                if not fig_dir.endswith('/'):
+                    fig_dir += '/'
+                savedir = fig_dir + plots[p]["subdir"] + '/'
+                os.makedirs(savedir, exist_ok=True) # make directories if needed
+                fig_path = savedir + filename
+                self.logger.info('Making QL time series plot ' + fig_path)
+            else:
+                fig_path = None
+
+            plot_dict = plots[p]
+            self.plot_standard_time_series_new(plot_dict, start_date=start_date, end_date=end_date, 
                                            fig_path=fig_path, show_plot=show_plot, clean=clean)
 
 

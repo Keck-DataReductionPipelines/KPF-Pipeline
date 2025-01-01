@@ -1,4 +1,5 @@
 description: KPF Spectrometer Temperatures
+plot_type: time_series
 panel_arr:
   - panelvars:
       - col: kpfmet.TEMP
