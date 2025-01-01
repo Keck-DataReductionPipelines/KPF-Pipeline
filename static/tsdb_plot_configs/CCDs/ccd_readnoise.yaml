@@ -1,0 +1,47 @@
+description: CCD Read Noise
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: RNGREEN1
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: Green CCD 1
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: RNGREEN2
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: Green CCD 2
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Green CCD\nRead Noise [e-]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: RNRED1
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: RED CCD 1
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: RNRED2
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: RED CCD 2
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      ylabel: "Red CCD\nRead Noise [e-]"
+      title: CCD Read Noise
+      not_junk: true
+      legend_frac_size: 0.25
