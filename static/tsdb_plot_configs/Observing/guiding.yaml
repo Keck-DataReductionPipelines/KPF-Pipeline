@@ -1,0 +1,47 @@
+description: Guiding Errors & Bias
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: GDRXRMS
+        plot_type: scatter
+        unit: mas
+        plot_attr:
+          label: Error (X)
+          marker: .
+          linewidth: 0.5
+      - col: GDRYRMS
+        plot_type: scatter
+        unit: mas
+        plot_attr:
+          label: Error (Y)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: RMS Guiding Errors (mas)
+      narrow_xlim_daily: true
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.20
+
+  - panelvars:
+      - col: GDRXBIAS
+        plot_type: scatter
+        unit: mas
+        plot_attr:
+          label: Bias (X)
+          marker: .
+          linewidth: 0.5
+      - col: GDRYBIAS
+        plot_type: scatter
+        unit: mas
+        plot_attr:
+          label: Bias (Y)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: RMS Guiding Bias (mas)
+      narrow_xlim_daily: true
+      title: Guiding
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.20

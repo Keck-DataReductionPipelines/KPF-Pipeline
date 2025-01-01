@@ -1,0 +1,26 @@
+description: Seeing
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: GDRSEEJZ
+        plot_type: scatter
+        unit: as
+        plot_attr:
+          label: Seeing in J+Z band
+          marker: .
+          linewidth: 0.5
+      - col: GDRSEEV
+        plot_type: scatter
+        unit: as
+        plot_attr:
+          label: Seeing in V band
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Seeing (arcsec)
+      yscale: log
+      narrow_xlim_daily: true
+      title: Seeing
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30

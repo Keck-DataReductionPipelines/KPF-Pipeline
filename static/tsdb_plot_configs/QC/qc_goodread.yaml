@@ -1,0 +1,13 @@
+description: QC - Good Read Metric
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: GOODREAD
+        plot_type: state
+        plot_attr:
+          label: Good Read 
+          marker: .
+    paneldict:
+      ylabel: Good Read Green/Red CCDs
+      title: "QC - Good Read Metric (T$_{exp}$ !$\\approx$ 6 sec)""
+      legend_frac_size: 0.10

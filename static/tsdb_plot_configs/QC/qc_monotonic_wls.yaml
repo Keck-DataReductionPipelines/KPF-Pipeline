@@ -1,0 +1,13 @@
+description: QC - Monotonic WLS in L1
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: MONOTWLS
+        plot_type: state
+        plot_attr:
+          label: Montonic WLS
+          marker: .
+    paneldict:
+      ylabel: Monotonic WLS
+      title: QC - Monotonic WLS in L1
+      legend_frac_size: 0.10

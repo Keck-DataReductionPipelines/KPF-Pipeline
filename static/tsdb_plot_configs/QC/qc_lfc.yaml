@@ -1,0 +1,13 @@
+description: QC - LFC Metrics
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: LFCSAT
+        plot_type: state
+        plot_attr:
+          label: LFC Not Saturated
+          marker: .
+    paneldict:
+      ylabel: LFC Not Saturated)
+      title: QC - LFC Metrics
+      legend_frac_size: 0.10

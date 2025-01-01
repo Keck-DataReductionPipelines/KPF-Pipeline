@@ -1,0 +1,52 @@
+description: Separation of Sun and Moon from Target
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: MOONSEP
+        plot_type: scatter
+        unit: deg
+        plot_attr:
+          label: Moon-star separation
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Angle (deg)
+      narrow_xlim_daily: true
+      ylim: (0,180)
+      axhspan:
+        1:
+          ymin: 0
+          ymax: 30
+          color: red
+          alpha: 0.2
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: SUNALT
+        plot_type: scatter
+        unit: deg
+        plot_attr:
+          label: Altitude of Sun
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Angle (deg)
+      title: Separation of Sun and Moon from Target
+      narrow_xlim_daily: true
+      ylim: (-90,0)
+      axhspan:
+        1:
+          ymin: 0
+          ymax: -6
+          color: red
+          alpha: 0.2
+        2:
+          ymin: -6
+          ymax: -12
+          color: orange
+          alpha: 0.2
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
