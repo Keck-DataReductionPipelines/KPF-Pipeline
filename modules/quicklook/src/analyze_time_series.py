@@ -963,16 +963,16 @@ class AnalyzeTimeSeries:
         # Define the source categories and their colors
         source_order = ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         source_colors = {
-            'Bias': 'gray',
-            'Dark': 'black',
-            'Flat': 'gainsboro',
+            'Bias':      'gray',
+            'Dark':      'black',
+            'Flat':      'gainsboro',
             'Wide Flat': 'silver',
-            'LFC': 'gold',
-            'Etalon': 'chocolate',
-            'ThAr': 'orange',
-            'UNe': 'forestgreen',
-            'Sun': 'cornflowerblue',
-            'Star': 'royalblue'
+            'LFC':       'gold',
+            'Etalon':    'chocolate',
+            'ThAr':      'orange',
+            'UNe':       'forestgreen',
+            'Sun':       'cornflowerblue',
+            'Star':      'royalblue'
         }
     
         # Load data
@@ -1573,1087 +1573,1087 @@ class AnalyzeTimeSeries:
         plt.close('all')
 
 
-    def plot_standard_time_series(self, plot_name, start_date=None, end_date=None, 
-                                  clean=False, 
-                                  fig_path=None, show_plot=False):
-        """
-        Generate one of several standard time-series plots of KPF data.
-
-        Args:
-            plot_name (string): chamber_temp - 4-panel plot showing KPF chamber temperatures
-                                abc - ...
-            start_date (datetime object) - start date for plot
-            end_date (datetime object) - end date for plot
-            fig_path (string) - set to the path for a SNR vs. wavelength file
-                to be generated.
-            show_plot (boolean) - show the plot in the current environment.
-
-        Returns:
-            PNG plot in fig_path or shows the plot it the current environment
-            (e.g., in a Jupyter Notebook).
-        """
-
-        if plot_name == 'hallway_temp':
-            dict1 = {'col': 'kpfmet.TEMP', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
-                             'title': 'KPF Hallway Temperature', 
-                             'legend_frac_size': 0.3}
-            halltemppanel = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-            panel_arr = [halltemppanel]
-        
-        elif plot_name == 'chamber_temp':
-            dict1 = {'col': 'kpfmet.TEMP',              'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway',              'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.GREEN_LN2_FLANGE',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Green LN$_2$ Flng',    'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'kpfmet.CHAMBER_EXT_BOTTOM','plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Chamber Ext Bot',      'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.CHAMBER_EXT_TOP',   'plot_type': 'plot',    'unit': 'K', 'plot_attr': {'label': r'Chamber Exterior Top', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.3}
-            halltemppanel = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-
-            thispanelvars2 = [dict2, dict3, dict4]
-            thispaneldict2 = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.3}
-            halltemppanel2 = {'panelvars': thispanelvars2,
-                              'paneldict': thispaneldict2}
-            
-            thispanelvars3 = [dict2, dict3, dict4]
-            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'title': 'KPF Hallway Temperatures', 
-                             'legend_frac_size': 0.3}
-            halltemppanel3 = {'panelvars': thispanelvars3,
-                              'paneldict': thispaneldict3}
-            
-            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
-            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
-            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
-            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
-            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
-            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
-            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
-            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
-            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
-            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
-            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
-            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
-            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict5, dict10, dict14, dict20, dict15, dict21, dict22]
-            thispaneldict = {'ylabel': 'Spectrometer\nTemperature' + ' ($^{\circ}$C)',
-                             'not_junk': 'true',
-                             'nolegend': 'false',
-                             'legend_frac_size': 0.3}
-            chambertemppanel = {'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
-            
-            thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperature (K)',
-                             'title': 'KPF Spectrometer Temperatures', 
-                             'not_junk': 'true',
-                             # Not working yet
-                             #'axhspan': {
-                             #           1: {'ymin':  0.01, 'ymax':  100, 'color': 'red', 'alpha': 0.2},
-                             #           2: {'ymin': -0.01, 'ymax': -100, 'color': 'red', 'alpha': 0.2},
-                             #           },
-                             'nolegend': 'false', 
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.3}
-            chambertemppanel2 = {'panelvars': thispanelvars,
-                                 'paneldict': thispaneldict}
-            panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)]
-
-        elif plot_name=='chamber_temp_detail':
-            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
-            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
-            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
-            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
-            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
-            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
-            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
-            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
-            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
-            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
-            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
-            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
-            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
-            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
-                
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, ]
-            thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'nolegend': 'false', 
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.3}
-            chambertemppanel1 = {'panelvars': thispanelvars,
-                                 'paneldict': thispaneldict}
-            
-            thispanelvars = [dict15, dict14, dict11, dict12, dict13, ]
-            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'nolegend': 'false', 
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.3}
-            chambertemppanel2 = {'panelvars': thispanelvars,
-                                 'paneldict': thispaneldict}
-            
-            thispanelvars = [dict21, dict20, dict17, dict18, dict19, ]
-            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'nolegend': 'false', 
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.3}
-            chambertemppanel3 = {'panelvars': thispanelvars,
-                                 'paneldict': thispaneldict}
-                
-            thispanelvars = [dict10, dict9, ]
-            thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'nolegend': 'false', 
-                             'title': 'KPF Spectrometer Temperatures', 
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.3}
-            chambertemppanel4 = {'panelvars': thispanelvars,
-                                 'paneldict': thispaneldict}
-            panel_arr = [copy.deepcopy(chambertemppanel1), copy.deepcopy(chambertemppanel2), copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)]
-
-        elif plot_name=='fiber_temp':
-            dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'Temperature' + ' ($^{\circ}$C)',
-                             'not_junk': 'true',
-                             'title': 'Fiber Temperatures',
-                             'legend_frac_size': 0.30}
-            fibertempspanel = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            panel_arr = [fibertempspanel]
-
-        elif plot_name=='ccd_readspeed':
-            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'Read Speed [sec]',
-                             'title': 'CCD Read Speed',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.25}
-            readspeedpanel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            panel_arr = [readspeedpanel]
-
-        elif plot_name=='ccd_readnoise':
-            dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-#            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
-#            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
-            dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-#            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
-#            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.25}
-            readnoisepanel1 = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            thispanelvars = [dict3, dict4]
-            thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
-                             'title': 'CCD Read Noise',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.25}
-            readnoisepanel2 = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            panel_arr = [readnoisepanel1, readnoisepanel2]
-        
-        elif plot_name=='ccd_dark_current':
-            # Green CCD panel - Dark current
-            dict1 = {'col': 'FLXCOLLG', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXECHG',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict3 = {'col': 'FLXREG1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict4 = {'col': 'FLXREG2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict5 = {'col': 'FLXREG3G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict6 = {'col': 'FLXREG4G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict7 = {'col': 'FLXREG5G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
-            thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'Green CCD\nDark Current [e-/hr]',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            greenpanel = {'panelvars': thispanelvars,
-                          'paneldict': thispaneldict}
-            
-            # Red CCD panel - Dark current
-            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
-            thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'Red CCD\nDark Current [e-/hr]',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            redpanel = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-            
-            # Green CCD panel - ion pump current
-            dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
-                             'yscale': 'log',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            greenpanel_ionpump = {'panelvars': thispanelvars,
-                                  'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
-                             'yscale': 'log',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            greenpanel_ionpump2 = {'panelvars': thispanelvars,
-                                   'paneldict': thispaneldict}
-            
-            # Red CCD panel - ion pump current
-            dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
-                             'yscale': 'log',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            redpanel_ionpump = {'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
-                             'yscale': 'log',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            redpanel_ionpump2 = {'panelvars': thispanelvars,
-                                'paneldict': thispaneldict}
-            # to do: add kpfred.COL_PRESS (green, too)
-            #            kpfred.ECH_PRESS
-
-            # Amplifier glow panel
-            dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars = [dict3, dict4, dict1, dict2, ]
-            thispaneldict = {'ylabel': 'CCD Amplifier Dark\nCurrent (Edge Glow) [e-/hr]',
-                             'not_junk': 'true',
-                             'title': 'CCD Dark Current',
-                             'legend_frac_size': 0.35}
-            amppanel = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-            panel_arr = [greenpanel, redpanel, greenpanel_ionpump, greenpanel_ionpump2, redpanel_ionpump, redpanel_ionpump2, amppanel]
-
-        elif plot_name=='ccd_temp':
-            # CCD Temperatures
-            dict1 = {'col': 'kpfgreen.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            thispanelvars = [dict2, dict1, ]
-            thispaneldict = {'ylabel': 'Green CCD\nTemperature (C)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.25}
-            green_ccd = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict}
-
-            dict1 = {'col': 'kpfred.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars2 = [dict2, dict1, ]
-            thispaneldict2 = {'ylabel': 'Red CCD\nTemperature (C)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.25}
-            red_ccd = {'panelvars': thispanelvars2,
-                       'paneldict': thispaneldict2}
-
-            dict1 = {'col': 'kpfgreen.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
-            dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
-            thispanelvars3 = [dict2, dict1, ]
-            thispaneldict3 = {'ylabel': 'Green CCD\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
-            green_ccd2 = {'panelvars': thispanelvars3,
-                          'paneldict': thispaneldict3}
-
-            dict1 = {'col': 'kpfred.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
-            dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
-            thispanelvars4 = [dict2, dict1, ]
-            thispaneldict4 = {'ylabel': 'Red CCD\n' + r'$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'title': 'CCD Temperatures',
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
-            red_ccd2 = {'panelvars': thispanelvars4,
-                        'paneldict': thispaneldict4}
-
-            panel_arr = [green_ccd, red_ccd, green_ccd2, red_ccd2]
-
-# Additional keywords to add:
-#                'kpfred.CRYOBODY_T':                   'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
-#                'kpfred.CRYOBODY_TRG':                 'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
-#                'kpfred.CURRTEMP':                     'float',  # degC    Current cold head temperature c- double degC {...
-#                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
-#                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
-
-#                'kpfred.CF_BASE_2WT':                  'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
-#                'kpfred.CF_BASE_T':                    'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
-#                'kpfred.CF_BASE_TRG':                  'float',  # degC    base cold finger heater 1A, target temp c2 dou...
-#                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
-#                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
-
-        elif plot_name=='ccd_controller':
-            dict1 = {'col': 'kpfred.BPLANE_TEMP',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Backplane',          'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfred.BRD10_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 10 (Driver)',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfred.BRD11_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 11 (Driver)',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfred.BRD12_LVXBIAS_T', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 12 (LVxBias)', 'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfred.BRD1_HTRX_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 1 (HeaterX)',  'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfred.BRD2_XVBIAS_T',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 2 (XV Bias)',  'marker': '.', 'linewidth': 0.5}}
-            dict7 = {'col': 'kpfred.BRD3_LVDS_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 3 (LVDS)',     'marker': '.', 'linewidth': 0.5}}
-            dict8 = {'col': 'kpfred.BRD4_DRVR_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 4 (Driver)',   'marker': '.', 'linewidth': 0.5}}
-            dict9 = {'col': 'kpfred.BRD5_AD_T',       'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 5 (AD)',       'marker': '.', 'linewidth': 0.5}}
-            dict10= {'col': 'kpfred.BRD7_HTRX_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 7 (HeaterX)',  'marker': '.', 'linewidth': 0.5}}
-            dict11= {'col': 'kpfred.BRD9_HVXBIAS_T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 9 (HVxBias)',  'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
-            thispaneldict = {'ylabel': 'Temperatures (C)',
-                             'title': 'CCD Controllers',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            controller1 = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-
-            thispanelvars2 = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
-            thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
-                             'title': 'CCD Controllers',
-                             'not_junk': 'true',
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.30}
-            controller2 = {'panelvars': thispanelvars2,
-                           'paneldict': thispaneldict2}
-            panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
-
-        elif plot_name=='lfc':
-            dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict1 = {'ylabel': 'Intensity (counts)',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            lfcpanel1 = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict1}
-            dict1 = {'col': 'kpfcal.VISFLUX', 'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock Vis', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict2 = {'ylabel': 'Intensity (counts)',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            lfcpanel2 = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict2}
-
-            dict1 = {'col': 'kpfcal.BLUECUTIACT', 'plot_type': 'scatter', 'unit': 'A', 'plot_attr': {'label': 'Blue Cut Amp.',  'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict3 = {'ylabel': 'Current (A)',
-                              'title': 'LFC Diagnostics',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            lfcpanel3 = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict3}
-            panel_arr = [lfcpanel1, lfcpanel2, lfcpanel3]
-
-        elif plot_name=='etalon':
-            dict1 = {'col': 'ETAV1C1T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 1',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict2 = {'col': 'ETAV1C2T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 2',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'ETAV1C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'ETAV1C4T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 4',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'purple'}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'Temperature (C)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.25}
-            thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
-                             'title': 'Etalon Temperatures',
-                             'not_junk': 'true',
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.25}
-            etalonpanel = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-            etalonpanel2 = {'panelvars': [dict1],
-                           'paneldict': thispaneldict2}
-            etalonpanel3 = {'panelvars': [dict2],
-                           'paneldict': thispaneldict2}
-            etalonpanel4 = {'panelvars': [dict3],
-                           'paneldict': thispaneldict2}
-            etalonpanel5 = {'panelvars': [dict4],
-                           'paneldict': thispaneldict2}
-            etalonpanel6 = {'panelvars': [dict5],
-                           'paneldict': thispaneldict2}
-            panel_arr = [copy.deepcopy(etalonpanel), copy.deepcopy(etalonpanel2), copy.deepcopy(etalonpanel3), copy.deepcopy(etalonpanel4), copy.deepcopy(etalonpanel5), copy.deepcopy(etalonpanel6)]
-
-        elif plot_name=='hcl':
-            dict1 = {'col': 'kpfmet.TEMP',     'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Hallway',      'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfmet.TH_DAILY', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Daily',  'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfmet.TH_GOLD',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Gold',   'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmet.U_DAILY',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Daily',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfmet.U_GOLD',   'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Gold',    'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Temperature (C)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.35}
-            hclpanel = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-            thispanelvars = [dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'Temperature (C)',
-                             'not_junk': 'true',
-                             'title': 'Hollow-Cathode Lamp Temperatures',
-                             'legend_frac_size': 0.35}
-            hclpanel2 = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict}
-            panel_arr = [copy.deepcopy(hclpanel), copy.deepcopy(hclpanel2)]
-            
-        elif plot_name=='hk_temp':
-            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK BENCH_C',     'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpfexpose.CAMBARREL_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK CAMBARREL_C', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK DET_XTRN_C',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ECHELLE_C',   'marker': '.', 'linewidth': 0.5}}
-            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
-            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
-            thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            hkpanel1 = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-
-            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
-            thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
-                             'not_junk': 'true',
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.30}
-            hkpanel2 = {'panelvars': thispanelvars2,
-                        'paneldict': thispaneldict2}
-
-            dict1 = {'col': 'kpf_hk.COOLTARG', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Target Temp.', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
-            thispanelvars3 = [dict1, dict2] 
-            thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
-                             'not_junk': 'true',
-                              'legend_frac_size': 0.30}
-            hkpanel3 = {'panelvars': thispanelvars3,
-                        'paneldict': thispaneldict3}
-
-            thispanelvars4 = [dict1, dict2]
-            thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
-                             'title': 'Ca H&K Spectrometer Temperatures',
-                             'not_junk': 'true',
-                             'subtractmedian': 'true',
-                             'legend_frac_size': 0.30}
-            hkpanel4 = {'panelvars': thispanelvars4,
-                        'paneldict': thispaneldict4}
-
-            panel_arr = [copy.deepcopy(hkpanel1), copy.deepcopy(hkpanel2), copy.deepcopy(hkpanel3), copy.deepcopy(hkpanel4)]
-
-            
-        elif plot_name=='agitator':
-            dict1 = {'col': 'kpfmot.AGITSPD', 'plot_type': 'scatter', 'unit': 'counts/sec', 'plot_attr': {'label': 'Agitator Speed', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars1 = [dict1]
-            thispaneldict1 = {'ylabel': 'Agitator Speed\n(counts/sec)',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            agitatorpanel1 = {'panelvars': thispanelvars1,
-                              'paneldict': thispaneldict1}
-            dict2 = {'col': 'kpfmot.AGITTOR', 'plot_type': 'scatter', 'unit': 'V', 'plot_attr': {'label': 'Agitator Motor Torque', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars2 = [dict2]
-            thispaneldict2 = {'ylabel': 'Motor Torque (V)',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            agitatorpanel2 = {'panelvars': thispanelvars2,
-                              'paneldict': thispaneldict2}
-            dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temp.', 'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'kpfmot.AGITMOT_T',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Motor Temp.',   'marker': '.', 'linewidth': 0.5}}
-            thispanelvars3 = [dict3, dict4]
-            thispaneldict3 = {'ylabel': 'Temperature (C)',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            agitatorpanel3 = {'panelvars': thispanelvars3,
-                              'paneldict': thispaneldict3}
-            dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
-            thispanelvars4 = [dict5]
-            thispaneldict4 = {'ylabel': 'Outlet A1 Power\n(mA)',
-                              'title': r'KPF Agitator',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.25}
-            agitatorpanel4 = {'panelvars': thispanelvars4,
-                              'paneldict': thispaneldict4}
-            panel_arr = [agitatorpanel1, agitatorpanel2, agitatorpanel3, agitatorpanel4]
-
-        elif plot_name=='guiding':
-            dict1 = {'col': 'GDRXRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (X)', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'GDRYRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (Y)', 'marker': '.', 'linewidth': 0.5}}
-            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (X)',  'marker': '.', 'linewidth': 0.5}}
-            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'on_sky': 'true', 
-                             'legend_frac_size': 0.20}
-            guidingpanel1 = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-
-            thispanelvars2 = [dict3, dict4]
-            thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
-                             'narrow_xlim_daily': 'true',
-                             'title': 'Guiding',
-                             'not_junk': 'true',
-                             'on_sky': 'true', 
-                             'legend_frac_size': 0.20}
-            guidingpanel2 = {'panelvars': thispanelvars2,
-                             'paneldict': thispaneldict2}
-            panel_arr = [guidingpanel1, guidingpanel2]
-
-        elif plot_name=='seeing':
-            dict1 = {'col': 'GDRSEEJZ', 'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in J+Z band', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'GDRSEEV',  'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in V band',   'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1, dict2]
-            thispaneldict = {'ylabel': 'Seeing (arcsec)',
-                             'yscale': 'log',
-                             'narrow_xlim_daily': 'true',
-                             'title': 'Seeing',
-                             'not_junk': 'true',
-                             'on_sky': 'true', 
-                             'legend_frac_size': 0.30}
-            seeingpanel = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-            panel_arr = [seeingpanel]
-
-        elif plot_name=='sun_moon':
-            dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-star separation', 'marker': '.', 'linewidth': 0.5}}
-            dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Altitude of Sun',      'marker': '.', 'linewidth': 0.5}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Angle (deg)',
-                             'narrow_xlim_daily': 'true',
-                             'ylim': '(0,180)',
-                             'axhspan': {
-                                        1: {'ymin':  0, 'ymax': 30, 'color': 'red', 'alpha': 0.2},
-                                        },
-                             'not_junk': 'true',
-                             'on_sky': 'true', 
-                             'legend_frac_size': 0.30}
-            sunpanel = {'panelvars': thispanelvars,
-                        'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Angle (deg)',
-                             'title': 'Separation of Sun and Moon from Target',
-                             'narrow_xlim_daily': 'true',
-                             'ylim': '(-90,0)',
-                             'axhspan': {
-                                        1: {'ymin':  0, 'ymax':  -6, 'color': 'red',    'alpha': 0.2},
-                                        2: {'ymin': -6, 'ymax': -12, 'color': 'orange', 'alpha': 0.2}
-                                        },
-                             'not_junk': 'true',
-                             'on_sky': 'true', 
-                             'legend_frac_size': 0.30}
-            moonpanel = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict}
-            panel_arr = [sunpanel, moonpanel]
-
-        elif plot_name=='drptag':
-            dict1 = {'col': 'DRPTAG', 'plot_type': 'state', 'plot_attr': {'label': 'Version Number', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'DRP Version Number',
-                             'title': 'KPF-Pipeline Version Number',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.10}
-            drptagpanel = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-            panel_arr = [drptagpanel]
-
-        elif plot_name=='drphash':
-            dict1 = {'col': 'DRPHASH', 'plot_type': 'state', 'plot_attr': {'label': 'Commit Hash', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'DRP Commit Hash',
-                             'title': 'KPF-Pipeline Commit Hash String',
-                             'not_junk': 'true',
-                             'nolegend': 'true',
-                             'legend_frac_size': 0.00}
-            drphashpanel = {'panelvars': thispanelvars,
-                            'paneldict': thispaneldict}
-            panel_arr = [drphashpanel]
-
-        elif plot_name=='junk_status':
-            dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Junk Status',
-                             'title': 'Junk Status',
-                             'legend_frac_size': 0.10}
-            junkpanel = {'panelvars': thispanelvars,
-                         'paneldict': thispaneldict}
-            panel_arr = [junkpanel]
-
-        elif plot_name=='qc_data_keywords_present':
-            dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
-            dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'L0 Data Present',
-                             'legend_frac_size': 0.10}
-            data_present_panel = {'panelvars': thispanelvars,
-                                  'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'L0 Keywords Present',
-                             'title': 'Quality Control - L0 Data and Keywords Products Present',
-                             'legend_frac_size': 0.10}
-            keywords_present_panel = {'panelvars': thispanelvars,
-                                      'paneldict': thispaneldict}
-            panel_arr = [data_present_panel, keywords_present_panel]
-
-# Add above
-#   Name: data_2D_CaHK
-#   Name: data_2D_red_green
-#   Name: data_L1_red_green
-#   Name: data_L2
-
-        elif plot_name=='qc_time_check':
-            dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
-            dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'L0 Time Check',
-                             'legend_frac_size': 0.10}
-            time_check_l0_panel = {'panelvars': thispanelvars,
-                                   'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'L2 Time Check',
-                             'title': 'Quality Control - L0 and L2 Times Consistent',
-                             'legend_frac_size': 0.10}
-            time_check_l2_panel = {'panelvars': thispanelvars,
-                                   'paneldict': thispaneldict}
-            panel_arr = [time_check_l0_panel, time_check_l2_panel]
-
-        elif plot_name=='qc_em':
-            dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
-            dict2 = {'col': 'EMNEG', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Netative Flux', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'EM Not Saturated',
-                             'legend_frac_size': 0.10}
-            emsat_panel = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'EM Not Netative Flux',
-                             'title': 'Quality Control - Exposure Meter',
-                             'legend_frac_size': 0.10}
-            emneg_panel = {'panelvars': thispanelvars,
-                           'paneldict': thispaneldict}
-            panel_arr = [emsat_panel, emneg_panel]
-
-        elif plot_name=='qc_monotonic_wls':
-            dict1 = {'col': 'MONOTWLS', 'plot_type': 'state', 'plot_attr': {'label': 'Montonic WLS', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Monotonic WLS',
-                             'title': 'Quality Control - Monotonic WLS in L1',
-                             'legend_frac_size': 0.10}
-            monot_wls_panel = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            panel_arr = [monot_wls_panel]
-
-        elif plot_name=='qc_pos_2d_snr':
-            dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Not Negative 2D SNR',
-                             'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
-                             'legend_frac_size': 0.10}
-            monot_wls_panel = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            panel_arr = [monot_wls_panel]
-
-        elif plot_name=='qc_lfc':
-            dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'LFC Not Saturated)',
-                             'title': 'Quality Control - LFC Metrics',
-                             'legend_frac_size': 0.10}
-            lfc_sat_panel = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-            panel_arr = [lfc_sat_panel]
-
-        elif plot_name=='qc_goodread':
-            dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Good Read Green/Red CCDs',
-                             'title': r'Quality Control - Good Read Metric (T$_{exp}$ !$\approx$ 6 sec)',
-                             'legend_frac_size': 0.10}
-            goodread_panel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            panel_arr = [goodread_panel]
-
-        elif plot_name=='qc_low_flux':
-            dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
-            dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
-            thispanelvars = [dict1]
-            thispaneldict = {'ylabel': 'Not 2D Low Bias Flux',
-                             'legend_frac_size': 0.10}
-            lowbias_panel = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-            thispanelvars = [dict2]
-            thispaneldict = {'ylabel': 'Not 2D Low Dark Flux',
-                             'title': 'Quality Control - Low Dark and Bias Flux',
-                             'legend_frac_size': 0.10}
-            lowdark_panel = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-            panel_arr = [lowbias_panel, lowdark_panel]
-
-        elif plot_name=='autocal-flat_snr':
-            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
-                             'only_object': 'autocal-flat-all',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            flat_snr_panel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            thispanelvars = [dict1, dict2, dict3, dict4]
-            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
-                             'title': 'autocal-flat-all SNR & Flux Ratio',
-                             'only_object': 'autocal-flat-all',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            flat_fr_panel = {'panelvars': thispanelvars,
-                             'paneldict': thispaneldict}
-            panel_arr = [flat_snr_panel, flat_fr_panel]
-
-        elif plot_name=='socal_snr':
-            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
-                             'only_object': 'SoCal',
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            socal_snr_panel = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            thispanelvars = [dict1, dict2, dict3, dict4]
-            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)', 
-                             'title': 'SoCal SNR & Flux Ratio',
-                             'only_object': 'SoCal',
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            socal_fr_panel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            panel_arr = [socal_snr_panel, socal_fr_panel]
-
-        elif plot_name=='observing_snr':
-            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
-            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
-                             'on_sky': 'true', 
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            observing_snr_panel = {'panelvars': thispanelvars,
-                                   'paneldict': thispaneldict}
-            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
-            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
-            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
-            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            thispanelvars = [dict1, dict2, dict3, dict4]
-            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
-                             'title': 'SoCal SNR & Flux Ratio',
-                             'on_sky': 'true', 
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30}
-            observing_fr_panel = {'panelvars': thispanelvars,
-                                  'paneldict': thispaneldict}
-            panel_arr = [observing_snr_panel, observing_fr_panel]
-
-        elif plot_name=='autocal_rv':
-            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
-            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8]
-            thispaneldict = {
-                             'ylabel': r'LFC RV (km/s)',
-                             #'ylabel': r'LFC $\Delta$RV (km/s)',
-                             #'subtractmedian': 'true',
-                             'only_object': '["autocal-lfc-all-morn", "autocal-lfc-all-eve", "autocal-lfc-all-night", "cal-LFC", "cal-LFC-morn", "cal-LFC-eve", "LFC_all", "lfc_all", "LFC"]',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.30
-                             }
-            lfc_rv_panel = {'panelvars': thispanelvars,
-                            'paneldict': thispaneldict}
-            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
-            thispanelvars2 = [dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18]
-            thispaneldict2 = {
-                              'ylabel': r'ThAr RV (km/s)',
-                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
-                              #'subtractmedian': 'true',
-                              'only_object': '["autocal-thar-all-night", "autocal-thar-all-eve", "autocal-thar-all-morn"]',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.30
-                              }
-            thar_rv_panel = {'panelvars': thispanelvars2,
-                             'paneldict': thispaneldict2}
-            dict21 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict22 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict23 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict24 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict25 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict26 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict27 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
-            thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
-            thispaneldict3 = {
-                              'title': 'LFC, ThAr, & Etalon RVs',
-                              'ylabel': r'Etalon RV (km/s)',
-                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
-                              #'subtractmedian': 'true',
-                              'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
-                              'not_junk': 'true',
-                              'legend_frac_size': 0.30
-                              }
-            etalon_rv_panel = {'panelvars': thispanelvars3,
-                               'paneldict': thispaneldict3}
-            panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
-
-        elif plot_name=='socal_rv':
-            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
-            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict7]
-            thispaneldict = {
-                             'ylabel': r'SoCal RV (km/s)',
-                             'title': 'SoCal RVs',
-                             'only_object': '["SoCal"]',
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.28
-                             }
-            socal_rv_panel = {'panelvars': thispanelvars,
-                              'paneldict': thispaneldict}
-            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
-            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
-            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
-            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
-            thispanelvars = [dict11, dict12, dict13, dict15, dict16, dict17]
-            thispaneldict = {
-                             'ylabel': r'SoCal $\Delta$RV (km/s)',
-                             'subtractmedian': 'true',
-                             'title': 'SoCal RVs',
-                             'only_object': '["SoCal"]',
-                             'narrow_xlim_daily': 'true',
-                             'not_junk': 'true',
-                             'legend_frac_size': 0.28
-                             }
-            socal_rv_panel2 = {'panelvars': thispanelvars,
-                               'paneldict': thispaneldict}
-            panel_arr = [socal_rv_panel,socal_rv_panel2]
-
-        else:
-            self.logger.error('plot_name not specified')
-            return
-        
-        self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
-                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
-                                         log_savefig_timing=False)        
-
-
-    def plot_standard_time_series_new(self, plot_dict, start_date=None, end_date=None, 
-                                  clean=False, 
-                                  fig_path=None, show_plot=False):
-        """
-        Generate one of several standard time-series plots of KPF data.
-
-        Args:
-            [UPDATE THIS]
-            plot_name (string): chamber_temp - 4-panel plot showing KPF chamber temperatures
-                                abc - ...
-            start_date (datetime object) - start date for plot
-            end_date (datetime object) - end date for plot
-            fig_path (string) - set to the path for a SNR vs. wavelength file
-                to be generated.
-            show_plot (boolean) - show the plot in the current environment.
-
-        Returns:
-            PNG plot in fig_path or shows the plot it the current environment
-            (e.g., in a Jupyter Notebook).
-        """
-
-        self.plot_time_series_multipanel(plot_dict, start_date=start_date, end_date=end_date, 
-                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
-                                         log_savefig_timing=False)        
-
-
-    def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
-                                 last_n_days=None,
-                                 fig_dir=None, show_plot=False, 
-                                 print_plot_names=False):
-        """
-        Generate all of the standard time series plots for the quicklook.  
-        Depending on the value of the input 'interval', the plots have time ranges 
-        that are daily, weekly, yearly, or decadal.
-
-        Args:
-            start_date (datetime object) - start date for plot
-            interval (string) - 'day', 'month', 'year', or 'decade'
-            last_n_days (int) - overrides start_date and makes a plot over the last n days
-            fig_path (string) - set to the path for the files to be generated.
-            show_plot (boolean) - show the plot in the current environment.
-            print_plot_names (boolean) - prints the names of possible plots and exits
-
-        Returns:
-            PNG plot in fig_path or shows the plots it the current environment
-            (e.g., in a Jupyter Notebook).
-        """
-        plots = { 
-            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   "desc": "Hallway temperature"},
-            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   "desc": "Vacuum chamber temperatures"},
-            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   "desc": "Vacuum chamber temperatures (by optical element)"},
-            "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
-            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
-            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
-            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCD read speed"},
-            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
-            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
-            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
-            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       "desc": "Etalon temperatures"},
-            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       "desc": "Hollow-cathode lamp temperatures"},
-            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       "desc": "SNR of flats"},
-            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems","desc": "Ca H&K Spectrometer temperatures"},
-            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems","desc": "Agatitator temperatures"},
-            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", "desc": "FIU Guiding performance of"},
-            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", "desc": "Seeing measurements for stars"},
-            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", "desc": "Target separation to Sun and Moon"},
-            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", "desc": "SNR of stellar spectra"},
-            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     "desc": "SNR of SoCal spectra"},
-            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        "desc": "RVs from SoCal spectra"}, 
-            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       "desc": "DRP Tag"},   
-            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       "desc": "DRP Hash"},   
-            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        "desc": "Quality control: junk status"}, 
-            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
-            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
-            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
-            "p8e":  {"plot_name": "qc_monotonic_wls",         "subdir": "QC",        "desc": "Quality Control: monotonic WLS"}, 
-            "p8f":  {"plot_name": "qc_pos_2d_snr",            "subdir": "QC",        "desc": "Quality Control: 2D SNR positive"}, 
-            "p8g":  {"plot_name": "qc_lfc",                   "subdir": "QC",        "desc": "Quality Control: LFC quality"}, 
-            "p8h":  {"plot_name": "qc_goodread",              "subdir": "QC",        "desc": "Quality Control: L0 Good Read metric"}, 
-            "p8i":  {"plot_name": "qc_low_flux",              "subdir": "QC",        "desc": "Quality Control: 2D low flux check"}, 
-            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
-        }
-        if print_plot_names:
-            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
-            for p in plots:
-                print("    '" + plots[p]["plot_name"] + "': " + plots[p]["desc"])
-            return
-
-        if (last_n_days != None) and (type(last_n_days) == type(1)):
-            now = datetime.now()
-            if last_n_days > 3:
-                end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            else:
-                end_date = now
-            start_date = end_date - timedelta(days=last_n_days)
-
-        if not isinstance(start_date, datetime):
-            self.logger.error("'start_date' must be a datetime object.")
-            return        
-        
-        for p in plots:
-            plot_name = plots[p]["plot_name"]
-            if interval == 'day':
-                end_date = start_date + timedelta(days=1)
-                filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
-            elif interval == 'month':
-                end_date = add_one_month(start_date)
-                filename = 'kpf_' + start_date.strftime("%Y%m") + '_telemetry_' + plot_name + '.png' 
-            elif interval == 'year':
-                end_date = datetime(start_date.year+1, start_date.month, start_date.day)
-                filename = 'kpf_' + start_date.strftime("%Y") + '_telemetry_' + plot_name + '.png' 
-            elif interval == 'decade':
-                end_date = datetime(start_date.year+10, start_date.month, start_date.day)
-                filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
-            elif (last_n_days != None) and (type(last_n_days) == type(1)):
-                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
-            else:
-                self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
-                return
-
-            if fig_dir != None:
-                if not fig_dir.endswith('/'):
-                    fig_dir += '/'
-                savedir = fig_dir + plots[p]["subdir"] + '/'
-                os.makedirs(savedir, exist_ok=True) # make directories if needed
-                fig_path = savedir + filename
-                self.logger.info('Making QL time series plot ' + fig_path)
-            else:
-                fig_path = None
-            self.plot_standard_time_series(plot_name, start_date=start_date, end_date=end_date, 
-                                           fig_path=fig_path, show_plot=show_plot, clean=clean)
+#    def plot_standard_time_series(self, plot_name, start_date=None, end_date=None, 
+#                                  clean=False, 
+#                                  fig_path=None, show_plot=False):
+#        """
+#        Generate one of several standard time-series plots of KPF data.
+#
+#        Args:
+#            plot_name (string): chamber_temp - 4-panel plot showing KPF chamber temperatures
+#                                abc - ...
+#            start_date (datetime object) - start date for plot
+#            end_date (datetime object) - end date for plot
+#            fig_path (string) - set to the path for a SNR vs. wavelength file
+#                to be generated.
+#            show_plot (boolean) - show the plot in the current environment.
+#
+#        Returns:
+#            PNG plot in fig_path or shows the plot it the current environment
+#            (e.g., in a Jupyter Notebook).
+#        """
+#
+#        if plot_name == 'hallway_temp':
+#            dict1 = {'col': 'kpfmet.TEMP', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway', 'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
+#                             'title': 'KPF Hallway Temperature', 
+#                             'legend_frac_size': 0.3}
+#            halltemppanel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [halltemppanel]
+#        
+#        elif plot_name == 'chamber_temp':
+#            dict1 = {'col': 'kpfmet.TEMP',              'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label':  'Hallway',              'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfmet.GREEN_LN2_FLANGE',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Green LN$_2$ Flng',    'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict3 = {'col': 'kpfmet.RED_LN2_FLANGE',    'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Red LN$_2$ Flng',      'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict4 = {'col': 'kpfmet.CHAMBER_EXT_BOTTOM','plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': r'Chamber Ext Bot',      'marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfmet.CHAMBER_EXT_TOP',   'plot_type': 'plot',    'unit': 'K', 'plot_attr': {'label': r'Chamber Exterior Top', 'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Hallway\n' + r' Temperature ($^{\circ}$C)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.3}
+#            halltemppanel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#
+#            thispanelvars2 = [dict2, dict3, dict4]
+#            thispaneldict2 = {'ylabel': 'Exterior\n' + r' Temperatures ($^{\circ}$C)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.3}
+#            halltemppanel2 = {'panelvars': thispanelvars2,
+#                              'paneldict': thispaneldict2}
+#            
+#            thispanelvars3 = [dict2, dict3, dict4]
+#            thispaneldict3 = {'ylabel': 'Exterior\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'title': 'KPF Hallway Temperatures', 
+#                             'legend_frac_size': 0.3}
+#            halltemppanel3 = {'panelvars': thispanelvars3,
+#                              'paneldict': thispaneldict3}
+#            
+#            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
+#            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
+#            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
+#            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
+#            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+#            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
+#            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
+#            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
+#            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
+#            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
+#            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
+#            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
+#            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+#            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1, dict5, dict10, dict14, dict20, dict15, dict21, dict22]
+#            thispaneldict = {'ylabel': 'Spectrometer\nTemperature' + ' ($^{\circ}$C)',
+#                             'not_junk': 'true',
+#                             'nolegend': 'false',
+#                             'legend_frac_size': 0.3}
+#            chambertemppanel = {'panelvars': thispanelvars,
+#                                'paneldict': thispaneldict}
+#            
+#            thispaneldict = {'ylabel': 'Spectrometer\n' + r'$\Delta$Temperature (K)',
+#                             'title': 'KPF Spectrometer Temperatures', 
+#                             'not_junk': 'true',
+#                             # Not working yet
+#                             #'axhspan': {
+#                             #           1: {'ymin':  0.01, 'ymax':  100, 'color': 'red', 'alpha': 0.2},
+#                             #           2: {'ymin': -0.01, 'ymax': -100, 'color': 'red', 'alpha': 0.2},
+#                             #           },
+#                             'nolegend': 'false', 
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.3}
+#            chambertemppanel2 = {'panelvars': thispanelvars,
+#                                 'paneldict': thispaneldict}
+#            panel_arr = [halltemppanel, halltemppanel2, copy.deepcopy(halltemppanel3), chambertemppanel, copy.deepcopy(chambertemppanel2)]
+#
+#        elif plot_name=='chamber_temp_detail':
+#            dict1 = {'col': 'kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Cams',   'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfmet.BENCH_BOTTOM_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Coll.',  'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'kpfmet.BENCH_BOTTOM_DCUT',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ D-Cut',  'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfmet.BENCH_BOTTOM_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench$\downarrow$ Echelle','marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS',    'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Cams',               'marker': '.', 'linewidth': 0.5}}
+#            dict6 = {'col': 'kpfmet.BENCH_TOP_COLL',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Coll',               'marker': '.', 'linewidth': 0.5}}
+#            dict7 = {'col': 'kpfmet.BENCH_TOP_DCUT',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench D-Cut',              'marker': '.', 'linewidth': 0.5}}
+#            dict8 = {'col': 'kpfmet.BENCH_TOP_ECHELLE_CAM',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Bench Ech-Cam',            'marker': '.', 'linewidth': 0.5}}
+#            dict9 = {'col': 'kpfmet.ECHELLE_BOTTOM',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict10= {'col': 'kpfmet.ECHELLE_TOP',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Echelle$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+#            dict11= {'col': 'kpfmet.GREEN_CAMERA_BOTTOM',          'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\downarrow$',    'marker': '.', 'linewidth': 0.5}}
+#            dict12= {'col': 'kpfmet.GREEN_CAMERA_COLLIMATOR',      'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Coll',           'marker': '.', 'linewidth': 0.5}}
+#            dict13= {'col': 'kpfmet.GREEN_CAMERA_ECHELLE',         'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam Ech',            'marker': '.', 'linewidth': 0.5}}
+#            dict14= {'col': 'kpfmet.GREEN_CAMERA_TOP',             'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Cam$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict15= {'col': 'kpfmet.GREEN_GRISM_TOP',              'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Green Grism$\uparrow$',    'marker': '.', 'linewidth': 0.5}}
+#            dict16= {'col': 'kpfmet.PRIMARY_COLLIMATOR_TOP',       'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Primary Coll$\uparrow$',   'marker': '.', 'linewidth': 0.5}}
+#            dict17= {'col': 'kpfmet.RED_CAMERA_BOTTOM',            'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\downarrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict18= {'col': 'kpfmet.RED_CAMERA_COLLIMATOR',        'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Coll',             'marker': '.', 'linewidth': 0.5}}
+#            dict19= {'col': 'kpfmet.RED_CAMERA_ECHELLE',           'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam Ech',              'marker': '.', 'linewidth': 0.5}}
+#            dict20= {'col': 'kpfmet.RED_CAMERA_TOP',               'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Cam$\uparrow$',        'marker': '.', 'linewidth': 0.5}}
+#            dict21= {'col': 'kpfmet.RED_GRISM_TOP',                'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Red Grism$\uparrow$',      'marker': '.', 'linewidth': 0.5}}
+#            dict22= {'col': 'kpfmet.REFORMATTER',                  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': r'Reformatter',              'marker': '.', 'linewidth': 0.5}}
+#                
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, ]
+#            thispaneldict = {'ylabel': 'Bench\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'nolegend': 'false', 
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.3}
+#            chambertemppanel1 = {'panelvars': thispanelvars,
+#                                 'paneldict': thispaneldict}
+#            
+#            thispanelvars = [dict15, dict14, dict11, dict12, dict13, ]
+#            thispaneldict = {'ylabel': 'Green Camera\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'nolegend': 'false', 
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.3}
+#            chambertemppanel2 = {'panelvars': thispanelvars,
+#                                 'paneldict': thispaneldict}
+#            
+#            thispanelvars = [dict21, dict20, dict17, dict18, dict19, ]
+#            thispaneldict = {'ylabel': 'Red Camera\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'nolegend': 'false', 
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.3}
+#            chambertemppanel3 = {'panelvars': thispanelvars,
+#                                 'paneldict': thispaneldict}
+#                
+#            thispanelvars = [dict10, dict9, ]
+#            thispaneldict = {'ylabel': 'Echelle Grating\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'nolegend': 'false', 
+#                             'title': 'KPF Spectrometer Temperatures', 
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.3}
+#            chambertemppanel4 = {'panelvars': thispanelvars,
+#                                 'paneldict': thispaneldict}
+#            panel_arr = [copy.deepcopy(chambertemppanel1), copy.deepcopy(chambertemppanel2), copy.deepcopy(chambertemppanel3), copy.deepcopy(chambertemppanel4)]
+#
+#        elif plot_name=='fiber_temp':
+#            dict1 = {'col': 'kpfmet.SCIENCE_CAL_FIBER_STG',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci Cal Fiber Stg',    'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Chmbr', 'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Sci/Sky Scrmb. Fiber', 'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfmet.SIMCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SimulCal Fiber Stg',   'marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfmet.SKYCAL_FIBER_STG',       'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'SkyCal Fiber Stg',     'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+#            thispaneldict = {'ylabel': 'Temperature' + ' ($^{\circ}$C)',
+#                             'not_junk': 'true',
+#                             'title': 'Fiber Temperatures',
+#                             'legend_frac_size': 0.30}
+#            fibertempspanel = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [fibertempspanel]
+#
+#        elif plot_name=='ccd_readspeed':
+#            dict1 = {'col': 'GREENTRT', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'REDTRT',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Red CCD',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            thispanelvars = [dict1, dict2]
+#            thispaneldict = {'ylabel': 'Read Speed [sec]',
+#                             'title': 'CCD Read Speed',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.25}
+#            readspeedpanel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            panel_arr = [readspeedpanel]
+#
+#        elif plot_name=='ccd_readnoise':
+#            dict1 = {'col': 'RNGREEN1', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'RNGREEN2', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+##            dict1b= {'col': 'RNGREEN3', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 3', 'marker': '.', 'linewidth': 0.5, 'color': 'limegreen'}}
+##            dict2b= {'col': 'RNGREEN4', 'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'Green CCD 4', 'marker': '.', 'linewidth': 0.5, 'color': 'lime'}}
+#            dict3 = {'col': 'RNRED1',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict4 = {'col': 'RNRED2',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+##            dict3b= {'col': 'RNRED3',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 3',   'marker': '.', 'linewidth': 0.5, 'color': 'indianred'}}
+##            dict4b= {'col': 'RNRED4',   'plot_type': 'plot', 'unit': 'e-', 'plot_attr': {'label': 'RED CCD 4',   'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            thispanelvars = [dict1, dict2]
+#            thispaneldict = {'ylabel': 'Green CCD\nRead Noise [e-]',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.25}
+#            readnoisepanel1 = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            thispanelvars = [dict3, dict4]
+#            thispaneldict = {'ylabel': 'Red CCD\nRead Noise [e-]',
+#                             'title': 'CCD Read Noise',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.25}
+#            readnoisepanel2 = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [readnoisepanel1, readnoisepanel2]
+#        
+#        elif plot_name=='ccd_dark_current':
+#            # Green CCD panel - Dark current
+#            dict1 = {'col': 'FLXCOLLG', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Collimator-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'FLXECHG',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Echelle-side',    'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+#            dict3 = {'col': 'FLXREG1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+#            dict4 = {'col': 'FLXREG2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+#            dict5 = {'col': 'FLXREG3G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+#            dict6 = {'col': 'FLXREG4G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+#            dict7 = {'col': 'FLXREG5G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+#            dict8 = {'col': 'FLXREG6G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',        'marker': '.', 'linewidth': 0.5, 'color': 'lightgreen'}}
+#            thispanelvars = [dict3, dict4, dict1, dict2, ]
+#            thispaneldict = {'ylabel': 'Green CCD\nDark Current [e-/hr]',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            greenpanel = {'panelvars': thispanelvars,
+#                          'paneldict': thispaneldict}
+#            
+#            # Red CCD panel - Dark current
+#            dict1 = {'col': 'FLXCOLLR', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict2 = {'col': 'FLXECHR',  'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+#            dict3 = {'col': 'FLXREG1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 1',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            dict4 = {'col': 'FLXREG2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 2',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            dict5 = {'col': 'FLXREG3R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 3',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            dict6 = {'col': 'FLXREG4R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 4',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            dict7 = {'col': 'FLXREG5R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 5',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            dict8 = {'col': 'FLXREG6R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Region 6',  'marker': '.', 'linewidth': 0.5, 'color': 'lightcoral'}}
+#            thispanelvars = [dict3, dict4, dict1, dict2, ]
+#            thispaneldict = {'ylabel': 'Red CCD\nDark Current [e-/hr]',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            redpanel = {'panelvars': thispanelvars,
+#                        'paneldict': thispaneldict}
+#            
+#            # Green CCD panel - ion pump current
+#            dict1 = {'col': 'kpfgreen.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'kpfgreen.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
+#                             'yscale': 'log',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            greenpanel_ionpump = {'panelvars': thispanelvars,
+#                                  'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'Green CCD\nIon Pump Current [A]',
+#                             'yscale': 'log',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            greenpanel_ionpump2 = {'panelvars': thispanelvars,
+#                                   'paneldict': thispaneldict}
+#            
+#            # Red CCD panel - ion pump current
+#            dict1 = {'col': 'kpfred.COL_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Coll-side', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict2 = {'col': 'kpfred.ECH_CURR', 'plot_type': 'plot', 'unit': 'A', 'plot_attr': {'label': 'Ech-side',  'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
+#                             'yscale': 'log',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            redpanel_ionpump = {'panelvars': thispanelvars,
+#                                'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'Red CCD\nIon Pump Current [A]',
+#                             'yscale': 'log',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            redpanel_ionpump2 = {'panelvars': thispanelvars,
+#                                'paneldict': thispaneldict}
+#            # to do: add kpfred.COL_PRESS (green, too)
+#            #            kpfred.ECH_PRESS
+#
+#            # Amplifier glow panel
+#            dict1 = {'col': 'FLXAMP1G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 1', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'FLXAMP2G', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Green Amp Reg 2', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+#            dict3 = {'col': 'FLXAMP1R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 1',   'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict4 = {'col': 'FLXAMP2R', 'plot_type': 'plot', 'unit': 'e-/hr', 'plot_attr': {'label': 'Red Amp Reg 2',   'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+#            thispanelvars = [dict3, dict4, dict1, dict2, ]
+#            thispaneldict = {'ylabel': 'CCD Amplifier Dark\nCurrent (Edge Glow) [e-/hr]',
+#                             'not_junk': 'true',
+#                             'title': 'CCD Dark Current',
+#                             'legend_frac_size': 0.35}
+#            amppanel = {'panelvars': thispanelvars,
+#                        'paneldict': thispaneldict}
+#            panel_arr = [greenpanel, redpanel, greenpanel_ionpump, greenpanel_ionpump2, redpanel_ionpump, redpanel_ionpump2, amppanel]
+#
+#        elif plot_name=='ccd_temp':
+#            # CCD Temperatures
+#            dict1 = {'col': 'kpfgreen.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+#            thispanelvars = [dict2, dict1, ]
+#            thispaneldict = {'ylabel': 'Green CCD\nTemperature (C)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.25}
+#            green_ccd = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict}
+#
+#            dict1 = {'col': 'kpfred.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+#            thispanelvars2 = [dict2, dict1, ]
+#            thispaneldict2 = {'ylabel': 'Red CCD\nTemperature (C)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.25}
+#            red_ccd = {'panelvars': thispanelvars2,
+#                       'paneldict': thispaneldict2}
+#
+#            dict1 = {'col': 'kpfgreen.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkgreen'}}
+#            dict2 = {'col': 'kpfgreen.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'forestgreen'}}
+#            thispanelvars3 = [dict2, dict1, ]
+#            thispaneldict3 = {'ylabel': 'Green CCD\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.25}
+#            green_ccd2 = {'panelvars': thispanelvars3,
+#                          'paneldict': thispaneldict3}
+#
+#            dict1 = {'col': 'kpfred.STA_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'STA Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'darkred'}}
+#            dict2 = {'col': 'kpfred.KPF_CCD_T', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'SSL Sensor', 'marker': '.', 'linewidth': 0.5, 'color': 'firebrick'}}
+#            thispanelvars4 = [dict2, dict1, ]
+#            thispaneldict4 = {'ylabel': 'Red CCD\n' + r'$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'title': 'CCD Temperatures',
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.25}
+#            red_ccd2 = {'panelvars': thispanelvars4,
+#                        'paneldict': thispaneldict4}
+#
+#            panel_arr = [green_ccd, red_ccd, green_ccd2, red_ccd2]
+#
+## Additional keywords to add:
+##                'kpfred.CRYOBODY_T':                   'float',  # degC    Cryo Body Temperature c- double degC {%.3f}
+##                'kpfred.CRYOBODY_TRG':                 'float',  # degC    Cryo body heater 7B, target temp c2 double deg...
+##                'kpfred.CURRTEMP':                     'float',  # degC    Current cold head temperature c- double degC {...
+##                'kpfred.STA_CCD_TRG':                  'float',  # degC    Detector heater 7A, target temp c2 double degC...
+##                'kpfred.TEMPSET':                      'float',  # degC    Set point for the cold head temperature c2 dou...
+#
+##                'kpfred.CF_BASE_2WT':                  'float',  # degC    tip cold finger (2 wire) c- double degC {%.3f}
+##                'kpfred.CF_BASE_T':                    'float',  # degC    base cold finger 2wire temp c- double degC {%.3f}
+##                'kpfred.CF_BASE_TRG':                  'float',  # degC    base cold finger heater 1A, target temp c2 dou...
+##                'kpfred.CF_TIP_T':                     'float',  # degC    tip cold finger c- double degC {%.3f}
+##                'kpfred.CF_TIP_TRG':                   'float',  # degC    tip cold finger heater 1B, target temp c2 doub...
+#
+#        elif plot_name=='ccd_controller':
+#            dict1 = {'col': 'kpfred.BPLANE_TEMP',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Backplane',          'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfred.BRD10_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 10 (Driver)',  'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'kpfred.BRD11_DRVR_T',    'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 11 (Driver)',  'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfred.BRD12_LVXBIAS_T', 'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 12 (LVxBias)', 'marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfred.BRD1_HTRX_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 1 (HeaterX)',  'marker': '.', 'linewidth': 0.5}}
+#            dict6 = {'col': 'kpfred.BRD2_XVBIAS_T',   'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 2 (XV Bias)',  'marker': '.', 'linewidth': 0.5}}
+#            dict7 = {'col': 'kpfred.BRD3_LVDS_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 3 (LVDS)',     'marker': '.', 'linewidth': 0.5}}
+#            dict8 = {'col': 'kpfred.BRD4_DRVR_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 4 (Driver)',   'marker': '.', 'linewidth': 0.5}}
+#            dict9 = {'col': 'kpfred.BRD5_AD_T',       'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 5 (AD)',       'marker': '.', 'linewidth': 0.5}}
+#            dict10= {'col': 'kpfred.BRD7_HTRX_T',     'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 7 (HeaterX)',  'marker': '.', 'linewidth': 0.5}}
+#            dict11= {'col': 'kpfred.BRD9_HVXBIAS_T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Board 9 (HVxBias)',  'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
+#            thispaneldict = {'ylabel': 'Temperatures (C)',
+#                             'title': 'CCD Controllers',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            controller1 = {'panelvars': thispanelvars,
+#                           'paneldict': thispaneldict}
+#
+#            thispanelvars2 = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8, dict9, dict10, dict11, ]
+#            thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
+#                             'title': 'CCD Controllers',
+#                             'not_junk': 'true',
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.30}
+#            controller2 = {'panelvars': thispanelvars2,
+#                           'paneldict': thispaneldict2}
+#            panel_arr = [copy.deepcopy(controller1), copy.deepcopy(controller2)]
+#
+#        elif plot_name=='lfc':
+#            dict1 = {'col': 'kpfcal.IRFLUX',  'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock IR',  'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict1 = {'ylabel': 'Intensity (counts)',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            lfcpanel1 = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict1}
+#            dict1 = {'col': 'kpfcal.VISFLUX', 'plot_type': 'scatter', 'unit': 'counts', 'plot_attr': {'label': 'Fiberlock Vis', 'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict2 = {'ylabel': 'Intensity (counts)',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            lfcpanel2 = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict2}
+#
+#            dict1 = {'col': 'kpfcal.BLUECUTIACT', 'plot_type': 'scatter', 'unit': 'A', 'plot_attr': {'label': 'Blue Cut Amp.',  'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict3 = {'ylabel': 'Current (A)',
+#                              'title': 'LFC Diagnostics',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            lfcpanel3 = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict3}
+#            panel_arr = [lfcpanel1, lfcpanel2, lfcpanel3]
+#
+#        elif plot_name=='etalon':
+#            dict1 = {'col': 'ETAV1C1T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 1',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict2 = {'col': 'ETAV1C2T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 2',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'ETAV1C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict4 = {'col': 'ETAV1C4T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 1 Ch 4',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict5 = {'col': 'ETAV2C3T',  'plot_type': 'plot', 'unit': 'C', 'plot_attr': {'label': 'Vescent 2 Ch 3',  'marker': '.', 'linewidth': 0.5, 'color': 'purple'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+#            thispaneldict = {'ylabel': 'Temperature (C)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.25}
+#            thispaneldict2 = {'ylabel': r'$\Delta$Temperature (K)',
+#                             'title': 'Etalon Temperatures',
+#                             'not_junk': 'true',
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.25}
+#            etalonpanel = {'panelvars': thispanelvars,
+#                           'paneldict': thispaneldict}
+#            etalonpanel2 = {'panelvars': [dict1],
+#                           'paneldict': thispaneldict2}
+#            etalonpanel3 = {'panelvars': [dict2],
+#                           'paneldict': thispaneldict2}
+#            etalonpanel4 = {'panelvars': [dict3],
+#                           'paneldict': thispaneldict2}
+#            etalonpanel5 = {'panelvars': [dict4],
+#                           'paneldict': thispaneldict2}
+#            etalonpanel6 = {'panelvars': [dict5],
+#                           'paneldict': thispaneldict2}
+#            panel_arr = [copy.deepcopy(etalonpanel), copy.deepcopy(etalonpanel2), copy.deepcopy(etalonpanel3), copy.deepcopy(etalonpanel4), copy.deepcopy(etalonpanel5), copy.deepcopy(etalonpanel6)]
+#
+#        elif plot_name=='hcl':
+#            dict1 = {'col': 'kpfmet.TEMP',     'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Hallway',      'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfmet.TH_DAILY', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Daily',  'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'kpfmet.TH_GOLD',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Th-Ar Gold',   'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfmet.U_DAILY',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Daily',   'marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfmet.U_GOLD',   'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'U-Ar Gold',    'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Temperature (C)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.35}
+#            hclpanel = {'panelvars': thispanelvars,
+#                        'paneldict': thispaneldict}
+#            thispanelvars = [dict2, dict3, dict4, dict5]
+#            thispaneldict = {'ylabel': 'Temperature (C)',
+#                             'not_junk': 'true',
+#                             'title': 'Hollow-Cathode Lamp Temperatures',
+#                             'legend_frac_size': 0.35}
+#            hclpanel2 = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict}
+#            panel_arr = [copy.deepcopy(hclpanel), copy.deepcopy(hclpanel2)]
+#            
+#        elif plot_name=='hk_temp':
+#            dict1 = {'col': 'kpfexpose.BENCH_C',     'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK BENCH_C',     'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpfexpose.CAMBARREL_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK CAMBARREL_C', 'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'kpfexpose.DET_XTRN_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK DET_XTRN_C',  'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfexpose.ECHELLE_C',   'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ECHELLE_C',   'marker': '.', 'linewidth': 0.5}}
+#            dict5 = {'col': 'kpfexpose.ENCLOSURE_C', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK ENCLOSURE_C', 'marker': '.', 'linewidth': 0.5}}
+#            dict6 = {'col': 'kpfexpose.RACK_AIR_C',  'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'HK RACK_AIR_C',  'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict4]
+#            thispaneldict = {'ylabel': 'Spectrometer\nTemperature (K)',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            hkpanel1 = {'panelvars': thispanelvars,
+#                        'paneldict': thispaneldict}
+#
+#            thispanelvars2 = [dict1, dict2, dict3, dict5, dict6, dict4]
+#            thispaneldict2 = {'ylabel': 'Spectrometer\n' + '$\Delta$Temperature (K)',
+#                             'not_junk': 'true',
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.30}
+#            hkpanel2 = {'panelvars': thispanelvars2,
+#                        'paneldict': thispaneldict2}
+#
+#            dict1 = {'col': 'kpf_hk.COOLTARG', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Target Temp.', 'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'kpf_hk.CURRTEMP', 'plot_type': 'plot', 'unit': 'K', 'plot_attr': {'label': 'Detector Temp.',        'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars3 = [dict1, dict2] 
+#            thispaneldict3 = {'ylabel': 'Detector\nTemperature (K)',
+#                             'not_junk': 'true',
+#                              'legend_frac_size': 0.30}
+#            hkpanel3 = {'panelvars': thispanelvars3,
+#                        'paneldict': thispaneldict3}
+#
+#            thispanelvars4 = [dict1, dict2]
+#            thispaneldict4 = {'ylabel': 'Detector\n' + '$\Delta$Temperature (K)',
+#                             'title': 'Ca H&K Spectrometer Temperatures',
+#                             'not_junk': 'true',
+#                             'subtractmedian': 'true',
+#                             'legend_frac_size': 0.30}
+#            hkpanel4 = {'panelvars': thispanelvars4,
+#                        'paneldict': thispaneldict4}
+#
+#            panel_arr = [copy.deepcopy(hkpanel1), copy.deepcopy(hkpanel2), copy.deepcopy(hkpanel3), copy.deepcopy(hkpanel4)]
+#
+#            
+#        elif plot_name=='agitator':
+#            dict1 = {'col': 'kpfmot.AGITSPD', 'plot_type': 'scatter', 'unit': 'counts/sec', 'plot_attr': {'label': 'Agitator Speed', 'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars1 = [dict1]
+#            thispaneldict1 = {'ylabel': 'Agitator Speed\n(counts/sec)',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            agitatorpanel1 = {'panelvars': thispanelvars1,
+#                              'paneldict': thispaneldict1}
+#            dict2 = {'col': 'kpfmot.AGITTOR', 'plot_type': 'scatter', 'unit': 'V', 'plot_attr': {'label': 'Agitator Motor Torque', 'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars2 = [dict2]
+#            thispaneldict2 = {'ylabel': 'Motor Torque (V)',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            agitatorpanel2 = {'panelvars': thispanelvars2,
+#                              'paneldict': thispaneldict2}
+#            dict3 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Ambient Temp.', 'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'kpfmot.AGITMOT_T',  'plot_type': 'scatter', 'unit': 'K', 'plot_attr': {'label': 'Motor Temp.',   'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars3 = [dict3, dict4]
+#            thispaneldict3 = {'ylabel': 'Temperature (C)',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            agitatorpanel3 = {'panelvars': thispanelvars3,
+#                              'paneldict': thispaneldict3}
+#            dict5 = {'col': 'kpfmot.AGITAMBI_T', 'plot_type': 'scatter', 'unit': 'mA', 'plot_attr': {'label': 'Outlet A1 Power', 'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars4 = [dict5]
+#            thispaneldict4 = {'ylabel': 'Outlet A1 Power\n(mA)',
+#                              'title': r'KPF Agitator',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.25}
+#            agitatorpanel4 = {'panelvars': thispanelvars4,
+#                              'paneldict': thispaneldict4}
+#            panel_arr = [agitatorpanel1, agitatorpanel2, agitatorpanel3, agitatorpanel4]
+#
+#        elif plot_name=='guiding':
+#            dict1 = {'col': 'GDRXRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (X)', 'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'GDRYRMS',  'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Error (Y)', 'marker': '.', 'linewidth': 0.5}}
+#            dict3 = {'col': 'GDRXBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (X)',  'marker': '.', 'linewidth': 0.5}}
+#            dict4 = {'col': 'GDRYBIAS', 'plot_type': 'scatter', 'unit': 'mas', 'plot_attr': {'label': 'Bias (Y)',  'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1, dict2]
+#            thispaneldict = {'ylabel': 'RMS Guiding Errors (mas)',
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'on_sky': 'true', 
+#                             'legend_frac_size': 0.20}
+#            guidingpanel1 = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#
+#            thispanelvars2 = [dict3, dict4]
+#            thispaneldict2 = {'ylabel': 'RMS Guiding Bias (mas)',
+#                             'narrow_xlim_daily': 'true',
+#                             'title': 'Guiding',
+#                             'not_junk': 'true',
+#                             'on_sky': 'true', 
+#                             'legend_frac_size': 0.20}
+#            guidingpanel2 = {'panelvars': thispanelvars2,
+#                             'paneldict': thispaneldict2}
+#            panel_arr = [guidingpanel1, guidingpanel2]
+#
+#        elif plot_name=='seeing':
+#            dict1 = {'col': 'GDRSEEJZ', 'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in J+Z band', 'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'GDRSEEV',  'plot_type': 'scatter', 'unit': 'as', 'plot_attr': {'label': 'Seeing in V band',   'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1, dict2]
+#            thispaneldict = {'ylabel': 'Seeing (arcsec)',
+#                             'yscale': 'log',
+#                             'narrow_xlim_daily': 'true',
+#                             'title': 'Seeing',
+#                             'not_junk': 'true',
+#                             'on_sky': 'true', 
+#                             'legend_frac_size': 0.30}
+#            seeingpanel = {'panelvars': thispanelvars,
+#                           'paneldict': thispaneldict}
+#            panel_arr = [seeingpanel]
+#
+#        elif plot_name=='sun_moon':
+#            dict1 = {'col': 'MOONSEP', 'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Moon-star separation', 'marker': '.', 'linewidth': 0.5}}
+#            dict2 = {'col': 'SUNALT',  'plot_type': 'scatter', 'unit': 'deg', 'plot_attr': {'label': 'Altitude of Sun',      'marker': '.', 'linewidth': 0.5}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Angle (deg)',
+#                             'narrow_xlim_daily': 'true',
+#                             'ylim': '(0,180)',
+#                             'axhspan': {
+#                                        1: {'ymin':  0, 'ymax': 30, 'color': 'red', 'alpha': 0.2},
+#                                        },
+#                             'not_junk': 'true',
+#                             'on_sky': 'true', 
+#                             'legend_frac_size': 0.30}
+#            sunpanel = {'panelvars': thispanelvars,
+#                        'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'Angle (deg)',
+#                             'title': 'Separation of Sun and Moon from Target',
+#                             'narrow_xlim_daily': 'true',
+#                             'ylim': '(-90,0)',
+#                             'axhspan': {
+#                                        1: {'ymin':  0, 'ymax':  -6, 'color': 'red',    'alpha': 0.2},
+#                                        2: {'ymin': -6, 'ymax': -12, 'color': 'orange', 'alpha': 0.2}
+#                                        },
+#                             'not_junk': 'true',
+#                             'on_sky': 'true', 
+#                             'legend_frac_size': 0.30}
+#            moonpanel = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict}
+#            panel_arr = [sunpanel, moonpanel]
+#
+#        elif plot_name=='drptag':
+#            dict1 = {'col': 'DRPTAG', 'plot_type': 'state', 'plot_attr': {'label': 'Version Number', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'DRP Version Number',
+#                             'title': 'KPF-Pipeline Version Number',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.10}
+#            drptagpanel = {'panelvars': thispanelvars,
+#                           'paneldict': thispaneldict}
+#            panel_arr = [drptagpanel]
+#
+#        elif plot_name=='drphash':
+#            dict1 = {'col': 'DRPHASH', 'plot_type': 'state', 'plot_attr': {'label': 'Commit Hash', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'DRP Commit Hash',
+#                             'title': 'KPF-Pipeline Commit Hash String',
+#                             'not_junk': 'true',
+#                             'nolegend': 'true',
+#                             'legend_frac_size': 0.00}
+#            drphashpanel = {'panelvars': thispanelvars,
+#                            'paneldict': thispaneldict}
+#            panel_arr = [drphashpanel]
+#
+#        elif plot_name=='junk_status':
+#            dict1 = {'col': 'NOTJUNK', 'plot_type': 'state', 'plot_attr': {'label': 'Junk State', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Junk Status',
+#                             'title': 'Junk Status',
+#                             'legend_frac_size': 0.10}
+#            junkpanel = {'panelvars': thispanelvars,
+#                         'paneldict': thispaneldict}
+#            panel_arr = [junkpanel]
+#
+#        elif plot_name=='qc_data_keywords_present':
+#            dict1 = {'col': 'DATAPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Data Present', 'marker': '.'}}
+#            dict2 = {'col': 'KWRDPRL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Keywords Present', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'L0 Data Present',
+#                             'legend_frac_size': 0.10}
+#            data_present_panel = {'panelvars': thispanelvars,
+#                                  'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'L0 Keywords Present',
+#                             'title': 'Quality Control - L0 Data and Keywords Products Present',
+#                             'legend_frac_size': 0.10}
+#            keywords_present_panel = {'panelvars': thispanelvars,
+#                                      'paneldict': thispaneldict}
+#            panel_arr = [data_present_panel, keywords_present_panel]
+#
+## Add above
+##   Name: data_2D_CaHK
+##   Name: data_2D_red_green
+##   Name: data_L1_red_green
+##   Name: data_L2
+#
+#        elif plot_name=='qc_time_check':
+#            dict1 = {'col': 'TIMCHKL0', 'plot_type': 'state', 'plot_attr': {'label': 'L0 Time Check', 'marker': '.'}}
+#            dict2 = {'col': 'TIMCHKL2', 'plot_type': 'state', 'plot_attr': {'label': 'L2 Time Check', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'L0 Time Check',
+#                             'legend_frac_size': 0.10}
+#            time_check_l0_panel = {'panelvars': thispanelvars,
+#                                   'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'L2 Time Check',
+#                             'title': 'Quality Control - L0 and L2 Times Consistent',
+#                             'legend_frac_size': 0.10}
+#            time_check_l2_panel = {'panelvars': thispanelvars,
+#                                   'paneldict': thispaneldict}
+#            panel_arr = [time_check_l0_panel, time_check_l2_panel]
+#
+#        elif plot_name=='qc_em':
+#            dict1 = {'col': 'EMSAT', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Saturated', 'marker': '.'}}
+#            dict2 = {'col': 'EMNEG', 'plot_type': 'state', 'plot_attr': {'label': 'EM Not Netative Flux', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'EM Not Saturated',
+#                             'legend_frac_size': 0.10}
+#            emsat_panel = {'panelvars': thispanelvars,
+#                           'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'EM Not Netative Flux',
+#                             'title': 'Quality Control - Exposure Meter',
+#                             'legend_frac_size': 0.10}
+#            emneg_panel = {'panelvars': thispanelvars,
+#                           'paneldict': thispaneldict}
+#            panel_arr = [emsat_panel, emneg_panel]
+#
+#        elif plot_name=='qc_monotonic_wls':
+#            dict1 = {'col': 'MONOTWLS', 'plot_type': 'state', 'plot_attr': {'label': 'Montonic WLS', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Monotonic WLS',
+#                             'title': 'Quality Control - Monotonic WLS in L1',
+#                             'legend_frac_size': 0.10}
+#            monot_wls_panel = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [monot_wls_panel]
+#
+#        elif plot_name=='qc_pos_2d_snr':
+#            dict1 = {'col': 'POS2DSNR', 'plot_type': 'state', 'plot_attr': {'label': 'Not Negative 2D SNR', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Not Negative 2D SNR',
+#                             'title': 'Quality Control - Red/Green CCD data/var^0.5 not significantly negative',
+#                             'legend_frac_size': 0.10}
+#            monot_wls_panel = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [monot_wls_panel]
+#
+#        elif plot_name=='qc_lfc':
+#            dict1 = {'col': 'LFCSAT', 'plot_type': 'state', 'plot_attr': {'label': 'LFC Not Saturated', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'LFC Not Saturated)',
+#                             'title': 'Quality Control - LFC Metrics',
+#                             'legend_frac_size': 0.10}
+#            lfc_sat_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [lfc_sat_panel]
+#
+#        elif plot_name=='qc_goodread':
+#            dict1 = {'col': 'GOODREAD', 'plot_type': 'state', 'plot_attr': {'label': r'Good Read ', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Good Read Green/Red CCDs',
+#                             'title': r'Quality Control - Good Read Metric (T$_{exp}$ !$\approx$ 6 sec)',
+#                             'legend_frac_size': 0.10}
+#            goodread_panel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            panel_arr = [goodread_panel]
+#
+#        elif plot_name=='qc_low_flux':
+#            dict1 = {'col': 'LOWBIAS', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Bias Flux', 'marker': '.'}}
+#            dict2 = {'col': 'LOWDARK', 'plot_type': 'state', 'plot_attr': {'label': '2D Low Dark Flux', 'marker': '.'}}
+#            thispanelvars = [dict1]
+#            thispaneldict = {'ylabel': 'Not 2D Low Bias Flux',
+#                             'legend_frac_size': 0.10}
+#            lowbias_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            thispanelvars = [dict2]
+#            thispaneldict = {'ylabel': 'Not 2D Low Dark Flux',
+#                             'title': 'Quality Control - Low Dark and Bias Flux',
+#                             'legend_frac_size': 0.10}
+#            lowdark_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [lowbias_panel, lowdark_panel]
+#
+#        elif plot_name=='autocal-flat_snr':
+#            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+#            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+#            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+#                             'only_object': 'autocal-flat-all',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            flat_snr_panel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+#            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4]
+#            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+#                             'title': 'autocal-flat-all SNR & Flux Ratio',
+#                             'only_object': 'autocal-flat-all',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            flat_fr_panel = {'panelvars': thispanelvars,
+#                             'paneldict': thispaneldict}
+#            panel_arr = [flat_snr_panel, flat_fr_panel]
+#
+#        elif plot_name=='socal_snr':
+#            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+#            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+#            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+#                             'only_object': 'SoCal',
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            socal_snr_panel = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+#            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4]
+#            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)', 
+#                             'title': 'SoCal SNR & Flux Ratio',
+#                             'only_object': 'SoCal',
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            socal_fr_panel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            panel_arr = [socal_snr_panel, socal_fr_panel]
+#
+#        elif plot_name=='observing_snr':
+#            dict1 = {'col': 'SNRSC452',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (452 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+#            dict2 = {'col': 'SNRSC548',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (548 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'SNRSC652',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (652 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict4 = {'col': 'SNRSC747',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (747 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict5 = {'col': 'SNRCL852',  'plot_type': 'scatter', 'plot_attr': {'label': 'SNR (852 nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5]
+#            thispaneldict = {'ylabel': 'SNR (SCI1+SCI2+SCI3)',
+#                             'on_sky': 'true', 
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            observing_snr_panel = {'panelvars': thispanelvars,
+#                                   'paneldict': thispaneldict}
+#            dict1 = {'col': 'FR452652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (452/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'darkviolet'}}
+#            dict2 = {'col': 'FR548652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (548/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'blue'}}
+#            dict3 = {'col': 'FR747652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (747/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'orange'}}
+#            dict4 = {'col': 'FR852652',  'plot_type': 'scatter', 'plot_attr': {'label': 'Flux Ratio (852/652nm)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4]
+#            thispaneldict = {'ylabel': 'Flux Ratio (SCI2)',
+#                             'title': 'SoCal SNR & Flux Ratio',
+#                             'on_sky': 'true', 
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30}
+#            observing_fr_panel = {'panelvars': thispanelvars,
+#                                  'paneldict': thispaneldict}
+#            panel_arr = [observing_snr_panel, observing_fr_panel]
+#
+#        elif plot_name=='autocal_rv':
+#            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+#            thispanelvars = [dict1, dict2, dict3, dict4, dict5, dict6, dict7, dict8]
+#            thispaneldict = {
+#                             'ylabel': r'LFC RV (km/s)',
+#                             #'ylabel': r'LFC $\Delta$RV (km/s)',
+#                             #'subtractmedian': 'true',
+#                             'only_object': '["autocal-lfc-all-morn", "autocal-lfc-all-eve", "autocal-lfc-all-night", "cal-LFC", "cal-LFC-morn", "cal-LFC-eve", "LFC_all", "lfc_all", "LFC"]',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.30
+#                             }
+#            lfc_rv_panel = {'panelvars': thispanelvars,
+#                            'paneldict': thispaneldict}
+#            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+#            thispanelvars2 = [dict11, dict12, dict13, dict14, dict15, dict16, dict17, dict18]
+#            thispaneldict2 = {
+#                              'ylabel': r'ThAr RV (km/s)',
+#                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+#                              #'subtractmedian': 'true',
+#                              'only_object': '["autocal-thar-all-night", "autocal-thar-all-eve", "autocal-thar-all-morn"]',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.30
+#                              }
+#            thar_rv_panel = {'panelvars': thispanelvars2,
+#                             'paneldict': thispaneldict2}
+#            dict21 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict22 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict23 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict24 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict25 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict26 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict27 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict28 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+#            thispanelvars3 = [dict21, dict22, dict23, dict24, dict25, dict26, dict27, dict28]
+#            thispaneldict3 = {
+#                              'title': 'LFC, ThAr, & Etalon RVs',
+#                              'ylabel': r'Etalon RV (km/s)',
+#                              #'ylabel': r'Etalon $\Delta$RV (km/s)',
+#                              #'subtractmedian': 'true',
+#                              'only_object': '["autocal-etalon-all-night", "autocal-etalon-all-eve", "autocal-etalon-all-morn", "manualcal-etalon-all", "Etalon_cal", "etalon-sequence"]',
+#                              'not_junk': 'true',
+#                              'legend_frac_size': 0.30
+#                              }
+#            etalon_rv_panel = {'panelvars': thispanelvars3,
+#                               'paneldict': thispaneldict3}
+#            panel_arr = [lfc_rv_panel, thar_rv_panel, etalon_rv_panel]
+#
+#        elif plot_name=='socal_rv':
+#            dict1 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict2 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict3 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict4 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict5 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict6 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict7 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict8 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+#            thispanelvars = [dict1, dict2, dict3, dict5, dict6, dict7]
+#            thispaneldict = {
+#                             'ylabel': r'SoCal RV (km/s)',
+#                             'title': 'SoCal RVs',
+#                             'only_object': '["SoCal"]',
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.28
+#                             }
+#            socal_rv_panel = {'panelvars': thispanelvars,
+#                              'paneldict': thispaneldict}
+#            dict11 = {'col': 'CCD1RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict12 = {'col': 'CCD1RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict13 = {'col': 'CCD1RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'green'}}
+#            dict14 = {'col': 'CCD1RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD1RV3 (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'limegreen'}}
+#            dict15 = {'col': 'CCD2RV1',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV1 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict16 = {'col': 'CCD2RV2',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV2 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict17 = {'col': 'CCD2RV3',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RV3 (km/s)',  'marker': '.', 'linewidth': 0.5, 'color': 'red'}}
+#            dict18 = {'col': 'CCD2RVC',  'plot_type': 'plot', 'plot_attr': {'label': 'CCD2RVC (km/s)',  'marker': 's', 'linewidth': 0.5, 'color': 'indianred'}}
+#            thispanelvars = [dict11, dict12, dict13, dict15, dict16, dict17]
+#            thispaneldict = {
+#                             'ylabel': r'SoCal $\Delta$RV (km/s)',
+#                             'subtractmedian': 'true',
+#                             'title': 'SoCal RVs',
+#                             'only_object': '["SoCal"]',
+#                             'narrow_xlim_daily': 'true',
+#                             'not_junk': 'true',
+#                             'legend_frac_size': 0.28
+#                             }
+#            socal_rv_panel2 = {'panelvars': thispanelvars,
+#                               'paneldict': thispaneldict}
+#            panel_arr = [socal_rv_panel,socal_rv_panel2]
+#
+#        else:
+#            self.logger.error('plot_name not specified')
+#            return
+#        
+#        self.plot_time_series_multipanel(panel_arr, start_date=start_date, end_date=end_date, 
+#                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
+#                                         log_savefig_timing=False)        
+#
+#
+#    def plot_standard_time_series_new(self, plot_dict, start_date=None, end_date=None, 
+#                                  clean=False, 
+#                                  fig_path=None, show_plot=False):
+#        """
+#        Generate one of several standard time-series plots of KPF data.
+#
+#        Args:
+#            [UPDATE THIS]
+#            plot_name (string): chamber_temp - 4-panel plot showing KPF chamber temperatures
+#                                abc - ...
+#            start_date (datetime object) - start date for plot
+#            end_date (datetime object) - end date for plot
+#            fig_path (string) - set to the path for a SNR vs. wavelength file
+#                to be generated.
+#            show_plot (boolean) - show the plot in the current environment.
+#
+#        Returns:
+#            PNG plot in fig_path or shows the plot it the current environment
+#            (e.g., in a Jupyter Notebook).
+#        """
+#
+#        self.plot_time_series_multipanel(plot_dict, start_date=start_date, end_date=end_date, 
+#                                         fig_path=fig_path, show_plot=show_plot, clean=clean, 
+#                                         log_savefig_timing=False)        
+#
+#
+#    def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
+#                                 last_n_days=None,
+#                                 fig_dir=None, show_plot=False, 
+#                                 print_plot_names=False):
+#        """
+#        Generate all of the standard time series plots for the quicklook.  
+#        Depending on the value of the input 'interval', the plots have time ranges 
+#        that are daily, weekly, yearly, or decadal.
+#
+#        Args:
+#            start_date (datetime object) - start date for plot
+#            interval (string) - 'day', 'month', 'year', or 'decade'
+#            last_n_days (int) - overrides start_date and makes a plot over the last n days
+#            fig_path (string) - set to the path for the files to be generated.
+#            show_plot (boolean) - show the plot in the current environment.
+#            print_plot_names (boolean) - prints the names of possible plots and exits
+#
+#        Returns:
+#            PNG plot in fig_path or shows the plots it the current environment
+#            (e.g., in a Jupyter Notebook).
+#        """
+#        plots = { 
+#            "p1a":  {"plot_name": "hallway_temp",             "subdir": "Chamber",   "desc": "Hallway temperature"},
+#            "p1b":  {"plot_name": "chamber_temp",             "subdir": "Chamber",   "desc": "Vacuum chamber temperatures"},
+#            "p1c":  {"plot_name": "chamber_temp_detail",      "subdir": "Chamber",   "desc": "Vacuum chamber temperatures (by optical element)"},
+#            "p1d":  {"plot_name": "fiber_temp",               "subdir": "Chamber",   "desc": "Fiber scrambler temperatures"},
+#            "p2a":  {"plot_name": "ccd_readnoise",            "subdir": "CCDs",      "desc": "CCD readnoise"},
+#            "p2b":  {"plot_name": "ccd_dark_current",         "subdir": "CCDs",      "desc": "CCD dark current"},
+#            "p2c":  {"plot_name": "ccd_readspeed",            "subdir": "CCDs",      "desc": "CCD read speed"},
+#            "p2d":  {"plot_name": "ccd_controller",           "subdir": "CCDs",      "desc": "CCD controller temperatures"},
+#            "p2e":  {"plot_name": "ccd_temp",                 "subdir": "CCDs",      "desc": "CCD temperatures"},
+#            "p3a":  {"plot_name": "lfc",                      "subdir": "Cal",       "desc": "LFC parameters"},
+#            "p3b":  {"plot_name": "etalon",                   "subdir": "Cal",       "desc": "Etalon temperatures"},
+#            "p3c":  {"plot_name": "hcl",                      "subdir": "Cal",       "desc": "Hollow-cathode lamp temperatures"},
+#            "p3d":  {"plot_name": "autocal-flat_snr",         "subdir": "Cal",       "desc": "SNR of flats"},
+#            "p4a":  {"plot_name": "hk_temp",                  "subdir": "Subsystems","desc": "Ca H&K Spectrometer temperatures"},
+#            "p4b":  {"plot_name": "agitator",                 "subdir": "Subsystems","desc": "Agatitator temperatures"},
+#            "p5a":  {"plot_name": "guiding",                  "subdir": "Observing", "desc": "FIU Guiding performance of"},
+#            "p5b":  {"plot_name": "seeing",                   "subdir": "Observing", "desc": "Seeing measurements for stars"},
+#            "p5c":  {"plot_name": "sun_moon",                 "subdir": "Observing", "desc": "Target separation to Sun and Moon"},
+#            "p5c":  {"plot_name": "observing_snr",            "subdir": "Observing", "desc": "SNR of stellar spectra"},
+#            "p6a":  {"plot_name": "socal_snr",                "subdir": "SoCal",     "desc": "SNR of SoCal spectra"},
+#            "p6b":  {"plot_name": "socal_rv",                 "subdir": "RV",        "desc": "RVs from SoCal spectra"}, 
+#            "p7a":  {"plot_name": "drptag",                   "subdir": "DRP",       "desc": "DRP Tag"},   
+#            "p7b":  {"plot_name": "drphash",                  "subdir": "DRP",       "desc": "DRP Hash"},   
+#            "p8a":  {"plot_name": "junk_status",              "subdir": "QC",        "desc": "Quality control: junk status"}, 
+#            "p8b":  {"plot_name": "qc_data_keywords_present", "subdir": "QC",        "desc": "Quality Control: keywords present"}, 
+#            "p8c":  {"plot_name": "qc_time_check",            "subdir": "QC",        "desc": "Quality Control: time checks"}, 
+#            "p8d":  {"plot_name": "qc_em",                    "subdir": "QC",        "desc": "Quality Control: Exposure Meter"}, 
+#            "p8e":  {"plot_name": "qc_monotonic_wls",         "subdir": "QC",        "desc": "Quality Control: monotonic WLS"}, 
+#            "p8f":  {"plot_name": "qc_pos_2d_snr",            "subdir": "QC",        "desc": "Quality Control: 2D SNR positive"}, 
+#            "p8g":  {"plot_name": "qc_lfc",                   "subdir": "QC",        "desc": "Quality Control: LFC quality"}, 
+#            "p8h":  {"plot_name": "qc_goodread",              "subdir": "QC",        "desc": "Quality Control: L0 Good Read metric"}, 
+#            "p8i":  {"plot_name": "qc_low_flux",              "subdir": "QC",        "desc": "Quality Control: 2D low flux check"}, 
+#            "p9a":  {"plot_name": "autocal_rv",               "subdir": "RV",        "desc": "RVs from LFC, ThAr, and etalon spectra"}, 
+#        }
+#        if print_plot_names:
+#            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
+#            for p in plots:
+#                print("    '" + plots[p]["plot_name"] + "': " + plots[p]["desc"])
+#            return
+#
+#        if (last_n_days != None) and (type(last_n_days) == type(1)):
+#            now = datetime.now()
+#            if last_n_days > 3:
+#                end_date = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+#            else:
+#                end_date = now
+#            start_date = end_date - timedelta(days=last_n_days)
+#
+#        if not isinstance(start_date, datetime):
+#            self.logger.error("'start_date' must be a datetime object.")
+#            return        
+#        
+#        for p in plots:
+#            plot_name = plots[p]["plot_name"]
+#            if interval == 'day':
+#                end_date = start_date + timedelta(days=1)
+#                filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
+#            elif interval == 'month':
+#                end_date = add_one_month(start_date)
+#                filename = 'kpf_' + start_date.strftime("%Y%m") + '_telemetry_' + plot_name + '.png' 
+#            elif interval == 'year':
+#                end_date = datetime(start_date.year+1, start_date.month, start_date.day)
+#                filename = 'kpf_' + start_date.strftime("%Y") + '_telemetry_' + plot_name + '.png' 
+#            elif interval == 'decade':
+#                end_date = datetime(start_date.year+10, start_date.month, start_date.day)
+#                filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+#            elif (last_n_days != None) and (type(last_n_days) == type(1)):
+#                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
+#            else:
+#                self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
+#                return
+#
+#            if fig_dir != None:
+#                if not fig_dir.endswith('/'):
+#                    fig_dir += '/'
+#                savedir = fig_dir + plots[p]["subdir"] + '/'
+#                os.makedirs(savedir, exist_ok=True) # make directories if needed
+#                fig_path = savedir + filename
+#                self.logger.info('Making QL time series plot ' + fig_path)
+#            else:
+#                fig_path = None
+#            self.plot_standard_time_series(plot_name, start_date=start_date, end_date=end_date, 
+#                                           fig_path=fig_path, show_plot=show_plot, clean=clean)
 
 
     def yaml_to_dict(self, filepath):
@@ -2670,10 +2670,10 @@ class AnalyzeTimeSeries:
         return plotdict
 
 
-    def plot_all_quicklook_new(self, start_date=None, interval=None, clean=True, 
-                                last_n_days=None,
-                                fig_dir=None, show_plot=False, 
-                                print_plot_names=False):
+    def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
+                           last_n_days=None, 
+                           fig_dir=None, show_plot=False, 
+                           print_plot_names=False, verbose=False):
         """
         Generate all of the standard time series plots for the quicklook.  
         Depending on the value of the input 'interval', the plots have time ranges 
@@ -2697,7 +2697,6 @@ class AnalyzeTimeSeries:
         import static.tsdb_plot_configs
         all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py        
         for this_yaml_path in all_yaml:
-            print(this_yaml_path)
             thisplotconfigdict = self.yaml_to_dict(this_yaml_path)
             plot_name = str.split(str.split(this_yaml_path,'/')[-1], '.')[0]
             subdir = str.split(os.path.dirname(this_yaml_path),'/')[-1]
@@ -2707,13 +2706,6 @@ class AnalyzeTimeSeries:
                 "description": thisplotconfigdict.get("description", ""),
                 "panel_arr": thisplotconfigdict["panel_arr"],
             }
-            #print(plot_name)
-            #print(subdir)
-            #print(plot_name)
-            #print(thisplotconfigdict.get("description", ""))
-            #print(thisplotconfigdict["panel_arr"])
-            #print()
-            print()
             plots[plot_name] = tempdict
 
         if print_plot_names:
@@ -2736,6 +2728,8 @@ class AnalyzeTimeSeries:
         
         for p in plots:
             plot_name = plots[p]["plot_name"]
+            if verbose:
+                self.logger.info("AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
             if interval == 'day':
                 end_date = start_date + timedelta(days=1)
                 filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
