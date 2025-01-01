@@ -1,5 +1,5 @@
 description: SoCal SNR & Flux Ratio
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: SNRSC452

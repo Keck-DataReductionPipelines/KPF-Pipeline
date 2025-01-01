@@ -1,5 +1,5 @@
 description: KPF Agitator
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: kpfmot.AGITSPD

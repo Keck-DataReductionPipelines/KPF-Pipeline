@@ -1,5 +1,5 @@
 description: Etalon Temperatures
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: ETAV1C1T

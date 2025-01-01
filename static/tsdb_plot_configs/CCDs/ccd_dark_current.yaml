@@ -1,5 +1,5 @@
 description: CCD Dark Current
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
 
   # 1) greenpanel

@@ -1,5 +1,5 @@
 description: KPF-Pipeline Commit Hash
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: DRPHASH

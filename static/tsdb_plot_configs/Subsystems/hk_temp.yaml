@@ -1,5 +1,5 @@
 description: Ca H&K Spectrometer Temperatures
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
 
   # Panel 1 (hkpanel1): Normal temperatures for HK

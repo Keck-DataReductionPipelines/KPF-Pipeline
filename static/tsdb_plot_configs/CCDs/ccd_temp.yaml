@@ -1,5 +1,5 @@
 description: CCD temperatures
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: kpfgreen.KPF_CCD_T

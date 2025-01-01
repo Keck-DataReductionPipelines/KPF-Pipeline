@@ -1,5 +1,5 @@
 description: CCD Read Noise
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: RNGREEN1

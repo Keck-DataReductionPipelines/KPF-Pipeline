@@ -1,5 +1,5 @@
-description: LFC, ThAr, & Etalon RVs (Autocal)
-plot_type: time_series
+description: LFC, ThAr, & Etalon RVs (autocal)
+plot_type: time_series_multipanel
 panel_arr:
   # 1) lfc_rv_panel
   - panelvars:

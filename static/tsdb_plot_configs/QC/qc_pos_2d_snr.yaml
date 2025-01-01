@@ -1,5 +1,5 @@
 description: "QC - Not Negative 2D SNR"
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: POS2DSNR

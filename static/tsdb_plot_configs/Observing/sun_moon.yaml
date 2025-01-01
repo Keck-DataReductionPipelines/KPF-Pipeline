@@ -1,5 +1,5 @@
 description: Separation of Sun and Moon from Target
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: MOONSEP

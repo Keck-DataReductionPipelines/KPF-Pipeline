@@ -1,5 +1,5 @@
 description: Chamber Temperature Detail
-plot_type: time_series
+plot_type: time_series_multipanel
 panel_arr:
 
   # 1) chambertemppanel1
