@@ -1,0 +1,183 @@
+description: CCD Dark Current
+plot_type: time_series
+panel_arr:
+
+  # 1) greenpanel
+  - panelvars:
+      - col: FLXREG1G
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Region 1
+          marker: .
+          linewidth: 0.5
+          color: lightgreen
+      - col: FLXREG2G
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Region 2
+          marker: .
+          linewidth: 0.5
+          color: lightgreen
+      - col: FLXCOLLG
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Collimator-side
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: FLXECHG
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Echelle-side
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Green CCD\nDark Current [e-/hr]"
+      not_junk: true
+      legend_frac_size: 0.35
+
+  # 2) redpanel
+  - panelvars:
+      - col: FLXREG1R
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Region 1
+          marker: .
+          linewidth: 0.5
+          color: lightcoral
+      - col: FLXREG2R
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Region 2
+          marker: .
+          linewidth: 0.5
+          color: lightcoral
+      - col: FLXCOLLR
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Coll-side
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: FLXECHR
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Ech-side
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      ylabel: "Red CCD\nDark Current [e-/hr]"
+      not_junk: true
+      legend_frac_size: 0.35
+
+  # 3) greenpanel_ionpump
+  - panelvars:
+      - col: kpfgreen.COL_CURR
+        plot_type: plot
+        unit: A
+        plot_attr:
+          label: Coll-side
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+    paneldict:
+      ylabel: "Green CCD\nIon Pump Current [A]"
+      yscale: log
+      not_junk: true
+      legend_frac_size: 0.35
+
+  - panelvars:
+      - col: kpfgreen.ECH_CURR
+        plot_type: plot
+        unit: A
+        plot_attr:
+          label: Ech-side
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Green CCD\nIon Pump Current [A]"
+      yscale: log
+      not_junk: true
+      legend_frac_size: 0.35
+
+  # 4) redpanel_ionpump
+  - panelvars:
+      - col: kpfred.COL_CURR
+        plot_type: plot
+        unit: A
+        plot_attr:
+          label: Coll-side
+          marker: .
+          linewidth: 0.5
+          color: darkred
+    paneldict:
+      ylabel: "Red CCD\nIon Pump Current [A]"
+      yscale: log
+      not_junk: true
+      legend_frac_size: 0.35
+
+  - panelvars:
+      - col: kpfred.ECH_CURR
+        plot_type: plot
+        unit: A
+        plot_attr:
+          label: Ech-side
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      ylabel: "Red CCD\nIon Pump Current [A]"
+      yscale: log
+      not_junk: true
+      legend_frac_size: 0.35
+
+  # 5) amppanel
+  - panelvars:
+      - col: FLXAMP1R
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Red Amp Reg 1
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: FLXAMP2R
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Red Amp Reg 2
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+      - col: FLXAMP1G
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Green Amp Reg 1
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: FLXAMP2G
+        plot_type: plot
+        unit: e-/hr
+        plot_attr:
+          label: Green Amp Reg 2
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "CCD Amplifier Dark\nCurrent (Edge Glow) [e-/hr]"
+      not_junk: true
+      title: CCD Dark Current
+      legend_frac_size: 0.35
