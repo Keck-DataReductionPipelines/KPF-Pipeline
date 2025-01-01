@@ -1,0 +1,128 @@
+description: Etalon Temperatures
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: ETAV1C1T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 1
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: ETAV1C2T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 2
+          marker: .
+          linewidth: 0.5
+          color: blue
+      - col: ETAV1C3T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 3
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: ETAV1C4T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 4
+          marker: .
+          linewidth: 0.5
+          color: orange
+      - col: ETAV2C3T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 2 Ch 3
+          marker: .
+          linewidth: 0.5
+          color: purple
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: ETAV1C1T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 1
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      ylabel: $\\Delta$Temperature (K)
+      title: Etalon Temperatures
+      not_junk: true
+      subtractmedian: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: ETAV1C2T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 2
+          marker: .
+          linewidth: 0.5
+          color: blue
+    paneldict:
+      ylabel: $\\Delta$Temperature (K)
+      title: Etalon Temperatures
+      not_junk: true
+      subtractmedian: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: ETAV1C3T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 3
+          marker: .
+          linewidth: 0.5
+          color: green
+    paneldict:
+      ylabel: $\\Delta$Temperature (K)
+      title: Etalon Temperatures
+      not_junk: true
+      subtractmedian: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: ETAV1C4T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 1 Ch 4
+          marker: .
+          linewidth: 0.5
+          color: orange
+    paneldict:
+      ylabel: $\\Delta$Temperature (K)
+      title: Etalon Temperatures
+      not_junk: true
+      subtractmedian: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: ETAV2C3T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Vescent 2 Ch 3
+          marker: .
+          linewidth: 0.5
+          color: purple
+    paneldict:
+      ylabel: $\\Delta$Temperature (K)
+      title: Etalon Temperatures
+      not_junk: true
+      subtractmedian: true
+      legend_frac_size: 0.25

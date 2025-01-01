@@ -1,0 +1,44 @@
+description: Fiber Temperatures
+plot_type: time_series
+panel_arr:
+  - panelvars:
+      - col: kpfmet.SCIENCE_CAL_FIBER_STG
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Sci Cal Fiber Stg
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.SCISKY_SCMBLR_CHMBR_EN
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Sci/Sky Scrmb. Chmbr
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.SCISKY_SCMBLR_FIBER_EN
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Sci/Sky Scrmb. Fiber
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.SIMCAL_FIBER_STG
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: SimulCal Fiber Stg
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.SKYCAL_FIBER_STG
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: SkyCal Fiber Stg
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Temperature ($^{\\circ}$C)"
+      not_junk: true
+      title: Fiber Temperatures
+      legend_frac_size: 0.30
