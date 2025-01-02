@@ -57,7 +57,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
-      ylabel: $\\Delta$Temperature (K)
+      ylabel: "$\\Delta$Temperature (K)"
       title: Etalon Temperatures
       not_junk: true
       subtractmedian: true
@@ -73,7 +73,7 @@ panel_arr:
           linewidth: 0.5
           color: blue
     paneldict:
-      ylabel: $\\Delta$Temperature (K)
+      ylabel: "$\\Delta$Temperature (K)"
       title: Etalon Temperatures
       not_junk: true
       subtractmedian: true
@@ -89,7 +89,7 @@ panel_arr:
           linewidth: 0.5
           color: green
     paneldict:
-      ylabel: $\\Delta$Temperature (K)
+      ylabel: "$\\Delta$Temperature (K)"
       title: Etalon Temperatures
       not_junk: true
       subtractmedian: true
@@ -105,7 +105,7 @@ panel_arr:
           linewidth: 0.5
           color: orange
     paneldict:
-      ylabel: $\\Delta$Temperature (K)
+      ylabel: "$\\Delta$Temperature (K)"
       title: Etalon Temperatures
       not_junk: true
       subtractmedian: true
@@ -121,7 +121,7 @@ panel_arr:
           linewidth: 0.5
           color: purple
     paneldict:
-      ylabel: $\\Delta$Temperature (K)
+      ylabel: "$\\Delta$Temperature (K)"
       title: Etalon Temperatures
       not_junk: true
       subtractmedian: true

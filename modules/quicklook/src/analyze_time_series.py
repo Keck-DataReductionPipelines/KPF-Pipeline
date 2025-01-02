@@ -751,7 +751,6 @@ class AnalyzeTimeSeries:
             query += " WHERE " + ' AND '.join(where_queries)
     
         # Execute query
-        print(query)
         df = pd.read_sql_query(query, conn, params=(only_object,) if only_object is not None else None)
         conn.close()
         print(df)
@@ -829,7 +828,7 @@ class AnalyzeTimeSeries:
             query += " WHERE " + ' AND '.join(where_queries)
     
         if verbose:
-            print('query = ' + query)
+            self.logger.info('query = ' + query)
     
         df = pd.read_sql_query(query, conn)
         conn.close()
@@ -1203,14 +1202,13 @@ class AnalyzeTimeSeries:
         plt.close('all')
 
 
-    def plot_time_series_multipanel(self, panel_dict, start_date=None, end_date=None, 
+    def plot_time_series_multipanel(self, plotdict, start_date=None, end_date=None, 
                                     clean=False, 
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
         Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
         attributes are stored in an array of dictionaries called 'panel_arr'.  
-
 
         Args:
             panel_dict makes panel_arr ...
@@ -1269,7 +1267,22 @@ class AnalyzeTimeSeries:
             """ For formatting of log plots """
             return num_fmt(value, sf=2)
 
-        panel_arr = panel_dict['panel_arr']
+        # Retrieve the appropriate standard plot dictionary
+        if type(plotdict) == type('str'):
+            plotdict_str = plotdict
+            import static.tsdb_plot_configs
+            all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py        
+            base_filenames = [os.path.basename(y) for y in all_yaml]
+            base_filenames = [str.split(f,'.')[0] for f in base_filenames]
+            try:
+                ind = base_filenames.index(plotdict_str)
+                plotdict = self.yaml_to_dict(all_yaml[ind])
+                self.logger.info(f'Plotting {all_yaml[ind]}')
+            except Exception as e:
+                self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
+                return
+        
+        panel_arr = plotdict['panel_arr']
         
         npanels = len(panel_arr)
         unique_cols = set()
@@ -1626,7 +1639,7 @@ class AnalyzeTimeSeries:
             plots[plot_name] = tempdict
 
         if print_plot_names:
-            print("Plots available in AnalyzeTimeSeries.plot_standard_time_series():")
+            print("Plots available:")
             for p in plots:
                 print("    '" + plots[p]["plot_name"] + "': " + plots[p]["description"])
             return
@@ -1646,7 +1659,7 @@ class AnalyzeTimeSeries:
         for p in plots:
             plot_name = plots[p]["plot_name"]
             if verbose:
-                self.logger.info("AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
+                self.logger.info(f"AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
             if interval == 'day':
                 end_date = start_date + timedelta(days=1)
                 filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
@@ -1870,13 +1883,14 @@ def convert_to_list_if_array(string):
     Convert a string like '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]' to an array.
     """
     # Check if the string starts with '[' and ends with ']'
-    if string.startswith('[') and string.endswith(']'):
-        try:
-            # Attempt to parse the string as JSON
-            return json.loads(string)
-        except json.JSONDecodeError:
-            # The string is not a valid JSON array
-            return string
+    if type(string) == 'str':
+        if string.startswith('[') and string.endswith(']'):
+            try:
+                # Attempt to parse the string as JSON
+                return json.loads(string)
+            except json.JSONDecodeError:
+                # The string is not a valid JSON array
+                return string
     else:
         # The string does not look like a JSON array
         return string
