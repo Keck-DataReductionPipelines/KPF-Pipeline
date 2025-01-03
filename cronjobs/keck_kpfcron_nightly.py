@@ -23,7 +23,8 @@ class KPFPipeNightly(KPFPipeCronBase):
         super(KPFPipeNightly, self).__init__(procname)
 
         # exit after 12 hours (12 hrs * 60 minutes * 60 seconds)
-        self.exit_timer = 9 * 60 * 60
+        if not self.exit_timer:
+            self.exit_timer = 6 * 60 * 60
 
     def set_recipe(self):
         """
@@ -64,10 +65,7 @@ class KPFPipeNightly(KPFPipeCronBase):
 
             # run the pipeline for all data in the directory
             kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
-
-            # keep the log
-            mkdir -p /logs/{self.procdate} 2>&1; 
-            cp -p /code/KPF-Pipeline/logs/pipeline_{self.procdate}.log /logs/{self.procdate}/kpf_pipeline_nightly_{self.procdate}.log >> {self.stdout_log} 2>&1;
+            kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             """
 
     def define_docker_cmd(self):
