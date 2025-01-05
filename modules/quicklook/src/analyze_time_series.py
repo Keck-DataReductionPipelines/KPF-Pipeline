@@ -388,58 +388,6 @@ class AnalyzeTimeSeries:
             cursor.executemany(insert_query, data_tuples)
             conn.commit()
             conn.close()
-    
-
-
-#    def ingest_batch_observation(self, batch):
-#        """
-#        Ingest a batch of observations into the database in parallel using 
-#        ProcessPoolExecutor.
-#        """
-#        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#
-#        # Prepare arguments for parallel execution
-#        args = {
-#            'now_str': now_str,
-#            'L0_header_keyword_types': self.L0_header_keyword_types,
-#            'L0_telemetry_types': self.L0_telemetry_types,
-#            'D2_header_keyword_types': self.D2_header_keyword_types,
-#            'L1_header_keyword_types': self.L1_header_keyword_types,
-#            'L2_header_keyword_types': self.L2_header_keyword_types,
-#            'L2_CCF_header_keyword_types': self.L2_CCF_header_keyword_types,
-#            'L2_RV_header_keyword_types': self.L2_RV_header_keyword_types,
-#            'extract_kwd_func': self.extract_kwd,
-#            'extract_telemetry_func': self.extract_telemetry,
-#            'extract_rvs_func': self.extract_rvs,
-#            'is_any_file_updated_func': self.is_any_file_updated,
-#            'get_source_func': self.get_source,
-#            'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
-#        }
-#
-#        # Create a partial function that bundles all these arguments
-#        partial_process_file = partial(process_file, **args)
-#
-#        # Run extraction in parallel using a worker pool
-#        max_workers = min([len(batch), 25, os.cpu_count()])
-#        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-#            results = list(executor.map(partial_process_file, batch))
-#
-#        # Filter out None results (files that were not updated)
-#        batch_data = [res for res in results if res is not None]
-#
-#        # Perform bulk insert
-#        if batch_data:
-#            columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
-#            placeholders = ', '.join(['?'] * len(batch_data[0]))
-#            insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
-#            data_tuples = [tuple(data.values()) for data in batch_data]
-#
-#            conn = sqlite3.connect(self.db_path)
-#            cursor = conn.cursor()
-#            cursor.execute("PRAGMA cache_size = -2000000;")
-#            cursor.executemany(insert_query, data_tuples)
-#            conn.commit()
-#            conn.close()
 
 
     def get_source(self, L0_dict):
