@@ -2,104 +2,61 @@ description: SoCal RVs
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
-      - col: CCD1RV1
-        plot_type: plot
+      - col: CCFRV
+        col_err: CCFERV
+        col_subtract: CCFRVC
+        col_multiply: 1000
+        plot_type: errorbar
         plot_attr:
-          label: CCD1RV1 (km/s)
+          label: CCFRV - CCFRVC [m/s]
           marker: .
           linewidth: 0.5
-          color: green
-      - col: CCD1RV2
-        plot_type: plot
-        plot_attr:
-          label: CCD1RV2 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: green
-      - col: CCD1RV3
-        plot_type: plot
-        plot_attr:
-          label: CCD1RV3 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: green
-      - col: CCD2RV1
-        plot_type: plot
-        plot_attr:
-          label: CCD2RV1 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: red
-      - col: CCD2RV2
-        plot_type: plot
-        plot_attr:
-          label: CCD2RV2 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: red
-      - col: CCD2RV3
-        plot_type: plot
-        plot_attr:
-          label: CCD2RV3 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: red
+          color: royalblue
     paneldict:
-      ylabel: SoCal RV (km/s)
-      title: SoCal RVs
-      only_object: [\SoCal\]
-      narrow_xlim_daily: true
-      not_junk: true
-      legend_frac_size: 0.28
-
-  - panelvars:
-      - col: CCD1RV1
-        plot_type: plot
-        plot_attr:
-          label: CCD1RV1 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: green
-      - col: CCD1RV2
-        plot_type: plot
-        plot_attr:
-          label: CCD1RV2 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: green
-      - col: CCD1RV3
-        plot_type: plot
-        plot_attr:
-          label: CCD1RV3 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: green
-      - col: CCD2RV1
-        plot_type: plot
-        plot_attr:
-          label: CCD2RV1 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: red
-      - col: CCD2RV2
-        plot_type: plot
-        plot_attr:
-          label: CCD2RV2 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: red
-      - col: CCD2RV3
-        plot_type: plot
-        plot_attr:
-          label: CCD2RV3 (km/s)
-          marker: .
-          linewidth: 0.5
-          color: red
-    paneldict:
-      ylabel: "SoCal $\\Delta$RV (km/s)"
+      title: Etalon RVs
+      ylabel: "Green+Red\nSoCal $\\Delta$RV (m/s)"
       subtractmedian: true
-      title: SoCal RVs
-      only_object: "[\"SoCal\"]"
-      narrow_xlim_daily: true
+      only_object: 
+        - SoCal
       not_junk: true
-      legend_frac_size: 0.28
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CCD1RV
+        col_err: CCD1ERV
+        col_subtract: CCD1RVC
+        col_multiply: 1000
+        plot_type: errorbar
+        plot_attr:
+          label: CCD1RV - CCD1RVC [m/s]
+          color: firebrick
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Green\nSoCal $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - SoCal
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CCD2RV
+        col_err: CCD2ERV
+        col_subtract: CCD2RVC
+        col_multiply: 1000
+        plot_type: errorbar
+        plot_attr:
+          label: CCD2RV - CCD2RVC [m/s]
+          color: darkred
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Red\nSoCal $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - SoCal
+      not_junk: true
+      legend_frac_size: 0.30

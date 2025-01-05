@@ -1,17 +1,80 @@
-description: LFC, ThAr, & Etalon RVs (autocal)
+description: Etalon RVs (autocal)
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: CCFRV
-        plot_type: plot
+        col_subtract: CCFRVC
+        col_multiply: 1000
+        col_err: CCFERV
+        plot_type: errorbar
         plot_attr:
-          label: CCFRV (km/s)
+          label: CCFRV - CCFRVC [m/s]
           marker: .
+          fmt: o 
           linewidth: 0.5
-          color: darkgray
+          color: royalblue
     paneldict:
       title: Etalon RVs
-      ylabel: Etalon RV (km/s)
-      only_object: "[\"autocal-etalon-all-night\", \"autocal-etalon-all-eve\", \"autocal-etalon-all-morn\", \"manualcal-etalon-all\", \"Etalon_cal\", \"etalon-sequence\"]"
+      ylabel: "Green+Red\nEtalon $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CCD1RV
+        col_subtract: CCD1RVC
+        col_multiply: 1000
+        col_err: CCD1ERV
+        plot_type: errorbar
+        plot_attr:
+          label: CCD1RV - CCD1RVC [m/s]
+          color: firebrick
+          marker: .
+          fmt: o 
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Green\nEtalon $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CCD2RV
+        col_subtract: CCD2RVC
+        col_multiply: 1000
+        col_err: CCD1ERV
+        plot_type: errorbar
+        plot_attr:
+          label: CCD2RV - CCD2RVC [m/s]
+          color: darkred
+          marker: .
+          fmt: o 
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Red\nEtalon $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
       not_junk: true
       legend_frac_size: 0.30
