@@ -114,15 +114,10 @@ class AnalyzeTimeSeries:
         self.print_db_status()
 
 
-    def drop_table(self):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("DROP TABLE IF EXISTS kpfdb")
-        conn.commit()
-        conn.close()
-
-
     def create_database(self):
+        """
+        Create SQLite3 database using the standard KPF scheme.
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         conn.execute("PRAGMA journal_mode=WAL")
@@ -168,13 +163,40 @@ class AnalyzeTimeSeries:
         conn.close()
 
 
+    def drop_table(self):
+        """
+        Start over on the database by dropping the main table.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DROP TABLE IF EXISTS kpfdb")
+        conn.commit()
+        conn.close()
+
+
+    def unlock_db(self):
+        """
+        Remove the -wal and -shm lock files, 
+        e.g. /data/time_series/kpf_ts.db-wal and /data/time_series/kpf_ts.db-shm
+        
+        Use this method sparingly.
+        """
+        wal_file = f"{self.db_path}-wal"
+        shm_file = f"{self.db_path}-shm"
+    
+        if os.path.exists(wal_file):
+            os.remove(wal_file)
+        if os.path.exists(shm_file):
+            os.remove(shm_file)
+
+
     def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
         """
         if not quiet:
-            self.logger.info("Adding to database between " + start_date_str + " to " + end_date_str)
+            self.logger.info("Adding to database between " + start_date_str + " and " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date_str > end_date_str)
         filtered_dir_paths = [
@@ -367,7 +389,7 @@ class AnalyzeTimeSeries:
         partial_process_file = partial(process_file, **args)
     
         # === 3) Run extraction in parallel ONLY for updated files ===
-        max_workers = min([len(updated_batch), 25, os.cpu_count()])
+        max_workers = min([len(updated_batch), 15, os.cpu_count()])
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(partial_process_file, updated_batch))
     
@@ -1305,6 +1327,8 @@ class AnalyzeTimeSeries:
                 unique_cols.add(d['col'])
                 if 'col_err' in d:
                     unique_cols.add(d['col_err'])
+                if 'col_subtract' in d:
+                    unique_cols.add(d['col_subtract'])
         # add this logic
         #if 'only_object' in thispanel['paneldict']:
         #if 'object_like' in thispanel['paneldict']:
@@ -1345,6 +1369,7 @@ class AnalyzeTimeSeries:
             else:
                 end_date_was_none = False
 
+            # Get data from database
             df = self.dataframe_from_db(unique_cols, 
                                         start_date=start_date, 
                                         end_date=end_date, 
@@ -1359,14 +1384,18 @@ class AnalyzeTimeSeries:
                 end_date = max(df['DATE-MID'])
             df = df.sort_values(by='DATE-MID')
 
+            # Remove outliers
             if clean:
                 df = self.clean_df(df)
 
+            # Filter using on_sky criterion
             if 'on_sky' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['on_sky']).lower() == 'true':
                     df = df[df['FIUMODE'] == 'Observing']
                 elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
                     df = df[df['FIUMODE'] == 'Calibration']
+                    
+            # Apply multiplier, if needed
 
             thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
@@ -1422,14 +1451,17 @@ class AnalyzeTimeSeries:
             if 'ylim' in thispanel['paneldict']:
                 if type(ast.literal_eval(thispanel['paneldict']['ylim'])) == type((1,2)):
                     ylim = ast.literal_eval(thispanel['paneldict']['ylim'])
+
             makelegend = True
             if 'nolegend' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['nolegend']).lower() == 'true':
                     makelegend = False
+
             subtractmedian = False
             if 'subtractmedian' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['subtractmedian']).lower() == 'true':
                     subtractmedian = True
+
             nvars = len(thispanel['panelvars'])
             df_initial = df
             for i in np.arange(nvars):
@@ -1438,16 +1470,37 @@ class AnalyzeTimeSeries:
                     plot_type = thispanel['panelvars'][i]['plot_type']
                 else:
                     plot_type = 'scatter'
+                
+                # Extract data from df and manipulate
                 col_name = thispanel['panelvars'][i]['col']
+                # Filter out invalid values in col_name
                 df = df[~df[col_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
                 col_data = df[col_name]
-                #col_data_replaced = col_data.replace('NaN',  np.nan)
-                #col_data_replaced = col_data.replace('null', np.nan)
-                col_data_replaced = col_data
+                col_data_replaced = col_data  # default, no subtraction
+                
+                if 'col_subtract' in thispanel['panelvars'][i]:
+                    col_subtract_name = thispanel['panelvars'][i]['col_subtract']
+                    # Now filter out invalid values in col_subtract_name,
+                    # and also re-filter col_name because removing rows re-indexes the DataFrame.
+                    df = df[~df[col_subtract_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
+                    # Re-grab the series after dropping rows
+                    col_data = df[col_name]
+                    col_subtract_data = df[col_subtract_name]
+                    col_data_replaced = col_data - col_subtract_data
+
+                if 'col_multiply' in thispanel['panelvars'][i]:
+                    col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+
+                if 'col_offset' in thispanel['panelvars'][i]:
+                    col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') + thispanel['panelvars'][i]['col_offset']
+
                 if 'col_err' in thispanel['panelvars'][i]:
                     col_data_err = df[thispanel['panelvars'][i]['col_err']]
                     col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
                     col_data_err_replaced = col_data_err.replace('null', np.nan)
+                    if 'col_multiply' in thispanel['panelvars'][i]:
+                        col_data_err_replaced = pd.to_numeric(col_data_err_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+                
                 if plot_type == 'state':
                     states = np.array(col_data_replaced)
                 else:
@@ -1502,14 +1555,19 @@ class AnalyzeTimeSeries:
                                 plot_attributes['label'] = label
                         else:
                            plot_attributes = {}
+                
                 if plot_type == 'scatter':
                     axs[p].scatter(t, data, **plot_attributes)
+                
                 if plot_type == 'errorbar':
                     axs[p].errorbar(t, data, yerr=data_err, **plot_attributes)
+                
                 if plot_type == 'plot':
                     axs[p].plot(t, data, **plot_attributes)
+                
                 if plot_type == 'step':
                     axs[p].step(t, data, **plot_attributes)
+                
                 if plot_type == 'state':
                     # Plot states (e.g., DRP version number or QC result)
                     # Convert states to a consistent type for comparison
@@ -1712,11 +1770,11 @@ class AnalyzeTimeSeries:
                                      time_range_type = 'all', clean=True, 
                                      base_dir='/data/QLP/', show_plot=False):
         """
-        Generate all of the standard time series plots for the quicklook for a date 
-        range.  Every unique day, month, year, and decade between start_date and end_date 
-        will have a full set of plots produced using plot_all_quicklook().
-        The set of date range types ('day', 'month', 'year', 'decade', 'all')
-        is set by the time_range_type parameter.
+        Generate all of the standard time series plots for the quicklook for a 
+        date range.  Every unique day, month, year, and decade between 
+        start_date and end_date will have a full set of plots produced using 
+        plot_all_quicklook(). The set of date range types ('day', 'month', 
+        'year', 'decade', 'all') is set by the time_range_type parameter.
 
         Args:
             start_date (datetime object) - start date for plot
