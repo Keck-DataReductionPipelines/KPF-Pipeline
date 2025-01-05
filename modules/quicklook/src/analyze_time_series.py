@@ -942,7 +942,8 @@ class AnalyzeTimeSeries:
                             plot_junk=False, plot_source=False, 
                             fig_path=None, show_plot=False):
         """
-        Plot a histogram of the number of observations per day or hour, optionally color-coded by 'NOTJUNK' or 'Source'.
+        Plot a histogram of the number of observations per day or hour, 
+        optionally color-coded by 'NOTJUNK' or 'Source'.
     
         Args:
             interval (string) - time interval over which plot is made
@@ -963,7 +964,7 @@ class AnalyzeTimeSeries:
             (e.g., in a Jupyter Notebook).
         
         To-do: 
-        	Add plotting of QC tests
+        	Add highlighting of QC tests
         """
 
         # Define the source categories and their colors

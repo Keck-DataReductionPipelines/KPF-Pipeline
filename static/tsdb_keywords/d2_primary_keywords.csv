@@ -7,17 +7,6 @@ DARKDIR|string|Directory for DARKDIR
 FLATDIR|string|Directory for FLATDIR
 DRPTAG|string|Git version number of KPF-Pipeline used for processing
 DRPHASH|string|Git commit hash version of KPF-Pipeline used for processing
-NOTJUNK|bool|QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
-DATAPRL0|bool|QC: 1 = L0 data products present with non-zero array sizes
-DATAPR2D|bool|QC: 2D red and green data present check
-KWRDPRL0|bool|QC: 1 = L0 expected keywords present
-TIMCHKL0|bool|QC: 1 = consistent times in L0 file
-EMSAT|float|QC: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
-EMNEG|float|QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
-GOODREAD|float|QC: 1 = Texp not consistent with CCD readout error
-POS2DSNR|float|QC: 1 = 2D Red/Green CCD data/var^0.5 not significantly negative.
-LOWBIAS|float|QC: 1 = 2D bias flux not low
-LOWDARK|float|QC: 1 = 2D dark flux not low
 RNRED1|float|Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
 RNRED2|float|Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
 RNGREEN1|float|Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
@@ -65,3 +54,14 @@ EMSKCT45|float|cumulative EM counts [ADU] in SKY in 445-551 nm
 EMSKCT56|float|cumulative EM counts [ADU] in SKY in 551-658 nm
 EMSKCT67|float|cumulative EM counts [ADU] in SKY in 658-764 nm
 EMSKCT78|float|cumulative EM counts [ADU] in SKY in 764-870 nm
+NOTJUNK|bool|QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
+DATAPRL0|bool|QC: 1 = L0 data products present with non-zero array sizes
+DATAPR2D|bool|QC: 2D red and green data present check
+KWRDPRL0|bool|QC: 1 = L0 expected keywords present
+TIMCHKL0|bool|QC: 1 = consistent times in L0 file
+EMSAT|float|QC: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
+EMNEG|float|QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
+GOODREAD|float|QC: 1 = Texp not consistent with CCD readout error
+POS2DSNR|float|QC: 1 = 2D Red/Green CCD data/var^0.5 not significantly negative.
+LOWBIAS|float|QC: 1 = 2D bias flux not low
+LOWDARK|float|QC: 1 = 2D dark flux not low

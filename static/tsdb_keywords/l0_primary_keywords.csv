@@ -1,7 +1,7 @@
 keyword|datatype|comment
-DATE-MID|datetime|Halfway point of the (unweighted) exposure
+DATE-MID|datetime|Halfway point of the exposure (unweighted)
 DATE-BEG|datetime|Start of exposure (shutter open time)
-DATE-END|datetime|End of exposure (shutter close tinme)
+DATE-END|datetime|End of exposure (shutter close time)
 GRDATE-B|datetime|Green camera DATE-BEG
 GRDATE-E|datetime|Green camera DATE-END
 RDDATE-B|datetime|Red camera DATE-BEG
@@ -30,19 +30,19 @@ SKY-OBJ|string|Sky fiber source
 SCI-OBJ|string|Science fiber source
 AGITSTA|string|Agigator state (Running/Stopped)
 FIUMODE|string|FIU operating mode - Observing = on-sky
-ETAV1C1T|float|Etalon Vescent 1 Channel 1 temperature
-ETAV1C2T|float|Etalon Vescent 1 Channel 2 temperature
-ETAV1C3T|float|Etalon Vescent 1 Channel 3 temperature
-ETAV1C4T|float|Etalon Vescent 1 Channel 4 temperature
-ETAV2C3T|float|Etalon Vescent 2 Channel 3 temperature
+ETAV1C1T|float|Etalon Vescent 1 Channel 1 temp [C]
+ETAV1C2T|float|Etalon Vescent 1 Channel 2 temp [C]
+ETAV1C3T|float|Etalon Vescent 1 Channel 3 temp [C]
+ETAV1C4T|float|Etalon Vescent 1 Channel 4 temp [C]
+ETAV2C3T|float|Etalon Vescent 2 Channel 3 temp [C]
 TOTCORR|string|need to correct this to split 498.12 604.38 710.62 816.88 / Wavelength of EM bins in nm
-USTHRSH|string|Was exposure meter thresholding used? (yYes/No)
-THRSHLD|float|Threshold counts
-THRSBIN|float|Threshold wavelength
+USTHRSH|string|Was exposure meter thresholding used? (Yes/No)
+THRSHLD|float|Threshold [counts]
+THRSBIN|float|Threshold [wavelength]
 TARGNAME|string|KPF Target name
 DCSNAME|string|DCS Target name - may not make any sense
-TARGRA|string|[h] DCS Target RA
-TARGDEC|string|[deg] DCS Target Dec
+TARGRA|string|DCS Target RA [h]
+TARGDEC|string|DCS Target Dec [deg]
 TARGEPOC|float|DCS Target epoch
 TARGEQUI|float|DCS Target equinox
 TARGPLAX|float|Target parallax [arcsec]
@@ -56,7 +56,7 @@ GAIAID|string|GAIA Target name from kpfconfig
 2MASSID|string|2MASS Target name from kpfconfig
 GAIAMAG|string|GAIA G band magnitude
 2MASSMAG|string|2MASS J band magnitude
-TARGTEFF|float|Target effective temperature (K)
+TARGTEFF|float|Target effective temp [K]
 RA|string|Right ascension [h]
 DEC|string|Declination [deg]
 EQUINOX|float|DCS Equinox
