@@ -1,0 +1,17 @@
+description: LFC, ThAr, & Etalon RVs (autocal)
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: CCFRV
+        plot_type: plot
+        plot_attr:
+          label: CCFRV (km/s)
+          marker: .
+          linewidth: 0.5
+          color: darkgray
+    paneldict:
+      title: Etalon RVs
+      ylabel: Etalon RV (km/s)
+      only_object: "[\"autocal-etalon-all-night\", \"autocal-etalon-all-eve\", \"autocal-etalon-all-morn\", \"manualcal-etalon-all\", \"Etalon_cal\", \"etalon-sequence\"]"
+      not_junk: true
+      legend_frac_size: 0.30
