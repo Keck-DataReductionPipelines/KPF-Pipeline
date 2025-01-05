@@ -1,34 +1,34 @@
 keyword|datatype|comment
 DATE-MID|datetime|Halfway point of the (unweighted) exposure
-DATE-BEG|datetime|Start of exposure from kpfexpose
-DATE-END|datetime|End of exposure from kpfexpose.ENDTIME
-GRDATE-B|datetime|Shutter-open time Kwd green DATE-BEG
-GRDATE-E|datetime|Shutter-close time Kwd green DATE-END
-RDDATE-B|datetime|Shutter-open time Kwd red DATE-BEG
-RDDATE-E|datetime|Shutter-close time Kwd red DATE-END
-EMDATE-B|datetime|Date-Beg of first observation Kwd expmeter
-EMDATE-E|datetime|Date-End of last observation Kwd expmeter
-GCDATE-B|datetime|sequence begin Kwd guide DATE-BEG
-GCDATE-E|datetime|sequence end Kwd guide DATE-END
-EXPTIME|float|comment
-ELAPSED|float|comment
-FRAMENO|int|comment
-PROGNAME|string|comment
-EL|float|comment
-AZ|float|comment
-OBJECT|string|comment
-AIRMASS|float|comment
-OCTAGON|string|comment
-IMTYPE|string|comment
-FFFB|string|comment
-GREEN|string|comment
-RED|string|comment
-CA_HK|string|comment
-EXPMETER|string|comment
-GUIDE|string|comment
-SKY-OBJ|string|comment
-SCI-OBJ|string|comment
-AGITSTA|string|comment
+DATE-BEG|datetime|Start of exposure (shutter open time)
+DATE-END|datetime|End of exposure (shutter close tinme)
+GRDATE-B|datetime|Green camera DATE-BEG
+GRDATE-E|datetime|Green camera DATE-END
+RDDATE-B|datetime|Red camera DATE-BEG
+RDDATE-E|datetime|Red camera DATE-END
+EMDATE-B|datetime|Exposure meter DATE-BEG
+EMDATE-E|datetime|Exposure meter DATE-END
+EXPTIME|float|Requested exposure time (sec)
+ELAPSED|float|Actual exposure time (sec)
+FRAMENO|int|Frame number
+PROGNAME|string|Program name
+HA|float|Hour angle 
+EL|float|Telescope elevation (deg)
+AZ|float|Telescope azimuth (deg)
+OBJECT|string|Object name
+AIRMASS|float|Airmass of target
+OCTAGON|string|Calibration octagon source
+IMTYPE|string|Image type
+FFFB|string|Flat field fiber on (Yes/No)
+GREEN|string|Green camera found (Yes/No)
+RED|string|Red camera found (Yes/No)
+CA_HK|string|Ca HK camera found (Yes/No)
+EXPMETER|string|Exposure meter camera found (Yes/No)
+GUIDE|string|Guide camera found (Yes/No)
+CAL-OBJ|string|Cal fiber source
+SKY-OBJ|string|Sky fiber source
+SCI-OBJ|string|Science fiber source
+AGITSTA|string|Agigator state (Running/Stopped)
 FIUMODE|string|FIU operating mode - Observing = on-sky
 ETAV1C1T|float|Etalon Vescent 1 Channel 1 temperature
 ETAV1C2T|float|Etalon Vescent 1 Channel 2 temperature
@@ -36,28 +36,28 @@ ETAV1C3T|float|Etalon Vescent 1 Channel 3 temperature
 ETAV1C4T|float|Etalon Vescent 1 Channel 4 temperature
 ETAV2C3T|float|Etalon Vescent 2 Channel 3 temperature
 TOTCORR|string|need to correct this to split 498.12 604.38 710.62 816.88 / Wavelength of EM bins in nm
-USTHRSH|string|comment
-THRSHLD|float|comment
-THRSBIN|float|comment
+USTHRSH|string|Was exposure meter thresholding used? (yYes/No)
+THRSHLD|float|Threshold counts
+THRSBIN|float|Threshold wavelength
 TARGNAME|string|KPF Target name
 DCSNAME|string|DCS Target name - may not make any sense
 TARGRA|string|[h] DCS Target RA
 TARGDEC|string|[deg] DCS Target Dec
 TARGEPOC|float|DCS Target epoch
 TARGEQUI|float|DCS Target equinox
-TARGPLAX|float|[arcsec] target parallax
-TARGPMDC|float|[arcsec/yr] target proper motion dec
-TARGPMRA|float|[s/yr] target proper motion ra
-TARGRADV|float|[km/s] target radial velocity
-TARGWAVE|float|target-wavelength
-TARGFRAM|string|target-frame
+TARGPLAX|float|Target parallax [arcsec]
+TARGPMDC|float|Target proper motion dec [arcsec/yr]
+TARGPMRA|float|Target proper motion ra [s/yr]
+TARGRADV|float|Target radial velocity [km/s]
+TARGWAVE|float|Target Wavelength [microns]
+TARGFRAM|string|Target frame
 FULLTARG|string|Full Target name from kpfconfig
 GAIAID|string|GAIA Target name from kpfconfig
 2MASSID|string|2MASS Target name from kpfconfig
 GAIAMAG|string|GAIA G band magnitude
 2MASSMAG|string|2MASS J band magnitude
 TARGTEFF|float|Target effective temperature (K)
-RA|string|[h] Right ascension
-DEC|string|[deg] Declination
+RA|string|Right ascension [h]
+DEC|string|Declination [deg]
 EQUINOX|float|DCS Equinox
 MJD-OBS|float|Modified Julian days
