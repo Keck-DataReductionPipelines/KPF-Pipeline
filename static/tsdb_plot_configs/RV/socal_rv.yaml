@@ -56,6 +56,7 @@ panel_arr:
       title: Etalon RVs
       ylabel: "Red\nSoCal $\\Delta$RV (m/s)"
       subtractmedian: true
+      narrow_xlim_daily: true
       only_object: 
         - SoCal
       not_junk: true

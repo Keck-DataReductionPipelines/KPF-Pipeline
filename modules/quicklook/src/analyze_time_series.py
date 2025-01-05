@@ -389,7 +389,7 @@ class AnalyzeTimeSeries:
         partial_process_file = partial(process_file, **args)
     
         # === 3) Run extraction in parallel ONLY for updated files ===
-        max_workers = min([len(updated_batch), 15, os.cpu_count()])
+        max_workers = min([len(updated_batch), 20, os.cpu_count()])
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(partial_process_file, updated_batch))
     
@@ -959,7 +959,8 @@ class AnalyzeTimeSeries:
         return keyword_types
 
 
-    def plot_nobs_histogram(self, interval='full', date=None, exclude_junk=False, 
+    def plot_nobs_histogram(self, plot_dict=None, 
+                            interval='full', date=None, exclude_junk=False, 
                             only_sources=['all'], only_autocal=False,
                             plot_junk=False, plot_source=False, 
                             fig_path=None, show_plot=False):
@@ -988,6 +989,21 @@ class AnalyzeTimeSeries:
         To-do: 
         	Add highlighting of QC tests
         """
+        
+        # Use plotting dictionary, if provided
+        # (inspired by dictionaries for plot_time_series_multipanel)
+        
+        dict_ylabel = ''
+        if plot_dict != None:
+            panel_arr = plot_dict['panel_arr']
+            if 'ylabel' in ['paneldict']:
+                 dict_ylabel = panel_arr[0]['paneldict']['ylabel']
+            if 'not_junk' in panel_arr[0]['paneldict']:
+                 plot_junk = not bool(panel_arr[0]['paneldict']['not_junk'])
+            if 'only_sources' in panel_arr[0]['paneldict']:
+                 only_sources = panel_arr[0]['paneldict']['only_sources']
+            if 'plot_source' in panel_arr[0]['paneldict']:
+                 plot_source = panel_arr[0]['paneldict']['plot_source']
 
         # Define the source categories and their colors
         source_order = ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
@@ -1202,7 +1218,10 @@ class AnalyzeTimeSeries:
             plt.xlabel("Day", fontsize=14)
         else:
             plt.xlabel("Date", fontsize=14)
-        plt.ylabel("Number of Observations", fontsize=14)
+        if dict_ylabel != '':
+            plt.ylabel(dict_ylabel, fontsize=14)
+        else:
+            plt.ylabel("Number of Observations", fontsize=14)
         plt.title(plot_title, fontsize=14)
     
         ax = plt.gca()
@@ -1329,7 +1348,7 @@ class AnalyzeTimeSeries:
                     unique_cols.add(d['col_err'])
                 if 'col_subtract' in d:
                     unique_cols.add(d['col_subtract'])
-        # add this logic
+        # add this logVERTEX - Visible Experiment for Rapid Transient EXplorationic?
         #if 'only_object' in thispanel['paneldict']:
         #if 'object_like' in thispanel['paneldict']:
 
@@ -1653,20 +1672,24 @@ class AnalyzeTimeSeries:
         plt.close('all')
 
 
-    def yaml_to_dict(self, filepath):
+    def yaml_to_dict(self, yaml_or_path):
         """
-        Read a plotting configuration yaml file and return the contents as a dictionary.
-        The standard yaml files are stored in the repository in subdirectories of 
-        static/tsdb_plot_configs/, e.g., static/tsdb_plot_configs/CCDs/ccd_temps.yaml. 
-        See files in those directories for formatting examples.
+        Read a plotting configuration from either a YAML file or a YAML string.
+        
+        1) If `yaml_or_path` is a valid file path, open that file and parse.
+        2) Otherwise, treat `yaml_or_path` as a YAML string and parse it directly.
         """
-        
-        with open(filepath, 'r') as f:
-            plotdict = yaml.safe_load(f)
-        
+        if os.path.isfile(yaml_or_path):
+            # It's an actual file path on disk
+            with open(yaml_or_path, 'r') as f:
+                plotdict = yaml.safe_load(f)
+        else:
+            # It's a (multi-line) YAML string
+            plotdict = yaml.safe_load(yaml_or_path)
+    
         return plotdict
-
-
+    
+    
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
                            last_n_days=None, 
                            fig_dir=None, show_plot=False, 
@@ -1728,20 +1751,27 @@ class AnalyzeTimeSeries:
             plot_name = plots[p]["plot_name"]
             if verbose:
                 self.logger.info(f"AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
+
+            # Set filename 
+            if plots[p]['plot_type'] == 'time_series_multipanel':
+                type_string = '_ts_'
+            elif plots[p]['plot_type'] == 'nobs_histogram':
+                type_string = '_nobs_'
+
             if interval == 'day':
                 end_date = start_date + timedelta(days=1)
-                filename = 'kpf_' + start_date.strftime("%Y%m%d") + '_telemetry_' + plot_name + '.png' 
+                filename = 'kpf_' + start_date.strftime("%Y%m%d") + type_string + plot_name + '.png' 
             elif interval == 'month':
                 end_date = add_one_month(start_date)
-                filename = 'kpf_' + start_date.strftime("%Y%m") + '_telemetry_' + plot_name + '.png' 
+                filename = 'kpf_' + start_date.strftime("%Y%m") + type_string + plot_name + '.png' 
             elif interval == 'year':
                 end_date = datetime(start_date.year+1, start_date.month, start_date.day)
-                filename = 'kpf_' + start_date.strftime("%Y") + '_telemetry_' + plot_name + '.png' 
+                filename = 'kpf_' + start_date.strftime("%Y") + type_string + plot_name + '.png' 
             elif interval == 'decade':
                 end_date = datetime(start_date.year+10, start_date.month, start_date.day)
-                filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0_telemetry_' + plot_name + '.png' 
+                filename = 'kpf_' + start_date.strftime("%Y")[0:3] + '0' + type_string + plot_name + '.png' 
             elif (last_n_days != None) and (type(last_n_days) == type(1)):
-                filename = 'kpf_last' + str(last_n_days) + 'days_telemetry_' + plot_name + '.png'                 
+                filename = 'kpf_last' + str(last_n_days) + 'days' + type_string + plot_name + '.png'                 
             else:
                 self.logger.error("The input 'interval' must be 'daily', 'weekly', 'yearly', or 'decadal'.")
                 return
@@ -1756,6 +1786,7 @@ class AnalyzeTimeSeries:
             else:
                 fig_path = None
 
+            # Make Plot
             plot_dict = plots[p]
             if plot_dict['plot_type'] == 'time_series_multipanel':
                 self.plot_time_series_multipanel(plot_dict, 
@@ -1763,7 +1794,13 @@ class AnalyzeTimeSeries:
                                                  end_date=end_date, 
                                                  fig_path=fig_path, 
                                                  show_plot=show_plot, 
-                                                 clean=clean)        
+                                                 clean=clean)
+            elif plot_dict['plot_type'] == 'nobs_histogram':        
+                self.plot_nobs_histogram(plot_dict=plot_dict, 
+                                         date=start_date.strftime('%Y%m%d'), 
+                                         interval=interval,
+                                         fig_path=fig_path, 
+                                         show_plot=show_plot)
 
 
     def plot_all_quicklook_daterange(self, start_date=None, end_date=None, 
