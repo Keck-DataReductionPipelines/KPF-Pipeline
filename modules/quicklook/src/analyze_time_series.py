@@ -59,10 +59,10 @@ class AnalyzeTimeSeries:
         logger (logger object) - a logger object can be passed, or one will be created
 
     Attributes:
-        L0_keyword_types   (dictionary) - specifies data types for L0 header keywords
-        D2_keyword_types   (dictionary) - specifies data types for 2D header keywords
-        L1_keyword_types   (dictionary) - specifies data types for L1 header keywords
-        L2_keyword_types   (dictionary) - specifies data types for L2 header keywords
+        L0_keyword_types (dictionary) - specifies data types for L0 header keywords
+        D2_keyword_types (dictionary) - specifies data types for 2D header keywords
+        L1_keyword_types (dictionary) - specifies data types for L1 header keywords
+        L2_keyword_types (dictionary) - specifies data types for L2 header keywords
         L0_telemetry_types (dictionary) - specifies data types for L0 telemetry keywords
         L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
         L2_RV_ccf_keyword_types (dictionary) - specifies data types for L2 CCF header keywords
@@ -75,15 +75,12 @@ class AnalyzeTimeSeries:
     To-do:
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
-        * Check if the plot doesn't have data and don't generate if so
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
-        * Check for proper data types (float vs. str) before plotting
-        * Add separate junk test from list of junked files
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * Add the capability of using one DB for ingestion into another or plotting
-        * Determine earliest observation with a TELEMETRY extension and act accordingly
+        * check mod times before issuing parallel threads
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -331,15 +328,25 @@ class AnalyzeTimeSeries:
             conn.commit()
             conn.close()
 
-
     def ingest_batch_observation(self, batch):
         """
         Ingest a batch of observations into the database in parallel using 
-        ProcessPoolExecutor.
+        ProcessPoolExecutor, but check if each file has been updated before 
+        parallel processing, to reduce overhead.
         """
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # Prepare arguments for parallel execution
+    
+        # === 1) Check for updated files in main thread ===
+        updated_batch = []
+        for file_path in batch:
+            if self.is_any_file_updated(file_path):
+                updated_batch.append(file_path)
+    
+        # If nothing to do, exit quickly
+        if not updated_batch:
+            return
+    
+        # === 2) Prepare arguments for parallel execution ===
         args = {
             'now_str': now_str,
             'L0_header_keyword_types': self.L0_header_keyword_types,
@@ -352,35 +359,87 @@ class AnalyzeTimeSeries:
             'extract_kwd_func': self.extract_kwd,
             'extract_telemetry_func': self.extract_telemetry,
             'extract_rvs_func': self.extract_rvs,
-            'is_any_file_updated_func': self.is_any_file_updated,
+#            'is_any_file_updated_func': self.is_any_file_updated,
             'get_source_func': self.get_source,
             'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
         }
-
-        # Create a partial function that bundles all these arguments
+    
         partial_process_file = partial(process_file, **args)
-
-        # Run extraction in parallel using a worker pool
-        max_workers = min([len(batch), 25, os.cpu_count()])
+    
+        # === 3) Run extraction in parallel ONLY for updated files ===
+        max_workers = min([len(updated_batch), 25, os.cpu_count()])
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(partial_process_file, batch))
-
-        # Filter out None results (files that were not updated)
+            results = list(executor.map(partial_process_file, updated_batch))
+    
+        # Filter out None results (though now we expect fewer None’s, 
+        # because we already did the update check in the main thread)
         batch_data = [res for res in results if res is not None]
-
-        # Perform bulk insert
+    
+        # === 4) Perform bulk insert ===
         if batch_data:
             columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
             placeholders = ', '.join(['?'] * len(batch_data[0]))
             insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
             data_tuples = [tuple(data.values()) for data in batch_data]
-
+    
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("PRAGMA cache_size = -2000000;")
             cursor.executemany(insert_query, data_tuples)
             conn.commit()
             conn.close()
+    
+
+
+#    def ingest_batch_observation(self, batch):
+#        """
+#        Ingest a batch of observations into the database in parallel using 
+#        ProcessPoolExecutor.
+#        """
+#        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#
+#        # Prepare arguments for parallel execution
+#        args = {
+#            'now_str': now_str,
+#            'L0_header_keyword_types': self.L0_header_keyword_types,
+#            'L0_telemetry_types': self.L0_telemetry_types,
+#            'D2_header_keyword_types': self.D2_header_keyword_types,
+#            'L1_header_keyword_types': self.L1_header_keyword_types,
+#            'L2_header_keyword_types': self.L2_header_keyword_types,
+#            'L2_CCF_header_keyword_types': self.L2_CCF_header_keyword_types,
+#            'L2_RV_header_keyword_types': self.L2_RV_header_keyword_types,
+#            'extract_kwd_func': self.extract_kwd,
+#            'extract_telemetry_func': self.extract_telemetry,
+#            'extract_rvs_func': self.extract_rvs,
+#            'is_any_file_updated_func': self.is_any_file_updated,
+#            'get_source_func': self.get_source,
+#            'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
+#        }
+#
+#        # Create a partial function that bundles all these arguments
+#        partial_process_file = partial(process_file, **args)
+#
+#        # Run extraction in parallel using a worker pool
+#        max_workers = min([len(batch), 25, os.cpu_count()])
+#        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+#            results = list(executor.map(partial_process_file, batch))
+#
+#        # Filter out None results (files that were not updated)
+#        batch_data = [res for res in results if res is not None]
+#
+#        # Perform bulk insert
+#        if batch_data:
+#            columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
+#            placeholders = ', '.join(['?'] * len(batch_data[0]))
+#            insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
+#            data_tuples = [tuple(data.values()) for data in batch_data]
+#
+#            conn = sqlite3.connect(self.db_path)
+#            cursor = conn.cursor()
+#            cursor.execute("PRAGMA cache_size = -2000000;")
+#            cursor.executemany(insert_query, data_tuples)
+#            conn.commit()
+#            conn.close()
 
 
     def get_source(self, L0_dict):
@@ -1202,13 +1261,15 @@ class AnalyzeTimeSeries:
         plt.close('all')
 
 
-    def plot_time_series_multipanel(self, plotdict, start_date=None, end_date=None, 
+    def plot_time_series_multipanel(self, plotdict, 
+                                    start_date=None, end_date=None, 
                                     clean=False, 
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
-        Generate a multi-panel plot of data in a KPF DB.  The data to be plotted and 
-        attributes are stored in an array of dictionaries called 'panel_arr'.  
+        Generate a multi-panel plot of data in a KPF DB.  The data to be 
+        plotted and attributes are stored in an array of dictionaries, which 
+        can be read from YAML configuration files.  
 
         Args:
             panel_dict makes panel_arr ...
@@ -1277,7 +1338,7 @@ class AnalyzeTimeSeries:
             try:
                 ind = base_filenames.index(plotdict_str)
                 plotdict = self.yaml_to_dict(all_yaml[ind])
-                self.logger.info(f'Plotting {all_yaml[ind]}')
+                self.logger.info(f'Plotting from config: {all_yaml[ind]}')
             except Exception as e:
                 self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
                 return
@@ -1799,7 +1860,8 @@ def process_file(file_path, now_str,
                  L0_header_keyword_types, L0_telemetry_types, D2_header_keyword_types,
                  L1_header_keyword_types, L2_header_keyword_types, L2_CCF_header_keyword_types, L2_RV_header_keyword_types,
                  extract_kwd_func, extract_telemetry_func, extract_rvs_func, 
-                 is_any_file_updated_func, get_source_func, get_datecode_func):
+                 #is_any_file_updated_func, 
+                 get_source_func, get_datecode_func):
     """
     This method runs in a worker process. It returns the extracted header data for one file.
     """
@@ -1809,8 +1871,8 @@ def process_file(file_path, now_str,
     
 
     # Check if updated
-    if not is_any_file_updated_func(L0_file_path):
-        return None
+#    if not is_any_file_updated_func(L0_file_path):
+#        return None
 
     D2_filename  = f"{L0_filename.replace('L0', '2D')}"
     L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
