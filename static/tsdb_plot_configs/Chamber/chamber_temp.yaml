@@ -71,6 +71,7 @@ panel_arr:
       ylabel: "Exterior\n $\\Delta$Temperature (K)"
       not_junk: true
       title: KPF Hallway Temperatures
+      subtractmedian: true
       legend_frac_size: 0.3
 
   - panelvars:
