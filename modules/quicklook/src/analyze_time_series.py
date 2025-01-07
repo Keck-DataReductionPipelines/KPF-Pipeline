@@ -161,6 +161,7 @@ class AnalyzeTimeSeries:
                 
         conn.commit()
         conn.close()
+        self.logger.info("Primary table 'kpfdb' created/updated successfully.")
         
 
     def create_metadata_table(self):
@@ -196,7 +197,7 @@ class AnalyzeTimeSeries:
             return df
 
         # Load keywords from CSV files for multiple levels
-        df_der   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/derived_keywords.csv',      source_label='Derived Keyword')
+        df_der   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/derived_keywords.csv',      source_label='Derived Keywords')
         df_l0    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',   source_label='L0 PRIMARY Header')
         df_2d    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',   source_label='2D PRIMARY Header')
         df_l1    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',   source_label='L1 PRIMARY Header')
@@ -261,7 +262,7 @@ class AnalyzeTimeSeries:
     
         # Define your custom order of sources
         custom_order = [
-            "Derived Keyword",
+            "Derived Keywords",
             "L0 PRIMARY Header",
             "2D PRIMARY Header",
             "L1 PRIMARY Header",
@@ -1250,6 +1251,7 @@ class AnalyzeTimeSeries:
             plt.subplots_adjust(hspace=0)
         #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
+        no_data = True # for now; will be set to False when data is detected
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
             not_junk = None
@@ -1305,8 +1307,6 @@ class AnalyzeTimeSeries:
                 elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
                     df = df[df['FIUMODE'] == 'Calibration']
                     
-            # Apply multiplier, if needed
-
             thistitle = ''
             if abs((end_date - start_date).days) <= 1.2:
                 t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
@@ -1451,7 +1451,6 @@ class AnalyzeTimeSeries:
                                             decimal_places = 1
                                             std_dev = 0.
                                         formatted_median = f"{median:.{decimal_places}f}"
-                                        #label += '\n' + formatted_median 
                                         if len(~np.isnan(data)) > 2:
                                             formatted_std_dev = f"{std_dev:.{decimal_places}f}"
                                             label += ' (' + formatted_std_dev 
@@ -1480,7 +1479,7 @@ class AnalyzeTimeSeries:
                 
                 if plot_type == 'state':
                     # Plot states (e.g., DRP version number or QC result)
-                    # Convert states to a consistent type for comparison
+                    # First, convert states to a consistent type for comparison
                     states = [float(s) if is_numeric(s) else s for s in states]
                     # Separate numeric and non-numeric states for sorting
                     numeric_states = sorted(s for s in states if isinstance(s, float))
@@ -1514,7 +1513,10 @@ class AnalyzeTimeSeries:
                     axs[p].set_yticks(range(len(unique_states)))
                     axs[p].set_yticklabels(unique_states)
                 
-                if len(t) < 1:
+                # Print 'no data' if appropriate
+                if len(t) > 1:
+                    no_data = False # this is checked for each variable
+                if (no_data and i == nvars-1):
                     axs[p].text(0.5, 0.5, 'No Data', 
                                 horizontalalignment='center', verticalalignment='center', 
                                 fontsize=24, transform=axs[p].transAxes)
@@ -1816,7 +1818,7 @@ class AnalyzeTimeSeries:
             else: 
                 plt.bar(bar_positions, entry_counts.values, width=1, align='center', zorder=3)
         if interval == 'day':
-            plt.xlabel("Hour of Day", fontsize=14)
+            plt.xlabel("Hour of Day (UT)", fontsize=14)
         elif interval == 'month':
             plt.xlabel("Day of Month", fontsize=14)
         else:
