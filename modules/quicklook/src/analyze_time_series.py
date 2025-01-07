@@ -273,7 +273,7 @@ class AnalyzeTimeSeries:
         ]
     
         # Define fixed column widths (adjust as needed)
-        col_width_keyword  = 30
+        col_width_keyword  = 35
         col_width_datatype = 9
         col_width_units    = 9
         col_width_desc     = 90
