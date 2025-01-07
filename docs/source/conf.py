@@ -67,7 +67,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'KPFPipeline'
-copyright = u'2020-2024, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
+copyright = u'2020-2025, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 author = u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 
 # The version info for the project you're documenting, acts as replacement for
