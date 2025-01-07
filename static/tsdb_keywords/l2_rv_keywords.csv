@@ -1,29 +1,29 @@
-keyword|datatype|comment
-CCD1ROW|float|Row number in the RV table (below) of the bluest order on the Green CCD
-CCD1RV1|float|RV (km/s) of SCI1 (all orders-Green CCD); corrected for barycentric RV
-CCD1ERV1|float|Error on CCD1RV1
-CCD1RV2|float|RV (km/s) of SCI2 (all orders-Green CCD); corrected for barycentric RV
-CCD1ERV2|float|Error on CCD1RV2
-CCD1RV3|float|RV (km/s) of SCI3 (all orders-Green CCD); corrected for barycentric RV
-CCD1ERV3|float|Error on CCD1RV3
-CCD1RVC|float|RV (km/s) of CAL (all orders-Green CCD); corrected for barycentric RV
-CCD1ERV|float|Error on CCD1RVC
-CCD1RVS|float|RV (km/s) of SKY (all orders-Green CCD); corrected for barycentric RV
-CCD1ERVS|float|Error on CCD1RVS
-CCD1RV|float|RV (km/s) of average of SCI1/SCI2/SCI3 (all orders-Green CCD); corrected for barycentric RV
-CCD1ERV|float|Error on CCD1RV  
-CCD1BJD|float|Photon-weighted mid-time (BJD) for CCD1RV
-CCD2ROW|float|Row number in the RV table (below) of the bluest order on the Red CCD
-CCD2RV1|float|RV (km/s) of SCI1 (all orders-Red CCD); corrected for barycentric RV
-CCD2ERV1|float|Error on CCD2RV1
-CCD2RV2|float|RV (km/s) of SCI2 (all orders-Red CCD); corrected for barycentric RV
-CCD2ERV2|float|Error on CCD2RV2
-CCD2RV3|float|RV (km/s) of SCI3 (all orders-Red CCD); corrected for barycentric RV
-CCD2ERV3|float|Error on CCD2RV3
-CCD2RVC|float|RV (km/s) of CAL (all orders-Red CCD); corrected for barycentric RV
-CCD2ERVC|float|Error on CCD2RVC
-CCD2RVS|float|RV (km/s) of SKY (all orders-Red CCD); corrected for barycentric RV
-CCD2ERVS|float|Error on CCD2RVS
-CCD2RV|float|RV (km/s) of average of SCI1/SCI2/SCI3 (all orders-Red CCD); corrected for barycentric RV
-CCD2ERV|float|Error on CCD2RV  
-CCD2BJD|float|Photon-weighted mid-time (BJD) for CCD2RV
+keyword|datatype|description|unit
+CCD1ROW|float|Row number in RV table of bluest order on Green CCD|None
+CCD1RV1|float|RV of SCI1 (all Green orders); bcvel corrected|km/s
+CCD1ERV1|float|Error on CCD1RV1|km/s
+CCD1RV2|float|RV of SCI2 (all Green orders); bcvel corrected|km/s
+CCD1ERV2|float|Error on CCD1RV2|km/s
+CCD1RV3|float|RV of SCI3 (all Green orders); bcvel corrected|km/s
+CCD1ERV3|float|Error on CCD1RV3|km/s
+CCD1RVC|float|RV of CAL (all Green orders); bcvel corrected|km/s
+CCD1ERV|float|Error on CCD1RVC|km/s
+CCD1RVS|float|RV of SKY (all Green orders); bcvel corrected|km/s
+CCD1ERVS|float|Error on CCD1RVS|km/s
+CCD1RV|float|RV of avg(SCI1/SCI2/SCI3), all Green orders; bcvel corrected|km/s
+CCD1ERV|float|Error on CCD1RV|km/s
+CCD1BJD|float|Photon-weighted mid-time (BJD) for CCD1RV|km/s
+CCD2ROW|float|Row number in RV table of bluest order on Red CCD|km/s
+CCD2RV1|float|RV of SCI1 (all Red orders); bcvel corrected|km/s
+CCD2ERV1|float|Error on CCD2RV1|km/s
+CCD2RV2|float|RV of SCI2 (all Red orders); bcvel corrected|km/s
+CCD2ERV2|float|Error on CCD2RV2|km/s
+CCD2RV3|float|RV of SCI3 (all Red orders); bcvel corrected|km/s
+CCD2ERV3|float|Error on CCD2RV3|km/s
+CCD2RVC|float|RV of CAL (all Red orders); bcvel corrected|km/s
+CCD2ERVC|float|Error on CCD2RVC|km/s
+CCD2RVS|float|RV of SKY (all Red orders); bcvel corrected|km/s
+CCD2ERVS|float|Error on CCD2RVS|km/s
+CCD2RV|float|RV of avg(SCI1/SCI2/SCI3), all Red orders; bcvel corrected|km/s
+CCD2ERV|float|Error on CCD2RV|km/s
+CCD2BJD|float|Photon-weighted mid-time (BJD) for CCD2RV|BJD

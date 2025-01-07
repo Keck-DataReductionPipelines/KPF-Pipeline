@@ -1,68 +1,66 @@
-keyword|datatype|comment
-WLSFILE|string|Filename of wavelength solution file used
-WLSFILE2|string|Filename of second wavelength solution file used for interpolation
-SNRSC452|float|SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
-SNRSK452|float|SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
-SNRCL452|float|SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
-SNRSC548|float|SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
-SNRSK548|float|SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
-SNRCL548|float|SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
-SNRSC652|float|SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 652 nm; on Red CCD
-SNRSK652|float|SNR of L1 SKY spectrum (95th %ile) near 652 nm; on Red CCD
-SNRCL652|float|SNR of L1 CAL spectrum (95th %ile) near 652 nm; on Red CCD
-SNRSC747|float|SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
-SNRSK747|float|SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
-SNRCL747|float|SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
-SNRSC852|float|SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
-SNRSK852|float|SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
-SNRCL852|float|SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
-FR452652|float|Peak flux ratio between orders (452nm/652nm) using SCI2
-FR548652|float|Peak flux ratio between orders (548nm/652nm) using SCI2
-FR747652|float|Peak flux ratio between orders (747nm/652nm) using SCI2
-FR852652|float|Peak flux ratio between orders (852nm/652nm) using SCI2
-FR12M452|float|median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
-FR12U452|float|uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
-FR32M452|float|median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
-FR32U452|float|uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
-FRS2M452|float|median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
-FRS2U452|float|uncertainty on the median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
-FRC2M452|float|median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
-FRC2U452|float|uncertainty on the median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
-FR12M548|float|median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
-FR12U548|float|uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
-FR32M548|float|median(SCI3/SCI2) flux ratio near 548 nm; on Green CCD
-FR32U548|float|uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
-FRS2M548|float|median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
-FRS2U548|float|uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
-FRC2M548|float|median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
-FRC2U548|float|uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
-FR12M652|float|median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
-FR12U652|float|uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
-FR32M652|float|median(SCI3/SCI2) flux ratio near 652 nm; on Red CCD
-FR32U652|float|uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
-FRS2M652|float|median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
-FRS2U652|float|uncertainty on the median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
-FRC2M652|float|median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
-FRC2U652|float|uncertainty on the median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
-FR12M747|float|median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
-FR12U747|float|uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
-FR32M747|float|median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
-FR32U747|float|uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
-FRS2M747|float|median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
-FRS2U747|float|uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
-FRC2M747|float|median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
-FRC2U747|float|uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
-FR12M852|float|median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
-FR12U852|float|uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
-FR32M852|float|median(SCI3/SCI2) flux ratio near 852 nm; on Red CCD
-FR32U852|float|uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
-FRS2M852|float|median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
-FRS2U852|float|uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
-FRC2M852|float|median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-FRC2U852|float|uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-WLSFILE|string|first wavelength interpolation reference
-WLSFILE2|string|second wavelength interpolation reference
-MONOTWLS|bool|QC: 1 = L1 wavelength solution is monotonic
-DATAPRL1|bool|QC: 1 = L1 red and green data present 
-WLSL1|bool|QC: 1 = L1 WLS file check passed
-LFCSAT|bool|QC: 1 = L1 LFC spectrum not saturated
+keyword|datatype|description|unit
+SNRSC452|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 452 nm|None
+SNRSK452|float|SNR of L1 SKY (95th %ile) near 452 nm|None
+SNRCL452|float|SNR of L1 CAL (95th %ile) near 452 nm|None
+SNRSC548|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 548 nm|None
+SNRSK548|float|SNR of L1 SKY (95th %ile) near 548 nm|None
+SNRCL548|float|SNR of L1 CAL (95th %ile) near 548 nm|None
+SNRSC652|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 652 nm|None
+SNRSK652|float|SNR of L1 SKY (95th %ile) near 652 nm|None
+SNRCL652|float|SNR of L1 CAL (95th %ile) near 652 nm|None
+SNRSC747|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 747 nm|None
+SNRSK747|float|SNR of L1 SKY (95th %ile) near 747 nm|None
+SNRCL747|float|SNR of L1 CAL (95th %ile) near 747 nm|None
+SNRSC852|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 852 nm|None
+SNRSK852|float|SNR of L1 SKY (95th %ile) near 852 nm|None
+SNRCL852|float|SNR of L1 CAL (95th %ile) near 852 nm|None
+FR452652|float|Peak flux ratio between orders (452nm/652nm)|None
+FR548652|float|Peak flux ratio between orders (548nm/652nm)|None
+FR747652|float|Peak flux ratio between orders (747nm/652nm)|None
+FR852652|float|Peak flux ratio between orders (852nm/652nm)|None
+FR12M452|float|median(SCI1/SCI2) flux ratio near 452 nm|None
+FR12U452|float|uncertainty on FR12M452|None
+FR32M452|float|median(SCI3/SCI2) flux ratio near 452 nm|None
+FR32U452|float|uncertainty on FR32M452|None
+FRS2M452|float|median(SKY/SCI2) flux ratio near 452 nm|None
+FRS2U452|float|uncertainty on FRS2M452|None
+FRC2M452|float|median(CAL/SCI2) flux ratio near 452 nm|None
+FRC2U452|float|uncertainty on FRC2M452|None
+FR12M548|float|median(SCI1/SCI2) flux ratio near 548 nm|None
+FR12U548|float|uncertainty on FR12M548|None
+FR32M548|float|median(SCI3/SCI2) flux ratio near 548 nm|None
+FR32U548|float|uncertainty on FR32M548|None
+FRS2M548|float|median(SKY/SCI2) flux ratio near 548 nm|None
+FRS2U548|float|uncertainty on FRS2M548|None
+FRC2M548|float|median(CAL/SCI2) flux ratio near 548 nm|None
+FRC2U548|float|uncertainty on FRC2M548|None
+FR12M652|float|median(SCI1/SCI2) flux ratio near 652 nm|None
+FR12U652|float|uncertainty on FR12M652|None
+FR32M652|float|median(SCI3/SCI2) flux ratio near 652 nm|None
+FR32U652|float|uncertainty on FR32M652|None
+FRS2M652|float|median(SKY/SCI2) flux ratio near 652 nm|None
+FRS2U652|float|uncertainty on FRS2M652|None
+FRC2M652|float|median(CAL/SCI2) flux ratio near 652 nm|None
+FRC2U652|float|uncertainty on FRC2M652|None
+FR12M747|float|median(SCI1/SCI2) flux ratio near 747 nm|None
+FR12U747|float|uncertainty on FR12M747|None
+FR32M747|float|median(SCI3/SCI2) flux ratio near 747 nm|None
+FR32U747|float|uncertainty on FR32M747|None
+FRS2M747|float|median(SKY/SCI2) flux ratio near 747 nm|None
+FRS2U747|float|uncertainty on FRS2M747|None
+FRC2M747|float|median(CAL/SCI2) flux ratio near 747 nm|None
+FRC2U747|float|uncertainty on FRC2M747|None
+FR12M852|float|median(SCI1/SCI2) flux ratio near 852 nm|None
+FR12U852|float|uncertainty on FR12M852|None
+FR32M852|float|median(SCI3/SCI2) flux ratio near 852 nm|None
+FR32U852|float|uncertainty on FR32M852|None
+FRS2M852|float|median(SKY/SCI2) flux ratio near 852 nm|None
+FRS2U852|float|uncertainty on FRS2M852|None
+FRC2M852|float|median(CAL/SCI2) flux ratio near 852 nm|None
+FRC2U852|float|uncertainty on FRC2M852|None
+WLSFILE|string|first wavelength interpolation reference|None
+WLSFILE2|string|second wavelength interpolation reference|None
+MONOTWLS|bool|QC: L1 wavelength solution is monotonic|None
+DATAPRL1|bool|QC: L1 red and green data present|None
+WLSL1|bool|QC: L1 WLS file check passed|None
+LFCSAT|bool|QC: L1 LFC spectrum not saturated|None

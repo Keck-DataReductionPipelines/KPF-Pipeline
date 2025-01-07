@@ -1,67 +1,67 @@
-keyword|datatype|comment
-BIASFILE|string|Master bias file used (except for bias exposures)
-DARKFILE|string|Master dark file used (except for dark exposures)
-FLATFILE|string|Master flat file used
-BIASDIR|string|Directory for BIASDIR
-DARKDIR|string|Directory for DARKDIR
-FLATDIR|string|Directory for FLATDIR
-DRPTAG|string|Git version number of KPF-Pipeline used for processing
-DRPHASH|string|Git commit hash version of KPF-Pipeline used for processing
-RNRED1|float|Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
-RNRED2|float|Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
-RNGREEN1|float|Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
-RNGREEN2|float|Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
-GREENTRT|float|Green CCD read time [sec]
-REDTRT|float|Red CCD read time [sec]
-READSPED|string|Categorization of CCD read speed ('regular' or 'fast')
-FLXREG1G|float|Dark current [e-/hr] - Green CCD region 1 - coords = [1690:1990,1690:1990]
-FLXREG2G|float|Dark current [e-/hr] - Green CCD region 2 - coords = [1690:1990,2090:2390]
-FLXREG3G|float|Dark current [e-/hr] - Green CCD region 3 - coords = [2090:2390,1690:1990]
-FLXREG4G|float|Dark current [e-/hr] - Green CCD region 4 - coords = [2090:2390,2090:2390]
-FLXREG5G|float|Dark current [e-/hr] - Green CCD region 5 - coords = [80:380,3080:3380]
-FLXREG6G|float|Dark current [e-/hr] - Green CCD region 6 - coords = [1690:1990,1690:1990]
-FLXAMP1G|float|Dark current [e-/hr] - Green CCD amplifier region 1 - coords = [3700:4000,700:1000]
-FLXAMP2G|float|Dark current [e-/hr] - Green CCD amplifier region 2 - coords = [3700:4000,3080:3380]
-FLXCOLLG|float|Dark current [e-/hr] - Green CCD collimator-side region = [3700:4000,700:1000]
-FLXECHG| float|Dark current [e-/hr] - Green CCD echelle-side region = [3700:4000,700:1000]
-FLXREG1R|float|Dark current [e-/hr] - Red CCD region 1 - coords = [1690:1990,1690:1990]
-FLXREG2R|float|Dark current [e-/hr] - Red CCD region 2 - coords = [1690:1990,2090:2390]
-FLXREG3R|float|Dark current [e-/hr] - Red CCD region 3 - coords = [2090:2390,1690:1990]
-FLXREG4R|float|Dark current [e-/hr] - Red CCD region 4 - coords = [2090:2390,2090:2390]
-FLXREG5R|float|Dark current [e-/hr] - Red CCD region 5 - coords = [80:380,3080:3380]
-FLXREG6R|float|Dark current [e-/hr] - Red CCD region 6 - coords = [1690:1990,1690:1990]
-FLXAMP1R|float|Dark current [e-/hr] - Red CCD amplifier region 1 = [3700:4000,700:1000]
-FLXAMP2R|float|Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
-FLXCOLLR|float|Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
-FLXECHR|float|Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
-GDRXRMS|float|x-coordinate RMS guiding error in milliarcsec (mas)
-GDRYRMS|float|y-coordinate RMS guiding error in milliarcsec (mas)
-GDRRRMS|float|r-coordinate RMS guiding error in milliarcsec (mas)
-GDRXBIAS|float|x-coordinate bias guiding error in milliarcsec (mas)
-GDRYBIAS|float|y-coordinate bias guiding error in milliarcsec (mas)
-GDRSEEJZ|float|Seeing (arcsec) in J+Z-band from Moffat func fit
-GDRSEEV|float|Scaled seeing (arcsec) in V-band from J+Z-band
-MOONSEP|float|Separation between Moon and target star (deg)
-SUNALT|float|Altitude of Sun (deg); negative = below horizon
-SKYSCIMS|float|SKY/SCI flux ratio in main spectrometer scaled from EM data. 
-EMSCCT48|float|cumulative EM counts [ADU] in SCI in 445-870 nm
-EMSCCT45|float|cumulative EM counts [ADU] in SCI in 445-551 nm
-EMSCCT56|float|cumulative EM counts [ADU] in SCI in 551-658 nm
-EMSCCT67|float|cumulative EM counts [ADU] in SCI in 658-764 nm
-EMSCCT78|float|cumulative EM counts [ADU] in SCI in 764-870 nm
-EMSKCT48|float|cumulative EM counts [ADU] in SKY in 445-870 nm
-EMSKCT45|float|cumulative EM counts [ADU] in SKY in 445-551 nm
-EMSKCT56|float|cumulative EM counts [ADU] in SKY in 551-658 nm
-EMSKCT67|float|cumulative EM counts [ADU] in SKY in 658-764 nm
-EMSKCT78|float|cumulative EM counts [ADU] in SKY in 764-870 nm
-NOTJUNK|bool|QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
-DATAPRL0|bool|QC: 1 = L0 data products present with non-zero array sizes
-DATAPR2D|bool|QC: 2D red and green data present check
-KWRDPRL0|bool|QC: 1 = L0 expected keywords present
-TIMCHKL0|bool|QC: 1 = consistent times in L0 file
-EMSAT|float|QC: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY
-EMNEG|float|QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux
-GOODREAD|float|QC: 1 = Texp not consistent with CCD readout error
-POS2DSNR|float|QC: 1 = 2D Red/Green CCD data/var^0.5 not significantly negative.
-LOWBIAS|float|QC: 1 = 2D bias flux not low
-LOWDARK|float|QC: 1 = 2D dark flux not low
+keyword|datatype|description|unit
+BIASFILE|string|Master bias file used (except for bias exposures)|None
+DARKFILE|string|Master dark file used (except for dark exposures)|None
+FLATFILE|string|Master flat file used (except for flat exposures)|None
+BIASDIR|string|Directory for BIASDIR|None
+DARKDIR|string|Directory for DARKDIR|None
+FLATDIR|string|Directory for FLATDIR|None
+DRPTAG|string|Git version number of KPF-Pipeline used|None
+DRPHASH|string|Git commit hash version of KPF-Pipeline used|None
+RNRED1|float|Read noise for RED_AMP1 (first amp region on Red)|e-
+RNRED2|float|Read noise for RED_AMP2 (second amp region on Red)|e-
+RNGREEN1|float|Read noise for GREEN_AMP1 (first amp region on Green)|e-
+RNGREEN2|float|Read noise for GREEN_AMP2 (second amp region on Green)|e-
+GREENTRT|float|Green read time|sec
+REDTRT|float|Red read time|sec
+READSPED|string|Categorization of CCD read speed ('regular' or 'fast')|None
+FLXREG1G|float|Dark curr, Green region 1 = [1690:1990,1690:1990]|e-/hr
+FLXREG2G|float|Dark curr, Green region 2 = [1690:1990,2090:2390]|e-/hr
+FLXREG3G|float|Dark curr, Green region 3 = [2090:2390,1690:1990]|e-/hr
+FLXREG4G|float|Dark curr, Green region 4 = [2090:2390,2090:2390]|e-/hr
+FLXREG5G|float|Dark curr, Green region 5 = [80:380,3080:3380]|e-/hr
+FLXREG6G|float|Dark curr, Green region 6 = [1690:1990,1690:1990]|e-/hr
+FLXAMP1G|float|Dark curr, Green amp region 1 = [3700:4000,700:1000]|e-/hr
+FLXAMP2G|float|Dark curr, Green amp region 2 = [3700:4000,3080:3380]|e-/hr
+FLXCOLLG|float|Dark curr, Green coll-side region = [3700:4000,700:1000]|e-/hr
+FLXECHG|float|Dark curr, Green ech-side region = [3700:4000,700:1000]|e-/hr
+FLXREG1R|float|Dark curr, Red region 1 = [1690:1990,1690:1990]|e-/hr
+FLXREG2R|float|Dark curr, Red region 2 = [1690:1990,2090:2390]|e-/hr
+FLXREG3R|float|Dark curr, Red region 3 = [2090:2390,1690:1990]|e-/hr
+FLXREG4R|float|Dark curr, Red region 4 = [2090:2390,2090:2390]|e-/hr
+FLXREG5R|float|Dark curr, Red region 5 = [80:380,3080:3380]|e-/hr
+FLXREG6R|float|Dark curr, Red region 6 = [1690:1990,1690:1990]|e-/hr
+FLXAMP1R|float|Dark curr, Red amp region 1 = [3700:4000,700:1000]|e-/hr
+FLXAMP2R|float|Dark curr, Red amp region 2 = [3700:4000,3080:3380]|e-/hr
+FLXCOLLR|float|Dark curr, Red coll-side region = [3700:4000,700:1000]|e-/hr
+FLXECHR|float|Dark curr, Red ech-side region = [3700:4000,700:1000]|e-/hr
+GDRXRMS|float|x-coordinate RMS guiding error|mas
+GDRYRMS|float|y-coordinate RMS guiding error|mas
+GDRRRMS|float|r-coordinate RMS guiding error|mas
+GDRXBIAS|float|x-coordinate bias guiding error in milliarcsec|mas
+GDRYBIAS|float|y-coordinate bias guiding error in milliarcsec|mas
+GDRSEEJZ|float|Seeing in J+Z-band from Moffat func fit|arcsec
+GDRSEEV|float|Scaled seeing in V-band from J+Z-band|arcsec
+MOONSEP|float|Separation between Moon and target star|deg
+SUNALT|float|Altitude of Sun; negative = below horizon|deg
+SKYSCIMS|float|SKY/SCI flux ratio in main spect. scaled from EM data|None
+EMSCCT48|float|cumulative EM counts [ADU] in SCI in 445-870 nm|counts
+EMSCCT45|float|cumulative EM counts [ADU] in SCI in 445-551 nm|counts
+EMSCCT56|float|cumulative EM counts [ADU] in SCI in 551-658 nm|counts
+EMSCCT67|float|cumulative EM counts [ADU] in SCI in 658-764 nm|counts
+EMSCCT78|float|cumulative EM counts [ADU] in SCI in 764-870 nm|counts
+EMSKCT48|float|cumulative EM counts [ADU] in SKY in 445-870 nm|counts
+EMSKCT45|float|cumulative EM counts [ADU] in SKY in 445-551 nm|counts
+EMSKCT56|float|cumulative EM counts [ADU] in SKY in 551-658 nm|counts
+EMSKCT67|float|cumulative EM counts [ADU] in SKY in 658-764 nm|counts
+EMSKCT78|float|cumulative EM counts [ADU] in SKY in 764-870 nm|counts
+NOTJUNK|bool|Not in the list of junk files check|None
+DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
+DATAPR2D|bool|QC: 2D red and green data present check|None
+KWRDPRL0|bool|QC: L0 expected keywords present|None
+TIMCHKL0|bool|QC: Consistent times in L0 file|None
+EMSAT|bool|QC: Exp Meter not saturated|None
+EMNEG|bool|QC: Exp Meter not negative flux|None
+GOODREAD|bool|QC: Texp not consistent with CCD readout error|None
+POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
+LOWBIAS|bool|QC: 2D bias flux not low|None
+LOWDARK|bool|QC: 2D dark flux not low|None

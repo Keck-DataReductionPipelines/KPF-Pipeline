@@ -1,63 +1,65 @@
-keyword|datatype|comment
-DATE-MID|datetime|Halfway point of the exposure (unweighted)
-DATE-BEG|datetime|Start of exposure (shutter open time)
-DATE-END|datetime|End of exposure (shutter close time)
-GRDATE-B|datetime|Green camera DATE-BEG
-GRDATE-E|datetime|Green camera DATE-END
-RDDATE-B|datetime|Red camera DATE-BEG
-RDDATE-E|datetime|Red camera DATE-END
-EMDATE-B|datetime|Exposure meter DATE-BEG
-EMDATE-E|datetime|Exposure meter DATE-END
-EXPTIME|float|Requested exposure time (sec)
-ELAPSED|float|Actual exposure time (sec)
-FRAMENO|int|Frame number
-PROGNAME|string|Program name
-HA|float|Hour angle 
-EL|float|Telescope elevation (deg)
-AZ|float|Telescope azimuth (deg)
-OBJECT|string|Object name
-AIRMASS|float|Airmass of target
-OCTAGON|string|Calibration octagon source
-IMTYPE|string|Image type
-FFFB|string|Flat field fiber on (Yes/No)
-GREEN|string|Green camera found (Yes/No)
-RED|string|Red camera found (Yes/No)
-CA_HK|string|Ca HK camera found (Yes/No)
-EXPMETER|string|Exposure meter camera found (Yes/No)
-GUIDE|string|Guide camera found (Yes/No)
-CAL-OBJ|string|Cal fiber source
-SKY-OBJ|string|Sky fiber source
-SCI-OBJ|string|Science fiber source
-AGITSTA|string|Agigator state (Running/Stopped)
-FIUMODE|string|FIU operating mode - Observing = on-sky
-ETAV1C1T|float|Etalon Vescent 1 Channel 1 temp [C]
-ETAV1C2T|float|Etalon Vescent 1 Channel 2 temp [C]
-ETAV1C3T|float|Etalon Vescent 1 Channel 3 temp [C]
-ETAV1C4T|float|Etalon Vescent 1 Channel 4 temp [C]
-ETAV2C3T|float|Etalon Vescent 2 Channel 3 temp [C]
-TOTCORR|string|need to correct this to split 498.12 604.38 710.62 816.88 / Wavelength of EM bins in nm
-USTHRSH|string|Was exposure meter thresholding used? (Yes/No)
-THRSHLD|float|Threshold [counts]
-THRSBIN|float|Threshold [wavelength]
-TARGNAME|string|KPF Target name
-DCSNAME|string|DCS Target name - may not make any sense
-TARGRA|string|DCS Target RA [h]
-TARGDEC|string|DCS Target Dec [deg]
-TARGEPOC|float|DCS Target epoch
-TARGEQUI|float|DCS Target equinox
-TARGPLAX|float|Target parallax [arcsec]
-TARGPMDC|float|Target proper motion dec [arcsec/yr]
-TARGPMRA|float|Target proper motion ra [s/yr]
-TARGRADV|float|Target radial velocity [km/s]
-TARGWAVE|float|Target Wavelength [microns]
-TARGFRAM|string|Target frame
-FULLTARG|string|Full Target name from kpfconfig
-GAIAID|string|GAIA Target name from kpfconfig
-2MASSID|string|2MASS Target name from kpfconfig
-GAIAMAG|string|GAIA G band magnitude
-2MASSMAG|string|2MASS J band magnitude
-TARGTEFF|float|Target effective temp [K]
-RA|string|Right ascension [h]
-DEC|string|Declination [deg]
-EQUINOX|float|DCS Equinox
-MJD-OBS|float|Modified Julian days
+keyword|datatype|description|unit
+DATE-MID|datetime|Halfway point of the exposure (unweighted)|None
+DATE-BEG|datetime|Start of exposure (shutter open time)|None
+DATE-END|datetime|End of exposure (shutter close time)|None
+GRDATE-B|datetime|Green camera DATE-BEG|None
+GRDATE-E|datetime|Green camera DATE-END|None
+RDDATE-B|datetime|Red camera DATE-BEG|None
+RDDATE-E|datetime|Red camera DATE-END|None
+EMDATE-B|datetime|Exposure meter DATE-BEG|None
+EMDATE-E|datetime|Exposure meter DATE-END|None
+EXPTIME|float|Requested exposure time|sec
+ELAPSED|float|Actual exposure time|sec
+FRAMENO|int|Frame number|None
+PROGNAME|string|Program name|None
+HA|float|Hour angle|hr
+EL|float|Telescope elevation|deg
+AZ|float|Telescope azimuth|deg
+OBJECT|string|Object name|None
+AIRMASS|float|Airmass of target|None
+OCTAGON|string|Calibration octagon source|None
+IMTYPE|string|Image type|None
+FFFB|string|Flat field fiber on (Yes/No)|None
+GREEN|string|Green camera found (Yes/No)|None
+RED|string|Red camera found (Yes/No)|None
+CA_HK|string|Ca HK camera found (Yes/No)|None
+EXPMETER|string|Exposure meter camera found (Yes/No)|None
+GUIDE|string|Guide camera found (Yes/No)|None
+CAL-OBJ|string|Cal fiber source|None
+SKY-OBJ|string|Sky fiber source|None
+SCI-OBJ|string|Science fiber source|None
+AGITSTA|string|Agigator state (Running/Stopped)|None
+FIUMODE|string|FIU operating mode - Observing = on-sky|None
+ETAV1C1T|float|Etalon Vescent 1 Channel 1 temp|C
+ETAV1C2T|float|Etalon Vescent 1 Channel 2 temp|C
+ETAV1C3T|float|Etalon Vescent 1 Channel 3 temp|C
+ETAV1C4T|float|Etalon Vescent 1 Channel 4 temp|C
+ETAV2C3T|float|Etalon Vescent 2 Channel 3 temp|C
+WAVEBNS|float|Wavelengths of EM bins (string of four vals)|nm
+TOTCNTS|float|Total EM counts in WAVEBINS|counts
+TOTCORR|string|Total EM counts (corrected) in WAVEBINS|counts
+USTHRSH|string|Was exposure meter thresholding used? (Yes/No)|None
+THRSHLD|float|Threshold level|counts
+THRSBIN|float|Threshold wavelength|nm
+TARGNAME|string|KPF Target name|None
+DCSNAME|string|DCS Target name - may not make any sense|None
+TARGRA|string|DCS Target RA|hr
+TARGDEC|string|DCS Target Dec|deg
+TARGEPOC|float|DCS Target epoch|None
+TARGEQUI|float|DCS Target equinox|None
+TARGPLAX|float|Target parallax|as
+TARGPMDC|float|Target proper motion dec|as/yr
+TARGPMRA|float|Target proper motion ra|s/yr
+TARGRADV|float|Target radial velocity|km/s
+TARGWAVE|float|Target Wavelength|microns
+TARGFRAM|string|Target frame|None
+FULLTARG|string|Full Target name from kpfconfig|None
+GAIAID|string|GAIA Target name from kpfconfig|None
+2MASSID|string|2MASS Target name from kpfconfig|None
+GAIAMAG|string|GAIA G band magnitude|mag
+2MASSMAG|string|2MASS J band magnitude|mag
+TARGTEFF|float|Target effective temp|K
+RA|string|Right ascension|hr
+DEC|string|Declination|deg
+EQUINOX|float|DCS Equinox|None
+MJD-OBS|float|Modified Julian day of observation|None

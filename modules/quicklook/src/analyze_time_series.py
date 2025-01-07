@@ -109,8 +109,8 @@ class AnalyzeTimeSeries:
             self.drop_table()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
 
-        # the line below might be modified so that if the database exists, then the columns are read from it
         self.create_database()
+        self.create_metadata_table()
         self.print_db_status()
 
 
@@ -161,6 +161,184 @@ class AnalyzeTimeSeries:
                 
         conn.commit()
         conn.close()
+        
+
+    def create_metadata_table(self):
+        """
+        Create a separate table 'kpfdb_metadata' to store column/keyword 
+        descriptions and units. Then load data from multiple CSV sources plus 
+        custom RV prefixes and insert into the database table.
+        """
+        # Connect to the database and create the metadata table if it doesn't exist
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+    
+        create_meta_table_query = """
+            CREATE TABLE IF NOT EXISTS kpfdb_metadata (
+                keyword     TEXT NOT NULL PRIMARY KEY,
+                datatype   TEXT,
+                description TEXT,
+                units       TEXT,
+                source      TEXT
+            )
+        """
+        cursor.execute(create_meta_table_query)
+        conn.commit()
+
+        def load_keyword_csv(csv_path, source_label):
+            """
+            Helper function to read a CSV file and return a DataFrame with columns:
+               keyword | datatype | unit | description | source
+            """
+            df = pd.read_csv(csv_path, delimiter='|', dtype=str)
+            df['source'] = source_label
+            df = df[['keyword', 'datatype', 'unit', 'description', 'source']]
+            return df
+
+        # Load keywords from CSV files for multiple levels
+        df_der   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/derived_keywords.csv',      source_label='Derived Keyword')
+        df_l0    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',   source_label='L0 PRIMARY Header')
+        df_2d    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',   source_label='2D PRIMARY Header')
+        df_l1    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',   source_label='L1 PRIMARY Header')
+        df_l2    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv',   source_label='L2 PRIMARY Header')
+        df_l0t   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv', source_label='L0 TELEMETRY Extension')
+        df_l2rv  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv',        source_label='L2 RV Header')
+        df_l2ccf = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv', source_label='L2 CCF Header')
+
+        # Build the RV prefix keywords (the 8th source)
+        prefixes = ['RV1','RV2','RV3','RVS','ERVS','RVC','ERVC','RVY','ERVY','CCFBJD','BCRV','CCFW']
+        units    = ['km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','None','km/s','None']
+        descs    = ['RV for SCI1 order ', 'RV for SCI2 order ', 'RV for SCI3 order ','RV for SCI order ',  'Error in RV for SCI order ', 'RV for CAL order ','Error in RV for CAL order ', 'RV for SKY order ',  'Error in RV for SKY order ','BJD for order ','Barycentric RV for order ','CCF weight for order ']
+        nums = [f"{i:02d}" for i in range(67)]
+
+        prefix_unit_map = dict(zip(prefixes, units))
+        prefix_desc_map = dict(zip(prefixes, descs))
+
+        rv_entries = []
+        for prefix in prefixes:
+            for num in nums:
+                kw   = f"{prefix}{num}"
+                dtyp = "REAL"
+                desc = f"{prefix_desc_map[prefix]}{num}"
+                unt  = prefix_unit_map[prefix]
+                rv_entries.append([kw, dtyp, unt, desc, 'L2 RV Extension'])
+
+        df_rv = pd.DataFrame(rv_entries, columns=['keyword','datatype','unit','description','source'])
+
+        # Combine all dataframes and remove duplicate keywords
+        df_all = pd.concat([
+            df_der, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv
+        ], ignore_index=True)
+        df_all.drop_duplicates(subset='keyword', keep='first', inplace=True)
+
+        # Insert (or replace) into kpfdb_metadata
+        insert_query = """
+            INSERT OR REPLACE INTO kpfdb_metadata
+            (keyword, datatype, description, units, source)
+            VALUES (?, ?, ?, ?, ?)
+        """
+
+        for _, row in df_all.iterrows():
+            cursor.execute(
+                insert_query,
+                (row['keyword'], row['datatype'], row['description'], row['unit'], row['source'])
+            )
+
+        conn.commit()
+        conn.close()
+
+        self.logger.info("Metadata table 'kpfdb_metadata' created/updated successfully.")
+
+
+    def print_metadata_table(self):
+        """
+        Read the kpfdb_metadata table, group by 'source', and print out rows
+        in fixed-width columns in the custom order below, without printing
+        the 'source' column.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+    
+        # Define your custom order of sources
+        custom_order = [
+            "Derived Keyword",
+            "L0 PRIMARY Header",
+            "2D PRIMARY Header",
+            "L1 PRIMARY Header",
+            "L2 PRIMARY Header",
+            "L0 TELEMETRY Extension",
+            "L2 RV Header",
+            "L2 RV Extension"
+        ]
+    
+        # Define fixed column widths (adjust as needed)
+        col_width_keyword  = 30
+        col_width_datatype = 9
+        col_width_units    = 9
+        col_width_desc     = 90
+    
+        # For each source in the custom order, fetch and print its rows
+        for src in custom_order:
+            # Query rows for this source
+            cursor.execute(
+                """
+                SELECT keyword, datatype, units, description
+                FROM kpfdb_metadata
+                WHERE source = ?
+                ORDER BY keyword;
+                """,
+                (src,)
+            )
+            rows = cursor.fetchall()
+    
+            # Skip if there are no rows for this source
+            if not rows:
+                continue
+    
+            # Print section header
+            print(f"{src}:")
+            print("-" * 90)
+            
+            # Print table header
+            print(
+                f"{'Keyword':<{col_width_keyword}} "
+                f"{'Datatype':<{col_width_datatype}} "
+                f"{'Units':<{col_width_units}} "
+                f"{'Description':<{col_width_desc}}"
+            )
+            print("-" * 90)
+    
+            # Print each row in a fixed-width format
+            for keyword, datatype, units, description in rows:
+                # Convert None to an empty string to avoid formatting errors
+                keyword_str   = keyword if keyword else ""
+                datatype_str  = datatype if datatype else ""
+                units_str     = units if units else ""
+                desc_str      = description if description else ""
+    
+                print(
+                    f"{keyword_str:<{col_width_keyword}} "
+                    f"{datatype_str:<{col_width_datatype}} "
+                    f"{units_str:<{col_width_units}} "
+                    f"{desc_str:<{col_width_desc}}"
+                )
+            print()  # Blank line after each group
+    
+        conn.close()
+
+
+    def metadata_table_to_df(self):
+        """
+        Return a dataframe of the metadata table with columns:
+            keyword | datatype | unit | description | source
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        query = f"SELECT keyword, datatype, units, description, source FROM kpfdb_metadata"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        return df
 
 
     def drop_table(self):
@@ -170,6 +348,7 @@ class AnalyzeTimeSeries:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("DROP TABLE IF EXISTS kpfdb")
+        cursor.execute("DROP TABLE IF EXISTS kpfdb_metadata")
         conn.commit()
         conn.close()
 
@@ -635,6 +814,7 @@ class AnalyzeTimeSeries:
     
         return first_date, last_date
 
+
     def is_notebook(self):
         """
         Determine if the code is being executed in a Jupyter Notebook.  
@@ -957,6 +1137,9 @@ class AnalyzeTimeSeries:
             keyword_types = {}
 
         return keyword_types
+
+
+
 
 
     def plot_time_series_multipanel(self, plotdict, 
