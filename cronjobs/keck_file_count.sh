@@ -29,6 +29,7 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
+
 # Directories to count
 declare -A DIRS=(
   ["koadata"]="/koadata/KPF/${DATE}/lev0/"
@@ -55,4 +56,4 @@ for key in "${ORDER[@]}"; do
   log "$(printf "%-10s: %3d files" "$key" "$count")"
 done
 
-log "Logged count to: $OUTPUT"
+echo "Logged count to: $OUTPUT"
