@@ -128,8 +128,8 @@ class SendRTIHttp(KPF_Primitive):
         """
         try:
             res = requests.get(url, params = data, auth=(
-                                                        self.user,
-                                                        self.pw
+                                                        self.config['RTI']['rti_user'],
+                                                        self.config['RTI']['rti_pass']
                                                         ))
             self.logger.info(f"Sending {res.request.url}")
         except requests.exceptions.RequestException as e:
