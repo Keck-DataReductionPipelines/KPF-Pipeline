@@ -22,7 +22,10 @@ invoke_subrecipe("recipes/quicklook_watch.recipe")
 
 if 'masters' in file_path: # Masters
     output_dir= '/data/QLP/' + datecode + '/Masters/'
+    level= ''
 else: # L0/2D/L1/L2
     output_dir= '/data/QLP/' + datecode + '/'
+    level = level_from_kpffile(file_path)
 
-SendRTIHttp(file_path, output_dir)
+
+SendRTIHttp(file_path, output_dir, level)
