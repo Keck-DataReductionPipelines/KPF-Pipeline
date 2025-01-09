@@ -83,7 +83,7 @@ class SendRTIHttp(KPF_Primitive):
         self.logger.info(f"Alerting RTI that {self.input_file} is ready for ingestion")
 
         url = self.config['RTI']['rti_url']
-        koaid = os.path.basename(self.input_file).split('.fits')[0]
+        koaid = os.path.basename(self.input_file).split('_')[0] + ".fits"
         data = {
             'instrument': 'KPF',
             'koaid': koaid,
