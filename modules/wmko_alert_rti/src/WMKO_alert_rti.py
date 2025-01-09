@@ -87,7 +87,7 @@ class SendRTIHttp(KPF_Primitive):
         data = {
             'instrument': 'KPF',
             'koaid': koaid,
-            'ingesttype': self.config['RTI']['rti_ingesttype'],
+            'ingesttype': "lev2",
             'datadir': str(self.output_dir),
             'start': None,
             'reingest': self.config['RTI']['rti_reingest'],
