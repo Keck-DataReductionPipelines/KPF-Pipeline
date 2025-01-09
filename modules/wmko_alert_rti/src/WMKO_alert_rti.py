@@ -96,11 +96,11 @@ class SendRTIHttp(KPF_Primitive):
         }
         
         attempts = 0
-        limit = int(self.config['rti']['rti_attempts'])
+        limit = int(self.config['RTI']['rti_attempts'])
         while attempts < limit:
             res = self.get_url(url, data)
             if res is None:
-                t = self.config['rti']['rti_retry_time']
+                t = self.config['RTI']['rti_retry_time']
                 attempts += 1
                 self.logger.error(f"Waiting {t} seconds to attempt again... ({attempts}/{limit})")
                 time.sleep(t)
