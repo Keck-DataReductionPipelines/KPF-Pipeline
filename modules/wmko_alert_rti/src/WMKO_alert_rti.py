@@ -26,114 +26,114 @@ class SendRTIHttp(KPF_Primitive):
         output_dir (str): The directory where the file is stored.
     """
 
-def __init__(self,
-                action: Action,
-                context: ProcessingContext) -> None:
+    def __init__(self,
+                    action: Action,
+                    context: ProcessingContext) -> None:
 
-    # Initialize parent class
-    KPF_Primitive.__init__(self, action, context)
-    args_keys = [item for item in action.args.iter_kw() if item != "name"]
-
-
-    # input configuration
-    self.config = configparser.ConfigParser()
-    try:
-        self.config_path = context.config_path['wmko_alert_rti']
-    except:
-        self.config_path = DEFAULT_CFG_PATH
-    self.config.read(self.config_path)
-
-    if not self.logger:
-        self.logger = self.context.logger
-    self.logger.info('Loading config form: {}'.format(self.config_path))
-
-    # Load arguments into atributtes
-    self.input_file = self.action.args[0]
-    self.output_dir = self.action.args[1]
+        # Initialize parent class
+        KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
 
 
-def _pre_condition(self) -> bool:
-    """Precondition for the SendRTIHttp primitive. If the RTI URL, user, and
-    password are not provided in the config file, then the precondition fails.
+        # input configuration
+        self.config = configparser.ConfigParser()
+        try:
+            self.config_path = context.config_path['wmko_alert_rti']
+        except:
+            self.config_path = DEFAULT_CFG_PATH
+        self.config.read(self.config_path)
 
-    Returns
-    -------
-    bool
-        True if the RTI URL, user, and password are provided in the config file.
-    """
-    if self.config['RTI']['rti_url'] is None:
-        self.logger.error("No RTI URL specified in config file.")
-        self.logger.error("Please add RTI URL to config file.")
-        return False
-    if self.config['RTI']['rti_user'] is None:
-        self.logger.error("No RTI user specified in config file.")
-        self.logger.error("Please add RTI user and password to config file.")
-        return False
-    if self.config['RTI']['rti_pass'] is None:
-        self.logger.error("No RTI password specified in config file.")
-        self.logger.error("Please add RTI user and password to config file.")
-        return False
-    return True
+        if not self.logger:
+            self.logger = self.context.logger
+        self.logger.info('Loading config form: {}'.format(self.config_path))
 
-def _post_condition(self) -> bool:
-    return True
+        # Load arguments into atributtes
+        self.input_file = self.action.args[0]
+        self.output_dir = self.action.args[1]
 
-def _perform(self):
-    
-    self.logger.info(f"Alerting RTI that {self.input_file} is ready for ingestion")
 
-    url = self.config['RTI']['rti_url']
-    koaid = os.path.basename(self.input_file).split('.fits')[0]
-    data = {
-        'instrument': 'KPF',
-        'koaid': koaid,
-        'ingesttype': self.config['RTI']['rti_ingesttype'],
-        'datadir': str(self.output_dir),
-        'start': None,
-        'reingest': self.config['RTI']['rti_reingest'],
-        'testonly': self.config['RTI']['rti_testonly'],
-        'dev': self.config['RTI']['rti_dev']
-    }
-    
-    attempts = 0
-    limit = int(self.config['rti']['rti_attempts'])
-    while attempts < limit:
-        res = self.get_url(url, data)
-        if res is None:
-            t = self.config['rti']['rti_retry_time']
-            attempts += 1
-            self.logger.error(f"Waiting {t} seconds to attempt again... ({attempts}/{limit})")
-            time.sleep(t)
-        else:
-            self.logger.info(f"Post returned status code {res.status_code}")
-            return Arguments([self.input_file, self.output_dir])
-    
-    self.logger.error(f"Post attempted {limit} times and got no response.")
-    return Arguments([self.input_file, self.output_dir])
+    def _pre_condition(self) -> bool:
+        """Precondition for the SendRTIHttp primitive. If the RTI URL, user, and
+        password are not provided in the config file, then the precondition fails.
 
-def get_url(self, url, data):
-    """Sends a get request to the specified URL with the specified data.
+        Returns
+        -------
+        bool
+            True if the RTI URL, user, and password are provided in the config file.
+        """
+        if self.config['RTI']['rti_url'] is None:
+            self.logger.error("No RTI URL specified in config file.")
+            self.logger.error("Please add RTI URL to config file.")
+            return False
+        if self.config['RTI']['rti_user'] is None:
+            self.logger.error("No RTI user specified in config file.")
+            self.logger.error("Please add RTI user and password to config file.")
+            return False
+        if self.config['RTI']['rti_pass'] is None:
+            self.logger.error("No RTI password specified in config file.")
+            self.logger.error("Please add RTI user and password to config file.")
+            return False
+        return True
 
-    Parameters
-    ----------
-    url : str
-        URL to send the request to.
-    data : dict
-        dictionary of key/value pairs to send as parameters in the request.
+    def _post_condition(self) -> bool:
+        return True
 
-    Returns
-    -------
-    requests.Response
-        Response object from the request, or None if an error occurred.
-    """
-    try:
-        res = requests.get(url, params = data, auth=(
-                                                    self.user,
-                                                    self.pw
-                                                    ))
-        self.logger.info(f"Sending {res.request.url}")
-    except requests.exceptions.RequestException as e:
-        self.logger.error(f"Error caught while posting to {url}:")
-        self.logger.error(e)
-        return None
-    return res
+    def _perform(self):
+        
+        self.logger.info(f"Alerting RTI that {self.input_file} is ready for ingestion")
+
+        url = self.config['RTI']['rti_url']
+        koaid = os.path.basename(self.input_file).split('.fits')[0]
+        data = {
+            'instrument': 'KPF',
+            'koaid': koaid,
+            'ingesttype': self.config['RTI']['rti_ingesttype'],
+            'datadir': str(self.output_dir),
+            'start': None,
+            'reingest': self.config['RTI']['rti_reingest'],
+            'testonly': self.config['RTI']['rti_testonly'],
+            'dev': self.config['RTI']['rti_dev']
+        }
+        
+        attempts = 0
+        limit = int(self.config['rti']['rti_attempts'])
+        while attempts < limit:
+            res = self.get_url(url, data)
+            if res is None:
+                t = self.config['rti']['rti_retry_time']
+                attempts += 1
+                self.logger.error(f"Waiting {t} seconds to attempt again... ({attempts}/{limit})")
+                time.sleep(t)
+            else:
+                self.logger.info(f"Post returned status code {res.status_code}")
+                return Arguments([self.input_file, self.output_dir])
+        
+        self.logger.error(f"Post attempted {limit} times and got no response.")
+        return Arguments([self.input_file, self.output_dir])
+
+    def get_url(self, url, data):
+        """Sends a get request to the specified URL with the specified data.
+
+        Parameters
+        ----------
+        url : str
+            URL to send the request to.
+        data : dict
+            dictionary of key/value pairs to send as parameters in the request.
+
+        Returns
+        -------
+        requests.Response
+            Response object from the request, or None if an error occurred.
+        """
+        try:
+            res = requests.get(url, params = data, auth=(
+                                                        self.user,
+                                                        self.pw
+                                                        ))
+            self.logger.info(f"Sending {res.request.url}")
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Error caught while posting to {url}:")
+            self.logger.error(e)
+            return None
+        return res
