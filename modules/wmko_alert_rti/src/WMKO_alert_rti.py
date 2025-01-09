@@ -50,11 +50,13 @@ class SendRTIHttp(KPF_Primitive):
         # Load arguments into atributtes
         self.input_file = self.action.args[0]
         self.output_dir = self.action.args[1]
+        self.level = self.action.args[2]
 
 
     def _pre_condition(self) -> bool:
         """Precondition for the SendRTIHttp primitive. If the RTI URL, user, and
         password are not provided in the config file, then the precondition fails.
+        Additionally, if the level is not L1 or L2, the precondition fails.
 
         Returns
         -------
@@ -73,6 +75,10 @@ class SendRTIHttp(KPF_Primitive):
             self.logger.error("No RTI password specified in config file.")
             self.logger.error("Please add RTI user and password to config file.")
             return False
+
+        if self.level not in ['L1', 'L2']:
+            self.logger.info(f"Level {self.level} will not trigger RTI ingestion.")
+            return False
         return True
 
     def _post_condition(self) -> bool:
@@ -83,12 +89,17 @@ class SendRTIHttp(KPF_Primitive):
         self.logger.info(f"Alerting RTI that {self.input_file} is ready for ingestion")
 
         url = self.config['RTI']['rti_url']
-        koaid = os.path.basename(self.input_file).split('_')[0] + ".fits"
+        koaid = os.path.basename(self.input_file).split('_')[0]
+        datadir = self.output_dir + koaid + '/' + self.level # /data/QLP/[UTDATE]/[KOAID]/[LEVEL]/
+        self.logger.info("Sending GET request to RTI with the following data:")
+        self.logger.info(f"URL: {url}")
+        self.logger.info(f"Data Directory: {datadir}")
+        self.logger.info(f"KOAID: {koaid}.fits")
         data = {
             'instrument': 'KPF',
-            'koaid': koaid,
-            'ingesttype': "lev2",
-            'datadir': str(self.output_dir),
+            'koaid': koaid + ".fits", # actually takes koaid + fits
+            'ingesttype': "lev2" if self.level == "L2" else "lev1", # TODO: make this match level
+            'datadir': datadir,
             'start': None,
             'reingest': self.config['RTI']['rti_reingest'],
             'testonly': self.config['RTI']['rti_testonly'],
