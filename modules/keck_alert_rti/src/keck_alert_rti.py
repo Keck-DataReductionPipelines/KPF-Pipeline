@@ -10,7 +10,7 @@ from keckdrpframework.models.action import Action
 from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
-DEFAULT_CFG_PATH = 'modules/wmko_alert_rti/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/keck_alert_rti/configs/default.cfg'
 
 class SendRTIHttp(KPF_Primitive):
     """

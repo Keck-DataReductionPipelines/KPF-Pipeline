@@ -11,7 +11,7 @@ from modules.Utils.string_proc import level_from_kpffile
 from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.string_proc import date_from_path
 from modules.quicklook.src.quick_prim import Quicklook
-from modules.wmko_alert_rti.src.WMKO_alert_rti import SendRTIHttp
+from modules.keck_alert_rti.src.keck_alert_rti import SendRTIHttp
 
 file_path = context.file_path # from context in watch mode, e.g.  
                               # /data/2D/20230711/KP.20230711.00415.52_2D.fits
