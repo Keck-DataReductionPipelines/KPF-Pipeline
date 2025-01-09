@@ -31,7 +31,7 @@ class KPFPipeQuickLook(KPFPipeCronBase):
     def set_recipe(self):
 
         # set the recipe and config file
-        self.recipe = 'recipes/quicklook_watch_wmko.recipe'
+        self.recipe = 'recipes/keck_quicklook_watch.recipe'
         self.config = 'configs/keck_quicklook_watch.cfg'
 
     def set_log_dir(self):
