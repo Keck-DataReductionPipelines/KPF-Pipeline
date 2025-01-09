@@ -45,7 +45,7 @@ class SendRTIHttp(KPF_Primitive):
 
         if not self.logger:
             self.logger = self.context.logger
-        self.logger.info('Loading config form: {}'.format(self.config_path))
+        self.logger.info('Loading config from: {}'.format(self.config_path))
 
         # Load arguments into atributtes
         self.input_file = self.action.args[0]
@@ -105,7 +105,9 @@ class SendRTIHttp(KPF_Primitive):
                 self.logger.error(f"Waiting {t} seconds to attempt again... ({attempts}/{limit})")
                 time.sleep(t)
             else:
-                self.logger.info(f"Post returned status code {res.status_code}")
+                self.logger.info(f"GET returned status code {res.status_code}")
+                if res.status_code != 200:
+                    self.logger.warning(f"Received non-200 status code with body: {res.text}")
                 return Arguments([self.input_file, self.output_dir])
         
         self.logger.error(f"Post attempted {limit} times and got no response.")
