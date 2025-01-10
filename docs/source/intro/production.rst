@@ -36,7 +36,8 @@ This script will generate time series plots of telemetry and other information o
     ./scripts/generate_time_series_plots.py
 
 Other Processing Tasks
-======================
+**********************
+
 **Reprocessing L0 files:** 
   
 Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD::
