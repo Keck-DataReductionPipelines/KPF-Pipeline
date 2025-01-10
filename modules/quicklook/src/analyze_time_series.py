@@ -1966,7 +1966,7 @@ class AnalyzeTimeSeries:
                 savedir = fig_dir + plots[p]["subdir"] + '/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 fig_path = savedir + filename
-                self.logger.info('Making QL time series plot ' + fig_path)
+                self.logger.info('Making QL plot ' + fig_path)
             else:
                 fig_path = None
 
@@ -1988,7 +1988,7 @@ class AnalyzeTimeSeries:
 
 
     def plot_all_quicklook_daterange(self, start_date=None, end_date=None, 
-                                     time_range_type = 'all', clean=True, 
+                                     time_range_type='all', clean=True, 
                                      base_dir='/data/QLP/', show_plot=False):
         """
         Generate all of the standard time series plots for the quicklook for a 
