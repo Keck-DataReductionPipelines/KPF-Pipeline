@@ -339,7 +339,7 @@ class KPFPipeCronBase:
                 return False
 
             if (self.log_chk and n_iter != 0 and
-                    utils.is_log_file_done(self.log_chk)):
+                    utils.is_log_file_done(self.log_chk, self.log)):
                 self.log.info(f"Log file {self.log_chk} has been"
                               f"idle,  stopping pipeline.")
 
