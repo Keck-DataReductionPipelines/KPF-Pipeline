@@ -17,7 +17,7 @@ APP_PATH = os.path.abspath(os.path.dirname(__file__))
 
 class KPFPipeNightly(KPFPipeCronBase):
     """
-    The QuickLook Processing Cronjob
+    The Nightly (morning-after) Processing Cronjob
     """
     def __init__(self, procname):
         super(KPFPipeNightly, self).__init__(procname)

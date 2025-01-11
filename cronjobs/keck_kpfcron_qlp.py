@@ -55,8 +55,8 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             make init >> {self.stdout_log} 2>&1;
     
             # touch the files so the pipe recognized them as new
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --log /data/logs/QLP/ --fits /data/{self.level} &
-    
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data_workspace/L0 --log /data/logs/ &
+
             # run the pipeline for all data in the directory
             kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             kpf --watch /data/{self.level}/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
