@@ -94,9 +94,15 @@ class DirectoryWatchHandler(FileSystemEventHandler):
         file_dir = os.path.dirname(file_loc)
         file_name = os.path.basename(file_loc)
         try:
+            # subprocess.run(
+            #     [
+            #         "rsync", "--include", "*.fits",
+            #         "--exclude", "*",
+            #         file_loc, dest_dir
+            #     ], check=True)
             subprocess.run(
                 [
-                    "rsync", "--include", "*.fits",
+                    "rsync", "--inplace", "--include", "*.fits",
                     "--exclude", "*",
                     file_loc, dest_dir
                 ], check=True)
