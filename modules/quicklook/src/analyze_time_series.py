@@ -9,14 +9,17 @@ import sqlite3
 import calendar
 import numpy as np
 import pandas as pd
-import matplotlib.dates as mdates
-import matplotlib.ticker as ticker
 from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from astropy.table import Table
 from astropy.io import fits
 from datetime import datetime, timedelta
+import matplotlib
+matplotlib.rcParams['font.family'] = 'DejaVu Sans'
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.ticker as ticker
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import DummyLogger
@@ -73,6 +76,7 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Add continuous integration for this class
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
         * Make plots of temperature vs. RV for various types of RVs
@@ -80,7 +84,11 @@ class AnalyzeTimeSeries:
         * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
         * Add the capability of using one DB for ingestion into another or plotting
-        * check mod times before issuing parallel threads
+        * Make a standard plot type that excludes outliers using ranges set 
+          to, say, +/- 4-sigma where sigma is determined by aggressive outlier
+          rejection.  This should be in Delta values.
+        * Make standard correlation plots.
+        * Make standard phased plots (by day)
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -1966,7 +1974,7 @@ class AnalyzeTimeSeries:
                 savedir = fig_dir + plots[p]["subdir"] + '/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 fig_path = savedir + filename
-                self.logger.info('Making QL plot ' + fig_path)
+                self.logger.info('Making ' + fig_path)
             else:
                 fig_path = None
 
@@ -1987,108 +1995,11 @@ class AnalyzeTimeSeries:
                                          show_plot=show_plot)
 
 
-    def plot_all_quicklook_daterange(self, start_date=None, end_date=None, 
-                                     time_range_type='all', clean=True, 
-                                     base_dir='/data/QLP/', show_plot=False):
-        """
-        Generate all of the standard time series plots for the quicklook for a 
-        date range.  Every unique day, month, year, and decade between 
-        start_date and end_date will have a full set of plots produced using 
-        plot_all_quicklook(). The set of date range types ('day', 'month', 
-        'year', 'decade', 'all') is set by the time_range_type parameter.
-
-        Args:
-            start_date (datetime object) - start date for plot
-            end_date (datetime object) - start date for plot
-            time_range_type (string)- one of: 'day', 'month', 'year', 'decade', 'all'
-            base_dir (string) - set to the path for the files to be generated.
-            show_plot (boolean) - show the plot in the current environment.
-
-        Returns:
-            PNG plots in the output director or shows the plots it the current 
-            environment (e.g., in a Jupyter Notebook).
-        """
-        if start_date == None or end_date == None:
-            dates = self.get_first_last_dates()
-            if start_date == None:
-                start_date = dates[0]
-            if end_date == None:
-                end_date = dates[1]
-        
-        time_range_type = time_range_type.lower()
-        if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
-            time_range_type = 'all'
-
-        days = []
-        months = []
-        years = []
-        decades = []
-        current_date = start_date
-        while current_date <= end_date:
-            days.append(current_date)
-            months.append(datetime(current_date.year,current_date.month,1))
-            years.append(datetime(current_date.year,1,1))
-            decades.append(datetime(int(str(current_date.year)[0:3])*10,1,1))
-            current_date += timedelta(days=1)
-        days    = sorted(set(days),    reverse=True)
-        months  = sorted(set(months),  reverse=True)
-        years   = sorted(set(years),   reverse=True)
-        decades = sorted(set(decades), reverse=True)
-
-        if time_range_type in ['day', 'all']:
-            self.logger.info('Making time series plots for ' + str(len(days)) + ' day(s)')
-            for day in days:
-                try:
-                    if base_dir != None:
-                        savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/'
-                    else:
-                        savedir = None
-                    self.plot_all_quicklook(day, interval='day', fig_dir=savedir, show_plot=show_plot)
-                except Exception as e:
-                    self.logger.error(e)
-    
-        if time_range_type in ['month', 'all']:
-            self.logger.info('Making time series plots for ' + str(len(months)) + ' month(s)')
-            for month in months:
-                try:
-                    if base_dir != None:
-                        savedir = base_dir + month.strftime("%Y%m") + '00/Time_Series/'
-                    else:
-                        savedir = None
-                    self.plot_all_quicklook(month, interval='month', fig_dir=savedir)
-                except Exception as e:
-                    self.logger.error(e)
-    
-        if time_range_type in ['year', 'all']:
-            self.logger.info('Making time series plots for ' + str(len(years)) + ' year(s)')
-            for year in years:
-                try:
-                    if base_dir != None:
-                        savedir = base_dir + year.strftime("%Y") + '0000/Time_Series/'
-                    else:
-                        savedir = None
-                    self.plot_all_quicklook(year, interval='year', fig_dir=savedir)
-                except Exception as e:
-                    self.logger.error(e)
-    
-        if time_range_type in ['decade', 'all']:
-            self.logger.info('Making time series plots for ' + str(len(decades)) + ' decade(s)')
-            for decade in decades:
-                try:
-                    if base_dir != None:
-                        savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Time_Series/' 
-                    else:
-                        savedir = None
-                    self.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
-                except Exception as e:
-                    self.logger.error(e)
-
-
 def process_file(file_path, now_str,
                  L0_header_keyword_types, L0_telemetry_types, D2_header_keyword_types,
                  L1_header_keyword_types, L2_header_keyword_types, L2_CCF_header_keyword_types, L2_RV_header_keyword_types,
                  extract_kwd_func, extract_telemetry_func, extract_rvs_func, 
-                 #is_any_file_updated_func, 
+                 #is_any_file_updated_func, # this check was moved
                  get_source_func, get_datecode_func):
     """
     This method runs in a worker process. It returns the extracted header data for one file.
