@@ -20,8 +20,9 @@ class KPFPipeMastersLevel1(KPFPipeCronBase):
     def __init__(self, procname):
         super(KPFPipeMastersLevel1, self).__init__(procname)
 
-        # set to monitor the log file for being idle
-        self.log_chk = self.stdout_log
+        # set to monitor the log file for being idle (location is real
+        # location, outside the container)
+        self.log_chk = self.stdout_log.replace('/data', self.data_workspace)
 
         # set the masters working directory
         self.masters_work_dir = f"{self.data_workspace}/masters/"

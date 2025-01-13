@@ -17,7 +17,7 @@ APP_PATH = os.path.abspath(os.path.dirname(__file__))
 
 class KPFPipeNightly(KPFPipeCronBase):
     """
-    The QuickLook Processing Cronjob
+    The Nightly (morning-after) Processing Cronjob
     """
     def __init__(self, procname):
         super(KPFPipeNightly, self).__init__(procname)
@@ -61,10 +61,9 @@ class KPFPipeNightly(KPFPipeCronBase):
             make init >> {self.stdout_log} 2>&1;
 
             # touch the files so the pipe recognized them as new
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --log /data/logs/ &
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data_workspace/L0 --log /data/logs/ &
 
             # run the pipeline for all data in the directory
-            kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             """
 

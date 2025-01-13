@@ -1,8 +1,8 @@
 import os
 import time
 import shutil
+import subprocess
 from datetime import datetime
-from watchdog.observers import Observer
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
@@ -22,49 +22,102 @@ class DirectoryWatchHandler(FileSystemEventHandler):
         self.dest_dir = os.path.join(BASE_DEST_DIR, current_date)
         os.makedirs(f"{self.dest_dir}/", exist_ok=True)
 
-    # def on_created(self, event):
-    #     if not event.is_directory:
-    #         src_path = event.src_path
-    #         self.copy_file(src_path)
-    #
-    # def copy_file(self, src_path):
-    #     if '.fits' not in src_path:
-    #         return
-    #
-    #     try:
-    #         shutil.copy2(src_path, self.dest_dir)
-    #     except Exception as e:
-    #         log.info(f"Error copying {src_path}: {e}")
     def on_created(self, event):
         if not event.is_directory:
-            src_path = event.src_path
-            self.cp_once_written(src_path)
+            file_loc = event.src_path
+            if '.fits' not in file_loc:
+                return
 
-    def cp_once_written(self, src_path, timeout=300, check_interval=5):
-        if '.fits' not in src_path:
-            return
+            # wait for the files to write,  return if there is an issue
+            if not self.wait_for_write(file_loc):
+                return
+
+            self.rsync_fullpath(file_loc, self.dest_dir)
+            log.info(f"File {file_loc} copied successfully to {self.dest_dir}.")
+
+    def wait_for_write(self, file_loc, timeout=300, check_interval=5):
+        """
+        Wait for the file to finish writing.  Used for both to wait before
+        copying and after copying to ensure the file is fully written.
+
+        Args:
+            file_loc (str): path to the file
+            timeout (int): time to wait before giving up
+            check_interval (int): time to wait between checks
+
+        Returns:
+
+        """
+        if '.fits' not in file_loc:
+            log.info(f"Extension .fits not in {file_loc}")
+            return False
 
         elapsed_time = 0
         previous_size = -1
 
         while elapsed_time < timeout:
             try:
-                current_size = os.path.getsize(src_path)
+                current_size = os.path.getsize(file_loc)
+                log.debug(f"file size: {current_size}, {previous_size}")
                 if current_size == previous_size:
                     # File size has stabilized, assume it's done writing
-                    shutil.copy2(src_path, self.dest_dir)
-                    log.info(f"File {src_path} copied successfully to {self.dest_dir}.")
-                    return
+                    log.info(f"File {file_loc} written.")
+                    return True
                 previous_size = current_size
             except FileNotFoundError:
-                pass
+                log.error(f"File not found: {file_loc}")
+                return False
             except Exception as e:
-                log.error(f"Error checking file size for {src_path}: {e}")
-                return
+                log.error(f"Error checking file size for {file_loc}: {e}")
+                return False
 
             time.sleep(check_interval)
             elapsed_time += check_interval
 
+        return False
+
+    def rsync_fullpath(self, file_loc, dest_dir):
+        """
+        Copy the full path to the destination directory using rsync to re-copy
+        any files that might be different from originally copied.  There was
+        originally an issue with the file size not being the same if the copy was
+        interrupted.
+
+
+        Args:
+            file_loc (str): path to the file
+            dest_dir (str): path to the destination directory
+
+        Returns:
+
+        """
+        file_dir = os.path.dirname(file_loc)
+        file_name = os.path.basename(file_loc)
+        try:
+            # subprocess.run(
+            #     [
+            #         "rsync", "--include", "*.fits",
+            #         "--exclude", "*",
+            #         file_loc, dest_dir
+            #     ], check=True)
+            subprocess.run(
+                [
+                    "rsync", "--inplace", "--include", "*.fits",
+                    "--exclude", "*",
+                    file_loc, dest_dir
+                ], check=True)
+            log.info(f"Copied {file_loc} to {dest_dir} using rsync.")
+
+            dest_file = os.path.join(dest_dir, file_name)
+            log.info(f"Waiting on {dest_file}.")
+
+            if '.fits' in dest_file and self.wait_for_write(dest_file):
+                # touch the file to avoid a block on the watch
+                time.sleep(15)
+                log.info(f"Touching file: {dest_file}.")
+                subprocess.run(["touch", dest_file], check=True)
+        except subprocess.CalledProcessError as e:
+            log.error(f"Issue with rsync {file_loc} to {dest_dir}: {e}")
 
 def get_watch_dir(current_date):
     """
@@ -78,7 +131,7 @@ def wait_watch_dir_exist(current_date):
     Wait for the watch directory to exist before starting.
 
     Args:
-        current_date ():
+        current_date (str): YYYYMMDD the UT date to monitor.
 
     Returns:
 
@@ -105,8 +158,6 @@ def monitor_directory():
 
     watch_obj = DirectoryWatchHandler(current_date)
     observer = PollingObserver()
-    # TODO not working with NFS?
-    # observer = Observer()
     observer.schedule(watch_obj, watch_dir, recursive=True)
     observer.start()
 
@@ -125,7 +176,6 @@ def monitor_directory():
         log.info(f"Exiting the monitor: {err}")
         observer.stop()
     observer.join()
-
 
 def copy_existing_files(current_date):
     """
@@ -159,12 +209,12 @@ def copy_existing_files(current_date):
         log.info(f'copying {len(new_files)} existing files: {new_files}')
 
         for file_name in new_files:
-            src_path = os.path.join(watch_dir, file_name)
+            file_loc = os.path.join(watch_dir, file_name)
             try:
-                shutil.copy2(src_path, dest_dir)
+                shutil.copy2(file_loc, dest_dir)
                 copied_files.add(file_name)
             except Exception as e:
-                log.info(f"Error copying {src_path}: {e}")
+                log.info(f"Error copying {file_loc}: {e}")
 
         # delay to catch any new files
         time.sleep(1)

@@ -122,14 +122,6 @@ class KPFPipeCronBase:
         except FileNotFoundError:
             self.log.info("Docker command not found.")
 
-    # stop_command = ["docker", "stop", self.containername]
-    # result = subprocess.run(stop_command, capture_output=True, text=True)
-    #
-    # if result.returncode != 0:
-    #     self.log.warning(f"Error stopping container '{self.containername}': {result.stderr}")
-    # else:
-    #     self.log.info(f"Container '{self.containername}' stopped successfully: {result.stdout}")
-
     def cmd_line_args(self, start_msg):
         """
         Parse the command line arguments for the DRP scripts.
@@ -347,7 +339,7 @@ class KPFPipeCronBase:
                 return False
 
             if (self.log_chk and n_iter != 0 and
-                    utils.is_log_file_done(self.log_chk)):
+                    utils.is_log_file_done(self.log_chk, self.log)):
                 self.log.info(f"Log file {self.log_chk} has been"
                               f"idle,  stopping pipeline.")
 

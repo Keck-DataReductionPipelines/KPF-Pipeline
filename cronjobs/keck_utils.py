@@ -184,7 +184,7 @@ def get_cfg(config, section, param_name):
     return param_val
 
 
-def is_log_file_done(log_file, timeout=120):
+def is_log_file_done(log_file, log, timeout=120):
     """
     Check if the log file has been updated recently.
 
@@ -195,8 +195,13 @@ def is_log_file_done(log_file, timeout=120):
     Returns: <bool> True if the log file has not bee updated in timeframe.
 
     """
-    last_mod_time = os.path.getmtime(log_file)
-    current_time = time.time()
+    try:
+        last_mod_time = os.path.getmtime(log_file)
+        current_time = time.time()
+    except FileNotFoundError as err:
+        log.error(f"Error checking log file {log_file}: {err}")
+        return True
+
     return (current_time - last_mod_time) > timeout
 
 

@@ -22,9 +22,6 @@ class KPFPipeNightly(KPFPipeCronBase):
     def __init__(self, procname):
         super(KPFPipeNightly, self).__init__(procname)
 
-        # dial back the ncpu since it is running at night with the QLP
-        # self.ncpu = 192
-
         # exit after 14 hours (6pm to 8am)
         if not self.exit_timer:
             self.exit_timer = 16.5 * 60 * 60
@@ -36,7 +33,6 @@ class KPFPipeNightly(KPFPipeCronBase):
         self.recipe = 'recipes/kpf_drp.recipe'
         cfg_dir = 'configs'
         self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp_watch')
-        # self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp_local')
         if not self.config:
             self.log.error(f'config not found for {self.procdate}, {cfg_dir}, keck_kpf_drp')
             exit()
@@ -63,11 +59,12 @@ class KPFPipeNightly(KPFPipeCronBase):
 
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
+   
+            # touch any files currently in the directory so the pipe recognized them as new
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data_workspace/L0 --log /data/logs/ &
 
-            # run the pipeline for all data in the directory
-            kpf --reprocess --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
+            # start the infinite process to watch for new data
             kpf --watch /data/L0/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
-
             """
 
     def define_docker_cmd(self):
