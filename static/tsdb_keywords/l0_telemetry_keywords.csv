@@ -72,8 +72,8 @@ kpfgreen.CRYOBODY_T|float|Green cryobody temp|C
 kpfgreen.CRYOBODY_TRG|float|Green cryobody heater 7B target temp|C
 kpfgreen.CURRTEMP|float|Green cold head temp|C
 kpfgreen.ECH_PRESS|float|Green echelle ion pump pressure|Torr
-kpfgreen.KPF_CCD_T|float|SSL Green CCD temp|C
-kpfgreen.STA_CCD_T|float|STA Green CCD temp|C
+kpfgreen.KPF_CCD_T|float|SSL temp sensor on Green CCD|C
+kpfgreen.STA_CCD_T|float|STA temp sensor on Green CCD|C
 kpfgreen.STA_CCD_TRG|float|Green CCD heater 7A target temp|C
 kpfgreen.TEMPSET|float|Green set point for the cold head temp|C
 kpfred.BPLANE_TEMP|float|Red Archon backplane temp|C
@@ -97,8 +97,8 @@ kpfred.CRYOBODY_T|float|Red Cryo Body temp|C
 kpfred.CRYOBODY_TRG|float|Red Cryo body heater 7B target temp|C
 kpfred.CURRTEMP|float|Red cold head temp|C
 kpfred.ECH_PRESS|float|Red ion pump pressure|Torr
-kpfred.KPF_CCD_T|float|SSL Red CCD temp|C
-kpfred.STA_CCD_T|float|STA Red CCD temp|C
+kpfred.KPF_CCD_T|float|SSL temp sensor on Red CCD|C
+kpfred.STA_CCD_T|float|STA temp sensor on Red CCD|C
 kpfred.STA_CCD_TRG|float|Red CCD heater 7A target temp|C
 kpfred.TEMPSET|float|Set point for the Red cold head temp|C
 kpfexpose.BENCH_C|float|HK Bench temp|C
