@@ -58,8 +58,12 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --log /data/logs/QLP/ --fits /data/{self.level} &
     
             # run the pipeline for all data in the directory
-            kpf --reprocess --watch /data/L2/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
-            # kpf --watch /data/{self.level}/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
+            kpf --watch /data/{self.level}/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
+
+            # Use this only to test the QLP with existing data. In order to use
+            # this, see the level in the watch directory appropriately, comment
+            # out the line above, and uncomment the line below.
+            # kpf --reprocess --watch /data/L2/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
             
             """
 
