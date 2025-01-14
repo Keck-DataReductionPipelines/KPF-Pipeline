@@ -107,6 +107,8 @@ The section below called **Master Files Creation** gives more details about the 
 FITS keyword ``BIASDONE = 1`` is written to the FITS header to signify that master bias subtraction was done.
 If the input image is itself a bias exposure, then the pipeline does not perform master bias subtraction and
 FITS keyword ``BIASDONE = 0`` will be written to the FITS header.
+Regardless, the path and filename of the master bias file that was applied or would have been applied is
+written to FITS keywords ``BIASDIR`` and ``BIASFILE``, respectively.
 
 Master dark subtraction is done next, also in machine memory.  Dark current contributes electrons to the signal
 of a pixel in proportion to time, and must be removed from the desired photon-detection signal.
@@ -120,6 +122,8 @@ The section below called **Master Files Creation** gives more details about the 
 FITS keyword ``DARKDONE = 1`` is written to the FITS header to signify that master dark subtraction was done.
 If the input image is itself a bias or dark exposure, then the pipeline does not perform master dark subtraction and
 FITS keyword ``DARKDONE = 0`` will be written to the FITS header.
+Regardless, the path and filename of the master dark file that was applied or would have been applied is
+written to FITS keywords ``DARKDIR`` and ``DARKFILE``, respectively.
 
 Master flat correction is done next, also in machine memory.
 This is also known as the image nonuniformity correction,
@@ -132,6 +136,8 @@ The section below called **Master Files Creation** gives more details about the 
 FITS keyword ``FLATDONE = 1`` is written to the FITS header to signify that master flat correction was done.
 If the input image is itself a bias or dark exposure, then the pipeline does not perform master flat correction and
 FITS keyword ``FLATDONE = 0`` will be written to the FITS header.
+Regardless, the path and filename of the master flat file that was applied or would have been applied is
+written to FITS keywords ``FLATDIR`` and ``FLATFILE``, respectively.
 
 In the end, the 2D FITS file is written to the filesystem,
 containing HDUs for GREEN and RED full spectroscopic-data images,
