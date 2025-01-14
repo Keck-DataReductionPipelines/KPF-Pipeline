@@ -93,8 +93,16 @@ under git repository ``KPF-Pipeline/recipes``.  The ``WATCHFOR_L0`` block in con
 The mosaicing of subimages from different readout amplifiers into a full CCD image for a given filter (GREEN or RED)
 is straightforward.  The relative positions of the subimages are described in the following parameter files under
 git repository ``KPF-Pipeline/static``: ``kpfsim_ccd_orient_green.txt`` and ``kpfsim_ccd_orient_red.txt``.
+At this point the product is in 2D FITS format, but the actual 2D FITS file is not actually written to disk
+until after all the remaining CCD image processing has been done, which is described in the remainder of this section.
 
-<Describe master bias subtraction>
+Next is master bias subtraction.  This is done in machine memory, continued after the aforementioned steps.
+Whereas overscan subtraction involves subtracting off the floating bias specific to an exposure, master bias
+subtraction involves the pixel-by-pixel subtraction of a master bias image that is common to a collection of
+exposures taken within some short period of time (such as 24 hours).  The master bias is a data-clipped,
+pixel-by-pixel stack average of some number of bias frames that were taken in the near vicinity of time.
+A database query is performed to obtain the nearest-in-time available master bias 2D FITS file (past or future).
+The section below called **Master Files Creation** gives more details about the generation of master bias files.
 
 <Describe master dark subtraction>
 
