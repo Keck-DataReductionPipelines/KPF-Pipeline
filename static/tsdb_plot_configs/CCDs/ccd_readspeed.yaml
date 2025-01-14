@@ -4,7 +4,7 @@ panel_arr:
   - panelvars:
       - col: GREENTRT
         plot_type: plot
-        unit: e-
+        unit: sec
         plot_attr:
           label: Green CCD
           marker: .
@@ -12,7 +12,7 @@ panel_arr:
           color: darkgreen
       - col: REDTRT
         plot_type: plot
-        unit: e-
+        unit: sec
         plot_attr:
           label: Red CCD
           marker: .

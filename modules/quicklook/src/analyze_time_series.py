@@ -412,8 +412,11 @@ class AnalyzeTimeSeries:
                             batch = []
                 if batch:
                     self.ingest_batch_observation(batch)
+
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
+
+        self.print_db_status()
 
 
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
@@ -569,7 +572,7 @@ class AnalyzeTimeSeries:
             'extract_kwd_func': self.extract_kwd,
             'extract_telemetry_func': self.extract_telemetry,
             'extract_rvs_func': self.extract_rvs,
-#            'is_any_file_updated_func': self.is_any_file_updated,
+#            'is_any_file_updated_func': self.is_any_file_updated,  # this isn't needed because it's checked eaerlier
             'get_source_func': self.get_source,
             'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
         }
@@ -792,6 +795,15 @@ class AnalyzeTimeSeries:
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
                  'FLXREG3R', 'FLXREG4R', 'FLXREG5R', 'FLXREG6R']
+
+        # Spectrometer and other temperatures from kpfmet
+        kwrds = ['kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS', 'kpfmet.BENCH_BOTTOM_COLLIMATOR', 'kpfmet.BENCH_BOTTOM_DCUT', 'kpfmet.BENCH_BOTTOM_ECHELLE', 'kpfmet.BENCH_TOP_BETWEEN_CAMERAS', 'kpfmet.BENCH_TOP_COLL', 'kpfmet.BENCH_TOP_DCUT', 'kpfmet.BENCH_TOP_ECHELLE_CAM', 'kpfmet.CALEM_SCMBLR_CHMBR_END', 'kpfmet.CALEM_SCMBLR_FIBER_END', 'kpfmet.CAL_BENCH', 'kpfmet.CAL_BENCH_BB_SRC', 'kpfmet.CAL_BENCH_BOT', 'kpfmet.CAL_BENCH_ENCL_AIR', 'kpfmet.CAL_BENCH_OCT_MOT', 'kpfmet.CAL_BENCH_TRANS_STG_MOT', 'kpfmet.CAL_RACK_TOP|float', 'kpfmet.CHAMBER_EXT_BOTTOM', 'kpfmet.CHAMBER_EXT_TOP', 'kpfmet.CRYOSTAT_G1', 'kpfmet.CRYOSTAT_G2', 'kpfmet.CRYOSTAT_G3', 'kpfmet.CRYOSTAT_R1', 'kpfmet.CRYOSTAT_R2', 'kpfmet.CRYOSTAT_R3', 'kpfmet.ECHELLE_BOTTOM', 'kpfmet.ECHELLE_TOP', 'kpfmet.FF_SRC', 'kpfmet.GREEN_CAMERA_BOTTOM', 'kpfmet.GREEN_CAMERA_COLLIMATOR', 'kpfmet.GREEN_CAMERA_ECHELLE', 'kpfmet.GREEN_CAMERA_TOP', 'kpfmet.GREEN_GRISM_TOP', 'kpfmet.GREEN_LN2_FLANGE', 'kpfmet.PRIMARY_COLLIMATOR_TOP', 'kpfmet.RED_CAMERA_BOTTOM', 'kpfmet.RED_CAMERA_COLLIMATOR', 'kpfmet.RED_CAMERA_ECHELLE', 'kpfmet.RED_CAMERA_TOP', 'kpfmet.RED_GRISM_TOP', 'kpfmet.RED_LN2_FLANGE', 'kpfmet.REFORMATTER', 'kpfmet.SCIENCE_CAL_FIBER_STG', 'kpfmet.SCISKY_SCMBLR_CHMBR_EN', 'kpfmet.SCISKY_SCMBLR_FIBER_EN', 'kpfmet.SIMCAL_FIBER_STG', 'kpfmet.SKYCAL_FIBER_STG', 'kpfmet.TEMP', 'kpfmet.TH_DAILY', 'kpfmet.TH_GOLD', 'kpfmet.U_DAILY', 'kpfmet.U_GOLD',]
+        for key in kwrds:
+            if key in df.columns:
+                pass
+                # need to check on why these values occur
+                #df = df.loc[df[key] > -200]
+                #df = df.loc[df[key] <  400]
 
         return df
 
@@ -1435,6 +1447,7 @@ class AnalyzeTimeSeries:
                 else:
                     t = df['DATE-MID'] # dates
 
+                # Set plot attributes
                 plot_attributes = {}
                 if plot_type != 'state':
                     if np.count_nonzero(~np.isnan(data)) > 0:
@@ -1472,19 +1485,24 @@ class AnalyzeTimeSeries:
                                 plot_attributes['label'] = label
                         else:
                            plot_attributes = {}
-                
+
+                # Plot type: scatter plot
                 if plot_type == 'scatter':
                     axs[p].scatter(t, data, **plot_attributes)
                 
+                # Plot type: scatter plot with error bars
                 if plot_type == 'errorbar':
                     axs[p].errorbar(t, data, yerr=data_err, **plot_attributes)
                 
+                # Plot type: connected points
                 if plot_type == 'plot':
                     axs[p].plot(t, data, **plot_attributes)
                 
+                # Plot type: stepped lines
                 if plot_type == 'step':
                     axs[p].step(t, data, **plot_attributes)
                 
+                # Plot type: scatter plots for non-float 'states'
                 if plot_type == 'state':
                     # Plot states (e.g., DRP version number or QC result)
                     # First, convert states to a consistent type for comparison
@@ -1531,25 +1549,40 @@ class AnalyzeTimeSeries:
 
                 axs[p].xaxis.set_tick_params(labelsize=10)
                 axs[p].yaxis.set_tick_params(labelsize=10)
-                if 'axhspan' in thispanel['paneldict']:
-                    for key, axh in thispanel['paneldict']['axhspan'].items():
-                        ymin = axh['ymin']
-                        ymax = axh['ymax']
-                        clr  = axh['color']
-                        alp  = axh['alpha']
-                        axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
-                if makelegend:
-                    if len(t) > 0:
-                        if 'legend_frac_size' in thispanel['paneldict']:
-                            legend_frac_size = thispanel['paneldict']['legend_frac_size']
-                        else:
-                            legend_frac_size = 0.20
-                        handles, labels = axs[p].get_legend_handles_labels()
-                        sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
-                        handles, labels = zip(*sorted_pairs)
-                        axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
-                if ylim:
-                    axs[p].set_ylim(ylim)
+
+            # Draw translucent boxes
+            if 'axhspan' in thispanel['paneldict']:
+                # This is needed so that ylim autoscaling is based on data and not the boxes below
+                axs[p].relim()            
+                axs[p].autoscale_view()   
+#                ymin, ymax = axs[p].get_ylim()
+#                axs[p].set_ylim(ymin, ymax)
+                axs[p].set_autoscale_on(False)
+                # Draw boxes
+                for key, axh in thispanel['paneldict']['axhspan'].items():
+                     ymin = axh['ymin']
+                     ymax = axh['ymax']
+                     clr  = axh['color']
+                     alp  = axh['alpha']
+                     axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
+
+            # Make legend
+            if makelegend:
+                if len(t) > 0:
+                    if 'legend_frac_size' in thispanel['paneldict']:
+                        legend_frac_size = thispanel['paneldict']['legend_frac_size']
+                    else:
+                        legend_frac_size = 0.20
+                    handles, labels = axs[p].get_legend_handles_labels()
+                    sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
+                    handles, labels = zip(*sorted_pairs)
+                    axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+
+            # Set y limits
+            if ylim:
+                axs[p].set_ylim(ylim)
+
+            # Add background grid
             axs[p].grid(color='lightgray')
 
         # Create a timestamp and annotate in the lower right corner

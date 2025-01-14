@@ -18,7 +18,7 @@ panel_arr:
           ymin: 0
           ymax: 30
           color: red
-          alpha: 0.2
+          alpha: 0.1
       not_junk: true
       on_sky: true
       legend_frac_size: 0.30
@@ -41,12 +41,12 @@ panel_arr:
           ymin: 0
           ymax: -6
           color: red
-          alpha: 0.2
+          alpha: 0.1
         2:
           ymin: -6
           ymax: -12
           color: orange
-          alpha: 0.2
+          alpha: 0.1
       not_junk: true
       on_sky: true
       legend_frac_size: 0.30

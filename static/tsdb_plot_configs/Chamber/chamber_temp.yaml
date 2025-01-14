@@ -2,79 +2,6 @@ description: KPF Spectrometer Temperatures
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
-      - col: kpfmet.TEMP
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: .
-          marker: .
-          linewidth: 0.5
-    paneldict:
-      ylabel: "Hallway\n Temperature ($^{\\circ}$C)"
-      not_junk: true
-      legend_frac_size: 0.3
-
-  - panelvars:
-      - col: kpfmet.GREEN_LN2_FLANGE
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: "Green LN$_2$ Flng"
-          marker: .
-          linewidth: 0.5
-          color: darkgreen
-      - col: kpfmet.RED_LN2_FLANGE
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: "Red LN$_2$ Flng"
-          marker: .
-          linewidth: 0.5
-          color: darkred
-      - col: kpfmet.CHAMBER_EXT_BOTTOM
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: Chamber Ext Bot
-          marker: .
-          linewidth: 0.5
-    paneldict:
-      ylabel: "Exterior\n Temperatures ($^{\\circ}$C)"
-      not_junk: true
-      legend_frac_size: 0.3
-
-  - panelvars:
-      - col: kpfmet.GREEN_LN2_FLANGE
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: "Green LN$_2$ Flng"
-          marker: .
-          linewidth: 0.5
-          color: darkgreen
-      - col: kpfmet.RED_LN2_FLANGE
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: "Red LN$_2$ Flng"
-          marker: .
-          linewidth: 0.5
-          color: darkred
-      - col: kpfmet.CHAMBER_EXT_BOTTOM
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: Chamber Ext Bot
-          marker: .
-          linewidth: 0.5
-    paneldict:
-      ylabel: "Exterior\n $\\Delta$Temperature (K)"
-      not_junk: true
-      title: KPF Hallway Temperatures
-      subtractmedian: true
-      legend_frac_size: 0.3
-
-  - panelvars:
       - col: kpfmet.BENCH_BOTTOM_BETWEEN_CAMERAS
         plot_type: plot
         unit: K
@@ -197,7 +124,106 @@ panel_arr:
     paneldict:
       ylabel: "Spectrometer\n $\\Delta$Temperature (K)"
       title: KPF Spectrometer Temperatures
-      not_junk: true
       nolegend: false
+      subtractmedian: true
+      axhspan:
+        1:
+          ymin: 0.1
+          ymax: 10
+          color: red
+          alpha: 0.2
+        2:
+          ymin: -10
+          ymax: -0.1
+          color: red
+          alpha: 0.2
+        3:
+          ymin: 0.01
+          ymax: 0.1
+          color: orange
+          alpha: 0.2
+        4:
+          ymin: -0.1
+          ymax: -0.01
+          color: orange
+          alpha: 0.2
+        5:
+          ymin: -0.01
+          ymax:  0.01
+          color: green
+          alpha: 0.2
+      not_junk: true
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.TEMP
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: .
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Hallway\n Temperature ($^{\\circ}$C)"
+      not_junk: true
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.GREEN_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Green LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: kpfmet.RED_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Red LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: kpfmet.CHAMBER_EXT_BOTTOM
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Chamber Ext Bot
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Exterior\n Temperatures ($^{\\circ}$C)"
+      not_junk: true
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.GREEN_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Green LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: kpfmet.RED_LN2_FLANGE
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: "Red LN$_2$ Flng"
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: kpfmet.CHAMBER_EXT_BOTTOM
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Chamber Ext Bot
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Exterior\n $\\Delta$Temperature (K)"
+      not_junk: true
+      title: KPF Hallway Temperatures
       subtractmedian: true
       legend_frac_size: 0.3
