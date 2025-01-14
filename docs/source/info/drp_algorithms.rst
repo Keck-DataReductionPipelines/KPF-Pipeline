@@ -68,10 +68,20 @@ off so that there is no light exposure, and so sensor data from these overscan r
 Overscan subtraction is also known as "floating-bias subtraction", which is not to be confused with the
 master bias subtraction to be discussed below.
 The method of determining the overscan bias is, for a given readout amplifier, to compute the clipped mean of data
-in the overscan region 5 pixels away from the edges of the overscan region.  The level of data clipping is 2.1 sigma.
+well into the overscan strip, avoiding the 4-pixel pre-scan region, with an addition 5-pixel buffer away from
+the edges of the overscan strip.  The specific clipped-mean algorithm involves rejecting data that are
++/- some number of sigmas from the median of the data, where sigma is robustly computed by::
+
+    sigma = 0.5 * (p84 - p16)
+    p84 = 84th percentile of the data
+    p16 = 16th percentile of the data
+
+The mean or average is computed from the remaining data.
+The level of data clipping is 2.1 sigma.
 The overscan bias, which is just a number for each readout amplifier (for a given filter), is then subtracted from
 the image data at each pixel in the unmasked or light-exposed portion of the CCD subimage data for that
 readout amplifier.
+The CCD subimage is trimmed to completely remove the bias strips that are now superfluous.
 With the overscan bias removed, the CCD subimage data are a step closer to a regime that is
 linearly proportional to the amount of light exposure.  The python module ``overscan_subtract.py``
 under git repository ``KPF-Pipeline/modules/Utils`` handles both overscan subtraction and
