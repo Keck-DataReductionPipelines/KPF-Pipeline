@@ -37,8 +37,8 @@ FLXECHR|float|Dark curr, Red ech-side region = [3700:4000,700:1000]|e-/hr
 GDRXRMS|float|x-coordinate RMS guiding error|mas
 GDRYRMS|float|y-coordinate RMS guiding error|mas
 GDRRRMS|float|r-coordinate RMS guiding error|mas
-GDRXBIAS|float|x-coordinate bias guiding error in milliarcsec|mas
-GDRYBIAS|float|y-coordinate bias guiding error in milliarcsec|mas
+GDRXBIAS|float|x-coordinate bias guiding error|mas
+GDRYBIAS|float|y-coordinate bias guiding error|mas
 GDRSEEJZ|float|Seeing in J+Z-band from Moffat func fit|arcsec
 GDRSEEV|float|Scaled seeing in V-band from J+Z-band|arcsec
 MOONSEP|float|Separation between Moon and target star|deg
