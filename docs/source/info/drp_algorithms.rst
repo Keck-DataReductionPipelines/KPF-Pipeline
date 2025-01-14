@@ -39,13 +39,15 @@ A CCD (charged-coupled device) is a sensor of many pixels that allows
 photons to be detected and a digital image to be produced.
 The CCD is exposed to light for a certain amount of requested time,
 called exposure time (EXPTIME in the FITS PRIMARY header, in seconds).
-In the case of KPF, there are CCDs with GREEN and RED filters (and a separate CCD with a Ca H&K line filter),
+In the case of KPF, spectroscopic-image data are taken by CCDs with GREEN and RED filters
+(and a separate CCD with a Ca H&K line filter),
 and these are exposed simultaneously via a beamsplitter.
 The CCD image processing consists of several steps, as discussed below.
 It starts with an L0 FITS file for a given exposure and ends with a 2D FITS file.
-The L0 FITS file contains several HDUs (header-data units) with CCD subimage data from separate readout amplifiers.
-The size in pixels of the subimages depends on the mode in which the instrument operating, which may be
-utilizing 2 or 4 amplifiers for a given GREEN or RED filter.
+The L0 FITS file contains several HDUs (header-data units) with CCD subimage data from
+separate readout amplifiers.
+The size in pixels of the subimages depends on the mode in which the instrument operating,
+which may be utilizing 2 or 4 amplifiers for a given GREEN or RED filter.
 For example, with 2 amplifiers the subimage is 2094x4110 pixels.
 The description in this section mainly refers to the GREEN and RED CCDs.
 
@@ -68,7 +70,8 @@ master bias subtraction to be discussed below.
 The method of determining the overscan bias is, for a given readout amplifier, to compute the clipped mean of data
 in the overscan region 5 pixels away from the edges of the overscan region.  The level of data clipping is 2.1 sigma.
 The overscan bias, which is just a number for each readout amplifier (for a given filter), is then subtracted from
-the image data at each pixel in the unmasked or light-exposed portion of the CCD subimage data for that readout amplifier.
+the image data at each pixel in the unmasked or light-exposed portion of the CCD subimage data for that
+readout amplifier.
 With the overscan bias removed, the CCD subimage data are a step closer to a regime that is
 linearly proportional to the amount of light exposure.  The python module ``overscan_subtract.py``
 under git repository ``KPF-Pipeline/modules/Utils`` handles both overscan subtraction and
@@ -87,8 +90,17 @@ git repository ``KPF-Pipeline/static``: ``kpfsim_ccd_orient_green.txt`` and ``kp
 
 <Describe master flat correction>
 
-In the end, the 2D FITS file contains HDUs for GREEN and RED images, each 4080x4080 pixels, with FITS extension names
-GREEN_CCD and RED_CCD, respectively.  The physical units of the image data is electrons.
+In the end, the 2D FITS file contains HDUs for GREEN and RED full spectroscopic-data images,
+each 4080x4080 pixels, with FITS extension names GREEN_CCD and RED_CCD, respectively.
+The overscan biases that were subtracted are recorded in the FITS headers of
+these HDUs; for example:
+
+    OSCANV1 =    3086.385215099043 / Overscan clipped mean (e-), GREEN_AMP1
+    OSCANV2 =    2783.307279684444 / Overscan clipped mean (e-), GREEN_AMP2
+
+The physical units of the image data is electrons.
+There are also associated variance images with FITS extension names
+GREEN_VAR and RED_VAR, respectively, with physical units of electrons squared.
 
 
 Master Files Creation
