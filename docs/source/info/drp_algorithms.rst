@@ -58,7 +58,8 @@ Here are the basic image-processing steps for a given L0 FITS file:
 3. Master bias subtraction
 4. Master dark subtraction
 5. Master flat correction
-6. Production of a 2D FITS file for the exposure
+6. Quality control testing
+7. Production of a 2D FITS file for the exposure
 
 Overscan subtraction is a fundamental data-reduction step in CCD image processing.
 It is the removal of the bias in the data that is associated
@@ -139,11 +140,85 @@ FITS keyword ``FLATDONE = 0`` will be written to the FITS header.
 Regardless, the path and filename of the master flat file that was applied or would have been applied is
 written to FITS keywords ``FLATDIR`` and ``FLATFILE``, respectively.
 
+Quality control testing is also done. Below is a fairly complete example of all the FITS keywords that
+are written to the PRIMARY header after successfully CCD image processing, with helpful keyword comments::
+
+    EXTNAME = 'PRIMARY '           / extension name
+    NOTJUNK =                    1 / QC: Not in list of junk files
+    DATAPRL0=                    1 / QC: L0 data present
+    KWRDPRL0=                    1 / QC: L0 keywords present
+    TIMCHKL0=                    1 / QC: L0 times consistent
+    ISGOOD  =                    1 / QC: all other QC tests passed
+    REDAMPS =                    2
+    GRNAMPS =                    2
+    BIASFILE= 'kpf_20250113_master_bias_autocal-bias.fits'
+    BIASDIR = '/masters/20250113'
+    BIASDONE=                    1
+    DARKFILE= 'kpf_20250113_master_dark_autocal-dark.fits'
+    DARKDIR = '/masters/20250113'
+    DARKDONE=                    1
+    FLATFILE= 'kpf_20250113_master_flat.fits'
+    FLATDIR = '/masters/20250113'
+    FLATDONE=                    1
+    GR2DF99P=             11089.16 / 99th percentile flux in 2D Green image (e-)
+    GR2DF90P=              1770.91 / 90th percentile flux in 2D Green image (e-)
+    GR2DF50P=                60.21 / 50th percentile flux in 2D Green image (e-)
+    GR2DF10P=                -1.25 / 10th percentile flux in 2D Green image (e-)
+    RD2DF99P=             13191.65 / 99th percentile flux in 2D Red image (e-)
+    RD2DF90P=              1077.75 / 90th percentile flux in 2D Red image (e-)
+    RD2DF50P=                 42.7 / 50th percentile flux in 2D Red image (e-)
+    RD2DF10P=                -10.6 / 10th percentile flux in 2D Red image (e-)
+    HK2DF99P=                 3.14 / 99th percentile flux in 2D CaHK image
+    HK2DF90P=                 1.85 / 90th percentile flux in 2D CaHK image
+    HK2DF50P=                 0.25 / 50th percentile flux in 2D CaHK image
+    HK2DF10P=                -1.32 / 10th percentile flux in 2D CaHK image
+    DATAPR2D=                    1 / QC: 2D red and green data present check
+    DBRID   =              1239221 / DB raw image ID
+    L0QCBITS=                   64 / L0 QC bitwise flags (see defs below)
+    MEDGRN1 =           39474412.0 / Median for GREEN_AMP1 [DN]
+    MEDGRN2 =           35158804.0 / Median for GREEN_AMP2 [DN]
+    MEDRED1 =           36648488.0 / Median for RED_AMP1 [DN]
+    MEDRED2 =           36021800.0 / Median for RED_AMP2 [DN]
+    MEDCAHK =                302.0 / Median for CA_HK_AMP [DN]
+    P16GRN1 =           38943508.0 / 16th percentile for GREEN_AMP1 [DN]
+    P16GRN2 =           34463428.0 / 16th percentile for GREEN_AMP2 [DN]
+    P16RED1 =           36180284.0 / 16th percentile for RED_AMP1 [DN]
+    P16RED2 =           35437960.0 / 16th percentile for RED_AMP2 [DN]
+    P16CAHK =                301.0 / 16th percentile for CA_HK_AMP [DN]
+    P84GRN1 =           45165332.0 / 84th percentile for GREEN_AMP1 [DN]
+    P84GRN2 =           45947276.0 / 84th percentile for GREEN_AMP2 [DN]
+    P84RED1 =           39188952.0 / 84th percentile for RED_AMP1 [DN]
+    P84RED2 =           40671076.0 / 84th percentile for RED_AMP2 [DN]
+    P84CAHK =                304.0 / 84th percentile for CA_HK_AMP [DN]
+    L0BIT00 = 'GREEN_AMP1 Dead: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT01 = 'GREEN_AMP2 Dead: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT02 = 'GREEN_AMP3 Dead: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT03 = 'GREEN_AMP4 Dead: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT04 = 'RED_AMP1 Dead: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT05 = 'RED_AMP2 Dead: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT06 = 'CA_HK: gt 5% of pixels have values lt 10000 D.N.'
+    L0BIT07 = 'GREEN_AMP1 Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    L0BIT08 = 'GREEN_AMP2 Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    L0BIT09 = 'GREEN_AMP3 Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    L0BIT10 = 'GREEN_AMP4 Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    L0BIT11 = 'RED_AMP1 Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    L0BIT12 = 'RED_AMP2 Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    L0BIT13 = 'CA_HK Saturated: gt 15% of pixels have values gt 5.0e8 D.N.'
+    RNGREEN1=             23.32865 / Instantaneous GREEN_AMP1 read noise [electrons]
+    RNGREEN2=             23.73995 / Instantaneous GREEN_AMP2 read noise [electrons]
+    RNRED1  =             24.74892 / Instantaneous RED_AMP1 read noise [electrons]
+    RNRED2  =             26.11677 / Instantaneous RED_AMP2 read noise [electrons]
+    RNCAHK  =                  0.0 / Instantaneous CA_HK read noise [electrons]
+    GREENTRT=               46.909 / GREEN chip total read time [seconds]
+    REDTRT  =               46.843 / RED chip total read time [seconds]
+    READSPED= 'regular '           / Categorization of read speed
+
+
 In the end, the 2D FITS file is written to the filesystem,
 containing HDUs for GREEN and RED full spectroscopic-data images,
 each 4080x4080 pixels, with FITS extension names GREEN_CCD and RED_CCD, respectively.
 The overscan biases that were subtracted are recorded in the FITS headers of
-these HDUs; for example::
+these HDUs (not PRIMARY HDU); for example::
 
     OSCANV1 =    3086.385215099043 / Overscan clipped mean (e-), GREEN_AMP1
     OSCANV2 =    2783.307279684444 / Overscan clipped mean (e-), GREEN_AMP2
