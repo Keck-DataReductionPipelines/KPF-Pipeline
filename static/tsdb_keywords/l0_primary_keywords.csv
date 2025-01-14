@@ -62,4 +62,4 @@ TARGTEFF|float|Target effective temp|K
 RA|string|Right ascension|hr
 DEC|string|Declination|deg
 EQUINOX|float|DCS Equinox|None
-MJD-OBS|float|Modified Julian day of observation|None
+MJD-OBS|float|Modified Julian day of the observation start|None
