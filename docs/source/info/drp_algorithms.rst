@@ -93,7 +93,7 @@ git repository ``KPF-Pipeline/static``: ``kpfsim_ccd_orient_green.txt`` and ``kp
 In the end, the 2D FITS file contains HDUs for GREEN and RED full spectroscopic-data images,
 each 4080x4080 pixels, with FITS extension names GREEN_CCD and RED_CCD, respectively.
 The overscan biases that were subtracted are recorded in the FITS headers of
-these HDUs; for example:
+these HDUs; for example::
 
     OSCANV1 =    3086.385215099043 / Overscan clipped mean (e-), GREEN_AMP1
     OSCANV2 =    2783.307279684444 / Overscan clipped mean (e-), GREEN_AMP2
