@@ -2,14 +2,6 @@ description: CCD temperatures
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
-      - col: kpfgreen.KPF_CCD_T
-        plot_type: plot
-        unit: K
-        plot_attr:
-          label: SSL Sensor
-          marker: .
-          linewidth: 0.5
-          color: forestgreen
       - col: kpfgreen.STA_CCD_T
         plot_type: plot
         unit: K
@@ -19,7 +11,35 @@ panel_arr:
           linewidth: 0.5
           color: darkgreen
     paneldict:
-      ylabel: "Green CCD\nTemperature (C)"
+      ylabel: "Green CCDTemp (C)\nSTA sensor"
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: kpfred.STA_CCD_T
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: STA Sensor
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      ylabel: "Red CCD\nTemp (C) - STA sensor"
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: kpfgreen.KPF_CCD_T
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: SSL Sensor
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Green CCD\nTemp (C) - SSL sensor"
       not_junk: true
       legend_frac_size: 0.25
 
@@ -32,16 +52,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
           color: darkred
-      - col: kpfred.STA_CCD_T
-        plot_type: plot
-        unit: K
-        plot_attr:
-          label: STA Sensor
-          marker: .
-          linewidth: 0.5
-          color: firebrick
     paneldict:
-      ylabel: "Red CCD\nTemperature (C)"
+      ylabel: "Red CCD\nTemp (C) - SSL sensor"
       not_junk: true
       legend_frac_size: 0.25
-
