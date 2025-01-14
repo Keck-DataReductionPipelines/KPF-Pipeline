@@ -11,7 +11,7 @@ panel_arr:
           linewidth: 0.5
           color: darkgreen
     paneldict:
-      ylabel: "Green CCDTemp (C)\nSTA sensor"
+      ylabel: "Green CCD Temp (C)\nSTA sensor (controlled)"
       not_junk: true
       legend_frac_size: 0.25
 
@@ -23,9 +23,9 @@ panel_arr:
           label: STA Sensor
           marker: .
           linewidth: 0.5
-          color: firebrick
+          color: darkred
     paneldict:
-      ylabel: "Red CCD\nTemp (C) - STA sensor"
+      ylabel: "Red CCD Temp (C)\nSTA sensor (controlled)"
       not_junk: true
       legend_frac_size: 0.25
 
@@ -39,7 +39,7 @@ panel_arr:
           linewidth: 0.5
           color: forestgreen
     paneldict:
-      ylabel: "Green CCD\nTemp (C) - SSL sensor"
+      ylabel: "Green CCD Temp (C)\nSSL sensor"
       not_junk: true
       legend_frac_size: 0.25
 
@@ -51,8 +51,8 @@ panel_arr:
           label: SSL Sensor
           marker: .
           linewidth: 0.5
-          color: darkred
+          color: firebrick
     paneldict:
-      ylabel: "Red CCD\nTemp (C) - SSL sensor"
+      ylabel: "Red CCD Temp (C)\nSSL sensor"
       not_junk: true
       legend_frac_size: 0.25
