@@ -1,6 +1,9 @@
 KPF DRP Algorithms
 ==================
 
+Please refer to the `KPF-Pipeline GitHub Repository <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_
+for any source code referred to below.
+
 Overview
 --------
 The target audience here is astronomers who will use the data.
@@ -64,16 +67,16 @@ Overscan subtraction is also known as "floating-bias subtraction", which is not 
 master bias subtraction to be discussed below.
 The method of determining the overscan bias is, for a given readout amplifier, to compute the clipped mean of data
 in the overscan region 5 pixels away from the edges of the overscan region.  The level of data clipping is 2.1 sigma.
-The overscan bias, which is just a number for each readout amplifier (for a given filter) is then subtracted from
+The overscan bias, which is just a number for each readout amplifier (for a given filter), is then subtracted from
 the image data at each pixel in the unmasked or light-exposed portion of the CCD subimage data for that readout amplifier.
 With the overscan bias removed, the CCD subimage data are a step closer to a regime that is
-linearly proportional to the amount of light exposure.  The python module overscan_subtract.py
-under git repository KPF-Pipeline/modules/Utils handles both overscan subtraction and
+linearly proportional to the amount of light exposure.  The python module ``overscan_subtract.py``
+under git repository ``KPF-Pipeline/modules/Utils`` handles both overscan subtraction and
 mosaicing amplifier subimage data into a full image.
 
 The mosaicing of subimages from different readout amplifiers into a full CCD image for a given filter (GREEN or RED)
 is straightforward.  The relative positions of the subimages are described in the following parameter files under
-git repository KPF-Pipeline/static: kpfsim_ccd_orient_green.txt and kpfsim_ccd_orient_red.txt.
+git repository ``KPF-Pipeline/static``: ``kpfsim_ccd_orient_green.txt`` and ``kpfsim_ccd_orient_red.txt``.
 
 <Describe master bias subtraction>
 
