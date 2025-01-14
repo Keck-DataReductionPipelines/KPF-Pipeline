@@ -1,0 +1,127 @@
+description: KPF Spectrometer Spatial Temperature Gradients
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: kpfmet.ECHELLE_TOP
+        col_subtract:  kpfmet.ECHELLE_BOTTOM
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Echelle ($\\uparrow$ - $\\downarrow$)"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
+      not_junk: true
+      subtractmedian: true
+      nolegend: false
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.REFORMATTER
+        col_subtract:  kpfmet.PRIMARY_COLLIMATOR_TOP
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Reformatter - Prim. Coll.\n"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
+      not_junk: true
+      subtractmedian: true
+      nolegend: false
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.BENCH_TOP_ECHELLE_CAM
+        col_subtract:  kpfmet.BENCH_TOP_COLL
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Bench Top (Echelle - Coll.)\n"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
+      not_junk: true
+      subtractmedian: true
+      nolegend: false
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.GREEN_CAMERA_TOP
+        col_subtract:  kpfmet.GREEN_CAMERA_BOTTOM
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Green Cam ($\\uparrow$ - $\\downarrow$)\n"
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: kpfmet.RED_CAMERA_TOP
+        col_subtract:  kpfmet.RED_CAMERA_BOTTOM
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Red Cam ($\\uparrow$ - $\\downarrow$)\n"
+          marker: .
+          linewidth: 0.5
+          color: darkred
+    paneldict:
+      ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
+      not_junk: true
+      subtractmedian: true
+      nolegend: false
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.GREEN_CAMERA_COLLIMATOR
+        col_subtract: kpfmet.GREEN_CAMERA_ECHELLE
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Green Cam (Coll-side - Ech-side)\n"
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: kpfmet.RED_CAMERA_COLLIMATOR
+        col_subtract: kpfmet.RED_CAMERA_ECHELLE
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Red Cam (Coll-side - Ech-side)\n"
+          marker: .
+          linewidth: 0.5
+          color: darkred
+    paneldict:
+      ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
+      not_junk: true
+      subtractmedian: true
+      nolegend: false
+      legend_frac_size: 0.3
+
+  - panelvars:
+      - col: kpfmet.CHAMBER_EXT_TOP
+        col_subtract:  kpfmet.CHAMBER_EXT_BOTTOM
+        col_multiply: 1000
+        plot_type: plot
+        unit: mK
+        plot_attr:
+          label: "Chamber Exterior ($\\uparrow$ - $\\downarrow$)\n"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
+      title: KPF Spectrometer Spatial Temperature Gradients
+      not_junk: true
+      subtractmedian: true
+      nolegend: false
+      legend_frac_size: 0.3
