@@ -1,0 +1,82 @@
+description: SoCal SNR & Flux Ratio
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: SNRSC452
+        plot_type: scatter
+        plot_attr:
+          label: SNR (452 nm)
+          marker: .
+          linewidth: 0.5
+          color: darkviolet
+      - col: SNRSC548
+        plot_type: scatter
+        plot_attr:
+          label: SNR (548 nm)
+          marker: .
+          linewidth: 0.5
+          color: blue
+      - col: SNRSC652
+        plot_type: scatter
+        plot_attr:
+          label: SNR (652 nm)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: SNRSC747
+        plot_type: scatter
+        plot_attr:
+          label: SNR (747 nm)
+          marker: .
+          linewidth: 0.5
+          color: orange
+      - col: SNRCL852
+        plot_type: scatter
+        plot_attr:
+          label: SNR (852 nm)
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      ylabel: SNR (SCI1+SCI2+SCI3)
+      only_object: SoCal
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: FR452652
+        plot_type: scatter
+        plot_attr:
+          label: Flux Ratio (452/652nm)
+          marker: .
+          linewidth: 0.5
+          color: darkviolet
+      - col: FR548652
+        plot_type: scatter
+        plot_attr:
+          label: Flux Ratio (548/652nm)
+          marker: .
+          linewidth: 0.5
+          color: blue
+      - col: FR747652
+        plot_type: scatter
+        plot_attr:
+          label: Flux Ratio (747/652nm)
+          marker: .
+          linewidth: 0.5
+          color: orange
+      - col: FR852652
+        plot_type: scatter
+        plot_attr:
+          label: Flux Ratio (852/652nm)
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      ylabel: Flux Ratio (SCI2)
+      title: SoCal SNR & Flux Ratio
+      only_object: SoCal
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
