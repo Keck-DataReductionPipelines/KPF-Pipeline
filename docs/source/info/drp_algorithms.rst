@@ -97,18 +97,44 @@ At this point the product is in 2D FITS format, but the actual 2D FITS file is n
 until after all the remaining CCD image processing has been done, which is described in the remainder of this section.
 
 Next is master bias subtraction.  This is done in machine memory, continued after the aforementioned steps.
-Whereas overscan subtraction involves subtracting off the floating bias specific to an exposure, master bias
-subtraction involves the pixel-by-pixel subtraction of a master bias image that is common to a collection of
+Whereas overscan subtraction involves subtracting off the floating bias specific to an exposure
+(and readout amplifier), master bias subtraction involves the pixel-by-pixel subtraction of a
+master bias image that is common to a collection of
 exposures taken within some short period of time (such as 24 hours).  The master bias is a data-clipped,
 pixel-by-pixel stack average of some number of bias frames that were taken in the near vicinity of time.
 A database query is performed to obtain the nearest-in-time available master bias 2D FITS file (past or future).
 The section below called **Master Files Creation** gives more details about the generation of master bias files.
+FITS keyword ``BIASDONE = 1`` is written to the FITS header to signify that master bias subtraction was done.
+If the input image is itself a bias exposure, then the pipeline does not perform master bias subtraction and
+FITS keyword ``BIASDONE = 0`` will be written to the FITS header.
 
-<Describe master dark subtraction>
+Master dark subtraction is done next, also in machine memory.  Dark current contributes electrons to the signal
+of a pixel in proportion to time, and must be removed from the desired photon-detection signal.
+From the input image to be processed,
+master dark subtraction involves involves the pixel-by-pixel subtraction of a
+master dark image, in electrons per second, multiplied by the exposure time of the input image.
+The master dark is a data-clipped, pixel-by-pixel stack average of some number of dark frames,
+normalized by their exposure times, that were taken in the near vicinity of time.
+A database query is performed to obtain the nearest-in-time available master dark 2D FITS file.
+The section below called **Master Files Creation** gives more details about the generation of master dark files.
+FITS keyword ``DARKDONE = 1`` is written to the FITS header to signify that master dark subtraction was done.
+If the input image is itself a bias or dark exposure, then the pipeline does not perform master dark subtraction and
+FITS keyword ``DARKDONE = 0`` will be written to the FITS header.
 
-<Describe master flat correction>
+Master flat correction is done next, also in machine memory.
+This is also known as the image nonuniformity correction,
+and it corrects for pixel-to-pixel variations in detector responsivity.
+The input image is simply divided by the master flat.
+The master flat is a data-clipped,
+pixel-by-pixel stack average of some number of Flatlamp frames that were taken in the near vicinity of time.
+A database query is performed to obtain the nearest-in-time available master flat 2D FITS file.
+The section below called **Master Files Creation** gives more details about the generation of master flat files.
+FITS keyword ``FLATDONE = 1`` is written to the FITS header to signify that master flat correction was done.
+If the input image is itself a bias or dark exposure, then the pipeline does not perform master flat correction and
+FITS keyword ``FLATDONE = 0`` will be written to the FITS header.
 
-In the end, the 2D FITS file contains HDUs for GREEN and RED full spectroscopic-data images,
+In the end, the 2D FITS file is written to the filesystem,
+containing HDUs for GREEN and RED full spectroscopic-data images,
 each 4080x4080 pixels, with FITS extension names GREEN_CCD and RED_CCD, respectively.
 The overscan biases that were subtracted are recorded in the FITS headers of
 these HDUs; for example::
