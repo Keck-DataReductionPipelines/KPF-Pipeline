@@ -72,7 +72,9 @@ the image data at each pixel in the unmasked or light-exposed portion of the CCD
 With the overscan bias removed, the CCD subimage data are a step closer to a regime that is
 linearly proportional to the amount of light exposure.  The python module ``overscan_subtract.py``
 under git repository ``KPF-Pipeline/modules/Utils`` handles both overscan subtraction and
-mosaicing amplifier subimage data into a full image.
+mosaicing amplifier subimage data into a full image.  This module is called from subrecipe
+``watchfor_kpf_l0.recipe`` of the KPF data reduction pipeline ``the kpf_drp.recipe``
+under git repository ``KPF-Pipeline/recipes``.
 
 The mosaicing of subimages from different readout amplifiers into a full CCD image for a given filter (GREEN or RED)
 is straightforward.  The relative positions of the subimages are described in the following parameter files under
