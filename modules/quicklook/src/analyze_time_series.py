@@ -925,7 +925,7 @@ class AnalyzeTimeSeries:
         self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
 
 
-    def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
+    def display_dataframe_from_db(self, columns, only_object=None, object_like=None, only_source=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
         TO-DO: should this method just call dataframe_from_db()?
@@ -938,6 +938,7 @@ class AnalyzeTimeSeries:
         Args:
             columns (string, list of strings, or '*' for all) - database columns to query
             only_object (string or list of strings) - object names to include in query
+            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
             object_like (string or list of strings) - partial object names to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
@@ -962,10 +963,15 @@ class AnalyzeTimeSeries:
             only_object = [f"OBJECT = '{only_object}'"]
             or_objects = ' OR '.join(only_object)
             where_queries.append(f'({or_objects})')
+        # is object_like working?
         if object_like is not None:
             object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
+        if only_source is not None:
+            only_source = [f"SOURCE = '{only_source}'"]
+            or_sources = ' OR '.join(only_source)
+            where_queries.append(f'({or_sources})')
         if on_sky is not None:
             if on_sky == True:
                 where_queries.append(f"FIUMODE = 'Observing'")
@@ -988,7 +994,7 @@ class AnalyzeTimeSeries:
 
     def dataframe_from_db(self, columns=None, 
                           start_date=None, end_date=None, 
-                          only_object=None, object_like=None, 
+                          only_object=None, only_source=None, object_like=None, 
                           on_sky=None, not_junk=None, 
                           verbose=False):
         """
@@ -1005,6 +1011,7 @@ class AnalyzeTimeSeries:
                With two years of observations in the database, 
                retrieving 1, 10, 100, 1000 days takes 0.13, 0.75, 2.05, 44 seconds.
             only_object (string) - object name to include in query
+            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
             object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
@@ -1034,10 +1041,18 @@ class AnalyzeTimeSeries:
             object_queries = [f"OBJECT = '{obj}'" for obj in only_object]
             or_objects = ' OR '.join(object_queries)
             where_queries.append(f'({or_objects})')
+        # does object_like work?
         if object_like is not None: 
             object_like = [f"OBJECT LIKE '%{object_like}%'"]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
+        if only_source is not None:
+            only_source = convert_to_list_if_array(only_source)
+            if isinstance(only_source, str):
+                only_source = [only_source]
+            source_queries = [f"SOURCE = '{src}'" for src in only_source]
+            or_sources = ' OR '.join(source_queries)
+            where_queries.append(f'({or_sources})')
         if not_junk is not None:
             if not_junk == True:
                 where_queries.append(f"NOTJUNK = 1")
@@ -1289,6 +1304,9 @@ class AnalyzeTimeSeries:
 #                    object_like = True
 #                elif str(thispanel['paneldict']['object_like']).lower() == 'false':
 #                    object_like = False
+            only_source = None
+            if 'only_source' in thispanel['paneldict']:
+                only_source = thispanel['paneldict']['only_source']
 
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
@@ -1308,6 +1326,7 @@ class AnalyzeTimeSeries:
                                         not_junk=not_junk, 
                                         only_object=only_object, 
                                         object_like=object_like,
+                                        only_source=only_source, 
                                         verbose=False)
             df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
             if start_date_was_none == True:
@@ -1634,7 +1653,7 @@ class AnalyzeTimeSeries:
             (e.g., in a Jupyter Notebook).
         
         To-do: 
-        	Add highlighting of QC tests
+            Add highlighting of QC tests
         """
         
         # Use plotting dictionary, if provided
