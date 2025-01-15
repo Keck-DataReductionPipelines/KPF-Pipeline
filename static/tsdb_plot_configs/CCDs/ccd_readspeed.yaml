@@ -10,6 +10,13 @@ panel_arr:
           marker: .
           linewidth: 0.5
           color: darkgreen
+    paneldict:
+      ylabel: Read Speed (sec)
+      title: CCD Read Speed
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
       - col: REDTRT
         plot_type: plot
         unit: sec
