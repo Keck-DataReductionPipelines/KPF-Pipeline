@@ -1551,6 +1551,10 @@ class AnalyzeTimeSeries:
                         mapped_states = [state_to_num[state] for state in states]
                         colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                         color_map = {state: colors[i] for i, state in enumerate(unique_states)}
+                    t = t.tolist()
+                    if len(states) != len(t):
+                        # Handle the mismatch
+                        print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
                     for state in unique_states:
                         color = color_map[state]
                         indices = [i for i, s in enumerate(states) if s == state]
@@ -1614,15 +1618,18 @@ class AnalyzeTimeSeries:
                     textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
-        # Display the plot
-        if fig_path != None:
-            t0 = time.process_time()
-            plt.savefig(fig_path, dpi=300, facecolor='w')
-            if log_savefig_timing:
-                self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-        if show_plot == True:
-            plt.show()
-        plt.close('all')
+        # Display the plot or make a PNG
+        try:
+            if fig_path != None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
 
 
     def plot_nobs_histogram(self, plot_dict=None, 
@@ -1959,7 +1966,7 @@ class AnalyzeTimeSeries:
         plots = {}
         
         import static.tsdb_plot_configs
-        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py        
+        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
         for this_yaml_path in all_yaml:
             thisplotconfigdict = self.yaml_to_dict(this_yaml_path)
             plot_name = str.split(str.split(this_yaml_path,'/')[-1], '.')[0]
@@ -2033,18 +2040,26 @@ class AnalyzeTimeSeries:
             # Make Plot
             plot_dict = plots[p]
             if plot_dict['plot_type'] == 'time_series_multipanel':
-                self.plot_time_series_multipanel(plot_dict, 
-                                                 start_date=start_date, 
-                                                 end_date=end_date, 
-                                                 fig_path=fig_path, 
-                                                 show_plot=show_plot, 
-                                                 clean=clean)
+                try:
+                    self.plot_time_series_multipanel(plot_dict, 
+                                                     start_date=start_date, 
+                                                     end_date=end_date, 
+                                                     fig_path=fig_path, 
+                                                     show_plot=show_plot, 
+                                                     clean=clean)
+                except Exception as e:
+                    self.logger.error(f"Error while plotting {plot_name}: {e}")
+                    continue  # Skip to the next plot
             elif plot_dict['plot_type'] == 'nobs_histogram':        
-                self.plot_nobs_histogram(plot_dict=plot_dict, 
-                                         date=start_date.strftime('%Y%m%d'), 
-                                         interval=interval,
-                                         fig_path=fig_path, 
-                                         show_plot=show_plot)
+                try:
+                    self.plot_nobs_histogram(plot_dict=plot_dict, 
+                                             date=start_date.strftime('%Y%m%d'), 
+                                             interval=interval,
+                                             fig_path=fig_path, 
+                                             show_plot=show_plot)
+                except Exception as e:
+                    self.logger.error(f"Error while plotting {plot_name}: {e}")
+                    continue  # Skip to the next plot
 
 
 def process_file(file_path, now_str,
