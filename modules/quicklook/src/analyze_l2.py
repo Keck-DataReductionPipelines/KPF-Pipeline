@@ -1,7 +1,10 @@
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
-from modules.Utils.kpf_parse import HeaderParse
+import matplotlib.ticker as ticker
+from matplotlib.ticker import MaxNLocator
+from matplotlib.lines import Line2D
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L2
 from astropy.table import Table
 
 class AnalyzeL2:
@@ -15,7 +18,9 @@ class AnalyzeL2:
         L2 - an L2 object
 
     Attributes:
-        TBD
+        ObsID - Observation ID (e.g., 'KP.20241215.16336.39')
+        header - header of the PRIMARY extension
+        rv_header - header of the RV extension
     """
 
     def __init__(self, L2, logger=None):
@@ -25,13 +30,52 @@ class AnalyzeL2:
         else:
             self.logger = None
         self.L2 = L2
-        #self.header = L2['PRIMARY'].header
         primary_header = HeaderParse(L2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
         self.rv_header = HeaderParse(L2, 'RV').header
         self.df_RVs = self.L2['RV'] # Table of RVs per order and orderlet
+        self.data_products = get_data_products_L2(self.L2)
+        self.green_present = 'Green' in self.data_products
+        self.red_present = 'Red' in self.data_products
+        self.texp = self.header['ELAPSED']
+        self.compute_BJD_dispersion()
+        
+        
+    def compute_BJD_dispersion(self):
+        """
+        Compute various metrics of dispersion of the per-order BJD values
+        """
+        self.n_green_orders = 35
+        self.n_red_orders   = 32
+        self.df_RV = self.L2['RV']
+
+        # compute per-order BJD differences
+        self.df_RV['Delta_CCFBJD'] = self.df_RV['CCFBJD'].copy()
+        self.df_RV.loc[:self.n_green_orders-1, 'Delta_CCFBJD'] -= self.rv_header['CCD1BJD']
+        self.df_RV.loc[self.n_green_orders:, 'Delta_CCFBJD'] -= self.rv_header['CCD2BJD']
+        #    compute weighted standard deviation
+        x = self.df_RV['Delta_CCFBJD']
+        w = self.df_RV['CCF Weights']
+        nonzero_mask = w != 0
+        wmean = np.sum(w * x) / np.sum(w)
+        var_pop = np.sum(w * (x - wmean)**2) / np.sum(w) # weighted variance
+        self.Delta_CCFBJD_weighted_std = np.sqrt(var_pop) * 24*60*60  # seconds
+        self.Delta_CCFBJD_weighted_range = (x[nonzero_mask].max() - x[nonzero_mask].min()) * 24*60*60  # seconds
+
+        # compute per-order Barycentric RV differences
+        self.df_RV['Delta_Bary_RVC'] = self.df_RV['Bary_RVC'].copy()
+        self.df_RV.loc[:self.n_green_orders-1, 'Delta_Bary_RVC'] -= np.mean(self.df_RV.loc[:self.n_green_orders-1, 'Delta_Bary_RVC'])
+        self.df_RV.loc[self.n_green_orders:, 'Delta_Bary_RVC']   -= np.mean(self.df_RV.loc[self.n_green_orders:, 'Delta_Bary_RVC'])
+        #    compute weighted standard deviation
+        x = self.df_RV['Delta_Bary_RVC']
+        wmean = np.sum(w * x) / np.sum(w)
+        var_pop = np.sum(w * (x - wmean)**2) / np.sum(w) # weighted variance
+        self.Delta_Bary_RVC_weighted_std = np.sqrt(var_pop) * 1000 # m/s
+        self.Delta_Bary_RVC_weighted_range = (x[nonzero_mask].max() - x[nonzero_mask].min()) * 1000 # m/s
+
+        
 
     def plot_CCF_grid(self, chip=None, annotate=False, 
                       zoom=False, fig_path=None, show_plot=False):
@@ -75,16 +119,6 @@ class AnalyzeL2:
         RVgrid = np.arange(RV_start, RV_start + nsteps*delta_RV, delta_RV)
         CCF_data = np.array(self.L2[chip].data)
         n_orders = self.L2[chip].data.shape[1]
-
-        # Measure the flux in each CCF (need to update this -- see below)
-        #CCF_flux_array = np.zeros((5, n_orders))
-        #for oo in np.arange(5):
-        #    for o in np.arange(n_orders):
-        #        CCF_flux_array[oo,o] = np.nansum(CCF_data[oo,o,:])
-        
-        #CCF2 = L2[chip].data[:,:,:]
-        #mean_CCF = CCF2/np.percentile(np.average(CCF2),[99.9])
-
         
         # Set up plot
         fig, axes = plt.subplots(1, 5, figsize=(25, 15), tight_layout=True)
@@ -230,6 +264,96 @@ class AnalyzeL2:
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
         ax.set_title('L2 - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name + '\n', fontsize=30)
             
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        plt.subplots_adjust(bottom=0.1)     
+
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
+
+    def plot_BJD_BCV_grid(self, fig_path=None, show_plot=False):
+        """
+
+        Generate a plot of SNR per order as compuated using the compute_l1_snr
+        function.
+
+        Args:
+            chip (string) - "green" or "red"
+            annotate (boolean) - show text annotations, especially on SCI 
+            fig_path (string) - set to the path for a SNR vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+
+        """
+        
+        # Set up plot
+        fig, axes = plt.subplots(2, 1, figsize=(12, 8), tight_layout=True)
+        
+        # Iterate over panels
+        for p, panel in enumerate(['BJD', 'BCRV']):
+            ax = axes[p]
+            ax.grid(True)
+            ax.xaxis.set_tick_params(labelsize=14)
+            ax.yaxis.set_tick_params(labelsize=14)
+            ax.axhline(0, color='black', lw=2, zorder=0)
+            ax.set_xlim(-1,self.n_green_orders+self.n_red_orders)
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(5))
+            ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
+            ax.yaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=7))
+
+            # BJD panel
+            if p == 0:
+                for o in np.arange(self.n_green_orders):
+                    if self.df_RV['CCF Weights'][o] != 0:
+                        ax.scatter(o, self.df_RV['Delta_CCFBJD'][o]*24*60*60, s=45, c='darkgreen')
+                    else:
+                        ax.scatter(o, self.df_RV['Delta_CCFBJD'][o]*24*60*60, s=45, c='darkseagreen')
+                for o in np.arange(self.n_green_orders, self.n_green_orders+self.n_red_orders):
+                    if self.df_RV['CCF Weights'][o] != 0:
+                        ax.scatter(o, self.df_RV['Delta_CCFBJD'][o]*24*60*60, s=45, c='darkred')
+                    else:
+                        ax.scatter(o, self.df_RV['Delta_CCFBJD'][o]*24*60*60, s=45, c='lightcoral')
+                ax.set_ylabel(r'$\Delta$BJD' + r'$_\mathrm{pw}$' + ' (sec)' + '\n(order - average' + r'$_\mathrm{chip}$' + ')', fontsize=16)
+                legend_handle = Line2D([], [], linestyle='none', label=r"$\sigma$ = " + f"{self.Delta_CCFBJD_weighted_std:.2g}" + ' sec\nrange = ' + f"{self.Delta_CCFBJD_weighted_range:.2g}" + ' sec')
+                ax.legend(handles=[legend_handle], loc='upper right', fontsize=14)
+
+            # Barycentric RV panel
+            elif p == 1: 
+                for o in np.arange(self.n_green_orders):
+                    if self.df_RV['CCF Weights'][o] != 0:
+                        ax.scatter(o, self.df_RV['Delta_Bary_RVC'][o]*1000, s=45, c='darkgreen')
+                    else:
+                        ax.scatter(o, self.df_RV['Delta_Bary_RVC'][o]*1000, s=45, c='darkseagreen')
+                for o in np.arange(self.n_green_orders, self.n_green_orders+self.n_red_orders):
+                    if self.df_RV['CCF Weights'][o] != 0:
+                        ax.scatter(o, self.df_RV['Delta_Bary_RVC'][o]*1000, s=45, c='darkred')
+                    else:
+                        ax.scatter(o, self.df_RV['Delta_Bary_RVC'][o]*1000, s=45, c='lightcoral')
+                ax.set_ylabel(r'$\Delta$ Barycentric RV (m s$^{-1}$)' + '\n(order - average' + r'$_\mathrm{chip}$' + ')', fontsize=16)
+                ax.set_xlabel('Order Index', fontsize=16)
+                legend_handle = Line2D([], [], linestyle='none', label=r"$\sigma$ = " + f"{self.Delta_Bary_RVC_weighted_std:.2g}" + ' m/s\nrange = ' + f"{self.Delta_Bary_RVC_weighted_range:.2g}" + ' m/s')
+                ax.legend(handles=[legend_handle], loc='upper right', fontsize=14)
+
+            
+            
+        # Add overall title to array of plots
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title('Dispersion of Photon-weighted BJDs and Barycentric RVs\nL2: ' + str(self.ObsID) + ' - ' + self.name + r' (T$_\mathrm{exp}$ = ' + str(int(self.texp)) + ' sec)', fontsize=18)
+
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time}"
