@@ -1551,7 +1551,21 @@ class AnalyzeTimeSeries:
                         mapped_states = [state_to_num[state] for state in states]
                         colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                         color_map = {state: colors[i] for i, state in enumerate(unique_states)}
-                    t = t.tolist()
+                    try:
+                        # check for a set of conditions that took forever to figure out
+                        if (hasattr(t, 'tolist') and callable(getattr(t, 'tolist'))):
+                            t = t.tolist()
+                        else:
+                            t = list(t)
+                    except Exception as e:
+                        self.logger.info(f"Error converting to a list: {e}")
+                    try:
+                        if (hasattr(states, 'tolist') and callable(getattr(states, 'tolist'))):
+                            states = states.tolist()
+                        else:
+                            states = list(states)
+                    except Exception as e:
+                        self.logger.info(f"Error converting to a list: {e}")
                     if len(states) != len(t):
                         # Handle the mismatch
                         print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
