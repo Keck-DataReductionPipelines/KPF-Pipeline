@@ -57,3 +57,4 @@ for instructions on how to initially set up the pipeline operations database.
     logging.rst
     config.rst
     database_setup.rst
+    production.rst
