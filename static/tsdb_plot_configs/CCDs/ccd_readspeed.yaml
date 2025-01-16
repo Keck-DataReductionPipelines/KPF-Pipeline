@@ -1,0 +1,25 @@
+description: CCD Read Speed
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: GREENTRT
+        plot_type: plot
+        unit: sec
+        plot_attr:
+          label: Green CCD
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: REDTRT
+        plot_type: plot
+        unit: sec
+        plot_attr:
+          label: Red CCD
+          marker: .
+          linewidth: 0.5
+          color: darkred
+    paneldict:
+      ylabel: Read Speed (sec)
+      title: CCD Read Speed
+      not_junk: true
+      legend_frac_size: 0.25

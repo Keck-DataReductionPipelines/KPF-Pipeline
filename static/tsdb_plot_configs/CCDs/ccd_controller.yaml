@@ -1,0 +1,171 @@
+description: CCD Controller Temperatures
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: kpfred.BPLANE_TEMP
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Backplane
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD10_DRVR_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 10 (Driver)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD11_DRVR_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 11 (Driver)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD12_LVXBIAS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 12 (LVxBias)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD1_HTRX_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 1 (HeaterX)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD2_XVBIAS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 2 (XV Bias)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD3_LVDS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 3 (LVDS)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD4_DRVR_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 4 (Driver)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD5_AD_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 5 (AD)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD7_HTRX_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 7 (HeaterX)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD9_HVXBIAS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 9 (HVxBias)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Temperatures (C)
+      title: CCD Controllers
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: kpfred.BPLANE_TEMP
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Backplane
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD10_DRVR_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 10 (Driver)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD11_DRVR_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 11 (Driver)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD12_LVXBIAS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 12 (LVxBias)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD1_HTRX_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 1 (HeaterX)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD2_XVBIAS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 2 (XV Bias)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD3_LVDS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 3 (LVDS)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD4_DRVR_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 4 (Driver)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD5_AD_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 5 (AD)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD7_HTRX_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 7 (HeaterX)
+          marker: .
+          linewidth: 0.5
+      - col: kpfred.BRD9_HVXBIAS_T
+        plot_type: plot
+        unit: C
+        plot_attr:
+          label: Board 9 (HVxBias)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "$\\Delta$Temperature (K)"
+      title: CCD Controllers
+      not_junk: true
+      subtractmedian: true
+      legend_frac_size: 0.30
