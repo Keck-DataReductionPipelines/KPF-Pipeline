@@ -70,7 +70,11 @@ class ImageProcessingAlg():
 
     def bias_subtraction(self, masterbias):
         """Subtracts bias data from raw data.
-        In pipeline terms: inputs two L0 files, produces one L0 file.
+        In pipeline terms: inputs are:
+        1. Raw data in the form of a 2D FITS-image object (after OverscanSubtraction
+           from modules.Utils.overscan_subtract has been applied to a L0 FITS-image object),
+           produces one 2D FITS-image object; and
+        2. Master bias data in the form of a 2D FITS-image object.
 
         Args:
             masterbias (FITS File): The master bias data.
@@ -253,7 +257,7 @@ class ImageProcessingAlg():
             self.rawimage[ffi] = self.rawimage[ffi] - bkg
 
         return self.rawimage
-    
+
     def bad_pixel_mask(self, mask):
         """Performs bad pixel masking
         In pipeline terms: inputs two 2D files, produces one 2D file.
@@ -268,7 +272,7 @@ class ImageProcessingAlg():
         if header['IMTYPE'].lower() != 'object':
             self.logger.info("Image is {}, skipping BPM correction.".format(header['IMTYPE']))
             return
-        
+
         num_amps = self.num_amps()
 
         for ffi in self.ffi_exts:
