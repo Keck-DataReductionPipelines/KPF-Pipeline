@@ -416,14 +416,6 @@ TIMCHKL2  1                                           Quality Control: 1 = consi
 DATAPRL2  1                                           Quality Control: 1 = L2 data is present
 WLSL2     1                                           Quality Control: 1 = WLS files okay (failure conditions not detected: nonexistent WLS files, unopenable WLS files, two identical WLS files, same WLS file as previous/next night)
 ========  ==========================================  =========
-CCFRV|float|Average of CCD1RV and CCD2RV using weights from RV table|km/s
-CCFERV|float|Error on CCFRV|km/s
-CCFRVC|float|Average of CCD1RVC and CCD2RVC using weights from RV table|km/s
-CCFERVC|float|Error on CCFRVC|km/s
-DATAPRL2|bool|QC: L2 data present|None
-TIMCHKL2|bool|QC: Consistent times in L2 file|None
-WLSL2|bool|QC: L2 WLS file check passed|None
-
 
 Radial Velocities
 -----------------
