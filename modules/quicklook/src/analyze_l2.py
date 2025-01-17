@@ -182,10 +182,10 @@ class AnalyzeL2:
                 ax.plot([this_RV, this_RV], [0, n_orders*0.5+0.5], color='k')
                 ax.text(this_RV, n_orders*0.5+0.7, this_RV_text, color='k', horizontalalignment='center', fontsize=11)
                 # Annotation for Delta RV
-                ax.text(RVgrid[2],    n_orders*0.5+0.7,r'$\Delta$RV (this - avg)', 
+                ax.text(RVgrid[2],    n_orders*0.5+0.55,r'$\Delta$RV (this - avg)', 
                                 verticalalignment='center', horizontalalignment='left', color='k', fontsize=11)
                 #Annotation for weight
-                ax.text(RVgrid[-1]-3, n_orders*0.5+0.7, 'weight', 
+                ax.text(RVgrid[-1]-3, n_orders*0.5+0.55, 'weight', 
                                 verticalalignment='center', horizontalalignment='right', color='k', fontsize=11)
                 # need to update this
                 #ax.text(RVgrid[-1]-30,n_orders*0.5+0.7, 'flux', 
@@ -249,7 +249,7 @@ class AnalyzeL2:
                     ax.text(RVgrid[2], 1+o*0.5-0.3, f"{rv:.4f}" + r' km s$^{-1}$', 
                             color=current_color, verticalalignment='center', fontsize=11)
                     # CCF weight annotation
-                    ax.text(RVgrid[-1]-3,  1+o*0.5-0.3, f"{self.df_RVs['CCF Weights'][o]:.2f}", 
+                    ax.text(RVgrid[-1]-3,  1+o*0.5-0.3, f"{self.df_RVs['CCF Weights'][offset+o]:.2f}", 
                             color=current_color, verticalalignment='center', horizontalalignment='right', fontsize=11)
                     # Flux annotation (fix)
 #                    ax.text(RVgrid[-1]-30, 1+o*0.5-0.3, f"{CCF_flux_array[o]:.2f}", 
