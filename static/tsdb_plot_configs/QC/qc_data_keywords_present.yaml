@@ -1,4 +1,4 @@
-description: QC - L0 Data and Keywords Present
+description: QC - Data and Keywords Present
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
@@ -20,4 +20,45 @@ panel_arr:
     paneldict:
       ylabel: L0 Keywords Present
       title: QC - L0 Data and Keywords Present
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: CAHKPR2D
+        plot_type: state
+        plot_attr:
+          label: 2D CaHK Data Present
+          marker: .
+    paneldict:
+      ylabel: 2D CaHK Data Present
+      title: QC - 2D CaHK Data Present
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: DATAPR2D
+        plot_type: state
+        plot_attr:
+          label: 2D Data Present
+          marker: .
+    paneldict:
+      ylabel: 2D Data Present
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: DATAPRL1
+        plot_type: state
+        plot_attr:
+          label: L1 Data Present
+          marker: .
+    paneldict:
+      ylabel: L1 Data Present
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: DATAPRL2
+        plot_type: state
+        plot_attr:
+          label: L2 Data Present
+          marker: .
+    paneldict:
+      ylabel: L2 Data Present
       legend_frac_size: 0.10
