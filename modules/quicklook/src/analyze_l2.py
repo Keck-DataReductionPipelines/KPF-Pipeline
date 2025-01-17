@@ -18,8 +18,9 @@ class AnalyzeL2:
         L2 - an L2 object
 
     Attributes:
-        ObsID - Observation ID (e.g., 'KP.20241215.16336.39')
-        header - header of the PRIMARY extension
+        name - name of source (e.g., 'Bias', 'Etalon', '185144')
+        ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
+        header - header of the PRIMARY extension of the L2 object
         rv_header - header of the RV extension
     """
 
@@ -30,6 +31,9 @@ class AnalyzeL2:
         else:
             self.logger = None
         self.L2 = L2
+        self.df_RV = self.L2['RV']
+        self.n_green_orders = 35
+        self.n_red_orders   = 32
         primary_header = HeaderParse(L2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -40,21 +44,27 @@ class AnalyzeL2:
         self.green_present = 'Green' in self.data_products
         self.red_present = 'Red' in self.data_products
         self.texp = self.header['ELAPSED']
-        self.compute_BJD_dispersion()
+
+        self.compute_statistics()
         
         
-    def compute_BJD_dispersion(self):
+    def compute_statistics(self):
         """
         Compute various metrics of dispersion of the per-order BJD values
         """
-        self.n_green_orders = 35
-        self.n_red_orders   = 32
-        self.df_RV = self.L2['RV']
+        # compute weighted Barycentric RV correction
+        x = self.df_RV['Bary_RVC']
+        w = self.df_RV['CCF Weights']
+        self.CCFBCV = np.sum(w * x) / np.sum(w)
+
+        # compute weighted BJD (this should be computed elsewhere and read from the L2 header)
+        x = self.df_RV['CCFBJD']
+        w = self.df_RV['CCF Weights']
+        self.CCFBJD = np.sum(w * x) / np.sum(w)
 
         # compute per-order BJD differences
         self.df_RV['Delta_CCFBJD'] = self.df_RV['CCFBJD'].copy()
-        self.df_RV.loc[:self.n_green_orders-1, 'Delta_CCFBJD'] -= self.rv_header['CCD1BJD']
-        self.df_RV.loc[self.n_green_orders:, 'Delta_CCFBJD'] -= self.rv_header['CCD2BJD']
+        self.df_RV['Delta_CCFBJD'] -= self.CCFBJD
         #    compute weighted standard deviation
         x = self.df_RV['Delta_CCFBJD']
         w = self.df_RV['CCF Weights']
@@ -66,8 +76,7 @@ class AnalyzeL2:
 
         # compute per-order Barycentric RV differences
         self.df_RV['Delta_Bary_RVC'] = self.df_RV['Bary_RVC'].copy()
-        self.df_RV.loc[:self.n_green_orders-1, 'Delta_Bary_RVC'] -= np.mean(self.df_RV.loc[:self.n_green_orders-1, 'Delta_Bary_RVC'])
-        self.df_RV.loc[self.n_green_orders:, 'Delta_Bary_RVC']   -= np.mean(self.df_RV.loc[self.n_green_orders:, 'Delta_Bary_RVC'])
+        self.df_RV['Delta_Bary_RVC'] -= self.CCFBCV
         #    compute weighted standard deviation
         x = self.df_RV['Delta_Bary_RVC']
         wmean = np.sum(w * x) / np.sum(w)
@@ -75,14 +84,13 @@ class AnalyzeL2:
         self.Delta_Bary_RVC_weighted_std = np.sqrt(var_pop) * 1000 # m/s
         self.Delta_Bary_RVC_weighted_range = (x[nonzero_mask].max() - x[nonzero_mask].min()) * 1000 # m/s
 
-        
+
 
     def plot_CCF_grid(self, chip=None, annotate=False, 
                       zoom=False, fig_path=None, show_plot=False):
         """
 
-        Generate a plot of SNR per order as compuated using the compute_l1_snr
-        function.
+        Generate a plot of CCFs for each order and orderlet.
 
         Args:
             chip (string) - "green" or "red"
@@ -283,8 +291,7 @@ class AnalyzeL2:
     def plot_BJD_BCV_grid(self, fig_path=None, show_plot=False):
         """
 
-        Generate a plot of SNR per order as compuated using the compute_l1_snr
-        function.
+        Generate a plot of BJD and Barycentric RV vs. spectral order.
 
         Args:
             chip (string) - "green" or "red"
@@ -346,8 +353,6 @@ class AnalyzeL2:
                 ax.set_xlabel('Order Index', fontsize=16)
                 legend_handle = Line2D([], [], linestyle='none', label=r"$\sigma$ = " + f"{self.Delta_Bary_RVC_weighted_std:.2g}" + ' m/s\nrange = ' + f"{self.Delta_Bary_RVC_weighted_range:.2g}" + ' m/s')
                 ax.legend(handles=[legend_handle], loc='upper right', fontsize=14)
-
-            
             
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)

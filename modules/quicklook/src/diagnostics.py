@@ -12,8 +12,10 @@ from modules.quicklook.src.analyze_hk import AnalyzeHK
 from modules.quicklook.src.analyze_em import AnalyzeEM
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
+from modules.quicklook.src.analyze_l2 import AnalyzeL2
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
+from modules.Utils.kpf_parse import get_data_products_L2
 from modules.Utils.utils import get_moon_sep, get_sun_alt
 
 def add_headers_2D_flux(D2, logger=None):
@@ -674,3 +676,46 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
     return L1
+
+
+def add_headers_L2_barycentric(L2, logger=None):
+    """
+    Adds Barycentric RV correction to the L2 primary header
+    
+    Keywords:
+        CCFBCV - Barycentric radial velocity correction (km/s), averaged
+                 over the BCV values for each spectral order and weighted 
+                 by the CCF Weights
+        CCFBJD - Weighted avg of BJD values (days)
+
+    Args:
+        L2 - a KPF L2 object 
+
+    Returns:
+        L2 - a L2 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L2(L2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L2)) != "<class 'kpfpipe.models.level2.KPF2'>" or chips == []:
+        print('Not a valid L2 KPF file.')
+        return L2
+        
+    # Use the AnalyzeL2 class to compute BCV
+    myL2 = AnalyzeL2(L2, logger=logger)
+
+    # Add value to header
+    if hasattr(myL2, 'CCFBCV'):
+        L2.header['PRIMARY']['CCFBCV'] = (myL2.CCFBCV, 'Weighted avg of barycentric RV correction (km/s)')
+    # remove the two lines below when CCFBJD is computed when the RV table is assembled
+    if hasattr(myL2, 'CCFBJD'):
+        L2.header['PRIMARY']['CCFBJD']  = (myL2.CCFBJD, 'Weighted avg of BJD values (days)')
+
+    return L2

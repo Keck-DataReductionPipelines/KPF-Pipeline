@@ -12,6 +12,7 @@ from keckdrpframework.models.arguments import Arguments
 import modules.quicklook.src.diagnostics as diagnostics
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.kpf_parse import get_data_products_L1
+from modules.Utils.kpf_parse import get_data_products_L2
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/quicklook/configs/default.cfg'
@@ -176,7 +177,23 @@ class DiagnosticsFramework(KPF0_Primitive):
                     self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
 
         elif 'L2' in self.data_level_str:
-            pass
+            # L2 - Barycentric correction
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L2_barycentric'):
+                try:
+                    data_products = get_data_products_L2(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            self.logger.info('Measuring diagnostics: add_headers_L2_barycentric')
+                            self.kpf_object = diagnostics.add_headers_L2_barycentric(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                        else: 
+                            self.logger.info("L2 BCV diagnostics not computed.")
+                    else: 
+                        self.logger.info("Green/Red not in L2 file. BCV diagnostics not computed.")
+                except Exception as e:
+                    self.logger.error(f"Measuring L2 BCV failed: {e}\n{traceback.format_exc()}")
+            
 
         # Finish
         self.logger.info('Finished {}'.format(self.__class__.__name__))
