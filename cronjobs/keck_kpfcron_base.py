@@ -399,6 +399,7 @@ class KPFPipeCronBase:
             mkdir -p /data/logs/watch/{self.procdate};
             mkdir -p /data/L1/{self.procdate};
             mkdir -p /data/L2/{self.procdate};
+            mkdir -p /data/QLP/{self.procdate}
         """
 
         return mk_dir_str
