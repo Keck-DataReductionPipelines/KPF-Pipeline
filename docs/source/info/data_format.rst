@@ -401,18 +401,32 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
 L2 Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The L2 file inherits all Level 0, 2D, and Level 1 keywords.  Below are additional important keywords.
+The L2 file inherits all L0, 2D, and L1 keywords.  Below are additional important keywords.
 
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
+CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
+CCFERV    0.001175044                                 Error on CCFRV
+CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table
+CCFERVC   0.001175044                                 Error on CCFRVC
+CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
+CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
 TIMCHKL2  1                                           Quality Control: 1 = consistent times in L2 file
 DATAPRL2  1                                           Quality Control: 1 = L2 data is present
+WLSL2     1                                           Quality Control: 1 = WLS files okay (failure conditions not detected: nonexistent WLS files, unopenable WLS files, two identical WLS files, same WLS file as previous/next night)
 ========  ==========================================  =========
+CCFRV|float|Average of CCD1RV and CCD2RV using weights from RV table|km/s
+CCFERV|float|Error on CCFRV|km/s
+CCFRVC|float|Average of CCD1RVC and CCD2RVC using weights from RV table|km/s
+CCFERVC|float|Error on CCFRVC|km/s
+DATAPRL2|bool|QC: L2 data present|None
+TIMCHKL2|bool|QC: Consistent times in L2 file|None
+WLSL2|bool|QC: L2 WLS file check passed|None
+
 
 Radial Velocities
 -----------------
-
 
 L2 RV Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -431,10 +445,6 @@ To-do, add notes on:
 =============  =================  =========
 Keyword        Value (example)    Comment
 =============  =================  =========
-CCFRV          19.4247572623      Average of CCD1RV and CCD2RV using weights from RV table
-CCFERV         0.001175044        Error on CCFRV
-CCFRVC         19.4247572623      Average of CCD1RVC and CCD2RVC using weights from RV table
-CCFERVC        0.001175044        Error on CCFRVC
 CCD1ROW        0                  Row number in the RV table (below) of the bluest order on the Green CCD
 CCD1RV1        19.4247572623      RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV1       0.0013815112       Error on CCD1RV1
