@@ -212,6 +212,7 @@ TIMCHKL0  1                                           Quality Control: 1 = consi
 EMSAT     1                                           Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
 EMNEG     1                                           Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 DATAPR2D  1                                           Quality Control: 1 = 2D data products present with non-zero array sizes
+CAHKPR2D  1                                           Quality Control: 1 = 2D CaHK data present with non-zero array sizes
 GOODREAD  1                                           Quality Control: 1 = Exposure time not consistent with CCD readout error (~6 sec)
 POS2DSNR  1                                           Quality Control: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
 LOWBIAS   1                                           Quality Control: 1 = 2D bias flux not low
