@@ -828,7 +828,7 @@ class QC:
                         if debug:
                             self.logger.info(f'Setting KPFERA = {KPFERA}')
             except Exception as e:
-                self.logger.info(f"Exceptions: {e}")
+                self.logger.info(f"Exception: {e}")
                 return None
         else:
             self.logger.error(f"The file {kfpera_csv} does not exist.")
@@ -1519,25 +1519,33 @@ class QC2D(QC):
         QC_pass = True
         extensions = D2.extensions
     
-        if 'GREEN_CCD' in extensions:
-            scaled_counts = np.array(D2['GREEN_CCD'].data) / np.sqrt(np.array(D2['GREEN_VAR'].data))
-            subthreshold = np.sum(scaled_counts < neg_threshold)
-            total_pixels = scaled_counts.size
-            if debug:
-                print(f'Number of pixels < {neg_threshold}: {subthreshold}')
-                print(f'Total number of pixels: {total_pixels}')
-            if ( subthreshold / total_pixels ) > 0.01:
-                QC_pass = False
+        try: 
+            if 'GREEN_CCD' in extensions:
+                scaled_counts = np.array(D2['GREEN_CCD'].data) / np.sqrt(np.array(D2['GREEN_VAR'].data))
+                subthreshold = np.sum(scaled_counts < neg_threshold)
+                total_pixels = scaled_counts.size
+                if debug:
+                    print(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                    print(f'Total number of pixels: {total_pixels}')
+                if ( subthreshold / total_pixels ) > 0.01:
+                    QC_pass = False
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
         
-        if 'RED_CCD' in extensions:
-            scaled_counts = (np.array(D2['RED_CCD'].data) / np.sqrt(np.array(D2['RED_VAR'].data))).flatten()
-            subthreshold = np.sum(scaled_counts < neg_threshold)
-            total_pixels = scaled_counts.size
-            if debug:
-                print(f'Number of pixels < {neg_threshold}: {subthreshold}')
-                print(f'Total number of pixels: {total_pixels}')
-            if ( subthreshold / total_pixels ) > 0.1:
-                QC_pass = False
+        try: 
+            if 'RED_CCD' in extensions:
+                scaled_counts = (np.array(D2['RED_CCD'].data) / np.sqrt(np.array(D2['RED_VAR'].data))).flatten()
+                subthreshold = np.sum(scaled_counts < neg_threshold)
+                total_pixels = scaled_counts.size
+                if debug:
+                    print(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                    print(f'Total number of pixels: {total_pixels}')
+                if ( subthreshold / total_pixels ) > 0.1:
+                    QC_pass = False
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
         
         return QC_pass
 
