@@ -94,28 +94,17 @@ class DirectoryWatchHandler(FileSystemEventHandler):
         file_dir = os.path.dirname(file_loc)
         file_name = os.path.basename(file_loc)
         try:
-            # subprocess.run(
-            #     [
-            #         "rsync", "--include", "*.fits",
-            #         "--exclude", "*",
-            #         file_loc, dest_dir
-            #     ], check=True)
             subprocess.run(
                 [
-                    "rsync", "--inplace", "--include", "*.fits",
+                    "rsync", "--include", "*.fits",
                     "--exclude", "*",
                     file_loc, dest_dir
                 ], check=True)
+
             log.info(f"Copied {file_loc} to {dest_dir} using rsync.")
 
             dest_file = os.path.join(dest_dir, file_name)
             log.info(f"Waiting on {dest_file}.")
-
-            if '.fits' in dest_file and self.wait_for_write(dest_file):
-                # touch the file to avoid a block on the watch
-                time.sleep(15)
-                log.info(f"Touching file: {dest_file}.")
-                subprocess.run(["touch", dest_file], check=True)
         except subprocess.CalledProcessError as e:
             log.error(f"Issue with rsync {file_loc} to {dest_dir}: {e}")
 

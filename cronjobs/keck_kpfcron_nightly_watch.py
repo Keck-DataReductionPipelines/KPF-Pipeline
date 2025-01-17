@@ -61,6 +61,7 @@ class KPFPipeNightly(KPFPipeCronBase):
             make init >> {self.stdout_log} 2>&1;
    
             # touch any files currently in the directory so the pipe recognized them as new
+            # using both the --reprocess and --watch flags causes the pipeline to hang blocking on new events
             python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data_workspace/L0 --log /data/logs/ &
 
             # start the infinite process to watch for new data

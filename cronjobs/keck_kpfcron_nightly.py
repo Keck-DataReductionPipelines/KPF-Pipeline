@@ -60,7 +60,7 @@ class KPFPipeNightly(KPFPipeCronBase):
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
 
-            # touch the files so the pipe recognized them as new
+            # touch the files that currently exist in the directory so they are recognized as new
             python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data_workspace/L0 --log /data/logs/ &
 
             # run the pipeline for all data in the directory
