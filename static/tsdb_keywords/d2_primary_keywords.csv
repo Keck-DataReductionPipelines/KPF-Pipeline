@@ -56,7 +56,8 @@ EMSKCT67|float|cumulative EM counts [ADU] in SKY in 658-764 nm|counts
 EMSKCT78|float|cumulative EM counts [ADU] in SKY in 764-870 nm|counts
 NOTJUNK|bool|Not in the list of junk files check|None
 DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
-DATAPR2D|bool|QC: 2D red and green data present check|None
+DATAPR2D|bool|QC: 2D red and green data present|None
+CAHKPR2D|bool|QC: 2D CaHK data present|None
 KWRDPRL0|bool|QC: L0 expected keywords present|None
 TIMCHKL0|bool|QC: Consistent times in L0 file|None
 EMSAT|bool|QC: Exp Meter not saturated|None
