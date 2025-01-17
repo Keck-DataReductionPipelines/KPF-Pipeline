@@ -27,7 +27,7 @@ class Analyze2D:
         D2 - a 2D object
 
     Attributes:
-        header - header of input 2D file
+        header - header of the PRIMARY extension of the 2D object
         name - name of source (e.g., 'Bias', 'Etalon', '185144')
         ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         exptime - exposure time (sec)
