@@ -326,8 +326,8 @@ The L1 file inherits all L0 and 2D keywords.  Below are additional important key
 ========  =======================================================================  =========
 Keyword   Value (example)                                                          Comment
 ========  =======================================================================  =========
-WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-thar-all-eve_L1.fits   First wavelength interpolation reference for this L1 file
-WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-thar-all-morn_L1.fits  Second wavelength interpolation reference for this L1 file
+WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
+WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
 MONOTWLS  1                                                                        Quality Control: 1 = L1 wavelength solution is monotonic
 DATAPR2D  1                                                                        Quality Control: 1 = 2D red and green data present
 DATAPRL1  1                                                                        Quality Control: 1 = L1 red and green data present
