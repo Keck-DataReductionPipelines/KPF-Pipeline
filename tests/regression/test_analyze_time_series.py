@@ -53,7 +53,9 @@ def test_analyze_time_series():
 
     # Test plotting
     start_date = datetime.datetime(2025,1,12)
+    
     myTS.plot_all_quicklook(start_date=start_date, interval='day', fig_dir=temp_plot_dir)
+    myTS.plot_time_series_multipanel('junk_status', fig_path=temp_plot_dir + '/temp.png')
     
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
