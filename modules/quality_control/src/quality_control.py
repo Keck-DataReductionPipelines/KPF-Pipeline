@@ -131,13 +131,9 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
         try:
             kw_value = kpf_object.header['PRIMARY'][kw]
-
             if kw_value == fail_value:
-
                 logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{}'.format(fname,kw,kw_value,fail_value))
-
                 for master_type in master_types:
-
                     if input_master_type.lower() == master_type.lower() or master_type.lower() == 'all' or input_master_type.lower() == 'all':
                         qc_fail = True
                         break
@@ -150,7 +146,6 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
     return qc_fail
 
 
-# To-do: move this to a new class?
 def execute_all_QCs(kpf_object, data_level, logger=None):
     """
     Method to loop over all QC tests for the data level of the input KPF object 
@@ -239,9 +234,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
     return kpf_object
 
-# See check_all_qc_keywords method above, which is data-level agnostic.
-# To do: finish this method or just use check_all_qc_keywords method above????
-# To-do: move this a new class?
+
 def check_all_QC_keywords_present(kpf_object, logger=None):
     """
     Method to determine if all QC tests have been run on the input kpf_object
@@ -327,19 +320,6 @@ class QCDefinitions:
         self.fits_keyword_fail_value = {}
 
         # Define QC metrics
-        name0 = 'jarque_bera_test_red_amp1'
-        self.names.append(name0)
-        self.descriptions[name0] = 'Jarque-Bera test of pixel values for RED AMP-1 detector.'
-        self.kpf_data_levels[name0] = ['L3'] # bogus value L3 to avoid executing
-        self.data_types[name0] = 'float'
-        self.spectrum_types[name0] = ['all', ]
-        self.master_types[name0] = []
-        self.required_data_products[name0] = [] # no required data products
-        self.fits_keywords[name0] = 'JBTRED1'
-        self.fits_comments[name0] = 'QC: J-B test for RED AMP-1 detector'
-        self.db_columns[name0] = None
-        self.fits_keyword_fail_value[name0] = None
-
         name1 = 'not_junk'
         self.names.append(name1)
         self.descriptions[name1] = 'File is not in list of junk files.'
@@ -691,6 +671,48 @@ class QCDefinitions:
                     print('      ' + styled_text("Comment: ", style="Bold") + comment)
                     print('      ' + styled_text("Database column: ", style="Bold") + str(db_column))
                     print()
+
+    def search_for_QC_keywords_in_files(self):
+        """
+        This method checks if each QC keyword is listed in three places and 
+        prints the results with green and red highlighting.  The three places 
+        are: 1) .yaml plot configuration files for the time series database, 
+        2) .csv files that define the time series database structure, and xxx.
+        It is best used in an interactive environment, e.g., in a Jupyter 
+        notebook.
+        """
+        
+        cases = ['plots', 'database']
+        
+        for case in cases:
+        
+            if case == 'plots':
+                search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/QC/'
+                file_ext = '.yaml'
+            if case == 'database':
+                search_directory = '/code/KPF-Pipeline/static/tsdb_keywords/'
+                file_ext = '.csv'
+            
+            print(styled_text(f"Searching *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
+            for name in self.names:
+                fits_kwd = self.fits_keywords.get(name, "")
+                if not fits_kwd:
+                    print(f"Warning: No search string found for '{name}'")
+                    continue
+                found_occurrence = False
+                for root, dirs, files in os.walk(search_directory):
+                    for file_name in files:
+                        if file_name.endswith(file_ext):
+                            full_path = os.path.join(root, file_name)
+                            # Read the file contents and check for the string
+                            with open(full_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                if fits_kwd in content:
+                                    found_occurrence = True
+                                    print(styled_text(f"Found ", color="Green") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Green") + styled_text(f"in: {full_path}", color="Green"))
+                if not found_occurrence:
+                    print(styled_text(f"No occurrence of ", color="Red") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Red") + styled_text(f" found in any {file_ext} file.", color="Red"))
+            print()
 
 
 #####################################################################
