@@ -82,7 +82,7 @@ To show the lines without coverage in a particular file, run a command like::
 
     pytest -x --cov=modules.quicklook.src.analyze_time_series --pyargs --cov-report=term-missing tests/regression/test_analyze_time_series.py
 
-To see the outputs of the code as it is being run (which pytest otherwise hides), add the options `-s --log-cli-level=DEBUG`.
+To see the outputs of the code as it is being run (which pytest otherwise hides), add the options `-s --log-cli-level=INFO`.
 
 Developing Quality Control (QC) Metrics
 ---------------------------------------
