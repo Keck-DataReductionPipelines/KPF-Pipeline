@@ -916,41 +916,46 @@ class QCL0(QC):
              QC_pass - a boolean signifying that the QC passed (True) for failed (False)
         """
         
-        L0 = self.kpf_object
+        try:
+            L0 = self.kpf_object
         
-        # Determine which extensions should be in the L0 file.
-        # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
-        trigtarg = L0.header['PRIMARY']['TRIGTARG']
-        if len(trigtarg) > 0:
-            data_products = trigtarg.split(',')
-        # add Guider
-        if hasattr(L0, 'GUIDER_AVG'):
-            data_products.append('Guider')
-        if hasattr(L0, 'guider_avg'):  # some early files had lower case
-            data_products.append('Guider')
-        # add Telemetry
-        if hasattr(L0, 'TELEMETRY'):
-            data_products.append('Telemetry')
-        # add Pyrheliometer
-        if hasattr(L0, 'SOCAL PYRHELIOMETER'):
-            data_products.append('Pyrheliometer')
-        if debug:
-            self.logger.info('Data products that are supposed to be in this L0 file: ' + str(data_products))
-     
-        # Use helper funtion to get data products and check their characteristics.
-        QC_pass = True
-        data_products_present = get_data_products_L0(L0)
-        if debug:
-            self.logger.info('Data products in L0 file: ' + str(data_products_present))
-    
-        # Check for specific data products
-        possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
-        for dp in possible_data_products:
-            if dp in data_products:
-                if not dp in data_products_present:
-                    QC_pass = False
-                    if debug:
-                        self.logger.info(dp + ' not present in L0 file. QC(L0_data_products) failed.')
+            # Determine which extensions should be in the L0 file.
+            # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
+            trigtarg = L0.header['PRIMARY']['TRIGTARG']
+            if len(trigtarg) > 0:
+                data_products = trigtarg.split(',')
+            # add Guider
+            if hasattr(L0, 'GUIDER_AVG'):
+                data_products.append('Guider')
+            if hasattr(L0, 'guider_avg'):  # some early files had lower case
+                data_products.append('Guider')
+            # add Telemetry
+            if hasattr(L0, 'TELEMETRY'):
+                data_products.append('Telemetry')
+            # add Pyrheliometer
+            if hasattr(L0, 'SOCAL PYRHELIOMETER'):
+                data_products.append('Pyrheliometer')
+            if debug:
+                self.logger.info('Data products that are supposed to be in this L0 file: ' + str(data_products))
+         
+            # Use helper funtion to get data products and check their characteristics.
+            QC_pass = True
+            data_products_present = get_data_products_L0(L0)
+            if debug:
+                self.logger.info('Data products in L0 file: ' + str(data_products_present))
+        
+            # Check for specific data products
+            possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
+            for dp in possible_data_products:
+                if dp in data_products:
+                    if not dp in data_products_present:
+                        QC_pass = False
+                        if debug:
+                            self.logger.info(dp + ' not present in L0 file. QC(L0_data_products) failed.')
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
         
         return QC_pass
 
@@ -969,51 +974,57 @@ class QCL0(QC):
              QC_pass - a boolean signifying that the QC passed (True) for failed (False)
         """
         
-        L0 = self.kpf_object
-
-        if essential_keywords == ['auto']:
-             essential_keywords = [
-                 'DATE-BEG',  # Start of exposure from kpfexpose
-                 'DATE-MID',  # Halfway point of the exposure (unweighted)
-                 'DATE-END',  # End of exposure
-                 'EXPTIME',   # Requested exposure time
-                 'ELAPSED',   # Actual exposure time
-                 'PROGNAME',  # Program name from kpfexpose
-                 'OBJECT',    # Object name
-                 'TARGRA',    # Right ascension [hr] from DCS
-                 'TARGDEC',   # Declination [deg] from DCS
-                 'TARGEPOC',  # Target epoch from DCS
-                 'TARGEQUI',  # Target equinox from DCS
-                 'TARGPLAX',  # Target parallax [arcsec] from DCS
-                 'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
-                 'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
-                 'TARGRADV',  # Target radial velocity [km/s]
-                 'AIRMASS',   # Airmass from DCS
-                 'PARANTEL',  # Parallactic angle of the telescope from DCS
-                 'HA',        # Hour angle
-                 'EL',        # Elevation [deg]
-                 'AZ',        # Azimuth [deg]
-                 'LST',       # Local sidereal time
-                 'GAIAID',    # GAIA Target name
-                 '2MASSID',   # 2MASS Target name
-                 'GAIAMAG',   # GAIA G band magnitude
-                 '2MASSMAG',  # 2MASS J band magnitude
-                 'TARGTEFF',  # Target effective temperature (K)
-                 'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
-                 'TRIGTARG',  # Cameras that were sent triggers
-                 'IMTYPE',    # Image Type
-                 'CAL-OBJ',   # Calibration fiber source
-                 'SKY-OBJ',   # Sky fiber source
-                 'SCI-OBJ',   # Science fiber source
-                 'AGITSTA',   # Agitator status
-             ] 
+        try:
+            L0 = self.kpf_object
     
-        QC_pass = True
-        for keyword in essential_keywords:
-            if keyword not in L0.header['PRIMARY']:
-                QC_pass = False
-                if debug:
-                    print('The keyword ' + keyword + ' is missing from the primary header.')
+            if essential_keywords == ['auto']:
+                 essential_keywords = [
+                     'DATE-BEG',  # Start of exposure from kpfexpose
+                     'DATE-MID',  # Halfway point of the exposure (unweighted)
+                     'DATE-END',  # End of exposure
+                     'EXPTIME',   # Requested exposure time
+                     'ELAPSED',   # Actual exposure time
+                     'PROGNAME',  # Program name from kpfexpose
+                     'OBJECT',    # Object name
+                     'TARGRA',    # Right ascension [hr] from DCS
+                     'TARGDEC',   # Declination [deg] from DCS
+                     'TARGEPOC',  # Target epoch from DCS
+                     'TARGEQUI',  # Target equinox from DCS
+                     'TARGPLAX',  # Target parallax [arcsec] from DCS
+                     'TARGPMDC',  # Target proper motion [arcsec/yr] in declination from DCS
+                     'TARGPMRA',  # Target proper motion [s/yr] in right ascension from DCS
+                     'TARGRADV',  # Target radial velocity [km/s]
+                     'AIRMASS',   # Airmass from DCS
+                     'PARANTEL',  # Parallactic angle of the telescope from DCS
+                     'HA',        # Hour angle
+                     'EL',        # Elevation [deg]
+                     'AZ',        # Azimuth [deg]
+                     'LST',       # Local sidereal time
+                     'GAIAID',    # GAIA Target name
+                     '2MASSID',   # 2MASS Target name
+                     'GAIAMAG',   # GAIA G band magnitude
+                     '2MASSMAG',  # 2MASS J band magnitude
+                     'TARGTEFF',  # Target effective temperature (K)
+                     'OCTAGON',   # Selected octagon calibration source (not necessarily powered on)
+                     'TRIGTARG',  # Cameras that were sent triggers
+                     'IMTYPE',    # Image Type
+                     'CAL-OBJ',   # Calibration fiber source
+                     'SKY-OBJ',   # Sky fiber source
+                     'SCI-OBJ',   # Science fiber source
+                     'AGITSTA',   # Agitator status
+                 ] 
+    
+            QC_pass = True
+        
+            for keyword in essential_keywords:
+                if keyword not in L0.header['PRIMARY']:
+                    QC_pass = False
+                    if debug:
+                        print('The keyword ' + keyword + ' is missing from the primary header.')
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
         
         return QC_pass
 
@@ -1040,120 +1051,125 @@ class QCL0(QC):
                 Date-End = DATE-END
         """
     
-        L0 = self.kpf_object
-        date_format = "%Y-%m-%dT%H:%M:%S.%f"
-        QC_pass = True
-    
-        time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
-        time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
+        try:
+            L0 = self.kpf_object
+            date_format = "%Y-%m-%dT%H:%M:%S.%f"
+            QC_pass = True
         
-        # First check that the appropriate keywords are present
-        essential_keywords = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'ELAPSED']
-        for keyword in essential_keywords:
-            if keyword not in L0.header['PRIMARY']:
-                if debug:
-                    print(f'Missing keyword: {keyword}')
-                QC_pass = False
-        if not QC_pass:
-            return QC_pass
-        
-        # Check that dates are ordered correctly
-        date_beg = datetime.strptime(L0.header['PRIMARY']['DATE-BEG'], date_format)
-        date_mid = datetime.strptime(L0.header['PRIMARY']['DATE-MID'], date_format)
-        date_end = datetime.strptime(L0.header['PRIMARY']['DATE-END'], date_format)
-        elapsed  = float(L0.header['PRIMARY']['ELAPSED'])
-        if (date_end < date_mid) or (date_mid < date_beg):
-            QC_pass = False
-        
-        # Check that DATE-BEG + ELAPSE = DATE-END
-        if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
-            if debug:
-                print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
-            QC_pass = False
+            time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
+            time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
+
+            # First check that the appropriate keywords are present
+            essential_keywords = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'ELAPSED']
+            for keyword in essential_keywords:
+                if keyword not in L0.header['PRIMARY']:
+                    if debug:
+                        print(f'Missing keyword: {keyword}')
+                    QC_pass = False
+            if not QC_pass:
+                return QC_pass
             
-        # Check that GRDATE-B/RDDATE-B are consistent with DATE-BEG, etc.
-        data_products = get_data_products_L0(L0)
-        if 'Green' in data_products:
-            if 'GRDATE-B' not in L0.header['PRIMARY']:
-                if debug:
-                    print(f'Missing keyword: GRDATE-B')
+            # Check that dates are ordered correctly
+            date_beg = datetime.strptime(L0.header['PRIMARY']['DATE-BEG'], date_format)
+            date_mid = datetime.strptime(L0.header['PRIMARY']['DATE-MID'], date_format)
+            date_end = datetime.strptime(L0.header['PRIMARY']['DATE-END'], date_format)
+            elapsed  = float(L0.header['PRIMARY']['ELAPSED'])
+            if (date_end < date_mid) or (date_mid < date_beg):
                 QC_pass = False
-                return QC_pass
-            else:
-                grdate_b = datetime.strptime(L0.header['PRIMARY']['GRDATE-B'], date_format)
-                if abs((date_beg - grdate_b).total_seconds()) > time_precision_threshold:
-                    if debug:
-                        print(f'abs(DATE-BEG - GRDATE-B) = {abs((date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold} sec')
-                    QC_pass = False
-            if 'GRDATE-E' not in L0.header['PRIMARY']:
+            
+            # Check that DATE-BEG + ELAPSE = DATE-END
+            if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
                 if debug:
-                    print(f'Missing keyword: GRDATE-E')
+                    print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
                 QC_pass = False
-                return QC_pass
-            else:
-                grdate_e = datetime.strptime(L0.header['PRIMARY']['GRDATE-E'], date_format)
-                if abs((date_end - grdate_e).total_seconds()) > time_precision_threshold:
-                    if debug:
-                        print(f'abs(DATE-END - GRDATE-E) = {abs((date_end - grdate_e).total_seconds())} sec > {time_precision_threshold} sec')
-                    QC_pass = False
-        if 'Red' in data_products:
-            if 'RDDATE-B' not in L0.header['PRIMARY']:
-                if debug:
-                    print(f'Missing keyword: RDDATE-B')
-                QC_pass = False
-                return QC_pass
-            else:
-                rddate_b = datetime.strptime(L0.header['PRIMARY']['RDDATE-B'], date_format)
-                if abs((date_beg - rddate_b).total_seconds()) > time_precision_threshold:
-                    if debug:
-                        print(f'abs(DATE-BEG - RDDATE-B) = {abs((date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
-                    QC_pass = False
-            if 'RDDATE-E' not in L0.header['PRIMARY']:
-                if debug:
-                    print(f'Missing keyword: RDDATE-E')
-                QC_pass = False
-                return QC_pass
-            else:
-                rddate_e = datetime.strptime(L0.header['PRIMARY']['RDDATE-E'], date_format)
-                if abs((date_end - rddate_e).total_seconds()) > time_precision_threshold:
-                    if debug:
-                        print(f'abs(DATE-END - RDDATE-E) = {abs((date_end - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
-                    QC_pass = False
-        if ('Green' in data_products) and ('Red' in data_products) and QC_pass:
-            if abs((grdate_b - rddate_b).total_seconds()) > time_precision_threshold: 
-                if debug:
-                    print(f'abs(GRDATE-B - RDDATE-B) = {abs((grdate_b - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
-                QC_pass = False
-            if abs((grdate_e - rddate_e).total_seconds()) > time_precision_threshold: 
-                if debug:
-                    print(f'abs(GRDATE-E - RDDATE-E) = {abs((grdate_e - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
-                QC_pass = False
-     
-        if 'ExpMeter' in data_products:
-            if 'Date-Beg-Corr' in L0['EXPMETER_SCI'].columns:
-                exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'], date_format)
-                exp_date_end = datetime.strptime(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'], date_format)
-            else:
-                exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg'], date_format)
-                exp_date_end = datetime.strptime(L0['EXPMETER_SCI'].iloc[-1]['Date-End'], date_format)
+                
+            # Check that GRDATE-B/RDDATE-B are consistent with DATE-BEG, etc.
+            data_products = get_data_products_L0(L0)
             if 'Green' in data_products:
-                if abs((exp_date_beg - grdate_b).total_seconds()) > time_precision_threshold_exp:
+                if 'GRDATE-B' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - GRDATE-B) = {abs((exp_date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        print(f'Missing keyword: GRDATE-B')
                     QC_pass = False
-                if abs((exp_date_end - grdate_e).total_seconds()) > time_precision_threshold_exp:
+                    return QC_pass
+                else:
+                    grdate_b = datetime.strptime(L0.header['PRIMARY']['GRDATE-B'], date_format)
+                    if abs((date_beg - grdate_b).total_seconds()) > time_precision_threshold:
+                        if debug:
+                            print(f'abs(DATE-BEG - GRDATE-B) = {abs((date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                        QC_pass = False
+                if 'GRDATE-E' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - GRDATE-E) = {abs((exp_date_end - grdate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        print(f'Missing keyword: GRDATE-E')
                     QC_pass = False
+                    return QC_pass
+                else:
+                    grdate_e = datetime.strptime(L0.header['PRIMARY']['GRDATE-E'], date_format)
+                    if abs((date_end - grdate_e).total_seconds()) > time_precision_threshold:
+                        if debug:
+                            print(f'abs(DATE-END - GRDATE-E) = {abs((date_end - grdate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                        QC_pass = False
             if 'Red' in data_products:
-                if abs((exp_date_beg - rddate_b).total_seconds()) > time_precision_threshold_exp:
+                if 'RDDATE-B' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - RDDATE-B) = {abs((exp_date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        print(f'Missing keyword: RDDATE-B')
                     QC_pass = False
-                if abs((exp_date_end - rddate_e).total_seconds()) > time_precision_threshold_exp:
+                    return QC_pass
+                else:
+                    rddate_b = datetime.strptime(L0.header['PRIMARY']['RDDATE-B'], date_format)
+                    if abs((date_beg - rddate_b).total_seconds()) > time_precision_threshold:
+                        if debug:
+                            print(f'abs(DATE-BEG - RDDATE-B) = {abs((date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                        QC_pass = False
+                if 'RDDATE-E' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - RDDATE-E) = {abs((exp_date_end - rddate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        print(f'Missing keyword: RDDATE-E')
                     QC_pass = False
+                    return QC_pass
+                else:
+                    rddate_e = datetime.strptime(L0.header['PRIMARY']['RDDATE-E'], date_format)
+                    if abs((date_end - rddate_e).total_seconds()) > time_precision_threshold:
+                        if debug:
+                            print(f'abs(DATE-END - RDDATE-E) = {abs((date_end - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                        QC_pass = False
+            if ('Green' in data_products) and ('Red' in data_products) and QC_pass:
+                if abs((grdate_b - rddate_b).total_seconds()) > time_precision_threshold: 
+                    if debug:
+                        print(f'abs(GRDATE-B - RDDATE-B) = {abs((grdate_b - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                    QC_pass = False
+                if abs((grdate_e - rddate_e).total_seconds()) > time_precision_threshold: 
+                    if debug:
+                        print(f'abs(GRDATE-E - RDDATE-E) = {abs((grdate_e - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                    QC_pass = False
+         
+            if 'ExpMeter' in data_products:
+                if 'Date-Beg-Corr' in L0['EXPMETER_SCI'].columns:
+                    exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'], date_format)
+                    exp_date_end = datetime.strptime(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'], date_format)
+                else:
+                    exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg'], date_format)
+                    exp_date_end = datetime.strptime(L0['EXPMETER_SCI'].iloc[-1]['Date-End'], date_format)
+                if 'Green' in data_products:
+                    if abs((exp_date_beg - grdate_b).total_seconds()) > time_precision_threshold_exp:
+                        if debug:
+                            print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - GRDATE-B) = {abs((exp_date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        QC_pass = False
+                    if abs((exp_date_end - grdate_e).total_seconds()) > time_precision_threshold_exp:
+                        if debug:
+                            print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - GRDATE-E) = {abs((exp_date_end - grdate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        QC_pass = False
+                if 'Red' in data_products:
+                    if abs((exp_date_beg - rddate_b).total_seconds()) > time_precision_threshold_exp:
+                        if debug:
+                            print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - RDDATE-B) = {abs((exp_date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        QC_pass = False
+                    if abs((exp_date_end - rddate_e).total_seconds()) > time_precision_threshold_exp:
+                        if debug:
+                            print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - RDDATE-E) = {abs((exp_date_end - rddate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                        QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
         
         return QC_pass    
 
@@ -1178,51 +1194,56 @@ class QCL0(QC):
         saturation_level = 1.93e6 # saturation level in reduced EM spectra (in data frame)
         saturation_fraction = 0.9 
         
-        # Read and condition the table of Exposure Meter Data
-        L0 = self.kpf_object
-        if hasattr(L0, 'EXPMETER_SCI') and hasattr(L0, 'EXPMETER_SKY'):
-            if (L0['EXPMETER_SCI'].size > 1) and (L0['EXPMETER_SKY'].size > 1):
-                pass
+        try:
+            # Read and condition the table of Exposure Meter Data
+            L0 = self.kpf_object
+            if hasattr(L0, 'EXPMETER_SCI') and hasattr(L0, 'EXPMETER_SKY'):
+                if (L0['EXPMETER_SCI'].size > 1) and (L0['EXPMETER_SKY'].size > 1):
+                    pass
+                else:
+                    return False
             else:
-                return False
-        else:
-            return True # pass test if no exposure meter data present
-        EM_sat_SCI = L0['EXPMETER_SCI'].copy()
-        EM_sat_SKY = L0['EXPMETER_SKY'].copy()
-        columns_to_drop_SCI = [col for col in EM_sat_SCI.columns if col.startswith('Date')]
-        columns_to_drop_SKY = [col for col in EM_sat_SKY.columns if col.startswith('Date')]
-        EM_sat_SCI.drop(columns_to_drop_SCI, axis=1, inplace=True)
-        EM_sat_SKY.drop(columns_to_drop_SKY, axis=1, inplace=True)
-        if len(EM_sat_SCI) >= 3:  # drop first and last rows if nrows >= 3
-            EM_sat_SCI = EM_sat_SCI.iloc[1:-1]
-            EM_sat_SKY = EM_sat_SKY.iloc[1:-1]
-        
-        # Determine the saturation fraction
-        for col in EM_sat_SCI.columns:
-            try: # only apply to columns with wavelengths as headers
-                float_col_title = float(col)
-                EM_sat_SCI[col] = EM_sat_SCI[col] / saturation_level 
-            except ValueError:
-                pass 
-        for col in EM_sat_SKY.columns:
-            try: 
-                float_col_title = float(col)
-                EM_sat_SKY[col] = EM_sat_SKY[col] / saturation_level 
-            except ValueError:
-                pass 
-
-        saturated_elements_SCI = (EM_sat_SCI > saturation_fraction).sum().sum()
-        saturated_elements_SKY = (EM_sat_SKY > saturation_fraction).sum().sum()
-        total_elements = EM_sat_SCI.shape[0] * EM_sat_SCI.shape[1]
-        saturated_fraction_threshold = 1.5 / EM_sat_SCI.shape[1]
-        
-        if saturated_elements_SCI / total_elements > saturated_fraction_threshold:
-            QC_pass = False
-        elif saturated_elements_SKY / total_elements > saturated_fraction_threshold:
-            QC_pass = False
-        else: 
-            QC_pass = True
+                return True # pass test if no exposure meter data present
+            EM_sat_SCI = L0['EXPMETER_SCI'].copy()
+            EM_sat_SKY = L0['EXPMETER_SKY'].copy()
+            columns_to_drop_SCI = [col for col in EM_sat_SCI.columns if col.startswith('Date')]
+            columns_to_drop_SKY = [col for col in EM_sat_SKY.columns if col.startswith('Date')]
+            EM_sat_SCI.drop(columns_to_drop_SCI, axis=1, inplace=True)
+            EM_sat_SKY.drop(columns_to_drop_SKY, axis=1, inplace=True)
+            if len(EM_sat_SCI) >= 3:  # drop first and last rows if nrows >= 3
+                EM_sat_SCI = EM_sat_SCI.iloc[1:-1]
+                EM_sat_SKY = EM_sat_SKY.iloc[1:-1]
             
+            # Determine the saturation fraction
+            for col in EM_sat_SCI.columns:
+                try: # only apply to columns with wavelengths as headers
+                    float_col_title = float(col)
+                    EM_sat_SCI[col] = EM_sat_SCI[col] / saturation_level 
+                except ValueError:
+                    pass 
+            for col in EM_sat_SKY.columns:
+                try: 
+                    float_col_title = float(col)
+                    EM_sat_SKY[col] = EM_sat_SKY[col] / saturation_level 
+                except ValueError:
+                    pass 
+    
+            saturated_elements_SCI = (EM_sat_SCI > saturation_fraction).sum().sum()
+            saturated_elements_SKY = (EM_sat_SKY > saturation_fraction).sum().sum()
+            total_elements = EM_sat_SCI.shape[0] * EM_sat_SCI.shape[1]
+            saturated_fraction_threshold = 1.5 / EM_sat_SCI.shape[1]
+            
+            if saturated_elements_SCI / total_elements > saturated_fraction_threshold:
+                QC_pass = False
+            elif saturated_elements_SKY / total_elements > saturated_fraction_threshold:
+                QC_pass = False
+            else: 
+                QC_pass = True
+            
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass
 
 
@@ -1246,43 +1267,49 @@ class QCL0(QC):
 
         N_in_a_row = 20 # number of negative flux elements in a row that triggers QC failure
         
-        # Read and condition the table of Exposure Meter Data
-        L0 = self.kpf_object
-        if hasattr(L0, 'EXPMETER_SCI') and hasattr(L0, 'EXPMETER_SKY'):
-            if (L0['EXPMETER_SCI'].size > 1) and (L0['EXPMETER_SKY'].size > 1):
-                pass
+        try:
+            # Read and condition the table of Exposure Meter Data
+            L0 = self.kpf_object
+            if hasattr(L0, 'EXPMETER_SCI') and hasattr(L0, 'EXPMETER_SKY'):
+                if (L0['EXPMETER_SCI'].size > 1) and (L0['EXPMETER_SKY'].size > 1):
+                    pass
+                else:
+                    return False
             else:
-                return False
-        else:
-            return True # pass test if no exposure meter data present
-        EM_SCI = L0['EXPMETER_SCI'].copy()
-        EM_SKY = L0['EXPMETER_SKY'].copy()
-        columns_to_drop_SCI = [col for col in EM_SCI.columns if col.startswith('Date')]
-        columns_to_drop_SKY = [col for col in EM_SKY.columns if col.startswith('Date')]
-        EM_SCI.drop(columns_to_drop_SCI, axis=1, inplace=True)
-        EM_SKY.drop(columns_to_drop_SKY, axis=1, inplace=True)
-        counts_SCI = EM_SCI.sum(axis=0).values
-        counts_SKY = EM_SKY.sum(axis=0).values
-        
-        # Determine if the spectra have significant negative flux
-        negative_mask_SCI = counts_SCI < 0 # spectral elements with negative flux
-        negative_mask_SKY = counts_SKY < 0
-        window = np.ones(N_in_a_row, dtype=int) # window to convolve with spectra
-        conv_result_SCI = convolve1d(negative_mask_SCI.astype(int), window, mode='constant', cval=0)
-        conv_result_SKY = convolve1d(negative_mask_SKY.astype(int), window, mode='constant', cval=0)
-        has_consec_negs_SCI = np.any(conv_result_SCI == N_in_a_row)
-        has_consec_negs_SKY = np.any(conv_result_SKY == N_in_a_row)
-
-        if has_consec_negs_SCI or has_consec_negs_SKY:
+                return True # pass test if no exposure meter data present
+            EM_SCI = L0['EXPMETER_SCI'].copy()
+            EM_SKY = L0['EXPMETER_SKY'].copy()
+            columns_to_drop_SCI = [col for col in EM_SCI.columns if col.startswith('Date')]
+            columns_to_drop_SKY = [col for col in EM_SKY.columns if col.startswith('Date')]
+            EM_SCI.drop(columns_to_drop_SCI, axis=1, inplace=True)
+            EM_SKY.drop(columns_to_drop_SKY, axis=1, inplace=True)
+            counts_SCI = EM_SCI.sum(axis=0).values
+            counts_SKY = EM_SKY.sum(axis=0).values
+            
+            # Determine if the spectra have significant negative flux
+            negative_mask_SCI = counts_SCI < 0 # spectral elements with negative flux
+            negative_mask_SKY = counts_SKY < 0
+            window = np.ones(N_in_a_row, dtype=int) # window to convolve with spectra
+            conv_result_SCI = convolve1d(negative_mask_SCI.astype(int), window, mode='constant', cval=0)
+            conv_result_SKY = convolve1d(negative_mask_SKY.astype(int), window, mode='constant', cval=0)
+            has_consec_negs_SCI = np.any(conv_result_SCI == N_in_a_row)
+            has_consec_negs_SKY = np.any(conv_result_SKY == N_in_a_row)
+    
+            if has_consec_negs_SCI or has_consec_negs_SKY:
+                QC_pass = False
+            else: 
+                QC_pass = True
+            
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
-        else: 
-            QC_pass = True
             
         return QC_pass
 
-    def L0_bad_readout_check(L0, data_products=['L0'], debug=False):
+
+    def L0_bad_readout_check(self, debug=False):
         """
-        This Quality Control function checks if desired readout time
+        This Quality Control function checks if the desired readout time
         matches the expected readout time (within some limit). This 
         mismatch idetifies a 'smeared' readout scenario that we want to junk.
         Bad readout states can also have no value for Greed/Red elapsed time.
@@ -1294,30 +1321,28 @@ class QCL0(QC):
         6.0 and 6.7 seconds, the star will be improperly failed. (very rare)
         
         Args:
-            L0 - an L0 object
-            data_products - L0 data_products to check (list)
-                            possible elements = 'auto', 'all',
-                                                'Green', 'Red', 'CaHK', 'ExpMeter',
-                                                'Guider', 'Telemetry', 'Pyrheliometer'
-                                                (note that 'all' should be used rarely since good data
-                                                could be missing some extensions, e.g. CaHK, Pyrheliometer)
             debug - an optional flag.  If True, missing data products are noted.
 
             Example that should fail this QC test: KP.20241008.31459.57
+        
         Returns:
             QC_pass - a boolean signifying that the QC passed for failed
         """
 
-        # Check primary header
-        Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
-        Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
-        # print('Desired exposure time: ', Texp_desired)
-        # print('Actual exposure time:  ', Texp_actual)
+        try:
+            L0 = self.kpf_object
 
-        if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
+            Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
+            Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
+    
+            if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
+                QC_pass = False
+            else:
+                QC_pass = True
+            
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
-        else:
-            QC_pass = True
 
         return QC_pass
 
@@ -1339,7 +1364,7 @@ class QC2D(QC):
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
 
-    def data_2D_red_green(self,debug=False):
+    def data_2D_red_green(self, debug=False):
         """
         This Quality Control function checks if the 2D data exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
@@ -1351,48 +1376,53 @@ class QC2D(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        D2 = self.kpf_object
-
-
-        if debug:
-            print(D2.info())
-            type_D2 = type(D2)
-            print("type_2D = ",type_D2)
-            print("D2 = ",D2)
-
-        QC_pass = True
+        try:
+            D2 = self.kpf_object
     
-        extensions = D2.extensions
+            if debug:
+                print(D2.info())
+                type_D2 = type(D2)
+                print("type_2D = ",type_D2)
+                print("D2 = ",D2)
     
-        if 'GREEN_CCD' in extensions:
+            QC_pass = True
+
+            extensions = D2.extensions
         
-            if debug:
-                print("GREEN_CCD exists")
-                print("data_shape =", np.shape(D2["GREEN_CCD"]))
+            if 'GREEN_CCD' in extensions:
             
-            if np.shape(D2["GREEN_CCD"]) != (4080, 4080):  
-                QC_pass = False
+                if debug:
+                    print("GREEN_CCD exists")
+                    print("data_shape =", np.shape(D2["GREEN_CCD"]))
+                
+                if np.shape(D2["GREEN_CCD"]) != (4080, 4080):  
+                    QC_pass = False
+                
+            else:
+                if debug:
+                    print("GREEN_CCD does not exist")
+                QC_pass = False       
             
-        else:
-            if debug:
-                print("GREEN_CCD does not exist")
-            QC_pass = False       
-        
-        if 'RED_CCD' in extensions:
-        
-            if debug:
-                print("RED_CCD exists")
-                print("data_shape =", np.shape(D2["RED_CCD"]))
+            if 'RED_CCD' in extensions:
             
-            if np.shape(D2["RED_CCD"]) != (4080, 4080):  
-                QC_pass = False
-            
-        else:
-            if debug:
-                print("RED_CCD does not exist")
-            QC_pass = False    
+                if debug:
+                    print("RED_CCD exists")
+                    print("data_shape =", np.shape(D2["RED_CCD"]))
+                
+                if np.shape(D2["RED_CCD"]) != (4080, 4080):  
+                    QC_pass = False
+                
+            else:
+                if debug:
+                    print("RED_CCD does not exist")
+                QC_pass = False    
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
         
         return QC_pass
+
 
     def data_2D_CaHK(self,debug=False):
         """
@@ -1406,33 +1436,39 @@ class QC2D(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        D2 = self.kpf_object
+        try:
+            D2 = self.kpf_object
 
-        if debug:
-            print(D2.info())
-            type_D2 = type(D2)
-            print("type_2D = ",type_D2)
-            print("D2 = ",D2)
+            if debug:
+                print(D2.info())
+                type_D2 = type(D2)
+                print("type_2D = ",type_D2)
+                print("D2 = ",D2)
 
-        QC_pass = True
-    
-        extensions = D2.extensions
-    
-        if 'CA_HK' in extensions:
-        
-            if debug:
-                print("CA_HK exists")
-                print("data_shape =", np.shape(D2["CA_HK"]))
-            
-            if np.shape(D2["CA_HK"]) == (0,):  
-                QC_pass = False
-            
-        else:
-            if debug:
-                print("CA_HK does not exist")
-            QC_pass = False       
-        
+            QC_pass = True
+
+            extensions = D2.extensions
+
+            if 'CA_HK' in extensions:
+
+                if debug:
+                    print("CA_HK exists")
+                    print("data_shape =", np.shape(D2["CA_HK"]))
+                
+                if np.shape(D2["CA_HK"]) == (0,):  
+                    QC_pass = False
+                
+            else:
+                if debug:
+                    print("CA_HK does not exist")
+                QC_pass = False       
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass
+
 
     def data_2D_bias_low_flux(self,debug=False):
         """
@@ -1446,28 +1482,34 @@ class QC2D(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        D2 = self.kpf_object
+        try:
+            D2 = self.kpf_object
 
-        if debug:
-            print(D2.info())
-            type_D2 = type(D2)
-            print("type_2D = ",type_D2)
-            print("D2 = ",D2)
-
-        QC_pass = True
-        extensions = D2.extensions
-
-        mean_GREEN = D2["GREEN_CCD"].flatten().mean()
-        mean_RED = D2["RED_CCD"].flatten().mean()
-
-        if debug:
-            print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
-            print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-            print("Max allowed mean flux =", 10)
-
-        if (mean_GREEN > 10) | (mean_RED > 10):
             if debug:
-                print("One of the CCDs has a high flux")
+                print(D2.info())
+                type_D2 = type(D2)
+                print("type_2D = ",type_D2)
+                print("D2 = ",D2)
+    
+            QC_pass = True
+            extensions = D2.extensions
+    
+            mean_GREEN = D2["GREEN_CCD"].flatten().mean()
+            mean_RED = D2["RED_CCD"].flatten().mean()
+    
+            if debug:
+                print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+                print("Mean RED_CCD flux =", np.round(mean_RED, 2))
+                print("Max allowed mean flux =", 10)
+    
+            if (mean_GREEN > 10) | (mean_RED > 10):
+                if debug:
+                    print("One of the CCDs has a high flux")
+                QC_pass = False
+
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
 
         return QC_pass
@@ -1484,34 +1526,39 @@ class QC2D(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        D2 = self.kpf_object
-
-        if debug:
-            print(D2.info())
-            type_D2 = type(D2)
-            print("type_2D = ",type_D2)
-            print("D2 = ",D2)
+        try:
+            D2 = self.kpf_object
     
-        QC_pass = True
-        extensions = D2.extensions
-
-        mean_GREEN = D2["GREEN_CCD"].flatten().mean()
-        mean_RED = D2["RED_CCD"].flatten().mean()
-
-        max_allowed_mean_flux_green = 11
-        max_allowed_mean_flux_red = 13
-
-        if debug:
-            print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
-            print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-            print("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
-            print("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
-
-        if (mean_GREEN > max_allowed_mean_flux_green) | (mean_RED > max_allowed_mean_flux_red):
             if debug:
-                print("One of the CCDs has a high flux")
-            QC_pass = False
+                print(D2.info())
+                type_D2 = type(D2)
+                print("type_2D = ",type_D2)
+                print("D2 = ",D2)
         
+            QC_pass = True
+            extensions = D2.extensions
+    
+            mean_GREEN = D2["GREEN_CCD"].flatten().mean()
+            mean_RED = D2["RED_CCD"].flatten().mean()
+    
+            max_allowed_mean_flux_green = 11
+            max_allowed_mean_flux_red = 13
+    
+            if debug:
+                print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+                print("Mean RED_CCD flux =", np.round(mean_RED, 2))
+                print("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
+                print("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
+    
+            if (mean_GREEN > max_allowed_mean_flux_green) | (mean_RED > max_allowed_mean_flux_red):
+                if debug:
+                    print("One of the CCDs has a high flux")
+                QC_pass = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass
 
     def positive_2D_SNR(self, neg_threshold=-5, debug=False):
@@ -1584,17 +1631,22 @@ class QC2D(QC):
                             threshold, False otherwise.
         """
         
-        Two_D = self.kpf_object
-        green_counts = Two_D['GREEN_CCD'].data
-        red_counts = Two_D['RED_CCD'].data
-        
-        QC_Test = True
-        if debug:
-            print("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
-            print("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
-        if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
-            QC_Test = False
-           
+        try:
+            Two_D = self.kpf_object
+            green_counts = Two_D['GREEN_CCD'].data
+            red_counts = Two_D['RED_CCD'].data
+            
+            QC_Test = True
+            if debug:
+                print("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
+                print("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
+            if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
+                QC_Test = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_Test
 
 #####################################################################
@@ -1631,74 +1683,79 @@ class QCL1(QC):
              bad_orders - an array of strings listing the nonmonotonic orders and orderlets
         """
 
-        L1 = self.kpf_object
-
-        if debug:
-            print(L1.info())
-            type_L1 = type(L1)
-            print("type_L1 = ",type_L1)
-            print("L1 = ",L1)
-
-        QC_pass = True
-        bad_orders = []
-
-        import numpy as np
-        if debug:
-            import matplotlib.pyplot as plt
-
-        # Define wavelength extensions in L1
-        extensions = [p + s for p in ["GREEN_", "RED_"]
-                            for s in ["SCI_WAVE1", "SCI_WAVE2", "SCI_WAVE3", "SKY_WAVE", "CAL_WAVE"]]
-
-        # Iterate over extensions (orderlets) and orders to check for monotonicity in each combination.
-        for ext in extensions:
-
+        try:
+            L1 = self.kpf_object
+    
             if debug:
-                print("ext = ",ext)
-            
-            extname = ext
-            # try:
-            #     naxis1 = L1.header[ext]["NAXIS1"]
-            #     naxis2 = L1.header[ext]["NAXIS2"]
-            # except KeyError:
-            #     import pdb; pdb.set_trace()
-
-            # if debug:
-            #     print("naxis1,naxis2,extname = ",naxis1,naxis2,extname)
-
-            if ext == extname:  # Check if extension exists (e.g., if RED isn't processed)
-
+                print(L1.info())
+                type_L1 = type(L1)
+                print("type_L1 = ",type_L1)
+                print("L1 = ",L1)
+    
+            QC_pass = True
+            bad_orders = []
+    
+            import numpy as np
+            if debug:
+                import matplotlib.pyplot as plt
+    
+            # Define wavelength extensions in L1
+            extensions = [p + s for p in ["GREEN_", "RED_"]
+                                for s in ["SCI_WAVE1", "SCI_WAVE2", "SCI_WAVE3", "SKY_WAVE", "CAL_WAVE"]]
+    
+            # Iterate over extensions (orderlets) and orders to check for monotonicity in each combination.
+            for ext in extensions:
+    
                 if debug:
-                    data_shape = np.shape(L1[ext])
-                    print("data_shape = ", data_shape)
-
-                norders = L1[ext].shape[0]
-                for o in range(norders):
-
+                    print("ext = ",ext)
+                
+                extname = ext
+                # try:
+                #     naxis1 = L1.header[ext]["NAXIS1"]
+                #     naxis2 = L1.header[ext]["NAXIS2"]
+                # except KeyError:
+                #     import pdb; pdb.set_trace()
+    
+                # if debug:
+                #     print("naxis1,naxis2,extname = ",naxis1,naxis2,extname)
+    
+                if ext == extname:  # Check if extension exists (e.g., if RED isn't processed)
+    
                     if debug:
-                         print("order = ",o)
-
-                    np_obj_ffi = np.array(L1[ext])
-
-                    if debug:
-                        print("wls_shape = ", np.shape(np_obj_ffi))
-
-                    WLS = np_obj_ffi[o,:] # wavelength solution of the current order/orderlet
-
-                    isMonotonic = np.all(WLS[:-1] >= WLS[1:]) # this expression determines monotonicity for the orderlet/order
-                    if not isMonotonic:
-                        QC_pass = False                             # the QC test fails if one order/orderlet is not monotonic
-                        bad_orders.append(ext + '(' + str(o)+')') # append the bad order/orderlet to the list
+                        data_shape = np.shape(L1[ext])
+                        print("data_shape = ", data_shape)
+    
+                    norders = L1[ext].shape[0]
+                    for o in range(norders):
+    
                         if debug:
-                            print('L1[' + ext + ']['+ str(o) +']: monotonic = ' + str(isMonotonic))
-                            plt.plot(WLS)
-                            plt.title('L1[' + ext + '] (order = '+ str(o) +') -- not monotonic')
-                            plt.show()
-        if debug:
-            try:  # using a try/except statement because sometimes OFNAME isn't defined
-                print("File: " + L1['PRIMARY'].header['OFNAME'])
-            except:
-                pass
+                             print("order = ",o)
+    
+                        np_obj_ffi = np.array(L1[ext])
+    
+                        if debug:
+                            print("wls_shape = ", np.shape(np_obj_ffi))
+    
+                        WLS = np_obj_ffi[o,:] # wavelength solution of the current order/orderlet
+    
+                        isMonotonic = np.all(WLS[:-1] >= WLS[1:]) # this expression determines monotonicity for the orderlet/order
+                        if not isMonotonic:
+                            QC_pass = False                             # the QC test fails if one order/orderlet is not monotonic
+                            bad_orders.append(ext + '(' + str(o)+')') # append the bad order/orderlet to the list
+                            if debug:
+                                print('L1[' + ext + ']['+ str(o) +']: monotonic = ' + str(isMonotonic))
+                                plt.plot(WLS)
+                                plt.title('L1[' + ext + '] (order = '+ str(o) +') -- not monotonic')
+                                plt.show()
+            if debug:
+                try:  # using a try/except statement because sometimes OFNAME isn't defined
+                    print("File: " + L1['PRIMARY'].header['OFNAME'])
+                except:
+                    pass
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
 
         return QC_pass #, bad_orders
 
@@ -1714,81 +1771,87 @@ class QCL1(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        L1 = self.kpf_object
-
-        if debug:
-            print(L1.info())
-            type_L1 = type(L1)
-            print("type_L1 = ",type_L1)
-            print("L1 = ",L1)
-
-        QC_pass = True
+        try:
+            L1 = self.kpf_object
     
-        extensions = L1.extensions
+            if debug:
+                print(L1.info())
+                type_L1 = type(L1)
+                print("type_L1 = ",type_L1)
+                print("L1 = ",L1)
     
-        GREEN_extensions = [
-         'GREEN_SCI_FLUX1',  
-         'GREEN_SCI_FLUX2',  
-         'GREEN_SCI_FLUX3',  
-         'GREEN_SKY_FLUX',   
-         'GREEN_CAL_FLUX',   
-         'GREEN_SCI_VAR1',  
-         'GREEN_SCI_VAR2',  
-         'GREEN_SCI_VAR3',  
-         'GREEN_SKY_VAR',   
-         'GREEN_CAL_VAR',   
-         'GREEN_SCI_WAVE1',  
-         'GREEN_SCI_WAVE2',  
-         'GREEN_SCI_WAVE3',  
-         'GREEN_SKY_WAVE',   
-         'GREEN_CAL_WAVE' 
-        ] 
-
-        RED_extensions = [
-         'RED_SCI_FLUX1',  
-         'RED_SCI_FLUX2',  
-         'RED_SCI_FLUX3',  
-         'RED_SKY_FLUX',   
-         'RED_CAL_FLUX',   
-         'RED_SCI_VAR1',  
-         'RED_SCI_VAR2',  
-         'RED_SCI_VAR3',  
-         'RED_SKY_VAR',   
-         'RED_CAL_VAR',   
-         'RED_SCI_WAVE1',  
-         'RED_SCI_WAVE2',  
-         'RED_SCI_WAVE3',  
-         'RED_SKY_WAVE',   
-         'RED_CAL_WAVE'  
-        ] 
-    
-        QC_pass = True
-    
-        for ext in GREEN_extensions:
-            if ext not in extensions:
-                QC_pass = False
-                if debug:
-                    print('The extension ' + ext + ' is missing from the file.')
-            else:
-                if np.shape(L1[ext]) != (35, 4080):
-                    QC_pass = False
-                    if debug:
-                        print('Shape of ' + ext + ' array is incorrect.')
-                        print("data_shape =", np.shape(L1[ext]))
-                    
-        for ext in RED_extensions:
-            if ext not in extensions:
-                QC_pass = False
-                if debug:
-                    print('The extension ' + ext + ' is missing from the file.')
-            else:
-                if np.shape(L1[ext]) != (32, 4080):
-                    QC_pass = False
-                    if debug:
-                        print('Shape of ' + ext + ' array is incorrect.')   
-                        print("data_shape =", np.shape(L1[ext]))
+            QC_pass = True
         
+            extensions = L1.extensions
+        
+            GREEN_extensions = [
+             'GREEN_SCI_FLUX1',  
+             'GREEN_SCI_FLUX2',  
+             'GREEN_SCI_FLUX3',  
+             'GREEN_SKY_FLUX',   
+             'GREEN_CAL_FLUX',   
+             'GREEN_SCI_VAR1',  
+             'GREEN_SCI_VAR2',  
+             'GREEN_SCI_VAR3',  
+             'GREEN_SKY_VAR',   
+             'GREEN_CAL_VAR',   
+             'GREEN_SCI_WAVE1',  
+             'GREEN_SCI_WAVE2',  
+             'GREEN_SCI_WAVE3',  
+             'GREEN_SKY_WAVE',   
+             'GREEN_CAL_WAVE' 
+            ] 
+    
+            RED_extensions = [
+             'RED_SCI_FLUX1',  
+             'RED_SCI_FLUX2',  
+             'RED_SCI_FLUX3',  
+             'RED_SKY_FLUX',   
+             'RED_CAL_FLUX',   
+             'RED_SCI_VAR1',  
+             'RED_SCI_VAR2',  
+             'RED_SCI_VAR3',  
+             'RED_SKY_VAR',   
+             'RED_CAL_VAR',   
+             'RED_SCI_WAVE1',  
+             'RED_SCI_WAVE2',  
+             'RED_SCI_WAVE3',  
+             'RED_SKY_WAVE',   
+             'RED_CAL_WAVE'  
+            ] 
+        
+            QC_pass = True
+        
+            for ext in GREEN_extensions:
+                if ext not in extensions:
+                    QC_pass = False
+                    if debug:
+                        print('The extension ' + ext + ' is missing from the file.')
+                else:
+                    if np.shape(L1[ext]) != (35, 4080):
+                        QC_pass = False
+                        if debug:
+                            print('Shape of ' + ext + ' array is incorrect.')
+                            print("data_shape =", np.shape(L1[ext]))
+                        
+            for ext in RED_extensions:
+                if ext not in extensions:
+                    QC_pass = False
+                    if debug:
+                        print('The extension ' + ext + ' is missing from the file.')
+                else:
+                    if np.shape(L1[ext]) != (32, 4080):
+                        QC_pass = False
+                        if debug:
+                            print('Shape of ' + ext + ' array is incorrect.')   
+                            print("data_shape =", np.shape(L1[ext]))
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass
+
 
     def data_L1_CaHK(self,debug=False):
         """
@@ -1802,40 +1865,46 @@ class QCL1(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        L1 = self.kpf_object
-
-        if debug:
-            print(L1.info())
-            type_L1 = type(L1)
-            print("type_L1 = ",type_L1)
-            print("L1 = ",L1)
-
-        QC_pass = True
+        try:
+            L1 = self.kpf_object
     
-        extensions = L1.extensions
+            if debug:
+                print(L1.info())
+                type_L1 = type(L1)
+                print("type_L1 = ",type_L1)
+                print("L1 = ",L1)
     
-        CaHK_extensions = [
-         'CA_HK_SCI',  
-         'CA_HK_SKY',  
-         'CA_HK_SCI_WAVE',  
-         'CA_HK_SKY_WAVE'  
-        ] 
-    
-        QC_pass = True
-    
-        for ext in CaHK_extensions:
-            if ext not in extensions:
-                QC_pass = False
-                if debug:
-                    print('The extension ' + ext + ' is missing from the file.')
-            else:
-                if np.shape(L1[ext]) == (0,):
+            QC_pass = True
+        
+            extensions = L1.extensions
+        
+            CaHK_extensions = [
+             'CA_HK_SCI',  
+             'CA_HK_SKY',  
+             'CA_HK_SCI_WAVE',  
+             'CA_HK_SKY_WAVE'  
+            ] 
+        
+            QC_pass = True
+        
+            for ext in CaHK_extensions:
+                if ext not in extensions:
                     QC_pass = False
                     if debug:
-                        print('Shape of ' + ext + ' array is zero.')
-                        print("data_shape =", np.shape(L1[ext]))
-        
+                        print('The extension ' + ext + ' is missing from the file.')
+                else:
+                    if np.shape(L1[ext]) == (0,):
+                        QC_pass = False
+                        if debug:
+                            print('Shape of ' + ext + ' array is zero.')
+                            print("data_shape =", np.shape(L1[ext]))
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+ 
         return QC_pass
+
 
     def L1_check_snr_lfc(L1, data_products=['auto']):
         """
@@ -1852,23 +1921,29 @@ class QCL1(QC):
             QC_pass - a boolean signifying that the QC passed or failed
         """
 
-        # Check L1 header
-        # SNR_452 = L1.header['PRIMARY']['SNRSC452'] # Not used for LFC
-        SNR_548 = L1.header['PRIMARY']['SNRSC548'] # 
-        # SNR_652 = L1.header['PRIMARY']['SNRSC652'] # # Not used for LFC
-        SNR_747 = L1.header['PRIMARY']['SNRSC747'] # 
-        object_name  = L1.header['PRIMARY']['OBJECT']
-
-        if object_name in 'autocal-lfc':
-            SNR_limit = 2800 # Optimistic limit. Could be lower.
-            if (SNR_548 >= SNR_limit) or (SNR_747 >= SNR_limit):
-                QC_pass = False
+        try:
+            # Check L1 header
+            # SNR_452 = L1.header['PRIMARY']['SNRSC452'] # Not used for LFC
+            SNR_548 = L1.header['PRIMARY']['SNRSC548'] # 
+            # SNR_652 = L1.header['PRIMARY']['SNRSC652'] # # Not used for LFC
+            SNR_747 = L1.header['PRIMARY']['SNRSC747'] # 
+            object_name  = L1.header['PRIMARY']['OBJECT']
+    
+            if object_name in 'autocal-lfc':
+                SNR_limit = 2800 # Optimistic limit. Could be lower.
+                if (SNR_548 >= SNR_limit) or (SNR_747 >= SNR_limit):
+                    QC_pass = False
+                else:
+                    QC_pass = True
             else:
                 QC_pass = True
-        else:
-            QC_pass = True
             
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass
+
 
     def L1_correct_wls_check(self, debug=False):
         """
@@ -1891,58 +1966,63 @@ class QCL1(QC):
              QC_pass - a boolean signifying that the QC passed for failed
         """
         
-        L1 = self.kpf_object
-        QC_pass = True
-    
-        # First, check if WLS files exist
         try:
-            WLSFILE = L1.header["PRIMARY"]["WLSFILE"]
-            WLSFILE2 = L1.header["PRIMARY"]["WLSFILE2"]
-            from kpfpipe.models.level1 import KPF1
-            WLSFILE_L1 = KPF1.from_fits(WLSFILE)
-            WLSFILE2_L1 = KPF1.from_fits(WLSFILE2)
-        except:
+            L1 = self.kpf_object
+            QC_pass = True
+        
+            # First, check if WLS files exist
+            try:
+                WLSFILE = L1.header["PRIMARY"]["WLSFILE"]
+                WLSFILE2 = L1.header["PRIMARY"]["WLSFILE2"]
+                from kpfpipe.models.level1 import KPF1
+                WLSFILE_L1 = KPF1.from_fits(WLSFILE)
+                WLSFILE2_L1 = KPF1.from_fits(WLSFILE2)
+            except:
+                QC_pass = False
+                if debug:
+                    print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
+                return QC_pass
+        
+            # Next, check if the two WLS files are the same (they should not be)
+            if WLSFILE == WLSFILE2:
+                QC_pass = False
+                if debug:
+                    print("WLSFILE and WLSFILE2 are the same.")
+                return QC_pass        
+                
+            # Check if the observations are Keck or SoCal observations
+            is_day = False
+            if L1.header["PRIMARY"]["OBJECT"] == "SoCal":
+                is_day = True
+        
+            # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
+            # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
+            date_format = "%Y-%m-%d"
+            DATE_OBS = datetime.strptime(L1.header["PRIMARY"]["DATE-OBS"], date_format)
+            WLSFILE_DATE = datetime.strptime(WLSFILE_L1.header["PRIMARY"]["DATE-OBS"], date_format)
+            WLSFILE2_DATE = datetime.strptime(WLSFILE2_L1.header["PRIMARY"]["DATE-OBS"], date_format)
+            if is_day == False:
+                if DATE_OBS != WLSFILE_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE not the same as date of obs.")
+                if DATE_OBS != WLSFILE2_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE2 not the same as date of obs.")
+            else:
+                if DATE_OBS != WLSFILE_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE not the same as date of obs.")
+                if DATE_OBS >= WLSFILE2_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
-            if debug:
-                print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
-            return QC_pass
-    
-        # Next, check if the two WLS files are the same (they should not be)
-        if WLSFILE == WLSFILE2:
-            QC_pass = False
-            if debug:
-                print("WLSFILE and WLSFILE2 are the same.")
-            return QC_pass        
-            
-        # Check if the observations are Keck or SoCal observations
-        is_day = False
-        if L1.header["PRIMARY"]["OBJECT"] == "SoCal":
-            is_day = True
-    
-        # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
-        # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
-        date_format = "%Y-%m-%d"
-        DATE_OBS = datetime.strptime(L1.header["PRIMARY"]["DATE-OBS"], date_format)
-        WLSFILE_DATE = datetime.strptime(WLSFILE_L1.header["PRIMARY"]["DATE-OBS"], date_format)
-        WLSFILE2_DATE = datetime.strptime(WLSFILE2_L1.header["PRIMARY"]["DATE-OBS"], date_format)
-        if is_day == False:
-            if DATE_OBS != WLSFILE_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE not the same as date of obs.")
-            if DATE_OBS != WLSFILE2_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE2 not the same as date of obs.")
-        else:
-            if DATE_OBS != WLSFILE_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE not the same as date of obs.")
-            if DATE_OBS >= WLSFILE2_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
             
         return QC_pass
 
@@ -1977,93 +2057,98 @@ class QCL2(QC):
              QC_pass - a boolean signifying that all of the data exists as expected
         """
     
-        L2 = self.kpf_object
-
-        if debug:
-            print(L2.info())
-            type_L2 = type(L2)
-            print("type_L2 = ",type_L2)
-            print("L2 = ",L2)
+        try:
+            L2 = self.kpf_object
     
-        extensions = L2.extensions
-    
-        required_extensions = [
-            "TELEMETRY",
-            "GREEN_CCF",
-            "RED_CCF",
-            "GREEN_CCF_RW",
-            "RED_CCF_RW",
-            "RV"
-        ]
-    
-        QC_pass = True
-    
-        if "TELEMETRY" not in extensions:
-            QC_pass = False
             if debug:
-                print('The extension TELEMETRY is missing from the file.')
-        else:
-            if np.shape(L2["TELEMETRY"]) == (0,):
-                QC_pass = False
-                if debug:
-                    print('Shape of TELEMETRY array is zero.')
-                    print("data_shape =", np.shape(L2["TELEMETRY"]))
-                
-        if "GREEN_CCF" not in extensions:
-            QC_pass = False
-            if debug:
-                print('The extension GREEN_CCF is missing from the file.')
-        else:
-            if np.shape(L2["GREEN_CCF"]) != (5, 35, 804):
-                QC_pass = False
-                if debug:
-                    print('Shape of GREEN_CCF array is incorrect.')
-                    print("data_shape =", np.shape(L2["GREEN_CCF"]))
-                
-        if "GREEN_CCF_RW" not in extensions:
-            QC_pass = False
-            if debug:
-                print('The extension GREEN_CCF_RW is missing from the file.')
-        else:
-            if np.shape(L2["GREEN_CCF_RW"]) != (5, 35, 804):
-                QC_pass = False
-                if debug:
-                    print('Shape of GREEN_CCF_RW array is incorrect.')
-                    print("data_shape =", np.shape(L2["GREEN_CCF_RW"]))
-                
-        if "RED_CCF" not in extensions:
-            QC_pass = False
-            if debug:
-                print('The extension RED_CCF is missing from the file.')
-        else:
-            if np.shape(L2["RED_CCF"]) != (5, 32, 804):
-                QC_pass = False
-                if debug:
-                    print('Shape of RED_CCF_RW array is incorrect.')
-                    print("data_shape =", np.shape(L2["RED_CCF"]))
-                
-        if "RED_CCF_RW" not in extensions:
-            QC_pass = False
-            if debug:
-                print('The extension RED_CCF_RW is missing from the file.')
-        else:
-            if np.shape(L2["RED_CCF_RW"]) != (5, 32, 804):
-                QC_pass = False
-                if debug:
-                    print('Shape of RED_CCF_RW array is incorrect.')
-                    print("data_shape =", np.shape(L2["RED_CCF_RW"]))
-                
-        if "RV" not in extensions:
-            QC_pass = False
-            if debug:
-                print('The extension RV is missing from the file.')
-        else:
-            if np.shape(L2["RV"]) == (0,):
-                QC_pass = False
-                if debug:
-                    print('Shape of RV array is zero.')
-                    print("data_shape =", np.shape(L2["RV"]))
+                print(L2.info())
+                type_L2 = type(L2)
+                print("type_L2 = ",type_L2)
+                print("L2 = ",L2)
         
+            extensions = L2.extensions
+        
+            required_extensions = [
+                "TELEMETRY",
+                "GREEN_CCF",
+                "RED_CCF",
+                "GREEN_CCF_RW",
+                "RED_CCF_RW",
+                "RV"
+            ]
+        
+            QC_pass = True
+        
+            if "TELEMETRY" not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension TELEMETRY is missing from the file.')
+            else:
+                if np.shape(L2["TELEMETRY"]) == (0,):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of TELEMETRY array is zero.')
+                        print("data_shape =", np.shape(L2["TELEMETRY"]))
+                    
+            if "GREEN_CCF" not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension GREEN_CCF is missing from the file.')
+            else:
+                if np.shape(L2["GREEN_CCF"]) != (5, 35, 804):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of GREEN_CCF array is incorrect.')
+                        print("data_shape =", np.shape(L2["GREEN_CCF"]))
+                    
+            if "GREEN_CCF_RW" not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension GREEN_CCF_RW is missing from the file.')
+            else:
+                if np.shape(L2["GREEN_CCF_RW"]) != (5, 35, 804):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of GREEN_CCF_RW array is incorrect.')
+                        print("data_shape =", np.shape(L2["GREEN_CCF_RW"]))
+                    
+            if "RED_CCF" not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension RED_CCF is missing from the file.')
+            else:
+                if np.shape(L2["RED_CCF"]) != (5, 32, 804):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of RED_CCF_RW array is incorrect.')
+                        print("data_shape =", np.shape(L2["RED_CCF"]))
+                    
+            if "RED_CCF_RW" not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension RED_CCF_RW is missing from the file.')
+            else:
+                if np.shape(L2["RED_CCF_RW"]) != (5, 32, 804):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of RED_CCF_RW array is incorrect.')
+                        print("data_shape =", np.shape(L2["RED_CCF_RW"]))
+                    
+            if "RV" not in extensions:
+                QC_pass = False
+                if debug:
+                    print('The extension RV is missing from the file.')
+            else:
+                if np.shape(L2["RV"]) == (0,):
+                    QC_pass = False
+                    if debug:
+                        print('Shape of RV array is zero.')
+                        print("data_shape =", np.shape(L2["RV"]))
+        
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass
 
     def L2_datetime(self, debug=False):
@@ -2090,43 +2175,48 @@ class QCL2(QC):
             We will also need to record the UT times.
         """
     
-        L2 = self.kpf_object
-        date_format = "%Y-%m-%dT%H:%M:%S.%f"
-        QC_pass = True
-    
-        time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
-        time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
+        try:
+            L2 = self.kpf_object
+            date_format = "%Y-%m-%dT%H:%M:%S.%f"
+            QC_pass = True
         
-        # First check that the appropriate headers and keywords are present
-        if not 'PRIMARY' in L2.header:
-            QC_pass = False
-            return QC_pass
-        if not 'RV' in L2.header:
-            QC_pass = False
-            return QC_pass
-        essential_keywords = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'ELAPSED']
-        for keyword in essential_keywords:
-            if keyword not in L2.header['PRIMARY']:
-                if debug:
-                    print(f'Missing keyword: {keyword}')
-                QC_pass = False
-        if not QC_pass:
-            return QC_pass
-        
-        # Check that dates are ordered correctly
-        date_beg = datetime.strptime(L2.header['PRIMARY']['DATE-BEG'], date_format)
-        date_mid = datetime.strptime(L2.header['PRIMARY']['DATE-MID'], date_format)
-        date_end = datetime.strptime(L2.header['PRIMARY']['DATE-END'], date_format)
-        elapsed  = float(L2.header['PRIMARY']['ELAPSED'])
-        if (date_end < date_mid) or (date_mid < date_beg):
-            QC_pass = False
-        
-        # Check that DATE-BEG + ELAPSE = DATE-END
-        if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
-            if debug:
-                print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
-            QC_pass = False
+            time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
+            time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
             
+            # First check that the appropriate headers and keywords are present
+            if not 'PRIMARY' in L2.header:
+                QC_pass = False
+                return QC_pass
+            if not 'RV' in L2.header:
+                QC_pass = False
+                return QC_pass
+            essential_keywords = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'ELAPSED']
+            for keyword in essential_keywords:
+                if keyword not in L2.header['PRIMARY']:
+                    if debug:
+                        print(f'Missing keyword: {keyword}')
+                    QC_pass = False
+            if not QC_pass:
+                return QC_pass
+            
+            # Check that dates are ordered correctly
+            date_beg = datetime.strptime(L2.header['PRIMARY']['DATE-BEG'], date_format)
+            date_mid = datetime.strptime(L2.header['PRIMARY']['DATE-MID'], date_format)
+            date_end = datetime.strptime(L2.header['PRIMARY']['DATE-END'], date_format)
+            elapsed  = float(L2.header['PRIMARY']['ELAPSED'])
+            if (date_end < date_mid) or (date_mid < date_beg):
+                QC_pass = False
+            
+            # Check that DATE-BEG + ELAPSE = DATE-END
+            if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
+                if debug:
+                    print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
+                QC_pass = False
+            
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
         return QC_pass    
 
     def L2_correct_wls_check(self, debug=False):
@@ -2150,57 +2240,62 @@ class QCL2(QC):
              QC_pass - a boolean signifying that the QC passed for failed
         """
         
-        L2 = self.kpf_object
-        QC_pass = True
-    
-        # First, check if WLS files exist
         try:
-            WLSFILE = L2.header["PRIMARY"]["WLSFILE"]
-            WLSFILE2 = L2.header["PRIMARY"]["WLSFILE2"]
-            from kpfpipe.models.level2 import KPF2
-            WLSFILE_L2 = KPF2.from_fits(WLSFILE)
-            WLSFILE2_L2 = KPF2.from_fits(WLSFILE2)
-        except:
-            QC_pass = False
-            if debug:
-                print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
-            return QC_pass
-    
-        # Next, check if the two WLS files are the same (they should not be)
-        if WLSFILE == WLSFILE2:
-            QC_pass = False
-            if debug:
-                print("WLSFILE and WLSFILE2 are the same.")
-            return QC_pass        
+            L2 = self.kpf_object
+            QC_pass = True
+        
+            # First, check if WLS files exist
+            try:
+                WLSFILE = L2.header["PRIMARY"]["WLSFILE"]
+                WLSFILE2 = L2.header["PRIMARY"]["WLSFILE2"]
+                from kpfpipe.models.level2 import KPF2
+                WLSFILE_L2 = KPF2.from_fits(WLSFILE)
+                WLSFILE2_L2 = KPF2.from_fits(WLSFILE2)
+            except:
+                QC_pass = False
+                if debug:
+                    print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
+                return QC_pass
+        
+            # Next, check if the two WLS files are the same (they should not be)
+            if WLSFILE == WLSFILE2:
+                QC_pass = False
+                if debug:
+                    print("WLSFILE and WLSFILE2 are the same.")
+                return QC_pass        
+                
+            # Check if the observations are Keck or SoCal observations
+            is_day = False
+            if L2.header["PRIMARY"]["OBJECT"] == "SoCal":
+                is_day = True
+        
+            # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
+            # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
+            date_format = "%Y-%m-%d"
+            DATE_OBS = datetime.strptime(L2.header["PRIMARY"]["DATE-OBS"], date_format)
+            WLSFILE_DATE = datetime.strptime(WLSFILE_L2.header["PRIMARY"]["DATE-OBS"], date_format)
+            WLSFILE2_DATE = datetime.strptime(WLSFILE2_L2.header["PRIMARY"]["DATE-OBS"], date_format)
+            if is_day == False:
+                if DATE_OBS != WLSFILE_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE not the same as date of obs.")
+                if DATE_OBS != WLSFILE2_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE2 not the same as date of obs.")
+            else:
+                if DATE_OBS != WLSFILE_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE not the same as date of obs.")
+                if DATE_OBS >= WLSFILE2_DATE:
+                    QC_pass = False
+                    if debug:
+                        print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
             
-        # Check if the observations are Keck or SoCal observations
-        is_day = False
-        if L2.header["PRIMARY"]["OBJECT"] == "SoCal":
-            is_day = True
-    
-        # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
-        # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
-        date_format = "%Y-%m-%d"
-        DATE_OBS = datetime.strptime(L2.header["PRIMARY"]["DATE-OBS"], date_format)
-        WLSFILE_DATE = datetime.strptime(WLSFILE_L2.header["PRIMARY"]["DATE-OBS"], date_format)
-        WLSFILE2_DATE = datetime.strptime(WLSFILE2_L2.header["PRIMARY"]["DATE-OBS"], date_format)
-        if is_day == False:
-            if DATE_OBS != WLSFILE_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE not the same as date of obs.")
-            if DATE_OBS != WLSFILE2_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE2 not the same as date of obs.")
-        else:
-            if DATE_OBS != WLSFILE_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE not the same as date of obs.")
-            if DATE_OBS >= WLSFILE2_DATE:
-                QC_pass = False
-                if debug:
-                    print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
             
         return QC_pass
