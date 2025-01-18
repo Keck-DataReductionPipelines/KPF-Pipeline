@@ -77,21 +77,17 @@ class AnalyzeTimeSeries:
         
     To-do:
         * Add continuous integration for this class
+        * Add the option of using a Postgres database
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
         * Make plots of temperature vs. RV for various types of RVs
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
-        * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * Add the capability of using one DB for ingestion into another or plotting
         * Make a standard plot type that excludes outliers using ranges set 
           to, say, +/- 4-sigma where sigma is determined by aggressive outlier
           rejection.  This should be in Delta values.
         * Make standard correlation plots.
         * Make standard phased plots (by day)
-####
-        * Add try/except with QC=False around all QCs.
-####
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -1013,13 +1009,13 @@ class AnalyzeTimeSeries:
                Retrieving all columns can be time consuming.  
                With two years of observations in the database, 
                retrieving 1, 10, 100, 1000 days takes 0.13, 0.75, 2.05, 44 seconds.
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
             only_object (string) - object name to include in query
             only_source (string or list of strings) - source names to include in query (e.g., 'Star')
             object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
-            start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
             verbose (boolean) - if True, prints the SQL query
         """
         
@@ -1067,10 +1063,10 @@ class AnalyzeTimeSeries:
             if on_sky == False:
                 where_queries.append(f"FIUMODE = 'Calibration'")
         if start_date is not None:
-            start_date_txt = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            start_date_txt = start_date.strftime('%Y-%m-%dT%H:%M:%S')
             where_queries.append(f' ("DATE-MID" > "{start_date_txt}")')
         if end_date is not None:
-            end_date_txt = end_date.strftime('%Y-%m-%d %H:%M:%S')
+            end_date_txt = end_date.strftime('%Y-%m-%dT%H:%M:%S')
             where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
         if where_queries != []:
             query += " WHERE " + ' AND '.join(where_queries)
@@ -1452,6 +1448,10 @@ class AnalyzeTimeSeries:
                     col_data_err_replaced = col_data_err.replace('null', np.nan)
                     if 'col_multiply' in thispanel['panelvars'][i]:
                         col_data_err_replaced = pd.to_numeric(col_data_err_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+
+                if 'normalize' in thispanel['panelvars'][i]:
+                    if thispanel['panelvars'][i]['normalize'] == True:
+                        col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') / np.nanmedian(pd.to_numeric(col_data_replaced, errors='coerce'))
                 
                 if plot_type == 'state':
                     states = np.array(col_data_replaced)
