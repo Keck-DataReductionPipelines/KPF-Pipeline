@@ -74,7 +74,7 @@ Continuous integration is a software development practice that involves frequent
 
 The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automatically run using Jenkins and can also be run manually from within Docker with commands like::
 
-    pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py`` 
+    pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py
 
 See the makefile for examples of performance and validation tests.
 
