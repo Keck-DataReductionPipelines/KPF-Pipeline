@@ -19,9 +19,13 @@ temp_db_path  = 'temp_kpf_ts_'       + random_char + '.db'
 temp_plot_dir = 'temp_kpf_ts_plots_' + random_char
 os.mkdir(temp_plot_dir)
 
-# Define paths
-#base_dir = '/data/kpf/reference_fits/tsdb_data/L0'
-base_dir = '/data/L0'
+# Define path
+# Files in base_dir can be copied over from /data/{L0/2D/L1/L2} using 
+# the script in scripts/copy_fits_ci_tsdb.py
+# It should be run when new fits header keywords are added or there are changes 
+# to the data model so that current files can be tested.  
+# This script should be run from within a Docker container.
+base_dir = '/code/KPF-Pipeline/kpf/reference_fits/tsdb_data/L0'
 
 # Reference FITS files listed in CSV file 
 ObsID_filename = '/code/KPF-Pipeline/tests/regression/test_analyze_time_series_ObsIDs.csv'
