@@ -80,7 +80,7 @@ class AnalyzeTimeSeries:
         * Add the option of using a Postgres database
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
-        * Make plots of temperature vs. RV for various types of RVs
+        * Make plots of temperature vs. RV for various types of RVs (correlation plots)
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
         * Augment statistics in legends (median and stddev upon request)
         * Make a standard plot type that excludes outliers using ranges set 
@@ -1903,6 +1903,7 @@ class AnalyzeTimeSeries:
                 plt.bar(bar_positions, entry_counts.values, width=1, align='center', zorder=3)
         if interval == 'day':
             plt.xlabel("Hour of Day (UT)", fontsize=14)
+            
         elif interval == 'month':
             plt.xlabel("Day of Month", fontsize=14)
         else:
@@ -1916,7 +1917,10 @@ class AnalyzeTimeSeries:
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
         ax.xaxis.set_major_formatter(major_formatter)
-        ax.xaxis.set_tick_params(labelsize=10)
+        if interval == 'day':
+            ax.xaxis.set_tick_params(labelsize=9)
+        else:
+            ax.xaxis.set_tick_params(labelsize=10)
         ax.yaxis.set_tick_params(labelsize=10)
         if minor_locator:
             ax.xaxis.set_minor_locator(minor_locator)
