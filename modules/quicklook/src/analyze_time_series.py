@@ -76,7 +76,6 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
-        * Add continuous integration for this class
         * Add the option of using a Postgres database
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
@@ -382,6 +381,13 @@ class AnalyzeTimeSeries:
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
         """
+
+        # Convert input dates to strings if necessary
+        if isinstance(start_date_str, datetime):
+            start_date_str = start_date_str.strftime("%Y%m%d")
+        if isinstance(end_date_str, datetime):
+            end_date_str = end_date_str.strftime("%Y%m%d")
+        
         if not quiet:
             self.logger.info("Adding to database between " + start_date_str + " and " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
@@ -1172,9 +1178,6 @@ class AnalyzeTimeSeries:
             keyword_types = {}
 
         return keyword_types
-
-
-
 
 
     def plot_time_series_multipanel(self, plotdict, 

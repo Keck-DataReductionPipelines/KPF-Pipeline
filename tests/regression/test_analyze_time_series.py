@@ -5,43 +5,66 @@ import sys
 import shutil
 import string
 import random
+import datetime
+import numpy as np
+import pandas as pd
 from dotenv import load_dotenv
 
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-## not the best test files but they are available
-#wls1_file = "/data/reference_fits/kpf_20230503_master_WLS_cal-LFC-eve_L1.fits"
-#wls2_file = "/data/reference_fits/kpf_20230531_master_WLS_autocal-thar-all-eve_L1.fits"
-#l1_timestamp = "2023-05-18T08:00:00.0000"
-#wls_extensions = ['GREEN_SCI_WAVE1', 'GREEN_SCI_WAVE2']
-
-# Generate a unique DB filename
+# Generate a unique DB filename and plot directory
 characters = string.ascii_letters + string.digits
-db_path = 'kpfts_temp_' + ''.join(random.choice(characters) for _ in range(12)) + '.db'
-data_dir = '/data/kpf/reference_fits/tsdb_data/'
+random_char = ''.join(random.choice(characters) for _ in range(12))
+temp_db_path  = 'temp_kpf_ts_'       + random_char + '.db'
+temp_plot_dir = 'temp_kpf_ts_plots_' + random_char
+os.mkdir(temp_plot_dir)
+
+# Define paths
+#base_dir = '/data/kpf/reference_fits/tsdb_data/L0'
+base_dir = '/data/L0'
+
+# Reference FITS files listed in CSV file 
+ObsID_filename = '/code/KPF-Pipeline/tests/regression/test_analyze_time_series_ObsIDs.csv'
 
 def test_analyze_time_series():
     
-    myTS = AnalyzeTimeSeries(db_path=db_path)
-    myTS.print_metadata_table()
+    # Generate a Time Series Database
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     
-    os.remove(db_path)
+    # Test metadata table capabilities
+    myTS.print_metadata_table()
+    df = myTS.metadata_table_to_df()
+    
+    # Test file ingestion methods
+    df_ObsIDs = pd.read_csv(ObsID_filename)
+    ObsID_list = df_ObsIDs['observation_id'].tolist()
+    myTS.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
+    
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    start_date = datetime.datetime(2025,1,12)
+    end_date = datetime.datetime(2025,1,13)
+    myTS.ingest_dates_to_db(start_date, end_date)
 
-    #wls1 = KPF1.from_fits(wls1_file)
-    #wls2 = KPF1.from_fits(wls2_file)
-    #wls1_ts = wls1.header['PRIMARY']['DATE-BEG']
-    #wls2_ts = wls2.header['PRIMARY']['DATE-BEG']
-    #wls_timestamps = [wls1_ts, wls2_ts]
-    #
-    #wls1_arrays = {}
-    #wls2_arrays = {}
-    #for ext in wls_extensions:
-    #    wls1_arrays[ext] = wls1[ext]
-    #    wls2_arrays[ext] = wls2[ext]
-#
-    #wi = WaveInterpolation(l1_timestamp, wls_timestamps, wls1_arrays, wls2_arrays)
-#
-    #wi.wave_interpolation()
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    myTS.add_ObsIDs_to_db(ObsID_list)
+    
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    myTS.add_ObsID_list_to_db(ObsID_filename)
+
+    # Test plotting
+    start_date = datetime.datetime(2025,1,12)
+    myTS.plot_all_quicklook(start_date=start_date, interval='day', fig_dir=temp_plot_dir)
+    
+    # Test miscellaneous methods
+    columns = ['ObsID','GDRXRMS','FIUMODE']
+    myTS.display_dataframe_from_db(columns)
+    df = myTS.dataframe_from_db(columns=columns)
+    myTS.ObsIDlist_from_db('autocal-bias')
+    myTS.drop_table()
+    
+    # Remove the temporary database file and plot directory
+    os.remove(temp_db_path)
+    shutil.rmtree(temp_plot_dir)
 
 if __name__ == '__main__':
     test_analyze_time_series()
