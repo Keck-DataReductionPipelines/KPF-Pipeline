@@ -103,20 +103,39 @@ class FileAlarm(PatternMatchingEventHandler):
         self.cooldown = 0.5
 
         self.file_cache = {}
+        self.file_stat_cache = {}
 
     def check_redundant(self, event):
         # ignore multiple triggers that happen within 1 second of each other
-        seconds = int(time.time())
-        # key = (seconds, event.src_path)
+
         key = event.src_path
+        if event.event_type == 'deleted':
+            self.logging.info("Ignoring / logging deleted event: {} {}".format(event.event_type, event.src_path))
+            self.file_cache[key] = time.time()
+            return True
+
+        stats = os.stat(event.src_path)
+        self.logging.info(f"Size: {stats.st_size}, Modified Time: {stats.st_mtime}")
+        if key in self.file_stat_cache and event.event_type == 'modified':
+            last_stats = self.file_stat_cache[key]
+            # if stats.st_size == last_stats.st_size and stats.st_mtime == last_stats.st_mtime:
+            if stats.st_size == last_stats.st_size:
+                self.logging.info("Ignoring duplicate modify event (same size): {} {}".format(event.event_type, event.src_path))
+                return True
+
+        self.file_stat_cache[key] = stats
+
         if key in self.file_cache:
             last_update = self.file_cache[key]
+
             if time.time() - last_update < 2 * self.cooldown:
-                self.logging.info("Ignoring duplicate file event: {}".format(event.src_path))
-                return False
+                self.logging.info("Ignoring duplicate temporal event: {} {}".format(event.event_type, event.src_path))
+                return True
 
         self.file_cache[key] = time.time()
-        return True
+
+        return False
+
 
     def process(self, event):
         if os.path.basename(event.src_path).startswith('.'):
@@ -131,7 +150,7 @@ class FileAlarm(PatternMatchingEventHandler):
         self.logging.info("Executing {} with context.file_path={}".format(self.arg.recipe, self.arg.file_path))
 
         self.arg.date_dir = os.path.basename(os.path.dirname(self.arg.file_path))
-        if self.arg.file_path.endswith('.fits') and self.check_redundant(event):
+        if self.arg.file_path.endswith('.fits') and not self.check_redundant(event):
             self.framework.append_event('next_file', self.arg)
 
     def on_modified(self, event):
@@ -148,6 +167,7 @@ class FileAlarm(PatternMatchingEventHandler):
 
     def on_deleted(self, event):
         self.logging.info("File removal event: {}".format(event.src_path))
+        self.check_redundant(event)
 
     def stop(self):
         os._exit(0)
