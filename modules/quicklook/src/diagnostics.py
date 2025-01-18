@@ -404,39 +404,39 @@ def add_headers_L1_SNR(L1, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],1), 
+                L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],3), 
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 452 nm')
-                L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],1),
+                L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],3),
                                                     'SNR of L1 SKY near 452 nm')
-                L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],1),
+                L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],3),
                                                     'SNR of L1 CAL near 452 nm')
-                L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],1),
+                L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],3),
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 548 nm')
-                L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],1),
+                L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],3),
                                                     'SNR of L1 SKY near 548 nm')
-                L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],1),
+                L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],3),
                                                     'SNR of L1 CAL near 548 nm')
             except Exception as e:
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                L1.header['PRIMARY']['SNRSC652'] = (round(myL1.RED_SNR[8,-1],1),
+                L1.header['PRIMARY']['SNRSC652'] = (round(myL1.RED_SNR[8,-1],3),
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 652 nm')
-                L1.header['PRIMARY']['SNRSK652'] = (round(myL1.RED_SNR[8,-2],1),
+                L1.header['PRIMARY']['SNRSK652'] = (round(myL1.RED_SNR[8,-2],3),
                                                     'SNR of L1 SKY near 652 nm')
-                L1.header['PRIMARY']['SNRCL652'] = (round(myL1.RED_SNR[8,0],1),
+                L1.header['PRIMARY']['SNRCL652'] = (round(myL1.RED_SNR[8,0],3),
                                                     'SNR of L1 CAL near 652 nm')
-                L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
+                L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],3),
                                                     'SNR of L1 SCI near 747 nm')
-                L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
+                L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],3),
                                                     'SNR of L1 SKY (SCI1+SCI2+SCI3) near 747 nm')
-                L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
+                L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],3),
                                                     'SNR of L1 CAL near 747 nm')
-                L1.header['PRIMARY']['SNRSC852'] = (round(myL1.RED_SNR[30,-1],1),
+                L1.header['PRIMARY']['SNRSC852'] = (round(myL1.RED_SNR[30,-1],3),
                                                     'SNR of L1 SCI near 852 nm')
-                L1.header['PRIMARY']['SNRSK852'] = (round(myL1.RED_SNR[30,-2],1),
+                L1.header['PRIMARY']['SNRSK852'] = (round(myL1.RED_SNR[30,-2],3),
                                                     'SNR of L1 SKY (SCI1+SCI2+SCI3) near 852 nm')
-                L1.header['PRIMARY']['SNRCL852'] = (round(myL1.RED_SNR[30,0],1),
+                L1.header['PRIMARY']['SNRCL852'] = (round(myL1.RED_SNR[30,0],3),
                                                     'SNR of L1 CAL near 852 nm')
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
@@ -479,17 +479,17 @@ def add_headers_L1_order_flux_ratios(L1, logger=None):
     for chip in chips:
         if chips == ['green', 'red']:
             try: 
-                L1.header['PRIMARY']['FR452652'] = (round(myL1.GREEN_PEAK_FLUX[1,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR452652'] = (round(myL1.GREEN_PEAK_FLUX[1,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (452nm/652nm) - SCI2')
-                L1.header['PRIMARY']['FR548652'] = (round(myL1.GREEN_PEAK_FLUX[25,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR548652'] = (round(myL1.GREEN_PEAK_FLUX[25,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (548nm/652nm) - SCI2')
             except Exception as e:
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                L1.header['PRIMARY']['FR747652'] = (round(myL1.RED_PEAK_FLUX[20,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR747652'] = (round(myL1.RED_PEAK_FLUX[20,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (747nm/652nm) - SCI2')
-                L1.header['PRIMARY']['FR852652'] = (round(myL1.RED_PEAK_FLUX[30,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR852652'] = (round(myL1.RED_PEAK_FLUX[30,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (852nm/652nm) - SCI2')
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
