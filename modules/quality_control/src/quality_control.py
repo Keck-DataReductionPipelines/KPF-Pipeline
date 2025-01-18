@@ -674,8 +674,8 @@ class QCDefinitions:
 
     def search_for_QC_keywords_in_files(self):
         """
-        This method checks if each QC keyword is listed in three places and 
-        prints the results with green and red highlighting.  The three places 
+        This method checks if each QC keyword is listed in two places and 
+        prints the results with green and red highlighting.  The two places 
         are: 1) .yaml plot configuration files for the time series database, 
         2) .csv files that define the time series database structure, and xxx.
         It is best used in an interactive environment, e.g., in a Jupyter 
@@ -687,13 +687,13 @@ class QCDefinitions:
         for case in cases:
         
             if case == 'plots':
-                search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/QC/'
+                search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/'
                 file_ext = '.yaml'
             if case == 'database':
                 search_directory = '/code/KPF-Pipeline/static/tsdb_keywords/'
                 file_ext = '.csv'
             
-            print(styled_text(f"Searching *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
+            print(styled_text(f"Searching for *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
             for name in self.names:
                 fits_kwd = self.fits_keywords.get(name, "")
                 if not fits_kwd:
@@ -709,7 +709,7 @@ class QCDefinitions:
                                 content = f.read()
                                 if fits_kwd in content:
                                     found_occurrence = True
-                                    print(styled_text(f"Found ", color="Green") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Green") + styled_text(f"in: {full_path}", color="Green"))
+                                    print(styled_text(f"Found ", color="Green") + styled_text(f"'{fits_kwd}' from '{name}'", style="Bold", color="Green") + styled_text(f" in: {full_path}", color="Green"))
                 if not found_occurrence:
                     print(styled_text(f"No occurrence of ", color="Red") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Red") + styled_text(f" found in any {file_ext} file.", color="Red"))
             print()

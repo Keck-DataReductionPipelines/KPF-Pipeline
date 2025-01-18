@@ -62,5 +62,6 @@ WLSFILE|string|first wavelength interpolation reference|None
 WLSFILE2|string|second wavelength interpolation reference|None
 MONOTWLS|bool|QC: L1 wavelength solution is monotonic|None
 DATAPRL1|bool|QC: L1 red and green data present|None
+CAHKPRL1|bool|QC: CaHK data present in L1 with expected shape|None
 WLSL1|bool|QC: L1 WLS file check passed|None
 LFCSAT|bool|QC: L1 LFC spectrum not saturated|None

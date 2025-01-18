@@ -90,7 +90,6 @@ class AnalyzeTimeSeries:
         * Make standard correlation plots.
         * Make standard phased plots (by day)
 ####
-        * Write a method to determine if all QCs listed in the quality_control module appear in the metadata table and also the time series plot config files
         * Add try/except with QC=False around all QCs.
 ####
     """
