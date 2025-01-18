@@ -19,7 +19,7 @@ def main():
     
     # Directories
     dir1 = "/data"
-    dir2 = "/code/KPF-Pipeline/kpf/reference_fits/tsdb_data"
+    dir2 = "/data/reference_fits/tsdb_data"
 
  
     for datatype in ['L0', '2D', 'L1', 'L2']:

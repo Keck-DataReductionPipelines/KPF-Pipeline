@@ -25,7 +25,7 @@ os.mkdir(temp_plot_dir)
 # It should be run when new fits header keywords are added or there are changes 
 # to the data model so that current files can be tested.  
 # This script should be run from within a Docker container.
-base_dir = '/code/KPF-Pipeline/kpf/reference_fits/tsdb_data/L0'
+base_dir = '/data/reference_fits/tsdb_data/L0'
 
 # Reference FITS files listed in CSV file 
 ObsID_filename = '/code/KPF-Pipeline/tests/regression/test_analyze_time_series_ObsIDs.csv'
