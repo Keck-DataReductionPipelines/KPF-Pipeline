@@ -78,6 +78,12 @@ The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automat
 
 See the makefile for examples of performance and validation tests.
 
+To show the lines without coverage in a particular file, run a command like::
+
+    pytest -x --cov=modules.quicklook.src.analyze_time_series --pyargs --cov-report=term-missing tests/regression/test_analyze_time_series.py
+
+To see the outputs of the code as it is being run (which pytest otherwise hides), add the options `-s --log-cli-level=DEBUG`.
+
 Developing Quality Control (QC) Metrics
 ---------------------------------------
 The Quality Control module of KPF-Pipeline has a set of methods that determine if L0/2D/L1/L2 data products meet certain criteria, such as having the expected FITS extensions with the correction dimensions and data, having the expected FITS header keywords, having non-negative data where expected, etc.  The results of QC tests are recorded to the headers of KPF objects and written to the headers of KPF FITS files.  Here are the steps to adding a new quality control test.
