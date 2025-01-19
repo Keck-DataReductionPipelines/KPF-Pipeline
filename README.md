@@ -12,7 +12,7 @@ Install instructions and documentation are available on [ReadTheDocs](https://kp
 
 ## Citation
 
-If you use the KPF Data Reduction Pipeline in your research, please cite the following publication:
+If you use the KPF Data Reduction Pipeline in your research, please cite the following publication: 
 
 * Gibson et al. (2020, SPIE): [ADS entry](https://ui.adsabs.harvard.edu/abs/2020SPIE11447E..42G/abstract); kpf:gibson2020 in [BibTex file](kpf_bibliography.bib)
   
