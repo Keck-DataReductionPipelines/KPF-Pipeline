@@ -523,6 +523,7 @@ class AnalyzeTimeSeries:
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
+            header_data['Source'] = self.get_source(L0_header_data)
             header_data['L0_filename'] = L0_filename
             header_data['D2_filename'] = f"{base_filename}_2D.fits"
             header_data['L1_filename'] = f"{base_filename}_L1.fits"
@@ -2134,6 +2135,7 @@ def process_file(file_path, now_str,
 
     header_data['ObsID'] = base_filename
     header_data['datecode'] = get_datecode_func(base_filename)
+    header_data['Source'] = self.get_source_func(L0_header_data)
     header_data['L0_filename'] = os.path.basename(L0_file_path)
     header_data['D2_filename'] = os.path.basename(D2_file_path)
     header_data['L1_filename'] = os.path.basename(L1_file_path)
@@ -2142,7 +2144,6 @@ def process_file(file_path, now_str,
     header_data['D2_header_read_time'] = now_str
     header_data['L1_header_read_time'] = now_str
     header_data['L2_header_read_time'] = now_str
-    header_data['Source'] = get_source_func(L0_header_data)
 
     return header_data
 
