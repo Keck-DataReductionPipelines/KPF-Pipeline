@@ -22,6 +22,7 @@ class CCFStats(object):
         action: Action,
         context: ProcessingContext) -> None:
         # Initialize parent class
+        pass # need to add more here; this is apparently incomplete.  Compare with radial_velocity.py
 
     def clean_ccf(ccf, ccf_fit_results, width=1):
         '''
