@@ -99,7 +99,7 @@ class AnalyzeL1:
 
     Returns:
         age_wls_file - number of days between the observation and the
-        date of observations for the WLS files
+                       date of observations for the WLS files
         '''
 
         date_mjd_str = self.header['MJD-OBS']
