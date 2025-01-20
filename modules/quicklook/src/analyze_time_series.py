@@ -2135,7 +2135,7 @@ def process_file(file_path, now_str,
 
     header_data['ObsID'] = base_filename
     header_data['datecode'] = get_datecode_func(base_filename)
-    header_data['Source'] = self.get_source_func(L0_header_data)
+    header_data['Source'] = get_source_func(L0_header_data)
     header_data['L0_filename'] = os.path.basename(L0_file_path)
     header_data['D2_filename'] = os.path.basename(D2_file_path)
     header_data['L1_filename'] = os.path.basename(L1_file_path)
