@@ -56,7 +56,7 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
             
-            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/{self.level}/ --log /data/logs/ &
+            python /code/KPF-Pipeline/cronjobs/keck_slow_touch.py --date {self.procdate} --fits /data/{self.level}/ --log /data/logs/ >> {self.stdout_log} &
 
             # run the pipeline for all data in the directory
             kpf --watch /data/{self.level}/{self.procdate}/ --ncpus={self.ncpu} -r {self.recipe} -c {self.config} >> {self.stdout_log} 2>&1;
