@@ -94,12 +94,12 @@ class AnalyzeL1:
             midnight = 09:30 UT  (HST midnight cals)
             eve      = 03:30 UT  (HST evening cals)
 
-    Arguments:
-        wls_keyword - keyword name of WLS file (usually 'WLSFILE' or 'WLSFILE2')
-
-    Returns:
-        age_wls_file - number of days between the observation and the
-                       date of observations for the WLS files
+        Arguments:
+            wls_keyword - keyword name of WLS file (usually 'WLSFILE' or 'WLSFILE2')
+    
+        Returns:
+            age_wls_file - number of days between the observation and the
+                           date of observations for the WLS files
         '''
 
         date_mjd_str = self.header['MJD-OBS']
