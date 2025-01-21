@@ -1,0 +1,110 @@
+description: CCD temperatures
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: kpfgreen.STA_CCD_T
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: STA Sensor
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+    paneldict:
+      ylabel: "Green CCD Temp (C)\nSTA sensor (controlled)"
+      not_junk: true
+      legend_frac_size: 0.25
+      axhspan:
+        1:
+          ymin: -99.9
+          ymax: 0
+          color: red
+          alpha: 0.1
+        2:
+          ymin: -200
+          ymax: -100.1
+          color: red
+          alpha: 0.1
+        3:
+          ymin: -99.99
+          ymax: -99.9
+          color: orange
+          alpha: 0.1
+        4:
+          ymin: -100.01
+          ymax: -100.1
+          color: orange
+          alpha: 0.1
+        5:
+          ymin: -100.01
+          ymax:  -99.99
+          color: green
+          alpha: 0.1
+
+  - panelvars:
+      - col: kpfred.STA_CCD_T
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: STA Sensor
+          marker: .
+          linewidth: 0.5
+          color: darkred
+    paneldict:
+      ylabel: "Red CCD Temp (C)\nSTA sensor (controlled)"
+      not_junk: true
+      legend_frac_size: 0.25
+      axhspan:
+        1:
+          ymin: -99.9
+          ymax: 0
+          color: red
+          alpha: 0.1
+        2:
+          ymin: -200
+          ymax: -100.1
+          color: red
+          alpha: 0.1
+        3:
+          ymin: -99.99
+          ymax: -99.9
+          color: orange
+          alpha: 0.1
+        4:
+          ymin: -100.01
+          ymax: -100.1
+          color: orange
+          alpha: 0.1
+        5:
+          ymin: -100.01
+          ymax:  -99.99
+          color: green
+          alpha: 0.1
+
+  - panelvars:
+      - col: kpfgreen.KPF_CCD_T
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: SSL Sensor
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Green CCD Temp (C)\nSSL sensor"
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: kpfred.KPF_CCD_T
+        plot_type: plot
+        unit: K
+        plot_attr:
+          label: SSL Sensor
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      ylabel: "Red CCD Temp (C)\nSSL sensor"
+      not_junk: true
+      legend_frac_size: 0.25
