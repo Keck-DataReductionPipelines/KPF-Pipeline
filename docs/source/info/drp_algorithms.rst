@@ -13,7 +13,7 @@ The description of each algorithm should include:
 * performance estimates, if appropriate
 * any caveats, if needed
 * development status (if partially implemented or not yet implemented)
-
+ 
 
 Current Limitations and Development Plans
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
