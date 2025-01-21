@@ -119,7 +119,6 @@ class AnalyzeL1:
             if verbose:
                 self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
 
-            #age_wls_file = (date_obs_datetime - wls_filename_datetime).total_seconds 
             age_wls_file = (date_obs_datetime - wls_filename_datetime).total_seconds() / 86400.0
 
             if verbose:
