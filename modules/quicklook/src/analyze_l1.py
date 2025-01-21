@@ -85,7 +85,7 @@ class AnalyzeL1:
         self.ObsID = primary_header.get_obsid()
 
 
-    def measure_WLS_age(self, wls_keyword='WLSFILE', verbose=False):
+    def measure_WLS_age(self, kwd='WLSFILE', verbose=False):
         '''
         Computes the number of days between the observation and the
         date of observations for the WLS files.  The age assumes the 
@@ -95,7 +95,7 @@ class AnalyzeL1:
             eve      = 03:30 UT  (HST evening cals)
 
         Arguments:
-            wls_keyword - keyword name of WLS file (usually 'WLSFILE' or 'WLSFILE2')
+            kwd - keyword name of WLS file (usually 'WLSFILE' or 'WLSFILE2')
     
         Returns:
             age_wls_file - number of days between the observation and the
@@ -105,10 +105,10 @@ class AnalyzeL1:
         date_mjd_str = self.header['MJD-OBS']
         date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
         if verbose:
-            logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+            self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
         try:
-            wls_filename = self.header[wls_keyword]
+            wls_filename = self.header[kwd]
             wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
             if "morn" in wls_filename:
                 wls_filename_datetime += timedelta(hours=18.8)
@@ -117,13 +117,18 @@ class AnalyzeL1:
             elif "midnight" in wls_filename:
                 wls_filename_datetime += timedelta(hours=9.5)
             if verbose:
-                self.logger.info(f'Date of {wls_keyword}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
-            age_wls_file = (date_obs_datetime - wls_filename_datetime).seconds / 86400.0
+                self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+
+            #age_wls_file = (date_obs_datetime - wls_filename_datetime).total_seconds 
+            age_wls_file = (date_obs_datetime - wls_filename_datetime).total_seconds() / 86400.0
+
             if verbose:
-                self.logger.info(f'Time between observation and WLSFILE1: {dt_wls_file.days}')
+                self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
+
             return age_wls_file
+
         except Exception as e:
-            self.logger.error(f"Problem with determining age of WLSFILE: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
             return None
 
 
