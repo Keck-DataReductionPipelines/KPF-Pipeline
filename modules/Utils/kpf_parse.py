@@ -229,6 +229,31 @@ def get_datecode(ObsID):
     return datecode
 
 
+def get_datecode_from_filename(filename, datetime_out=False):
+    """
+    Extract the datecode (YYYYMMDD) from a filename.  
+    Return the string datecode or a datetime version if 
+    datetime_out is set to True.
+    Return None if no datetime is found
+
+    Args:
+        filename, e.g. 'kpf_20250115_master_bias_autocal-bias.fits'
+
+    Returns:
+        datecode, e.g. '20250115'
+    """
+    match = re.search(r"(\d{8})", filename)
+    if not match:
+        return None
+    
+    datecode = match.group(1)
+    
+    if datetime_out:
+        return datetime.strptime(datecode, "%Y%m%d")#.date()
+    else:
+        return datecode
+    
+
 def get_datetime_obsid(ObsID):
     """
     Return a datetime object for an ObsID.  Note that this datetime is related 
@@ -507,7 +532,8 @@ def get_data_products_L2(L2):
 def hasattr_with_wildcard(obj, pattern):
     regex = re.compile(pattern)
     return any(regex.match(attr) for attr in dir(obj))
-    
+
+
 def get_kpf_level(kpf_object):
     """
     Returns a string with the KPF level ('L0', '2D', 'L1', 'L2') corresponding 
