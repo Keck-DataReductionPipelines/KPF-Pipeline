@@ -606,6 +606,21 @@ class QCDefinitions:
         self.db_columns[name21] = None
         self.fits_keyword_fail_value[name21] = 0
 
+#####
+# New Diagnostics keywords:
+#        AGEBIAS - Age of master bias file compared to this file (whole days)
+#        AGEDARK - Age of master dark file compared to this file (whole days)
+#        AGEFLAT - Age of master flat file compared to this file (whole days)
+#        AGEWLS  - Approx age of WLSFILE compared to this file (days)
+#        AGEWLS2 - Approx age of WLSFILE2 compared to this file (days)
+#
+# New QC keywords:
+#        OLDBIAS - Master bias file > 5 days from this file 
+#        OLDDARK - Master dark file > 5 days from this file 
+#        OLDFLAT - Master flat file > 5 days from this file 
+#        OLDWLS  - Master WLSFILE > 2 days from this file 
+#        OLDWLS2 - Master WLSFILE2 > 2 days from this file 
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")

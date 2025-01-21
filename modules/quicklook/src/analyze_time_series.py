@@ -87,6 +87,7 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * Make standard correlation plots.
         * Make standard phased plots (by day)
+        * Make plot of correlation between per-order RVs and RVs per-chip and overall RVs.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
