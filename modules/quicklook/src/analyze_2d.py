@@ -1,4 +1,5 @@
 import time
+import traceback
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
-from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
@@ -80,6 +81,46 @@ class Analyze2D:
             self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Green 2D image')
+
+
+    def measure_master_age(self, kwd='BIASFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 
+                  'BIASFILE', 'DARKFILE', or 'FLATFILE')
+    
+        Returns:
+            master_wls_file - number of days between the observation and the
+                              date of observations for the WLS files
+        '''
+
+        date_obs_str = self.header['DATE-OBS']
+        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%d").date()
+
+        if verbose:
+            self.logger.info(f'Date of observation: {date_obs_str}')
+        
+        try:
+            master_filename = self.header[kwd]
+            master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+            master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+            if verbose:
+                self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+            
+            master_filename_datetime += timedelta(days=11)
+            age_master_file = (date_obs_datetime - master_filename_datetime).days
+            if verbose:
+                self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+
+            return age_master_file
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
 
     def measure_2D_dark_current(self, chip=None):
         """
