@@ -22,6 +22,10 @@ class AnalyzeL2:
         ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         header - header of the PRIMARY extension of the L2 object
         rv_header - header of the RV extension
+    
+    To do:
+        Add plot showing combined CCF - https://github.com/Keck-DataReductionPipelines/KPF-Pipeline/issues/940
+        Add plot showing correlations between per-order RVs and per-chip RVs and overall RVs.
     """
 
     def __init__(self, L2, logger=None):
