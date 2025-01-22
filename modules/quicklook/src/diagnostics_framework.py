@@ -124,7 +124,34 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring exposure meter diagnostics failed: {e}\n{traceback.format_exc()}")
                         
+            # Masters Age - Bias, Dark, Flat
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_masters_age_2D'):
+                try:
+                    self.logger.info('Measuring diagnostics: add_headers_masters_age_2D')
+                    self.kpf_object = diagnostics.add_headers_masters_age_2D(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Age of masters for Bias/Dark/Flat not computed: {e}\n{traceback.format_exc()}")
+                        
         elif 'L1' in self.data_level_str:
+            # WLS Age
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_masters_age_L1'):
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            self.logger.info('Measuring diagnostics: add_headers_masters_age_L1')
+                            self.kpf_object = diagnostics.add_headers_masters_age_L1(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                        else: 
+                            self.logger.info("Age of masters for wavelength solution not computed.")
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. Age of masters for wavelength solution not computed.")
+                except Exception as e:
+                    self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
+            
             # L1 SNR
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_L1_SNR'):

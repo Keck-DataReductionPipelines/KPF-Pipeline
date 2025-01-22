@@ -13,7 +13,7 @@ from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.optimize import curve_fit
 #import emcee
 #import corner
@@ -110,8 +110,7 @@ class Analyze2D:
             if verbose:
                 self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
             
-            master_filename_datetime += timedelta(days=11)
-            age_master_file = (date_obs_datetime - master_filename_datetime).days
+            age_master_file = (master_filename_datetime - date_obs_datetime).days
             if verbose:
                 self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
 

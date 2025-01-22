@@ -360,7 +360,7 @@ def add_headers_exposure_meter(D2, logger=None):
     return D2
 
 
-def add_headers_masters_age_2D(D2, logger=None, verbose=True):
+def add_headers_masters_age_2D(D2, logger=None, verbose=False):
     """
     Computes the the number of days between the observation and the
     date of observations for the master bias, master dark, and master flat.
