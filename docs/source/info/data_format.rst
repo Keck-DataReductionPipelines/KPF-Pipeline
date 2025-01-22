@@ -200,23 +200,38 @@ ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3
 
 The 2D file inherits all L0 keywords.  Below are additional keywords.
 
+DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
+DATAPR2D|bool|QC: 2D red and green data present|None
+CAHKPR2D|bool|QC: 2D CaHK data present|None
+KWRDPRL0|bool|QC: L0 expected keywords present|None
+TIMCHKL0|bool|QC: Consistent times in L0 file|None
+EMSAT|bool|QC: Exp Meter not saturated|None
+EMNEG|bool|QC: Exp Meter not negative flux|None
+GOODREAD|bool|QC: Texp not consistent with CCD readout error|None
+POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
+LOWBIAS|bool|QC: 2D bias flux not low|None
+LOWDARK|bool|QC: 2D dark flux not low|None
+LFC2DFOK|bool|QC: LFC flux meets threshold of 4000 counts|None
+
+
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
 DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used for processing
-NOTJUNK   1                                           Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
-DATAPRL0  1                                           Quality Control: 1 = L0 data products present with non-zero array sizes
-KWRDPRL0  1                                           Quality Control: 1 = L0 expected keywords present 
-TIMCHKL0  1                                           Quality Control: 1 = consistent times in L0 file
-EMSAT     1                                           Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
-EMNEG     1                                           Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
-DATAPR2D  1                                           Quality Control: 1 = 2D data products present with non-zero array sizes
-CAHKPR2D  1                                           Quality Control: 1 = 2D CaHK data present with non-zero array sizes
-GOODREAD  1                                           Quality Control: 1 = Exposure time not consistent with CCD readout error (~6 sec)
-POS2DSNR  1                                           Quality Control: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
-LOWBIAS   1                                           Quality Control: 1 = 2D bias flux not low
-LOWDARK   1                                           Quality Control: 1 = 2D dark flux not low
+NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
+DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
+KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
+TIMCHKL0  1                                           QC: 1 = consistent times in L0 file
+EMSAT     1                                           QC: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
+EMNEG     1                                           QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
+DATAPR2D  1                                           QC: 1 = 2D data products present with non-zero array sizes
+CAHKPR2D  1                                           QC: 1 = 2D CaHK data present with non-zero array sizes
+GOODREAD  1                                           QC: 1 = Exposure time not consistent with CCD readout error (~6 sec)
+POS2DSNR  1                                           QC: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
+LOWBIAS   1                                           QC: 1 = 2D bias flux not low
+LOWDARK   1                                           QC: 1 = 2D dark flux not low
+LFC2DFOK  1                                           QC: 1 = LFC flux meets threshold of 4000 counts
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -301,6 +316,9 @@ HK2DF99P  62520.97                                    99th percentile flux in th
 HK2DF90P  40589.16                                    90th percentile flux in the 2D header (e-)
 HK2DF50P  613.23                                      50th percentile flux in the 2D header (e-)
 HK2DF10P  128.83                                      10th percentile flux in the 2D header (e-)
+AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
+AGEDARK   0                                           Age of master dark file compared to this file (whole days)
+AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -328,11 +346,11 @@ Keyword   Value (example)                                                       
 ========  =======================================================================  =========
 WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
 WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
-MONOTWLS  1                                                                        Quality Control: 1 = L1 wavelength solution is monotonic
-DATAPR2D  1                                                                        Quality Control: 1 = 2D red and green data present
-DATAPRL1  1                                                                        Quality Control: 1 = L1 red and green data present
-WLSL1     1                                                                        Quality Control: 1 = L1 WLS file check passed
-LFCSAT    1                                                                        Quality Control: 1 = L1 LFC spectrum not saturated
+MONOTWLS  1                                                                        QC: 1 = L1 wavelength solution is monotonic
+DATAPRL1  1                                                                        QC: 1 = L1 red and green data present
+CAHKPRL1  1                                                                        QC: 1 = CaHK data present in L1 with expected shape
+WLSL1     1                                                                        QC: 1 = L1 WLS file check passed
+LFCSAT    1                                                                        QC: 1 = L1 LFC spectrum not saturated
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -392,6 +410,8 @@ FRS2M852  0.9000                                                                
 FRS2U852  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852  0.9000                                                                   median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
+AGEWLS2   0.1419343333333333                                                       Approx age of WLSFILE2 compared to this file (days)
 ========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
@@ -420,9 +440,9 @@ CCFRVC    19.4247572623                               Average of CCD1RVC and CCD
 CCFERVC   0.001175044                                 Error on CCFRVC
 CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
-TIMCHKL2  1                                           Quality Control: 1 = consistent times in L2 file
-DATAPRL2  1                                           Quality Control: 1 = L2 data is present
-WLSL2     1                                           Quality Control: 1 = WLS files okay (failure conditions not detected: nonexistent WLS files, unopenable WLS files, two identical WLS files, same WLS file as previous/next night)
+TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
+DATAPRL2  1                                           QC: 1 = L2 data is present
+WLSL2     1                                           QC: 1 = WLS files okay (failure conditions not detected: nonexistent WLS files, unopenable WLS files, two identical WLS files, same WLS file as previous/next night)
 ========  ==========================================  =========
 
 Radial Velocities
