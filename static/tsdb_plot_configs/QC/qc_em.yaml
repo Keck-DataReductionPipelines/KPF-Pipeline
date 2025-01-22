@@ -1,0 +1,23 @@
+description: QC - Exposure Meter
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: EMSAT
+        plot_type: state
+        plot_attr:
+          label: EM Not Saturated
+          marker: .
+    paneldict:
+      ylabel: EM Not Saturated
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: EMNEG
+        plot_type: state
+        plot_attr:
+          label: EM Not Netative Flux
+          marker: .
+    paneldict:
+      ylabel: EM Not Netative Flux
+      title: QC - Exposure Meter
+      legend_frac_size: 0.10

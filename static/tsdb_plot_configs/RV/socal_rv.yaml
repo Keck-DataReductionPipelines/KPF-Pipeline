@@ -1,0 +1,63 @@
+description: SoCal RVs
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: CCFRV
+        col_err: CCFERV
+        col_subtract: CCFRVC
+        col_multiply: 1000
+        plot_type: errorbar
+        plot_attr:
+          label: CCFRV - CCFRVC [m/s]
+          marker: .
+          linewidth: 0.5
+          color: royalblue
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Green+Red\nSoCal $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - SoCal
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CCD1RV
+        col_err: CCD1ERV
+        col_subtract: CCD1RVC
+        col_multiply: 1000
+        plot_type: errorbar
+        plot_attr:
+          label: CCD1RV - CCD1RVC [m/s]
+          color: firebrick
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Green\nSoCal $\\Delta$RV (m/s)"
+      subtractmedian: true
+      only_object: 
+        - SoCal
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CCD2RV
+        col_err: CCD2ERV
+        col_subtract: CCD2RVC
+        col_multiply: 1000
+        plot_type: errorbar
+        plot_attr:
+          label: CCD2RV - CCD2RVC [m/s]
+          color: darkred
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      title: Etalon RVs
+      ylabel: "Red\nSoCal $\\Delta$RV (m/s)"
+      subtractmedian: true
+      narrow_xlim_daily: true
+      only_object: 
+        - SoCal
+      not_junk: true
+      legend_frac_size: 0.30

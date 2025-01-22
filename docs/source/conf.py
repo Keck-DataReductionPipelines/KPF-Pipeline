@@ -48,6 +48,14 @@ extensions = ['sphinx.ext.autodoc',
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
+# Add _static to the static path list if not present
+html_static_path = ['_static']
+
+# Add the custom CSS file to the HTML build
+html_css_files = [
+    'css/custom.css',
+]
+
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
@@ -59,7 +67,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'KPFPipeline'
-copyright = u'2020-2024, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
+copyright = u'2020-2025, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 author = u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 
 # The version info for the project you're documenting, acts as replacement for
