@@ -589,37 +589,74 @@ class QCDefinitions:
         self.master_types[name20] = ['all', ]
         self.required_data_products[name20] = [] # no required data products
         self.fits_keywords[name20] = 'WLSL1'
-        self.fits_comments[name20] = 'QC: WLS files are correct'
+        self.fits_comments[name20] = 'QC: WLS files are correct in L1'
         self.db_columns[name20] = None
         self.fits_keyword_fail_value[name20] = 0
-        
-        name21 = 'L2_correct_wls_check'
-        self.names.append(name21)
-        self.kpf_data_levels[name21] = ['L2']
-        self.descriptions[name21] = 'Check WLS files used by L2 file'
-        self.data_types[name21] = 'int'
-        self.spectrum_types[name21] = ['all', ]
-        self.master_types[name21] = ['all', ]
-        self.required_data_products[name21] = [] # no required data products
-        self.fits_keywords[name21] = 'WLSL2'
-        self.fits_comments[name21] = 'QC: WLS files are correct'
-        self.db_columns[name21] = None
-        self.fits_keyword_fail_value[name21] = 0
 
-#####
-# New Diagnostics keywords:
-#        AGEBIAS - Age of master bias file compared to this file (whole days)
-#        AGEDARK - Age of master dark file compared to this file (whole days)
-#        AGEFLAT - Age of master flat file compared to this file (whole days)
-#        AGEWLS  - Approx age of WLSFILE compared to this file (days)
-#        AGEWLS2 - Approx age of WLSFILE2 compared to this file (days)
-#
-# New QC keywords:
-#        OLDBIAS - Master bias file > 5 days from this file 
-#        OLDDARK - Master dark file > 5 days from this file 
-#        OLDFLAT - Master flat file > 5 days from this file 
-#        OLDWLS  - Master WLSFILE > 2 days from this file 
-#        OLDWLS2 - Master WLSFILE2 > 2 days from this file 
+        name22 = 'D2_master_bias_age'
+        self.names.append(name22)
+        self.kpf_data_levels[name22] = ['2D']
+        self.descriptions[name22] = 'Check master bias file age'
+        self.data_types[name22] = 'int'
+        self.spectrum_types[name22] = ['all', ]
+        self.master_types[name22] = []
+        self.required_data_products[name22] = [] # no required data products
+        self.fits_keywords[name22] = 'OLDBIAS'
+        self.fits_comments[name22] = 'QC: Files in master bias taken 5 days of this obs'
+        self.db_columns[name22] = None
+        self.fits_keyword_fail_value[name22] = 0
+        
+        name23 = 'D2_master_dark_age'
+        self.names.append(name23)
+        self.kpf_data_levels[name23] = ['2D']
+        self.descriptions[name23] = 'Check master dark file age'
+        self.data_types[name23] = 'int'
+        self.spectrum_types[name23] = ['all', ]
+        self.master_types[name23] = []
+        self.required_data_products[name23] = [] # no required data products
+        self.fits_keywords[name23] = 'OLDDARK'
+        self.fits_comments[name23] = 'QC: Files in master dark taken 5 days of this obs'
+        self.db_columns[name23] = None
+        self.fits_keyword_fail_value[name23] = 0
+        
+        name24 = 'D2_master_flat_age'
+        self.names.append(name24)
+        self.kpf_data_levels[name24] = ['2D']
+        self.descriptions[name24] = 'Check master flat file age'
+        self.data_types[name24] = 'int'
+        self.spectrum_types[name24] = ['all', ]
+        self.master_types[name24] = []
+        self.required_data_products[name24] = [] # no required data products
+        self.fits_keywords[name24] = 'OLDFLAT'
+        self.fits_comments[name24] = 'QC: Files in master flat within 5 days of this obs'
+        self.db_columns[name24] = None
+        self.fits_keyword_fail_value[name24] = 0
+        
+        name25 = 'L1_WLSFILE_age'
+        self.names.append(name25)
+        self.kpf_data_levels[name25] = ['L1']
+        self.descriptions[name25] = 'Check WLSFILE file age'
+        self.data_types[name25] = 'int'
+        self.spectrum_types[name25] = ['all', ]
+        self.master_types[name25] = []
+        self.required_data_products[name25] = [] # no required data products
+        self.fits_keywords[name25] = 'OLDWLS'
+        self.fits_comments[name25] = 'QC: Files from WLSFILE within 2 days of this obs'
+        self.db_columns[name25] = None
+        self.fits_keyword_fail_value[name25] = 0
+        
+        name26 = 'L1_WLSFILE2_age'
+        self.names.append(name26)
+        self.kpf_data_levels[name26] = ['L1']
+        self.descriptions[name26] = 'Check WLSFILE2 file age'
+        self.data_types[name26] = 'int'
+        self.spectrum_types[name26] = ['all', ]
+        self.master_types[name26] = []
+        self.required_data_products[name26] = [] # no required data products
+        self.fits_keywords[name26] = 'OLDWLS2'
+        self.fits_comments[name26] = 'QC: Files from WLSFILE2 within 2 days of this obs'
+        self.db_columns[name26] = None
+        self.fits_keyword_fail_value[name26] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -1395,10 +1432,10 @@ class QC2D(QC):
             D2 = self.kpf_object
     
             if debug:
-                print(D2.info())
+                self.logger.info(D2.info())
                 type_D2 = type(D2)
-                print("type_2D = ",type_D2)
-                print("D2 = ",D2)
+                self.logger.info("type_2D = ",type_D2)
+                self.logger.info("D2 = ",D2)
     
             QC_pass = True
 
@@ -1407,29 +1444,29 @@ class QC2D(QC):
             if 'GREEN_CCD' in extensions:
             
                 if debug:
-                    print("GREEN_CCD exists")
-                    print("data_shape =", np.shape(D2["GREEN_CCD"]))
+                    self.logger.info("GREEN_CCD exists")
+                    self.logger.info("data_shape =", np.shape(D2["GREEN_CCD"]))
                 
                 if np.shape(D2["GREEN_CCD"]) != (4080, 4080):  
                     QC_pass = False
                 
             else:
                 if debug:
-                    print("GREEN_CCD does not exist")
+                    self.logger.info("GREEN_CCD does not exist")
                 QC_pass = False       
             
             if 'RED_CCD' in extensions:
             
                 if debug:
-                    print("RED_CCD exists")
-                    print("data_shape =", np.shape(D2["RED_CCD"]))
+                    self.logger.info("RED_CCD exists")
+                    self.logger.info("data_shape =", np.shape(D2["RED_CCD"]))
                 
                 if np.shape(D2["RED_CCD"]) != (4080, 4080):  
                     QC_pass = False
                 
             else:
                 if debug:
-                    print("RED_CCD does not exist")
+                    self.logger.info("RED_CCD does not exist")
                 QC_pass = False    
                 
         except Exception as e:
@@ -1455,10 +1492,10 @@ class QC2D(QC):
             D2 = self.kpf_object
 
             if debug:
-                print(D2.info())
+                self.logger.info(D2.info())
                 type_D2 = type(D2)
-                print("type_2D = ",type_D2)
-                print("D2 = ",D2)
+                self.logger.info("type_2D = ",type_D2)
+                self.logger.info("D2 = ",D2)
 
             QC_pass = True
 
@@ -1467,15 +1504,15 @@ class QC2D(QC):
             if 'CA_HK' in extensions:
 
                 if debug:
-                    print("CA_HK exists")
-                    print("data_shape =", np.shape(D2["CA_HK"]))
+                    self.logger.info("CA_HK exists")
+                    self.logger.info("data_shape =", np.shape(D2["CA_HK"]))
                 
                 if np.shape(D2["CA_HK"]) == (0,):  
                     QC_pass = False
                 
             else:
                 if debug:
-                    print("CA_HK does not exist")
+                    self.logger.info("CA_HK does not exist")
                 QC_pass = False       
                 
         except Exception as e:
@@ -1501,10 +1538,10 @@ class QC2D(QC):
             D2 = self.kpf_object
 
             if debug:
-                print(D2.info())
+                self.logger.info(D2.info())
                 type_D2 = type(D2)
-                print("type_2D = ",type_D2)
-                print("D2 = ",D2)
+                self.logger.info("type_2D = ",type_D2)
+                self.logger.info("D2 = ",D2)
     
             QC_pass = True
             extensions = D2.extensions
@@ -1513,13 +1550,13 @@ class QC2D(QC):
             mean_RED = D2["RED_CCD"].flatten().mean()
     
             if debug:
-                print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
-                print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-                print("Max allowed mean flux =", 10)
+                self.logger.info("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+                self.logger.info("Mean RED_CCD flux =", np.round(mean_RED, 2))
+                self.logger.info("Max allowed mean flux =", 10)
     
             if (mean_GREEN > 10) | (mean_RED > 10):
                 if debug:
-                    print("One of the CCDs has a high flux")
+                    self.logger.info("One of the CCDs has a high flux")
                 QC_pass = False
 
                 
@@ -1545,10 +1582,10 @@ class QC2D(QC):
             D2 = self.kpf_object
     
             if debug:
-                print(D2.info())
+                self.logger.info(D2.info())
                 type_D2 = type(D2)
-                print("type_2D = ",type_D2)
-                print("D2 = ",D2)
+                self.logger.info("type_2D = ",type_D2)
+                self.logger.info("D2 = ",D2)
         
             QC_pass = True
             extensions = D2.extensions
@@ -1560,14 +1597,14 @@ class QC2D(QC):
             max_allowed_mean_flux_red = 13
     
             if debug:
-                print("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
-                print("Mean RED_CCD flux =", np.round(mean_RED, 2))
-                print("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
-                print("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
+                self.logger.info("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
+                self.logger.info("Mean RED_CCD flux =", np.round(mean_RED, 2))
+                self.logger.info("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
+                self.logger.info("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
     
             if (mean_GREEN > max_allowed_mean_flux_green) | (mean_RED > max_allowed_mean_flux_red):
                 if debug:
-                    print("One of the CCDs has a high flux")
+                    self.logger.info("One of the CCDs has a high flux")
                 QC_pass = False
                 
         except Exception as e:
@@ -1595,10 +1632,10 @@ class QC2D(QC):
         D2 = self.kpf_object
 
         if debug:
-            print(D2.info())
+            self.logger.info(D2.info())
             type_D2 = type(D2)
-            print("type_2D = ",type_D2)
-            print("D2 = ",D2)
+            self.logger.info("type_2D = ",type_D2)
+            self.logger.info("D2 = ",D2)
     
         QC_pass = True
         extensions = D2.extensions
@@ -1609,8 +1646,8 @@ class QC2D(QC):
                 subthreshold = np.sum(scaled_counts < neg_threshold)
                 total_pixels = scaled_counts.size
                 if debug:
-                    print(f'Number of pixels < {neg_threshold}: {subthreshold}')
-                    print(f'Total number of pixels: {total_pixels}')
+                    priself.logger.infont(f'Number of pixels < {neg_threshold}: {subthreshold}')
+                    self.logger.info(f'Total number of pixels: {total_pixels}')
                 if ( subthreshold / total_pixels ) > 0.01:
                     QC_pass = False
         except Exception as e:
@@ -1647,15 +1684,103 @@ class QC2D(QC):
         """
         
         try:
-            Two_D = self.kpf_object
-            green_counts = Two_D['GREEN_CCD'].data
-            red_counts = Two_D['RED_CCD'].data
+            D2 = self.kpf_object
+            green_counts = D2['GREEN_CCD'].data
+            red_counts = D2['RED_CCD'].data
             
             QC_Test = True
             if debug:
-                print("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
-                print("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
+                self.logger.info("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
+                self.logger.info("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
             if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
+                QC_Test = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_Test
+
+    def D2_master_bias_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the master bias file used to 
+        process this exposure was created from files taken more than maxage (default: 5)
+        days from the exposure itself.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if the time of exposure for the files going 
+                            into the master bias file were taken more than a 
+                            certain number of days from the exposure itself.
+        """
+        
+        try:
+            D2 = self.kpf_object
+            my2D = Analyze2D(D2, logger=logger)
+            age_master_file = my2D.measure_master_age(kwd='BIASFILE', verbose=debug)
+            
+            QC_Test = True
+            if abs(age_master_file) > maxage:
+                QC_Test = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+    def D2_master_dark_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the master dark file used to 
+        process this exposure was created from files taken more than maxage (default: 5)
+        days from the exposure itself.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if the time of exposure for the files going 
+                            into the master dark file were taken more than a 
+                            certain number of days from the exposure itself.
+        """
+        
+        try:
+            D2 = self.kpf_object
+            my2D = Analyze2D(D2, logger=logger)
+            age_master_file = my2D.measure_master_age(kwd='DARKFILE', verbose=debug)
+            
+            QC_Test = True
+            if abs(age_master_file) > maxage:
+                QC_Test = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_Test
+
+    def D2_master_flat_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the master flat file used to 
+        process this exposure was created from files taken more than maxage (default: 5)
+        days from the exposure itself.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if the time of exposure for the files going 
+                            into the master dark file were taken more than a 
+                            certain number of days from the exposure itself.
+        """
+        
+        try:
+            D2 = self.kpf_object
+            my2D = Analyze2D(D2, logger=logger)
+            age_master_file = my2D.measure_master_age(kwd='FLATFILE', verbose=debug)
+            
+            QC_Test = True
+            if abs(age_master_file) > maxage:
                 QC_Test = False
                 
         except Exception as e:
@@ -2041,6 +2166,69 @@ class QCL1(QC):
             
         return QC_pass
 
+    def L1_WLSFILE_age(self, maxage=2, debug=False):
+        """
+        This Quality Control function checks if the wavelength solution file 
+        WLSFILE that was used to calibrated the wavelengths in this spectrum 
+        was created from files taken more than maxage (default: 2) days from 
+        the exposure itself.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if the time of exposure for the files going 
+                            into WLSFILE were taken more than a 
+                            certain number of days from the exposure itself.
+        """
+        
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=logger)
+            age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE', verbose=debug)
+            
+            QC_Test = True
+            if abs(age_wls_file) > maxage:
+                QC_Test = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_Test
+
+    def L1_WLSFILE2_age(self, maxage=2, debug=False):
+        """
+        This Quality Control function checks if the wavelength solution file 
+        WLSFILE2 that was used to calibrated the wavelengths in this spectrum 
+        was created from files taken more than maxage (default: 2) days from 
+        the exposure itself.
+        
+        Args:
+            debug
+        
+        Returns:
+            QC_Test (bool): True if the time of exposure for the files going 
+                            into WLSFILE2 were taken more than a 
+                            certain number of days from the exposure itself.
+        """
+        
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=logger)
+            age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE2', verbose=debug)
+            
+            QC_Test = True
+            if abs(age_wls_file) > maxage:
+                QC_Test = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_Test
+
+
 #####################################################################
 
 class QCL2(QC):
@@ -2234,83 +2422,3 @@ class QCL2(QC):
 
         return QC_pass    
 
-    def L2_correct_wls_check(self, debug=False):
-        """
-        This Quality Control function checks if the WLS files used by a given L2
-        file are correct. Failure states are as follows:
-            (1) The two WLS files do not exist or cannot be opened.
-            (2) The two WLS files are the same.
-            (3) If data was taken at night, the first WLS file does not correspond
-                to that from the prior evening and/or the second WLS file does
-                not correspond to that from the following morning.
-            (4) If data was taken during the day, the first WLS file does not
-                correspond to that from the prior morning and/or the second
-                WLS file does not correspond to that from the following evening.
-    
-        Args:
-             L2 - an L2 object
-             debug - an optional flag.  If True, missing data products are noted.
-    
-         Returns:
-             QC_pass - a boolean signifying that the QC passed for failed
-        """
-        
-        try:
-            L2 = self.kpf_object
-            QC_pass = True
-        
-            # First, check if WLS files exist
-            try:
-                WLSFILE = L2.header["PRIMARY"]["WLSFILE"]
-                WLSFILE2 = L2.header["PRIMARY"]["WLSFILE2"]
-                from kpfpipe.models.level2 import KPF2
-                WLSFILE_L2 = KPF2.from_fits(WLSFILE)
-                WLSFILE2_L2 = KPF2.from_fits(WLSFILE2)
-            except:
-                QC_pass = False
-                if debug:
-                    print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
-                return QC_pass
-        
-            # Next, check if the two WLS files are the same (they should not be)
-            if WLSFILE == WLSFILE2:
-                QC_pass = False
-                if debug:
-                    print("WLSFILE and WLSFILE2 are the same.")
-                return QC_pass        
-                
-            # Check if the observations are Keck or SoCal observations
-            is_day = False
-            if L2.header["PRIMARY"]["OBJECT"] == "SoCal":
-                is_day = True
-        
-            # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
-            # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
-            date_format = "%Y-%m-%d"
-            DATE_OBS = datetime.strptime(L2.header["PRIMARY"]["DATE-OBS"], date_format)
-            WLSFILE_DATE = datetime.strptime(WLSFILE_L2.header["PRIMARY"]["DATE-OBS"], date_format)
-            WLSFILE2_DATE = datetime.strptime(WLSFILE2_L2.header["PRIMARY"]["DATE-OBS"], date_format)
-            if is_day == False:
-                if DATE_OBS != WLSFILE_DATE:
-                    QC_pass = False
-                    if debug:
-                        print("Date of WLSFILE not the same as date of obs.")
-                if DATE_OBS != WLSFILE2_DATE:
-                    QC_pass = False
-                    if debug:
-                        print("Date of WLSFILE2 not the same as date of obs.")
-            else:
-                if DATE_OBS != WLSFILE_DATE:
-                    QC_pass = False
-                    if debug:
-                        print("Date of WLSFILE not the same as date of obs.")
-                if DATE_OBS >= WLSFILE2_DATE:
-                    QC_pass = False
-                    if debug:
-                        print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
-            
-        except Exception as e:
-            self.logger.info(f"Exception: {e}")
-            QC_pass = False
-            
-        return QC_pass

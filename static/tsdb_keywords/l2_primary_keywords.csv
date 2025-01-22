@@ -7,5 +7,4 @@ CCFBCV|float|Weighted avg (over orders) of barycentric RVs|km/s
 CCFBJD|float|Weighted avg (over orders) of BJD times|days
 DATAPRL2|bool|QC: L2 data present|None
 TIMCHKL2|bool|QC: Consistent times in L2 file|None
-WLSL2|bool|QC: L2 WLS file check passed|None
 

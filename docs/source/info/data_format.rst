@@ -442,7 +442,6 @@ CCFBJD    2460662.094073044                           Weighted average of BJD ti
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
 TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
 DATAPRL2  1                                           QC: 1 = L2 data is present
-WLSL2     1                                           QC: 1 = WLS files okay (failure conditions not detected: nonexistent WLS files, unopenable WLS files, two identical WLS files, same WLS file as previous/next night)
 ========  ==========================================  =========
 
 Radial Velocities
