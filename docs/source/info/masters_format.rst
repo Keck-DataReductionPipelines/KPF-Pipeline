@@ -82,20 +82,20 @@ There are thus four exceptions to this general file-naming scheme, namely:
     kpf_<yyyymmdd>_master_flat_GREEN_CCD.csv
     kpf_<yyyymmdd>_master_flat_RED_CCD.csv
 
-* The etalon masks have filenames like the following (with derived ``<object>`` placeholders)::
+* The etalon masks have filenames like the following (in the masks subdirectory, with derived ``<object>`` placeholder)::
 
-    <yyyymmdd>_eve_CAL_etalon_wavelengths.csv
-    <yyyymmdd>_eve_SCI1_etalon_wavelengths.csv
-    <yyyymmdd>_eve_SCI2_etalon_wavelengths.csv
-    <yyyymmdd>_eve_SCI3_etalon_wavelengths.csv
-    <yyyymmdd>_morn_CAL_etalon_wavelengths.csv
-    <yyyymmdd>_morn_SCI1_etalon_wavelengths.csv
-    <yyyymmdd>_morn_SCI2_etalon_wavelengths.csv
-    <yyyymmdd>_morn_SCI3_etalon_wavelengths.csv
-    <yyyymmdd>_night_CAL_etalon_wavelengths.csv
-    <yyyymmdd>_night_SCI1_etalon_wavelengths.csv
-    <yyyymmdd>_night_SCI2_etalon_wavelengths.csv
-    <yyyymmdd>_night_SCI3_etalon_wavelengths.csv
+    masks/<yyyymmdd>_eve_CAL_etalon_wavelengths.csv
+    masks/<yyyymmdd>_eve_SCI1_etalon_wavelengths.csv
+    masks/<yyyymmdd>_eve_SCI2_etalon_wavelengths.csv
+    masks/<yyyymmdd>_eve_SCI3_etalon_wavelengths.csv
+    masks/<yyyymmdd>_morn_CAL_etalon_wavelengths.csv
+    masks/<yyyymmdd>_morn_SCI1_etalon_wavelengths.csv
+    masks/<yyyymmdd>_morn_SCI2_etalon_wavelengths.csv
+    masks/<yyyymmdd>_morn_SCI3_etalon_wavelengths.csv
+    masks/<yyyymmdd>_night_CAL_etalon_wavelengths.csv
+    masks/<yyyymmdd>_night_SCI1_etalon_wavelengths.csv
+    masks/<yyyymmdd>_night_SCI2_etalon_wavelengths.csv
+    masks/<yyyymmdd>_night_SCI3_etalon_wavelengths.csv
 
 
 Data Format of KPF Master Files
