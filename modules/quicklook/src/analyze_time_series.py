@@ -76,7 +76,11 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Add temperature derivatives as columns; they will need to be computed.
         * Add the option of using a Postgres database
+        * Make standard correlation plots.
+        * Make standard phased plots (by day)
+        * Make plot of correlation between per-order RVs and RVs per-chip and overall RVs.
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
         * Make plots of temperature vs. RV for various types of RVs (correlation plots)
@@ -85,9 +89,8 @@ class AnalyzeTimeSeries:
         * Make a standard plot type that excludes outliers using ranges set 
           to, say, +/- 4-sigma where sigma is determined by aggressive outlier
           rejection.  This should be in Delta values.
-        * Make standard correlation plots.
-        * Make standard phased plots (by day)
-        * Make plot of correlation between per-order RVs and RVs per-chip and overall RVs.
+        * For time series state plots, include the number of points in each state 
+          in the legend.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):

@@ -6,6 +6,9 @@ from datetime import datetime
 from scipy.ndimage import convolve1d
 from modules.Utils.utils import DummyLogger, styled_text
 from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid, get_kpf_level, get_data_products_expected
+from modules.quicklook.src.analyze_2d import Analyze2D
+from modules.quicklook.src.analyze_l1 import AnalyzeL1
+from modules.quicklook.src.analyze_l2 import AnalyzeL2
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -342,7 +345,7 @@ class QCDefinitions:
         self.master_types[name2] = []
         self.required_data_products[name2] = [] # no required data products
         self.fits_keywords[name2] = 'MONOTWLS'
-        self.fits_comments[name2] = 'QC: Monotonic wavelength-solution'
+        self.fits_comments[name2] = 'QC: Monotonic wavelength solution'
         self.db_columns[name2] = None
         self.fits_keyword_fail_value[name2] = 0
 
@@ -593,18 +596,18 @@ class QCDefinitions:
         self.db_columns[name20] = None
         self.fits_keyword_fail_value[name20] = 0
 
-        name22 = 'D2_master_bias_age'
-        self.names.append(name22)
-        self.kpf_data_levels[name22] = ['2D']
-        self.descriptions[name22] = 'Check master bias file age'
-        self.data_types[name22] = 'int'
-        self.spectrum_types[name22] = ['all', ]
-        self.master_types[name22] = []
-        self.required_data_products[name22] = [] # no required data products
-        self.fits_keywords[name22] = 'OLDBIAS'
-        self.fits_comments[name22] = 'QC: Files in master bias taken 5 days of this obs'
-        self.db_columns[name22] = None
-        self.fits_keyword_fail_value[name22] = 0
+        name21 = 'D2_master_bias_age'
+        self.names.append(name21)
+        self.kpf_data_levels[name21] = ['2D']
+        self.descriptions[name21] = 'Check master dark file age'
+        self.data_types[name21] = 'int'
+        self.spectrum_types[name21] = ['all', ]
+        self.master_types[name21] = []
+        self.required_data_products[name21] = [] # no required data products
+        self.fits_keywords[name21] = 'OLDBIAS'
+        self.fits_comments[name21] = 'QC: Master bias within 5 days of this obs'
+        self.db_columns[name21] = None
+        self.fits_keyword_fail_value[name21] = 0
         
         name23 = 'D2_master_dark_age'
         self.names.append(name23)
@@ -615,7 +618,7 @@ class QCDefinitions:
         self.master_types[name23] = []
         self.required_data_products[name23] = [] # no required data products
         self.fits_keywords[name23] = 'OLDDARK'
-        self.fits_comments[name23] = 'QC: Files in master dark taken 5 days of this obs'
+        self.fits_comments[name23] = 'QC: Master dark within 5 days of this obs'
         self.db_columns[name23] = None
         self.fits_keyword_fail_value[name23] = 0
         
@@ -628,7 +631,7 @@ class QCDefinitions:
         self.master_types[name24] = []
         self.required_data_products[name24] = [] # no required data products
         self.fits_keywords[name24] = 'OLDFLAT'
-        self.fits_comments[name24] = 'QC: Files in master flat within 5 days of this obs'
+        self.fits_comments[name24] = 'QC: Master flat within 5 days of this obs'
         self.db_columns[name24] = None
         self.fits_keyword_fail_value[name24] = 0
         
@@ -641,7 +644,7 @@ class QCDefinitions:
         self.master_types[name25] = []
         self.required_data_products[name25] = [] # no required data products
         self.fits_keywords[name25] = 'OLDWLS'
-        self.fits_comments[name25] = 'QC: Files from WLSFILE within 2 days of this obs'
+        self.fits_comments[name25] = 'QC: WLSFILE within 2 days of this obs'
         self.db_columns[name25] = None
         self.fits_keyword_fail_value[name25] = 0
         
@@ -654,7 +657,7 @@ class QCDefinitions:
         self.master_types[name26] = []
         self.required_data_products[name26] = [] # no required data products
         self.fits_keywords[name26] = 'OLDWLS2'
-        self.fits_comments[name26] = 'QC: Files from WLSFILE2 within 2 days of this obs'
+        self.fits_comments[name26] = 'QC: WLSFILE2 within 2 days of this obs'
         self.db_columns[name26] = None
         self.fits_keyword_fail_value[name26] = 0
 
@@ -1679,7 +1682,7 @@ class QC2D(QC):
             debug
         
         Returns:
-            QC_Test (bool): True if both green and red channels have 98th percentile values above the
+            QC_pass (bool): True if both green and red channels have 98th percentile values above the
                             threshold, False otherwise.
         """
         
@@ -1688,76 +1691,78 @@ class QC2D(QC):
             green_counts = D2['GREEN_CCD'].data
             red_counts = D2['RED_CCD'].data
             
-            QC_Test = True
+            QC_pass = True
             if debug:
                 self.logger.info("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
                 self.logger.info("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
             if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
-                QC_Test = False
+                QC_pass = False
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
-        return QC_Test
+        return QC_pass
 
     def D2_master_bias_age(self, maxage=5, debug=False):
         """
         This Quality Control function checks if the master bias file used to 
-        process this exposure was created from files taken more than maxage (default: 5)
-        days from the exposure itself.
+        process this exposure was created from files taken more than maxage 
+        (default: 5) days from the exposure itself.
         
         Args:
             debug
         
         Returns:
-            QC_Test (bool): True if the time of exposure for the files going 
+            QC_pass (bool): True if the time of exposure for the files going 
                             into the master bias file were taken more than a 
                             certain number of days from the exposure itself.
         """
         
         try:
             D2 = self.kpf_object
-            my2D = Analyze2D(D2, logger=logger)
+            my2D = Analyze2D(D2, logger=self.logger)
             age_master_file = my2D.measure_master_age(kwd='BIASFILE', verbose=debug)
             
-            QC_Test = True
+            QC_pass = True
             if abs(age_master_file) > maxage:
-                QC_Test = False
+                QC_pass = False
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
+        return QC_pass
+
     def D2_master_dark_age(self, maxage=5, debug=False):
         """
         This Quality Control function checks if the master dark file used to 
-        process this exposure was created from files taken more than maxage (default: 5)
-        days from the exposure itself.
+        process this exposure was created from files taken more than maxage
+        (default: 5) days from the exposure itself.
         
         Args:
             debug
         
         Returns:
-            QC_Test (bool): True if the time of exposure for the files going 
+            QC_pass (bool): True if the time of exposure for the files going 
                             into the master dark file were taken more than a 
                             certain number of days from the exposure itself.
         """
         
         try:
             D2 = self.kpf_object
-            my2D = Analyze2D(D2, logger=logger)
+            my2D = Analyze2D(D2, logger=self.logger)
             age_master_file = my2D.measure_master_age(kwd='DARKFILE', verbose=debug)
             
-            QC_Test = True
+            QC_pass = True
             if abs(age_master_file) > maxage:
-                QC_Test = False
+                QC_pass = False
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
-        return QC_Test
+        return QC_pass
 
     def D2_master_flat_age(self, maxage=5, debug=False):
         """
@@ -1769,25 +1774,25 @@ class QC2D(QC):
             debug
         
         Returns:
-            QC_Test (bool): True if the time of exposure for the files going 
+            QC_pass (bool): True if the time of exposure for the files going 
                             into the master dark file were taken more than a 
                             certain number of days from the exposure itself.
         """
         
         try:
             D2 = self.kpf_object
-            my2D = Analyze2D(D2, logger=logger)
+            my2D = Analyze2D(D2, logger=self.logger)
             age_master_file = my2D.measure_master_age(kwd='FLATFILE', verbose=debug)
             
-            QC_Test = True
+            QC_pass = True
             if abs(age_master_file) > maxage:
-                QC_Test = False
+                QC_pass = False
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
-        return QC_Test
+        return QC_pass
 
 #####################################################################
 
@@ -2177,25 +2182,25 @@ class QCL1(QC):
             debug
         
         Returns:
-            QC_Test (bool): True if the time of exposure for the files going 
+            QC_pass (bool): True if the time of exposure for the files going 
                             into WLSFILE were taken more than a 
                             certain number of days from the exposure itself.
         """
         
         try:
             L1 = self.kpf_object
-            myL1 = AnalyzeL1(L1, logger=logger)
+            myL1 = AnalyzeL1(L1, logger=self.logger)
             age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE', verbose=debug)
             
-            QC_Test = True
+            QC_pass = True
             if abs(age_wls_file) > maxage:
-                QC_Test = False
+                QC_pass = False
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
-        return QC_Test
+        return QC_pass
 
     def L1_WLSFILE2_age(self, maxage=2, debug=False):
         """
@@ -2208,25 +2213,25 @@ class QCL1(QC):
             debug
         
         Returns:
-            QC_Test (bool): True if the time of exposure for the files going 
+            QC_pass (bool): True if the time of exposure for the files going 
                             into WLSFILE2 were taken more than a 
                             certain number of days from the exposure itself.
         """
         
         try:
             L1 = self.kpf_object
-            myL1 = AnalyzeL1(L1, logger=logger)
+            myL1 = AnalyzeL1(L1, logger=self.logger)
             age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE2', verbose=debug)
             
-            QC_Test = True
+            QC_pass = True
             if abs(age_wls_file) > maxage:
-                QC_Test = False
+                QC_pass = False
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
-        return QC_Test
+        return QC_pass
 
 
 #####################################################################

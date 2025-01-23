@@ -396,7 +396,7 @@ def add_headers_masters_age_2D(D2, logger=None, verbose=False):
         file_error = False
         try:
             if type(age_master_file) == type(0):
-                D2.header['PRIMARY'][new_keyword] = (age_master_file, f'Age of {master_file} compared to this file (whole days)')
+                D2.header['PRIMARY'][new_keyword] = (age_master_file, f'{master_file} age compared to this file (whole days)')
             else:
                 file_error = True
         except Exception as e:
@@ -448,14 +448,14 @@ def add_headers_masters_age_L1(L1, logger=None, verbose=False):
         try:
             age_wls_file = myL1.measure_WLS_age(kwd=wlsfile, verbose=verbose)
             if verbose:
-                logger.info(f'Age of {wlsfile} compared to this file (days): {age_wls_file}')
+                logger.info(f'{wlsfile} age compared to this file (days): {age_wls_file}')
             
             # Write WLS age to primary header
-            L1.header['PRIMARY'][new_keyword] = (age_wls_file, f'Age of {wlsfile} compared to this file (days)')
+            L1.header['PRIMARY'][new_keyword] = (age_wls_file, f'{wlsfile} age compared to this file (days)')
 
         except Exception as e:
             logger.error(f"Problem with determining age of {wlsfile}: {e}\n{traceback.format_exc()}")
-            L1.header['PRIMARY'][new_keyword] = (-999, 'ERROR: Age of {wlsfile} compared to this file (days).')
+            L1.header['PRIMARY'][new_keyword] = (-999, 'ERROR: {wlsfile} age compared to this file (days).')
 
     return L1
 
