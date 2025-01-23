@@ -81,9 +81,9 @@ There are three exceptions to this file-naming scheme, namely:
     kpf_<yyyymmdd>_master_flat_GREEN_CCD.csv
     kpf_<yyyymmdd>_master_flat_RED_CCD.csv
 
-* The etalon masks
+* The etalon masks::
 
-<yyyymmdd>_eve_CAL_etalon_wavelengths.csv
+    <yyyymmdd>_eve_CAL_etalon_wavelengths.csv
 
 
 Data Format of KPF Master Files
