@@ -65,3 +65,5 @@ DATAPRL1|bool|QC: L1 red and green data present|None
 CAHKPRL1|bool|QC: CaHK data present in L1 with expected shape|None
 WLSL1|bool|QC: L1 WLS file check passed|None
 LFCSAT|bool|QC: L1 LFC spectrum not saturated|None
+OLDWLS|bool|QC: WLSFILE within 2 days of this obs|None
+OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None

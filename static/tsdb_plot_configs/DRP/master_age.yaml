@@ -1,0 +1,57 @@
+description: Ages of Master Files
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: AGEBIAS
+        plot_type: state
+        plot_attr:
+          label: Age of Master Bias File (days)
+          marker: .
+    paneldict:
+      ylabel: Age of Master Bias File (days)
+      not_junk: true
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: AGEDARK
+        plot_type: state
+        plot_attr:
+          label: Age of Master Dark File (days)
+          marker: .
+    paneldict:
+      ylabel: Age of Master Dark File (days)
+      not_junk: true
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: AGEFLAT
+        plot_type: state
+        plot_attr:
+          label: Age of Master Flat File (days)
+          marker: .
+    paneldict:
+      ylabel: Age of Master Flat File (days)
+      not_junk: true
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: AGEWLS
+        plot_type: state
+        plot_attr:
+          label: Age of WLSFILE (days)
+          marker: .
+    paneldict:
+      ylabel: Age of WLSFILE (days)
+      not_junk: true
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: AGEWLS2
+        plot_type: state
+        plot_attr:
+          label: Age of WLSFILE2 (days)
+          marker: .
+    paneldict:
+      ylabel: Age of WLSFILE2 (days)
+      not_junk: true
+      legend_frac_size: 0.10

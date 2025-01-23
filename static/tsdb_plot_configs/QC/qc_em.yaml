@@ -15,7 +15,7 @@ panel_arr:
       - col: EMNEG
         plot_type: state
         plot_attr:
-          label: "EM Not Netative Flux\n(EMNEG)"
+          label: "EM Not Negative Flux\n(EMNEG)"
           marker: .
     paneldict:
       ylabel: EM Not Netative Flux

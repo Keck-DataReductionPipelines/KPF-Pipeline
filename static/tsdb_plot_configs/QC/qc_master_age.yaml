@@ -1,0 +1,53 @@
+description: QC - Master File Ages
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: OLDBIAS
+        plot_type: state
+        plot_attr:
+          label: "Master Bias File Age"
+          marker: .
+    paneldict:
+      title: QC: Master File Ages
+      ylabel: "Master Bias File (2D)\nOlder than 5 Days"
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: OLDDARK
+        plot_type: state
+        plot_attr:
+          label: "Master Dark File Age"
+          marker: .
+    paneldict:
+      ylabel: "Master Dark File (2D)\nOlder than 5 Days"
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: OLDFLAT
+        plot_type: state
+        plot_attr:
+          label: "Master Flat File Age"
+          marker: .
+    paneldict:
+      ylabel: "Master Flat File (2D)\nOlder than 5 Days"
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: OLDWLS
+        plot_type: state
+        plot_attr:
+          label: "WLSFILE Age"
+          marker: .
+    paneldict:
+      ylabel: "WLSFILE (2D)\nOlder than 2 Days"
+      legend_frac_size: 0.10
+
+  - panelvars:
+      - col: OLDWLS2
+        plot_type: state
+        plot_attr:
+          label: "WLSFILE2 Age"
+          marker: .
+    paneldict:
+      ylabel: "WLSFILE2 (2D)\nOlder than 2 Days"
+      legend_frac_size: 0.10
