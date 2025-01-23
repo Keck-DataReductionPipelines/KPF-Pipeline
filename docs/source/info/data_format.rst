@@ -200,20 +200,6 @@ ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3
 
 The 2D file inherits all L0 keywords.  Below are additional keywords.
 
-DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
-DATAPR2D|bool|QC: 2D red and green data present|None
-CAHKPR2D|bool|QC: 2D CaHK data present|None
-KWRDPRL0|bool|QC: L0 expected keywords present|None
-TIMCHKL0|bool|QC: Consistent times in L0 file|None
-EMSAT|bool|QC: Exp Meter not saturated|None
-EMNEG|bool|QC: Exp Meter not negative flux|None
-GOODREAD|bool|QC: Texp not consistent with CCD readout error|None
-POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
-LOWBIAS|bool|QC: 2D bias flux not low|None
-LOWDARK|bool|QC: 2D dark flux not low|None
-LFC2DFOK|bool|QC: LFC flux meets threshold of 4000 counts|None
-
-
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
