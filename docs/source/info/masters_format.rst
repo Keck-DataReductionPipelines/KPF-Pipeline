@@ -4,7 +4,7 @@ KPF Calibration-Masters Data Format
 Overview
 --------
 
-KPF master calibration-file products, made by combining subsets of input L0 FITS files,
+KPF master calibration-file products, made by combining subsets of input L0 image data,
 are defined for these data levels:
 
 * **2D**: Assembled CCD images with minimal processing.
@@ -25,52 +25,48 @@ The canonical location for persisted master files on the shrek machine is::
 Less frequently, the masters for some or all observation dates are reprocessed to
 correct processing abnormalities or incorporate new features.
 
-The file-naming convention for master calibration files generally follows the following prototype::
+The file-naming convention for master calibration files generally adheres to the following prototype::
 
     kpf_<yyymmdd>_master_<type>_<object>.fits
 
-where <yyyymmdd> is the observation date.
-Master <type> can be either bias, dark, flat, arclamp, smooth lamp, order trace, and WLS.
-Some master filenames include GREEN or RED as suffixes to indicate that they pertain to that filter only.
-Master <object> in the file-naming scheme is a descriptive hyphenated subtype string
+where ``<yyyymmdd>`` is the observation date.
+Master ``<type>`` can be either bias, dark, flat, arclamp, smooth lamp, order trace, and WLS.
+Some master filenames include '_GREEN' or '_RED' as suffixes before
+the '.fits' filename extension to indicate that they pertain to that specific filter only.
+Master ``<object>`` in the file-naming scheme is a descriptive hyphenated subtype string
 (derived from the OBJECT FITS keyword of a representation input data L0 FITS file), and
-can be like any of those listed in the following table (the list is not exhaustive, but
+can be like any of the examples listed in the following table (the list is not exhaustive, but
 gives the reader an idea of what to expect)::
 
-+-------------------------------------+
-| Examples of KPF Master-File Objects |
-+=====================================+
-| autocal-bias                        |
-| autocal-dark                        |
-| (none for master flat)              |
-| (none for master smooth lamp)       |
-| autocal-une-all-morn                |
-| autocal-une-cal-eve                 |
-| autocal-une-sci-eve                 |
-| autocal-une-sky-eve                 |
-| autocal-une-all-eve                 |
-| slewcal                             |
-| autocal-etalon-all-eve              |
-| autocal-etalon-all-midday           |
-| autocal-etalon-all-morn             |
-| autocal-etalon-all-night            |
-| autocal-lfc-all-eve                 |
-| autocal-lfc-all-midnight            |
-| autocal-lfc-all-morn                |
-| autocal-thar-all-eve                |
-| autocal-thar-all-morn               |
-| autocal-thar-cal-eve                |
-| autocal-thar-sci-eve                |
-| autocal-thar-sky-eve                |
-+-------------------------------------+
+    autocal-bias
+    autocal-dark
+    (none for master flat)
+    (none for master smooth lamp)
+    autocal-une-all-morn
+    autocal-une-cal-eve
+    autocal-une-sci-eve
+    autocal-une-sky-eve
+    autocal-une-all-eve
+    slewcal
+    autocal-etalon-all-eve
+    autocal-etalon-all-midday
+    autocal-etalon-all-morn
+    autocal-etalon-all-night
+    autocal-lfc-all-eve
+    autocal-lfc-all-midnight
+    autocal-lfc-all-morn
+    autocal-thar-all-eve
+    autocal-thar-all-morn
+    autocal-thar-cal-eve
+    autocal-thar-sci-eve
+    autocal-thar-sky-eve
 
-
-The master flat and smooth-lamp filenames do not include <object> by quirk of software.
+The master flat and smooth-lamp filenames do not include the ``<object>`` placeholder by quirk of the software.
 L1 and L2 master files have similar file names, but with '_L1', or '_L2' before
 the '.fits' filename extension.
 There are three exceptions to this file-naming scheme, namely:
 
-*  The 2D, L1, and L2 smooth-lamp products have filenames like the following::
+*  The 2D (no explicit suffix), L1, and L2 smooth-lamp products have filenames like the following::
 
     kpf_<yyyymmdd>_smooth_lamp.fits
     kpf_<yyyymmdd>_smooth_lamp_L2.fits
@@ -81,7 +77,7 @@ There are three exceptions to this file-naming scheme, namely:
     kpf_<yyyymmdd>_master_flat_GREEN_CCD.csv
     kpf_<yyyymmdd>_master_flat_RED_CCD.csv
 
-* The etalon masks::
+* The etalon masks have filenames like the following::
 
     <yyyymmdd>_eve_CAL_etalon_wavelengths.csv
 
