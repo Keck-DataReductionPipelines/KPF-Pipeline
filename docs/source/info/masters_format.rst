@@ -25,11 +25,11 @@ The canonical location for persisted master files on the shrek machine is::
 Less frequently, the masters for some or all observation dates are reprocessed to
 correct processing abnormalities or incorporate new features.
 
-The file-naming convention for master calibration files generally adheres to the following prototype::
+The file-naming convention for 2D master calibration files generally adheres to the following prototype::
 
     kpf_<yyymmdd>_master_<type>_<object>.fits
 
-where ``<yyyymmdd>`` is the observation date.
+where ``<yyyymmdd>`` is the observation date, and there is no explicit '_2D' suffix.
 Master ``<type>`` can be either bias, dark, flat, arclamp, smooth lamp, order trace, and WLS.
 Some master filenames include '_GREEN' or '_RED' as suffixes before
 the '.fits' filename extension to indicate that they pertain to that specific filter only.
@@ -62,24 +62,40 @@ gives the reader an idea of what to expect)::
     autocal-thar-sky-eve
 
 The master flat and smooth-lamp filenames do not include the ``<object>`` placeholder by quirk of the software.
-L1 and L2 master files have similar file names, but with '_L1', or '_L2' before
-the '.fits' filename extension.
-There are three exceptions to this file-naming scheme, namely:
+The L1 and L2 master files have similar file names, but with '_L1', or '_L2' suffixes before the '.fits' filename extension.
+There are thus four exceptions to this general file-naming scheme, namely:
 
-*  The 2D (no explicit suffix), L1, and L2 smooth-lamp products have filenames like the following::
+*  The 2D (no explicit suffix), L1, and L2 master-flat products have filenames like the following (no ``<object>`` placeholder)::
+
+    kpf_<yyyymmdd>_master_flat.fits
+    kpf_<yyyymmdd>_master_flat_L1.fits
+    kpf_<yyyymmdd>_master_flat_L2.fits
+
+*  The 2D (no explicit suffix), L1, and L2 smooth-lamp products have filenames like the following (no explicit '_master' and no ``<object>`` placeholder)::
 
     kpf_<yyyymmdd>_smooth_lamp.fits
-    kpf_<yyyymmdd>_smooth_lamp_L2.fits
     kpf_<yyyymmdd>_smooth_lamp_L1.fits
+    kpf_<yyyymmdd>_smooth_lamp_L2.fits
 
 *  The order-trace products have filenames like the following::
 
     kpf_<yyyymmdd>_master_flat_GREEN_CCD.csv
     kpf_<yyyymmdd>_master_flat_RED_CCD.csv
 
-* The etalon masks have filenames like the following::
+* The etalon masks have filenames like the following (with derived ``<object>`` placeholders)::
 
     <yyyymmdd>_eve_CAL_etalon_wavelengths.csv
+    <yyyymmdd>_eve_SCI1_etalon_wavelengths.csv
+    <yyyymmdd>_eve_SCI2_etalon_wavelengths.csv
+    <yyyymmdd>_eve_SCI3_etalon_wavelengths.csv
+    <yyyymmdd>_morn_CAL_etalon_wavelengths.csv
+    <yyyymmdd>_morn_SCI1_etalon_wavelengths.csv
+    <yyyymmdd>_morn_SCI2_etalon_wavelengths.csv
+    <yyyymmdd>_morn_SCI3_etalon_wavelengths.csv
+    <yyyymmdd>_night_CAL_etalon_wavelengths.csv
+    <yyyymmdd>_night_SCI1_etalon_wavelengths.csv
+    <yyyymmdd>_night_SCI2_etalon_wavelengths.csv
+    <yyyymmdd>_night_SCI3_etalon_wavelengths.csv
 
 
 Data Format of KPF Master Files
