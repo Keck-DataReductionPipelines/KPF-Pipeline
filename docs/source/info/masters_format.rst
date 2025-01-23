@@ -77,7 +77,7 @@ There are thus four exceptions to this general file-naming scheme, namely:
     kpf_<yyyymmdd>_smooth_lamp_L1.fits
     kpf_<yyyymmdd>_smooth_lamp_L2.fits
 
-*  The order-trace products have filenames like the following::
+*  The order-trace products have filenames like the following (CSV files instead of FITS, and explicit filter suffix is included)::
 
     kpf_<yyyymmdd>_master_flat_GREEN_CCD.csv
     kpf_<yyyymmdd>_master_flat_RED_CCD.csv
