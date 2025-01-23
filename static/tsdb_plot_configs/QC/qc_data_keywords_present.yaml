@@ -8,7 +8,7 @@ panel_arr:
           label: L0 Data Present
           marker: .
     paneldict:
-      ylabel: L0 Data Present
+      ylabel: "L0 Data Present\n(DATAPRL0)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -18,7 +18,7 @@ panel_arr:
           label: L0 Keywords Present
           marker: .
     paneldict:
-      ylabel: L0 Keywords Present
+      ylabel: "L0 Keywords Present\n(KWRDPRL0)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -28,7 +28,7 @@ panel_arr:
           label: 2D CaHK Data Present
           marker: .
     paneldict:
-      ylabel: 2D CaHK Data Present
+      ylabel: "2D CaHK Data Present\n(CAHKPR2D)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -38,7 +38,7 @@ panel_arr:
           label: L1 CaHK Data Present
           marker: .
     paneldict:
-      ylabel: L1 CaHK Data Present
+      ylabel: "L1 CaHK Data Present\n(CAHKPRL1)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -48,7 +48,7 @@ panel_arr:
           label: 2D Data Present
           marker: .
     paneldict:
-      ylabel: 2D Data Present
+      ylabel: "2D Data Present\n(DATAPR2D)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -58,7 +58,7 @@ panel_arr:
           label: L1 Data Present
           marker: .
     paneldict:
-      ylabel: L1 Data Present
+      ylabel: "L1 Data Present\n(DATAPRL1)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -68,6 +68,6 @@ panel_arr:
           label: L2 Data Present
           marker: .
     paneldict:
-      ylabel: L2 Data Present
+      ylabel: "L2 Data Present\n(DATAPRL2)"
       title: QC - Tests For Data Present With Correct Array Sizes
       legend_frac_size: 0.10

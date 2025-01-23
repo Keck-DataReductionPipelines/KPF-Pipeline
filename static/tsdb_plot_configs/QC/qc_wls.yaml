@@ -8,16 +8,6 @@ panel_arr:
           label: "L1 Wavelength Solution\nFiles Pass Sanity Checks"
           marker: .
     paneldict:
-      ylabel: "L1 Wavelength Solution\nFiles Pass Sanity Checks"
-      legend_frac_size: 0.10
-
-  - panelvars:
-      - col: WLSL2
-        plot_type: state
-        plot_attr:
-          label: "L2 Wavelength Solution\nFiles Pass Sanity Checks"
-          marker: .
-    paneldict:
-      ylabel: "L2 Wavelength Solution\nFiles Pass Sanity Checks"
+      ylabel: "L1 Wavelength Solution\nFiles Pass Sanity Checks\n(WLSL1)"
       legend_frac_size: 0.10
 

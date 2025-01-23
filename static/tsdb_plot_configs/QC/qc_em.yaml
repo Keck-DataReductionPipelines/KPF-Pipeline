@@ -8,14 +8,14 @@ panel_arr:
           label: EM Not Saturated
           marker: .
     paneldict:
-      ylabel: EM Not Saturated
+      ylabel: "EM Not Saturated\n(EMSAT)"
       legend_frac_size: 0.10
 
   - panelvars:
       - col: EMNEG
         plot_type: state
         plot_attr:
-          label: EM Not Netative Flux
+          label: "EM Not Netative Flux\n(EMNEG)"
           marker: .
     paneldict:
       ylabel: EM Not Netative Flux

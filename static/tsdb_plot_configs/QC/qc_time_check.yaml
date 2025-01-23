@@ -8,7 +8,7 @@ panel_arr:
           label: L0 Time Check
           marker: .
     paneldict:
-      ylabel: L0 Time Check
+      ylabel: "L0 Time Check\n(TIMCHKL0)"
       legend_frac_size: 0.10
 
   - panelvars:
@@ -18,6 +18,6 @@ panel_arr:
           label: L2 Time Check
           marker: .
     paneldict:
-      ylabel: L2 Time Check
+      ylabel: "L2 Time Check\n(TIMCHKL2)"
       title: QC - L0 and L2 Times Consistent
       legend_frac_size: 0.10

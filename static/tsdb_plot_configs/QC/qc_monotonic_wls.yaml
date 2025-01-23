@@ -8,6 +8,6 @@ panel_arr:
           label: Montonic WLS
           marker: .
     paneldict:
-      ylabel: Monotonic WLS
+      ylabel: "Monotonic WLS\n(MONOTWLS)"
       title: QC - Monotonic WLS in L1
       legend_frac_size: 0.10
