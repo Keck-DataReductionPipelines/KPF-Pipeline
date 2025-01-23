@@ -9,15 +9,19 @@ are defined for these data levels:
 
 * **2D**: Assembled CCD images with minimal processing.
 * **Level 1 (L1)**: Extracted, wavelength-calibrated spectra
-* **Level 2 (L2)**: Derived data products including cross-correlation functions,
-                    radial velocities, and activity indicators.
+* **Level 2 (L2)**: Derived data products
 
-Each of these data levels is a standardized, multi-extension FITS format,
-and can be read using standard fits tools
+Derived data products for L2 include cross-correlation functions, radial velocities, and activity indicators.
+Each of these data levels has associated product files in a standardized, multi-extension FITS format
+(with a few exceptions), and can be read using standard fits tools
 (e.g., `astropy.fits.io <https://docs.astropy.org/en/stable/io/fits/>`_)
 and the `KPF-Pipeline <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_.
 
 Master calibration files are generated daily, for each observation date.
+The canonical location for persisted master files on the shrek machine is::
+
+    /data/kpf/masters/yyyymmdd
+
 Less frequently, the masters for some or all observation dates are reprocessed to
 correct processing abnormalities or incorporate new features.
 
@@ -31,37 +35,37 @@ Some master filenames include GREEN or RED as suffixes to indicate that they per
 Master <object> in the file-naming scheme is a descriptive hyphenated subtype string
 (derived from the OBJECT FITS keyword of a representation input data L0 FITS file), and
 can be like any of those listed in the following table (the list is not exhaustive, but
-gives the reader an idea of what to expect).  The master flat and smooth-lamp filenames
-do not include <object> by quirk of software.
+gives the reader an idea of what to expect)::
 
-======================================
-Examples of KPF Master-File Objects
-======================================
-autocal-bias
-autocal-dark
-(none for master flat)
-(none for master smooth lamp)
-autocal-une-all-morn
-autocal-une-cal-eve
-autocal-une-sci-eve
-autocal-une-sky-eve
-autocal-une-all-eve
-slewcal
-autocal-etalon-all-eve
-autocal-etalon-all-midday
-autocal-etalon-all-morn
-autocal-etalon-all-night
-autocal-lfc-all-eve
-autocal-lfc-all-midnight
-autocal-lfc-all-morn
-autocal-thar-all-eve
-autocal-thar-all-morn
-autocal-thar-cal-eve
-autocal-thar-sci-eve
-autocal-thar-sky-eve
-======================================
++-------------------------------------+
+| Examples of KPF Master-File Objects |
++=====================================+
+| autocal-bias                        |
+| autocal-dark                        |
+| (none for master flat)              |
+| (none for master smooth lamp)       |
+| autocal-une-all-morn                |
+| autocal-une-cal-eve                 |
+| autocal-une-sci-eve                 |
+| autocal-une-sky-eve                 |
+| autocal-une-all-eve                 |
+| slewcal                             |
+| autocal-etalon-all-eve              |
+| autocal-etalon-all-midday           |
+| autocal-etalon-all-morn             |
+| autocal-etalon-all-night            |
+| autocal-lfc-all-eve                 |
+| autocal-lfc-all-midnight            |
+| autocal-lfc-all-morn                |
+| autocal-thar-all-eve                |
+| autocal-thar-all-morn               |
+| autocal-thar-cal-eve                |
+| autocal-thar-sci-eve                |
+| autocal-thar-sky-eve                |
++-------------------------------------+
 
 
+The master flat and smooth-lamp filenames do not include <object> by quirk of software.
 L1 and L2 master files have similar file names, but with '_L1', or '_L2' before
 the '.fits' filename extension.
 There are three exceptions to this file-naming scheme, namely:
@@ -88,20 +92,34 @@ Data Format of KPF Master Files
 Master Bias
 ^^^^^^^^^^^
 
+Add content here.
+
 Master Dark
 ^^^^^^^^^^^
+
+Add content here.
 
 Master Flat
 ^^^^^^^^^^^
 
+Add content here.
+
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
+
+Add content here.
 
 Master Arclamp
 ^^^^^^^^^^^^^^
 
+Add content here.
+
 Master Order Trace
 ^^^^^^^^^^^^^^^^^^
 
+Add content here.
+
 Master WLS
 ^^^^^^^^^^
+
+Add content here.
