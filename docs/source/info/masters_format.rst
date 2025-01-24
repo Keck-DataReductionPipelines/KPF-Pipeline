@@ -309,7 +309,8 @@ frames are stacked in this example.
 Two important master files that are required as inputs to the generation of a master flat are
 the master order mask and the master smooth lamp.  Normally these files are only updated when instrument
 characteristics change.  These are given by the ``ORDRMASK`` and ``LAMPPATT`` FITS-header keywords, and are discussed in more
-detail in sections that follow.  These two relatively static files are kept in the ``/data/reference_fits`` directory on the shrek machine.
+detail in sections that follow.  These two relatively static files are kept in the
+``/data/kpf/reference_fits`` directory on the shrek machine.
 
 
 Master Smooth Lamp
@@ -324,12 +325,21 @@ characteristics change (say, on the time scale of months).
 Master Order Mask (Trace)
 ^^^^^^^^^^^^^^^^^^
 
+A master order mask FITS file contains GREEN and RED mask mages showing the locations of the order traces
+in the image data.  The order-mask values are numbered from 1 to 5 designating distinct order traces from
+top to bottom in the image) to denote the corresponding fiber of the order trace (sci1, sci2, sci3, sky, cal).
+
 Generally, the master order mask is relatively static and generated from master order-trace files for GREEN and RED
 only periodically.
 New master order-trace files for GREEN and RED are made daily from the data taken on the corresponding observation date
 for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine),
 but these are only used to create a new master order mask for the generation of daily master flats
 when the instrument characteristics change (say, on the time scale of months).
+
+Master order-trace files, such as ``kpf_20250122_master_flat_GREEN_CCD.csv`` and ``kpf_20250122_master_flat_RED_CCD.csv``,
+are CSV files containing the following quantites for each order:
+Coeff0, Coeff1, Coeff2, Coeff3, BottomEdge, TopEdge, X1, X2.
+This information is used to compute the location of the order traces in the image data.
 
 Master Arclamp
 ^^^^^^^^^^^^^^
