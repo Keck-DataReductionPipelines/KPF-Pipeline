@@ -162,7 +162,7 @@ Here is an example of the keywords in the GREEN_CCD extension of master bias fil
     INFL5   = 'KP.20250122.61571.78_2D.fits'
 
 It includes useful metadata about the image stacking, including the specific input bias L0 FITS files.
-The input bias L0 FITS files are preprocessed to assemble the CCD images and subtract the overscan bias.
+The input bias L0 FITS files are preprocessed to subtract the overscan biases, and assemble the CCD images.
 
 
 Master Dark
@@ -179,11 +179,11 @@ Extension Name       Data Type  Data Dimension  Data Units      Description
 GREEN_CCD            image      4080 x 4080     electrons/sec   Master dark image for GREEN
 RED_CCD              image      4080 x 4080     electrons/sec   Master dark image for RED
 CA_HK                image      1024 x 255      electrons/sec   Master dark image for CA_HK
-GREEN_CCD_UNC        image      4080 x 4080     electrons       Master dark-image uncertainty for GREEN
+GREEN_CCD_UNC        image      4080 x 4080     electrons/sec   Master dark-image uncertainty for GREEN
 GREEN_CCD_CNT        image      4080 x 4080     count           Master dark-image number of stack samples for GREEN
-RED_CCD_UNC          image      4080 x 4080     electrons       Master dark-image uncertainty for RED
+RED_CCD_UNC          image      4080 x 4080     electrons/sec   Master dark-image uncertainty for RED
 RED_CCD_CNT          image      4080 x 4080     count           Master dark-image number of stack samples for RED
-CA_HK_UNC            image      1024 x 255      electrons       Master dark-image uncertainty for CA_HK
+CA_HK_UNC            image      1024 x 255      electrons/sec   Master dark-image uncertainty for CA_HK
 CA_HK_CNT            image      1024 x 255      count           Master dark-image number of stack samples for CA_HK
 ===================  =========  ==============  ==============  ========================================================
 
@@ -223,7 +223,7 @@ Here is an example of the keywords in the GREEN_CCD extension of master dark fil
     INFL4   = 'KP.20250122.79221.17_2D.fits'
 
 It includes useful metadata about the image stacking, including the specific input dark L0 FITS files.
-The input dark L0 FITS files are preprocessed to assemble the CCD images, subtract the overscan bias, and subtract
+The input dark L0 FITS files are preprocessed to subtract the overscan biases, assemble the CCD images, and subtract
 the master bias.  The header keyword ``INPBIAS`` gives the master bias employed.
 
 Master Flat
