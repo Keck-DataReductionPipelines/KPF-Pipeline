@@ -9,7 +9,7 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "LFC Not Saturated\n(LFCSAT)"
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15
 
   - panelvars:
       - col: LFC2DFOK
@@ -20,4 +20,4 @@ panel_arr:
     paneldict:
       ylabel: "LFC Flux Meets Threshold\nof 4000 Counts\n(LFC2DFOK)"
       title: QC - LFC Metrics
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

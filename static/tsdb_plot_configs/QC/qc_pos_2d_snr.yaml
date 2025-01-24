@@ -10,4 +10,4 @@ panel_arr:
     paneldict:
       ylabel: "Not Negative 2D SNR\n(POS2DSNR)"
       title: "QC - Red/Green CCD data/var^0.5 not significantly negative"
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

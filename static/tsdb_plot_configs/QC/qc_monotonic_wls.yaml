@@ -10,4 +10,4 @@ panel_arr:
     paneldict:
       ylabel: "Monotonic WLS\n(MONOTWLS)"
       title: QC - Monotonic WLS in L1
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

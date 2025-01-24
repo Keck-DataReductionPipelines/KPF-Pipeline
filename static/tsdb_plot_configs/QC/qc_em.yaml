@@ -9,15 +9,15 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "EM Not Saturated\n(EMSAT)"
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15
 
   - panelvars:
       - col: EMNEG
         plot_type: state
         plot_attr:
-          label: "EM Not Negative Flux\n(EMNEG)"
+          label: EM Flux Not Negative
           marker: .
     paneldict:
-      ylabel: EM Not Netative Flux
+      ylabel: "EM Not Negative Flux\n(EMNEG)"
       title: QC - Exposure Meter
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

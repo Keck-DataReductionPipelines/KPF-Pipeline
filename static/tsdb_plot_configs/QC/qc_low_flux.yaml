@@ -9,7 +9,7 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "2D Bias Flux Not Low\n(LOWBIAS)"
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15
 
   - panelvars:
       - col: LOWDARK
@@ -20,4 +20,4 @@ panel_arr:
     paneldict:
       ylabel: "2D Dark Flux Not Low\n(LOWDARK)"
       title: QC - Low Dark and Bias Flux
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

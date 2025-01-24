@@ -9,5 +9,5 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "L1 Wavelength Solution\nFiles Pass Sanity Checks\n(WLSL1)"
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15
 

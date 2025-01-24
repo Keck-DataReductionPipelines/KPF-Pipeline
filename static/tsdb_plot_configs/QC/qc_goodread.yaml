@@ -8,6 +8,6 @@ panel_arr:
           label: Good Read 
           marker: .
     paneldict:
-      ylabel: "Good Read Green/Red CCDs\n(GOODREAD)"
+      ylabel: "Good Read of Green/Red\nCCDs(GOODREAD)"
       title: "QC - Good Read Metric (T$_{exp}$ !$\\approx$ 6 sec)"
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

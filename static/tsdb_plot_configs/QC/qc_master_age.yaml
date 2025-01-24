@@ -8,9 +8,9 @@ panel_arr:
           label: "Master Bias File Age"
           marker: .
     paneldict:
-      title: QC: Master File Ages
-      ylabel: "Master Bias File (2D)\nOlder than 5 Days"
-      legend_frac_size: 0.10
+      title: QC - Master File Ages
+      ylabel: "Master Bias File (2D)\nYounger than 5 Days"
+      legend_frac_size: 0.12
 
   - panelvars:
       - col: OLDDARK
@@ -19,8 +19,8 @@ panel_arr:
           label: "Master Dark File Age"
           marker: .
     paneldict:
-      ylabel: "Master Dark File (2D)\nOlder than 5 Days"
-      legend_frac_size: 0.10
+      ylabel: "Master Dark File (2D)\nYounger than 5 Days"
+      legend_frac_size: 0.12
 
   - panelvars:
       - col: OLDFLAT
@@ -29,8 +29,8 @@ panel_arr:
           label: "Master Flat File Age"
           marker: .
     paneldict:
-      ylabel: "Master Flat File (2D)\nOlder than 5 Days"
-      legend_frac_size: 0.10
+      ylabel: "Master Flat File (2D)\nYounger than 5 Days"
+      legend_frac_size: 0.12
 
   - panelvars:
       - col: OLDWLS
@@ -39,8 +39,8 @@ panel_arr:
           label: "WLSFILE Age"
           marker: .
     paneldict:
-      ylabel: "WLSFILE (2D)\nOlder than 2 Days"
-      legend_frac_size: 0.10
+      ylabel: "WLSFILE (2D)\nYounger than 2 Days"
+      legend_frac_size: 0.12
 
   - panelvars:
       - col: OLDWLS2
@@ -49,5 +49,5 @@ panel_arr:
           label: "WLSFILE2 Age"
           marker: .
     paneldict:
-      ylabel: "WLSFILE2 (2D)\nOlder than 2 Days"
-      legend_frac_size: 0.10
+      ylabel: "WLSFILE2 (2D)\nYounger than 2 Days"
+      legend_frac_size: 0.12
