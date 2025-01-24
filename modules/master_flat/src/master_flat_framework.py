@@ -50,7 +50,7 @@ class MasterFlatFramework(KPF0_Primitive):
         3. Further modifications to this recipe are needed in order to use
            a master flat-lamp pattern from a prior night.
         4. Low-light pixels cannot be reliably used to
-           compute the flat-field correction (e.g., less than 5 DN/sec).
+           compute the flat-field correction (e.g., less than 5 electrons/sec).
         5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
 
         Algorithm:
@@ -93,7 +93,7 @@ class MasterFlatFramework(KPF0_Primitive):
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
         gaussian_filter_sigma (float): 2-D Gaussian-blur sigma for smooth lamp pattern calculation (default = 2.0 pixels)
-        low_light_limit = Low-light limit where flat is set to unity (default = 5.0 DN/sec)
+        low_light_limit = Low-light limit where flat is set to unity (default = 5.0 electrons/sec)
 
     Outputs:
         Full-frame-image FITS extensions in output master flat:
@@ -604,9 +604,14 @@ class MasterFlatFramework(KPF0_Primitive):
             del master_holder.header['GREEN_CCD']['OSCANV2']
             del master_holder.header['GREEN_CCD']['OSCANV3']
             del master_holder.header['GREEN_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
+
+        try:
             del master_holder.header['RED_CCD']['OSCANV1']
             del master_holder.header['RED_CCD']['OSCANV2']
-
+            del master_holder.header['RED_CCD']['OSCANV3']
+            del master_holder.header['RED_CCD']['OSCANV4']
         except KeyError as err:
             pass
 
@@ -615,7 +620,7 @@ class MasterFlatFramework(KPF0_Primitive):
             master_holder.header[ffi]['BUNIT'] = ('Dimensionless','Units of master flat')
             master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['GAUSSSIG'] = (self.gaussian_filter_sigma,'2-D Gaussian-smoother sigma (pixels)')
-            master_holder.header[ffi]['LOWLTLIM'] = (self.low_light_limit,'Low-light limit (DN)')
+            master_holder.header[ffi]['LOWLTLIM'] = (self.low_light_limit,'Low-light limit (electrons)')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of flat observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of flat observations')
@@ -660,10 +665,10 @@ class MasterFlatFramework(KPF0_Primitive):
             master_holder.header[ffi_cnt_ext_name]['BUNIT'] = ('Count','Number of stack samples')
 
             ffi_stack_ext_name = ffi + '_STACK'
-            master_holder.header[ffi_stack_ext_name]['BUNIT'] = ('DN/sec','Stacked-data mean per exposure time')
+            master_holder.header[ffi_stack_ext_name]['BUNIT'] = ('electrons/sec','Stacked-data mean per exposure time')
 
             ffi_lamp_ext_name = ffi + '_LAMP'
-            master_holder.header[ffi_lamp_ext_name]['BUNIT'] = ('DN/sec','Lamp pattern per exposure time')
+            master_holder.header[ffi_lamp_ext_name]['BUNIT'] = ('electrons/sec','Lamp pattern per exposure time')
 
             if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
                 master_holder.header[ffi]['ORDRMASK'] = self.ordermask_path
