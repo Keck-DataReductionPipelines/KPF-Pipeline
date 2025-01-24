@@ -302,7 +302,7 @@ class MasterBiasFramework(KPF0_Primitive):
             master_holder.header[ffi]['BIT02'] = ('2**2 = 4', 'CA_HK" has gt 1% pixels with lt 10 samples')
 
             ffi_unc_ext_name = ffi + '_UNC'
-            master_holder.header[ffi_unc_ext_name]['BUNIT'] = ('DN','Units of master-bias uncertainty')
+            master_holder.header[ffi_unc_ext_name]['BUNIT'] = ('electrons','Units of master-bias uncertainty')
 
             ffi_cnt_ext_name = ffi + '_CNT'
             master_holder.header[ffi_cnt_ext_name]['BUNIT'] = ('Count','Number of stack samples')
