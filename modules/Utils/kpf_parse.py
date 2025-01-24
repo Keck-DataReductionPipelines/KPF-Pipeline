@@ -320,7 +320,7 @@ def get_data_products_expected(kpf_object, data_level):
     Returns:
         array of data expected data products
     """
-    primary_header = HeaderParse(kpf_object, 'PRIMARY').header
+    primary_header = HeaderParse(kpf_object, 'PRIMARY')
     header = primary_header.header
     name = primary_header.get_name() # 'Star','Sun','LFC', etc.
     data_products = ['Telemetry']
@@ -348,7 +348,7 @@ def get_data_products_expected(kpf_object, data_level):
             if data_level in ['L2']:
                 if name in ['Star', 'Sun']:
                     data_products.append('Activity') # need a better way to determine (what about FWHM, etc.)
-    if 'EXPMETER' in header:
+    if ('EXPMETER' in header) or ('EXPMETER_SCI' in header) or ('EXPMETER_SKY' in header):
         if header['EXPMETER'] == 'YES':
             if data_level in ['L0', '2D']:
                 data_products.append('ExpMeter')
