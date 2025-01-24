@@ -13,7 +13,7 @@ panel_arr:
           linewidth: 0.5
           color: royalblue
     paneldict:
-      title: Etalon RVs
+      title: SoCal RVs
       ylabel: "Green+Red\nSoCal $\\Delta$RV (m/s)"
       subtractmedian: true
       only_object: 
@@ -33,7 +33,7 @@ panel_arr:
           linewidth: 0.5
           color: forestgreen
     paneldict:
-      title: Etalon RVs
+      title: SoCal RVs
       ylabel: "Green\nSoCal $\\Delta$RV (m/s)"
       subtractmedian: true
       only_object: 
@@ -53,7 +53,7 @@ panel_arr:
           linewidth: 0.5
           color: firebrick
     paneldict:
-      title: Etalon RVs
+      title: SoCal RVs
       ylabel: "Red\nSoCal $\\Delta$RV (m/s)"
       subtractmedian: true
       narrow_xlim_daily: true

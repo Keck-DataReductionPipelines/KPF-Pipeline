@@ -1,0 +1,71 @@
+description: autocal-flat-all Relative Flux Ratio
+plot_type: time_series_multipanel
+panel_arr:
+
+  - panelvars:
+      - col: FR452652
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: "Relative Flux Ratio\n(452/652nm)"
+          marker: .
+          linewidth: 0.5
+          color: darkviolet
+    paneldict:
+      ylabel: "Relative Flux Ratio\n(SCI2)"
+      title: autocal-flat-all SNR & Flux Ratio
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: FR548652
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: "Relative Flux Ratio\n(548/652nm)"
+          marker: .
+          linewidth: 0.5
+          color: blue
+    paneldict:
+      ylabel: "Relative Flux Ratio\n(SCI2)"
+      title: autocal-flat-all SNR & Flux Ratio
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: FR747652
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: "Relative Flux Ratio\n(747/652nm)"
+          marker: .
+          linewidth: 0.5
+          color: orange
+    paneldict:
+      ylabel: "Relative Flux Ratio\n(SCI2)"
+      title: autocal-flat-all SNR & Flux Ratio
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: FR852652
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: "Relative Flux Ratio\n(852/652nm)"
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      ylabel: Flux Ratio (SCI2)
+      title: autocal-flat-all Relative Flux ((Flux Ratio)/median(Flux Ratio))
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30

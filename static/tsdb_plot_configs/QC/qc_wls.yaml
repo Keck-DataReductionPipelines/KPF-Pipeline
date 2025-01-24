@@ -1,0 +1,13 @@
+description: QC - Wavelength Solution Metrics
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: WLSL1
+        plot_type: state
+        plot_attr:
+          label: "L1 Wavelength Solution\nFiles Pass Sanity Checks"
+          marker: .
+    paneldict:
+      ylabel: "L1 Wavelength Solution\nFiles Pass Sanity Checks\n(WLSL1)"
+      legend_frac_size: 0.15
+

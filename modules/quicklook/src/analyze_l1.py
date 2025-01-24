@@ -1,11 +1,14 @@
 import time
+import traceback
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, timedelta
 from modules.Utils.utils import DummyLogger
+from astropy.time import Time
 from matplotlib import gridspec
 from matplotlib.ticker import MaxNLocator
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import get_datecode_from_filename
 from scipy.interpolate import interp1d
 from scipy.interpolate import make_interp_spline
 
@@ -80,7 +83,53 @@ class AnalyzeL1:
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
+
+
+    def measure_WLS_age(self, kwd='WLSFILE', verbose=False):
+        '''
+        Computes the number of days between the observation and the
+        date of observations for the WLS files.  The age assumes the 
+        following times for autocal calibrations:
+            morn     = 18:48 UT  (HST morning cals)
+            midnight = 09:30 UT  (HST midnight cals)
+            eve      = 03:30 UT  (HST evening cals)
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 'WLSFILE' or 'WLSFILE2')
+    
+        Returns:
+            age_wls_file - number of days between the observation and the
+                           date of observations for the WLS files
+        '''
+
+        date_mjd_str = self.header['MJD-OBS']
+        date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
+        if verbose:
+            self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
+        try:
+            wls_filename = self.header[kwd]
+            wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
+            if "morn" in wls_filename:
+                wls_filename_datetime += timedelta(hours=18.8)
+            elif "eve" in wls_filename:
+                wls_filename_datetime += timedelta(hours=3.5)
+            elif "midnight" in wls_filename:
+                wls_filename_datetime += timedelta(hours=9.5)
+            if verbose:
+                self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+
+            age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+
+            if verbose:
+                self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
+
+            return age_wls_file
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
         """

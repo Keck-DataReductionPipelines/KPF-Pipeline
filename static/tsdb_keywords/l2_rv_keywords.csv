@@ -12,7 +12,7 @@ CCD1RVS|float|RV of SKY (all Green orders); bcvel corrected|km/s
 CCD1ERVS|float|Error on CCD1RVS|km/s
 CCD1RV|float|RV of avg(SCI1/SCI2/SCI3), all Green orders; bcvel corr'd|km/s
 CCD1ERV|float|Error on CCD1RV|km/s
-CCD1BJD|float|Photon-weighted mid-time (BJD) for CCD1RV|km/s
+CCD1BJD|float|Photon-weighted mid-time (BJD) for CCD1RV|days
 CCD2ROW|float|Row number in RV table of bluest order on Red CCD|km/s
 CCD2RV1|float|RV of SCI1 (all Red orders); bcvel corrected|km/s
 CCD2ERV1|float|Error on CCD2RV1|km/s
@@ -26,4 +26,4 @@ CCD2RVS|float|RV of SKY (all Red orders); bcvel corrected|km/s
 CCD2ERVS|float|Error on CCD2RVS|km/s
 CCD2RV|float|RV of avg(SCI1/SCI2/SCI3), all Red orders; bcvel corr'd|km/s
 CCD2ERV|float|Error on CCD2RV|km/s
-CCD2BJD|float|Photon-weighted mid-time (BJD) for CCD2RV|BJD
+CCD2BJD|float|Photon-weighted mid-time (BJD) for CCD2RV|days
