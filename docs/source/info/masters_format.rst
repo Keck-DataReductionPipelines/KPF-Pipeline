@@ -309,14 +309,14 @@ frames are stacked in this example.
 Two important master files that are required as inputs to the generation of a master flat are
 the master order mask and the master smooth lamp.  Normally these files are only updated when instrument
 characteristics change.  These are given by the ``ORDRMASK`` and ``LAMPPATT`` FITS-header keywords, and are discussed in more
-detail in sections that follow.  These two relatively static files are kept in the /data/reference_fits directory the shrek machine.
+detail in sections that follow.  These two relatively static files are kept in the ``/data/reference_fits`` directory on the shrek machine.
 
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
 
-A new master smooth lamp is made daily from the data taken on the corresponding observation date,
-for reference purposes (in /data/kpf/masters/<yyyymmdd> on the shrek machine), but the master smooth
+A new master smooth lamp is made daily from the data taken on the corresponding observation date
+for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
 lamp that is used to create a master flat is relatively static and only updated when instrument
 characteristics change (say, on the time scale of months).
 
@@ -326,8 +326,8 @@ Master Order Mask (Trace)
 
 Generally, the master order mask is relatively static and generated from master order-trace files for GREEN and RED
 only periodically.
-New master order-trace files for GREEN and RED are made daily from the data taken on the corresponding observation date,
-for reference purposes (in /data/kpf/masters/<yyyymmdd> on the shrek machine),
+New master order-trace files for GREEN and RED are made daily from the data taken on the corresponding observation date
+for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine),
 but these are only used to create a new master order mask for the generation of daily master flats
 when the instrument characteristics change (say, on the time scale of months).
 
