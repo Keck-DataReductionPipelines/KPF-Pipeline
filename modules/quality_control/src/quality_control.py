@@ -190,6 +190,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
         for qc_name in qc_obj.qcdefinitions.names:
             if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
                 qc_names.append(qc_name)
+        print(qc_names)
 
         # Run the QC tests and add result keyword to header
         primary_header = HeaderParse(kpf_object, 'PRIMARY')
@@ -401,9 +402,9 @@ class QCDefinitions:
         self.db_columns[name5b] = None
         self.fits_keyword_fail_value[name5b] = 0
 
-        name6 = 'exposure_meter_not_saturated'
+        name6 = 'EM_not_saturated'
         self.names.append(name6)
-        self.kpf_data_levels[name6] = ['L0']
+        self.kpf_data_levels[name6] = ['L0', '2D']
         self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
@@ -414,9 +415,9 @@ class QCDefinitions:
         self.db_columns[name6] = None
         self.fits_keyword_fail_value[name6] = 0
 
-        name7 = 'exposure_meter_flux_not_negative'
+        name7 = 'EM_flux_not_negative'
         self.names.append(name7)
-        self.kpf_data_levels[name7] = ['L0']
+        self.kpf_data_levels[name7] = ['L0', '2D']
         self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
@@ -486,7 +487,7 @@ class QCDefinitions:
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
-        self.required_data_products[name12] = ['HK'] 
+        self.required_data_products[name12] = ['CaHK'] 
         self.fits_keywords[name12] = 'CAHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
@@ -512,7 +513,7 @@ class QCDefinitions:
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
-        self.required_data_products[name14] = ['HK'] 
+        self.required_data_products[name14] = ['CaHK'] 
         self.fits_keywords[name14] = 'CAHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
@@ -559,27 +560,27 @@ class QCDefinitions:
 
         name19 = 'L1_check_snr_lfc'
         self.names.append(name19)
-        self.kpf_data_levels[name19] = ['L1']#, '2D', 'L1', 'L2']
-        self.descriptions[name19] = 'QC test for identifying saturated LFC frames.'
-        self.data_types[name19] = 'float'
-        self.spectrum_types[name19] = ['all', ]
-        self.master_types[name19] = ['lfc', ]
-        self.required_data_products[name19] = ['L1',] # no required data products
+        self.kpf_data_levels[name19] = ['L1']
+        self.descriptions[name19] = 'Check for saturated LFC frames.'
+        self.data_types[name19] = 'int'
+        self.spectrum_types[name19] = ['LFC', ]
+        self.master_types[name19] = ['LFC', ]
+        self.required_data_products[name19] = [] # no required data products
         self.fits_keywords[name19] = 'LFCSAT'
-        self.fits_comments[name19] = 'LFC is saturated'
+        self.fits_comments[name19] = 'LFC is not saturated'
         self.db_columns[name19] = None
         self.fits_keyword_fail_value[name19] = 0
 
         name18 = 'L0_bad_readout_check'
         self.names.append(name18)
-        self.kpf_data_levels[name18] = ['L0']#, '2D', 'L1', 'L2']
-        self.descriptions[name18] = 'Check Texp that identifies error in reading out CCD'
-        self.data_types[name18] = 'float'
+        self.kpf_data_levels[name18] = ['L0', '2D']
+        self.descriptions[name18] = 'Check Texp that identifies error in reading CCD'
+        self.data_types[name18] = 'int'
         self.spectrum_types[name18] = ['all', ]
         self.master_types[name18] = ['all', ]
         self.required_data_products[name18] = [] # no required data products
-        self.fits_keywords[name18] = 'GOODREAD'  
-        self.fits_comments[name18] = 'QC: CCD readout properly'
+        self.fits_keywords[name18] = 'GOODREAD'
+        self.fits_comments[name18] = 'QC: CCD read properly'
         self.db_columns[name18] = None
         self.fits_keyword_fail_value[name18] = 0
 
@@ -601,7 +602,7 @@ class QCDefinitions:
         self.kpf_data_levels[name21] = ['2D']
         self.descriptions[name21] = 'Check master dark file age'
         self.data_types[name21] = 'int'
-        self.spectrum_types[name21] = ['all', ]
+        self.spectrum_types[name21] = ['Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name21] = []
         self.required_data_products[name21] = [] # no required data products
         self.fits_keywords[name21] = 'OLDBIAS'
@@ -614,7 +615,7 @@ class QCDefinitions:
         self.kpf_data_levels[name23] = ['2D']
         self.descriptions[name23] = 'Check master dark file age'
         self.data_types[name23] = 'int'
-        self.spectrum_types[name23] = ['all', ]
+        self.spectrum_types[name23] = ['Bias', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name23] = []
         self.required_data_products[name23] = [] # no required data products
         self.fits_keywords[name23] = 'OLDDARK'
@@ -627,7 +628,7 @@ class QCDefinitions:
         self.kpf_data_levels[name24] = ['2D']
         self.descriptions[name24] = 'Check master flat file age'
         self.data_types[name24] = 'int'
-        self.spectrum_types[name24] = ['all', ]
+        self.spectrum_types[name24] = ['Bias', 'Dark', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name24] = []
         self.required_data_products[name24] = [] # no required data products
         self.fits_keywords[name24] = 'OLDFLAT'
@@ -1229,7 +1230,7 @@ class QCL0(QC):
         return QC_pass    
 
 
-    def exposure_meter_not_saturated(self, debug=False):
+    def EM_not_saturated(self, debug=False):
         """
         This Quality Control function checks if 2 or more reduced pixels in an exposure
         meter spectrum is within 90% of saturated.  The check is applied to the EM-SCI 
@@ -1302,7 +1303,7 @@ class QCL0(QC):
         return QC_pass
 
 
-    def exposure_meter_flux_not_negative(self, debug=False):
+    def EM_flux_not_negative(self, debug=False):
         """
         This Quality Control function checks if 20 or more consecutive elements of the 
         exposure meter spectra are negative.  Negative flux usually indicates 
@@ -1998,7 +1999,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def data_L1_CaHK(self,debug=False):
+    def data_L1_CaHK(self, debug=False):
         """
         This Quality Control function checks if the green and red data
         are present in an L1 file, and that all array sizes are as expected.
@@ -2051,38 +2052,32 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_check_snr_lfc(L1, data_products=['auto']):
+    def L1_check_snr_lfc(self, SNR_limit=2800):
         """
         This Quality Control function checks checks the SNR of
         LFC frames, marking satured frames as failing the test.
         
         Args:
-            L1 - an L1 object
-            data_products - L1 data_products to check (list)
-            
-            This file should pass: KP.20240711.11549.10_L1.fits
-            This file should fail: KP.20240506.33962.36_L1.fits
+            SNR_limit - max allowable SNR at two wavelengths (548 Ang and 747 Ang)
         Returns:
             QC_pass - a boolean signifying that the QC passed or failed
         """
 
         try:
-            # Check L1 header
-            # SNR_452 = L1.header['PRIMARY']['SNRSC452'] # Not used for LFC
-            SNR_548 = L1.header['PRIMARY']['SNRSC548'] # 
-            # SNR_652 = L1.header['PRIMARY']['SNRSC652'] # # Not used for LFC
-            SNR_747 = L1.header['PRIMARY']['SNRSC747'] # 
-            object_name  = L1.header['PRIMARY']['OBJECT']
-    
-            if object_name in 'autocal-lfc':
-                SNR_limit = 2800 # Optimistic limit. Could be lower.
-                if (SNR_548 >= SNR_limit) or (SNR_747 >= SNR_limit):
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            myL1.measure_L1_snr(snr_percentile=95)
+            SNR_452 = myL1.GREEN_SNR[1,-1]  # SNRSC452 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 452 nm (second bluest order); on Green CCD
+            SNR_548 = myL1.GREEN_SNR[25,-1] # SNRSC548 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 548 nm; on Green CCD
+            SNR_652 = myL1.RED_SNR[8,-1]    # SNRSC652 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 652 nm; on Red CCD
+            SNR_747 = myL1.RED_SNR[20,-1]   # SNRSC747 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 747 nm; on Red CCD
+            SNR_852 = myL1.RED_SNR[30,-1]   # SNRSC852 - SNR of L1 SCI spectrum (SCI1+SCI2+SCI3) near 852 nm (second reddest order); on Red CCD
+
+            QC_pass = True
+            for SNR in [SNR_452, SNR_548, SNR_652, SNR_747, SNR_852]:
+                if SNR >= SNR_limit:
                     QC_pass = False
-                else:
-                    QC_pass = True
-            else:
-                QC_pass = True
-            
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
