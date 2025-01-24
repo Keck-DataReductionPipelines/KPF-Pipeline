@@ -67,3 +67,8 @@ WLSL1|bool|QC: L1 WLS file check passed|None
 LFCSAT|bool|QC: L1 LFC spectrum not saturated|None
 OLDWLS|bool|QC: WLSFILE within 2 days of this obs|None
 OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None
+AGEBIAS|float|BIASFILE age (whole days)|None
+AGEDARK|float|DARKFILE age (whole days)|None
+AGEFLAT|float|FLATFILE age (whole days)|None
+AGEWLS|float|WLSFILE approx age (days)|None
+AGEWLS2|float|WLSFILE2 approx age (days)|None
