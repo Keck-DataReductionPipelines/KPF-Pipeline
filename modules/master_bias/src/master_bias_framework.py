@@ -268,11 +268,14 @@ class MasterBiasFramework(KPF0_Primitive):
             del master_holder.header['GREEN_CCD']['OSCANV2']
             del master_holder.header['GREEN_CCD']['OSCANV3']
             del master_holder.header['GREEN_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
+
+        try:
             del master_holder.header['RED_CCD']['OSCANV1']
             del master_holder.header['RED_CCD']['OSCANV2']
             del master_holder.header['RED_CCD']['OSCANV3']
             del master_holder.header['RED_CCD']['OSCANV4']
-
         except KeyError as err:
             pass
 
