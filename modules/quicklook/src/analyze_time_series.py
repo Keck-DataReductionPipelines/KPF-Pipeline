@@ -1583,7 +1583,8 @@ class AnalyzeTimeSeries:
                     for state in unique_states:
                         color = color_map[state]
                         indices = [i for i, s in enumerate(states) if s == state]
-                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
+                        label_text = f"{state} ({len(indices)})"
+                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=label_text)
                     axs[p].set_yticks(range(len(unique_states)))
                     axs[p].set_yticklabels(unique_states)
                 
