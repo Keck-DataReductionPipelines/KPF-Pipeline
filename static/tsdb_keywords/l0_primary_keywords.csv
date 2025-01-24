@@ -32,9 +32,9 @@ AGITSTA|string|Agigator state (Running/Stopped)|None
 FIUMODE|string|FIU operating mode - Observing = on-sky|None
 ETAV1C1T|float|Etalon housing temp (Vescent 1 Channel 1)|C
 ETAV1C2T|float|Etalon inner side shield temp (Vescent 1 Channel 2)|C
-ETAV1C3T|float|Etalon inner bottom lid (Vescent 1 Channel 3)|C
-ETAV1C4T|float|Etalon outer etalon chamber (Vescent 1 Channel 4)|C
-ETAV2C3T|float|Etalon inner top lid (Vescent 2 Channel 3)|C
+ETAV1C3T|float|Etalon inner bottom lid temp (Vescent 1 Channel 3)|C
+ETAV1C4T|float|Etalon outer etalon chamber temp (Vescent 1 Channel 4)|C
+ETAV2C3T|float|Etalon inner top lid temp (Vescent 2 Channel 3)|C
 WAVEBNS|float|Wavelengths of EM bins (string of four vals)|nm
 TOTCNTS|float|Total EM counts in WAVEBINS|counts
 TOTCORR|string|Total EM counts (corrected) in WAVEBINS|counts
@@ -62,4 +62,4 @@ TARGTEFF|float|Target effective temp|K
 RA|string|Right ascension|hr
 DEC|string|Declination|deg
 EQUINOX|float|DCS Equinox|None
-MJD-OBS|float|Modified Julian day of the observation start|None
+MJD-OBS|float|Modified Julian day of the observation start|days

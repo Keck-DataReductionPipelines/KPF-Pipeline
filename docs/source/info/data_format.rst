@@ -205,12 +205,19 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
 DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used for processing
-NOTJUNK   1                                           Quality Control: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
-DATAPRL0  1                                           Quality Control: 1 = L0 data products present with non-zero array sizes
-KWRDPRL0  1                                           Quality Control: 1 = L0 expected keywords present 
-TIMCHKL0  1                                           Quality Control: 1 = consistent times in L0 file
-EMSAT     1                                           Quality Control: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
-EMNEG     1                                           Quality Control: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
+NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
+DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
+KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
+TIMCHKL0  1                                           QC: 1 = consistent times in L0 file
+EMSAT     1                                           QC: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
+EMNEG     1                                           QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
+DATAPR2D  1                                           QC: 1 = 2D data products present with non-zero array sizes
+CAHKPR2D  1                                           QC: 1 = 2D CaHK data present with non-zero array sizes
+GOODREAD  1                                           QC: 1 = Exposure time not consistent with CCD readout error (~6 sec)
+POS2DSNR  1                                           QC: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
+LOWBIAS   1                                           QC: 1 = 2D bias flux not low
+LOWDARK   1                                           QC: 1 = 2D dark flux not low
+LFC2DFOK  1                                           QC: 1 = LFC flux meets threshold of 4000 counts
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -295,6 +302,9 @@ HK2DF99P  62520.97                                    99th percentile flux in th
 HK2DF90P  40589.16                                    90th percentile flux in the 2D header (e-)
 HK2DF50P  613.23                                      50th percentile flux in the 2D header (e-)
 HK2DF10P  128.83                                      10th percentile flux in the 2D header (e-)
+AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
+AGEDARK   0                                           Age of master dark file compared to this file (whole days)
+AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -317,74 +327,78 @@ L1 Primary Extension Header
 
 The L1 file inherits all L0 and 2D keywords.  Below are additional important keywords.
 
-========  ======================================================================  =========
-Keyword   Value (example)                                                         Comment
-========  ======================================================================  =========
-WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-thar-all-eve_L1.fits  Wavelength solution file used for this L1 file
-MONOTWLS  1                                                                       Quality Control: 1 = L1 wavelength solution is monotonic
-SNRSC452  250.0                                                                   SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
-SNRSK452  250.0                                                                   SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
-SNRCL452  250.0                                                                   SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
-SNRSC548  250.0                                                                   SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
-SNRSK548  250.0                                                                   SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
-SNRCL548  250.0                                                                   SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
-SNRSC652  250.0                                                                   SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 652 nm; on Red CCD
-SNRSK652  250.0                                                                   SNR of L1 SKY spectrum (95th %ile) near 652 nm; on Red CCD
-SNRCL652  250.0                                                                   SNR of L1 CAL spectrum (95th %ile) near 652 nm; on Red CCD
-SNRSC747  250.0                                                                   SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
-SNRSK747  250.0                                                                   SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
-SNRCL747  250.0                                                                   SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
-SNRSC852  250.0                                                                   SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
-SNRSK852  250.0                                                                   SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
-SNRCL852  250.0                                                                   SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
-FR452652  1.2345                                                                  Peak flux ratio between orders (452nm/652nm) using SCI2
-FR548652  1.2345                                                                  Peak flux ratio between orders (548nm/652nm) using SCI2
-FR747652  1.2345                                                                  Peak flux ratio between orders (747nm/652nm) using SCI2
-FR852652  1.2345                                                                  Peak flux ratio between orders (852nm/652nm) using SCI2
-FR12M452  0.9000                                                                  median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
-FR12U452  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
-FR32M452  0.9000                                                                  median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
-FR32U452  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
-FRS2M452  0.9000                                                                  median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
-FRS2U452  0.0010                                                                  uncertainty on the median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
-FRC2M452  0.9000                                                                  median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
-FRC2U452  0.0010                                                                  uncertainty on the median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
-FR12M548  0.9000                                                                  median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
-FR12U548  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
-FR32M548  0.9000                                                                  median(SCI3/SCI2) flux ratio near 548 nm; on Green CCD
-FR32U548  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
-FRS2M548  0.9000                                                                  median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
-FRS2U548  0.0010                                                                  uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
-FRC2M548  0.9000                                                                  median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
-FRC2U548  0.0010                                                                  uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
-FR12M652  0.9000                                                                  median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
-FR12U652  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
-FR32M652  0.9000                                                                  median(SCI3/SCI2) flux ratio near 652 nm; on Red CCD
-FR32U652  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
-FRS2M652  0.9000                                                                  median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
-FRS2U652  0.0010                                                                  uncertainty on the median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
-FRC2M652  0.9000                                                                  median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
-FRC2U652  0.0010                                                                  uncertainty on the median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
-FR12M747  0.9000                                                                  median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
-FR12U747  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
-FR32M747  0.9000                                                                  median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
-FR32U747  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
-FRS2M747  0.9000                                                                  median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
-FRS2U747  0.0010                                                                  uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
-FRC2M747  0.9000                                                                  median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
-FRC2U747  0.0010                                                                  uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
-FR12M852  0.9000                                                                  median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
-FR12U852  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
-FR32M852  0.9000                                                                  median(SCI3/SCI2) flux ratio near 852 nm; on Red CCD
-FR32U852  0.0010                                                                  uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
-FRS2M852  0.9000                                                                  median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
-FRS2U852  0.0010                                                                  uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
-FRC2M852  0.9000                                                                  median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-FRC2U852  0.0010                                                                  uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-DATAPR2D  1                                                                       Quality Control: 1 = 2D red and green data present
-MONOTWLS  1                                                                       Quality Control: 1 = Monotonic wavelength-solution
-DATAPRL1  1                                                                       Quality Control: 1 = L1 red and green data present
-========  ======================================================================  =========
+========  =======================================================================  =========
+Keyword   Value (example)                                                          Comment
+========  =======================================================================  =========
+WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
+WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
+MONOTWLS  1                                                                        QC: 1 = L1 wavelength solution is monotonic
+DATAPRL1  1                                                                        QC: 1 = L1 red and green data present
+CAHKPRL1  1                                                                        QC: 1 = CaHK data present in L1 with expected shape
+WLSL1     1                                                                        QC: 1 = L1 WLS file check passed
+LFCSAT    1                                                                        QC: 1 = L1 LFC spectrum not saturated
+SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
+SNRSC548  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 548 nm; on Green CCD
+SNRSK548  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 548 nm; on Green CCD
+SNRCL548  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 548 nm; on Green CCD
+SNRSC652  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 652 nm; on Red CCD
+SNRSK652  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 652 nm; on Red CCD
+SNRCL652  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 652 nm; on Red CCD
+SNRSC747  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 747 nm; on Red CCD
+SNRSK747  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 747 nm; on Red CCD
+SNRCL747  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 747 nm; on Red CCD
+SNRSC852  250.0                                                                    SNR of L1 SCI (SCI1+SCI2+SCI3; 95th %ile) near 852 nm (second reddest order); on Red CCD
+SNRSK852  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+SNRCL852  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 852 nm (second reddest order); on Red CCD
+FR452652  1.2345                                                                   Peak flux ratio between orders (452nm/652nm) using SCI2
+FR548652  1.2345                                                                   Peak flux ratio between orders (548nm/652nm) using SCI2
+FR747652  1.2345                                                                   Peak flux ratio between orders (747nm/652nm) using SCI2
+FR852652  1.2345                                                                   Peak flux ratio between orders (852nm/652nm) using SCI2
+FR12M452  0.9000                                                                   median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FR12U452  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FR32M452  0.9000                                                                   median(SCI3/SCI2) flux ratio near 452 nm; on Green CCD
+FR32U452  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 452 nm; on Green CCD
+FRS2M452  0.9000                                                                   median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+FRS2U452  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 452 nm; on Green CCD
+FRC2M452  0.9000                                                                   median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+FRC2U452  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 452 nm; on Green CCD
+FR12M548  0.9000                                                                   median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FR12U548  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FR32M548  0.9000                                                                   median(SCI3/SCI2) flux ratio near 548 nm; on Green CCD
+FR32U548  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 548 nm; on Green CCD
+FRS2M548  0.9000                                                                   median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+FRS2U548  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 548 nm; on Green CCD
+FRC2M548  0.9000                                                                   median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+FRC2U548  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 548 nm; on Green CCD
+FR12M652  0.9000                                                                   median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FR12U652  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FR32M652  0.9000                                                                   median(SCI3/SCI2) flux ratio near 652 nm; on Red CCD
+FR32U652  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 652 nm; on Red CCD
+FRS2M652  0.9000                                                                   median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+FRS2U652  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 652 nm; on Red CCD
+FRC2M652  0.9000                                                                   median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+FRC2U652  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 652 nm; on Red CCD
+FR12M747  0.9000                                                                   median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FR12U747  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FR32M747  0.9000                                                                   median(SCI3/SCI2) flux ratio near 747 nm; on Red CCD
+FR32U747  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 747 nm; on Red CCD
+FRS2M747  0.9000                                                                   median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+FRS2U747  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 747 nm; on Red CCD
+FRC2M747  0.9000                                                                   median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+FRC2U747  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 747 nm; on Red CCD
+FR12M852  0.9000                                                                   median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FR12U852  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FR32M852  0.9000                                                                   median(SCI3/SCI2) flux ratio near 852 nm; on Red CCD
+FR32U852  0.0010                                                                   uncertainty on the median(SCI1/SCI2) flux ratio near 852 nm; on Red CCD
+FRS2M852  0.9000                                                                   median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+FRS2U852  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
+FRC2M852  0.9000                                                                   median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+FRC2U852  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
+AGEWLS2   0.1419343333333333                                                       Approx age of WLSFILE2 compared to this file (days)
+========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
 
@@ -401,18 +415,23 @@ Keywords related to orderlet flux ratios (e.g., FR12M452 and its uncertainty FR1
 L2 Primary Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The L2 file inherits all Level 0, 2D, and Level 1 keywords.  Below are additional important keywords.
+The L2 file inherits all L0, 2D, and L1 keywords.  Below are additional important keywords.
 
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
-TIMCHKL2  1                                           Quality Control: 1 = consistent times in L2 file
-DATAPRL2  1                                           Quality Control: 1 = L2 data is present
+CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
+CCFERV    0.001175044                                 Error on CCFRV
+CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table
+CCFERVC   0.001175044                                 Error on CCFRVC
+CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
+CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
+TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
+DATAPRL2  1                                           QC: 1 = L2 data is present
 ========  ==========================================  =========
 
 Radial Velocities
 -----------------
-
 
 L2 RV Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -431,10 +450,6 @@ To-do, add notes on:
 =============  =================  =========
 Keyword        Value (example)    Comment
 =============  =================  =========
-CCFRV          19.4247572623      Average of CCD1RV and CCD2RV using weights from RV table
-CCFERV         0.001175044        Error on CCFRV
-CCFRVC         19.4247572623      Average of CCD1RVC and CCD2RVC using weights from RV table
-CCFERVC        0.001175044        Error on CCFRVC
 CCD1ROW        0                  Row number in the RV table (below) of the bluest order on the Green CCD
 CCD1RV1        19.4247572623      RV (km/s) of SCI1 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV1       0.0013815112       Error on CCD1RV1

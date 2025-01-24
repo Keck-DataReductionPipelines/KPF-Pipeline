@@ -76,15 +76,18 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
             end_date   = None # (now - timedelta(days=366)).replace(hour=0, minute=0, second=0, microsecond=0)
             time_range_type =  time_range_type
         elif date_range == 'this_day':
-            start_date = (now - timedelta(days=3)).replace(hour=0, minute=0, second=0, microsecond=0)
+            start_date = (now - timedelta(days=15)).replace(hour=0, minute=0, second=0, microsecond=0)
+            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
             end_date   =  now
             time_range_type =  time_range_type
         elif date_range == 'this_month':
             start_date = (now - timedelta(days=31)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
             end_date   = now
             time_range_type = time_range_type
         elif date_range == 'this_year':
             start_date = (now - timedelta(days=366)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
             end_date   =  now
             time_range_type = time_range_type
         elif date_range == 'last_10_days':
@@ -172,7 +175,7 @@ def generate_plots(start_date=None, end_date=None,
         for month in months:
             try:
                 if base_dir != None:
-                    savedir = base_dir + month.strftime("%Y%m") + '00/Time_Series/'
+                    savedir = base_dir + month.strftime("%Y%m") + 'M/Time_Series/'
                 else:
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
@@ -186,7 +189,7 @@ def generate_plots(start_date=None, end_date=None,
         for year in years:
             try:
                 if base_dir != None:
-                    savedir = base_dir + year.strftime("%Y") + '0000/Time_Series/'
+                    savedir = base_dir + year.strftime("%Y") + 'Y/Time_Series/'
                 else:
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
@@ -200,7 +203,7 @@ def generate_plots(start_date=None, end_date=None,
         for decade in decades:
             try:
                 if base_dir != None:
-                    savedir = base_dir + decade.strftime("%Y")[0:3] + '00000/Time_Series/' 
+                    savedir = base_dir + decade.strftime("%Y")[0:3] + '0D/Time_Series/' 
                 else:
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
@@ -230,10 +233,10 @@ if __name__ == "__main__":
 # For now, only one thread is active because of a non-tread-safe issue with fonts in the version of matplotlib that we use
     tasks = [
         {"thread_name": "Today Thread",       "interval":    3600, "time_range_type": "day",    "date_range": 'this_day'},
-#        {"thread_name": "This Month Thread",  "interval":    3600, "time_range_type": "month",  "date_range": 'this_month'},
+#        {"thread_name": "This Month Thread",  "interval": 12*3600, "time_range_type": "month",  "date_range": 'this_month'},
 #        {"thread_name": "This Year Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": 'this_year'},
 #        {"thread_name": "All Days Thread",    "interval": 96*3600, "time_range_type": "day",    "date_range": 'all_days'},
-#        {"thread_name": "All Months Thread",  "interval": 24*3600, "time_range_type": "month",  "date_range": 'all_months'},
+#        {"thread_name": "All Months Thread",  "interval": 2*3600, "time_range_type": "month",  "date_range": 'all_months'},
 #        {"thread_name": "All Years Thread",   "interval": 24*3600, "time_range_type": "year",   "date_range": 'all_years'},
 #        {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
     ]
@@ -244,9 +247,9 @@ if __name__ == "__main__":
         thread.start_time = datetime.now()  
         thread.start()  
         threads.append(thread)
-        time.sleep(10)
+        time.sleep(20)
 
-    monitor_thread_sleep_time = 300 # seconds
+    monitor_thread_sleep_time = 3600 # seconds
     monitor_thread = Thread(target=monitor_threads, args=(threads, monitor_thread_sleep_time))
     monitor_thread.start()
 
