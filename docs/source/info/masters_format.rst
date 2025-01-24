@@ -4,7 +4,7 @@ KPF Calibration-Masters Data Format
 Overview
 --------
 
-KPF master calibration-file products, made by combining subsets of input L0 image data,
+KPF master calibration-file products, made by combining similar subsets of input L0 image data,
 are defined for these data levels:
 
 * **2D**: Assembled CCD images with minimal processing.
@@ -23,7 +23,7 @@ The canonical location for persisted master files on the shrek machine is::
     /data/kpf/masters/yyyymmdd
 
 Less frequently, the masters for some or all observation dates are reprocessed to
-correct processing abnormalities or incorporate new features.
+fix bugs, correct processing abnormalities, or incorporate new features.
 
 The file-naming convention for 2D master calibration files generally adheres to the following prototype::
 
@@ -64,8 +64,10 @@ gives the reader an idea of what to expect)::
     autocal-thar-sky-eve
 
 The master flat and smooth-lamp filenames do not include the ``<object>`` placeholder by quirk of the software.
+
 The L1 and L2 master files have similar file names, but with '_L1', or '_L2' suffixes before the '.fits' filename extension.
-There are thus four exceptions to this general file-naming scheme, namely:
+
+There are four exceptions to this general file-naming scheme, namely:
 
 *  The 2D (no explicit suffix), L1, and L2 master-flat products have filenames like the following (no ``<object>`` placeholder)::
 
@@ -84,7 +86,7 @@ There are thus four exceptions to this general file-naming scheme, namely:
     kpf_<yyyymmdd>_master_flat_GREEN_CCD.csv
     kpf_<yyyymmdd>_master_flat_RED_CCD.csv
 
-* The etalon masks have filenames like the following (in the masks subdirectory, with derived ``<object>`` placeholder)::
+* The etalon wavelength masks have filenames like the following (CSV files instead of FITS, and in the masks subdirectory, with derived ``<object>`` placeholder broken down by fiber)::
 
     masks/<yyyymmdd>_eve_CAL_etalon_wavelengths.csv
     masks/<yyyymmdd>_eve_SCI1_etalon_wavelengths.csv
@@ -159,13 +161,70 @@ Here is an example of the keywords in the GREEN_CCD extension of master bias fil
     INFL4   = 'KP.20250122.61521.77_2D.fits'
     INFL5   = 'KP.20250122.61571.78_2D.fits'
 
-It includes useful metadata about the image stacking, including the specific input L0 FITS files.
+It includes useful metadata about the image stacking, including the specific input bias L0 FITS files.
+The input bias L0 FITS files are preprocessed to assemble the CCD images and subtract the overscan bias.
 
 
 Master Dark
 ^^^^^^^^^^^
 
-Add content here.
+A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data with
+``IMTYPE='Dark'`` and ``OBJECT='autocal-dark'`` observed on the same date.
+
+Here are the FITS extensions of interest in a 2D master-dark file:
+
+===================  =========  ==============  ==============  ========================================================
+Extension Name       Data Type  Data Dimension  Data Units      Description
+===================  =========  ==============  ==============  ========================================================
+GREEN_CCD            image      4080 x 4080     electrons/sec   Master dark image for GREEN
+RED_CCD              image      4080 x 4080     electrons/sec   Master dark image for RED
+CA_HK                image      1024 x 255      electrons/sec   Master dark image for CA_HK
+GREEN_CCD_UNC        image      4080 x 4080     electrons       Master dark-image uncertainty for GREEN
+GREEN_CCD_CNT        image      4080 x 4080     count           Master dark-image number of stack samples for GREEN
+RED_CCD_UNC          image      4080 x 4080     electrons       Master dark-image uncertainty for RED
+RED_CCD_CNT          image      4080 x 4080     count           Master dark-image number of stack samples for RED
+CA_HK_UNC            image      1024 x 255      electrons       Master dark-image uncertainty for CA_HK
+CA_HK_CNT            image      1024 x 255      count           Master dark-image number of stack samples for CA_HK
+===================  =========  ==============  ==============  ========================================================
+
+Here is an example of the keywords in the GREEN_CCD extension of master dark file
+``kpf_20250122_master_dark_autocal-dark.fits``::
+
+    ==================================================================================
+    HDU number and type = 4 and 0
+    Number of header cards in HDU = 27
+    ==================================================================================
+    XTENSION= 'IMAGE   '           / Image extension
+    BITPIX  =                  -64 / array data type
+    NAXIS   =                    2 / number of array dimensions
+    NAXIS1  =                 4080
+    NAXIS2  =                 4080
+    PCOUNT  =                    0 / number of parameters
+    GCOUNT  =                    1 / number of groups
+    BUNIT   = 'electrons/sec'      / Units of master dark
+    EXTNAME = 'GREEN_CCD'          / extension name
+    NFRAMES =                    5 / Number of frames in input stack
+    MINEXPTM=                300.0 / Minimum exposure time of input darks (seconds)
+    NSIGMA  =                  2.2 / Number of sigmas for data-clipping
+    MINMJD  =         60697.048439 / Minimum MJD of dark observations
+    MAXMJD  =         60697.916909 / Maximum MJD of dark observations
+    MIDMJD  =         60697.482674 / Middle MJD of dark observations
+    DATE-MID= '2025-01-22T11:35:03.034Z' / Middle timestamp of dark observations
+    INPBIAS = 'kpf_20250122_master_bias_autocal-bias.fits'
+    CREATED = '2025-01-23T03:08:44Z' / UTC of master-dark creation
+    INFOBITS=                    7 / Bit-wise flags defined below
+    BIT00   = '2**0 = 1'           / GREEN_CCD has gt 1% pixels with lt 10 samples
+    BIT01   = '2**1 = 2'           / RED_CCD has gt 1% pixels with lt 10 samples
+    BIT02   = '2**2 = 4'           / CA_HK" has gt 1% pixels with lt 10 samples
+    INFL0   = 'KP.20250122.04185.19_2D.fits'
+    INFL1   = 'KP.20250122.08949.47_2D.fits'
+    INFL2   = 'KP.20250122.61770.27_2D.fits'
+    INFL3   = 'KP.20250122.65367.88_2D.fits'
+    INFL4   = 'KP.20250122.79221.17_2D.fits'
+
+It includes useful metadata about the image stacking, including the specific input dark L0 FITS files.
+The input dark L0 FITS files are preprocessed to assemble the CCD images, subtract the overscan bias, and subtract
+the master bias.  The header keyword ``INPBIAS`` gives the master bias employed.
 
 Master Flat
 ^^^^^^^^^^^
