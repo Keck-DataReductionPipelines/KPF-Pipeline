@@ -251,8 +251,8 @@ RED_CCD_STACK        image      4080 x 4080     electrons/sec   Stacked-data mea
 RED_CCD_LAMP         image      4080 x 4080     electrons/sec   Smooth-lamp pattern per exposure time for RED
 CA_HK_UNC            image      1024 x 255      Dimensionless   Master flat-image uncertainty for CA_HK
 CA_HK_CNT            image      1024 x 255      count           Master flat-image number of stack samples for CA_HK
-CA_HK_CCD_STACK      image      4080 x 4080     electrons/sec   Stacked-data mean per exposure time for CA_HK
-CA_HK_CCD_LAMP       image      4080 x 4080     electrons/sec   Smooth-lamp pattern per exposure time for CA_HK
+CA_HK_CCD_STACK      image      1024 x 255      electrons/sec   Stacked-data mean per exposure time for CA_HK
+CA_HK_CCD_LAMP       image      1024 x 255      electrons/sec   Smooth-lamp pattern per exposure time for CA_HK
 ===================  =========  ==============  ==============  ========================================================
 
 Here is an example of the header keywords in the GREEN_CCD extension of master flat file
