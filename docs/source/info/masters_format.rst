@@ -30,7 +30,9 @@ The file-naming convention for 2D master calibration files generally adheres to 
     kpf_<yyymmdd>_master_<type>_<object>.fits
 
 where ``<yyyymmdd>`` is the observation date, and there is no explicit '_2D' suffix.
-Master ``<type>`` can be either bias, dark, flat, arclamp, smooth lamp, order trace, and WLS.
+Master ``<type>`` can be either bias, dark, flat, arclamp, smooth lamp, and WLS.
+Order-trace products unfortunately do not include anything like 'order_trace' in the filename
+(please see below for more information).
 Some master filenames include '_GREEN' or '_RED' as suffixes before
 the '.fits' filename extension to indicate that they pertain to that specific filter only.
 Master ``<object>`` in the file-naming scheme is a descriptive hyphenated subtype string
@@ -104,7 +106,61 @@ Data Format of KPF Master Files
 Master Bias
 ^^^^^^^^^^^
 
-Add content here.
+A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data with
+``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
+
+Here are the FITS extensions of interest in a 2D master-bias file:
+
+===================  =========  ==============  ==========  ========================================================
+Extension Name       Data Type  Data Dimension  Data Units  Description
+===================  =========  ==============  ==========  ========================================================
+GREEN_CCD            image      4080 x 4080     electrons   Master bias image for GREEN
+RED_CCD              image      4080 x 4080     electrons   Master bias image for RED
+CA_HK                image      1024 x 255      electrons   Master bias image for CA_HK
+GREEN_CCD_UNC        image      4080 x 4080     electrons   Master bias-image uncertainty for GREEN
+GREEN_CCD_CNT        image      4080 x 4080     count       Master bias-image number of stack samples for GREEN
+RED_CCD_UNC          image      4080 x 4080     electrons   Master bias-image uncertainty for RED
+RED_CCD_CNT          image      4080 x 4080     count       Master bias-image number of stack samples for RED
+CA_HK_UNC            image      1024 x 255      electrons   Master bias-image uncertainty for CA_HK
+CA_HK_CNT            image      1024 x 255      count       Master bias-image number of stack samples for CA_HK
+===================  =========  ==============  ==========  ========================================================
+
+Here is an example of the keywords in the GREEN_CCD extension of master bias file
+``kpf_20250122_master_bias_autocal-bias.fits``::
+
+    ==================================================================================
+    HDU number and type = 4 and 0
+    Number of header cards in HDU = 26
+    ==================================================================================
+    XTENSION= 'IMAGE   '           / Image extension
+    BITPIX  =                  -64 / array data type
+    NAXIS   =                    2 / number of array dimensions
+    NAXIS1  =                 4080
+    NAXIS2  =                 4080
+    PCOUNT  =                    0 / number of parameters
+    GCOUNT  =                    1 / number of groups
+    BUNIT   = 'electrons'          / Units of master bias
+    EXTNAME = 'GREEN_CCD'          / extension name
+    NFRAMES =                    6 / Number of frames in input stack
+    NSIGMA  =                  2.1 / Number of sigmas for data-clipping
+    MINMJD  =         60697.043256 / Minimum MJD of bias observations
+    MAXMJD  =         60697.712638 / Maximum MJD of bias observations
+    MIDMJD  =         60697.377947 / Middle MJD of bias observations
+    DATE-MID= '2025-01-22T09:04:14.621Z' / Middle timestamp of bias observations
+    CREATED = '2025-01-23T03:07:21Z' / UTC of master-bias creation
+    INFOBITS=                    7 / Bit-wise flags defined below
+    BIT00   = '2**0 = 1'           / GREEN_CCD has gt 1% pixels with lt 10 samples
+    BIT01   = '2**1 = 2'           / RED_CCD has gt 1% pixels with lt 10 samples
+    BIT02   = '2**2 = 4'           / CA_HK" has gt 1% pixels with lt 10 samples
+    INFL0   = 'KP.20250122.03737.36_2D.fits'
+    INFL1   = 'KP.20250122.03937.09_2D.fits'
+    INFL2   = 'KP.20250122.03987.04_2D.fits'
+    INFL3   = 'KP.20250122.04037.05_2D.fits'
+    INFL4   = 'KP.20250122.61521.77_2D.fits'
+    INFL5   = 'KP.20250122.61571.78_2D.fits'
+
+It includes useful metadata about the image stacking, including the specific input L0 FITS files.
+
 
 Master Dark
 ^^^^^^^^^^^
