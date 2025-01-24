@@ -108,7 +108,7 @@ Data Format of KPF Master Files
 Master Bias
 ^^^^^^^^^^^
 
-A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data with
+A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
 
 Here are the FITS extensions of interest in a 2D master-bias file:
@@ -127,7 +127,7 @@ CA_HK_UNC            image      1024 x 255      electrons   Master bias-image un
 CA_HK_CNT            image      1024 x 255      count       Master bias-image number of stack samples for CA_HK
 ===================  =========  ==============  ==========  ========================================================
 
-Here is an example of the keywords in the GREEN_CCD extension of master bias file
+Here is an example of the header keywords in the GREEN_CCD extension of master bias file
 ``kpf_20250122_master_bias_autocal-bias.fits``::
 
     ==================================================================================
@@ -168,7 +168,7 @@ The input bias L0 FITS files are preprocessed to subtract the overscan biases, a
 Master Dark
 ^^^^^^^^^^^
 
-A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data with
+A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Dark'`` and ``OBJECT='autocal-dark'`` observed on the same date.
 
 Here are the FITS extensions of interest in a 2D master-dark file:
@@ -187,7 +187,7 @@ CA_HK_UNC            image      1024 x 255      electrons/sec   Master dark-imag
 CA_HK_CNT            image      1024 x 255      count           Master dark-image number of stack samples for CA_HK
 ===================  =========  ==============  ==============  ========================================================
 
-Here is an example of the keywords in the GREEN_CCD extension of master dark file
+Here is an example of the header keywords in the GREEN_CCD extension of master dark file
 ``kpf_20250122_master_dark_autocal-dark.fits``::
 
     ==================================================================================
@@ -226,10 +226,86 @@ It includes useful metadata about the image stacking, including the specific inp
 The input dark L0 FITS files are preprocessed to subtract the overscan biases, assemble the CCD images, and subtract
 the master bias.  The header keyword ``INPBIAS`` gives the master bias employed.
 
+
 Master Flat
 ^^^^^^^^^^^
 
-Add content here.
+A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds observed on the same date.
+
+Here are the FITS extensions of interest in a 2D master-flat file:
+
+===================  =========  ==============  ==============  ========================================================
+Extension Name       Data Type  Data Dimension  Data Units      Description
+===================  =========  ==============  ==============  ========================================================
+GREEN_CCD            image      4080 x 4080     Dimensionless   Master flat image for GREEN
+RED_CCD              image      4080 x 4080     Dimensionless   Master flat image for RED
+CA_HK                image      1024 x 255      Dimensionless   Master flat image for CA_HK
+GREEN_CCD_UNC        image      4080 x 4080     Dimensionless   Master flat-image uncertainty for GREEN
+GREEN_CCD_CNT        image      4080 x 4080     count           Master flat-image number of stack samples for GREEN
+GREEN_CCD_STACK      image      4080 x 4080     electrons/sec   Stacked-data mean per exposure time for GREEN
+GREEN_CCD_LAMP       image      4080 x 4080     electrons/sec   Smooth-lamp pattern per exposure time for GREEN
+RED_CCD_UNC          image      4080 x 4080     Dimensionless   Master flat-image uncertainty for RED
+RED_CCD_CNT          image      4080 x 4080     count           Master flat-image number of stack samples for RED
+RED_CCD_STACK        image      4080 x 4080     electrons/sec   Stacked-data mean per exposure time for RED
+RED_CCD_LAMP         image      4080 x 4080     electrons/sec   Smooth-lamp pattern per exposure time for RED
+CA_HK_UNC            image      1024 x 255      Dimensionless   Master flat-image uncertainty for CA_HK
+CA_HK_CNT            image      1024 x 255      count           Master flat-image number of stack samples for CA_HK
+CA_HK_CCD_STACK      image      4080 x 4080     electrons/sec   Stacked-data mean per exposure time for CA_HK
+CA_HK_CCD_LAMP       image      4080 x 4080     electrons/sec   Smooth-lamp pattern per exposure time for CA_HK
+===================  =========  ==============  ==============  ========================================================
+
+Here is an example of the header keywords in the GREEN_CCD extension of master flat file
+``kpf_20250122_master_flat.fits``::
+
+    ==================================================================================
+    HDU number and type = 4 and 0
+    Number of header cards in HDU = 168
+    ==================================================================================
+    XTENSION= 'IMAGE   '           / Image extension
+    BITPIX  =                  -64 / array data type
+    NAXIS   =                    2 / number of array dimensions
+    NAXIS1  =                 4080
+    NAXIS2  =                 4080
+    PCOUNT  =                    0 / number of parameters
+    GCOUNT  =                    1 / number of groups
+    BUNIT   = 'Dimensionless'      / Units of master flat
+    EXTNAME = 'GREEN_CCD'          / extension name
+    NFRAMES =                  140 / Number of frames in input stack
+    GAUSSSIG=                 2.01 / 2-D Gaussian-smoother sigma (pixels)
+    LOWLTLIM=                 5.01 / Low-light limit (DN)
+    NSIGMA  =                  2.3 / Number of sigmas for data-clipping
+    MINMJD  =         60697.000306 / Minimum MJD of flat observations
+    MAXMJD  =         60697.999642 / Maximum MJD of flat observations
+    MIDMJD  =    60697.49997400001 / Middle MJD of flat observations
+    DATE-MID= '2025-01-22T11:59:57.754Z' / Middle timestamp of flat observations
+    INPBIAS = 'kpf_20250122_master_bias_autocal-bias.fits'
+    INPDARK = 'kpf_20250122_master_dark_autocal-dark.fits'
+    CREATED = '2025-01-23T03:49:31Z' / UTC of master-flat creation
+    INFOBITS=                    0 / Bit-wise flags defined below
+    BIT00   = '2**0 = 1'           / GREEN_CCD has gt 1% pixels with lt 10 samples
+    BIT01   = '2**1 = 2'           / RED_CCD has gt 1% pixels with lt 10 samples
+    BIT02   = '2**2 = 4'           / CA_HK" has gt 1% pixels with lt 10 samples
+    ORDRMASK= '/data/reference_fits/kpf_20240211_order_mask_untrimmed_made20240212&'
+    CONTINUE  '.fits'
+    LAMPPATT= '/data/reference_fits/kpf_20240211_smooth_lamp_made20240212.fits'
+    ORDTRACE= 'kpf_20240211_master_flat_GREEN_CCD.csv'
+    INFL0   = 'KP.20250122.00026.60_2D.fits'
+    INFL1   = 'KP.20250122.00085.01_2D.fits'
+    INFL2   = 'KP.20250122.00143.56_2D.fits'
+    INFL3   = 'KP.20250122.00202.21_2D.fits'
+    ...
+    INFL136 = 'KP.20250122.86193.31_2D.fits'
+    INFL137 = 'KP.20250122.86251.99_2D.fits'
+    INFL138 = 'KP.20250122.86310.59_2D.fits'
+    INFL139 = 'KP.20250122.86369.13_2D.fits'
+
+It includes useful metadata about the image stacking, including the specific input flat L0 FITS files.
+The input flat L0 FITS files are preprocessed to subtract the overscan biases, assemble the CCD images, subtract
+the master bias, and subtract the master dark.  The header keyword ``INPBIAS`` gives the master bias employed.
+The header keyword ``INPDARK`` gives the master dark employed.  As can be seen, a relatively large number of
+frames are stacked in this example.
+
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
