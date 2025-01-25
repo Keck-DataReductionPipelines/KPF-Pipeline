@@ -1,4 +1,4 @@
-description: QC - L0 Data and Keywords Present
+description: QC - Data and Keywords Present
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
@@ -8,8 +8,8 @@ panel_arr:
           label: L0 Data Present
           marker: .
     paneldict:
-      ylabel: L0 Data Present
-      legend_frac_size: 0.10
+      ylabel: "L0 Data Present\n(DATAPRL0)"
+      legend_frac_size: 0.15
 
   - panelvars:
       - col: KWRDPRL0
@@ -18,6 +18,56 @@ panel_arr:
           label: L0 Keywords Present
           marker: .
     paneldict:
-      ylabel: L0 Keywords Present
-      title: QC - L0 Data and Keywords Present
-      legend_frac_size: 0.10
+      ylabel: "L0 Keywords Present\n(KWRDPRL0)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: CAHKPR2D
+        plot_type: state
+        plot_attr:
+          label: 2D CaHK Data Present
+          marker: .
+    paneldict:
+      ylabel: "2D CaHK Data Present\n(CAHKPR2D)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: CAHKPRL1
+        plot_type: state
+        plot_attr:
+          label: L1 CaHK Data Present
+          marker: .
+    paneldict:
+      ylabel: "L1 CaHK Data Present\n(CAHKPRL1)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: DATAPR2D
+        plot_type: state
+        plot_attr:
+          label: 2D Data Present
+          marker: .
+    paneldict:
+      ylabel: "2D Data Present\n(DATAPR2D)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: DATAPRL1
+        plot_type: state
+        plot_attr:
+          label: L1 Data Present
+          marker: .
+    paneldict:
+      ylabel: "L1 Data Present\n(DATAPRL1)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: DATAPRL2
+        plot_type: state
+        plot_attr:
+          label: L2 Data Present
+          marker: .
+    paneldict:
+      ylabel: "L2 Data Present\n(DATAPRL2)"
+      title: QC - Tests For Data Present With Correct Array Sizes
+      legend_frac_size: 0.15

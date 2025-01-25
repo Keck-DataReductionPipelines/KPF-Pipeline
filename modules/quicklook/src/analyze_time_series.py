@@ -76,19 +76,21 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
-        * Add continuous integration for this class
+        * Add temperature derivatives as columns; they will need to be computed.
+        * Add the option of using a Postgres database
+        * Make standard correlation plots.
+        * Make standard phased plots (by day)
+        * Make plot of correlation between per-order RVs and RVs per-chip and overall RVs.
         * Add database for masters (separate from ObsIDs?)
         * Method to return the avg, std., etc. for a DB column over a time range, with conditions (e.g., fast-read mode only)
-        * Make plots of temperature vs. RV for various types of RVs
+        * Make plots of temperature vs. RV for various types of RVs (correlation plots)
         * Add standard plots of flux vs. time for cals (all types?), stars, and solar -- highlight Junked files
-        * Add methods to print the schema
         * Augment statistics in legends (median and stddev upon request)
-        * Add the capability of using one DB for ingestion into another or plotting
         * Make a standard plot type that excludes outliers using ranges set 
           to, say, +/- 4-sigma where sigma is determined by aggressive outlier
           rejection.  This should be in Delta values.
-        * Make standard correlation plots.
-        * Make standard phased plots (by day)
+        * For time series state plots, include the number of points in each state 
+          in the legend.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -216,8 +218,8 @@ class AnalyzeTimeSeries:
 
         # Build the RV prefix keywords (the 8th source)
         prefixes = ['RV1','RV2','RV3','RVS','ERVS','RVC','ERVC','RVY','ERVY','CCFBJD','BCRV','CCFW']
-        units    = ['km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','None','km/s','None']
-        descs    = ['RV for SCI1 order ', 'RV for SCI2 order ', 'RV for SCI3 order ','RV for SCI order ',  'Error in RV for SCI order ', 'RV for CAL order ','Error in RV for CAL order ', 'RV for SKY order ',  'Error in RV for SKY order ','BJD for order ','Barycentric RV for order ','CCF weight for order ']
+        units    = ['km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','days','km/s','None']
+        descs    = ['RV for SCI1 order ', 'RV for SCI2 order ', 'RV for SCI3 order ','RV for SCI order ', 'Error in RV for SCI order ', 'RV for CAL order ','Error in RV for CAL order ', 'RV for SKY order ',  'Error in RV for SKY order ','BJD for order ','Barycentric RV for order ','CCF weight for order ']
         nums = [f"{i:02d}" for i in range(67)]
 
         prefix_unit_map = dict(zip(prefixes, units))
@@ -383,6 +385,13 @@ class AnalyzeTimeSeries:
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
         """
+
+        # Convert input dates to strings if necessary
+        if isinstance(start_date_str, datetime):
+            start_date_str = start_date_str.strftime("%Y%m%d")
+        if isinstance(end_date_str, datetime):
+            end_date_str = end_date_str.strftime("%Y%m%d")
+        
         if not quiet:
             self.logger.info("Adding to database between " + start_date_str + " and " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
@@ -518,6 +527,7 @@ class AnalyzeTimeSeries:
                           }
             header_data['ObsID'] = (L0_filename.split('.fits')[0])
             header_data['datecode'] = get_datecode(L0_filename)  
+            header_data['Source'] = self.get_source(L0_header_data)
             header_data['L0_filename'] = L0_filename
             header_data['D2_filename'] = f"{base_filename}_2D.fits"
             header_data['L1_filename'] = f"{base_filename}_L1.fits"
@@ -925,7 +935,7 @@ class AnalyzeTimeSeries:
         self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
 
 
-    def display_dataframe_from_db(self, columns, only_object=None, object_like=None, 
+    def display_dataframe_from_db(self, columns, only_object=None, object_like=None, only_source=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
         TO-DO: should this method just call dataframe_from_db()?
@@ -938,6 +948,7 @@ class AnalyzeTimeSeries:
         Args:
             columns (string, list of strings, or '*' for all) - database columns to query
             only_object (string or list of strings) - object names to include in query
+            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
             object_like (string or list of strings) - partial object names to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
@@ -962,10 +973,15 @@ class AnalyzeTimeSeries:
             only_object = [f"OBJECT = '{only_object}'"]
             or_objects = ' OR '.join(only_object)
             where_queries.append(f'({or_objects})')
+        # is object_like working?
         if object_like is not None:
             object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
+        if only_source is not None:
+            only_source = [f"SOURCE = '{only_source}'"]
+            or_sources = ' OR '.join(only_source)
+            where_queries.append(f'({or_sources})')
         if on_sky is not None:
             if on_sky == True:
                 where_queries.append(f"FIUMODE = 'Observing'")
@@ -988,7 +1004,7 @@ class AnalyzeTimeSeries:
 
     def dataframe_from_db(self, columns=None, 
                           start_date=None, end_date=None, 
-                          only_object=None, object_like=None, 
+                          only_object=None, only_source=None, object_like=None, 
                           on_sky=None, not_junk=None, 
                           verbose=False):
         """
@@ -1004,12 +1020,13 @@ class AnalyzeTimeSeries:
                Retrieving all columns can be time consuming.  
                With two years of observations in the database, 
                retrieving 1, 10, 100, 1000 days takes 0.13, 0.75, 2.05, 44 seconds.
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
             only_object (string) - object name to include in query
+            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
             object_like (string) - partial object name to search for
             on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
             not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
-            start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
             verbose (boolean) - if True, prints the SQL query
         """
         
@@ -1034,10 +1051,18 @@ class AnalyzeTimeSeries:
             object_queries = [f"OBJECT = '{obj}'" for obj in only_object]
             or_objects = ' OR '.join(object_queries)
             where_queries.append(f'({or_objects})')
+        # does object_like work?
         if object_like is not None: 
             object_like = [f"OBJECT LIKE '%{object_like}%'"]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
+        if only_source is not None:
+            only_source = convert_to_list_if_array(only_source)
+            if isinstance(only_source, str):
+                only_source = [only_source]
+            source_queries = [f"SOURCE = '{src}'" for src in only_source]
+            or_sources = ' OR '.join(source_queries)
+            where_queries.append(f'({or_sources})')
         if not_junk is not None:
             if not_junk == True:
                 where_queries.append(f"NOTJUNK = 1")
@@ -1049,10 +1074,10 @@ class AnalyzeTimeSeries:
             if on_sky == False:
                 where_queries.append(f"FIUMODE = 'Calibration'")
         if start_date is not None:
-            start_date_txt = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            start_date_txt = start_date.strftime('%Y-%m-%dT%H:%M:%S')
             where_queries.append(f' ("DATE-MID" > "{start_date_txt}")')
         if end_date is not None:
-            end_date_txt = end_date.strftime('%Y-%m-%d %H:%M:%S')
+            end_date_txt = end_date.strftime('%Y-%m-%dT%H:%M:%S')
             where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
         if where_queries != []:
             query += " WHERE " + ' AND '.join(where_queries)
@@ -1158,9 +1183,6 @@ class AnalyzeTimeSeries:
             keyword_types = {}
 
         return keyword_types
-
-
-
 
 
     def plot_time_series_multipanel(self, plotdict, 
@@ -1289,6 +1311,9 @@ class AnalyzeTimeSeries:
 #                    object_like = True
 #                elif str(thispanel['paneldict']['object_like']).lower() == 'false':
 #                    object_like = False
+            only_source = None
+            if 'only_source' in thispanel['paneldict']:
+                only_source = thispanel['paneldict']['only_source']
 
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
@@ -1308,6 +1333,7 @@ class AnalyzeTimeSeries:
                                         not_junk=not_junk, 
                                         only_object=only_object, 
                                         object_like=object_like,
+                                        only_source=only_source, 
                                         verbose=False)
             df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
             if start_date_was_none == True:
@@ -1430,6 +1456,10 @@ class AnalyzeTimeSeries:
                     col_data_err_replaced = col_data_err.replace('null', np.nan)
                     if 'col_multiply' in thispanel['panelvars'][i]:
                         col_data_err_replaced = pd.to_numeric(col_data_err_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+
+                if 'normalize' in thispanel['panelvars'][i]:
+                    if thispanel['panelvars'][i]['normalize'] == True:
+                        col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') / np.nanmedian(pd.to_numeric(col_data_replaced, errors='coerce'))
                 
                 if plot_type == 'state':
                     states = np.array(col_data_replaced)
@@ -1532,10 +1562,29 @@ class AnalyzeTimeSeries:
                         mapped_states = [state_to_num[state] for state in states]
                         colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                         color_map = {state: colors[i] for i, state in enumerate(unique_states)}
+                    try:
+                        # check for a set of conditions that took forever to figure out
+                        if (hasattr(t, 'tolist') and callable(getattr(t, 'tolist'))):
+                            t = t.tolist()
+                        else:
+                            t = list(t)
+                    except Exception as e:
+                        self.logger.info(f"Error converting to a list: {e}")
+                    try:
+                        if (hasattr(states, 'tolist') and callable(getattr(states, 'tolist'))):
+                            states = states.tolist()
+                        else:
+                            states = list(states)
+                    except Exception as e:
+                        self.logger.info(f"Error converting to a list: {e}")
+                    if len(states) != len(t):
+                        # Handle the mismatch
+                        print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
                     for state in unique_states:
                         color = color_map[state]
                         indices = [i for i, s in enumerate(states) if s == state]
-                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=state)
+                        label_text = f"{state} ({len(indices)})"
+                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=label_text)
                     axs[p].set_yticks(range(len(unique_states)))
                     axs[p].set_yticklabels(unique_states)
                 
@@ -1595,15 +1644,18 @@ class AnalyzeTimeSeries:
                     textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
-        # Display the plot
-        if fig_path != None:
-            t0 = time.process_time()
-            plt.savefig(fig_path, dpi=300, facecolor='w')
-            if log_savefig_timing:
-                self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-        if show_plot == True:
-            plt.show()
-        plt.close('all')
+        # Display the plot or make a PNG
+        try:
+            if fig_path != None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
 
 
     def plot_nobs_histogram(self, plot_dict=None, 
@@ -1634,7 +1686,7 @@ class AnalyzeTimeSeries:
             (e.g., in a Jupyter Notebook).
         
         To-do: 
-        	Add highlighting of QC tests
+            Add highlighting of QC tests
         """
         
         # Use plotting dictionary, if provided
@@ -1860,6 +1912,7 @@ class AnalyzeTimeSeries:
                 plt.bar(bar_positions, entry_counts.values, width=1, align='center', zorder=3)
         if interval == 'day':
             plt.xlabel("Hour of Day (UT)", fontsize=14)
+            
         elif interval == 'month':
             plt.xlabel("Day of Month", fontsize=14)
         else:
@@ -1873,7 +1926,10 @@ class AnalyzeTimeSeries:
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
         ax.xaxis.set_major_formatter(major_formatter)
-        ax.xaxis.set_tick_params(labelsize=10)
+        if interval == 'day':
+            ax.xaxis.set_tick_params(labelsize=9)
+        else:
+            ax.xaxis.set_tick_params(labelsize=10)
         ax.yaxis.set_tick_params(labelsize=10)
         if minor_locator:
             ax.xaxis.set_minor_locator(minor_locator)
@@ -1940,7 +1996,7 @@ class AnalyzeTimeSeries:
         plots = {}
         
         import static.tsdb_plot_configs
-        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py        
+        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
         for this_yaml_path in all_yaml:
             thisplotconfigdict = self.yaml_to_dict(this_yaml_path)
             plot_name = str.split(str.split(this_yaml_path,'/')[-1], '.')[0]
@@ -2014,18 +2070,26 @@ class AnalyzeTimeSeries:
             # Make Plot
             plot_dict = plots[p]
             if plot_dict['plot_type'] == 'time_series_multipanel':
-                self.plot_time_series_multipanel(plot_dict, 
-                                                 start_date=start_date, 
-                                                 end_date=end_date, 
-                                                 fig_path=fig_path, 
-                                                 show_plot=show_plot, 
-                                                 clean=clean)
+                try:
+                    self.plot_time_series_multipanel(plot_dict, 
+                                                     start_date=start_date, 
+                                                     end_date=end_date, 
+                                                     fig_path=fig_path, 
+                                                     show_plot=show_plot, 
+                                                     clean=clean)
+                except Exception as e:
+                    self.logger.error(f"Error while plotting {plot_name}: {e}")
+                    continue  # Skip to the next plot
             elif plot_dict['plot_type'] == 'nobs_histogram':        
-                self.plot_nobs_histogram(plot_dict=plot_dict, 
-                                         date=start_date.strftime('%Y%m%d'), 
-                                         interval=interval,
-                                         fig_path=fig_path, 
-                                         show_plot=show_plot)
+                try:
+                    self.plot_nobs_histogram(plot_dict=plot_dict, 
+                                             date=start_date.strftime('%Y%m%d'), 
+                                             interval=interval,
+                                             fig_path=fig_path, 
+                                             show_plot=show_plot)
+                except Exception as e:
+                    self.logger.error(f"Error while plotting {plot_name}: {e}")
+                    continue  # Skip to the next plot
 
 
 def process_file(file_path, now_str,
@@ -2076,6 +2140,7 @@ def process_file(file_path, now_str,
 
     header_data['ObsID'] = base_filename
     header_data['datecode'] = get_datecode_func(base_filename)
+    header_data['Source'] = get_source_func(L0_header_data)
     header_data['L0_filename'] = os.path.basename(L0_file_path)
     header_data['D2_filename'] = os.path.basename(D2_file_path)
     header_data['L1_filename'] = os.path.basename(L1_file_path)
@@ -2084,7 +2149,6 @@ def process_file(file_path, now_str,
     header_data['D2_header_read_time'] = now_str
     header_data['L1_header_read_time'] = now_str
     header_data['L2_header_read_time'] = now_str
-    header_data['Source'] = get_source_func(L0_header_data)
 
     return header_data
 

@@ -1,4 +1,4 @@
-description: Observing SNR & Flux Ratio
+description: Observing SNR & Flux Ratio for Stars
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
@@ -39,6 +39,7 @@ panel_arr:
           color: red
     paneldict:
       ylabel: SNR (SCI1+SCI2+SCI3)
+      only_source: Star
       on_sky: true
       narrow_xlim_daily: true
       not_junk: true
@@ -75,7 +76,8 @@ panel_arr:
           color: red
     paneldict:
       ylabel: Flux Ratio (SCI2)
-      title: SoCal SNR & Flux Ratio
+      only_source: Star
+      title: SNR & Flux Ratio for Stars
       on_sky: true
       narrow_xlim_daily: true
       not_junk: true
