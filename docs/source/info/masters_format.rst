@@ -387,7 +387,67 @@ RED_CCD              image      4080 x 4080     Dimensionless   Master order mas
 Master Arclamp
 ^^^^^^^^^^^^^^
 
-Add content here.
+A 2D master-arclamp file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Arclamp'`` and the same ``OBJECT`` keyword string observed on the same date.
+
+Here are the FITS extensions of interest in a 2D master-arclamp file:
+
+===================  =========  ==============  ==============  ========================================================
+Extension Name       Data Type  Data Dimension  Data Units      Description
+===================  =========  ==============  ==============  ========================================================
+GREEN_CCD            image      4080 x 4080     electrons       Master arclamp image for GREEN
+RED_CCD              image      4080 x 4080     electrons       Master arclamp image for RED
+GREEN_CCD_UNC        image      4080 x 4080     electrons       Master arclamp-image uncertainty for GREEN
+GREEN_CCD_CNT        image      4080 x 4080     count           Master arclamp-image number of stack samples for GREEN
+RED_CCD_UNC          image      4080 x 4080     electrons       Master arclamp-image uncertainty for RED
+RED_CCD_CNT          image      4080 x 4080     count           Master arclamp-image number of stack samples for RED
+===================  =========  ==============  ==============  ========================================================
+
+Here is an example of the header keywords in the GREEN_CCD extension of master arclamp file
+``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``::
+
+    ==================================================================================
+    HDU number and type = 4 and 0
+    Number of header cards in HDU = 29
+    ==================================================================================
+    XTENSION= 'IMAGE   '           / Image extension
+    BITPIX  =                  -64 / array data type
+    NAXIS   =                    2 / number of array dimensions
+    NAXIS1  =                 4080
+    NAXIS2  =                 4080
+    PCOUNT  =                    0 / number of parameters
+    GCOUNT  =                    1 / number of groups
+    BUNIT   = 'electrons'          / Units of master arclamp
+    EXTNAME = 'GREEN_CCD'          / extension name
+    NFRAMES =                    5 / Number of frames in input stack
+    SKIPFLAT=                    0 / Flag to skip flat-field calibration
+    NSIGMA  =                  2.4 / Number of sigmas for data-clipping
+    MINMJD  =         60697.077492 / Minimum MJD of arclamp observations
+    MAXMJD  =         60697.080662 / Maximum MJD of arclamp observations
+    MIDMJD  =         60697.079077 / Middle MJD of arclamp observations
+    DATE-MID= '2025-01-22T01:53:52.253Z' / Middle timestamp of arclamp observations
+    TARGOBJ = 'autocal-thar-cal-eve' / Target object of stacking
+    INPBIAS = 'kpf_20250122_master_bias_autocal-bias.fits'
+    INPDARK = 'kpf_20250122_master_dark_autocal-dark.fits'
+    INPFLAT = 'kpf_20250122_master_flat.fits'
+    CREATED = '2025-01-23T03:54:34Z' / UTC of master-arclamp creation
+    INFOBITS=                    3 / Bit-wise flags defined below
+    BIT00   = '2**0 = 1'           / GREEN_CCD has gt 1% pixels with lt 5 samples
+    BIT01   = '2**1 = 2'           / RED_CCD has gt 1% pixels with lt 5 samples
+    INFL0   = 'KP.20250122.06695.18_2D.fits'
+    INFL1   = 'KP.20250122.06763.78_2D.fits'
+    INFL2   = 'KP.20250122.06832.44_2D.fits'
+    INFL3   = 'KP.20250122.06900.89_2D.fits'
+    INFL4   = 'KP.20250122.06969.51_2D.fits'
+
+
+It includes useful metadata about the image stacking, including the specific input arclamp L0 FITS files.
+The input arclamp L0 FITS files are preprocessed to subtract the overscan biases, assemble the CCD images,
+subtract the master bias, subtract the master dark, and apply the master flat.
+The header keyword ``INPBIAS`` gives the master bias employed.
+The header keyword ``INPDARK`` gives the master dark employed.
+The header keyword ``INPFLAT`` gives the master flat employed.
+
 
 Master WLS
 ^^^^^^^^^^
