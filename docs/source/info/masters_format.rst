@@ -329,9 +329,9 @@ A master order mask FITS file contains GREEN and RED mask mages showing the loca
 diffraction orderlet traces in the image data.
 The order-mask values are numbered from 1 to 5 designating distinct orderlet traces from
 bottom to top in the image, so as to differentiate the corresponding fiber of the orderlet trace
-(sky,sci1, sci2, sci3, cal).
-An order-mask value of zero indicates not on any order trace in the mask.
-The following table summarizes the possible order-mask values:
+(sky, sci1, sci2, sci3, cal).
+An order-mask value of zero indicates the mask pixel is not on any order trace in the mask.
+The following table summarizes the possible order-mask values at various pixel locations in the mask:
 
 =========================  =================
 Fiber of Orderlet Trace    Order Mask Value
