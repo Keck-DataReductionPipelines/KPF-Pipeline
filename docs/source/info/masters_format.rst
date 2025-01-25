@@ -318,8 +318,25 @@ Master Smooth Lamp
 
 A new master smooth lamp is made daily from the data taken on the corresponding observation date
 for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
-lamp that is used to create a master flat is relatively static and only updated when instrument
-characteristics change (say, on the time scale of months).
+lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
+instrument characteristics change (say, on the time scale of months).
+
+The smoothing is done using a sliding-window kernel 200-pixels wide (along dispersion dimension)
+by 1-pixel high (along cross-dispersion dimension) by computing the clipped mean
+with 3-sigma double-sided outlier rejection.   The fixed smooth lamp pattern
+normalizes the flat field and enables the flat-field
+correction to remove the effects of pixel-detector responsivity variations along with
+dust and debris signatures on the optics of the instrument and telescope.
+
+Here are the only two FITS extensions of interest in a 2D master-smooth-lamp file:
+
+===================  =========  ==============  ==============  ========================================================
+Extension Name       Data Type  Data Dimension  Data Units      Description
+===================  =========  ==============  ==============  ========================================================
+GREEN_CCD            image      4080 x 4080     electrons/sec   Master order smooth lamp pattern for GREEN
+RED_CCD              image      4080 x 4080     electrons/sec   Master order smooth lamp pattern for RED
+===================  =========  ==============  ==============  ========================================================
+
 
 
 Master Order Mask (Trace)
