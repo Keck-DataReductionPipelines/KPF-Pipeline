@@ -473,8 +473,8 @@ class MasterFlatFramework(KPF0_Primitive):
             # to "flatten" of all stacked-image data for the current observation date within the orderlet mask.
             # The fixed lamp pattern is made from a stacked image from a specific observation date
             # (e.g., 100 Flatlamp frames, 30-second exposures each, were acquired on 20230628). The fixed lamp
-            # pattern is smoothed with a sliding-window kernel 15-pixels wide (along dispersion dimension)
-            # by 3-pixels high (along cross-dispersion dimension) by computing the clipped mean
+            # pattern is smoothed with a sliding-window kernel 200-pixels wide (along dispersion dimension)
+            # by 1-pixel high (along cross-dispersion dimension) by computing the clipped mean
             # with 3-sigma double-sided outlier rejection.   The fixed smooth lamp pattern enables the flat-field
             # correction to remove dust and debris signatures on the optics of the instrument and telescope.
             # The local median filtering smooths, yet minimizes undesirable effects at the orderlet edges.
