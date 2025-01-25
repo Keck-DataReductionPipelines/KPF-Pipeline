@@ -316,7 +316,7 @@ detail in sections that follow.  These two relatively static files are kept in t
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
 
-A new master smooth lamp is made daily from the data taken on the corresponding observation date
+A new 2D master smooth lamp is made daily from the data taken on the corresponding observation date
 for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
 lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
 instrument characteristics change (say, on the time scale of months).
@@ -342,7 +342,7 @@ RED_CCD              image      4080 x 4080     electrons/sec   Master order smo
 Master Order Mask (Trace)
 ^^^^^^^^^^^^^^^^^^
 
-A master order mask FITS file contains GREEN and RED mask mages showing the locations of the
+A 2D master order mask FITS file contains GREEN and RED mask mages showing the locations of the
 diffraction orderlet traces in the image data.
 The order-mask values are numbered from 1 to 5 designating distinct orderlet traces from
 bottom to top in the image, so as to differentiate the corresponding fiber of the orderlet trace
@@ -362,7 +362,7 @@ CAL                                5
 =========================  =================
 
 Generally, the master order mask is relatively static and updated via computation from
-master order-trace files for GREEN and RED only periodically.
+master order-trace files for GREEN and RED only periodically (a new one is not made daily).
 New master order-trace files for GREEN and RED are made daily from the data taken on the
 corresponding observation date for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine),
 but these are only used to create a new master order mask for the generation of daily master flats
