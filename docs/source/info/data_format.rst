@@ -426,6 +426,10 @@ CCFRVC    19.4247572623                               Average of CCD1RVC and CCD
 CCFERVC   0.001175044                                 Error on CCFRVC
 CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
+BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (m/s)        
+BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (m/s)    
+BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (sec)        
+BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (sec)    
 TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
 DATAPRL2  1                                           QC: 1 = L2 data is present
 ========  ==========================================  =========

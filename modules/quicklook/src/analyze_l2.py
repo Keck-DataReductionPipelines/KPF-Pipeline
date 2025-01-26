@@ -89,7 +89,6 @@ class AnalyzeL2:
         self.Delta_Bary_RVC_weighted_range = (x[nonzero_mask].max() - x[nonzero_mask].min()) * 1000 # m/s
 
 
-
     def plot_CCF_grid(self, chip=None, annotate=False, 
                       zoom=False, fig_path=None, show_plot=False):
         """
