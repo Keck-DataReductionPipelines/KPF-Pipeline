@@ -973,6 +973,7 @@ class QCL0(QC):
         
         try:
             L0 = self.kpf_object
+            debug=True
         
             # Determine which extensions should be in the L0 file.
             # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
@@ -991,7 +992,7 @@ class QCL0(QC):
             if hasattr(L0, 'SOCAL PYRHELIOMETER'):
                 data_products.append('Pyrheliometer')
             if debug:
-                self.logger.info('Data products that are supposed to be in this L0 file: ' + str(data_products))
+                self.logger.info('Data products expected in this L0 file: ' + str(data_products))
          
             # Use helper funtion to get data products and check their characteristics.
             QC_pass = True
@@ -1001,6 +1002,8 @@ class QCL0(QC):
         
             # Check for specific data products
             possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
+            if debug:
+                self.logger.info('Possible data products in L0 file: ' + str(possible_data_products))
             for dp in possible_data_products:
                 if dp in data_products:
                     if not dp in data_products_present:
@@ -1105,7 +1108,7 @@ class QCL0(QC):
                 Date-Beg = DATE-BEG
                 Date-End = DATE-END
         """
-    
+        debug=True
         try:
             L0 = self.kpf_object
             date_format = "%Y-%m-%dT%H:%M:%S.%f"
@@ -1119,7 +1122,7 @@ class QCL0(QC):
             for keyword in essential_keywords:
                 if keyword not in L0.header['PRIMARY']:
                     if debug:
-                        print(f'Missing keyword: {keyword}')
+                        self.logger.info(f'Missing keyword: {keyword}')
                     QC_pass = False
             if not QC_pass:
                 return QC_pass
@@ -1135,7 +1138,7 @@ class QCL0(QC):
             # Check that DATE-BEG + ELAPSE = DATE-END
             if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
                 if debug:
-                    print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
+                    self.logger.info(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
                 QC_pass = False
                 
             # Check that GRDATE-B/RDDATE-B are consistent with DATE-BEG, etc.
@@ -1143,57 +1146,57 @@ class QCL0(QC):
             if 'Green' in data_products:
                 if 'GRDATE-B' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f'Missing keyword: GRDATE-B')
+                        self.logger.info(f'Missing keyword: GRDATE-B')
                     QC_pass = False
                     return QC_pass
                 else:
                     grdate_b = datetime.strptime(L0.header['PRIMARY']['GRDATE-B'], date_format)
                     if abs((date_beg - grdate_b).total_seconds()) > time_precision_threshold:
                         if debug:
-                            print(f'abs(DATE-BEG - GRDATE-B) = {abs((date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                            self.logger.info(f'abs(DATE-BEG - GRDATE-B) = {abs((date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold} sec')
                         QC_pass = False
                 if 'GRDATE-E' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f'Missing keyword: GRDATE-E')
+                        self.logger.info(f'Missing keyword: GRDATE-E')
                     QC_pass = False
                     return QC_pass
                 else:
                     grdate_e = datetime.strptime(L0.header['PRIMARY']['GRDATE-E'], date_format)
                     if abs((date_end - grdate_e).total_seconds()) > time_precision_threshold:
                         if debug:
-                            print(f'abs(DATE-END - GRDATE-E) = {abs((date_end - grdate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                            self.logger.info(f'abs(DATE-END - GRDATE-E) = {abs((date_end - grdate_e).total_seconds())} sec > {time_precision_threshold} sec')
                         QC_pass = False
             if 'Red' in data_products:
                 if 'RDDATE-B' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f'Missing keyword: RDDATE-B')
+                        self.logger.info(f'Missing keyword: RDDATE-B')
                     QC_pass = False
                     return QC_pass
                 else:
                     rddate_b = datetime.strptime(L0.header['PRIMARY']['RDDATE-B'], date_format)
                     if abs((date_beg - rddate_b).total_seconds()) > time_precision_threshold:
                         if debug:
-                            print(f'abs(DATE-BEG - RDDATE-B) = {abs((date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                            self.logger.info(f'abs(DATE-BEG - RDDATE-B) = {abs((date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
                         QC_pass = False
                 if 'RDDATE-E' not in L0.header['PRIMARY']:
                     if debug:
-                        print(f'Missing keyword: RDDATE-E')
+                        self.logger.info(f'Missing keyword: RDDATE-E')
                     QC_pass = False
                     return QC_pass
                 else:
                     rddate_e = datetime.strptime(L0.header['PRIMARY']['RDDATE-E'], date_format)
                     if abs((date_end - rddate_e).total_seconds()) > time_precision_threshold:
                         if debug:
-                            print(f'abs(DATE-END - RDDATE-E) = {abs((date_end - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                            self.logger.info(f'abs(DATE-END - RDDATE-E) = {abs((date_end - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
                         QC_pass = False
             if ('Green' in data_products) and ('Red' in data_products) and QC_pass:
                 if abs((grdate_b - rddate_b).total_seconds()) > time_precision_threshold: 
                     if debug:
-                        print(f'abs(GRDATE-B - RDDATE-B) = {abs((grdate_b - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
+                        self.logger.info(f'abs(GRDATE-B - RDDATE-B) = {abs((grdate_b - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
                     QC_pass = False
                 if abs((grdate_e - rddate_e).total_seconds()) > time_precision_threshold: 
                     if debug:
-                        print(f'abs(GRDATE-E - RDDATE-E) = {abs((grdate_e - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
+                        self.logger.info(f'abs(GRDATE-E - RDDATE-E) = {abs((grdate_e - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
                     QC_pass = False
          
             if 'ExpMeter' in data_products:
@@ -1206,20 +1209,20 @@ class QCL0(QC):
                 if 'Green' in data_products:
                     if abs((exp_date_beg - grdate_b).total_seconds()) > time_precision_threshold_exp:
                         if debug:
-                            print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - GRDATE-B) = {abs((exp_date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                            self.logger.info(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - GRDATE-B) = {abs((exp_date_beg - grdate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
                         QC_pass = False
                     if abs((exp_date_end - grdate_e).total_seconds()) > time_precision_threshold_exp:
                         if debug:
-                            print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - GRDATE-E) = {abs((exp_date_end - grdate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                            self.logger.info(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - GRDATE-E) = {abs((exp_date_end - grdate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
                         QC_pass = False
                 if 'Red' in data_products:
                     if abs((exp_date_beg - rddate_b).total_seconds()) > time_precision_threshold_exp:
                         if debug:
-                            print(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - RDDATE-B) = {abs((exp_date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                            self.logger.info(f"abs(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'] - RDDATE-B) = {abs((exp_date_beg - rddate_b).total_seconds())} sec > {time_precision_threshold_exp} sec")
                         QC_pass = False
                     if abs((exp_date_end - rddate_e).total_seconds()) > time_precision_threshold_exp:
                         if debug:
-                            print(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - RDDATE-E) = {abs((exp_date_end - rddate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
+                            self.logger.info(f"abs(L0['EXPMETER_SCI'].iloc[-1]['Date-End-Corr'] - RDDATE-E) = {abs((exp_date_end - rddate_e).total_seconds())} sec > {time_precision_threshold_exp} sec")
                         QC_pass = False
 
         except Exception as e:
