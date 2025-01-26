@@ -9,8 +9,12 @@ from matplotlib import gridspec
 from matplotlib.ticker import MaxNLocator
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.kpf_parse import get_datecode_from_filename
+from modules.Utils.kpf_parse import get_datetime_obsid
+from modules.calibration_lookup.src.alg import GetCalibrations
+from kpfpipe.models.level1 import KPF1
 from scipy.interpolate import interp1d
 from scipy.interpolate import make_interp_spline
+
 
 class AnalyzeL1:
     """
@@ -128,6 +132,31 @@ class AnalyzeL1:
 
         except Exception as e:
             self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
+
+    def compare_wls_to_reference(self, reference_file='auto'):
+        '''
+        ADD description
+
+        Arguments:
+            reference_file - filename of reference wavelength solution.
+                             "auto" - use rough_wls from calibration_lookup
+    
+        Returns:
+            ADD something
+        '''
+
+        
+        try:
+            dt = get_datetime_obsid(self.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+            GC = GetCalibrations(dt, default_config_path)
+            wls_dict = GC.lookup(subset='rough_wls')
+            L1_rough_wls = KPF1.from_fits(wls_dict['rough_wls'])
+
+        except Exception as e:
+            self.logger.error(f"Problem with compare_wls_to_reference(): {e}\n{traceback.format_exc()}")
             return None
 
 
