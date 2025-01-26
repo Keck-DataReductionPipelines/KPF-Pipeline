@@ -190,7 +190,6 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
         for qc_name in qc_obj.qcdefinitions.names:
             if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
                 qc_names.append(qc_name)
-        print(qc_names)
 
         # Run the QC tests and add result keyword to header
         primary_header = HeaderParse(kpf_object, 'PRIMARY')
