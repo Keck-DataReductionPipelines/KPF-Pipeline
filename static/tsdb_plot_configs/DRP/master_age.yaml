@@ -8,7 +8,7 @@ panel_arr:
           label: Age of Master Bias File (days)
           marker: .
     paneldict:
-      ylabel: Age of Master Bias File (days)
+      ylabel: "Age of Master Bias\nFile (days, AGEBIAS)"
       not_junk: true
       legend_frac_size: 0.10
 
@@ -19,7 +19,7 @@ panel_arr:
           label: Age of Master Dark File (days)
           marker: .
     paneldict:
-      ylabel: Age of Master Dark File (days)
+      ylabel: "Age of Master Dark\nFile (days, AGEDARK)"
       not_junk: true
       legend_frac_size: 0.10
 
@@ -30,7 +30,7 @@ panel_arr:
           label: Age of Master Flat File (days)
           marker: .
     paneldict:
-      ylabel: Age of Master Flat File (days)
+      ylabel: "Age of Master Flat\nFile (days, AGEFLAT)"
       not_junk: true
       legend_frac_size: 0.10
 
@@ -41,7 +41,7 @@ panel_arr:
           label: Age of WLSFILE (days)
           marker: .
     paneldict:
-      ylabel: Age of WLSFILE (days)
+      ylabel: "Age of WLSFILE\n(days, AGEWLS)"
       not_junk: true
       legend_frac_size: 0.10
 
@@ -52,6 +52,6 @@ panel_arr:
           label: Age of WLSFILE2 (days)
           marker: .
     paneldict:
-      ylabel: Age of WLSFILE2 (days)
+      ylabel: "Age of WLSFILE2\n(days, AGEWLS2)"
       not_junk: true
       legend_frac_size: 0.10
