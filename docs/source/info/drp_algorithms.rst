@@ -41,6 +41,9 @@ The CCD is exposed to light for a certain amount of requested time,
 called exposure time (e.g., EXPTIME in the FITS PRIMARY header, in seconds).
 The light from a spectrometer is captured in a digital image by the spectrometer CCD,
 and this image is called a raw 2D echellogram.
+In the case of KPF, spectroscopic-image data are taken by CCDs with GREEN and RED filters
+(and a separate CCD with a Ca H&K line filter),
+and these are exposed simultaneously via a beamsplitter.
 The raw spectral data from a single exposure is formatted into
 is a single computer data file in standardized, multi-extension FITS format.
 There are multiple extensions to contain the 2D image data from different amplifiers and filters.
@@ -69,7 +72,7 @@ This subimage is about 500 pixels wide.
 It shows portions of three sets of order traces horizontally oriented,
 where each order trace is composed of 5 distinct orderlets from top to bottom in the subimage
 made by the ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY`` fibers of the instrument.
-Arclamp atomic lines are clearly visible in the orderlets.
+Atomic lines from the arc lamp are clearly visible in the orderlets.
 
 This is illustrated more clearly in the following diagram, which shows spectral orders
 and the arrangement of orderlets within each order.
@@ -90,9 +93,6 @@ the SKY trace partially falls off of the active area of the CCD, so it is not sh
 CCD Image Processing
 --------------------
 
-In the case of KPF, spectroscopic-image data are taken by CCDs with GREEN and RED filters
-(and a separate CCD with a Ca H&K line filter),
-and these are exposed simultaneously via a beamsplitter.
 The CCD image processing consists of several steps, as discussed below.
 It starts with an L0 FITS file for a given exposure and ends with a 2D FITS file.
 The L0 FITS file contains several HDUs (header-data units) with CCD subimage data from
