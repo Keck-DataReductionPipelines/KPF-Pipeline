@@ -470,6 +470,24 @@ class MasterArclampFramework(KPF0_Primitive):
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 
+        # Remove confusing or non-relevant keywords, if existing.
+
+        try:
+            del master_holder.header['GREEN_CCD']['OSCANV1']
+            del master_holder.header['GREEN_CCD']['OSCANV2']
+            del master_holder.header['GREEN_CCD']['OSCANV3']
+            del master_holder.header['GREEN_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
+
+        try:
+            del master_holder.header['RED_CCD']['OSCANV1']
+            del master_holder.header['RED_CCD']['OSCANV2']
+            del master_holder.header['RED_CCD']['OSCANV3']
+            del master_holder.header['RED_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
+
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue
             master_holder.header[ffi]['BUNIT'] = ('electrons','Units of master arclamp')
