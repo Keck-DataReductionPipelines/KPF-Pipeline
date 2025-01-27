@@ -13,7 +13,7 @@ The description of each algorithm should include:
 * performance estimates, if appropriate
 * any caveats, if needed
 * development status (if partially implemented or not yet implemented)
- 
+
 
 Current Limitations and Development Plans
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -32,13 +32,64 @@ Include:
 * Stellar activity indicators (see below)
 
 
-CCD Image Processing
---------------------
+Basics of CCD Raw Spectral Data
+-----------------
 
 A CCD (charged-coupled device) is a sensor of many pixels that allows
 photons to be detected and a digital image to be produced.
 The CCD is exposed to light for a certain amount of requested time,
-called exposure time (EXPTIME in the FITS PRIMARY header, in seconds).
+called exposure time (e.g., EXPTIME in the FITS PRIMARY header, in seconds).
+The light from a spectrometer is captured in a digital image by the spectrometer CCD(s)
+and this image is called a raw 2D echellogram.
+The raw spectral data from a single exposure is formatted into
+is a single computer data file in standardized, multi-extension FITS format.
+There are multiple extensions to contain the 2D image data from different amplifiers and filters.
+This is called an L0 FITS file.   A example filename is ``KP.20221203.81416.24.fits``,
+which is an arclamp calibration exposure, and it includes the observation date and time.
+
+Generally, the spectral wavelength covered in the data extended from the blue portion
+of the spectral range at bottom of the image to the red portion of the spectral range
+at the top of the image.  The spectral wavelength also increases monotonically from
+left to right in the image.  Light from a given instrument fiber-optic cable will show up in the image
+as a slightly curved horizontal swath of 10 or 20 pixels in width that covers much of the
+image from left to right, called an 'orderlet trace', which will appear to repeat vertically in the image
+as different spectral wavelength ranges are traversed and detected (but with independent spectral data
+content), an effect of the diffraction grating and optics that direct how
+light is spread out onto the CCD by different diffraction orders.
+Thus, a given order trace will have a wavelength range that somewhat overlaps
+those of the neighboring order traces below and above.
+This complexity makes the reduction of 2D raw spectra data particularly challenging.
+
+The following figure is a subimage of the aforementioned arclamp exposure from the ``GREEN-AMP1``
+FITS extension near the right side of the CCD associated with the corresponding readout amplifier.
+
+.. image:: KP.20221203.81416.24_subimage.png
+
+This subimage is about 500 pixels wide.
+It shows portions of three sets of order traces horizontally oriented,
+where each order trace is composed of 5 distinct orderlets from top to bottom in the subimage
+made by the ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY`` fibers of the instrument.
+Arclamp atomic lines are clearly visible in the orderlets.
+
+This is illustrated more clearly in the following diagram, which shows spectral orders
+and the arrangement of orderlets within each order.
+The horizontal axis in the diagram is actually the vertical axis of a CCD spectral data image, and the
+left arrow beside the Pixel Number label on the horizontal axis points toward the top of the image.
+
+.. image:: orderlet_diagram_2d.png
+
+The order numbers in the diagram are spectral order numbers that obey the grating equation
+(and not array indices that start at zero).
+The orderlet ordering is ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY``,
+starting at the top of the 2D spectral data image,
+as is usual for viewing images, with redder orders above and bluer orders below.
+Note that in the bluest order (at the right edge of the diagram or bottom of the 2D spectral data image)
+the SKY trace partially falls off of the active area of the CCD, so it is not shown in the above diagram.
+
+
+CCD Image Processing
+--------------------
+
 In the case of KPF, spectroscopic-image data are taken by CCDs with GREEN and RED filters
 (and a separate CCD with a Ca H&K line filter),
 and these are exposed simultaneously via a beamsplitter.
