@@ -3,7 +3,7 @@ plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
       - col: AGEBIAS
-        plot_type: state
+        plot_type: plot
         plot_attr:
           label: Age of Master Bias File (days)
           marker: .
@@ -14,7 +14,7 @@ panel_arr:
 
   - panelvars:
       - col: AGEDARK
-        plot_type: state
+        plot_type: plot
         plot_attr:
           label: Age of Master Dark File (days)
           marker: .
@@ -25,7 +25,7 @@ panel_arr:
 
   - panelvars:
       - col: AGEFLAT
-        plot_type: state
+        plot_type: plot
         plot_attr:
           label: Age of Master Flat File (days)
           marker: .
@@ -36,7 +36,7 @@ panel_arr:
 
   - panelvars:
       - col: AGEWLS
-        plot_type: state
+        plot_type: plot
         plot_attr:
           label: Age of WLSFILE (days)
           marker: .
@@ -47,7 +47,7 @@ panel_arr:
 
   - panelvars:
       - col: AGEWLS2
-        plot_type: state
+        plot_type: plot
         plot_attr:
           label: Age of WLSFILE2 (days)
           marker: .
