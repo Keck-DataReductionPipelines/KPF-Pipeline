@@ -39,7 +39,7 @@ A CCD (charged-coupled device) is a sensor of many pixels that allows
 photons to be detected and a digital image to be produced.
 The CCD is exposed to light for a certain amount of requested time,
 called exposure time (e.g., EXPTIME in the FITS PRIMARY header, in seconds).
-The light from a spectrometer is captured in a digital image by the spectrometer CCD(s)
+The light from a spectrometer is captured in a digital image by the spectrometer CCD,
 and this image is called a raw 2D echellogram.
 The raw spectral data from a single exposure is formatted into
 is a single computer data file in standardized, multi-extension FITS format.
