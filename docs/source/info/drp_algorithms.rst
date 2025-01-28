@@ -6,7 +6,7 @@ for any source code referred to below.
 
 Overview
 --------
-The target audience here is astronomers who will use the data.
+The target audience here is astronomers who will use data from the Keck Planet Finder.
 The description of each algorithm should include:
 
 * a brief description of how the algorithm works
@@ -44,13 +44,14 @@ and this image is called a raw 2D echellogram.
 In the case of KPF, spectroscopic-image data are taken by CCDs with GREEN and RED filters
 (and a separate CCD with a Ca H&K line filter),
 and these are exposed simultaneously via a beamsplitter.
-The raw spectral data from a single exposure is formatted into
-is a single computer data file in standardized, multi-extension FITS format.
-There are multiple extensions to contain the 2D image data from different amplifiers and filters.
-This is called an L0 FITS file.   A example filename is ``KP.20221203.81416.24.fits``,
+The raw spectral data from a single exposure are formatted into
+a single computer data file in standardized, multi-extension FITS format.
+There are multiple image extensions to contain the 2D image data from different readout amplifiers and filters,
+as well as table extensions for exposure metadata and ancillary information.
+This is called an L0 FITS file.   A example FITS filename for KPF is ``KP.20221203.81416.24.fits``,
 which is an arclamp calibration exposure, and it includes the observation date and time.
 
-Generally, the spectral wavelength covered in the data extended from the blue portion
+Generally, the spectral wavelength range covered in the data extends from the blue portion
 of the spectral range at bottom of the image to the red portion of the spectral range
 at the top of the image.  The spectral wavelength also increases monotonically from
 left to right in the image.  Light from a given instrument fiber-optic cable will show up in the image
@@ -59,12 +60,13 @@ image from left to right, called an 'orderlet trace', which will appear to repea
 as different spectral wavelength ranges are traversed and detected (but with independent spectral data
 content), an effect of the diffraction grating and optics that direct how
 light is spread out onto the CCD by different diffraction orders.
-Thus, a given order trace will have a wavelength range that somewhat overlaps
+Thus, a given order trace, which is a group of orderlet traces from a bundle of fibers (more detail below),
+will have a wavelength range that somewhat overlaps
 those of the neighboring order traces below and above.
 This complexity makes the reduction of 2D raw spectra data particularly challenging.
 
 The following figure is a subimage of the aforementioned arclamp exposure from the ``GREEN-AMP1``
-FITS extension near the right side of the CCD associated with the corresponding readout amplifier.
+FITS image extension near the right side of the CCD associated with the corresponding readout amplifier.
 
 .. image:: KP.20221203.81416.24_subimage.png
 
@@ -72,9 +74,10 @@ This subimage is about 500 pixels wide.
 It shows portions of three sets of order traces horizontally oriented,
 where each order trace is composed of 5 distinct orderlets from top to bottom in the subimage
 made by the ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY`` fibers of the instrument.
-Atomic lines from the arc lamp are clearly visible in the orderlets.
+Atomic lines from the arc lamp are clearly visible in the orderlets.  There are gaps between
+orderlet traces within the same order, and larger gaps between order-trace bundles.
 
-This is illustrated more clearly in the following diagram, which shows spectral orders
+This is further illustrated in the following diagram, which shows spectral orders
 and the arrangement of orderlets within each order.
 The horizontal axis in the diagram is actually the vertical axis of a CCD spectral data image, and the
 left arrow beside the Pixel Number label on the horizontal axis points toward the top of the image.
@@ -85,8 +88,8 @@ The order numbers in the diagram are spectral order numbers that obey the gratin
 (and not array indices that start at zero).
 The orderlet ordering is ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY``,
 starting at the top of the 2D spectral data image,
-as is usual for viewing images, with redder orders above and bluer orders below.
-Note that in the bluest order (at the right edge of the diagram or bottom of the 2D spectral data image)
+as is usual for viewing images with image-viewing software, with redder orders above and bluer orders below.
+Note that in the bluest order (at the right edge of the diagram or bottom of the 2D spectral data image),
 the SKY trace partially falls off of the active area of the CCD, so it is not shown in the above diagram.
 
 
