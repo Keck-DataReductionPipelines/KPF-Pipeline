@@ -41,7 +41,7 @@ The CCD is exposed to light for a certain amount of requested time,
 called exposure time (e.g., EXPTIME in the FITS PRIMARY header, in seconds).
 In the case of spectral imaging, the light from a source of interest is captured
 in a digital image by the spectrometer CCD, and this image is called a raw 2D echellogram.
-In the case of KPF, spectroscopic-image data are taken by CCDs with GREEN and RED filters
+KPF spectroscopic-image data are taken by CCDs with GREEN and RED filters
 (and a separate CCD with a Ca H&K line filter),
 and these are exposed simultaneously via a beamsplitter.
 The raw spectral data from a single exposure are formatted into
