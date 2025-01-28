@@ -48,7 +48,7 @@ The raw spectral data from a single exposure are formatted into
 a single computer data file in standardized, multi-extension FITS format.
 There are multiple image extensions to contain the 2D image data from different readout amplifiers and filters,
 as well as table extensions for exposure metadata and ancillary information.
-This is called an L0 FITS file.   A example FITS filename for KPF is ``KP.20221203.81416.24.fits``,
+This is called an L0 FITS file.   An example FITS filename for KPF is ``KP.20221203.81416.24.fits``,
 which is an arclamp calibration exposure, and it includes the observation date and time.
 
 Generally, the spectral wavelength range covered in the data extends from the blue portion
