@@ -91,7 +91,8 @@ The orderlet ordering is ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY``,
 starting at the top of the 2D spectral data image,
 as is usual for viewing images with image-viewing software, with redder orders above and bluer orders below.
 Note that in the bluest order (at the right edge of the diagram or bottom of the 2D spectral data image),
-the SKY trace partially falls off of the active area of the CCD, so it is not shown in the above diagram.
+the SKY trace partially falls off of the active area of the CCD, so it is not shown at that particular
+place in the above diagram.
 
 
 CCD Image Processing
