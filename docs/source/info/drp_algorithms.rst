@@ -44,9 +44,10 @@ in a digital image by the spectrometer CCD, and this image is called a raw 2D ec
 KPF spectroscopic-image data are taken by CCDs with GREEN and RED filters
 (and a separate CCD with a Ca H&K line filter),
 and these are exposed simultaneously via a beamsplitter.
+CCD data are read out in parallel by different amplifiers into CCD subimages.
 The raw spectral data from a single exposure are formatted into
 a single computer data file in standardized, multi-extension FITS format.
-There are multiple image extensions to contain the 2D image data from different readout amplifiers and filters,
+There are multiple image extensions to contain the 2D subimage data from different readout amplifiers and filters,
 as well as table extensions for exposure metadata and ancillary information.
 This is called an L0 FITS file.   An example FITS filename for KPF is ``KP.20221203.81416.24.fits``,
 which is an arclamp calibration exposure, and it includes the observation date and time.
