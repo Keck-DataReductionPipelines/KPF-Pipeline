@@ -226,7 +226,45 @@ def get_datecode(ObsID):
     ObsID = ObsID.replace('_L1', '')
     ObsID = ObsID.replace('_L2', '')
     datecode = ObsID.split('.')[1]
+
     return datecode
+
+
+
+def get_filename(ObsID, level='L0', fullpath=False):
+    """
+    Extract the datecode from an ObsID or a KPF filename 
+
+    Args:
+        ObsID, e.g. 'KP.20230708.04519.63' 
+        level - 'L0', '2D', 'L1', or 'L2'
+        fullpath - if True, prepends /data/L0, etc.
+
+    Returns:
+        datecode, e.g. 'KP.20230708.04519.63_2D.fits' or '/data/2D/20230708/KP.20230708.04519.63_2D.fits'
+    """
+    path = ''
+    if fullpath:
+        if level == 'L0':
+            path = f'/data/L0/{get_datecode(ObsID)}/'
+        elif level == '2D':
+            path = f'/data/2D/{get_datecode(ObsID)}/'
+        elif level == 'L1':
+            path = f'/data/L1/{get_datecode(ObsID)}/'
+        elif level == 'L2':
+            path = f'/data/L2/{get_datecode(ObsID)}/'
+    
+    if level == 'L0':
+        filename = f'{ObsID}.fits'
+    elif level == '2D':
+        filename = f'{ObsID}_2D.fits'
+    elif level == 'L1':
+        filename = f'{ObsID}_L1.fits'
+    elif level == 'L2':
+        filename = f'{ObsID}_L2.fits'
+
+    return path + filename
+
 
 
 def get_datecode_from_filename(filename, datetime_out=False):
@@ -394,11 +432,12 @@ def get_data_products_L0(L0):
         if L0['EXPMETER_SCI'].size > 1:
             data_products.append('ExpMeter')
     if hasattr(L0, 'GUIDER_AVG'):
+        print('**** Got to 3 *****')
         if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
     elif hasattr(L0, 'guider_avg'): # Early KPF files used lower case guider_avg
-        if (L0['guider_avg'].size > 1):
-            data_products.append('Guider')
+        #if (L0['guider_avg'].size > 1):  # this fails because it checks for GUIDER_AVG
+        data_products.append('Guider')
     if hasattr(L0, 'TELEMETRY'):
         if L0['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
@@ -565,7 +604,7 @@ def get_kpf_level(kpf_object):
             return '2D'
 
     # elif L0 if one of the standard extensions is present with non-zero size
-    L0_attrs = ['GREEN_AMP1', 'RED_AMP1', 'CA_HK', 'EXPMETER_SCI', 'GUIDER_AVG', 'GUIDER_CUBE_ORIGINS']
+    L0_attrs = ['GREEN_AMP1', 'RED_AMP1', 'CA_HK', 'EXPMETER_SCI', 'GUIDER_AVG', 'GUIDER_CUBE_ORIGINS', 'guider_avg', 'guider_cube_origins']
     for L0_attr in L0_attrs:
         if hasattr(kpf_object, L0_attr):
             if kpf_object[L0_attr].size:
