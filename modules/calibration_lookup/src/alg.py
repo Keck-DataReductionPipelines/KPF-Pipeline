@@ -21,6 +21,10 @@ class GetCalibrations:
     """
     def __init__(self, datetime, default_config_path, use_db=True, logger=None):
 
+        """
+        use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
+        """
+        
         # Initialize DB class
         # self.db_lookup = QueryDBNearestMasterFilesFramework(self.action, self.context)
 
