@@ -137,6 +137,7 @@ class AnalyzeL1:
 
     def compare_wls_to_reference(self, reference_file='auto'):
         '''
+        # , wav_endpoint_tolerance=0.1, wav_std_tolerance=0.05
         ADD description
 
         Arguments:
@@ -146,18 +147,53 @@ class AnalyzeL1:
         Returns:
             ADD something
         '''
-
         
-        try:
-            dt = get_datetime_obsid(self.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
-            default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
-            GC = GetCalibrations(dt, default_config_path)
-            wls_dict = GC.lookup(subset='rough_wls')
-            L1_rough_wls = KPF1.from_fits(wls_dict['rough_wls'])
+        # Load reference wavelength solution
+        dt = get_datetime_obsid(self.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        GC = GetCalibrations(dt, default_config_path, use_db=False)
+        wls_dict = GC.lookup(subset=['rough_wls'])
+        L1_ref = KPF1.from_fits(wls_dict['rough_wls'])
 
-        except Exception as e:
-            self.logger.error(f"Problem with compare_wls_to_reference(): {e}\n{traceback.format_exc()}")
-            return None
+        # definitions
+        self.chips = ['GREEN', 'RED']
+        self.orderlets = ['SCI_WAVE1', 'SCI_WAVE2', 'SCI_WAVE3', 'SKY_WAVE', 'CAL_WAVE']
+        self.green_exts = [self.chips[0] + "_" + o for o in self.orderlets]
+        self.red_exts   = [self.chips[1] + "_" + o for o in self.orderlets]
+        self.exts = self.green_exts + self.red_exts
+        self.norders_per_chip = [self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[0], self.L1[self.chips[1]+'_'+self.orderlets[0]].shape[0]] # green, red
+        #self.npix = self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[1] #4080
+        self.norderlets = len(self.orderlets)
+        
+        # Check that L1 and L1_ref have same shaped arrays
+        self.consistent_array_shapes = True
+        for ext in self.green_exts + self.red_exts:
+            if not (self.L1[ext].shape == L1_ref[ext].shape):
+                self.consistent_array_shapes = False
+                self.logger.info(f'Different array sizes between L1 and L1_ref for {ext}.')
+                return
+
+        # arrays to store results
+        # indices: [chip, orderlet, pixel]
+        self.wave_end_diff_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets, 3)) # L1 - L1_ref diff between 0th pixel, middle pixel, last pixel
+        self.wave_end_diff_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets, 3))
+        # indices: [chip, orderlet]
+        self.wave_stddev_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets)) # stddev(L1 - L1_ref) per order and orderlet
+        self.wave_stddev_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets)) 
+        
+        # Compute endpint wavelength differences and stddev between L1 and L1_ref
+        for oo, ext in enumerate(self.green_exts): # oo = orderlet number
+            for o in np.arange(self.norders_per_chip[0]):
+                self.wave_end_diff_green[o,oo,0] = self.L1[ext][o,0] - L1_ref[ext][o,0]  # 0th pixel
+                self.wave_end_diff_green[o,oo,1] = self.L1[ext][o,2040] - L1_ref[ext][o,2040] # middle pixel
+                self.wave_end_diff_green[o,oo,2] = self.L1[ext][o,-1] - L1_ref[ext][o,-1] # last pixel
+                self.wave_stddev_green[o,oo] = np.nanstd(self.L1[ext][o,:] - L1_ref[ext][o,:])
+        for oo, ext in enumerate(self.red_exts):
+            for o in np.arange(self.norders_per_chip[1]):
+                self.wave_end_diff_red[o,oo,0] = self.L1[ext][o,0] - L1_ref[ext][o,0]  # 0th pixel
+                self.wave_end_diff_red[o,oo,1] = self.L1[ext][o,2040] - L1_ref[ext][o,2040] # middle pixel
+                self.wave_end_diff_red[o,oo,2] = self.L1[ext][o,-1] - L1_ref[ext][o,-1] # last pixel
+                self.wave_stddev_red[o,oo] = np.nanstd(self.L1[ext][o,:] - L1_ref[ext][o,:])
 
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
