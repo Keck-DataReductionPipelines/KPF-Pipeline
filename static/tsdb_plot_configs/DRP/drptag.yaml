@@ -11,7 +11,7 @@ panel_arr:
       ylabel: DRP Version Number
       title: KPF-Pipeline Version Number
       not_junk: true
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15
 
   - panelvars:
       - col: KPFERA
@@ -23,4 +23,4 @@ panel_arr:
       ylabel: KPF ERA
       title: KPF ERA
       not_junk: true
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15
