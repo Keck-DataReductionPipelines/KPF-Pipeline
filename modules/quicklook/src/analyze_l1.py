@@ -801,8 +801,9 @@ class AnalyzeL1:
 
     def my_1d_interp(self, wav, flux, newwav):
         """
-        1D interpolation function that uses B-splines unless the input wavelengths are non-monotonic, 
-        in which case it uses cubic splines.  This function is used in measure_orderlet_flux_ratio().
+        1D interpolation function that uses B-splines unless the input 
+        wavelengths are non-monotonic, in which case it uses cubic splines.  
+        This function is used in measure_orderlet_flux_ratio().
         """
         
         # B-spline is not compatabile with non-monotonic WLS (which we should eliminate anyway)
@@ -820,13 +821,19 @@ class AnalyzeL1:
             try:
                 interpolator = make_interp_spline(wav, flux, k=3)
                 newflux = interpolator(newwav)
-            except:
-                print('Using cubic-spline interpolation instead of B-splines.')
+            except Exception as e:
+                self.logger.info(f'Error: {e}')
+                self.logger.info('Using cubic-spline interpolation instead of B-splines.')
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
         else:
-            interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
-            newflux = interpolator(newwav)   
+            try:
+                interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
+                newflux = interpolator(newwav)   
+            except Exception as e:
+                self.logger.info(f'Error: {e}')
+                self.logger.info(f'No interpolation applied.')
+                newflux = flux  
         return newflux
 
     def measure_orderlet_flux_ratios(self):
