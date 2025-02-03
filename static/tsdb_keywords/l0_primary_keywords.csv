@@ -63,3 +63,19 @@ RA|string|Right ascension|hr
 DEC|string|Declination|deg
 EQUINOX|float|DCS Equinox|None
 MJD-OBS|float|Modified Julian day of the observation start|days
+PTHDAY|float|Last ThAr Daily power meter measurement|Watts
+PTHAU|float|Last ThAr Gold power meter measurement|Watts
+PUDAY|float|Last UNe Daily power meter measurement|Watts
+PUAU|float|Last UNe Gold power meter measurement|Watts
+PLFC|float|Last LFC power meter measurement|Watts
+PETAL|float|Last Etalon power meter measurement|Watts
+PBRB|float|Last Broadband power meter measurement|Watts
+PSOL|float|Last SoCal-CalFib power meter measurement|Watts
+PTHDAYT|string|Time of last ThAr Daily power measurement|None
+PTHAUT|string|Time of last ThAr Gold power measurement|None
+PUDAYT|string|Time of last UNe Daily power measurement|None
+PUAUT|string|Time of last UNe Gold power measurement|None
+PLFCT|string|Time of last LFC power measurement|None
+PETALT|string|Time of last Etalon power measurement|None
+PBRBT|string|Time of last Broadband power measurement|None
+PSOLT|string|Time of last SoCal-CalFib power measurement|None
