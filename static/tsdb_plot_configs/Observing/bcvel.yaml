@@ -11,10 +11,8 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: stddev(BJD) [m/s]
-      narrow_xlim_daily: true
       title: Barycentric Variations
       not_junk: true
-      on_sky: true
       legend_frac_size: 0.30
   - panelvars:
       - col: BJDRNG
@@ -26,10 +24,8 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: range(BJD) [m/s]
-      narrow_xlim_daily: true
       title: Barycentric Variations
       not_junk: true
-      on_sky: true
       legend_frac_size: 0.30
 
   - panelvars:
@@ -42,10 +38,8 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: stddev(BCV) [sec]
-      narrow_xlim_daily: true
       title: Barycentric Variations
       not_junk: true
-      on_sky: true
       legend_frac_size: 0.30
   - panelvars:
       - col: BCVRNG
@@ -57,8 +51,6 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: range(BCV) [m/s]
-      narrow_xlim_daily: true
       title: Barycentric Variations
       not_junk: true
-      on_sky: true
       legend_frac_size: 0.30
