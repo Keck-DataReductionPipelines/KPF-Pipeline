@@ -1,0 +1,82 @@
+description: Power Meter Measurements of Lamp Brightness
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: PTHDAY
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: ThAr Daily
+          marker: .
+          linewidth: 0.5
+      - col: PTHAU
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: ThAr Gold
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: PUDAY
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: UNe Daily
+          marker: .
+          linewidth: 0.5
+      - col: PUAU
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: UNe Gold
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: PLFC
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: LFC
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: PETAL
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: Etalon
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: PBRB
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: Broadband
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      title: Power Meter Measurements of Lamp Brightness
+      legend_frac_size: 0.15
