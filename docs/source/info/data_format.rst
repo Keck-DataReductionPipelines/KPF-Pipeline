@@ -193,6 +193,22 @@ ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2
 ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
 ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
 ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
+PTHDAY    1.422E-05                                   Last ThAr Daily power meter measurement (Watts)
+PTHAU     1.422E-05                                   Last ThAr Gold power meter measurement (Watts)
+PUDAY     1.422E-05                                   Last UNe Daily power meter measurement (Watts)
+PUAU      1.422E-05                                   Last UNe Gold power meter measurement (Watts)
+PLFC      1.422E-05                                   Last LFC power meter measurement (Watts)
+PETAL     1.422E-05                                   Last Etalon power meter measurement (Watts)
+PBRB      1.422E-05                                   Last Broadband power meter measurement (Watts)
+PSOL      1.422E-05                                   Last SoCal-CalFib power meter measurement (Watts)
+PTHDAYT   '20250108T08:37:44 HST'                     Time of last ThAr Daily power measurement
+PTHAUT    '20250108T08:37:44 HST'                     Time of last ThAr Gold power measurement
+PUDAYT    '20250108T08:37:44 HST'                     Time of last UNe Daily power measurement
+PUAUT     '20250108T08:37:44 HST'                     Time of last UNe Gold power measurement
+PLFCT     '20250108T08:37:44 HST'                     Time of last LFC power measurement
+PETALT    '20250108T08:37:44 HST'                     Time of last Etalon power measurement
+PBRBT     '20250108T08:37:44 HST'                     Time of last Broadband power measurement
+PSOLT     '20250108T08:37:44 HST'                     Time of last SoCal-CalFib power measurement
 ========  ==========================================  =========
 
 2D Primary Extension Header
