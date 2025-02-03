@@ -9,6 +9,12 @@ panel_arr:
           label: ThAr Daily
           marker: .
           linewidth: 0.5
+    paneldict:
+      ylabel: ThAr Daily Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
       - col: PTHAU
         plot_type: scatter
         unit: W
@@ -17,9 +23,9 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: ThAr Gold Power (W)
       not_junk: true
-      legend_frac_size: 0.15
+      legend_frac_size: 0.25
 
   - panelvars:
       - col: PUDAY
@@ -29,6 +35,12 @@ panel_arr:
           label: UNe Daily
           marker: .
           linewidth: 0.5
+    paneldict:
+      ylabel: UNe Daily Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
       - col: PUAU
         plot_type: scatter
         unit: W
@@ -37,9 +49,9 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: UNe Gold Power (W)
       not_junk: true
-      legend_frac_size: 0.15
+      legend_frac_size: 0.25
 
   - panelvars:
       - col: PLFC
@@ -50,9 +62,9 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: LFC Power (W)
       not_junk: true
-      legend_frac_size: 0.15
+      legend_frac_size: 0.25
 
   - panelvars:
       - col: PETAL
@@ -63,9 +75,9 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: Etalon Power (W)
       not_junk: true
-      legend_frac_size: 0.15
+      legend_frac_size: 0.25
 
   - panelvars:
       - col: PBRB
@@ -76,7 +88,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: Broadband Power (W)
       not_junk: true
       title: Power Meter Measurements of Lamp Brightness
-      legend_frac_size: 0.15
+      legend_frac_size: 0.25
