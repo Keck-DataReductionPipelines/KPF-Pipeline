@@ -2,6 +2,7 @@ import time
 import traceback
 import numpy as np
 import matplotlib.pyplot as plt
+from math import sin, cos, pi
 from datetime import datetime, timedelta
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
@@ -78,6 +79,30 @@ class AnalyzeL1:
         w_g_order - central wavelengths for green spectral orders
         w_r_order - central wavelengths for red spectral orders
 
+    Attributes set by compare_wls_to_reference():
+        wave_diff_green - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+        wave_diff_red   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+        wave_stddev_green - stddev(L1 - L1_ref);  [order, orderlet]
+        wave_stddev_red   - stddev(L1 - L1_ref);  [order, orderlet]
+        wave_mid_green - wavelength in middle of order; [order]
+        wave_mid_red   - wavelength in middle of order; [order]
+
+    Attributes set by measure_l1_snr():
+        GREEN_SNR - Two-dimensional array of SNR values for the Green CCD.
+            The first array index specifies the spectral order
+            (0-34 = green, 0-31 = red).  The second array index
+            specifies the orderlet:
+            0=CAL, 1=SCI1, 2=SCI2, 3=SCI3, 4=SKY, 5=SCI1+SCI2+SCI3.
+            For example, GREEN_SNR[1,2] is the SNR for order=1 and the
+            SCI2 orderlet.
+        RED_SNR - Similar to GREEN_SNR, but for the Red CCD.
+        GREEN_PEAK_FLUX - Similar to GREEN_SNR, but it is an array of top-
+            percentile counts instead of SNR.
+        RED_PEAK_FLUX - Similar to GREEN_PEAK_FLUX, but for the Red CCD.
+        GREEN_SNR_WAV - One-dimensional array of the wavelength of the
+            middle of the spectral orders on the green CCD.
+        RED_SNR_WAV - Similar to GREEN_SNR, but for the Red CCD.
+
     """
 
     def __init__(self, L1, logger=None):
@@ -133,67 +158,6 @@ class AnalyzeL1:
         except Exception as e:
             self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
             return None
-
-
-    def compare_wls_to_reference(self, reference_file='auto'):
-        '''
-        # , wav_endpoint_tolerance=0.1, wav_std_tolerance=0.05
-        ADD description
-
-        Arguments:
-            reference_file - filename of reference wavelength solution.
-                             "auto" - use rough_wls from calibration_lookup
-    
-        Returns:
-            ADD something
-        '''
-        
-        # Load reference wavelength solution
-        dt = get_datetime_obsid(self.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
-        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
-        GC = GetCalibrations(dt, default_config_path, use_db=False)
-        wls_dict = GC.lookup(subset=['rough_wls'])
-        L1_ref = KPF1.from_fits(wls_dict['rough_wls'])
-
-        # definitions
-        self.chips = ['GREEN', 'RED']
-        self.orderlets = ['SCI_WAVE1', 'SCI_WAVE2', 'SCI_WAVE3', 'SKY_WAVE', 'CAL_WAVE']
-        self.green_exts = [self.chips[0] + "_" + o for o in self.orderlets]
-        self.red_exts   = [self.chips[1] + "_" + o for o in self.orderlets]
-        self.exts = self.green_exts + self.red_exts
-        self.norders_per_chip = [self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[0], self.L1[self.chips[1]+'_'+self.orderlets[0]].shape[0]] # green, red
-        #self.npix = self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[1] #4080
-        self.norderlets = len(self.orderlets)
-        
-        # Check that L1 and L1_ref have same shaped arrays
-        self.consistent_array_shapes = True
-        for ext in self.green_exts + self.red_exts:
-            if not (self.L1[ext].shape == L1_ref[ext].shape):
-                self.consistent_array_shapes = False
-                self.logger.info(f'Different array sizes between L1 and L1_ref for {ext}.')
-                return
-
-        # arrays to store results
-        # indices: [chip, orderlet, pixel]
-        self.wave_end_diff_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets, 3)) # L1 - L1_ref diff between 0th pixel, middle pixel, last pixel
-        self.wave_end_diff_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets, 3))
-        # indices: [chip, orderlet]
-        self.wave_stddev_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets)) # stddev(L1 - L1_ref) per order and orderlet
-        self.wave_stddev_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets)) 
-        
-        # Compute endpint wavelength differences and stddev between L1 and L1_ref
-        for oo, ext in enumerate(self.green_exts): # oo = orderlet number
-            for o in np.arange(self.norders_per_chip[0]):
-                self.wave_end_diff_green[o,oo,0] = self.L1[ext][o,0] - L1_ref[ext][o,0]  # 0th pixel
-                self.wave_end_diff_green[o,oo,1] = self.L1[ext][o,2040] - L1_ref[ext][o,2040] # middle pixel
-                self.wave_end_diff_green[o,oo,2] = self.L1[ext][o,-1] - L1_ref[ext][o,-1] # last pixel
-                self.wave_stddev_green[o,oo] = np.nanstd(self.L1[ext][o,:] - L1_ref[ext][o,:])
-        for oo, ext in enumerate(self.red_exts):
-            for o in np.arange(self.norders_per_chip[1]):
-                self.wave_end_diff_red[o,oo,0] = self.L1[ext][o,0] - L1_ref[ext][o,0]  # 0th pixel
-                self.wave_end_diff_red[o,oo,1] = self.L1[ext][o,2040] - L1_ref[ext][o,2040] # middle pixel
-                self.wave_end_diff_red[o,oo,2] = self.L1[ext][o,-1] - L1_ref[ext][o,-1] # last pixel
-                self.wave_stddev_red[o,oo] = np.nanstd(self.L1[ext][o,:] - L1_ref[ext][o,:])
 
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
@@ -799,6 +763,7 @@ class AnalyzeL1:
             plt.show()
         plt.close('all')
 
+
     def my_1d_interp(self, wav, flux, newwav):
         """
         1D interpolation function that uses B-splines unless the input 
@@ -835,6 +800,7 @@ class AnalyzeL1:
                 self.logger.info(f'No interpolation applied.')
                 newflux = flux  
         return newflux
+
 
     def measure_orderlet_flux_ratios(self):
         """
@@ -1247,6 +1213,388 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+
+    def compare_wls_to_reference(self, reference_file='auto'):
+        '''
+        This method compares the wavelength solution of the L1 file to a 
+        reference wavelength solution.  The reference can be from a file
+        whose name is given or is automatically set using the Calibration 
+        Lookup.
+
+        Arguments:
+            reference_file - filename of reference wavelength solution.
+                             "auto" - use rough_wls from calibration_lookup
+    
+        Attributes set:
+            self.wave_diff_green - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+            self.wave_diff_red   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+            self.wave_median_green - median(L1 - L1_ref); [order, orderlet]
+            self.wave_median_red   - median(L1 - L1_ref); [order, orderlet]
+            self.wave_stddev_green - stddev(L1 - L1_ref); [order, orderlet]
+            self.wave_stddev_red   - stddev(L1 - L1_ref); [order, orderlet]
+            self.wave_mid_green - wavelength of middle of order; [order]
+            self.wave_mid_red   - wavelength of middle of order; [order]
+        '''
+        
+        # Load reference wavelength solution
+        if reference_file == 'auto':
+            dt = get_datetime_obsid(self.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+            GC = GetCalibrations(dt, default_config_path, use_db=False)
+            wls_dict = GC.lookup(subset=['rough_wls'])
+            self.reference_file = wls_dict['rough_wls']
+        else:
+            self.reference_file = reference_file
+        L1_ref = KPF1.from_fits(self.reference_file)
+
+        # definitions
+        self.chips = ['GREEN', 'RED']
+        self.orderlets = ['SCI_WAVE1', 'SCI_WAVE2', 'SCI_WAVE3', 'SKY_WAVE', 'CAL_WAVE']
+        self.green_exts = [self.chips[0] + "_" + o for o in self.orderlets]
+        self.red_exts   = [self.chips[1] + "_" + o for o in self.orderlets]
+        self.exts = self.green_exts + self.red_exts
+        self.norders_per_chip = [self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[0], self.L1[self.chips[1]+'_'+self.orderlets[0]].shape[0]] # green, red
+        #self.npix = self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[1] #4080
+        self.norderlets = len(self.orderlets)
+        
+        # Check that L1 and L1_ref have same shaped arrays
+        self.consistent_array_shapes = True
+        for ext in self.green_exts + self.red_exts:
+            if not (self.L1[ext].shape == L1_ref[ext].shape):
+                self.consistent_array_shapes = False
+                self.logger.info(f'Different array sizes between L1 and L1_ref for {ext}.')
+                return
+
+        # arrays to store results:
+        # difference at end/middle/end pixel between L1 and L1_ref - indices: [order, orderlet, pixel]
+        self.wave_diff_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets, 3)) # L1 - L1_ref diff between 0th pixel, middle pixel, last pixel
+        self.wave_diff_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets, 3))
+        self.pix_diff_green  = self.wave_diff_green 
+        self.pix_diff_red    = self.wave_diff_red
+        # median difference between L1 and L1_ref - indices: [order, orderlet]
+        self.wave_median_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets)) # stddev(L1 - L1_ref) per order and orderlet
+        self.wave_median_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets)) 
+        self.pix_median_green  = self.wave_median_green 
+        self.pix_median_red    = self.wave_median_red
+        # stddev of difference between L1 and L1_ref - indices: [order, orderlet]
+        self.wave_stddev_green = np.zeros((int(self.norders_per_chip[0]), self.norderlets)) # stddev(L1 - L1_ref) per order and orderlet
+        self.wave_stddev_red   = np.zeros((int(self.norders_per_chip[1]), self.norderlets)) 
+        self.pix_stddev_green  = self.wave_stddev_green 
+        self.pix_stddev_red    = self.wave_stddev_red
+        # indices: [order]
+        self.wave_mid_green = np.zeros(int(self.norders_per_chip[0])) # wavelength of middle of the order
+        self.wave_mid_red   = np.zeros(int(self.norders_per_chip[1])) 
+        
+        # Compute endpint wavelength differences and stddev between L1 and L1_ref
+        for oo, ext in enumerate(self.green_exts): # oo = orderlet number - 'SCI1, SCI2, SCI3, SKY, CAL
+            for o in np.arange(self.norders_per_chip[0]):
+                self.wave_diff_green[o,oo,0] = self.L1[ext][o,0] - L1_ref[ext][o,0]  # 0th pixel
+                self.wave_diff_green[o,oo,1] = self.L1[ext][o,2040] - L1_ref[ext][o,2040] # middle pixel
+                self.wave_diff_green[o,oo,2] = self.L1[ext][o,-1] - L1_ref[ext][o,-1] # last pixel
+                self.wave_median_green[o,oo] = np.nanmedian(self.L1[ext][o,:] - L1_ref[ext][o,:])
+                self.wave_stddev_green[o,oo] = np.nanstd(self.L1[ext][o,:] - L1_ref[ext][o,:])
+                npix_deriv = 1000
+                dwavdpix = (self.L1[ext][o,2040+npix_deriv] - self.L1[ext][o,2040-npix_deriv]) / (2*npix_deriv)
+                self.pix_diff_green[o,oo,0] = self.wave_diff_green[o,oo,0] / dwavdpix
+                self.pix_diff_green[o,oo,1] = self.wave_diff_green[o,oo,1] / dwavdpix
+                self.pix_diff_green[o,oo,2] = self.wave_diff_green[o,oo,2] / dwavdpix
+                self.pix_median_green[o,oo] = self.wave_median_green[o,oo] / dwavdpix
+                self.pix_stddev_green[o,oo] = self.wave_stddev_green[o,oo] / dwavdpix
+        for oo, ext in enumerate(self.red_exts):
+            for o in np.arange(self.norders_per_chip[1]):
+                self.wave_diff_red[o,oo,0] = self.L1[ext][o,0] - L1_ref[ext][o,0]  # 0th pixel
+                self.wave_diff_red[o,oo,1] = self.L1[ext][o,2040] - L1_ref[ext][o,2040] # middle pixel
+                self.wave_diff_red[o,oo,2] = self.L1[ext][o,-1] - L1_ref[ext][o,-1] # last pixel
+                self.wave_median_red[o,oo] = np.nanmedian(self.L1[ext][o,:] - L1_ref[ext][o,:])
+                self.wave_stddev_red[o,oo] = np.nanstd(self.L1[ext][o,:] - L1_ref[ext][o,:])
+                npix_deriv = 1000
+                dwavdpix = (self.L1[ext][o,2040+npix_deriv] - self.L1[ext][o,2040-npix_deriv]) / (2*npix_deriv)
+                self.pix_diff_red[o,oo,0] = self.wave_diff_red[o,oo,0] / dwavdpix
+                self.pix_diff_red[o,oo,1] = self.wave_diff_red[o,oo,1] / dwavdpix
+                self.pix_diff_red[o,oo,2] = self.wave_diff_red[o,oo,2] / dwavdpix
+                self.pix_median_red[o,oo] = self.wave_median_red[o,oo] / dwavdpix
+                self.pix_stddev_red[o,oo] = self.wave_stddev_red[o,oo] / dwavdpix
+        for o in np.arange(self.norders_per_chip[0]):
+            self.wave_mid_green[o] = L1_ref['GREEN_SCI_WAVE2'][o,2040]  # middle pixel
+        for o in np.arange(self.norders_per_chip[1]):
+            self.wave_mid_red[o] = L1_ref['RED_SCI_WAVE2'][o,2040]  # middle pixel
+
+
+    def plot_L1_wave_comparison(self, reference_file='auto', 
+                                      label_n_outliers=0, nsigma_threshold=4,
+                                     fig_path=None, show_plot=False):
+        """
+        Generate a multi-panel plot comparing the L1 wavelength solution to a
+        reference WLS.
+
+        Args:
+            fig_path (string) - set to the path for a SNR vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+
+        self.compare_wls_to_reference(reference_file=reference_file)
+        
+        nrows=5
+        ncols=5
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(16, 12), tight_layout=True)
+        xtick_positions = [4450, 5100, 5800, 6650, 7600, 8700]
+        xtick_labels = ["4450", "5100", "5800", "6650", "7600", "8700"]
+ 
+        for row in range(nrows):
+            for col in range(ncols):
+                oo = row # orderlet
+                if oo == 0:
+                    orderlet_label = 'SCI1'
+                    orderlet_marker = ">"
+                if oo == 1:
+                    orderlet_label = 'SCI2'
+                    orderlet_marker = "s"
+                if oo == 2:
+                    orderlet_label = 'SCI3'
+                    orderlet_marker = "<"
+                if oo == 3:
+                    orderlet_label = 'SKY'
+                    orderlet_marker = "D"
+                if oo == 4:
+                    orderlet_label = 'CAL'
+                    orderlet_marker = "D"
+                ax = axes[row, col]  # Access the specific Axes object
+                if col == 0:
+                    green_data = self.pix_diff_green[:,oo,0]
+                    red_data   = self.pix_diff_red[:,oo,0] 
+                if col == 1:
+                    green_data = self.pix_diff_green[:,oo,1]
+                    red_data   = self.pix_diff_red[:,oo,1] 
+                if col == 2:
+                    green_data = self.pix_diff_green[:,oo,2]
+                    red_data   = self.pix_diff_red[:,oo,2] 
+                if col == 3:
+                    green_data = self.pix_median_green[:,oo]
+                    red_data   = self.pix_median_red[:,oo]
+                if col == 4:
+                    green_data = self.pix_stddev_green[:,oo]
+                    red_data   = self.pix_stddev_red[:,oo]
+                ax.scatter(self.wave_mid_green, green_data, marker=orderlet_marker, c='green', label=orderlet_label)
+                ax.scatter(self.wave_mid_red,   red_data,   marker=orderlet_marker, c='darkred')
+
+                if label_n_outliers > 0:
+                
+                    def compute_median_and_sigma(data_valid):
+                        """Return (median, sigma) using 16th and 84th percentiles of data_valid."""
+                        p16 = np.percentile(data_valid, 16)
+                        p50 = np.percentile(data_valid, 50)
+                        p84 = np.percentile(data_valid, 84)
+                        sigma = (p84 - p16)/2
+                        return p50, sigma
+                
+                    # Compute median/sigma for green, ignoring zeros
+                    mask_g = np.isfinite(green_data) & (green_data != 0.0)
+                    g_valid = green_data[mask_g]
+                    if len(g_valid) == 0:
+                        p50_g, sigma_g = 0, 0
+                    else:
+                        p50_g, sigma_g = compute_median_and_sigma(g_valid)
+                    
+                    # Compute median/sigma for red, ignoring zeros
+                    mask_r = np.isfinite(red_data) & (red_data != 0.0)
+                    r_valid = red_data[mask_r]
+                    if len(r_valid) == 0:
+                        p50_r, sigma_r = 0, 0
+                    else:
+                        p50_r, sigma_r = compute_median_and_sigma(r_valid)
+                
+                    # Distance in sigma
+                    dist_in_sigma_g = np.full_like(green_data, np.nan, dtype=float)
+                    dist_in_sigma_r = np.full_like(red_data,   np.nan, dtype=float)
+                    if sigma_g > 0:
+                        dist_in_sigma_g[mask_g] = np.abs(green_data[mask_g] - p50_g) / sigma_g
+                    if sigma_r > 0:
+                        dist_in_sigma_r[mask_r] = np.abs(red_data[mask_r] - p50_r) / sigma_r
+                    combined_dist_in_sigma = np.concatenate([dist_in_sigma_g, dist_in_sigma_r])
+                    combined_wave = np.concatenate([self.wave_mid_green, self.wave_mid_red])
+                    combined_y    = np.concatenate([green_data, red_data])
+                    
+                    # Outliers >= n-sigma
+                    outlier_mask = (combined_dist_in_sigma >= nsigma_threshold)
+                    if np.any(outlier_mask):
+                        outlier_idx = np.where(outlier_mask)[0]
+                        sort_desc_idx = outlier_idx[np.argsort(combined_dist_in_sigma[outlier_idx])[::-1]]
+                        top_outliers = sort_desc_idx[:label_n_outliers]
+                        
+                        xlim = ax.get_xlim()
+                        ylim = ax.get_ylim()
+                        x_range = xlim[1] - xlim[0]
+                        y_range = ylim[1] - ylim[0]
+                        
+                        # We consider angles in 12 increments from 0..2π
+                        base_angles = np.linspace(0, 2*pi, 12, endpoint=False)
+                        
+                        # Decide the "preferred angle" based on which side of the midpoint
+                        def preferred_angle(xf, yf):
+                            """
+                            Return an angle in radians that places the label
+                            on the 'opposite' side from the outlier location:
+                             - If outlier is top-right => angle ~ 225° (5*pi/4)
+                             - top-left  => 315° (7*pi/4)
+                             - bottom-right => 135° (3*pi/4)
+                             - bottom-left  => 45° (pi/4)
+                            """
+                            xmid, ymid = 0.5, 0.5  # midpoint in fraction coords
+                            # Determine quadrant
+                            if xf >= xmid and yf >= ymid:
+                                # top-right => place label bottom-left => ~225°
+                                return 5*pi/4
+                            elif xf < xmid and yf >= ymid:
+                                # top-left => place label bottom-right => ~315°
+                                return 7*pi/4
+                            elif xf >= xmid and yf < ymid:
+                                # bottom-right => place label top-left => ~135°
+                                return 3*pi/4
+                            else:
+                                # bottom-left => place label top-right => ~45°
+                                return pi/4
+                
+                        # Radial distance & boundary padding
+                        radius_frac = 0.18
+                        pad_frac = 0.04
+                
+                        for idx in top_outliers:
+                            x_val = combined_wave[idx]
+                            y_val = combined_y[idx]
+                            
+                            if idx < len(green_data):
+                                point_color = 'green'
+                                local_idx = idx
+                            else:
+                                point_color = 'darkred'
+                                local_idx = idx - len(green_data)
+                
+                            label_text = f"o={local_idx}"
+                            
+                            # Convert outlier location to fraction of axes
+                            x_frac0 = (x_val - xlim[0]) / x_range
+                            y_frac0 = (y_val - ylim[0]) / y_range
+                            
+                            # Build candidate angles: put the "preferred angle" first
+                            pref = preferred_angle(x_frac0, y_frac0)
+                            # Then add the other base angles
+                            # We can ensure we don't duplicate if 'pref' is close to one in base_angles
+                            angles = np.concatenate(([pref], base_angles))
+                            
+                            annotation_placed = False
+                            
+                            # Try angles in order
+                            for angle in angles:
+                                x_frac = x_frac0 + radius_frac * cos(angle)
+                                y_frac = y_frac0 + radius_frac * sin(angle)
+                
+                                # Clamp to keep box inside plot
+                                x_frac = max(pad_frac, min(x_frac, 1.0 - pad_frac))
+                                y_frac = max(pad_frac, min(y_frac, 1.0 - pad_frac))
+                
+                                # Check if that fraction is sufficiently far from the point
+                                dist_to_point = np.hypot(x_frac - x_frac0, y_frac - y_frac0)
+                                if dist_to_point > 0.02:
+                                    # Place label here
+                                    ax.annotate(
+                                        label_text,
+                                        xy=(x_val, y_val),
+                                        xycoords='data',
+                                        xytext=(x_frac, y_frac),
+                                        textcoords=ax.transAxes,
+                                        arrowprops=dict(
+                                            arrowstyle="-",  # or "->"
+                                            color=point_color,
+                                            lw=1,
+                                            shrinkA=4,
+                                            shrinkB=4
+                                        ),
+                                        bbox=dict(
+                                            boxstyle="round,pad=0.3",
+                                            fc="white",
+                                            ec=point_color,
+                                            alpha=0.7
+                                        ),
+                                        color=point_color
+                                    )
+                                    annotation_placed = True
+                                    break
+                            
+                            if not annotation_placed:
+                                # Fallback if all angles fail
+                                ax.annotate(
+                                    label_text,
+                                    xy=(x_val, y_val),
+                                    xycoords='data',
+                                    xytext=(x_frac0, y_frac0),
+                                    textcoords=ax.transAxes,
+                                    arrowprops=dict(arrowstyle="->", color=point_color),
+                                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=point_color),
+                                    color=point_color
+                                )
+
+                #ax.xaxis.set_tick_params(labelsize=12)
+                ax.set_xscale('log')
+                ax.set_xlim(4450, 8700)
+                ax.get_xaxis().set_major_locator(plt.NullLocator())
+                ax.get_xaxis().set_minor_locator(plt.NullLocator())
+                ax.set_xticks(xtick_positions)               # Set positions of ticks
+                ax.set_xticklabels(xtick_labels, rotation=0) # Set custom labels (optionally rotate)
+                #ax.legend()
+                ax.grid()
+                ymin, ymax = ax.get_ylim()
+                if ymin > 0:
+                    ax.set_ylim(bottom=0)
+                if row == 0:
+                    if col == 0:
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=0)', fontsize=14)
+                    if col == 1:
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=2040)', fontsize=14)
+                    if col == 2:
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=4080)', fontsize=14)
+                    if col == 3:
+                        ax.set_title(r'median(L1 - L1$_\mathrm{ref}$)', fontsize=14)                    
+                    if col == 4:
+                        ax.set_title(r'stddev(L1 - L1$_\mathrm{ref}$)', fontsize=14)                    
+                if row == 4:
+                    ax.set_xlabel('Wavelength [Ang]', fontsize=14)
+                if col == 0:
+                    ax.set_ylabel(f'$\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
+
+        # Adjust spacing between subplots
+        plt.subplots_adjust(hspace=0)
+        plt.tight_layout()
+
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time}"
+        axes[4, 4].annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=8, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+
+        # Add overall title to array of plots
+        title = f'WAVE Comparison: L1 = {self.ObsID} ({self.name}), ' + r'L1$_\mathrm{ref}$' + f' = {self.reference_file}\n'
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title(title, fontsize=16)
+        plt.tight_layout()
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=300, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
 
 def uncertainty_median(input_data, n_bootstrap=1000):
     """
