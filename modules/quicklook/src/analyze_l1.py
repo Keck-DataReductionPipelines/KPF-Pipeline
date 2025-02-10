@@ -79,13 +79,23 @@ class AnalyzeL1:
         w_g_order - central wavelengths for green spectral orders
         w_r_order - central wavelengths for red spectral orders
 
-    Attributes set by compare_wls_to_reference():
-        wave_diff_green - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
-        wave_diff_red   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
-        wave_stddev_green - stddev(L1 - L1_ref);  [order, orderlet]
-        wave_stddev_red   - stddev(L1 - L1_ref);  [order, orderlet]
-        wave_mid_green - wavelength in middle of order; [order]
-        wave_mid_red   - wavelength in middle of order; [order]
+    Attributes set by compare_wave_to_reference():
+        self.wave_diff_green   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+        self.wave_diff_red     - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+        self.wave_median_green - median(L1 - L1_ref); [order, orderlet]
+        self.wave_median_red   - median(L1 - L1_ref); [order, orderlet]
+        self.wave_stddev_green - stddev(L1 - L1_ref); [order, orderlet]
+        self.wave_stddev_red   - stddev(L1 - L1_ref); [order, orderlet]
+        self.wave_mid_green    - wavelength of middle of order; [order]
+        self.wave_mid_red      - wavelength of middle of order; [order]
+        self.pix_diff_green   - same as self.wave_diff_green but in pixels
+        self.pix_diff_red     - same as self.wave_diff_red   
+        self.pix_median_green - same as self.wave_median_green 
+        self.pix_median_red   - same as self.wave_median_red   
+        self.pix_stddev_green - same as self.wave_stddev_green 
+        self.pix_stddev_red   - same as self.wave_stddev_red   
+        self.pix_mid_green    - same as self.wave_mid_green
+        self.pix_mid_red      - same as self.wave_mid_red   
 
     Attributes set by measure_l1_snr():
         GREEN_SNR - Two-dimensional array of SNR values for the Green CCD.
@@ -1215,7 +1225,7 @@ class AnalyzeL1:
         plt.close('all')
 
 
-    def compare_wls_to_reference(self, reference_file='auto'):
+    def compare_wave_to_reference(self, reference_file='auto'):
         '''
         This method compares the wavelength solution of the L1 file to a 
         reference wavelength solution.  The reference can be from a file
@@ -1227,14 +1237,22 @@ class AnalyzeL1:
                              "auto" - use rough_wls from calibration_lookup
     
         Attributes set:
-            self.wave_diff_green - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
-            self.wave_diff_red   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+            self.wave_diff_green   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
+            self.wave_diff_red     - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
             self.wave_median_green - median(L1 - L1_ref); [order, orderlet]
             self.wave_median_red   - median(L1 - L1_ref); [order, orderlet]
             self.wave_stddev_green - stddev(L1 - L1_ref); [order, orderlet]
             self.wave_stddev_red   - stddev(L1 - L1_ref); [order, orderlet]
-            self.wave_mid_green - wavelength of middle of order; [order]
-            self.wave_mid_red   - wavelength of middle of order; [order]
+            self.wave_mid_green    - wavelength of middle of order; [order]
+            self.wave_mid_red      - wavelength of middle of order; [order]
+            self.pix_diff_green   - same as self.wave_diff_green but in pixels
+            self.pix_diff_red     - same as self.wave_diff_red   
+            self.pix_median_green - same as self.wave_median_green 
+            self.pix_median_red   - same as self.wave_median_red   
+            self.pix_stddev_green - same as self.wave_stddev_green 
+            self.pix_stddev_red   - same as self.wave_stddev_red   
+            self.pix_mid_green    - same as self.wave_mid_green
+            self.pix_mid_red      - same as self.wave_mid_red   
         '''
         
         # Load reference wavelength solution
@@ -1323,12 +1341,18 @@ class AnalyzeL1:
 
     def plot_L1_wave_comparison(self, reference_file='auto', 
                                       label_n_outliers=0, nsigma_threshold=4,
-                                     fig_path=None, show_plot=False):
+                                      fig_path=None, show_plot=False):
         """
         Generate a multi-panel plot comparing the L1 wavelength solution to a
-        reference WLS.
+        reference WLS.  There are 5 rows (corresponding to SCI1, SCI2, SCI3, SKY, CAL)
+        by 5 columns (corresponding to the meidan(L1-L1_ref) per order, 
+        standard deviation, value at pixel=0, value at pixel=2040, value at pixel=4080).
 
         Args:
+            label_n_outliers (int, default=0) - number of outliers to annotate per panel
+            nsigma_threshold (int, default=4) - threshold (in standard deviations) for labeling
+                                                outliers; note that sigma is determined
+                                                separately for red and green orders            
             fig_path (string) - set to the path for a SNR vs. wavelength file
                 to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -1338,7 +1362,7 @@ class AnalyzeL1:
             (e.g., in a Jupyter Notebook).
         """
 
-        self.compare_wls_to_reference(reference_file=reference_file)
+        self.compare_wave_to_reference(reference_file=reference_file)
         
         nrows=5
         ncols=5
@@ -1350,36 +1374,36 @@ class AnalyzeL1:
             for col in range(ncols):
                 oo = row # orderlet
                 if oo == 0:
-                    orderlet_label = 'SCI1'
-                    orderlet_marker = ">"
-                if oo == 1:
-                    orderlet_label = 'SCI2'
-                    orderlet_marker = "s"
-                if oo == 2:
-                    orderlet_label = 'SCI3'
-                    orderlet_marker = "<"
-                if oo == 3:
                     orderlet_label = 'SKY'
                     orderlet_marker = "D"
-                if oo == 4:
+                if oo == 1:
                     orderlet_label = 'CAL'
                     orderlet_marker = "D"
+                if oo == 2:
+                    orderlet_label = 'SCI1'
+                    orderlet_marker = ">"
+                if oo == 3:
+                    orderlet_label = 'SCI2'
+                    orderlet_marker = "s"
+                if oo == 4:
+                    orderlet_label = 'SCI3'
+                    orderlet_marker = "<"
                 ax = axes[row, col]  # Access the specific Axes object
                 if col == 0:
-                    green_data = self.pix_diff_green[:,oo,0]
-                    red_data   = self.pix_diff_red[:,oo,0] 
-                if col == 1:
-                    green_data = self.pix_diff_green[:,oo,1]
-                    red_data   = self.pix_diff_red[:,oo,1] 
-                if col == 2:
-                    green_data = self.pix_diff_green[:,oo,2]
-                    red_data   = self.pix_diff_red[:,oo,2] 
-                if col == 3:
                     green_data = self.pix_median_green[:,oo]
                     red_data   = self.pix_median_red[:,oo]
-                if col == 4:
+                if col == 1:
                     green_data = self.pix_stddev_green[:,oo]
                     red_data   = self.pix_stddev_red[:,oo]
+                if col == 2:
+                    green_data = self.pix_diff_green[:,oo,0]
+                    red_data   = self.pix_diff_red[:,oo,0] 
+                if col == 3:
+                    green_data = self.pix_diff_green[:,oo,1]
+                    red_data   = self.pix_diff_red[:,oo,1] 
+                if col == 4:
+                    green_data = self.pix_diff_green[:,oo,2]
+                    red_data   = self.pix_diff_red[:,oo,2] 
                 ax.scatter(self.wave_mid_green, green_data, marker=orderlet_marker, c='green', label=orderlet_label)
                 ax.scatter(self.wave_mid_red,   red_data,   marker=orderlet_marker, c='darkred')
 
@@ -1432,7 +1456,7 @@ class AnalyzeL1:
                         x_range = xlim[1] - xlim[0]
                         y_range = ylim[1] - ylim[0]
                         
-                        # We consider angles in 12 increments from 0..2π
+                        # We consider angles in 12 increments from 0..2pi
                         base_angles = np.linspace(0, 2*pi, 12, endpoint=False)
                         
                         # Decide the "preferred angle" based on which side of the midpoint
@@ -1553,15 +1577,15 @@ class AnalyzeL1:
                     ax.set_ylim(bottom=0)
                 if row == 0:
                     if col == 0:
-                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=0)', fontsize=14)
-                    if col == 1:
-                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=2040)', fontsize=14)
-                    if col == 2:
-                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=4080)', fontsize=14)
-                    if col == 3:
                         ax.set_title(r'median(L1 - L1$_\mathrm{ref}$)', fontsize=14)                    
-                    if col == 4:
+                    if col == 1:
                         ax.set_title(r'stddev(L1 - L1$_\mathrm{ref}$)', fontsize=14)                    
+                    if col == 2:
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=0)', fontsize=14)
+                    if col == 3:
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=2040)', fontsize=14)
+                    if col == 4:
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=4080)', fontsize=14)
                 if row == 4:
                     ax.set_xlabel('Wavelength [Ang]', fontsize=14)
                 if col == 0:
@@ -1579,7 +1603,7 @@ class AnalyzeL1:
                     xytext=(0, -50), textcoords='offset points')
 
         # Add overall title to array of plots
-        title = f'WAVE Comparison: L1 = {self.ObsID} ({self.name}), ' + r'L1$_\mathrm{ref}$' + f' = {self.reference_file}\n'
+        title = f'WAVE Comparison: L1 = {self.ObsID}, ' + r'L1$_\mathrm{ref}$' + f' = {self.reference_file}\n'
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
