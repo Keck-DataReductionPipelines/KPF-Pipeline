@@ -299,7 +299,11 @@ standard deviation of normal data::
     p84 = 84th percentile of the data
     p16 = 16th percentile of the data
 
-The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data.
+For each stack-average image, an uncertainty image is also computed, where the uncertainty at a
+given pixel location is the square root of the quantity stack variance divided by number of stack sample left after outlier rejection.
+A correction factor is applied to properly reinflate the variance after it is naturally diminished via the data clipping.
+The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data,
+and encompasses our methods for computing the average, variance, and other statistics.
 The FitsHeaders python class in ``modules.Utils.kpf_fits`` includes methods for filtering file directories
 to identify all exposure files for a given observation date that are inputs for the type of master file to be created.
 The QC python class helper method called ``check_all_qc_keywords`` in ``modules.quality_control.src.quality_control`` is
