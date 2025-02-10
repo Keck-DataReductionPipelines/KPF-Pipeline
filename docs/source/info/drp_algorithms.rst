@@ -287,16 +287,17 @@ GREEN_VAR and RED_VAR, respectively, with physical units of electrons squared.
 Master Files Creation
 ---------------------
 
-This section describes the algorithms for how master files are made for bias, dark, flats, LFC, etalon, and ThAr exposures.
+This section describes the algorithms for how master files are made for bias, dark, flat, LFC, etalon, and ThAr exposures.
 Master files at the 2D data level are essentially pixel-by-pixel averages of many independent exposures of the same kind,
 in order to beat down the noise.
-There are bias, dark, and flat exposures, as well as arclamp exposures that are stacked.
-The averaging is actually a clipped mean, after outliers are rejected, which lie outside the +/- N-sigma envelope around the median
-of the data, which sigma computed robustly from percentiles using the following formula based on normal data: sigma = 0.5 * (p84 -p16).
+There are bias, dark, and flat exposures that are stacked, as well as arclamp exposures for LFC, etalon, and ThAr.
+The averaging actually involves computing a clipped mean after outliers are rejected, which lie outside the +/- N-sigma envelope
+around the median of the data, where sigma is computed robustly from percentiles using the following formula based on the
+standard deviation of normal data: sigma = 0.5 * (p84 -p16).
 The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data.
 The FitsHeaders python class in ``modules.Utils.kpf_fits`` includes methods for filtering file directories
-to identify the type of master file to be created for a given observation date.
-The QC python class helper method called check_all_qc_keywords in ``modules.quality_control.src.quality_control`` is
+to identify all exposure files for a given observation date that are inputs for the type of master file to be created.
+The QC python class helper method called ``check_all_qc_keywords`` in ``modules.quality_control.src.quality_control`` is
 utilized to check input-data QC-related FITS-header keywords, including ``NOTJUNK``, and skip images that do not pass
 this very important QC checking.
 Once the 2D master files are created, then L1 and then L2 versions of the master files are subsequently produced
