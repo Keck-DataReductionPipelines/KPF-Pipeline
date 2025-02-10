@@ -226,9 +226,15 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because {data_products_required} not in list of expected data products({data_products_expected})')
                 else:
                     logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because {this_spectrum_type} not in list of spectrum types: {spectrum_types}')
+
+            except KeyError as e:
+                logger.info(f"KeyError: {e}")
+                pass
+
             except AttributeError as e:
                 logger.info(f'Method {qc_name} does not exist in qc_obj or another AttributeError occurred: {e}')
                 pass
+
             except Exception as e:
                 logger.info(f'An error occurred when executing {qc_name}:', str(e))
                 pass
