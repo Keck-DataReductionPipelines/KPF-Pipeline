@@ -291,9 +291,16 @@ This section describes the algorithms for how master files are made for bias, da
 Master files at the 2D data level are essentially pixel-by-pixel averages of many independent exposures of the same kind,
 in order to beat down the noise.
 There are bias, dark, and flat exposures that are stacked, as well as arclamp exposures for LFC, etalon, and ThAr.
-The averaging actually involves computing a clipped mean after outliers are rejected, which lie outside the +/- N-sigma envelope
+The averaging actually involves computing a clipped mean after outliers are rejected, which lie outside the
+:math:`\pm N-\sigma` envelope
 around the median of the data, where sigma is computed robustly from percentiles using the following formula based on the
-standard deviation of normal data: sigma = 0.5 * (p84 -p16).
+standard deviation of normal data:
+
+.. math::
+  :label: datascale
+
+  \sigma = 0.5 * (p_{\tt 84th} - p_{\tt 16th})
+
 The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data.
 The FitsHeaders python class in ``modules.Utils.kpf_fits`` includes methods for filtering file directories
 to identify all exposure files for a given observation date that are inputs for the type of master file to be created.
