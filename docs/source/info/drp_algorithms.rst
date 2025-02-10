@@ -1,5 +1,5 @@
-KPF DRP Algorithms
-==================
+KPF DRP (Data Reduction Pipeline) Algorithms
+=============================================
 
 Please refer to the `KPF-Pipeline GitHub Repository <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_
 for any source code referred to below.
@@ -50,7 +50,7 @@ a single computer data file in standardized, multi-extension FITS format.
 There are multiple image extensions to contain the 2D subimage data from different readout amplifiers and filters,
 as well as table extensions for exposure metadata and ancillary information.
 This is called an L0 FITS file.   An example FITS filename for KPF is ``KP.20221203.81416.24.fits``,
-which is an arclamp calibration exposure, and it includes the observation date and time.
+which is an arclamp calibration exposure, and the observation date and time are embedded in the filename.
 
 Generally, the spectral wavelength range covered in the data extends from the blue portion
 of the spectral range at bottom of the image to the red portion of the spectral range
@@ -66,14 +66,14 @@ will have a wavelength range that somewhat overlaps
 those of the neighboring order traces below and above.
 This complexity makes the reduction of 2D raw spectra data particularly challenging.
 
-The following figure is a subimage of the aforementioned arclamp exposure from the ``GREEN-AMP1``
+The following figure is a small section of a subimage of the aforementioned arclamp exposure from the ``GREEN-AMP1``
 FITS image extension near the right side of the CCD associated with the corresponding readout amplifier.
 
 .. image:: KP.20221203.81416.24_subimage.png
 
-This subimage is about 500 pixels wide.
+This figure, shown above, is about 500 pixels wide, zoomed in to highlight features in the data.
 It shows portions of three sets of order traces horizontally oriented,
-where each order trace is composed of 5 distinct orderlets from top to bottom in the subimage
+where each order trace is composed of 5 distinct orderlets from top to bottom
 made by the ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY`` fibers of the instrument.
 Atomic lines from the arc lamp are clearly visible in the orderlets.  There are gaps between
 orderlet traces within the same order, and larger gaps between order-trace bundles.
@@ -287,9 +287,43 @@ GREEN_VAR and RED_VAR, respectively, with physical units of electrons squared.
 Master Files Creation
 ---------------------
 
+This section describes the algorithms for how master files are made for bias, dark, flats, LFC, etalon, and ThAr exposures.
+Master files at the 2D data level are essentially pixel-by-pixel averages of many independent exposures of the same kind,
+in order to beat down the noise.
+There are bias, dark, and flat exposures, as well as arclamp exposures that are stacked.
+The averaging is actually a clipped mean, after outliers are rejected, which lie outside the +/- N-sigma envelope around the median
+of the data, which sigma computed robustly from percentiles using the following formula based on normal data: sigma = 0.5 * (p84 -p16).
+The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data.
+The FitsHeaders python class in ``modules.Utils.kpf_fits`` includes methods for filtering file directories
+to identify the type of master file to be created for a given observation date.
+The QC python class helper method called check_all_qc_keywords in ``modules.quality_control.src.quality_control`` is
+utilized to check input-data QC-related FITS-header keywords, including ``NOTJUNK``, and skip images that do not pass
+this very important QC checking.
+Once the 2D master files are created, then L1 and then L2 versions of the master files are subsequently produced
+by running the 2D master files through the standard KPF DRP as if they were single science exposures.
+Master files are generated daily for each new observation date.
+
+Master Biases
+^^^^^^^^^^^^^
+
 <TBD to add content here>
 
-Include a description of how master stacks are made for bias, dark, flats, LFC, etalon, and ThAr.
+Master Darks
+^^^^^^^^^^^^
+
+<TBD to add content here>
+
+Master Flats
+^^^^^^^^^^^^
+
+<TBD to add content here>
+
+Master Arclamps
+^^^^^^^^^^^^^^^
+
+<TBD to add content here>
+
+
 
 Scattered light correction
 --------------------------
