@@ -1273,7 +1273,7 @@ class AnalyzeL1:
         self.red_exts   = [self.chips[1] + "_" + o for o in self.orderlets]
         self.exts = self.green_exts + self.red_exts
         self.norders_per_chip = [self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[0], self.L1[self.chips[1]+'_'+self.orderlets[0]].shape[0]] # green, red
-        #self.npix = self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[1] #4080
+        #self.npix = self.L1[self.chips[0]+'_'+self.orderlets[0]].shape[1] #last pixel
         self.norderlets = len(self.orderlets)
         
         # Check that L1 and L1_ref have same shaped arrays
@@ -1346,7 +1346,7 @@ class AnalyzeL1:
         Generate a multi-panel plot comparing the L1 wavelength solution to a
         reference WLS.  There are 5 rows (corresponding to SCI1, SCI2, SCI3, SKY, CAL)
         by 5 columns (corresponding to the meidan(L1-L1_ref) per order, 
-        standard deviation, value at pixel=0, value at pixel=2040, value at pixel=4080).
+        standard deviation, value at pixel=0, value at pixel=2040, value at pixel=4079).
 
         Args:
             label_n_outliers (int, default=0) - number of outliers to annotate per panel
@@ -1374,20 +1374,20 @@ class AnalyzeL1:
             for col in range(ncols):
                 oo = row # orderlet
                 if oo == 0:
-                    orderlet_label = 'SKY'
-                    orderlet_marker = "D"
-                if oo == 1:
-                    orderlet_label = 'CAL'
-                    orderlet_marker = "D"
-                if oo == 2:
                     orderlet_label = 'SCI1'
                     orderlet_marker = ">"
-                if oo == 3:
+                if oo == 1:
                     orderlet_label = 'SCI2'
                     orderlet_marker = "s"
-                if oo == 4:
+                if oo == 2:
                     orderlet_label = 'SCI3'
                     orderlet_marker = "<"
+                if oo == 3:
+                    orderlet_label = 'SKY'
+                    orderlet_marker = "D"
+                if oo == 4:
+                    orderlet_label = 'CAL'
+                    orderlet_marker = "D"
                 ax = axes[row, col]  # Access the specific Axes object
                 if col == 0:
                     green_data = self.pix_median_green[:,oo]
@@ -1585,7 +1585,7 @@ class AnalyzeL1:
                     if col == 3:
                         ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=2040)', fontsize=14)
                     if col == 4:
-                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=4080)', fontsize=14)
+                        ax.set_title(r'L1 - L1$_\mathrm{ref}$'+f' (pixel=4079)', fontsize=14)
                 if row == 4:
                     ax.set_xlabel('Wavelength [Ang]', fontsize=14)
                 if col == 0:
