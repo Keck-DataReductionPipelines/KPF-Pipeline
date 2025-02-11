@@ -210,6 +210,11 @@ PETALT    '20250108T08:37:44 HST'                     Time of last Etalon power 
 PBRBT     '20250108T08:37:44 HST'                     Time of last Broadband power measurement
 PSOLT     '20250108T08:37:44 HST'                     Time of last SoCal-CalFib power measurement
 TIMEERR   'ok 2 3 {NTP time correct to within 3 ms}'  NTP time server response (needs interpretation)
+VIGNETTE  'false '                                    Dome vignetting (true/false)
+STVIGNE   'false '                                    Top shutter vignetting (true/false)
+SBVIGNE   'false '                                    Bottom shutter vignetting (true/false)
+SBELEV    23.99                                       Bottom shutter elevation (deg)
+STELEV    23.99                                       Top shutter elevation (deg)
 ========  ==========================================  =========
 
 2D Primary Extension Header
