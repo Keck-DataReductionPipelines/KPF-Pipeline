@@ -79,3 +79,4 @@ PLFCT|string|Time of last LFC power measurement|None
 PETALT|string|Time of last Etalon power measurement|None
 PBRBT|string|Time of last Broadband power measurement|None
 PSOLT|string|Time of last SoCal-CalFib power measurement|None
+TIMEERR|string|NTP time server response|None

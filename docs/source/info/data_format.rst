@@ -209,6 +209,7 @@ PLFCT     '20250108T08:37:44 HST'                     Time of last LFC power mea
 PETALT    '20250108T08:37:44 HST'                     Time of last Etalon power measurement
 PBRBT     '20250108T08:37:44 HST'                     Time of last Broadband power measurement
 PSOLT     '20250108T08:37:44 HST'                     Time of last SoCal-CalFib power measurement
+TIMEERR   'ok 2 3 {NTP time correct to within 3 ms}'  NTP time server response (needs interpretation)
 ========  ==========================================  =========
 
 2D Primary Extension Header
