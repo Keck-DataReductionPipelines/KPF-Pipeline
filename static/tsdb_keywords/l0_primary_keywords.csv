@@ -80,8 +80,8 @@ PETALT|string|Time of last Etalon power measurement|None
 PBRBT|string|Time of last Broadband power measurement|None
 PSOLT|string|Time of last SoCal-CalFib power measurement|None
 TIMEERR|string|NTP time server response|None
-VIGNETTE|bool|Dome vignette|None
-STVIGNE|bool|Top shutter vignette|None
-SBVIGNE|bool|Bottom shutter vignette|None
+VIGNETTE|bool|Dome vignetting|None
+STVIGNE|bool|Top shutter vignetting|None
+SBVIGNE|bool|Bottom shutter vignetting|None
 SBELEV|float|Bottom shutter elevation|deg
 STELEV|float|Top shutter elevation|deg
