@@ -1227,32 +1227,42 @@ class AnalyzeL1:
 
     def compare_wave_to_reference(self, reference_file='auto'):
         '''
-        This method compares the wavelength solution of the L1 file to a 
-        reference wavelength solution.  The reference can be from a file
-        whose name is given or is automatically set using the Calibration 
-        Lookup.
+
+        This method compares the WAVE arrays of the L1 object to a WAVE arrays
+        of a reference L1.  The comparisons are: 1) the median difference in 
+        wavelength or pixels between L1 and L1_ref per order and per orderlet, 
+        2) the stddev of the difference in wavelength and pixel, 3) 
+        the difference evaluate and the first, middle, or last pixel.
+        The reference can be from a file whose name is given or is automatically 
+        set using GetCalibrations.  The method does note return anything, but it 
+        sets a set of attributes (below).
 
         Arguments:
-            reference_file - filename of reference wavelength solution.
-                             "auto" - use rough_wls from calibration_lookup
+            reference_file - filename of reference wavelength solution
+                             for default value of "auto", the reference is 
+                             equal to the rough_wls from GetCalibrations
     
         Attributes set:
-            self.wave_diff_green   - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
-            self.wave_diff_red     - (L1 - L1_ref diff) eval at p; [order, orderlet, p]; p = 0th pixel, middle pixel, last pixel
-            self.wave_median_green - median(L1 - L1_ref); [order, orderlet]
-            self.wave_median_red   - median(L1 - L1_ref); [order, orderlet]
-            self.wave_stddev_green - stddev(L1 - L1_ref); [order, orderlet]
-            self.wave_stddev_red   - stddev(L1 - L1_ref); [order, orderlet]
-            self.wave_mid_green    - wavelength of middle of order; [order]
-            self.wave_mid_red      - wavelength of middle of order; [order]
+            self.wave_diff_green   - (L1 - L1_ref diff) eval at p; 
+                                     indices: [order, orderlet, p]; 
+                                         orderlet indices: 0=SCI1, 1=SCI2, 2=SCI3, 3=SKY, 4=CAL
+                                         p = 0th pixel, middle pixel, last pixel
+            self.wave_diff_red     - (L1 - L1_ref diff) eval at p; 
+                                     indices: [order, orderlet, p]
+            self.wave_median_green - median(L1 - L1_ref); indices: [order, orderlet]
+            self.wave_median_red   - median(L1 - L1_ref); indices: [order, orderlet]
+            self.wave_stddev_green - stddev(L1 - L1_ref); indices: [order, orderlet]
+            self.wave_stddev_red   - stddev(L1 - L1_ref); indices: [order, orderlet]
+            self.wave_mid_green    - wavelength of middle of order; indices: [order]
+            self.wave_mid_red      - wavelength of middle of order; indices: [order]
             self.pix_diff_green   - same as self.wave_diff_green but in pixels
-            self.pix_diff_red     - same as self.wave_diff_red   
-            self.pix_median_green - same as self.wave_median_green 
-            self.pix_median_red   - same as self.wave_median_red   
-            self.pix_stddev_green - same as self.wave_stddev_green 
-            self.pix_stddev_red   - same as self.wave_stddev_red   
-            self.pix_mid_green    - same as self.wave_mid_green
-            self.pix_mid_red      - same as self.wave_mid_red   
+            self.pix_diff_red     - same as self.wave_diff_red but in pixels   
+            self.pix_median_green - same as self.wave_median_green but in pixels 
+            self.pix_median_red   - same as self.wave_median_red but in pixels   
+            self.pix_stddev_green - same as self.wave_stddev_green but in pixels 
+            self.pix_stddev_red   - same as self.wave_stddev_red but in pixels   
+            self.pix_mid_green    - same as self.wave_mid_green but in pixels
+            self.pix_mid_red      - same as self.wave_mid_red but in pixels   
         '''
         
         # Load reference wavelength solution
