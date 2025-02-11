@@ -1,4 +1,4 @@
 .. toctree::
    :maxdepth: 0
 
-   ../tutorials/AnalyzeTimeSeriesL1_Tutorial.ipynb
+   ../tutorials/AnalyzeL1_Tutorial.ipynb
