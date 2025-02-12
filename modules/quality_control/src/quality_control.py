@@ -543,7 +543,7 @@ class QCDefinitions:
         self.descriptions[name16] = 'Red/Green CCD data/var^0.5 not significantly negative.'
         self.data_types[name16] = 'int'
         self.spectrum_types[name16] = ['all', ]
-        self.master_types[name16] = ['all', ]
+        self.master_types[name16] = []
         self.required_data_products[name16] = [] # no required data products
         self.fits_keywords[name16] = 'POS2DSNR'
         self.fits_comments[name16] = 'QC: 2D check for > 10% data 5-sigma below zero'

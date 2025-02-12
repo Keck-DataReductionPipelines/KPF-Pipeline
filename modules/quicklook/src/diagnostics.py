@@ -401,10 +401,10 @@ def add_headers_masters_age_2D(D2, logger=None, verbose=False):
                 file_error = True
         except Exception as e:
             file_error = True
-            logger.error(f"Problem with {master_keyword} age determination: {e}\n{traceback.format_exc()}")
+            logger.error(f"Problem with {new_keyword} age determination: {e}\n{traceback.format_exc()}")
     
         if file_error:
-            logger.error(f"Problem with {master_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
+            logger.error(f"Problem with {new_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
             D2.header['PRIMARY'][new_keyword] = (-999, 'ERROR: Age of {master_file} compared to this file (whole days)')
 
     return D2

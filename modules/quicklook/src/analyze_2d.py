@@ -117,7 +117,7 @@ class Analyze2D:
     
                 return age_master_file
             else:
-                age_master_file = timedelta(days=-999) # standard value indicating keyword not available
+                age_master_file = -999 # standard value indicating keyword not available
                 return age_master_file
 
         except KeyError as e:
