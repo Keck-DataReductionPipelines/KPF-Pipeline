@@ -272,7 +272,7 @@ are written to the PRIMARY header after successfully CCD image processing, with 
 
 In the end, the 2D FITS file is written to the filesystem,
 containing HDUs for GREEN and RED full spectroscopic-data images,
-each 4080x4080 pixels, with FITS extension names GREEN_CCD and RED_CCD, respectively.
+each 4080x4080 pixels, with FITS extension names ``GREEN_CCD`` and ``RED_CCD``, respectively.
 The overscan biases that were subtracted are recorded in the FITS headers of
 these HDUs (not PRIMARY HDU); for example::
 
@@ -325,8 +325,9 @@ Master Biases
 A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
 An example of a master bias file filename is ``kpf_20250122_master_bias_autocal-bias.fits``.
-The data units of an output master bias file are electrons.
 For the data clipping, ``N_sigma = 2.1`` is used.
+The data units of a master bias 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master bias file are electrons.
 
 Master Darks
 ^^^^^^^^^^^^
@@ -337,8 +338,9 @@ An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.
 Input dark frames must have a minimum exposure time of 300 seconds.
 Before the image stacking, the relevant master bias is subtracted and the resulting data
 are normalized by input frame exposure time (FITS keyword ``EXPTIME``).
-The data units of an output master dark file are electrons/second.
 For the data clipping, ``N_sigma = 2.2`` is used.
+The data units of a master dark 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master dark file are electrons/second.
 
 Master Flats
 ^^^^^^^^^^^^
@@ -347,9 +349,9 @@ A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS ima
 ``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
 observed on the same date.
 An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
-The data units of a flat field in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
-of an output master flat file are dimensionless.
 For the data clipping, ``N_sigma = 2.3`` is used.
+The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master flat file are dimensionless.
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
@@ -414,6 +416,8 @@ A 2D master-arclamp file is a pixel-by-pixel clipped mean of a stack of L0 FITS 
 ``IMTYPE='Arclamp'`` and the same ``OBJECT`` keyword string observed on the same date.
 An example of a master arclamp filename is ``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``.
 For the data clipping, ``N_sigma = 2.4`` is used.
+The data units of a master arclamp 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master arclamp file are electrons.
 
 
 Scattered light correction
