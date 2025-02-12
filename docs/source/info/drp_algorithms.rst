@@ -324,23 +324,27 @@ Master Biases
 
 A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
-An example of a master bias file filename is ``kpf_20250122_master_bias_autocal-bias.fits``.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
 For the data clipping, ``N_sigma = 2.1`` is used.
 The data units of a master bias 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master bias file are electrons.
+An example of a master bias file filename is ``kpf_20250122_master_bias_autocal-bias.fits``.
 
 Master Darks
 ^^^^^^^^^^^^
 
 A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Dark'`` and ``OBJECT='autocal-dark'`` observed on the same date.
-An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.fits``.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
 Input dark frames must have a minimum exposure time of 300 seconds.
 Before the image stacking, the relevant master bias is subtracted and the resulting data
 are normalized by input frame exposure time (FITS keyword ``EXPTIME``).
 For the data clipping, ``N_sigma = 2.2`` is used.
 The data units of a master dark 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master dark file are electrons/second.
+An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.fits``.
 
 Master Flats
 ^^^^^^^^^^^^
@@ -348,10 +352,12 @@ Master Flats
 A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
 observed on the same date.
-An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
 For the data clipping, ``N_sigma = 2.3`` is used.
 The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master flat file are dimensionless.
+An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
@@ -414,10 +420,12 @@ Master Arclamps
 
 A 2D master-arclamp file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Arclamp'`` and the same ``OBJECT`` keyword string observed on the same date.
-An example of a master arclamp filename is ``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
 For the data clipping, ``N_sigma = 2.4`` is used.
 The data units of a master arclamp 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master arclamp file are electrons.
+An example of a master arclamp filename is ``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``.
 
 
 Scattered light correction
