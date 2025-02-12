@@ -379,7 +379,7 @@ to normalize the flat field and remove low-frequency variations in the master fl
 It is important to use an updated smooth lamp pattern when the intensity shape in Flatlamp exposures
 changes substantially in the KPF instrument.
 
-Master Order Trace and Order Mask
+Master Order Trace and Mask
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Master order-trace files, such as ``kpf_20250122_master_flat_GREEN_CCD.csv`` and
