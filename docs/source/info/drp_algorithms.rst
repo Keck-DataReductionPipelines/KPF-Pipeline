@@ -300,7 +300,8 @@ standard deviation of normal data::
     p16 = 16th percentile of the data
 
 For each stack-average image, an uncertainty image is also computed, where the uncertainty at a
-given pixel location is the square root of the quantity stack variance divided by number of stack sample left after outlier rejection.
+given pixel location is the square root of the quantity stack variance divided by number of stack samples
+left after outlier rejection.
 A correction factor is applied to properly reinflate the variance after it is naturally diminished via the data clipping.
 The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data,
 and encompasses our methods for computing the average, variance, and other statistics.
@@ -309,30 +310,101 @@ to identify all exposure files for a given observation date that are inputs for 
 The QC python class helper method called ``check_all_qc_keywords`` in ``modules.quality_control.src.quality_control`` is
 utilized to check input-data QC-related FITS-header keywords, including ``NOTJUNK``, and skip images that do not pass
 this very important QC checking.
-Once the 2D master files are created, then L1 and then L2 versions of the master files are subsequently produced
+
+Once the 2D-stacked-image master files are created, then L1 and then L2 versions of the master files are subsequently produced
 by running the 2D master files through the standard KPF DRP as if they were single science exposures.
 Master files are generated daily for each new observation date.
+
+There are also derived versions of master files that do not necessarily involve image stacking (at least directly).
+This includes smooth-lamp pattern 2D images and order-mask 2D images, and order-trace CSV files.  Only master order-mask files
+are not generated daily.
 
 Master Biases
 ^^^^^^^^^^^^^
 
-<TBD to add content here>
+A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
+An example of a master bias file filename is ``kpf_20250122_master_bias_autocal-bias.fits``.
 
 Master Darks
 ^^^^^^^^^^^^
 
-<TBD to add content here>
+A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Dark'`` and ``OBJECT='autocal-dark'`` observed on the same date.
+An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.fits``.
 
 Master Flats
 ^^^^^^^^^^^^
 
-<TBD to add content here>
+A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
+observed on the same date.
+An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
+
+
+
+Master Smooth Lamp
+^^^^^^^^^^^^^^^^^^
+
+A new 2D master smooth lamp is made daily from the data taken on the corresponding observation date
+for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
+lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
+instrument characteristics change (say, on the time scale of months).
+
+The inputs are stacked Flatlamp 2D images from the GREEN_CCD_STACK and RED_CCD_STACK FITS extensions
+of a master-flat file.  The data units of the inputs are electrons per second.
+The smoothing is done using a sliding-window kernel 200-pixels wide (along dispersion dimension)
+by 1-pixel high (along cross-dispersion dimension) by computing the clipped mean
+with 3-sigma double-sided outlier rejection.
+The data units of output master smooth-lamp images are electrons/second.
+
+The fixed smooth lamp pattern is used by the master-flat pipeline specifically
+to normalize the flat field and remove low-frequency variations in the master flat.
+It is important to use an updated smooth lamp pattern when the intensity shape in Flatlamp exposures
+changes substantially in the KPF instrument.
+
+Master Order Trace and Order Mask
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Master order-trace files, such as ``kpf_20250122_master_flat_GREEN_CCD.csv`` and
+``kpf_20250122_master_flat_RED_CCD.csv``, are CSV files containing the following quantites
+for each diffraction order:
+Coeff0, Coeff1, Coeff2, Coeff3, BottomEdge, TopEdge, X1, X2.
+This information is used to compute the location and curvature of the orderlet traces in the image data.
+
+From the order-trace files, a 2D master order mask FITS file containing GREEN and RED mask images that
+show locations of the diffraction orderlet traces in the image data can be computed.
+The order-mask values are numbered from 1 to 5 designating distinct orderlet traces from
+bottom to top in the image, so as to differentiate the corresponding fiber of the orderlet trace
+(sky, sci1, sci2, sci3, cal).
+An order-mask value of zero indicates the mask pixel is not on any order trace in the mask.
+The following table summarizes the possible order-mask values at various pixel locations in the mask:
+
+=========================  =================
+Fiber of Orderlet Trace    Order Mask Value
+=========================  =================
+None                               0
+SKY                                1
+SCI1                               2
+SCI2                               3
+SCI3                               4
+CAL                                5
+=========================  =================
+
+Generally, the master order mask is relatively static and updated via computation from
+master order-trace files for GREEN and RED only periodically (a new order-mask file is not made daily,
+but new order-trace files are made daily).
+New master order-trace files for GREEN and RED are made daily from the data taken on the
+corresponding observation date for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine),
+but these are only used to create a new master order mask for the generation of daily master flats
+when the instrument characteristics change (say, on the time scale of months).
 
 Master Arclamps
 ^^^^^^^^^^^^^^^
 
-<TBD to add content here>
-
+A 2D master-arclamp file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Arclamp'`` and the same ``OBJECT`` keyword string observed on the same date.
+An example of a master arclamp filename is ``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``.
 
 
 Scattered light correction

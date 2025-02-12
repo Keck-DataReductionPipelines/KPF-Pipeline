@@ -339,10 +339,10 @@ RED_CCD              image      4080 x 4080     electrons/sec   Master order smo
 
 
 
-Master Order Mask (Trace)
-^^^^^^^^^^^^^^^^^^
+Master Order Mask and Order Trace
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A 2D master order mask FITS file contains GREEN and RED mask mages showing the locations of the
+A 2D master order mask FITS file contains GREEN and RED mask images showing the locations of the
 diffraction orderlet traces in the image data.
 The order-mask values are numbered from 1 to 5 designating distinct orderlet traces from
 bottom to top in the image, so as to differentiate the corresponding fiber of the orderlet trace
