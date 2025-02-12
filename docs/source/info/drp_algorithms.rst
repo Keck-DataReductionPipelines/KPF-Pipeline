@@ -281,7 +281,7 @@ these HDUs (not PRIMARY HDU); for example::
 
 The physical units of the image data is electrons.
 There are also associated variance images with FITS extension names
-GREEN_VAR and RED_VAR, respectively, with physical units of electrons squared.
+``GREEN_VAR`` and ``RED_VAR``, respectively, with physical units of electrons squared.
 
 
 Master Files Creation
@@ -291,7 +291,7 @@ This section describes the algorithms for how master files are made for bias, da
 Master files at the 2D data level are essentially pixel-by-pixel averages of many independent exposures of the same kind,
 in order to beat down the noise.
 There are bias, dark, and flat exposures that are stacked, as well as arclamp exposures for LFC, etalon, and ThAr.
-The averaging actually involves computing a clipped mean after outliers are rejected, which lie outside the +/- N-sigma envelope
+The averaging actually involves computing a clipped mean after outliers are rejected, which lie outside the ``+/- N-sigma`` envelope
 around the median of the data, where sigma is computed robustly from percentiles using the following formula based on the
 standard deviation of normal data::
 
@@ -325,6 +325,8 @@ Master Biases
 A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
 An example of a master bias file filename is ``kpf_20250122_master_bias_autocal-bias.fits``.
+The data units of an output master bias file are electrons.
+For the data clipping, ``N_sigma = 2.1`` is used.
 
 Master Darks
 ^^^^^^^^^^^^
@@ -332,6 +334,11 @@ Master Darks
 A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Dark'`` and ``OBJECT='autocal-dark'`` observed on the same date.
 An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.fits``.
+Input dark frames must have a minimum exposure time of 300 seconds.
+Before the image stacking, the relevant master bias is subtracted and the resulting data
+are normalized by input frame exposure time (FITS keyword ``EXPTIME``).
+The data units of an output master dark file are electrons/second.
+For the data clipping, ``N_sigma = 2.2`` is used.
 
 Master Flats
 ^^^^^^^^^^^^
@@ -340,8 +347,9 @@ A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS ima
 ``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
 observed on the same date.
 An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
-
-
+The data units of a flat field in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master flat file are dimensionless.
+For the data clipping, ``N_sigma = 2.3`` is used.
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
@@ -351,7 +359,7 @@ for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine
 lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
 instrument characteristics change (say, on the time scale of months).
 
-The inputs are stacked Flatlamp 2D images from the GREEN_CCD_STACK and RED_CCD_STACK FITS extensions
+The inputs are stacked Flatlamp 2D images from the ``GREEN_CCD_STACK`` and ``RED_CCD_STACK`` FITS extensions
 of a master-flat file.  The data units of the inputs are electrons per second.
 The smoothing is done using a sliding-window kernel 200-pixels wide (along dispersion dimension)
 by 1-pixel high (along cross-dispersion dimension) by computing the clipped mean
@@ -405,6 +413,7 @@ Master Arclamps
 A 2D master-arclamp file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Arclamp'`` and the same ``OBJECT`` keyword string observed on the same date.
 An example of a master arclamp filename is ``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``.
+For the data clipping, ``N_sigma = 2.4`` is used.
 
 
 Scattered light correction
