@@ -14,8 +14,8 @@ from modules.quicklook.src.analyze_l2 import AnalyzeL2
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
 class QCDefinitions.  Other classes QCL0, QC2D, QCL1, and QCL2 contain methods to compute QC values,
 which are with the QC metrics, for specific data products, and then store them in the primary header
-of the corresponding KPF object (which will be saved to a FITS file).  Normally QC values are stored 
-headers, but storage in the KPF pipeline-operations database may be set up later by the database 
+of the corresponding KPF object (which will be saved to a FITS file).  Normally QC values are stored
+headers, but storage in the KPF pipeline-operations database may be set up later by the database
 administrator, depending upon the special requirements for some QC metrics.
 """
 
@@ -135,7 +135,7 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
         try:
             kw_value = kpf_object.header['PRIMARY'][kw]
             if kw_value == fail_value:
-                logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{}'.format(fname,kw,kw_value,fail_value))
+                logger.debug('--------->quality_control: check_all_qc_keywords: fname,kw,kw_value,fail_value = {},{},{},{}'.format(fname,kw,kw_value,fail_value))
                 for master_type in master_types:
                     if input_master_type.lower() == master_type.lower() or master_type.lower() == 'all' or input_master_type.lower() == 'all':
                         qc_fail = True
@@ -151,14 +151,14 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
 def execute_all_QCs(kpf_object, data_level, logger=None):
     """
-    Method to loop over all QC tests for the data level of the input KPF object 
-    (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g., 
-    in a Jupyter Notebook).  To run the QCs in a recipe, use methods in 
+    Method to loop over all QC tests for the data level of the input KPF object
+    (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g.,
+    in a Jupyter Notebook).  To run the QCs in a recipe, use methods in
     quality_control_framework.py
 
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
-        data_type - 
+        data_type -
 
     Attributes:
         None
@@ -166,11 +166,11 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
     Returns:
         kpf_object - the input kpf_object with QC keywords added
     """
-    
+
     logger = logger if logger is not None else DummyLogger()
-    
+
     #data_level = get_kpf_level(kpf_object)
-    
+
     # Define QC object
     if data_level == 'L0':
         qc_obj = QCL0(kpf_object)
@@ -182,7 +182,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
         qc_obj = QCL2(kpf_object)
     else:
         print('data_level is not L0, 2D, L1, or L2.  Exiting.')
-        
+
     if data_level != None:
 
         # Get a list of QC method names appropriate for the data level
@@ -194,7 +194,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
         # Run the QC tests and add result keyword to header
         primary_header = HeaderParse(kpf_object, 'PRIMARY')
         is_good = 1
-        this_spectrum_type = primary_header.get_name(use_star_names=False)    
+        this_spectrum_type = primary_header.get_name(use_star_names=False)
         logger.info(f'Spectrum type: {this_spectrum_type}')
         for qc_name in qc_names:
             try:
@@ -212,7 +212,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         logger.info(f'Running QC: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
                         method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
                         qc_value = method() # evaluate method
-                        if qc_value == True: 
+                        if qc_value == True:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Green")
                         elif qc_value == False:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Red")
@@ -226,9 +226,15 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because {data_products_required} not in list of expected data products({data_products_expected})')
                 else:
                     logger.info(f'Not running QC: {qc_name} ({qc_obj.qcdefinitions.descriptions[qc_name]}) because {this_spectrum_type} not in list of spectrum types: {spectrum_types}')
+
+            except KeyError as e:
+                logger.info(f"KeyError: {e}")
+                pass
+
             except AttributeError as e:
                 logger.info(f'Method {qc_name} does not exist in qc_obj or another AttributeError occurred: {e}')
                 pass
+
             except Exception as e:
                 logger.info(f'An error occurred when executing {qc_name}:', str(e))
                 pass
@@ -241,9 +247,9 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 def check_all_QC_keywords_present(kpf_object, logger=None):
     """
     Method to determine if all QC tests have been run on the input kpf_object
-    by examining it's keywords.  The method determines the data_level for 
-    kpf_object and checks for keywords of that level and lower, e.g., for 
-    data_level = 'L1', the method checks for keywords in levels 'L0', '2D', 
+    by examining it's keywords.  The method determines the data_level for
+    kpf_object and checks for keywords of that level and lower, e.g., for
+    data_level = 'L1', the method checks for keywords in levels 'L0', '2D',
     and 'L1'.
 
     Args:
@@ -253,11 +259,11 @@ def check_all_QC_keywords_present(kpf_object, logger=None):
     Returns:
         kpf_object - the input kpf_object with QC keywords added
     """
-    
+
     logger = logger if logger is not None else DummyLogger()
     data_level = get_kpf_level(kpf_object)
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
-    this_spectrum_type = primary_header.get_name(use_star_names=False)    
+    this_spectrum_type = primary_header.get_name(use_star_names=False)
 
     if data_level == 'L0':
         data_levels = data_levels = ['L0']
@@ -269,7 +275,7 @@ def check_all_QC_keywords_present(kpf_object, logger=None):
         data_levels = data_levels = ['L0', '2D', 'L1', 'L2']
 
 # To do:
-#   * write a method to check that all QC keywords defined below are in the 
+#   * write a method to check that all QC keywords defined below are in the
 #     appropriate .csv files for the TSDB.
 
 #####################################################################
@@ -309,12 +315,12 @@ class QCDefinitions:
     def __init__(self, logger=None):
 
         self.logger = logger if logger is not None else DummyLogger()
-        
+
         self.names = []
         self.descriptions = {}
-        self.kpf_data_levels = {} 
-        self.data_types = {}  
-        self.spectrum_types = {} 
+        self.kpf_data_levels = {}
+        self.data_types = {}
+        self.spectrum_types = {}
         self.master_types = {} # if = [], then the QC test is not relevant for the construction of any masters
         self.required_data_products = {} # if = [], then no required data products; other possible values: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
         self.fits_keywords = {}
@@ -408,7 +414,7 @@ class QCDefinitions:
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
         self.master_types[name6] = []
-        self.required_data_products[name6] = ['ExpMeter'] 
+        self.required_data_products[name6] = ['ExpMeter']
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
         self.db_columns[name6] = None
@@ -486,7 +492,7 @@ class QCDefinitions:
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
-        self.required_data_products[name12] = ['CaHK'] 
+        self.required_data_products[name12] = ['CaHK']
         self.fits_keywords[name12] = 'CAHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
         self.db_columns[name12] = None
@@ -512,7 +518,7 @@ class QCDefinitions:
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
-        self.required_data_products[name14] = ['CaHK'] 
+        self.required_data_products[name14] = ['CaHK']
         self.fits_keywords[name14] = 'CAHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
         self.db_columns[name14] = None
@@ -537,7 +543,7 @@ class QCDefinitions:
         self.descriptions[name16] = 'Red/Green CCD data/var^0.5 not significantly negative.'
         self.data_types[name16] = 'int'
         self.spectrum_types[name16] = ['all', ]
-        self.master_types[name16] = ['all', ]
+        self.master_types[name16] = []
         self.required_data_products[name16] = [] # no required data products
         self.fits_keywords[name16] = 'POS2DSNR'
         self.fits_comments[name16] = 'QC: 2D check for > 10% data 5-sigma below zero'
@@ -608,7 +614,7 @@ class QCDefinitions:
         self.fits_comments[name21] = 'QC: Master bias within 5 days of this obs'
         self.db_columns[name21] = None
         self.fits_keyword_fail_value[name21] = 0
-        
+
         name23 = 'D2_master_dark_age'
         self.names.append(name23)
         self.kpf_data_levels[name23] = ['2D']
@@ -621,7 +627,7 @@ class QCDefinitions:
         self.fits_comments[name23] = 'QC: Master dark within 5 days of this obs'
         self.db_columns[name23] = None
         self.fits_keyword_fail_value[name23] = 0
-        
+
         name24 = 'D2_master_flat_age'
         self.names.append(name24)
         self.kpf_data_levels[name24] = ['2D']
@@ -634,7 +640,7 @@ class QCDefinitions:
         self.fits_comments[name24] = 'QC: Master flat within 5 days of this obs'
         self.db_columns[name24] = None
         self.fits_keyword_fail_value[name24] = 0
-        
+
         name25 = 'L1_WLSFILE_age'
         self.names.append(name25)
         self.kpf_data_levels[name25] = ['L1']
@@ -647,7 +653,7 @@ class QCDefinitions:
         self.fits_comments[name25] = 'QC: WLSFILE within 2 days of this obs'
         self.db_columns[name25] = None
         self.fits_keyword_fail_value[name25] = 0
-        
+
         name26 = 'L1_WLSFILE2_age'
         self.names.append(name26)
         self.kpf_data_levels[name26] = ['L1']
@@ -697,11 +703,11 @@ class QCDefinitions:
         characteristics, sorted by the data level that the QC check accepts.
         """
         qc_names = self.names
-        
+
         for data_level in ['L0', '2D', 'L1', 'L2']:
             print(styled_text(f"Quality Control tests for {data_level}:", style="Bold"))
             for qc_name in qc_names:
-    
+
                 kpf_data_levels = self.kpf_data_levels[qc_name]
                 data_type = self.data_types[qc_name]
                 spectrum_types = self.spectrum_types[qc_name]
@@ -712,7 +718,7 @@ class QCDefinitions:
                 comment = self.fits_comments[qc_name]
                 db_column = self.db_columns[qc_name]
                 description = self.descriptions[qc_name]
-    
+
                 if data_level in self.kpf_data_levels[qc_name]:
                     print('   ' + styled_text("Name: ", style="Bold") + styled_text(qc_name, style="Bold", color="Blue"))
                     print('      ' + styled_text("Description: ", style="Bold") + description)
@@ -729,25 +735,25 @@ class QCDefinitions:
 
     def search_for_QC_keywords_in_files(self):
         """
-        This method checks if each QC keyword is listed in two places and 
-        prints the results with green and red highlighting.  The two places 
-        are: 1) .yaml plot configuration files for the time series database, 
+        This method checks if each QC keyword is listed in two places and
+        prints the results with green and red highlighting.  The two places
+        are: 1) .yaml plot configuration files for the time series database,
         2) .csv files that define the time series database structure, and xxx.
-        It is best used in an interactive environment, e.g., in a Jupyter 
+        It is best used in an interactive environment, e.g., in a Jupyter
         notebook.
         """
-        
+
         cases = ['plots', 'database']
-        
+
         for case in cases:
-        
+
             if case == 'plots':
                 search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/'
                 file_ext = '.yaml'
             if case == 'database':
                 search_directory = '/code/KPF-Pipeline/static/tsdb_keywords/'
                 file_ext = '.csv'
-            
+
             print(styled_text(f"Searching for *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
             for name in self.names:
                 fits_kwd = self.fits_keywords.get(name, "")
@@ -780,7 +786,7 @@ class QC:
     """
     Description:
         This superclass defines QC functions in general and has common methods across
-        subclasses QCL0, QC2D, QCL1, and QCL2.  It also includes QC checks that apply 
+        subclasses QCL0, QC2D, QCL1, and QCL2.  It also includes QC checks that apply
         to all data levels.
 
     Class Attributes:
@@ -794,7 +800,7 @@ class QC:
         self.kpf_object = kpf_object
         self.qcdefinitions = QCDefinitions()
         self.logger = logger if logger is not None else DummyLogger()
-        
+
 
     def add_qc_keyword_to_header(self, qc_name, value, debug=False):
 
@@ -803,7 +809,7 @@ class QC:
                 value = 1
             else:
                 value = 0
-        
+
         keyword = self.qcdefinitions.fits_keywords[qc_name]
         comment = self.qcdefinitions.fits_comments[qc_name]
 
@@ -814,10 +820,10 @@ class QC:
 
     def not_junk(self, junk_ObsIDs_csv='/data/reference/Junk_Observations_for_KPF.csv', debug=False):
         """
-        This Quality Control method can be used in any of the data levels (L0/2D/L1/L2) 
-        so it is included in the superclass. 
+        This Quality Control method can be used in any of the data levels (L0/2D/L1/L2)
+        so it is included in the superclass.
         It checks if the obsID of the input is in the list of junked files.
-    
+
         Args:
              kpfobs - a KPF L0/2D/L1/L2 object
              junk_ObsIDs_csv - a CSV with ObsIDs in the first column
@@ -827,21 +833,21 @@ class QC:
                                    KP.20230621.27498.77
                                    KP.20230621.27611.73
                                    KP.20220516.57354.11
-    
+
              debug - an optional flag.  If True, verbose output will be printed.
-    
+
          Returns:
              QC_pass - a boolean signifying that the input(s) are not junk (i.e., = False if junk)
         """
-        
+
         QC_pass = True  # Assume not junk unless explicitly listed in junk_ObsIDs_csv
-        
+
         try:
             filename = self.kpf_object.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
         except:
             filename = 'this file'
         obsID = filename[:20]
-    
+
         # read list of junk files
         if os.path.exists(junk_ObsIDs_csv):
             df_junk = pd.read_csv(junk_ObsIDs_csv)
@@ -850,35 +856,35 @@ class QC:
         else:
             self.logger.info(f"The file {junk_ObsIDs_csv} does not exist.")
             return QC_pass
-        
+
         QC_pass = not (df_junk['observation_id'].isin([obsID])).any()
         if debug:
             self.logger.info(f'{filename} is a Junk file: ' + str(not QC_pass[i]))
-    
+
         return QC_pass
 
 
     def add_kpfera(self, kfpera_csv='/code/KPF-Pipeline/static/kpfera_definitions.csv', debug=False):
         """
-        This is not a Quality Control method.  
+        This is not a Quality Control method.
         The goal of this method is to add the KPFERA keyword to all KPF files.
         This keyword was created in February 2024, during the first service mission;
-        thus, L0 files before then (with KPFERA = 1.0 and 1.5) do not have 
-        this defined.  By running a recipe with the L0 checks as the first 
+        thus, L0 files before then (with KPFERA = 1.0 and 1.5) do not have
+        this defined.  By running a recipe with the L0 checks as the first
         element in a processing recipe involving L0 files, the KPFERA keyword
         is guaranteed to be in the primary header of every kpf object.
-    
+
         Args:
              kpfobs - a KPF L0/2D/L1/L2 object
-             kfpera_csv - a CSV the KPF era definitions    
+             kfpera_csv - a CSV the KPF era definitions
              debug - an optional flag.  If True, verbose output will be printed.
-    
+
          Returns:
              KPFERA - a string the the KPFERA (e.g., '1.0') for the input file
         """
-        
+
         KPFERA = float('0.0')
-        
+
         try:
             filename = self.kpf_object.header['PRIMARY']['OFNAME'] # 'KP.20231129.11266.37.fits' / Filename of output file
         except:
@@ -898,7 +904,7 @@ class QC:
                     self.logger.info(f'Read the KPFERA file {kfpera_csv}.')
                 nrows = len(df_kpfera)
                 for i in np.arange(nrows):
-                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S') 
+                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S')
                     stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
                     if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
                         KPFERA = float(df_kpfera.iloc[i][0])
@@ -909,10 +915,10 @@ class QC:
                 return None
         else:
             self.logger.error(f"The file {kfpera_csv} does not exist.")
-        
+
         if debug:
             self.logger.info(f'The KPFERA of {filename} is: ' + str(KPFERA))
-    
+
         return KPFERA
 
 #####################################################################
@@ -959,22 +965,22 @@ class QCL0(QC):
 
     def L0_data_products(self, debug=False):
         """
-        This Quality Control function checks if the expected data_products 
-        in an L0 file are present and if their data extensions are populated 
+        This Quality Control function checks if the expected data_products
+        in an L0 file are present and if their data extensions are populated
         with arrays of non-zero size.
-        
+
         Args:
              L0 - an L0 object
              debug - an optional flag.  If True, missing data products are noted.
-    
+
          Returns:
              QC_pass - a boolean signifying that the QC passed (True) for failed (False)
         """
-        
+
         try:
             L0 = self.kpf_object
             debug=True
-        
+
             # Determine which extensions should be in the L0 file.
             # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
             trigtarg = L0.header['PRIMARY']['TRIGTARG']
@@ -993,13 +999,13 @@ class QCL0(QC):
                 data_products.append('Pyrheliometer')
             if debug:
                 self.logger.info('Data products expected in this L0 file: ' + str(data_products))
-         
+
             # Use helper funtion to get data products and check their characteristics.
             QC_pass = True
             data_products_present = get_data_products_L0(L0)
             if debug:
                 self.logger.info('Data products in L0 file: ' + str(data_products_present))
-        
+
             # Check for specific data products
             possible_data_products = ['Green', 'Red', 'CaHK', 'ExpMeter', 'Guider', 'Telemetry', 'Pyrheliometer']
             if debug:
@@ -1014,27 +1020,27 @@ class QCL0(QC):
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-        
+
         return QC_pass
 
 
     def L0_header_keywords_present(self, essential_keywords=['auto'], debug=False):
         """
         This Quality Control function checks if a specified set of FITS header keywords are present.
-        
+
         Args:
              L0 - an L0 object
-             essential_keywords - an optional list of keywords to check.  If set to ['auto'], 
-             then a default list of keywords will be checked. 
+             essential_keywords - an optional list of keywords to check.  If set to ['auto'],
+             then a default list of keywords will be checked.
              debug - an optional flag.  If True, missing data products are noted.
-    
+
          Returns:
              QC_pass - a boolean signifying that the QC passed (True) for failed (False)
         """
-        
+
         try:
             L0 = self.kpf_object
-    
+
             if essential_keywords == ['auto']:
                  essential_keywords = [
                      'DATE-BEG',  # Start of exposure from kpfexpose
@@ -1070,10 +1076,10 @@ class QCL0(QC):
                      'SKY-OBJ',   # Sky fiber source
                      'SCI-OBJ',   # Science fiber source
                      'AGITSTA',   # Agitator status
-                 ] 
-    
+                 ]
+
             QC_pass = True
-        
+
             for keyword in essential_keywords:
                 if keyword not in L0.header['PRIMARY']:
                     QC_pass = False
@@ -1083,21 +1089,21 @@ class QCL0(QC):
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-        
+
         return QC_pass
 
 
     def L0_datetime(self, debug=False):
         """
         This QC module performs the following checks on datetimes in the L0 primary header
-        and in the Exposure Meter table (if present).  The timing checks have precision 
-        thresholds to only catch significant timing errors and not trigger on small 
+        and in the Exposure Meter table (if present).  The timing checks have precision
+        thresholds to only catch significant timing errors and not trigger on small
         differences related to machine precision or dead time in the Exposure Meter detector.
         This method returns True only if all checks pass.
-        
-            Time ordering: 
+
+            Time ordering:
                 DATE-BEG < DATE-MID < DATE-END
-            Duration consistency: 
+            Duration consistency:
                 DATE-END - DATE-BEG = ELAPSED
             Consistency between Green/Red and overall timing:
                 DATE-BEG = GRDATE-B
@@ -1113,7 +1119,7 @@ class QCL0(QC):
             L0 = self.kpf_object
             date_format = "%Y-%m-%dT%H:%M:%S.%f"
             QC_pass = True
-        
+
             time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
             time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
 
@@ -1126,7 +1132,7 @@ class QCL0(QC):
                     QC_pass = False
             if not QC_pass:
                 return QC_pass
-            
+
             # Check that dates are ordered correctly
             date_beg = datetime.strptime(L0.header['PRIMARY']['DATE-BEG'], date_format)
             date_mid = datetime.strptime(L0.header['PRIMARY']['DATE-MID'], date_format)
@@ -1134,13 +1140,13 @@ class QCL0(QC):
             elapsed  = float(L0.header['PRIMARY']['ELAPSED'])
             if (date_end < date_mid) or (date_mid < date_beg):
                 QC_pass = False
-            
+
             # Check that DATE-BEG + ELAPSE = DATE-END
             if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
                 if debug:
                     self.logger.info(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
                 QC_pass = False
-                
+
             # Check that GRDATE-B/RDDATE-B are consistent with DATE-BEG, etc.
             data_products = get_data_products_L0(L0)
             if 'Green' in data_products:
@@ -1190,15 +1196,15 @@ class QCL0(QC):
                             self.logger.info(f'abs(DATE-END - RDDATE-E) = {abs((date_end - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
                         QC_pass = False
             if ('Green' in data_products) and ('Red' in data_products) and QC_pass:
-                if abs((grdate_b - rddate_b).total_seconds()) > time_precision_threshold: 
+                if abs((grdate_b - rddate_b).total_seconds()) > time_precision_threshold:
                     if debug:
                         self.logger.info(f'abs(GRDATE-B - RDDATE-B) = {abs((grdate_b - rddate_b).total_seconds())} sec > {time_precision_threshold} sec')
                     QC_pass = False
-                if abs((grdate_e - rddate_e).total_seconds()) > time_precision_threshold: 
+                if abs((grdate_e - rddate_e).total_seconds()) > time_precision_threshold:
                     if debug:
                         self.logger.info(f'abs(GRDATE-E - RDDATE-E) = {abs((grdate_e - rddate_e).total_seconds())} sec > {time_precision_threshold} sec')
                     QC_pass = False
-         
+
             if 'ExpMeter' in data_products:
                 if 'Date-Beg-Corr' in L0['EXPMETER_SCI'].columns:
                     exp_date_beg = datetime.strptime(L0['EXPMETER_SCI'].iloc[0]['Date-Beg-Corr'], date_format)
@@ -1228,30 +1234,30 @@ class QCL0(QC):
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-        
-        return QC_pass    
+
+        return QC_pass
 
 
     def EM_not_saturated(self, debug=False):
         """
         This Quality Control function checks if 2 or more reduced pixels in an exposure
-        meter spectrum is within 90% of saturated.  The check is applied to the EM-SCI 
-        and EM-SKY fibers and returns False if saturation is detected in either.  
-        Note that this check only works for L0 files with the EXPMETER_SCI and 
+        meter spectrum is within 90% of saturated.  The check is applied to the EM-SCI
+        and EM-SKY fibers and returns False if saturation is detected in either.
+        Note that this check only works for L0 files with the EXPMETER_SCI and
         EXPMETER_SKY extensions present.
-        
+
         Args:
              L0 - an L0 object
              fiber ('SCI' [default value] or 'SKY) - the EM fiber output to be tested
              debug - an optional flag.  If True, missing data products are noted.
-    
+
          Returns:
              QC_pass - a boolean signifying that the QC passed (True) for failed (False)
         """
 
         saturation_level = 1.93e6 # saturation level in reduced EM spectra (in data frame)
-        saturation_fraction = 0.9 
-        
+        saturation_fraction = 0.9
+
         try:
             # Read and condition the table of Exposure Meter Data
             L0 = self.kpf_object
@@ -1271,33 +1277,33 @@ class QCL0(QC):
             if len(EM_sat_SCI) >= 3:  # drop first and last rows if nrows >= 3
                 EM_sat_SCI = EM_sat_SCI.iloc[1:-1]
                 EM_sat_SKY = EM_sat_SKY.iloc[1:-1]
-            
+
             # Determine the saturation fraction
             for col in EM_sat_SCI.columns:
                 try: # only apply to columns with wavelengths as headers
                     float_col_title = float(col)
-                    EM_sat_SCI[col] = EM_sat_SCI[col] / saturation_level 
+                    EM_sat_SCI[col] = EM_sat_SCI[col] / saturation_level
                 except ValueError:
-                    pass 
+                    pass
             for col in EM_sat_SKY.columns:
-                try: 
+                try:
                     float_col_title = float(col)
-                    EM_sat_SKY[col] = EM_sat_SKY[col] / saturation_level 
+                    EM_sat_SKY[col] = EM_sat_SKY[col] / saturation_level
                 except ValueError:
-                    pass 
-    
+                    pass
+
             saturated_elements_SCI = (EM_sat_SCI > saturation_fraction).sum().sum()
             saturated_elements_SKY = (EM_sat_SKY > saturation_fraction).sum().sum()
             total_elements = EM_sat_SCI.shape[0] * EM_sat_SCI.shape[1]
             saturated_fraction_threshold = 1.5 / EM_sat_SCI.shape[1]
-            
+
             if saturated_elements_SCI / total_elements > saturated_fraction_threshold:
                 QC_pass = False
             elif saturated_elements_SKY / total_elements > saturated_fraction_threshold:
                 QC_pass = False
-            else: 
+            else:
                 QC_pass = True
-            
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1307,24 +1313,24 @@ class QCL0(QC):
 
     def EM_flux_not_negative(self, debug=False):
         """
-        This Quality Control function checks if 20 or more consecutive elements of the 
-        exposure meter spectra are negative.  Negative flux usually indicates 
-        over-subtraction of bias from the raw EM images.  The check is applied to the 
-        EM-SCI and EM-SKY fibers and returns False if negative flux is detected in 
-        either.  Note that this check only works for L0 files with the EXPMETER_SCI and 
+        This Quality Control function checks if 20 or more consecutive elements of the
+        exposure meter spectra are negative.  Negative flux usually indicates
+        over-subtraction of bias from the raw EM images.  The check is applied to the
+        EM-SCI and EM-SKY fibers and returns False if negative flux is detected in
+        either.  Note that this check only works for L0 files with the EXPMETER_SCI and
         EXPMETER_SKY extensions present.
-        
+
         Args:
              L0 - an L0 object
              fiber ('SCI' [default value] or 'SKY) - the EM fiber output to be tested
              debug - an optional flag.  If True, missing data products are noted.
-    
+
          Returns:
              QC_pass - a boolean signifying that the QC passed (True) for failed (False)
         """
 
         N_in_a_row = 20 # number of negative flux elements in a row that triggers QC failure
-        
+
         try:
             # Read and condition the table of Exposure Meter Data
             L0 = self.kpf_object
@@ -1343,7 +1349,7 @@ class QCL0(QC):
             EM_SKY.drop(columns_to_drop_SKY, axis=1, inplace=True)
             counts_SCI = EM_SCI.sum(axis=0).values
             counts_SKY = EM_SKY.sum(axis=0).values
-            
+
             # Determine if the spectra have significant negative flux
             negative_mask_SCI = counts_SCI < 0 # spectral elements with negative flux
             negative_mask_SKY = counts_SKY < 0
@@ -1352,23 +1358,23 @@ class QCL0(QC):
             conv_result_SKY = convolve1d(negative_mask_SKY.astype(int), window, mode='constant', cval=0)
             has_consec_negs_SCI = np.any(conv_result_SCI == N_in_a_row)
             has_consec_negs_SKY = np.any(conv_result_SKY == N_in_a_row)
-    
+
             if has_consec_negs_SCI or has_consec_negs_SKY:
                 QC_pass = False
-            else: 
+            else:
                 QC_pass = True
-            
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-            
+
         return QC_pass
 
 
     def L0_bad_readout_check(self, debug=False):
         """
         This Quality Control function checks if the desired readout time
-        matches the expected readout time (within some limit). This 
+        matches the expected readout time (within some limit). This
         mismatch idetifies a 'smeared' readout scenario that we want to junk.
         Bad readout states can also have no value for Greed/Red elapsed time.
         Bad readouts have elapsed time between 6 and 7 seconds.
@@ -1377,12 +1383,12 @@ class QCL0(QC):
         Edge case: If a star has a desired exposure time larger than 7 seconds
         but the exposure meter properly terminates the exposure between
         6.0 and 6.7 seconds, the star will be improperly failed. (very rare)
-        
+
         Args:
             debug - an optional flag.  If True, missing data products are noted.
 
             Example that should fail this QC test: KP.20241008.31459.57
-        
+
         Returns:
             QC_pass - a boolean signifying that the QC passed for failed
         """
@@ -1392,12 +1398,12 @@ class QCL0(QC):
 
             Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
             Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
-    
-            if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):    
+
+            if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):
                 QC_pass = False
             else:
                 QC_pass = True
-            
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1426,59 +1432,59 @@ class QC2D(QC):
         """
         This Quality Control function checks if the 2D data exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
-    
+
         Args:
              debug - an optional flag.  If True, prints shapes of CCD arrays and other comments.
-    
+
          Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             D2 = self.kpf_object
-    
+
             if debug:
                 self.logger.info(D2.info())
                 type_D2 = type(D2)
                 self.logger.info("type_2D = ",type_D2)
                 self.logger.info("D2 = ",D2)
-    
+
             QC_pass = True
 
             extensions = D2.extensions
-        
+
             if 'GREEN_CCD' in extensions:
-            
+
                 if debug:
                     self.logger.info("GREEN_CCD exists")
                     self.logger.info("data_shape =", np.shape(D2["GREEN_CCD"]))
-                
-                if np.shape(D2["GREEN_CCD"]) != (4080, 4080):  
+
+                if np.shape(D2["GREEN_CCD"]) != (4080, 4080):
                     QC_pass = False
-                
+
             else:
                 if debug:
                     self.logger.info("GREEN_CCD does not exist")
-                QC_pass = False       
-            
+                QC_pass = False
+
             if 'RED_CCD' in extensions:
-            
+
                 if debug:
                     self.logger.info("RED_CCD exists")
                     self.logger.info("data_shape =", np.shape(D2["RED_CCD"]))
-                
-                if np.shape(D2["RED_CCD"]) != (4080, 4080):  
+
+                if np.shape(D2["RED_CCD"]) != (4080, 4080):
                     QC_pass = False
-                
+
             else:
                 if debug:
                     self.logger.info("RED_CCD does not exist")
-                QC_pass = False    
-                
+                QC_pass = False
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-        
+
         return QC_pass
 
 
@@ -1489,11 +1495,11 @@ class QC2D(QC):
 
         Args:
              debug - an optional flag.  If True, prints shape of CaHK CCD array.
-    
+
         Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             D2 = self.kpf_object
 
@@ -1512,15 +1518,15 @@ class QC2D(QC):
                 if debug:
                     self.logger.info("CA_HK exists")
                     self.logger.info("data_shape =", np.shape(D2["CA_HK"]))
-                
-                if np.shape(D2["CA_HK"]) == (0,):  
+
+                if np.shape(D2["CA_HK"]) == (0,):
                     QC_pass = False
-                
+
             else:
                 if debug:
                     self.logger.info("CA_HK does not exist")
-                QC_pass = False       
-                
+                QC_pass = False
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1539,7 +1545,7 @@ class QC2D(QC):
         Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             D2 = self.kpf_object
 
@@ -1548,24 +1554,24 @@ class QC2D(QC):
                 type_D2 = type(D2)
                 self.logger.info("type_2D = ",type_D2)
                 self.logger.info("D2 = ",D2)
-    
+
             QC_pass = True
             extensions = D2.extensions
-    
+
             mean_GREEN = D2["GREEN_CCD"].flatten().mean()
             mean_RED = D2["RED_CCD"].flatten().mean()
-    
+
             if debug:
                 self.logger.info("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
                 self.logger.info("Mean RED_CCD flux =", np.round(mean_RED, 2))
                 self.logger.info("Max allowed mean flux =", 10)
-    
+
             if (mean_GREEN > 10) | (mean_RED > 10):
                 if debug:
                     self.logger.info("One of the CCDs has a high flux")
                 QC_pass = False
 
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1583,36 +1589,36 @@ class QC2D(QC):
         Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             D2 = self.kpf_object
-    
+
             if debug:
                 self.logger.info(D2.info())
                 type_D2 = type(D2)
                 self.logger.info("type_2D = ",type_D2)
                 self.logger.info("D2 = ",D2)
-        
+
             QC_pass = True
             extensions = D2.extensions
-    
+
             mean_GREEN = D2["GREEN_CCD"].flatten().mean()
             mean_RED = D2["RED_CCD"].flatten().mean()
-    
+
             max_allowed_mean_flux_green = 11
             max_allowed_mean_flux_red = 13
-    
+
             if debug:
                 self.logger.info("Mean GREEN_CCD flux =", np.round(mean_GREEN, 2))
                 self.logger.info("Mean RED_CCD flux =", np.round(mean_RED, 2))
                 self.logger.info("Max allowed mean flux for GREEN =", max_allowed_mean_flux_green)
                 self.logger.info("Max allowed mean flux for RED =", max_allowed_mean_flux_red)
-    
+
             if (mean_GREEN > max_allowed_mean_flux_green) | (mean_RED > max_allowed_mean_flux_red):
                 if debug:
                     self.logger.info("One of the CCDs has a high flux")
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1622,19 +1628,19 @@ class QC2D(QC):
     def positive_2D_SNR(self, neg_threshold=-5, debug=False):
         """
         This Quality Control function checks a 2D image to see if more than 1%
-        of the pixel values of 'SNR' = counts / sqrt(variance) < -5.  
-        The value of -5 was chosen because for a definition of SNR that is 
-        normally distributed, this is 5-sigma low.  
-        
+        of the pixel values of 'SNR' = counts / sqrt(variance) < -5.
+        The value of -5 was chosen because for a definition of SNR that is
+        normally distributed, this is 5-sigma low.
+
         Args:
              neg_threshold - the low flux threshold (default: -5, i.e., 5-sigma)
              debug - an optional flag.  If True, prints mean flux in each CCD.
 
         Returns:
-             QC_pass - a boolean signifying that < 1% of the 2D pixels have 
+             QC_pass - a boolean signifying that < 1% of the 2D pixels have
                        values below the threshold
         """
-    
+
         D2 = self.kpf_object
 
         if debug:
@@ -1642,11 +1648,11 @@ class QC2D(QC):
             type_D2 = type(D2)
             self.logger.info("type_2D = ",type_D2)
             self.logger.info("D2 = ",D2)
-    
+
         QC_pass = True
         extensions = D2.extensions
-    
-        try: 
+
+        try:
             if 'GREEN_CCD' in extensions:
                 scaled_counts = np.array(D2['GREEN_CCD'].data) / np.sqrt(np.array(D2['GREEN_VAR'].data))
                 subthreshold = np.sum(scaled_counts < neg_threshold)
@@ -1659,8 +1665,8 @@ class QC2D(QC):
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-        
-        try: 
+
+        try:
             if 'RED_CCD' in extensions:
                 scaled_counts = (np.array(D2['RED_CCD'].data) / np.sqrt(np.array(D2['RED_VAR'].data))).flatten()
                 subthreshold = np.sum(scaled_counts < neg_threshold)
@@ -1673,34 +1679,34 @@ class QC2D(QC):
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-        
+
         return QC_pass
 
     def D2_lfc_flux(self, threshold=4000, debug=False):
         """
         This Quality Control function checks if the flux values in the green and red chips of the
         given 2D file are above a defined threshold at the 98th percentile.
-        
+
         Args:
             debug
-        
+
         Returns:
             QC_pass (bool): True if both green and red channels have 98th percentile values above the
                             threshold, False otherwise.
         """
-        
+
         try:
             D2 = self.kpf_object
             green_counts = D2['GREEN_CCD'].data
             red_counts = D2['RED_CCD'].data
-            
+
             QC_pass = True
             if debug:
                 self.logger.info("******Green - 98th percentile counts: " + str(np.percentile(green_counts, 98)))
                 self.logger.info("******Red - 98th percentile counts: " + str(np.percentile(red_counts, 98)))
             if np.percentile(green_counts, 98) < threshold or np.percentile(red_counts, 98) < threshold:
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1709,28 +1715,28 @@ class QC2D(QC):
 
     def D2_master_bias_age(self, maxage=5, debug=False):
         """
-        This Quality Control function checks if the master bias file used to 
-        process this exposure was created from files taken more than maxage 
+        This Quality Control function checks if the master bias file used to
+        process this exposure was created from files taken more than maxage
         (default: 5) days from the exposure itself.
-        
+
         Args:
             debug
-        
+
         Returns:
-            QC_pass (bool): True if the time of exposure for the files going 
-                            into the master bias file were taken more than a 
+            QC_pass (bool): True if the time of exposure for the files going
+                            into the master bias file were taken more than a
                             certain number of days from the exposure itself.
         """
-        
+
         try:
             D2 = self.kpf_object
             my2D = Analyze2D(D2, logger=self.logger)
             age_master_file = my2D.measure_master_age(kwd='BIASFILE', verbose=debug)
-            
+
             QC_pass = True
             if abs(age_master_file) > maxage:
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1739,28 +1745,28 @@ class QC2D(QC):
 
     def D2_master_dark_age(self, maxage=5, debug=False):
         """
-        This Quality Control function checks if the master dark file used to 
+        This Quality Control function checks if the master dark file used to
         process this exposure was created from files taken more than maxage
         (default: 5) days from the exposure itself.
-        
+
         Args:
             debug
-        
+
         Returns:
-            QC_pass (bool): True if the time of exposure for the files going 
-                            into the master dark file were taken more than a 
+            QC_pass (bool): True if the time of exposure for the files going
+                            into the master dark file were taken more than a
                             certain number of days from the exposure itself.
         """
-        
+
         try:
             D2 = self.kpf_object
             my2D = Analyze2D(D2, logger=self.logger)
             age_master_file = my2D.measure_master_age(kwd='DARKFILE', verbose=debug)
-            
+
             QC_pass = True
             if abs(age_master_file) > maxage:
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1769,28 +1775,28 @@ class QC2D(QC):
 
     def D2_master_flat_age(self, maxage=5, debug=False):
         """
-        This Quality Control function checks if the master flat file used to 
+        This Quality Control function checks if the master flat file used to
         process this exposure was created from files taken more than maxage (default: 5)
         days from the exposure itself.
-        
+
         Args:
             debug
-        
+
         Returns:
-            QC_pass (bool): True if the time of exposure for the files going 
-                            into the master dark file were taken more than a 
+            QC_pass (bool): True if the time of exposure for the files going
+                            into the master dark file were taken more than a
                             certain number of days from the exposure itself.
         """
-        
+
         try:
             D2 = self.kpf_object
             my2D = Analyze2D(D2, logger=self.logger)
             age_master_file = my2D.measure_master_age(kwd='FLATFILE', verbose=debug)
-            
+
             QC_pass = True
             if abs(age_master_file) > maxage:
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1833,59 +1839,59 @@ class QCL1(QC):
 
         try:
             L1 = self.kpf_object
-    
+
             if debug:
                 print(L1.info())
                 type_L1 = type(L1)
                 print("type_L1 = ",type_L1)
                 print("L1 = ",L1)
-    
+
             QC_pass = True
             bad_orders = []
-    
+
             import numpy as np
             if debug:
                 import matplotlib.pyplot as plt
-    
+
             # Define wavelength extensions in L1
             extensions = [p + s for p in ["GREEN_", "RED_"]
                                 for s in ["SCI_WAVE1", "SCI_WAVE2", "SCI_WAVE3", "SKY_WAVE", "CAL_WAVE"]]
-    
+
             # Iterate over extensions (orderlets) and orders to check for monotonicity in each combination.
             for ext in extensions:
-    
+
                 if debug:
                     print("ext = ",ext)
-                
+
                 extname = ext
                 # try:
                 #     naxis1 = L1.header[ext]["NAXIS1"]
                 #     naxis2 = L1.header[ext]["NAXIS2"]
                 # except KeyError:
                 #     import pdb; pdb.set_trace()
-    
+
                 # if debug:
                 #     print("naxis1,naxis2,extname = ",naxis1,naxis2,extname)
-    
+
                 if ext == extname:  # Check if extension exists (e.g., if RED isn't processed)
-    
+
                     if debug:
                         data_shape = np.shape(L1[ext])
                         print("data_shape = ", data_shape)
-    
+
                     norders = L1[ext].shape[0]
                     for o in range(norders):
-    
+
                         if debug:
                              print("order = ",o)
-    
+
                         np_obj_ffi = np.array(L1[ext])
-    
+
                         if debug:
                             print("wls_shape = ", np.shape(np_obj_ffi))
-    
+
                         WLS = np_obj_ffi[o,:] # wavelength solution of the current order/orderlet
-    
+
                         isMonotonic = np.all(WLS[:-1] >= WLS[1:]) # this expression determines monotonicity for the orderlet/order
                         if not isMonotonic:
                             QC_pass = False                             # the QC test fails if one order/orderlet is not monotonic
@@ -1900,7 +1906,7 @@ class QCL1(QC):
                     print("File: " + L1['PRIMARY'].header['OFNAME'])
                 except:
                     pass
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -1918,58 +1924,58 @@ class QCL1(QC):
         Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             L1 = self.kpf_object
-    
+
             if debug:
                 print(L1.info())
                 type_L1 = type(L1)
                 print("type_L1 = ",type_L1)
                 print("L1 = ",L1)
-    
+
             QC_pass = True
-        
+
             extensions = L1.extensions
-        
+
             GREEN_extensions = [
-             'GREEN_SCI_FLUX1',  
-             'GREEN_SCI_FLUX2',  
-             'GREEN_SCI_FLUX3',  
-             'GREEN_SKY_FLUX',   
-             'GREEN_CAL_FLUX',   
-             'GREEN_SCI_VAR1',  
-             'GREEN_SCI_VAR2',  
-             'GREEN_SCI_VAR3',  
-             'GREEN_SKY_VAR',   
-             'GREEN_CAL_VAR',   
-             'GREEN_SCI_WAVE1',  
-             'GREEN_SCI_WAVE2',  
-             'GREEN_SCI_WAVE3',  
-             'GREEN_SKY_WAVE',   
-             'GREEN_CAL_WAVE' 
-            ] 
-    
+             'GREEN_SCI_FLUX1',
+             'GREEN_SCI_FLUX2',
+             'GREEN_SCI_FLUX3',
+             'GREEN_SKY_FLUX',
+             'GREEN_CAL_FLUX',
+             'GREEN_SCI_VAR1',
+             'GREEN_SCI_VAR2',
+             'GREEN_SCI_VAR3',
+             'GREEN_SKY_VAR',
+             'GREEN_CAL_VAR',
+             'GREEN_SCI_WAVE1',
+             'GREEN_SCI_WAVE2',
+             'GREEN_SCI_WAVE3',
+             'GREEN_SKY_WAVE',
+             'GREEN_CAL_WAVE'
+            ]
+
             RED_extensions = [
-             'RED_SCI_FLUX1',  
-             'RED_SCI_FLUX2',  
-             'RED_SCI_FLUX3',  
-             'RED_SKY_FLUX',   
-             'RED_CAL_FLUX',   
-             'RED_SCI_VAR1',  
-             'RED_SCI_VAR2',  
-             'RED_SCI_VAR3',  
-             'RED_SKY_VAR',   
-             'RED_CAL_VAR',   
-             'RED_SCI_WAVE1',  
-             'RED_SCI_WAVE2',  
-             'RED_SCI_WAVE3',  
-             'RED_SKY_WAVE',   
-             'RED_CAL_WAVE'  
-            ] 
-        
+             'RED_SCI_FLUX1',
+             'RED_SCI_FLUX2',
+             'RED_SCI_FLUX3',
+             'RED_SKY_FLUX',
+             'RED_CAL_FLUX',
+             'RED_SCI_VAR1',
+             'RED_SCI_VAR2',
+             'RED_SCI_VAR3',
+             'RED_SKY_VAR',
+             'RED_CAL_VAR',
+             'RED_SCI_WAVE1',
+             'RED_SCI_WAVE2',
+             'RED_SCI_WAVE3',
+             'RED_SKY_WAVE',
+             'RED_CAL_WAVE'
+            ]
+
             QC_pass = True
-        
+
             for ext in GREEN_extensions:
                 if ext not in extensions:
                     QC_pass = False
@@ -1981,7 +1987,7 @@ class QCL1(QC):
                         if debug:
                             print('Shape of ' + ext + ' array is incorrect.')
                             print("data_shape =", np.shape(L1[ext]))
-                        
+
             for ext in RED_extensions:
                 if ext not in extensions:
                     QC_pass = False
@@ -1991,9 +1997,9 @@ class QCL1(QC):
                     if np.shape(L1[ext]) != (32, 4080):
                         QC_pass = False
                         if debug:
-                            print('Shape of ' + ext + ' array is incorrect.')   
+                            print('Shape of ' + ext + ' array is incorrect.')
                             print("data_shape =", np.shape(L1[ext]))
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -2012,29 +2018,29 @@ class QCL1(QC):
         Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             L1 = self.kpf_object
-    
+
             if debug:
                 print(L1.info())
                 type_L1 = type(L1)
                 print("type_L1 = ",type_L1)
                 print("L1 = ",L1)
-    
+
             QC_pass = True
-        
+
             extensions = L1.extensions
-        
+
             CaHK_extensions = [
-             'CA_HK_SCI',  
-             'CA_HK_SKY',  
-             'CA_HK_SCI_WAVE',  
-             'CA_HK_SKY_WAVE'  
-            ] 
-        
+             'CA_HK_SCI',
+             'CA_HK_SKY',
+             'CA_HK_SCI_WAVE',
+             'CA_HK_SKY_WAVE'
+            ]
+
             QC_pass = True
-        
+
             for ext in CaHK_extensions:
                 if ext not in extensions:
                     QC_pass = False
@@ -2046,11 +2052,11 @@ class QCL1(QC):
                         if debug:
                             print('Shape of ' + ext + ' array is zero.')
                             print("data_shape =", np.shape(L1[ext]))
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
- 
+
         return QC_pass
 
 
@@ -2058,7 +2064,7 @@ class QCL1(QC):
         """
         This Quality Control function checks checks the SNR of
         LFC frames, marking satured frames as failing the test.
-        
+
         Args:
             SNR_limit - max allowable SNR at two wavelengths (548 Ang and 747 Ang)
         Returns:
@@ -2099,19 +2105,19 @@ class QCL1(QC):
             (4) If data was taken during the day, the first WLS file does not
                 correspond to that from the prior morning and/or the second
                 WLS file does not correspond to that from the following evening.
-    
+
         Args:
              L1 - an L1 object
              debug - an optional flag.  If True, missing data products are noted.
-    
+
          Returns:
              QC_pass - a boolean signifying that the QC passed for failed
         """
-        
+
         try:
             L1 = self.kpf_object
             QC_pass = True
-        
+
             # First, check if WLS files exist
             try:
                 WLSFILE = L1.header["PRIMARY"]["WLSFILE"]
@@ -2124,19 +2130,19 @@ class QCL1(QC):
                 if debug:
                     print("WLSFILE and/or WLSFILE2 does not exist or failed to be read.")
                 return QC_pass
-        
+
             # Next, check if the two WLS files are the same (they should not be)
             if WLSFILE == WLSFILE2:
                 QC_pass = False
                 if debug:
                     print("WLSFILE and WLSFILE2 are the same.")
-                return QC_pass        
-                
+                return QC_pass
+
             # Check if the observations are Keck or SoCal observations
             is_day = False
             if L1.header["PRIMARY"]["OBJECT"] == "SoCal":
                 is_day = True
-        
+
             # If is_day == False, make sure the UTC dates of the WLS agree with the UTC date of the observation
             # If is_day == True, make sure WLSFILE has the same date as the observation and WLSFILE2 has a date one day later
             date_format = "%Y-%m-%d"
@@ -2161,38 +2167,38 @@ class QCL1(QC):
                     QC_pass = False
                     if debug:
                         print("Date of WLSFILE2 for SoCal obs is not after date of obs.")
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-            
+
         return QC_pass
 
     def L1_WLSFILE_age(self, maxage=2, debug=False):
         """
-        This Quality Control function checks if the wavelength solution file 
-        WLSFILE that was used to calibrated the wavelengths in this spectrum 
-        was created from files taken more than maxage (default: 2) days from 
+        This Quality Control function checks if the wavelength solution file
+        WLSFILE that was used to calibrated the wavelengths in this spectrum
+        was created from files taken more than maxage (default: 2) days from
         the exposure itself.
-        
+
         Args:
             debug
-        
+
         Returns:
-            QC_pass (bool): True if the time of exposure for the files going 
-                            into WLSFILE were taken more than a 
+            QC_pass (bool): True if the time of exposure for the files going
+                            into WLSFILE were taken more than a
                             certain number of days from the exposure itself.
         """
-        
+
         try:
             L1 = self.kpf_object
             myL1 = AnalyzeL1(L1, logger=self.logger)
             age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE', verbose=debug)
-            
+
             QC_pass = True
             if abs(age_wls_file) > maxage:
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -2201,29 +2207,29 @@ class QCL1(QC):
 
     def L1_WLSFILE2_age(self, maxage=2, debug=False):
         """
-        This Quality Control function checks if the wavelength solution file 
-        WLSFILE2 that was used to calibrated the wavelengths in this spectrum 
-        was created from files taken more than maxage (default: 2) days from 
+        This Quality Control function checks if the wavelength solution file
+        WLSFILE2 that was used to calibrated the wavelengths in this spectrum
+        was created from files taken more than maxage (default: 2) days from
         the exposure itself.
-        
+
         Args:
             debug
-        
+
         Returns:
-            QC_pass (bool): True if the time of exposure for the files going 
-                            into WLSFILE2 were taken more than a 
+            QC_pass (bool): True if the time of exposure for the files going
+                            into WLSFILE2 were taken more than a
                             certain number of days from the exposure itself.
         """
-        
+
         try:
             L1 = self.kpf_object
             myL1 = AnalyzeL1(L1, logger=self.logger)
             age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE2', verbose=debug)
-            
+
             QC_pass = True
             if abs(age_wls_file) > maxage:
                 QC_pass = False
-                
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -2252,7 +2258,7 @@ class QCL2(QC):
 
     def data_L2(self,debug=False):
         """
-        This Quality Control function checks if all of the 
+        This Quality Control function checks if all of the
         expected data (telemetry, CCFs, and RVs) are present.
 
         Args:
@@ -2261,18 +2267,18 @@ class QCL2(QC):
         Returns:
              QC_pass - a boolean signifying that all of the data exists as expected
         """
-    
+
         try:
             L2 = self.kpf_object
-    
+
             if debug:
                 print(L2.info())
                 type_L2 = type(L2)
                 print("type_L2 = ",type_L2)
                 print("L2 = ",L2)
-        
+
             extensions = L2.extensions
-        
+
             required_extensions = [
                 "TELEMETRY",
                 "GREEN_CCF",
@@ -2281,9 +2287,9 @@ class QCL2(QC):
                 "RED_CCF_RW",
                 "RV"
             ]
-        
+
             QC_pass = True
-        
+
             if "TELEMETRY" not in extensions:
                 QC_pass = False
                 if debug:
@@ -2294,7 +2300,7 @@ class QCL2(QC):
                     if debug:
                         print('Shape of TELEMETRY array is zero.')
                         print("data_shape =", np.shape(L2["TELEMETRY"]))
-                    
+
             if "GREEN_CCF" not in extensions:
                 QC_pass = False
                 if debug:
@@ -2305,7 +2311,7 @@ class QCL2(QC):
                     if debug:
                         print('Shape of GREEN_CCF array is incorrect.')
                         print("data_shape =", np.shape(L2["GREEN_CCF"]))
-                    
+
             if "GREEN_CCF_RW" not in extensions:
                 QC_pass = False
                 if debug:
@@ -2316,7 +2322,7 @@ class QCL2(QC):
                     if debug:
                         print('Shape of GREEN_CCF_RW array is incorrect.')
                         print("data_shape =", np.shape(L2["GREEN_CCF_RW"]))
-                    
+
             if "RED_CCF" not in extensions:
                 QC_pass = False
                 if debug:
@@ -2327,7 +2333,7 @@ class QCL2(QC):
                     if debug:
                         print('Shape of RED_CCF_RW array is incorrect.')
                         print("data_shape =", np.shape(L2["RED_CCF"]))
-                    
+
             if "RED_CCF_RW" not in extensions:
                 QC_pass = False
                 if debug:
@@ -2338,7 +2344,7 @@ class QCL2(QC):
                     if debug:
                         print('Shape of RED_CCF_RW array is incorrect.')
                         print("data_shape =", np.shape(L2["RED_CCF_RW"]))
-                    
+
             if "RV" not in extensions:
                 QC_pass = False
                 if debug:
@@ -2349,7 +2355,7 @@ class QCL2(QC):
                     if debug:
                         print('Shape of RV array is zero.')
                         print("data_shape =", np.shape(L2["RV"]))
-        
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
@@ -2358,36 +2364,36 @@ class QCL2(QC):
 
     def L2_datetime(self, debug=False):
         """
-        This QC module performs the following checks on datetimes in the header 
-        to the RV extension in an L2 object. The timing checks have precision 
-        thresholds to only catch significant timing errors and not trigger on 
-        small differences related to machine precision or dead time in the 
-        Exposure Meter detector.  This method returns True only if all checks 
+        This QC module performs the following checks on datetimes in the header
+        to the RV extension in an L2 object. The timing checks have precision
+        thresholds to only catch significant timing errors and not trigger on
+        small differences related to machine precision or dead time in the
+        Exposure Meter detector.  This method returns True only if all checks
         pass.
-        
-            Time ordering: 
+
+            Time ordering:
                 DATE-BEG < DATE-MID < DATE-END
-            Duration consistency: 
+            Duration consistency:
                 DATE-END - DATE-BEG = ELAPSED
             Consistency between Green/Red and overall timing:
                 DATE-BEG = GRDATE-B
                 DATE-BEG = RDDATE-B
                 DATE-END = GRDATE-E
                 DATE-END = RDDATE-E
-        
-        To-do: 
+
+        To-do:
           * Add checks for the times in the RV table.  These are currently in BJD.
             We will also need to record the UT times.
         """
-    
+
         try:
             L2 = self.kpf_object
             date_format = "%Y-%m-%dT%H:%M:%S.%f"
             QC_pass = True
-        
+
             time_precision_threshold     = 0.1 # sec - threshold for DATE-BEG, etc.
             time_precision_threshold_exp = 1.0 # sec - threshold for times involving the exposure meter -- account for EM dead time and only catch bad errors
-            
+
             # First check that the appropriate headers and keywords are present
             if not 'PRIMARY' in L2.header:
                 QC_pass = False
@@ -2403,7 +2409,7 @@ class QCL2(QC):
                     QC_pass = False
             if not QC_pass:
                 return QC_pass
-            
+
             # Check that dates are ordered correctly
             date_beg = datetime.strptime(L2.header['PRIMARY']['DATE-BEG'], date_format)
             date_mid = datetime.strptime(L2.header['PRIMARY']['DATE-MID'], date_format)
@@ -2411,16 +2417,16 @@ class QCL2(QC):
             elapsed  = float(L2.header['PRIMARY']['ELAPSED'])
             if (date_end < date_mid) or (date_mid < date_beg):
                 QC_pass = False
-            
+
             # Check that DATE-BEG + ELAPSE = DATE-END
             if abs((date_end - date_beg).total_seconds() - elapsed) > time_precision_threshold:
                 if debug:
                     print(f'(DATE-END - DATE-BEG) - ELASPED = {abs((date_end - date_beg).total_seconds() - elapsed)} sec > {time_precision_threshold} sec')
                 QC_pass = False
-            
+
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
 
-        return QC_pass    
+        return QC_pass
 
