@@ -104,17 +104,25 @@ class Analyze2D:
             self.logger.info(f'Date of observation: {date_obs_str}')
         
         try:
-            master_filename = self.header[kwd]
-            master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
-            master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
-            if verbose:
-                self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
-            
-            age_master_file = (master_filename_datetime - date_obs_datetime).days
-            if verbose:
-                self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                if verbose:
+                    self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                
+                age_master_file = (master_filename_datetime - date_obs_datetime).days
+                if verbose:
+                    self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+    
+                return age_master_file
+            else:
+                age_master_file = -999 # standard value indicating keyword not available
+                return age_master_file
 
-            return age_master_file
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
 
         except Exception as e:
             self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
@@ -663,7 +671,6 @@ class Analyze2D:
         plt.close('all')
 
 
-
     def plot_2D_order_trace2x2(self, chip=None, order_trace_master_file='auto',
                                fig_path=None, show_plot=False, 
                                width=200, height=200, 
@@ -788,6 +795,7 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
 
     def plot_bias_histogram(self, variance=False, data_over_sqrt_variance=False, chip=None, fig_path=None, show_plot=False):
         """
