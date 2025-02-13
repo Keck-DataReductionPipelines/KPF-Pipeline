@@ -255,7 +255,7 @@ class FitsHeaders:
         for fits_file in matched_fits_files:
 
             hdul = fits.open(fits_file)
-            
+
             flag = 'remove'
 
             try:
@@ -289,7 +289,7 @@ class FitsHeaders:
                     self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
                 else:
                     print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
-                
+
             hdul.close()
 
         if self.logger:
@@ -339,11 +339,22 @@ class FitsHeaders:
                         print('---->TypeError: {} ({}); skipping...'.format(err,fits_file))
 
             if match_count == self.n_header_keywords:
-                matched_fits_files.append(fits_file)
-                obj = hdul[0].header['OBJECT']
-                if obj not in all_arclamp_objects:
-                    all_arclamp_objects.append(obj)
-                
+
+                try:
+
+                    obj = hdul[0].header['OBJECT']
+                    matched_fits_files.append(fits_file)
+                    if obj not in all_arclamp_objects:
+                        all_arclamp_objects.append(obj)
+
+                except KeyError as err:
+
+                    if self.logger:
+                        self.logger.debug('KeyError: {} ({}); skipping...'.format(err,fits_file))
+                    else:
+                        print('---->KeyError: {} ({}); skipping...'.format(err,fits_file))
+
+
             hdul.close()
 
         if self.logger:
@@ -405,7 +416,7 @@ class FitsHeaders:
                     self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
                 else:
                     print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
-                
+
             hdul.close()
 
         if self.logger:
