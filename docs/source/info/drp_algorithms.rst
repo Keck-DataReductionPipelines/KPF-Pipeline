@@ -350,7 +350,7 @@ Master Flats
 ^^^^^^^^^^^^
 
 A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
-``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
+``IMTYPE='Flatlamp'``, ``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
 observed on the same date.
 Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
 from separate amplifiers for a given filter into a 2D image.
