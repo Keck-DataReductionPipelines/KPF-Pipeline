@@ -276,7 +276,6 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make 2D images
-        # to-do: process bias and dark differently
         if chips != []:    
             try:
                 savedir = D2_QLP_file_base +'2D/'
@@ -295,6 +294,40 @@ class QuicklookAlg:
                                             fig_path=filename, show_plot=False)
                     except Exception as e:
                         self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            except Exception as e:
+                self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make Bias-subtracted Bias - 2D images
+        if chips != []:    
+            try:
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
+                if my_2D.name == 'Bias': 
+                    for chip in chips:
+                        try:
+                            filename = savedir + self.ObsID + '_2D_image_bias_subtracted_' + chip + '_zoomable.png'
+                            self.logger.info('Generating QLP image ' + filename)
+                            my_2D.plot_2D_image(chip=chip, subtract_master_bias=True, 
+                                                fig_path=filename, show_plot=False)
+                        except Exception as e:
+                            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            except Exception as e:
+                self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make Dark-subtracted Darks - 2D images
+        if chips != []:    
+            try:
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
+                if my_2D.name == 'Dark': 
+                    for chip in chips:
+                        try:
+                            filename = savedir + self.ObsID + '_2D_image_dark_subtracted_' + chip + '_zoomable.png'
+                            self.logger.info('Generating QLP image ' + filename)
+                            my_2D.plot_2D_image(chip=chip, subtract_master_dark=True, 
+                                                fig_path=filename, show_plot=False)
+                        except Exception as e:
+                            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -363,7 +396,7 @@ class QuicklookAlg:
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
-        
+       
         
     #######################
     ##### QLP Level 1 #####
