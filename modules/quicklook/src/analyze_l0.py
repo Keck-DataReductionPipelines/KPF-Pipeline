@@ -1,4 +1,5 @@
 import re
+import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,7 +31,7 @@ class AnalyzeL0:
 
     def __init__(self, L0, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
-        self.L0 = L0
+        self.L0 = copy.deepcopy(L0)
         self.data_products = get_data_products_L0(L0)
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
