@@ -78,6 +78,7 @@ class AnalyzeTimeSeries:
     To-do:
         * Add temperature derivatives as columns; they will need to be computed.
         * Add the option of using a Postgres database
+        * For time series plots of states, put the states in alphabetical order (e.g. for KPF ERA values or DRP Version Numbers)
         * Make standard correlation plots.
         * Make standard phased plots (by day)
         * Make plot of correlation between per-order RVs and RVs per-chip and overall RVs.
