@@ -324,8 +324,11 @@ class QuicklookAlg:
                         try:
                             filename = savedir + self.ObsID + '_2D_image_dark_subtracted_' + chip + '_zoomable.png'
                             self.logger.info('Generating QLP image ' + filename)
+                            my_2D.measure_2D_dark_current(chip=chip)
                             my_2D.plot_2D_image(chip=chip, subtract_master_dark=True, 
+                                                overplot_dark_current=True, 
                                                 fig_path=filename, show_plot=False)
+
                         except Exception as e:
                             self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
@@ -340,7 +343,7 @@ class QuicklookAlg:
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
                     try:
-                        filename = savedir + self.ObsID + '_2D_image_3x3zoom_' + chip + '_zoomable.png'
+                        filename = savedir + self.ObsID + '_2D_image_zoom3x3_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
                     except Exception as e:
@@ -371,11 +374,13 @@ class QuicklookAlg:
         if chips != []:    
             try:
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
+                is_bias = my_2D.name == 'Bias'
+                is_dark = my_2D.name == 'Dark'
                 for chip in chips:
                     try:
                         filename = savedir + self.ObsID + '_2D_histogram_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
-                        my_2D.plot_2D_image_histogram(chip=chip, fig_path=filename, show_plot=False)
+                        my_2D.plot_2D_image_histogram(chip=chip, subtract_master_bias=is_bias, subtract_master_dark=is_dark, fig_path=filename, show_plot=False)
                     except Exception as e:
                         self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
