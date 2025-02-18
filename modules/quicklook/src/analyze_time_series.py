@@ -1558,11 +1558,11 @@ class AnalyzeTimeSeries:
                         colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                         color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
                     else:
+                        unique_states = sorted(list(set(unique_states)))
                         state_to_num = {state: i for i, state in enumerate(unique_states)}
                         mapped_states = [state_to_num[state] for state in states]
                         colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                         color_map = {state: colors[i] for i, state in enumerate(unique_states)}
-                    unique_states = sorted(list(set(unique_states)))
                     try:
                         # check for a set of conditions that took forever to figure out
                         if (hasattr(t, 'tolist') and callable(getattr(t, 'tolist'))):
