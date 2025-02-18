@@ -78,7 +78,6 @@ class AnalyzeTimeSeries:
     To-do:
         * Add temperature derivatives as columns; they will need to be computed.
         * Add the option of using a Postgres database
-        * For time series plots of states, put the states in alphabetical order (e.g. for KPF ERA values or DRP Version Numbers)
         * Make standard correlation plots.
         * Make standard phased plots (by day)
         * Make plot of correlation between per-order RVs and RVs per-chip and overall RVs.
@@ -1563,6 +1562,7 @@ class AnalyzeTimeSeries:
                         mapped_states = [state_to_num[state] for state in states]
                         colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                         color_map = {state: colors[i] for i, state in enumerate(unique_states)}
+                    unique_states = sorted(list(set(unique_states)))
                     try:
                         # check for a set of conditions that took forever to figure out
                         if (hasattr(t, 'tolist') and callable(getattr(t, 'tolist'))):
