@@ -572,6 +572,20 @@ class QuicklookAlg:
             except Exception as e:
                 self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Make BCVel plot per order
+        if chips != []:    
+            try:
+                myL2 = AnalyzeL2(kpf2, logger=self.logger)
+                if myL2.is_star:
+                    savedir = L2_QLP_file_base +'L2/'
+                    os.makedirs(savedir, exist_ok=True) # make directories if needed
+                    filename = savedir + self.ObsID + '_BJD_BCV_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL2.plot_BJD_BCV_grid(fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
+
 
     #######################
     ##### QLP MASTERS #####

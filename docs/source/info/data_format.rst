@@ -193,6 +193,28 @@ ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2
 ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
 ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
 ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
+PTHDAY    1.422E-05                                   Last ThAr Daily power meter measurement (Watts)
+PTHAU     1.422E-05                                   Last ThAr Gold power meter measurement (Watts)
+PUDAY     1.422E-05                                   Last UNe Daily power meter measurement (Watts)
+PUAU      1.422E-05                                   Last UNe Gold power meter measurement (Watts)
+PLFC      1.422E-05                                   Last LFC power meter measurement (Watts)
+PETAL     1.422E-05                                   Last Etalon power meter measurement (Watts)
+PBRB      1.422E-05                                   Last Broadband power meter measurement (Watts)
+PSOL      1.422E-05                                   Last SoCal-CalFib power meter measurement (Watts)
+PTHDAYT   '20250108T08:37:44 HST'                     Time of last ThAr Daily power measurement
+PTHAUT    '20250108T08:37:44 HST'                     Time of last ThAr Gold power measurement
+PUDAYT    '20250108T08:37:44 HST'                     Time of last UNe Daily power measurement
+PUAUT     '20250108T08:37:44 HST'                     Time of last UNe Gold power measurement
+PLFCT     '20250108T08:37:44 HST'                     Time of last LFC power measurement
+PETALT    '20250108T08:37:44 HST'                     Time of last Etalon power measurement
+PBRBT     '20250108T08:37:44 HST'                     Time of last Broadband power measurement
+PSOLT     '20250108T08:37:44 HST'                     Time of last SoCal-CalFib power measurement
+TIMEERR   'ok 2 3 {NTP time correct to within 3 ms}'  NTP time server response (needs interpretation)
+VIGNETTE  'false '                                    Dome vignetting (true/false)
+STVIGNE   'false '                                    Top shutter vignetting (true/false)
+SBVIGNE   'false '                                    Bottom shutter vignetting (true/false)
+SBELEV    23.99                                       Bottom shutter elevation (deg)
+STELEV    23.99                                       Top shutter elevation (deg)
 ========  ==========================================  =========
 
 2D Primary Extension Header
@@ -426,6 +448,10 @@ CCFRVC    19.4247572623                               Average of CCD1RVC and CCD
 CCFERVC   0.001175044                                 Error on CCFRVC
 CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
+BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (m/s)        
+BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (m/s)    
+BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (sec)        
+BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (sec)    
 TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
 DATAPRL2  1                                           QC: 1 = L2 data is present
 ========  ==========================================  =========
