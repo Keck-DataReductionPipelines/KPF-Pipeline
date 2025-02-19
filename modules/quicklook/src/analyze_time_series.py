@@ -380,7 +380,7 @@ class AnalyzeTimeSeries:
             os.remove(shm_file)
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.

@@ -19,8 +19,12 @@ class GetCalibrations:
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, logger=None):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None):
 
+        """
+        use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
+        """
+        
         # Initialize DB class
         # self.db_lookup = QueryDBNearestMasterFilesFramework(self.action, self.context)
 
@@ -39,7 +43,8 @@ class GetCalibrations:
         self.wls_cal_types = eval(self.config['PARAM']['wls_cal_types'])
         self.max_age = eval(self.config['PARAM']['max_cal_age'])
         self.defaults = eval(self.config['PARAM']['defaults'])
-        self.db = KPFDB(logger=self.log)
+        if use_db:
+            self.db = KPFDB(logger=self.log)
 
     def lookup(self, subset=None):
         dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")

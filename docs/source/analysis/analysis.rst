@@ -7,6 +7,7 @@ Using Analysis Methods
     :maxdepth: 2
     :titlesonly:
 
+    analyzel1.rst
     dictonary_format.rst
     analyzewls.rst
     analyzetimeseries.rst
