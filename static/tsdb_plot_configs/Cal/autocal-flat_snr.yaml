@@ -40,6 +40,7 @@ panel_arr:
     paneldict:
       ylabel: SNR (SCI1+SCI2+SCI3)
       only_object: autocal-flat-all
+      narrow_xlim_daily: true
       not_junk: true
       legend_frac_size: 0.30
 
@@ -76,5 +77,6 @@ panel_arr:
       ylabel: Flux Ratio (SCI2)
       title: autocal-flat-all SNR & Flux Ratio
       only_object: autocal-flat-all
+      narrow_xlim_daily: true
       not_junk: true
       legend_frac_size: 0.30

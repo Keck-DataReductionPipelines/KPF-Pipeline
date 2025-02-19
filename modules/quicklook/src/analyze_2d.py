@@ -1,4 +1,5 @@
 import time
+import traceback
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,11 +9,11 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
-from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.optimize import curve_fit
 #import emcee
 #import corner
@@ -27,7 +28,7 @@ class Analyze2D:
         D2 - a 2D object
 
     Attributes:
-        header - header of input 2D file
+        header - header of the PRIMARY extension of the 2D object
         name - name of source (e.g., 'Bias', 'Etalon', '185144')
         ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         exptime - exposure time (sec)
@@ -80,6 +81,53 @@ class Analyze2D:
             self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Green 2D image')
+
+
+    def measure_master_age(self, kwd='BIASFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 
+                  'BIASFILE', 'DARKFILE', or 'FLATFILE')
+    
+        Returns:
+            master_wls_file - number of days between the observation and the
+                              date of observations for the WLS files
+        '''
+
+        date_obs_str = self.header['DATE-OBS']
+        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%d").date()
+
+        if verbose:
+            self.logger.info(f'Date of observation: {date_obs_str}')
+        
+        try:
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                if verbose:
+                    self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                
+                age_master_file = (master_filename_datetime - date_obs_datetime).days
+                if verbose:
+                    self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+    
+                return age_master_file
+            else:
+                age_master_file = -999 # standard value indicating keyword not available
+                return age_master_file
+
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -623,7 +671,6 @@ class Analyze2D:
         plt.close('all')
 
 
-
     def plot_2D_order_trace2x2(self, chip=None, order_trace_master_file='auto',
                                fig_path=None, show_plot=False, 
                                width=200, height=200, 
@@ -748,6 +795,7 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
 
     def plot_bias_histogram(self, variance=False, data_over_sqrt_variance=False, chip=None, fig_path=None, show_plot=False):
         """

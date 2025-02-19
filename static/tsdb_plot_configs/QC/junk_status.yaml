@@ -5,9 +5,9 @@ panel_arr:
       - col: NOTJUNK
         plot_type: state
         plot_attr:
-          label: Junk State
+          label: Junk State\n(NOTJUNK)
           marker: .
     paneldict:
       ylabel: Junk Status
       title: Junk Status
-      legend_frac_size: 0.10
+      legend_frac_size: 0.15

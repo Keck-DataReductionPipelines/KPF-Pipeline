@@ -32,9 +32,9 @@ AGITSTA|string|Agigator state (Running/Stopped)|None
 FIUMODE|string|FIU operating mode - Observing = on-sky|None
 ETAV1C1T|float|Etalon housing temp (Vescent 1 Channel 1)|C
 ETAV1C2T|float|Etalon inner side shield temp (Vescent 1 Channel 2)|C
-ETAV1C3T|float|Etalon inner bottom lid (Vescent 1 Channel 3)|C
-ETAV1C4T|float|Etalon outer etalon chamber (Vescent 1 Channel 4)|C
-ETAV2C3T|float|Etalon inner top lid (Vescent 2 Channel 3)|C
+ETAV1C3T|float|Etalon inner bottom lid temp (Vescent 1 Channel 3)|C
+ETAV1C4T|float|Etalon outer etalon chamber temp (Vescent 1 Channel 4)|C
+ETAV2C3T|float|Etalon inner top lid temp (Vescent 2 Channel 3)|C
 WAVEBNS|float|Wavelengths of EM bins (string of four vals)|nm
 TOTCNTS|float|Total EM counts in WAVEBINS|counts
 TOTCORR|string|Total EM counts (corrected) in WAVEBINS|counts
@@ -62,4 +62,26 @@ TARGTEFF|float|Target effective temp|K
 RA|string|Right ascension|hr
 DEC|string|Declination|deg
 EQUINOX|float|DCS Equinox|None
-MJD-OBS|float|Modified Julian day of the observation start|None
+MJD-OBS|float|Modified Julian day of the observation start|days
+PTHDAY|float|Last ThAr Daily power meter measurement|Watts
+PTHAU|float|Last ThAr Gold power meter measurement|Watts
+PUDAY|float|Last UNe Daily power meter measurement|Watts
+PUAU|float|Last UNe Gold power meter measurement|Watts
+PLFC|float|Last LFC power meter measurement|Watts
+PETAL|float|Last Etalon power meter measurement|Watts
+PBRB|float|Last Broadband power meter measurement|Watts
+PSOL|float|Last SoCal-CalFib power meter measurement|Watts
+PTHDAYT|string|Time of last ThAr Daily power measurement|None
+PTHAUT|string|Time of last ThAr Gold power measurement|None
+PUDAYT|string|Time of last UNe Daily power measurement|None
+PUAUT|string|Time of last UNe Gold power measurement|None
+PLFCT|string|Time of last LFC power measurement|None
+PETALT|string|Time of last Etalon power measurement|None
+PBRBT|string|Time of last Broadband power measurement|None
+PSOLT|string|Time of last SoCal-CalFib power measurement|None
+TIMEERR|string|NTP time server response|None
+VIGNETTE|bool|Dome vignetting|None
+STVIGNE|bool|Top shutter vignetting|None
+SBVIGNE|bool|Bottom shutter vignetting|None
+SBELEV|float|Bottom shutter elevation|deg
+STELEV|float|Top shutter elevation|deg

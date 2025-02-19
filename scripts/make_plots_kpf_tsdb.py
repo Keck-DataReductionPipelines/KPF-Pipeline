@@ -50,11 +50,11 @@ def plot_data(db_path, interval, wait_time):
     if interval in ['day', 'month', 'year', 'decade']:
         date = datetime.now()
         date_str = date.strftime('%Y%m%d')
-        savedir = f'/data/QLP/{date_str}/Masters/'
+        savedir = f'/data/QLP/{date_str}/Time_Series/'
         myTS = AnalyzeTimeSeries(db_path=db_path)
         myTS.plot_all_quicklook(datetime(2024, 1, 1), interval=interval, fig_dir=savedir)
     elif interval.startswith('last'):
-        savedir = f'/data/QLP/{interval}/Masters/'
+        savedir = f'/data/QLP/{interval}/Time_Series/'
         n_days = int(interval.replace('last_', '').replace('_days', '').replace('_day', ''))
         myTS = AnalyzeTimeSeries(db_path=db_path)
         myTS.plot_all_quicklook(last_n_days=n_days, fig_dir=savedir)

@@ -1,0 +1,83 @@
+description: autocal-flat-all Relative SNR Ratio
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: SNRSC452
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: Relative SNR (452 nm)
+          marker: .
+          linewidth: 0.5
+          color: darkviolet
+    paneldict:
+      ylabel: "Relative SNR\n(SCI1+SCI2+SCI3)"
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: SNRSC548
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: Relative SNR (548 nm)
+          marker: .
+          linewidth: 0.5
+          color: blue
+    paneldict:
+      ylabel: "Relative SNR\n(SCI1+SCI2+SCI3)"
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: SNRSC652
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: Relative SNR (652 nm)
+          marker: .
+          linewidth: 0.5
+          color: green
+    paneldict:
+      ylabel: "Relative SNR\n(SCI1+SCI2+SCI3)"
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: SNRSC747
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: Relative SNR (747 nm)
+          marker: .
+          linewidth: 0.5
+          color: orange
+    paneldict:
+      ylabel: "Relative SNR\n(SCI1+SCI2+SCI3)"
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: SNRCL852
+        normalize: true
+        plot_type: scatter
+        plot_attr:
+          label: Relative SNR (852 nm)
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      ylabel: "Relative SNR\n(SCI1+SCI2+SCI3)"
+      title: autocal-flat-all Relative SNR (SNR/median(SNR))
+      only_object: autocal-flat-all
+      narrow_xlim_daily: true
+      not_junk: true
+      legend_frac_size: 0.30

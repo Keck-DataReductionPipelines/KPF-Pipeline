@@ -15,24 +15,26 @@ def main(start_date, end_date, db_path):
       --help        Display help message
       --start_date  Start date in YYYYMMDD format
       --end_date    End date in YYYYMMDD format
+      --db_path     Path to database file; default = /data/time_series/kpf_ts.db
    
     Usage:
       ./ingest_dates_kpf_tsdb.py YYYYMMDD YYYYMMDD dbname.db
    
     Example:
-      ./ingest_dates_kpf_tsdb.py 20231201 20240101 kpfdb.db
+      ./ingest_dates_kpf_tsdb.py 20231201 20240101
     """
 
     myTS = AnalyzeTimeSeries(db_path=db_path)
     myTS.print_db_status()
-    myTS.ingest_dates_to_db(start_date, end_date)
+    myTS.ingest_dates_to_db(start_date, end_date, reverse=True)
     myTS.print_db_status()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Ingest KPF files over a date range into an observational database.')
     parser.add_argument('start_date', type=str, help='Start date in YYYYMMDD format, e.g. 20231201')
     parser.add_argument('end_date', type=str, help='End date in YYYYMMDD format, e.g. 20240101')
-    parser.add_argument('db_path', type=str, help='path to database file, e.g. kpfdb.db')
+    parser.add_argument('--db_path', type=str, default='/data/time_series/kpf_ts.db', 
+                        help='path to database file; default = /data/time_series/kpf_ts.db')
 
     args = parser.parse_args()
     main(args.start_date, args.end_date, args.db_path)
