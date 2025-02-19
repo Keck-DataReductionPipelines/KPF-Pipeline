@@ -360,7 +360,7 @@ def get_data_products_expected(kpf_object, data_level):
     """
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
     header = primary_header.header
-    name = primary_header.get_name() # 'Star','Sun','LFC', etc.
+    name = primary_header.get_name(use_star_names=False) # 'Star','Sun','LFC', etc.
     data_products = ['Telemetry']
     if data_level in ['2D', 'L1', 'L2']:
         data_products.append('Config')
