@@ -1,5 +1,5 @@
-KPF DRP Algorithms
-==================
+KPF DRP (Data Reduction Pipeline) Algorithms
+=============================================
 
 Please refer to the `KPF-Pipeline GitHub Repository <https://github.com/Keck-DataReductionPipelines/KPF-Pipeline>`_
 for any source code referred to below.
@@ -50,7 +50,7 @@ a single computer data file in standardized, multi-extension FITS format.
 There are multiple image extensions to contain the 2D subimage data from different readout amplifiers and filters,
 as well as table extensions for exposure metadata and ancillary information.
 This is called an L0 FITS file.   An example FITS filename for KPF is ``KP.20221203.81416.24.fits``,
-which is an arclamp calibration exposure, and it includes the observation date and time.
+which is an arclamp calibration exposure, and the observation date and time are embedded in the filename.
 
 Generally, the spectral wavelength range covered in the data extends from the blue portion
 of the spectral range at bottom of the image to the red portion of the spectral range
@@ -66,14 +66,14 @@ will have a wavelength range that somewhat overlaps
 those of the neighboring order traces below and above.
 This complexity makes the reduction of 2D raw spectra data particularly challenging.
 
-The following figure is a subimage of the aforementioned arclamp exposure from the ``GREEN-AMP1``
+The following figure is a small section of a subimage of the aforementioned arclamp exposure from the ``GREEN-AMP1``
 FITS image extension near the right side of the CCD associated with the corresponding readout amplifier.
 
 .. image:: KP.20221203.81416.24_subimage.png
 
-This subimage is about 500 pixels wide.
+This figure, shown above, is about 500 pixels wide, zoomed in to highlight features in the data.
 It shows portions of three sets of order traces horizontally oriented,
-where each order trace is composed of 5 distinct orderlets from top to bottom in the subimage
+where each order trace is composed of 5 distinct orderlets from top to bottom
 made by the ``CAL``, ``SCI3``, ``SCI2``, ``SCI1``, and ``SKY`` fibers of the instrument.
 Atomic lines from the arc lamp are clearly visible in the orderlets.  There are gaps between
 orderlet traces within the same order, and larger gaps between order-trace bundles.
@@ -272,7 +272,7 @@ are written to the PRIMARY header after successfully CCD image processing, with 
 
 In the end, the 2D FITS file is written to the filesystem,
 containing HDUs for GREEN and RED full spectroscopic-data images,
-each 4080x4080 pixels, with FITS extension names GREEN_CCD and RED_CCD, respectively.
+each 4080x4080 pixels, with FITS extension names ``GREEN_CCD`` and ``RED_CCD``, respectively.
 The overscan biases that were subtracted are recorded in the FITS headers of
 these HDUs (not PRIMARY HDU); for example::
 
@@ -281,15 +281,152 @@ these HDUs (not PRIMARY HDU); for example::
 
 The physical units of the image data is electrons.
 There are also associated variance images with FITS extension names
-GREEN_VAR and RED_VAR, respectively, with physical units of electrons squared.
+``GREEN_VAR`` and ``RED_VAR``, respectively, with physical units of electrons squared.
 
 
 Master Files Creation
 ---------------------
 
-<TBD to add content here>
+This section describes the algorithms for how master files are made for bias, dark, flat, LFC, etalon, and ThAr exposures.
+Master files at the 2D data level are essentially pixel-by-pixel averages of many independent exposures of the same kind,
+in order to beat down the noise.
+There are bias, dark, and flat exposures that are stacked, as well as arclamp exposures for LFC, etalon, and ThAr.
+The averaging actually involves computing a clipped mean after outliers are rejected, which lie outside the ``+/- N-sigma`` envelope
+around the median of the data, where sigma is computed robustly from percentiles using the following formula based on the
+standard deviation of normal data::
 
-Include a description of how master stacks are made for bias, dark, flats, LFC, etalon, and ThAr.
+    sigma = 0.5 * (p84 - p16)
+    p84 = 84th percentile of the data
+    p16 = 16th percentile of the data
+
+For each stack-average image, an uncertainty image is also computed, where the uncertainty at a
+given pixel location is the square root of the quantity stack variance divided by number of stack samples
+left after outlier rejection.
+A correction factor is applied to properly reinflate the variance after it is naturally diminished via the data clipping.
+The FrameStacker python class in ``modules.Utils.frame_stacker`` is common code to all image stacking used for KPF data,
+and encompasses our methods for computing the average, variance, and other statistics.
+The FitsHeaders python class in ``modules.Utils.kpf_fits`` includes methods for filtering file directories
+to identify all exposure files for a given observation date that are inputs for the type of master file to be created.
+The QC python class helper method called ``check_all_qc_keywords`` in ``modules.quality_control.src.quality_control`` is
+utilized to check input-data QC-related FITS-header keywords, including ``NOTJUNK``, and skip images that do not pass
+this very important QC checking.
+
+Once the 2D-stacked-image master files are created, then L1 and then L2 versions of the master files are subsequently produced
+by running the 2D master files through the standard KPF DRP as if they were single science exposures.
+Master files are generated daily for each new observation date.
+
+There are also derived versions of master files that do not necessarily involve image stacking (at least directly).
+This includes smooth-lamp pattern 2D images and order-mask 2D images, and order-trace CSV files.  Only master order-mask files
+are not generated daily.
+
+Master Biases
+^^^^^^^^^^^^^
+
+A 2D master-bias file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Bias'`` and ``OBJECT='autocal-bias'`` observed on the same date.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
+For the data clipping, ``N_sigma = 2.1`` is used.
+The data units of a master bias 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master bias file are electrons.
+An example of a master bias file filename is ``kpf_20250122_master_bias_autocal-bias.fits``.
+
+Master Darks
+^^^^^^^^^^^^
+
+A 2D master-dark file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Dark'`` and ``OBJECT='autocal-dark'`` observed on the same date.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
+Input dark frames must have a minimum exposure time of 300 seconds.
+Before the image stacking, the relevant master bias is subtracted and the resulting data
+are normalized by input frame exposure time (FITS keyword ``EXPTIME``).
+For the data clipping, ``N_sigma = 2.2`` is used.
+The data units of a master dark 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master dark file are electrons/second.
+An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.fits``.
+
+Master Flats
+^^^^^^^^^^^^
+
+A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Flatlamp'``, ``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
+observed on the same date.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
+For the data clipping, ``N_sigma = 2.3`` is used.
+The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master flat file are dimensionless.
+An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
+
+Master Smooth Lamp
+^^^^^^^^^^^^^^^^^^
+
+A new 2D master smooth lamp is made daily from the data taken on the corresponding observation date
+for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
+lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
+instrument characteristics change (say, on the time scale of months).
+
+The inputs are stacked Flatlamp 2D images from the ``GREEN_CCD_STACK`` and ``RED_CCD_STACK`` FITS extensions
+of a master-flat file.  The data units of the inputs are electrons per second.
+The smoothing is done using a sliding-window kernel 200-pixels wide (along dispersion dimension)
+by 1-pixel high (along cross-dispersion dimension) by computing the clipped mean
+with 3-sigma double-sided outlier rejection.
+The data units of output master smooth-lamp images are electrons/second.
+
+The fixed smooth lamp pattern is used by the master-flat pipeline specifically
+to normalize the flat field and remove low-frequency variations in the master flat.
+It is important to use an updated smooth lamp pattern when the intensity shape in Flatlamp exposures
+changes substantially in the KPF instrument.
+
+Master Order Trace and Mask
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Master order-trace files, such as ``kpf_20250122_master_flat_GREEN_CCD.csv`` and
+``kpf_20250122_master_flat_RED_CCD.csv``, are CSV files containing the following quantites
+for each diffraction order:
+Coeff0, Coeff1, Coeff2, Coeff3, BottomEdge, TopEdge, X1, X2.
+This information is used to compute the location and curvature of the orderlet traces in the image data.
+
+From the order-trace files, a 2D master order mask FITS file containing GREEN and RED mask images that
+show locations of the diffraction orderlet traces in the image data can be computed.
+The order-mask values are numbered from 1 to 5 designating distinct orderlet traces from
+bottom to top in the image, so as to differentiate the corresponding fiber of the orderlet trace
+(sky, sci1, sci2, sci3, cal).
+An order-mask value of zero indicates the mask pixel is not on any order trace in the mask.
+The following table summarizes the possible order-mask values at various pixel locations in the mask:
+
+=========================  =================
+Fiber of Orderlet Trace    Order Mask Value
+=========================  =================
+None                               0
+SKY                                1
+SCI1                               2
+SCI2                               3
+SCI3                               4
+CAL                                5
+=========================  =================
+
+Generally, the master order mask is relatively static and updated via computation from
+master order-trace files for GREEN and RED only periodically (a new order-mask file is not made daily,
+but new order-trace files are made daily).
+New master order-trace files for GREEN and RED are made daily from the data taken on the
+corresponding observation date for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine),
+but these are only used to create a new master order mask for the generation of daily master flats
+when the instrument characteristics change (say, on the time scale of months).
+
+Master Arclamps
+^^^^^^^^^^^^^^^
+
+A 2D master-arclamp file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+``IMTYPE='Arclamp'`` and the same ``OBJECT`` keyword string observed on the same date.
+Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
+from separate amplifiers for a given filter into a 2D image.
+For the data clipping, ``N_sigma = 2.4`` is used.
+The data units of a master arclamp 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
+of an output master arclamp file are electrons.
+An example of a master arclamp filename is ``kpf_20250122_master_arclamp_autocal-thar-cal-eve.fits``.
+
 
 Scattered light correction
 --------------------------

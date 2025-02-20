@@ -1,4 +1,5 @@
 import time
+import copy
 import math
 import numpy as np
 import pandas as pd
@@ -57,8 +58,8 @@ class AnalyzeEM:
             self.logger.debug('Initializing AnalyzeEM object.')
         else:
             self.logger = None
-        self.L0 = L0 
-        primary_header = HeaderParse(L0, 'PRIMARY')
+        self.L0 = copy.deepcopy(L0)
+        primary_header = HeaderParse(self.L0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
@@ -72,8 +73,8 @@ class AnalyzeEM:
         self.wav4 = 870      # "
 
         # Read data tables
-        self.dat_SCI = L0['EXPMETER_SCI']
-        self.dat_SKY = L0['EXPMETER_SKY']
+        self.dat_SCI = self.L0['EXPMETER_SCI']
+        self.dat_SKY = self.L0['EXPMETER_SKY']
         self.df_SCI_EM = self.dat_SCI
         self.df_SKY_EM = self.dat_SKY
         i = 0
