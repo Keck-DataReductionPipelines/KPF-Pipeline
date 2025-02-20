@@ -1,4 +1,5 @@
 import time
+import copy
 import traceback
 import numpy as np
 import matplotlib.pyplot as plt
@@ -117,7 +118,7 @@ class AnalyzeL1:
 
     def __init__(self, L1, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
-        self.L1 = L1
+        self.L1 = copy.deepcopy(L1)
         primary_header = HeaderParse(L1, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()

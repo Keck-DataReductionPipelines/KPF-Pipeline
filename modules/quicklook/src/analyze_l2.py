@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -34,7 +35,7 @@ class AnalyzeL2:
             self.logger.debug('Initializing AnalyzeL2 object')
         else:
             self.logger = None
-        self.L2 = L2
+        self.L2 = copy.deepcopy(L2)
         self.df_RV = self.L2['RV']
         self.n_green_orders = 35
         self.n_red_orders   = 32
