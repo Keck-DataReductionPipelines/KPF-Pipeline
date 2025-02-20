@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -34,13 +35,17 @@ class AnalyzeL2:
             self.logger.debug('Initializing AnalyzeL2 object')
         else:
             self.logger = None
-        self.L2 = L2
+        self.L2 = copy.deepcopy(L2)
         self.df_RV = self.L2['RV']
         self.n_green_orders = 35
         self.n_red_orders   = 32
         primary_header = HeaderParse(L2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
+        if primary_header.get_name(use_star_names=False) in ['Star', 'Sun']:
+            self.is_star = True
+        else:
+            self.is_star = False
         self.ObsID = primary_header.get_obsid()
         self.rv_header = HeaderParse(L2, 'RV').header
         self.df_RVs = self.L2['RV'] # Table of RVs per order and orderlet
@@ -87,7 +92,6 @@ class AnalyzeL2:
         var_pop = np.sum(w * (x - wmean)**2) / np.sum(w) # weighted variance
         self.Delta_Bary_RVC_weighted_std = np.sqrt(var_pop) * 1000 # m/s
         self.Delta_Bary_RVC_weighted_range = (x[nonzero_mask].max() - x[nonzero_mask].min()) * 1000 # m/s
-
 
 
     def plot_CCF_grid(self, chip=None, annotate=False, 
@@ -298,8 +302,6 @@ class AnalyzeL2:
         Generate a plot of BJD and Barycentric RV vs. spectral order.
 
         Args:
-            chip (string) - "green" or "red"
-            annotate (boolean) - show text annotations, especially on SCI 
             fig_path (string) - set to the path for a SNR vs. wavelength file
                 to be generated.
             show_plot (boolean) - show the plot in the current environment.

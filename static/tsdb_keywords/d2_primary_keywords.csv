@@ -68,6 +68,9 @@ POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
 LOWBIAS|bool|QC: 2D bias flux not low|None
 LOWDARK|bool|QC: 2D dark flux not low|None
 LFC2DFOK|bool|QC: LFC flux meets threshold of 4000 counts|None
+AGEBIAS|float|BIASFILE age (whole days)|None
+AGEDARK|float|DARKFILE age (whole days)|None
+AGEFLAT|float|FLATFILE age (whole days)|None
 OLDBIAS|bool|QC: Master bias within 5 days of this obs|None
 OLDDARK|bool|QC: Master dark within 5 days of this obs|None
 OLDFLAT|bool|QC: Master flat within 5 days of this obs|None

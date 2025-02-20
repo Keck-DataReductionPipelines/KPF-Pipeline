@@ -1,4 +1,5 @@
 import time
+import copy
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -47,7 +48,7 @@ class AnalyzeGuider:
     def __init__(self, L0, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeGuider')
-        self.L0 = L0
+        self.L0 = copy.deepcopy(L0)
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
 
         header_primary_obj = HeaderParse(L0, 'PRIMARY')

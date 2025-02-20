@@ -380,7 +380,7 @@ class AnalyzeTimeSeries:
             os.remove(shm_file)
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=100, reverse=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
@@ -1558,6 +1558,7 @@ class AnalyzeTimeSeries:
                         colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                         color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
                     else:
+                        unique_states = sorted(list(set(unique_states)))
                         state_to_num = {state: i for i, state in enumerate(unique_states)}
                         mapped_states = [state_to_num[state] for state in states]
                         colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))

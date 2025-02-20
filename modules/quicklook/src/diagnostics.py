@@ -401,10 +401,10 @@ def add_headers_masters_age_2D(D2, logger=None, verbose=False):
                 file_error = True
         except Exception as e:
             file_error = True
-            logger.error(f"Problem with {master_keyword} age determination: {e}\n{traceback.format_exc()}")
+            logger.error(f"Problem with {new_keyword} age determination: {e}\n{traceback.format_exc()}")
     
         if file_error:
-            logger.error(f"Problem with {master_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
+            logger.error(f"Problem with {new_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
             D2.header['PRIMARY'][new_keyword] = (-999, 'ERROR: Age of {master_file} compared to this file (whole days)')
 
     return D2
@@ -783,13 +783,23 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
 
 def add_headers_L2_barycentric(L2, logger=None):
     """
-    Adds Barycentric RV correction to the L2 primary header
+    Adds Barycentric RV correction and BJD to the L2 primary header
     
     Keywords:
         CCFBCV - Barycentric radial velocity correction (km/s), averaged
                  over the BCV values for each spectral order and weighted 
                  by the CCF Weights
         CCFBJD - Weighted avg of BJD values (days)
+        BCVRNG - Range of values of barycentric radial velocity correction 
+                 (m/s) for the spectral orders, with zero-weight orders 
+                 excluded
+        BCVSTD - Standard deviation of values of barycentric radial velocity 
+                 correction (m/s) for the spectral orders and weighted by the 
+                 CCF Weights
+        BJDRNG - Range of BJD values for the spectral orders, with zero-weight
+                 orders excluded (sec)
+        BJDSTD - Standard deviation of BJD values for the spectral orders, 
+                 weighted by the CCF Weights (sec)
 
     Args:
         L2 - a KPF L2 object 
@@ -801,24 +811,39 @@ def add_headers_L2_barycentric(L2, logger=None):
     if logger == None:
         logger = DummyLogger()
 
-    data_products = get_data_products_L2(L2)
-    chips = []
-    if 'Green' in data_products: chips.append('green')
-    if 'Red'   in data_products: chips.append('red')
-    
-    # Check that the input object is of the right type
-    if str(type(L2)) != "<class 'kpfpipe.models.level2.KPF2'>" or chips == []:
-        print('Not a valid L2.')
-        return L2
+    try:
+        data_products = get_data_products_L2(L2)
+        chips = []
+        if 'Green' in data_products: chips.append('green')
+        if 'Red'   in data_products: chips.append('red')
         
-    # Use the AnalyzeL2 class to compute BCV
-    myL2 = AnalyzeL2(L2, logger=logger)
+        # Check that the input object is of the right type
+        if str(type(L2)) != "<class 'kpfpipe.models.level2.KPF2'>" or chips == []:
+            print('Not a valid L2.')
+            return L2
+            
+        # Use the AnalyzeL2 class to compute BCV
+        myL2 = AnalyzeL2(L2, logger=logger)
+    
+        # Add values to header
+        if hasattr(myL2, 'CCFBCV'):
+            L2.header['PRIMARY']['CCFBCV'] = (myL2.CCFBCV, 'Weighted avg of barycentricRV correction (km/s)')
+        # remove the two lines below when CCFBJD is computed where the RV table is assembled
+        if hasattr(myL2, 'CCFBJD'):
+            L2.header['PRIMARY']['CCFBJD']  = (myL2.CCFBJD, 'Weighted avg of BJD values (days)')
+    
+        # Add range and standard deviation stats
+        if hasattr(myL2, 'Delta_CCFBJD_weighted_std'):
+            L2.header['PRIMARY']['BJDSTD'] = (myL2.Delta_CCFBJD_weighted_std, 'Weighted stddev of BJD for orders (m/s)')
+        if hasattr(myL2, 'Delta_CCFBJD_weighted_range'):
+            L2.header['PRIMARY']['BJDRNG'] = (myL2.Delta_CCFBJD_weighted_range, 'Range(BJD) for non-zero-weight orders (m/s)')
+        if hasattr(myL2, 'Delta_Bary_RVC_weighted_std'):
+            L2.header['PRIMARY']['BCVSTD'] = (myL2.Delta_Bary_RVC_weighted_std, 'Weighted stddev of BCV for orders (sec)')
+        if hasattr(myL2, 'Delta_Bary_RVC_weighted_range'):
+            L2.header['PRIMARY']['BCVRNG'] = (myL2.Delta_Bary_RVC_weighted_range, 'Range(BCV) for non-zero-weight orders (sec)')
 
-    # Add value to header
-    if hasattr(myL2, 'CCFBCV'):
-        L2.header['PRIMARY']['CCFBCV'] = (myL2.CCFBCV, 'Weighted avg of barycentric RV correction (km/s)')
-    # remove the two lines below when CCFBJD is computed when the RV table is assembled
-    if hasattr(myL2, 'CCFBJD'):
-        L2.header['PRIMARY']['CCFBJD']  = (myL2.CCFBJD, 'Weighted avg of BJD values (days)')
+    except Exception as e:
+        logger.error(f"Problem with L2 BJD/BCV measurements: {e}\n{traceback.format_exc()}")
 
     return L2
+

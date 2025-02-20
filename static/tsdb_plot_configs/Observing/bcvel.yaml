@@ -1,0 +1,56 @@
+description: Barycentric Variations
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: BJDSTD
+        plot_type: scatter
+        unit: m/s
+        plot_attr:
+          label: stddev(BJD) [m/s]
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: stddev(BJD) [m/s]
+      title: Barycentric Variations
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: BJDRNG
+        plot_type: scatter
+        unit: m/s
+        plot_attr:
+          label: range(BJD) [m/s]
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: range(BJD) [m/s]
+      title: Barycentric Variations
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: BCVSTD
+        plot_type: scatter
+        unit: sec
+        plot_attr:
+          label: stddev(BCV) [sec]
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: stddev(BCV) [sec]
+      title: Barycentric Variations
+      not_junk: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: BCVRNG
+        plot_type: scatter
+        unit: m/s
+        plot_attr:
+          label: range(BCV) [m/s]
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: range(BCV) [m/s]
+      title: Barycentric Variations
+      not_junk: true
+      legend_frac_size: 0.30

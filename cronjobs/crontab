@@ -1,0 +1,6 @@
+[rlaher@shrek ~]$ crontab -l
+00 * * * * /data/user/rlaher/git/KPF-Pipeline/database/cronjobs/db_server_watchdog.sh >& ~/watchdog_db.out
+00 16 * * 1 /data/user/rlaher/db/pg15.2/bin/pg_dump -d kpfopsdb -p 6125 > /data/user/rlaher/dbbackups/db_backup_$(date +\%Y\%m\%d).txt
+15 17 * * * /data/user/rlaher/git/KPF-Pipeline/cronjobs/runDailyPipelines.sh >& /data/user/rlaher/git/KPF-Pipeline/runDailyPipelines_$(date +\%Y\%m\%d).out
+00 15 * * * /data/user/rlaher/git/KPF-Pipeline/cronjobs/runPerlScriptsUnderCrontab.sh >& /data/user/rlaher/git/KPF-Pipeline/runPerlScriptsUnderCrontab_$(date +\%Y\%m\%d).out
+
