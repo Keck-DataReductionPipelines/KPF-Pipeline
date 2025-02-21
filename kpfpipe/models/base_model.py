@@ -335,7 +335,7 @@ class KPFDataModel(object):
                'Module_Param': param,
                'Status': status}
 
-        self.receipt = pd.concat([self.receipt, pd.DataFrame(row)], ignore_index=True)
+        self.receipt = pd.concat([self.receipt, pd.DataFrame([row])], ignore_index=True)
         self.RECEIPT = self.receipt
 
         # add DRPTAG and DRPHASH to primary header
