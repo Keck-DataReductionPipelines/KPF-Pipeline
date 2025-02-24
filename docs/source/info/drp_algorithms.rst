@@ -351,13 +351,67 @@ Master Flats
 
 A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Flatlamp'``, ``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
-observed on the same date.
+observed on the same date, appropriately normalized as described below to "flatten" the master flat.
 Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
 from separate amplifiers for a given filter into a 2D image.
+Before the image stacking, the relevant master bias is subtracted and the resulting data
+are normalized by input frame exposure time (FITS keyword ``EXPTIME``), and the relevant master dark
+is then subtracted.
 For the data clipping, ``N_sigma = 2.3`` is used.
 The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master flat file are dimensionless.
 An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
+
+The heart of the master-flat algorithm for the GREEN and RED CCDs involves separate
+normalization of the unnormalized stack-averaged flat.  The following is the Python code,
+and note that the very important step of normalizing by the smooth_lamp_pattern is
+first done (the smooth_lamp_pattern is discussed in detail in a separate section below)::
+
+
+    unnormalized_flat = stack_avg / smooth_lamp_pattern
+    unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
+
+    # Apply order mask, if available for the current FITS extension.
+
+    np_om_ffi = np.array(np.rint(order_mask_data[ffi])).astype(int)   # Ensure rounding to nearest integer.
+    np_om_ffi_shape = np.shape(np_om_ffi)
+    order_mask_n_dims = len(np_om_ffi_shape)
+
+    if order_mask_n_dims == 2:      # Check if valid data extension
+
+        # Loop over 5 orderlets in the KPF instrument and normalize separately for each.
+
+        flat = unnormalized_flat
+        flat_unc = unnormalized_flat_unc
+
+        # Order mask has orderlets numbered from 1 to 5 (bottom to top).
+        # Order mask value is zero if not on orderlet.
+
+        for orderlet_val in range(1,6):
+            np_om_ffi_bool = np.where(np_om_ffi == orderlet_val,True,False)
+            np_om_ffi_bool = np.where(stack_avg > self.low_light_limit,np_om_ffi_bool,False)
+
+            # Invert mask for numpy.ma operation.
+            unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)
+
+            # Compute mode of distribution for normalization factor.
+            vals_for_mode_calc = np.where(np_om_ffi == orderlet_val,np.rint(100.0 * unnormalized_flat),np.nan)
+            vals_for_mode_calc = np.where(stack_avg > self.low_light_limit,vals_for_mode_calc,np.nan)
+            mode_vals,mode_counts = mode(vals_for_mode_calc,axis=None,nan_policy='omit')
+
+            normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+
+            flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
+            flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
+
+
+Master flat values are forced to be 1.0 for pixels with an order mask value of zero.  Order masks
+are described in greater detail below.
+Also, master flat values are forced to be 1.0 for pixels with stack-average values
+that are less than the current low_light_limit of 5.01 electrons per second.
+Resetting a master flat value to 1.0 is the safest way to deal with pixels for which it is
+difficult or impossible to compute a nonuniformity correction.
+
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
