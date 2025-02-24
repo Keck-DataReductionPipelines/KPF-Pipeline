@@ -119,7 +119,8 @@ my $pythonpath = $ENV{PYTHONPATH};
 if (defined $pythonpath) {
     print "PYTHONPATH=$pythonpath\n";
 } else {
-    print "PYTHONPATH not defined (assume current PATH is sufficient); continuing...\n";
+    $ENV{PYTHONPATH} = '/data/user/rlaher/git/KPF-Pipeline/polly/src';
+    print "PYTHONPATH not defined; reset to PYTHONPATH=$ENV{PYTHONPATH}\n";
 }
 
 my $pythonscript = 'cronjobs/run_analysis_for_masters.py';

@@ -19,6 +19,8 @@ psycopg2-binary
 tqdm
 dataclasses
 pyyaml
+# The following is required by polly.
+pyfonts
 
 # Documentation
 sphinx
