@@ -368,7 +368,7 @@ The heart of the master-flat algorithm for the GREEN and RED CCDs involves separ
 normalization of the unnormalized stack-averaged flat for each orderlet trace.
 The following is the pertinent Python code,
 and note that the very important step of normalizing by the master smooth lamp is
-first done to remove the low-frequency variations in the ``Flatlamp`` stack image
+first done to remove the low-frequency intensity variations in the ``Flatlamp`` stack image
 (the smooth lamp pattern is discussed in detail in a separate section below)::
 
 
