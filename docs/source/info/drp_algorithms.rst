@@ -361,15 +361,15 @@ For the data clipping, ``N_sigma = 2.3`` is used.
 The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master flat file are dimensionless.  Other image FITS extensions in the 2D master flat
 are written for the uncertainties, sample counts, unnormalized stack average, and smooth lamp pattern
-(a separate page gives the data-format details: :doc:`KPF Calibration-Masters Data Format </masters_format>`).
+(a separate page gives the data-format details: :doc:`KPF Calibration-Masters Data Format <info/masters_format>`).
 An example of a 2D master flat filename is ``kpf_20250122_master_flat.fits``.
 
 The heart of the master-flat algorithm for the GREEN and RED CCDs involves separate
 normalization of the unnormalized stack-averaged flat for each orderlet trace.
 The following is the pertinent Python code,
-and note that the very important step of normalizing by the smooth_lamp_pattern is
+and note that the very important step of normalizing by the master smooth lamp is
 first done to remove the low-frequency variations in the ``Flatlamp`` stack image
-(the smooth_lamp_pattern is discussed in detail in a separate section below)::
+(the smooth lamp pattern is discussed in detail in a separate section below)::
 
 
     unnormalized_flat = stack_avg / smooth_lamp_pattern
@@ -408,6 +408,10 @@ first done to remove the low-frequency variations in the ``Flatlamp`` stack imag
             flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
             flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
 
+.. note::
+    The master smooth lamp that is used to create a 2D master flat is relatively static and only updated
+    when the flat-lamp or instrument characteristics change (say, on the time scale of months).
+
 
 Master flat values are forced to be 1.0 for pixels with an order mask value of zero.  Order masks
 are described in greater detail below.
@@ -422,7 +426,7 @@ Master Smooth Lamp
 
 A new 2D master smooth lamp is made daily from the data taken on the corresponding observation date
 for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
-lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
+lamp that is used to create a 2D master flat is relatively static and only updated when the flat-lamp or
 instrument characteristics change (say, on the time scale of months).
 
 The inputs are stacked Flatlamp 2D images from the ``GREEN_CCD_STACK`` and ``RED_CCD_STACK`` FITS extensions
