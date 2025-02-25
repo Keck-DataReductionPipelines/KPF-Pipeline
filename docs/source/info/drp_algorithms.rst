@@ -385,7 +385,7 @@ first done (the smooth_lamp_pattern is discussed in detail in a separate section
         flat_unc = unnormalized_flat_unc
 
         # Order mask has orderlets numbered from 1 to 5 (bottom to top).
-        # Order mask value is zero if not on orderlet.
+        # Order mask value is zero if not on any orderlet trace.
 
         for orderlet_val in range(1,6):
             np_om_ffi_bool = np.where(np_om_ffi == orderlet_val,True,False)
