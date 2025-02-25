@@ -361,7 +361,7 @@ For the data clipping, ``N_sigma = 2.3`` is used.
 The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
 of an output master flat file are dimensionless.  Other image FITS extensions in the 2D master flat
 are written for the uncertainties, sample counts, unnormalized stack average, and smooth lamp pattern
-(a separate page gives the data-format details: :doc:`KPF Calibration-Masters Data Format <info/masters_format>`).
+(a separate page gives the data-format details: :doc:`KPF Calibration-Masters Data Format <masters_format.rst>`).
 An example of a 2D master flat filename is ``kpf_20250122_master_flat.fits``.
 
 The heart of the master-flat algorithm for the GREEN and RED CCDs involves separate
