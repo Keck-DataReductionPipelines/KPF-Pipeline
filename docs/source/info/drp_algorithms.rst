@@ -363,7 +363,8 @@ of an output master flat file are dimensionless.
 An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
 
 The heart of the master-flat algorithm for the GREEN and RED CCDs involves separate
-normalization of the unnormalized stack-averaged flat.  The following is the Python code,
+normalization of the unnormalized stack-averaged flat for each orderlet trace.
+The following is the pertinent Python code,
 and note that the very important step of normalizing by the smooth_lamp_pattern is
 first done (the smooth_lamp_pattern is discussed in detail in a separate section below)::
 
