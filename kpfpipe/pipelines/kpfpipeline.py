@@ -2,6 +2,8 @@
 # algorithm module. 
 from asyncio.log import logger
 import os
+import signal
+import sys
 import gc
 import time
 import glob
@@ -228,7 +230,12 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         self.logger.info("exiting pipeline...")
-        os._exit(1)
+        sys.exit(0)
+        # os._exit(1)
+
+        # pid = os.getpid()  # Get the current process ID
+        # pgid = os.getpgid(pid)  # Get the process group ID
+        # os.killpg(pgid, signal.SIGTERM)  # Kill the entire process group
 
     # reentry after call
     def resume_recipe(self, action: Action, context: ProcessingContext):
