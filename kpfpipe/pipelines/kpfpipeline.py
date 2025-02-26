@@ -230,12 +230,7 @@ class KPFPipeline(BasePipeline):
             context (keckdrpframework.models.ProcessingContext.ProcessingContext): Keck DRPF ProcessingContext object
         """
         self.logger.info("exiting pipeline...")
-        sys.exit(0)
-        # os._exit(1)
-
-        # pid = os.getpid()  # Get the current process ID
-        # pgid = os.getpgid(pid)  # Get the process group ID
-        # os.killpg(pgid, signal.SIGTERM)  # Kill the entire process group
+        os._exit(1)
 
     # reentry after call
     def resume_recipe(self, action: Action, context: ProcessingContext):
