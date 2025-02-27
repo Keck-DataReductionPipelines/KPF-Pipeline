@@ -349,22 +349,86 @@ An example of a master dark filename is ``kpf_20250122_master_dark_autocal-dark.
 Master Flats
 ^^^^^^^^^^^^
 
-A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
+A 2D master-flat file is used to correct variations in pixel detector responsity, the so-called
+nonuniformity correction.  Several complex steps are involved in computing a 2D master flat.
+It is basically a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
 ``IMTYPE='Flatlamp'``, ``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds
-observed on the same date.
+observed on the same date, appropriately normalized as described below to "flatten" the master flat.
 Each input L0 file is processed to perform overscan bias subtraction and assembly of subimages
 from separate amplifiers for a given filter into a 2D image.
+Before the image stacking, the relevant master bias is subtracted and the resulting data
+are normalized by input frame exposure time (FITS keyword ``EXPTIME``), and the relevant master dark
+is then subtracted.
 For the data clipping, ``N_sigma = 2.3`` is used.
 The data units of a flat-field 2D image in the ``GREEN_CCD`` or ``RED_CCD`` FITS extensions
-of an output master flat file are dimensionless.
-An example of a  master flat filename is ``kpf_20250122_master_flat.fits``.
+of an output master flat file are dimensionless.  Other image FITS extensions in the 2D master flat
+are written for the uncertainties, sample counts, unnormalized stack average, and smooth lamp pattern
+(see :doc:`KPF Calibration-Masters Data Format </info/masters_format>` ).
+An example of a 2D master flat filename is ``kpf_20250123_master_flat.fits``.
+
+The heart of the master-flat algorithm for the GREEN and RED CCDs involves separate
+normalization of the unnormalized stack-averaged flat for each orderlet trace.
+The following is the pertinent Python code,
+and note that the very important step of normalizing by the master smooth lamp is
+first done to remove the low-frequency intensity variations in the ``Flatlamp`` stack image
+(the smooth lamp pattern is discussed in detail in a separate section below)::
+
+
+    unnormalized_flat = stack_avg / smooth_lamp_pattern
+    unnormalized_flat_unc = stack_unc / smooth_lamp_pattern
+
+    # Apply order mask, if available for the current FITS extension.
+
+    np_om_ffi = np.array(np.rint(order_mask_data[ffi])).astype(int)   # Ensure rounding to nearest integer.
+    np_om_ffi_shape = np.shape(np_om_ffi)
+    order_mask_n_dims = len(np_om_ffi_shape)
+
+    if order_mask_n_dims == 2:      # Check if valid data extension
+
+        # Loop over 5 orderlets in the KPF instrument and normalize separately for each.
+
+        flat = unnormalized_flat
+        flat_unc = unnormalized_flat_unc
+
+        # Order mask has orderlets numbered from 1 to 5 (bottom to top).
+        # Order mask value is zero if not on any orderlet trace.
+
+        for orderlet_val in range(1,6):
+            np_om_ffi_bool = np.where(np_om_ffi == orderlet_val,True,False)
+            np_om_ffi_bool = np.where(stack_avg > self.low_light_limit,np_om_ffi_bool,False)
+
+            # Invert mask for numpy.ma operation.
+            unmx = ma.masked_array(unnormalized_flat, mask = ~ np_om_ffi_bool)
+
+            # Compute mode of distribution for normalization factor.
+            vals_for_mode_calc = np.where(np_om_ffi == orderlet_val,np.rint(100.0 * unnormalized_flat),np.nan)
+            vals_for_mode_calc = np.where(stack_avg > self.low_light_limit,vals_for_mode_calc,np.nan)
+            mode_vals,mode_counts = mode(vals_for_mode_calc,axis=None,nan_policy='omit')
+
+            normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+
+            flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
+            flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
+
+.. note::
+    The master smooth lamp that is used to create a 2D master flat is relatively static and only updated
+    when the flat-lamp or instrument characteristics change (say, on the time scale of months).
+
+
+Master flat values are forced to be 1.0 for pixels with an order mask value of zero.  Order masks
+are described in greater detail below.
+Also, master flat values are forced to be 1.0 for pixels with stack-average values
+that are less than the current low_light_limit of 5.01 electrons per second.
+Resetting a master flat value to 1.0 is the safest way to deal with pixels for which it is
+difficult or impossible to compute a nonuniformity correction.
+
 
 Master Smooth Lamp
 ^^^^^^^^^^^^^^^^^^
 
 A new 2D master smooth lamp is made daily from the data taken on the corresponding observation date
 for reference purposes (in ``/data/kpf/masters/<yyyymmdd>`` on the shrek machine), but the master smooth
-lamp that is used to create a master flat is relatively static and only updated when the flat-lamp or
+lamp that is used to create a 2D master flat is relatively static and only updated when the flat-lamp or
 instrument characteristics change (say, on the time scale of months).
 
 The inputs are stacked Flatlamp 2D images from the ``GREEN_CCD_STACK`` and ``RED_CCD_STACK`` FITS extensions
