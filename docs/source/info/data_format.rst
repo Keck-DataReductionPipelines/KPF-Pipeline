@@ -240,6 +240,9 @@ POS2DSNR  1                                           QC: 1 = 2D Red and Green S
 LOWBIAS   1                                           QC: 1 = 2D bias flux not low
 LOWDARK   1                                           QC: 1 = 2D dark flux not low
 LFC2DFOK  1                                           QC: 1 = LFC flux meets threshold of 4000 counts
+OLDBIAS   1                                           QC: 1 = Master bias within 5 days of this obs|None
+OLDDARK   1                                           QC: 1 = Master dark within 5 days of this obs|None
+OLDFLAT   1                                           QC: 1 = Master flat within 5 days of this obs|None
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -359,6 +362,9 @@ DATAPRL1  1                                                                     
 CAHKPRL1  1                                                                        QC: 1 = CaHK data present in L1 with expected shape
 WLSL1     1                                                                        QC: 1 = L1 WLS file check passed
 LFCSAT    1                                                                        QC: 1 = L1 LFC spectrum not saturated
+OLDWLS    1                                                                        QC: 1 = WLSFILE within 2 days of this obs
+OLDWLS2   1                                                                        QC: 1 = WLSFILE2 within 2 days of this obs
+FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD

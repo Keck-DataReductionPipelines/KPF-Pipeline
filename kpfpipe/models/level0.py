@@ -2,23 +2,17 @@
 Level 0 Data Model
 """
 # Standard dependencies
-from collections import OrderedDict
-import os
 import copy
 import warnings
 
 # External dependencies
-import astropy
 from astropy.io import fits
-from astropy.time import Time
 from astropy.table import Table
 import numpy as np
-from numpy.lib.shape_base import get_array_prepare
 import pandas as pd
 
 from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
-from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
 
 class KPF0(KPFDataModel):

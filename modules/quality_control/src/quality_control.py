@@ -668,6 +668,19 @@ class QCDefinitions:
         self.db_columns[name26] = None
         self.fits_keyword_fail_value[name26] = 0
 
+        name27 = 'L1_FLAT_SNR'
+        self.names.append(name27)
+        self.kpf_data_levels[name27] = ['L1']
+        self.descriptions[name27] = 'Check SNR of flat'
+        self.data_types[name27] = 'int'
+        self.spectrum_types[name27] = ['Flat', ]
+        self.master_types[name27] = []
+        self.required_data_products[name27] = [] # no required data products
+        self.fits_keywords[name27] = 'FLATSNR'
+        self.fits_comments[name27] = 'QC: Flat SNR sufficient, all orders/orderlets'
+        self.db_columns[name27] = None
+        self.fits_keyword_fail_value[name27] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -2175,6 +2188,7 @@ class QCL1(QC):
 
         return QC_pass
 
+
     def L1_WLSFILE_age(self, maxage=2, debug=False):
         """
         This Quality Control function checks if the wavelength solution file
@@ -2206,6 +2220,7 @@ class QCL1(QC):
 
         return QC_pass
 
+
     def L1_WLSFILE2_age(self, maxage=2, debug=False):
         """
         This Quality Control function checks if the wavelength solution file
@@ -2230,6 +2245,42 @@ class QCL1(QC):
             QC_pass = True
             if abs(age_wls_file) > maxage:
                 QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_FLAT_SNR(self, snr_min=40, snr_max=1800, debug=False):
+        """
+        Checks each chip/order/orderlet to see if the peak-of-blaze SNR is 
+        greater than the specified minimum (snr_min) and less than a specified 
+        maximum (snr_max).
+
+        Args:
+            snr_min: minimum SNR threshold applied to all chips/orders/orderlets
+            snr_max: maximum SNR threshold applied to all chips/orders/orderlets
+            debug
+
+        Returns:
+            QC_pass (bool): True if the SNR of each order and orderlet for the 
+            green and red CCDs are above a threshold.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            myL1.measure_L1_snr()
+
+            QC_pass = False
+            green_snr_min_ok = (myL1.GREEN_SNR[:,0:5] > snr_min).all() 
+            red_snr_min_ok   = (myL1.RED_SNR[:,0:5]   > snr_min).all() 
+            green_snr_max_ok = (myL1.GREEN_SNR[:,0:5] < snr_max).all() 
+            red_snr_max_ok   = (myL1.RED_SNR[:,0:5]   < snr_max).all() 
+            if (green_snr_min_ok and red_snr_min_ok and green_snr_max_ok and red_snr_max_ok):
+                QC_pass = True
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
