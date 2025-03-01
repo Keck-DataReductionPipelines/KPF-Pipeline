@@ -4,7 +4,11 @@ import subprocess
 from glob import glob
 from astropy.io import fits
 
-script_to_execute = "polly/run_analysis_single.py"
+pythonpath = os.environ['PYTHONPATH']
+
+print("pythonpath =",pythonpath)
+
+script_to_execute = "polly/tools/run_analysis_single.py"
 
 ORDERLETS : list[str] = [
     "SCI1",
