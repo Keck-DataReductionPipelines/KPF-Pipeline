@@ -172,67 +172,178 @@ class AnalyzeL1:
             return None
 
 
-    def measure_good_comb_orders(self, chip = 'green', 
-                                       intensity_thresh = 40**2, 
-                                       min_lines = 300, 
-                                       fraction_of_order = 0.75):
+    def measure_good_comb_orders(self, chip='green', 
+                                       intensity_thresh=40**2, 
+                                       min_lines=100, 
+                                       divisions_per_order=8):
         """
-        This method uses the find_peaks algorithm to measures the number of 
-        emission lines above an intensity threshold
-
+        This method uses the find_peaks algorithm to measure the number of 
+        emission lines above an intensity threshold. Additionally, it checks
+        that each order has at least one peak in each of the 
+        `divisions_per_order` subregions.
+    
         Args:
-            chip:             CCD name ('green' or 'red')
-            intensity_thresh: minimum line amplitude to be considered good
-            min_lines:        minimum number of lines in a spectral order for 
-                              it to be considered good
-
-        Attributes:
-            None
-
+            chip (str):               CCD name ('green' or 'red')
+            intensity_thresh (float): minimum line amplitude to be considered good
+            min_lines (int):          minimum number of lines in a spectral 
+                                      order for it to be considered good
+            divisions_per_order (int): number of contiguous subregions each order 
+                                       must have at least one peak in
+    
         Returns:
-            (SCI_fl, CAL_fl, SKY_fl) where e.g., SCI_fl = (first_good_order, last_good_order)
+            (SCI_fl, CAL_fl, SKY_fl) where, e.g., SCI_fl = (first_good_order, last_good_order)
         """
         
         chip = chip.lower()
-        data = np.array(self.L1[chip.upper() + '_CAL_WAVE'].data,'d')
+        data = np.array(self.L1[chip.upper() + '_CAL_WAVE'].data, dtype='d')
         orderlets = ['SCI_FLUX1', 'SCI_FLUX2', 'SCI_FLUX3', 'CAL_FLUX', 'SKY_FLUX']
+        
         norder = data.shape[0]
         norderlet = len(orderlets)
-        lines = np.zeros((norder, norderlet))
-
+        # lines[o, oo] will hold the final "count" for each (order, orderlet)
+        lines = np.zeros((norder, norderlet), dtype=int)
+    
         def find_first_last_true(arr):
-            # For each column in a boolean array, find the first and last columns that are True
-            first_true = np.full(arr.shape[1], np.nan)  # Initialize with NaN
-            last_true  = np.full(arr.shape[1], np.nan)
-        
+            """
+            Find the first and last elements of each column that are True.
+            The last element is determined first.
+            The first element is then determined by scanning from the last 
+            good element downward.
+            """
+            first_true = np.full(arr.shape[1], None)  
+            last_true  = np.full(arr.shape[1], None)
             for col in range(arr.shape[1]):  # Iterate over each column
-                true_indices = np.where(arr[:, col])[0]  # Get indices of True values
-                if true_indices.size > 0:  # If there are any True values
-                    first_true[col] = true_indices[0]
-                    last_true[col] = true_indices[-1]
-        
+                true_indices = np.where(arr[:, col])[0]  # Indices of True values
+                if true_indices.size > 0:
+                    last_true[col]  = true_indices[-1]
+                    first_true[col] = last_true[col]
+                    i = last_true[col]
+                    while i >= 0 and arr[i, col]:
+                        first_true[col] = i
+                        i -= 1           
             return first_true, last_true
-
-        def convert_float64_to_int(value):
-            """Convert a numpy.float64 to an int, keeping NaN as NaN."""
-            return int(value) if not np.isnan(value) else np.nan
-
+    
         for oo, oo_str in enumerate(orderlets):
-            for o in np.arange(norder):
-                orderlet_str = 'CAL'
-                flux = np.array(self.L1[chip.upper() + '_' + oo_str].data,'d')[o,:].flatten()
+            for o in range(norder):
+                # Extract flux for this order / orderlet
+                flux = np.array(self.L1[chip.upper() + '_' + oo_str].data, dtype='d')[o, :].flatten()
+                
+                # Find peaks above intensity_thresh
                 peaks, properties = scipy.signal.find_peaks(flux, height=intensity_thresh)
-                lines[o, oo] = len(peaks)
+    
+                # Now we check if each of the divisions_per_order subregions 
+                # has at least one peak
+                flux_len = len(flux)
+                region_size = flux_len // divisions_per_order
+                
+                # Track how many regions actually have >= 1 peak
+                num_regions_with_peaks = 0
+                
+                for d in range(divisions_per_order):
+                    start = d * region_size
+                    # Make sure we capture any 'leftover' indices in the final region
+                    end = (d+1) * region_size if d < divisions_per_order - 1 else flux_len
+                    
+                    # Check if at least one peak is within [start, end)
+                    if np.any((peaks >= start) & (peaks < end)):
+                        num_regions_with_peaks += 1
+                
+                # If all subregions contained at least one peak,
+                # we keep the actual count of peaks; otherwise 0.
+                if num_regions_with_peaks == divisions_per_order:
+                    lines[o, oo] = len(peaks)
+                else:
+                    lines[o, oo] = 0
+    
+        # Determine which orders are 'good' (i.e., above min_lines)
         lines_above_threshold = lines > min_lines
-        
+    
+        # Find the first and last "good" orders in each of the orderlet columns
         first_indices, last_indices = find_first_last_true(lines_above_threshold)
-        
-        SCI_fl = (convert_float64_to_int(max(first_indices[0], first_indices[1], first_indices[2])), convert_float64_to_int(min(last_indices[0], last_indices[1], last_indices[2])))
-        CAL_fl = (convert_float64_to_int(first_indices[3]), convert_float64_to_int(last_indices[3]))
-        SKY_fl = (convert_float64_to_int(first_indices[4]), convert_float64_to_int(last_indices[4]))
-
+    
+        # SCI Fluxes combine the first three columns
+        SCI_fl = (
+            max(first_indices[0], first_indices[1], first_indices[2]),
+            min(last_indices[0], last_indices[1], last_indices[2])
+        )
+        # CAL Flux is the 4th column
+        CAL_fl = (first_indices[3], last_indices[3])
+        # SKY Flux is the 5th column
+        SKY_fl = (first_indices[4], last_indices[4])
+    
         return (SCI_fl, CAL_fl, SKY_fl)
+
+
+
+#    def measure_good_comb_orders(self, chip = 'green', 
+#                                       intensity_thresh = 40**2, 
+#                                       min_lines = 100, 
+#                                       divisions_per_order = 8):
+#        """
+#        This method uses the find_peaks algorithm to measures the number of 
+#        emission lines above an intensity threshold
+#
+#        Args:
+#            chip:                CCD name ('green' or 'red')
+#            intensity_thresh:    minimum line amplitude to be considered good
+#            min_lines:           minimum number of lines in a spectral order for 
+#                                 it to be considered good
+#            divisions_per_order: number of equal-size regions of each order in 
+#                                 which at least one good line is needed 
+#
+#        Attributes:
+#            None
+#
+#        Returns:
+#            (SCI_fl, CAL_fl, SKY_fl) where e.g., SCI_fl = (first_good_order, last_good_order)
+#        """
+#        
+#        chip = chip.lower()
+#        data = np.array(self.L1[chip.upper() + '_CAL_WAVE'].data,'d')
+#        orderlets = ['SCI_FLUX1', 'SCI_FLUX2', 'SCI_FLUX3', 'CAL_FLUX', 'SKY_FLUX']
+#        norder = data.shape[0]
+#        norderlet = len(orderlets)
+#        lines = np.zeros((norder, norderlet))
+#
+#        def find_first_last_true(arr):
+#            '''
+#            Find the first and last elements of each column that are True.
+#            The last element is determined first.
+#            The first element is the determined by scanning from the last good
+#            element to lower indices and finding the last True index. 
+#            '''
+#            first_true = np.full(arr.shape[1], None)  
+#            last_true  = np.full(arr.shape[1], None)
+#            for col in range(arr.shape[1]):  # Iterate over each column
+#                true_indices = np.where(arr[:, col])[0]  # Get indices of True values
+#                if true_indices.size > 0:  # If there are any True values
+#                    last_true[col]  = true_indices[-1]
+#                    first_true[col] = last_true[col]
+#                    i = last_true[col]
+#                    while i >= 0 and arr[i, col]:
+#                        first_true[col] = i
+#                        i -= 1           
+#            return first_true, last_true
+#
+#        for oo, oo_str in enumerate(orderlets):
+#            for o in np.arange(norder):
+#                orderlet_str = 'CAL'
+#                flux = np.array(self.L1[chip.upper() + '_' + oo_str].data,'d')[o,:].flatten()
+#                peaks, properties = scipy.signal.find_peaks(flux, height=intensity_thresh)
+#                lines[o, oo] = len(peaks)
+#        lines_above_threshold = lines > min_lines
+#        first_indices, last_indices = find_first_last_true(lines_above_threshold)
+#        
+#        SCI_fl = (max(first_indices[0], first_indices[1], first_indices[2])), min(last_indices[0], last_indices[1], last_indices[2]))
+#        CAL_fl = (first_indices[3], last_indices[3])
+#        SKY_fl = (first_indices[4], last_indices[4])
+#
+#        return (SCI_fl, CAL_fl, SKY_fl)
         
+#        def convert_float64_to_int(value):
+#            """Convert a numpy.float64 to an int, keeping NaN as NaN."""
+#            return int(value) if not np.isnan(value) else np.nan
+#
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
         """
