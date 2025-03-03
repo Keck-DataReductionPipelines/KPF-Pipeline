@@ -56,7 +56,14 @@ for (my $i = int($computedjdstart); $i <= int($computedjdend); $i++) {
     push @yyyymmdd, $obsdate;
 }
 
+my @reverse_yyyymmdd = reverse @yyyymmdd;
 
+my $pwd = $ENV{"PWD"};
+print "PWD=$pwd\n";
+
+my $cronjob_code = $ENV{"KPFCRONJOB_CODE"};
+
+my $scriptdir = $pwd;
 my $scriptfile = "runWLSPipelineFrom" . $yyyymmdd[0] . "To" . $yyyymmdd[$#yyyymmdd] . ".sh";
 
 if (! open(SCR, ">$scriptfile") ) {
@@ -67,10 +74,10 @@ my $shebang = '#! /bin/bash -l';
 
 print SCR "$shebang\n";
 
-foreach my $yyyymmdd (@yyyymmdd) {
+foreach my $yyyymmdd (@reverse_yyyymmdd) {
     print "yyyymmdd=$yyyymmdd\n";
 
-    my @op = `cat runDailyPipelines.sh`;
+    my @op = `cat $cronjob_code/cronjobs/runDailyPipelines.sh`;
 
     foreach my $op (@op) {
         if ($op =~ /^\s*$/) { next; }
@@ -81,6 +88,7 @@ foreach my $yyyymmdd (@yyyymmdd) {
         if ($op =~ /\/bin\/bash/) { next; }
         if ($op =~ /^printenv/) { next; }
         if ($op =~ /kpfmastersruncmd/) { next; }
+        if ($op =~ /kpfmasters_order_trace/) { next; }
         $op =~ s/\$procdate/$yyyymmdd/g;
         print SCR "$op";
     }

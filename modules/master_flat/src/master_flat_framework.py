@@ -522,12 +522,25 @@ class MasterFlatFramework(KPF0_Primitive):
                         fname = 'vals_for_mode_' + ffi + '_orderlet' + str(orderlet_val) + '.txt'
                         np.savetxt(fname, vals_for_mode_calc.flatten(), fmt = '%10.5f', newline = '\n', header = 'value')
 
-                    normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+
+                    self.logger.debug('type(mode_vals),type(mode_counts) = {},{}'.format(type(mode_vals),type(mode_counts)))
+
+                    # Try if mod_vals is returned as array; upon failure, try if mod_vals is returned as just one value.
+
+                    try:
+                        normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+                    except:
+                        try:
+                            normalization_factor = mode_vals / 100.0      # Divide by 100 to account for above binning.
+                        except:
+                            normalization_factor = unnormalized_flat_mean
+
+                    self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_vals,mode_counts = {},{},{},{},{}'.\
+                        format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_vals,mode_counts))
+
 
                     flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
                     flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
-
-                    self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_count = {},{},{},{}'.format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_counts[0]))
 
                 # Set unity flat values for unmasked pixels.
                 np_om_ffi_bool_all_orderlets = np.where(np_om_ffi > 0.5, True, False)
