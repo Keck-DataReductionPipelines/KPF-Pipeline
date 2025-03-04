@@ -852,14 +852,14 @@ def add_headers_L1_LFC_lines(L1, intensity_thresh=40**2, min_lines=100, division
                 SKY_g_fl = [-1 if x is None else x for x in SKY_g_fl]
 
                 if use_SCI:
-                    L1.header['PRIMARY']['LFCLGS0'] = (SCI_g_fl[0]), 'Minimum order with good LFC lines on SCI orders of Green CCD')
-                    L1.header['PRIMARY']['LFCLGS1'] = (SCI_g_fl[1]), 'Maximum order with good LFC lines on SCI orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGS0'] = (SCI_g_fl[0], 'Minimum order with good LFC lines on SCI orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGS1'] = (SCI_g_fl[1], 'Maximum order with good LFC lines on SCI orders of Green CCD')
                 if use_CAL:
-                    L1.header['PRIMARY']['LFCLGC0'] = (CAL_g_fl[0]), 'Minimum order with good LFC lines on CAL orders of Green CCD')
-                    L1.header['PRIMARY']['LFCLGC1'] = (CAL_g_fl[1]), 'Maximum order with good LFC lines on CAL orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGC0'] = (CAL_g_fl[0], 'Minimum order with good LFC lines on CAL orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGC1'] = (CAL_g_fl[1], 'Maximum order with good LFC lines on CAL orders of Green CCD')
                 if use_SKY:
-                    L1.header['PRIMARY']['LFCLGK0'] = (SKY_g_fl[0]), 'Minimum order with good LFC lines on SKY orders of Green CCD')
-                    L1.header['PRIMARY']['LFCLGK1'] = (SKY_g_fl[1]), 'Maximum order with good LFC lines on SKY orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGK0'] = (SKY_g_fl[0], 'Minimum order with good LFC lines on SKY orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGK1'] = (SKY_g_fl[1], 'Maximum order with good LFC lines on SKY orders of Green CCD')
 
             except Exception as e:
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
@@ -878,14 +878,14 @@ def add_headers_L1_LFC_lines(L1, intensity_thresh=40**2, min_lines=100, division
                 SKY_r_fl = [-1 if x is None else x for x in SKY_r_fl]
 
                 if use_SCI:
-                    L1.header['PRIMARY']['LFCLRS0'] = (SCI_r_fl[0]), 'Minimum order with good LFC lines on SCI orders of Red CCD')
-                    L1.header['PRIMARY']['LFCLRS1'] = (SCI_r_fl[1]), 'Maximum order with good LFC lines on SCI orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRS0'] = (SCI_r_fl[0], 'Minimum order with good LFC lines on SCI orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRS1'] = (SCI_r_fl[1], 'Maximum order with good LFC lines on SCI orders of Red CCD')
                 if use_CAL:
-                    L1.header['PRIMARY']['LFCLRC0'] = (CAL_r_fl[0]), 'Minimum order with good LFC lines on CAL orders of Red CCD')
-                    L1.header['PRIMARY']['LFCLRC1'] = (CAL_r_fl[1]), 'Maximum order with good LFC lines on CAL orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRC0'] = (CAL_r_fl[0], 'Minimum order with good LFC lines on CAL orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRC1'] = (CAL_r_fl[1], 'Maximum order with good LFC lines on CAL orders of Red CCD')
                 if use_SKY:
-                    L1.header['PRIMARY']['LFCLRK0'] = (SKY_r_fl[0]), 'Minimum order with good LFC lines on SKY orders of Red CCD')
-                    L1.header['PRIMARY']['LFCLRK1'] = (SKY_r_fl[1]), 'Maximum order with good LFC lines on SKY orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRK0'] = (SKY_r_fl[0], 'Minimum order with good LFC lines on SKY orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRK1'] = (SKY_r_fl[1], 'Maximum order with good LFC lines on SKY orders of Red CCD')
 
             except Exception as e:
                 logger.error(f"Problem with rreen L1 SNR measurements: {e}\n{traceback.format_exc()}")
