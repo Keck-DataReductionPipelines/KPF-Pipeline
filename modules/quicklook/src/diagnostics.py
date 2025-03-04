@@ -781,6 +781,118 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     return L1
 
 
+def add_headers_L1_LFC_lines(L1, intensity_thresh=40**2, min_lines=100, divisions_per_order=8, logger=None):
+    """
+    Computes the min/max order per chip and orderlet with good LFC lines.
+    An order is good if at least min_lines with amplitude intensity_thresh.  
+    It also checks that there is at least one line of that amplitude in 8 
+    (set by divisions_per_order) equal-spaced regions per order.
+    
+    Keywords:
+        LFCLGS0 - Minimum order with good LFC lines on SCI orders of Green CCD
+        LFCLGS1 - Maximum order with good LFC lines on SCI orders of Green CCD
+        LFCLGC0 - Minimum order with good LFC lines on CAL orders of Green CCD
+        LFCLGC1 - Maximum order with good LFC lines on CAL orders of Green CCD
+        LFCLGK0 - Minimum order with good LFC lines on SKY orders of Green CCD
+        LFCLGK1 - Maximum order with good LFC lines on SKY orders of Green CCD
+        LFCLRS0 - Minimum order with good LFC lines on SCI orders of Red CCD
+        LFCLRS1 - Maximum order with good LFC lines on SCI orders of Red CCD
+        LFCLRC0 - Minimum order with good LFC lines on CAL orders of Red CCD
+        LFCLRC1 - Maximum order with good LFC lines on CAL orders of Red CCD
+        LFCLRK0 - Minimum order with good LFC lines on SKY orders of Red CCD
+        LFCLRK1 - Maximum order with good LFC lines on SKY orders of Red CCD
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+
+    # Determine which fibers are illuminated by LFC
+    use_CAL, use_SCI, use_SKY = False, False, False
+    if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
+        if myL1.L1.header['PRIMARY']['CAL-OBJ'] == 'LFCFiber':
+            use_CAL = True
+    if 'SCI-OBJ' in myL1.L1.header['PRIMARY']:
+        if myL1.L1.header['PRIMARY']['SCI-OBJ'] == 'LFCFiber':
+            use_SCI = True
+    if 'SKY-OBJ' in myL1.L1.header['PRIMARY']:
+        if myL1.L1.header['PRIMARY']['SKY-OBJ'] == 'LFCFiber':
+            use_SKY = True
+
+
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1.')
+        return L1
+        
+    # Use the AnalyzeL1 class to compute flux ratios between orderlets
+    myL1 = AnalyzeL1(L1, logger=logger)
+    myL1.measure_orderlet_flux_ratios()
+    for chip in chips:
+        if chip == 'green':
+            try:
+                # Compute first and last good orders
+                SCI_g_fl, CAL_g_fl, SKY_g_fl = myL1.measure_good_comb_orders(chip='green', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+
+                # Replace None values with -1 to indicate no good orders
+                SCI_g_fl = [-1 if x is None else x for x in SCI_g_fl]
+                CAL_g_fl = [-1 if x is None else x for x in CAL_g_fl]
+                SKY_g_fl = [-1 if x is None else x for x in SKY_g_fl]
+
+                if use_SCI:
+                    L1.header['PRIMARY']['LFCLGS0'] = (SCI_g_fl[0]), 'Minimum order with good LFC lines on SCI orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGS1'] = (SCI_g_fl[1]), 'Maximum order with good LFC lines on SCI orders of Green CCD')
+                if use_CAL:
+                    L1.header['PRIMARY']['LFCLGC0'] = (CAL_g_fl[0]), 'Minimum order with good LFC lines on CAL orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGC1'] = (CAL_g_fl[1]), 'Maximum order with good LFC lines on CAL orders of Green CCD')
+                if use_SKY:
+                    L1.header['PRIMARY']['LFCLGK0'] = (SKY_g_fl[0]), 'Minimum order with good LFC lines on SKY orders of Green CCD')
+                    L1.header['PRIMARY']['LFCLGK1'] = (SKY_g_fl[1]), 'Maximum order with good LFC lines on SKY orders of Green CCD')
+
+            except Exception as e:
+                logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
+
+        if chip == 'red':
+            try:
+                # Compute first and last good orders
+                SCI_r_fl, CAL_r_fl, SKY_r_fl = myL1.measure_good_comb_orders(chip='red', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+
+                # Replace None values with -1 to indicate no good orders
+                SCI_r_fl = [-1 if x is None else x for x in SCI_r_fl]
+                CAL_r_fl = [-1 if x is None else x for x in CAL_r_fl]
+                SKY_r_fl = [-1 if x is None else x for x in SKY_r_fl]
+
+                if use_SCI:
+                    L1.header['PRIMARY']['LFCLRS0'] = (SCI_r_fl[0]), 'Minimum order with good LFC lines on SCI orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRS1'] = (SCI_r_fl[1]), 'Maximum order with good LFC lines on SCI orders of Red CCD')
+                if use_CAL:
+                    L1.header['PRIMARY']['LFCLRC0'] = (CAL_r_fl[0]), 'Minimum order with good LFC lines on CAL orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRC1'] = (CAL_r_fl[1]), 'Maximum order with good LFC lines on CAL orders of Red CCD')
+                if use_SKY:
+                    L1.header['PRIMARY']['LFCLRK0'] = (SKY_r_fl[0]), 'Minimum order with good LFC lines on SKY orders of Red CCD')
+                    L1.header['PRIMARY']['LFCLRK1'] = (SKY_r_fl[1]), 'Maximum order with good LFC lines on SKY orders of Red CCD')
+
+            except Exception as e:
+                logger.error(f"Problem with rreen L1 SNR measurements: {e}\n{traceback.format_exc()}")
+
+    return L1
+
+
 def add_headers_L2_barycentric(L2, logger=None):
     """
     Adds Barycentric RV correction and BJD to the L2 primary header
