@@ -178,7 +178,7 @@ class WaveCalibrate(KPF1_Primitive):
                         peak_wavelengths_ang = pd.read_csv(self.linelist_path,
                                                            header=None,
                                                            names=['wave', 'weight'],
-                                                           delim_whitespace=True)
+                                                           sep='\s+')
                         peak_wavelengths_ang = peak_wavelengths_ang.query('weight == 1')
                     else:
                         raise ValueError('ThAr run requires linelist_path')
