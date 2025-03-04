@@ -5,7 +5,8 @@ import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
 from modules.Utils.utils import DummyLogger, styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_data_products_L0, get_datetime_obsid, get_kpf_level, get_data_products_expected
+from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
+from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_L1
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
@@ -680,6 +681,19 @@ class QCDefinitions:
         self.fits_comments[name27] = 'QC: Flat SNR sufficient, all orders/orderlets'
         self.db_columns[name27] = None
         self.fits_keyword_fail_value[name27] = 0
+
+        name28 = 'L1_LFC_lines'
+        self.names.append(name28)
+        self.kpf_data_levels[name28] = ['L1']
+        self.descriptions[name28] = 'Check number and distribution of LFC lines/order'
+        self.data_types[name28] = 'int'
+        self.spectrum_types[name28] = ['LFC', ]
+        self.master_types[name28] = []
+        self.required_data_products[name28] = [] # no required data products
+        self.fits_keywords[name28] = 'LFCLINES'
+        self.fits_comments[name28] = 'QC: Number and dist of LFC lines sufficient'
+        self.db_columns[name28] = None
+        self.fits_keyword_fail_value[name28] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -2197,7 +2211,7 @@ class QCL1(QC):
         the exposure itself.
 
         Args:
-            debug
+            debug: if True, print debugging statements
 
         Returns:
             QC_pass (bool): True if the time of exposure for the files going
@@ -2211,7 +2225,9 @@ class QCL1(QC):
             age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE', verbose=debug)
 
             QC_pass = True
-            if abs(age_wls_file) > maxage:
+            if age_wls_file == None:
+                QC_pass = False
+            elif abs(age_wls_file) > maxage:
                 QC_pass = False
 
         except Exception as e:
@@ -2229,7 +2245,7 @@ class QCL1(QC):
         the exposure itself.
 
         Args:
-            debug
+            debug: if True, print debugging statements
 
         Returns:
             QC_pass (bool): True if the time of exposure for the files going
@@ -2243,7 +2259,9 @@ class QCL1(QC):
             age_wls_file = myL1.measure_WLS_age(kwd='WLSFILE2', verbose=debug)
 
             QC_pass = True
-            if abs(age_wls_file) > maxage:
+            if age_wls_file == None:
+                QC_pass = False
+            elif abs(age_wls_file) > maxage:
                 QC_pass = False
 
         except Exception as e:
@@ -2253,16 +2271,18 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_FLAT_SNR(self, snr_min=40, snr_max=1800, debug=False):
+    def L1_FLAT_SNR(self, snr_min=40, snr_max=1600, debug=False):
         """
-        Checks each chip/order/orderlet to see if the peak-of-blaze SNR is 
-        greater than the specified minimum (snr_min) and less than a specified 
+        Checks each chip/order/orderlet to see if the peak-of-blaze SNR in a flat 
+        is greater than the specified minimum (snr_min) and less than a specified 
         maximum (snr_max).
 
         Args:
             snr_min: minimum SNR threshold applied to all chips/orders/orderlets
             snr_max: maximum SNR threshold applied to all chips/orders/orderlets
-            debug
+                     SNR max is for SCI1/SCI2/SCI3/SKY.  The value for CAL is 
+                     3/4 of the value for the other orders
+            debug: if True, print debugging statements
 
         Returns:
             QC_pass (bool): True if the SNR of each order and orderlet for the 
@@ -2273,15 +2293,175 @@ class QCL1(QC):
             L1 = self.kpf_object
             myL1 = AnalyzeL1(L1, logger=self.logger)
             myL1.measure_L1_snr()
+            data_products = get_data_products_L1(L1)
+            use_CAL, use_SCI, use_SKY = False, False, False
+            if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['CAL-OBJ'] == 'BrdbandFiber':
+                    use_CAL = True
+            if 'SCI-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['SCI-OBJ'] == 'BrdbandFiber':
+                    use_SCI = True
+            if 'SKY-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['SKY-OBJ'] == 'BrdbandFiber':
+                    use_SKY = True
 
+            QC_pass = True
+            if 'Green' in data_products:
+                if use_CAL:
+                    QC_pass = QC_pass & (myL1.GREEN_SNR[:,0] < snr_max).all() 
+                if use_SCI:
+                    QC_pass = QC_pass & (myL1.GREEN_SNR[:,1:3] < snr_max).all() 
+                if use_SKY:
+                    QC_pass = QC_pass & (myL1.GREEN_SNR[1:,4] < snr_max).all() 
+            if 'Red' in data_products:
+                if use_CAL:
+                    QC_pass = QC_pass & (myL1.RED_SNR[:,0] < snr_max).all() 
+                if use_SCI:
+                    QC_pass = QC_pass & (myL1.RED_SNR[:,1:3] < snr_max).all() 
+                if use_SKY:
+                    QC_pass = QC_pass & (myL1.RED_SNR[1:,4] < snr_max).all() 
+            if (not 'Green' in data_products) and (not 'Red' in data_products):
+                QC_pass = False
+            if (not use_CAL) and (not use_SCI) and (not use_SKY):
+                QC_pass = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
-            green_snr_min_ok = (myL1.GREEN_SNR[:,0:5] > snr_min).all() 
-            red_snr_min_ok   = (myL1.RED_SNR[:,0:5]   > snr_min).all() 
-            green_snr_max_ok = (myL1.GREEN_SNR[:,0:5] < snr_max).all() 
-            red_snr_max_ok   = (myL1.RED_SNR[:,0:5]   < snr_max).all() 
-            if (green_snr_min_ok and red_snr_min_ok and green_snr_max_ok and red_snr_max_ok):
-                QC_pass = True
 
+        return QC_pass
+
+
+    def L1_LFC_lines(self, intensity_thresh=40**2, min_lines=100, divisions_per_order=8, debug=False):
+        """
+        Checks the quality of LFCs frames by examining the number and distribution 
+        of emissions lines per chip/order/orderlet.  It checks that each order 
+        has at least min_lines with amplitude intensity_thresh.  It also checks 
+        that there is at least one line of that amplitude in 8 (set by 
+        divisions_per_order) equal-spaced regions per order.
+
+        Args:
+            intensity_thresh (float): minimum line amplitude to be considered good
+            min_lines (int):          minimum number of lines in a spectral 
+                                      order for it to be considered good
+            divisions_per_order (int): number of contiguous subregions each order 
+                                       must have at least one peak in
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if each order and orderlet for the 
+            green and red CCDs are pass quality checks related to the 
+            intensity, number, and distribution of emissions per order.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            myL1.measure_L1_snr()
+            data_products = get_data_products_L1(L1)
+
+            
+            # Compute good orders
+            if 'Green' in data_products:
+                SCI_g_fl, CAL_g_fl, SKY_g_fl = myL1.measure_good_comb_orders(chip='green', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+            if 'Red' in data_products:
+                SCI_r_fl, CAL_r_fl, SKY_r_fl = myL1.measure_good_comb_orders(chip='red', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+            
+            # Special cases for (order 34 CAL on the Green CCD) and 
+            #                   (order  0 SKY on the Red   CCD), which are not fully extracted.
+            if CAL_g_fl[1] !=  None:
+                if CAL_g_fl[1] == 33:
+                    CAL_g_fl[1] = 34
+            if SKY_r_fl[0] !=  None:
+                if SKY_r_fl[0] == 1:
+                    SKY_r_fl[0] = 0
+
+            # usable orders are copied from modules/wavelength_cal/confits/LFC_KPF_{green,red}.cfg
+            # a future version of this code would use GetCalibrations for this
+            usable_orders_g = [2, 34]
+            usable_orders_r = [0, 31]
+            
+            # Determine which fibers are illuminated by LFC
+            use_CAL, use_SCI, use_SKY = False, False, False
+            if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['CAL-OBJ'] == 'LFCFiber':
+                    use_CAL = True
+            if 'SCI-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['SCI-OBJ'] == 'LFCFiber':
+                    use_SCI = True
+            if 'SKY-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['SKY-OBJ'] == 'LFCFiber':
+                    use_SKY = True
+
+            # Check various combinations of SCI/CAL/SKY and Green/Red 
+            QC_pass = True
+            if 'Green' in data_products:
+                if use_SCI:
+                    if None in SCI_g_fl:
+                        QC_pass = False
+                        if debug:   
+                            print('Green SCI orders: False')
+                    else:
+                        QC_pass = QC_pass & (SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])
+                        if debug:   
+                            print('Green SCI orders: ' + str((SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])))
+                if use_CAL:
+                    if None in CAL_g_fl:
+                        QC_pass = False
+                        if debug:   
+                            print('Green CAL orders: False')
+                    else:
+                        QC_pass = QC_pass & (CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])
+                        if debug:   
+                            print('Green CAL orders: ' + str((CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])))
+                if use_SKY:
+                    if None in SKY_g_fl:
+                        QC_pass = False
+                        if debug:   
+                            print('Green SKY orders: False')
+                    else:
+                        QC_pass = QC_pass & (SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])
+                        if debug:   
+                            print('Green SKY orders: ' + str((SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])))
+            if 'Red' in data_products:
+                if use_SCI:
+                    if None in SCI_r_fl:
+                        QC_pass = False
+                        if debug:   
+                            print('Red SCI orders: False')
+                    else:
+                        QC_pass = QC_pass & (SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])  
+                        if debug:   
+                            print('Red SCI orders: ' + str((SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])))
+                if use_CAL:
+                    if None in CAL_r_fl:
+                        QC_pass = False
+                        if debug:   
+                            print('Red CAL orders: False')
+                    else:
+                        QC_pass = QC_pass & (CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])
+                        if debug:   
+                            print('Red CAL orders: ' + str((CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])))
+                if use_SKY:
+                    if None in SKY_r_fl:
+                        QC_pass = False
+                        if debug:   
+                            print('Red SKY orders: False')
+                    else:
+                        QC_pass = QC_pass & (SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1]) 
+                        if debug:   
+                            print('Red SKY orders: ' + str((SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1])))
+            if (not 'Green' in data_products) and (not 'Red' in data_products):
+                QC_pass = False
+            if (not use_CAL) and (not use_SCI) and (not use_SKY):
+                QC_pass = False
+                
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False

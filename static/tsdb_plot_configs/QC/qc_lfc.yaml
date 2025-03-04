@@ -19,5 +19,15 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "LFC Flux Meets Threshold\nof 4000 Counts\n(LFC2DFOK)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: LFCLINES
+        plot_type: state
+        plot_attr:
+          label: "Number and dist of\nLFC lines sufficient"
+          marker: .
+    paneldict:
+      ylabel: "Number and dist of\nLFC lines sufficient\n(LFCLINES)"
       title: QC - LFC Metrics
       legend_frac_size: 0.15

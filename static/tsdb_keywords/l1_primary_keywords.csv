@@ -68,5 +68,6 @@ LFCSAT|bool|QC: L1 LFC spectrum not saturated|None
 OLDWLS|bool|QC: WLSFILE within 2 days of this obs|None
 OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None
 FLATSNR|bool|QC: SNR of flat >min and <max|None
+LFCLINES|bool|QC: Number and dist of LFC lines sufficient|None 
 AGEWLS|float|WLSFILE approx age (days)|None
 AGEWLS2|float|WLSFILE2 approx age (days)|None

@@ -365,6 +365,7 @@ LFCSAT    1                                                                     
 OLDWLS    1                                                                        QC: 1 = WLSFILE within 2 days of this obs
 OLDWLS2   1                                                                        QC: 1 = WLSFILE2 within 2 days of this obs
 FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
+LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders/orderlets available
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
