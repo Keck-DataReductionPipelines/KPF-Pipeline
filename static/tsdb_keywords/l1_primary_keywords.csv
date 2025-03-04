@@ -58,6 +58,18 @@ FRS2M852|float|median(SKY/SCI2) flux ratio near 852 nm|None
 FRS2U852|float|uncertainty on FRS2M852|None
 FRC2M852|float|median(CAL/SCI2) flux ratio near 852 nm|None
 FRC2U852|float|uncertainty on FRC2M852|None
+LFCLGS0|float|Minimum Green order with good LFC lines on SCI|None
+LFCLGS1|float|Maximum Green order with good LFC lines on SCI|None
+LFCLGC0|float|Minimum Green order with good LFC lines on CAL|None
+LFCLGC1|float|Maximum Green order with good LFC lines on CAL|None
+LFCLGK0|float|Minimum Green order with good LFC lines on SKY|None
+LFCLGK1|float|Maximum Green order with good LFC lines on SKY|None
+LFCLRS0|float|Minimum Red order with good LFC lines on SCI|None
+LFCLRS1|float|Maximum Red order with good LFC lines on SCI|None
+LFCLRC0|float|Minimum Red order with good LFC lines on CAL|None
+LFCLRC1|float|Maximum Red order with good LFC lines on CAL|None
+LFCLRK0|float|Minimum Red order with good LFC lines on SKY|None
+LFCLRK1|float|Maximum Red order with good LFC lines on SKY|None
 WLSFILE|string|first wavelength interpolation reference|None
 WLSFILE2|string|second wavelength interpolation reference|None
 MONOTWLS|bool|QC: L1 wavelength solution is monotonic|None

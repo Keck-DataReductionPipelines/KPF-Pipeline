@@ -425,6 +425,18 @@ FRS2M852  0.9000                                                                
 FRS2U852  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852  0.9000                                                                   median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+LFCLGS0   0                                                                        Minimum order with good LFC lines on SCI orders of Green CCD
+LFCLGS1   34                                                                       Maximum order with good LFC lines on SCI orders of Green CCD
+LFCLGC0   0                                                                        Minimum order with good LFC lines on CAL orders of Green CCD
+LFCLGC1   34                                                                       Maximum order with good LFC lines on CAL orders of Green CCD
+LFCLGK0   0                                                                        Minimum order with good LFC lines on SKY orders of Green CCD
+LFCLGK1   34                                                                       Maximum order with good LFC lines on SKY orders of Green CCD
+LFCLRS0   0                                                                        Minimum order with good LFC lines on SCI orders of Red CCD
+LFCLRS1   31                                                                       Maximum order with good LFC lines on SCI orders of Red CCD
+LFCLRC0   0                                                                        Minimum order with good LFC lines on CAL orders of Red CCD
+LFCLRC1   31                                                                       Maximum order with good LFC lines on CAL orders of Red CCD
+LFCLRK0   0                                                                        Minimum order with good LFC lines on SKY orders of Red CCD
+LFCLRK1   31                                                                       Maximum order with good LFC lines on SKY orders of Red CCD
 AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
 AGEWLS2   0.1419343333333333                                                       Approx age of WLSFILE2 compared to this file (days)
 ========  =======================================================================  =========
