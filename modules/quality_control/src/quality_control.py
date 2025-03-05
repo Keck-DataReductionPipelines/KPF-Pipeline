@@ -208,7 +208,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         data_products_required = qc_obj.qcdefinitions.required_data_products[qc_name]
                         all_required_data_products_present = all(element in data_products_expected for element in data_products_required)
                     if all_required_data_products_present:
-                        text_running_qc = styled_text('Running QC:', style="Bold", color="Magenta")
+                        text_running_qc = styled_text('Running QC', style="Bold", color="Magenta")
                         text_qc_name = styled_text(qc_name, style="Bold", color="Blue")
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
