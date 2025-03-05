@@ -283,17 +283,6 @@ GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-ban
 GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
 MOONSEP   55.0                                        Separation between Moon and target star (deg)
 SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
-SKYSCIMS  0.0000123                                   SKY/SCI flux ratio in main spectrometer scaled from EM data. 
-EMSCCT48  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-870 nm
-EMSCCT45  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-551 nm
-EMSCCT56  100000000.1234                              cumulative EM counts [ADU] in SCI in 551-658 nm
-EMSCCT67  100000000.1234                              cumulative EM counts [ADU] in SCI in 658-764 nm
-EMSCCT78  100000000.1234                              cumulative EM counts [ADU] in SCI in 764-870 nm
-EMSKCT48  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-870 nm
-EMSKCT45  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-551 nm
-EMSKCT56  100000000.1234                              cumulative EM counts [ADU] in SKY in 551-658 nm
-EMSKCT67  100000000.1234                              cumulative EM counts [ADU] in SKY in 658-764 nm
-EMSKCT78  100000000.1234                              cumulative EM counts [ADU] in SKY in 764-870 nm
 MEDGRN1   3.9642348e+07                               Median for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
 P16GRN1   3.9340188e+07                               16th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
 P84GRN1   3.9340188e+07                               84th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
@@ -426,6 +415,17 @@ FRS2M852  0.9000                                                                
 FRS2U852  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852  0.9000                                                                   median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+SKYSCIMS  0.0000123                                                                SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+EMSCCT48  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 445-870 nm
+EMSCCT45  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 445-551 nm
+EMSCCT56  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 551-658 nm
+EMSCCT67  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 658-764 nm
+EMSCCT78  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 764-870 nm
+EMSKCT48  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 445-870 nm
+EMSKCT45  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 445-551 nm
+EMSKCT56  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 551-658 nm
+EMSKCT67  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 658-764 nm
+EMSKCT78  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 764-870 nm
 LFCLGS0   0                                                                        Min SCI Green order with good LFC lines
 LFCLGS1   34                                                                       Max SCI Green order with good LFC lines
 LFCLGC0   0                                                                        Min CAL Green order with good LFC lines
