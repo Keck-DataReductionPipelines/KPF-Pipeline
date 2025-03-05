@@ -204,25 +204,29 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
 
-            # L1 LFC first/last spectral orders with good lines
+            # L1 LFC and first/last spectral orders with good lines
             if (self.diagnostics_name == 'all') or \
-               (self.diagnostics_name == 'add_headers_L1_LFC_lines'):
+               (self.diagnostics_name == 'add_headers_L1_cal_line_quality'):
                 try:
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
                         name = primary_header.get_name()
                         if name == 'LFC':
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_LFC_lines", style="Bold", color="Blue")}')
-                            self.kpf_object = diagnostics.add_headers_L1_LFC_lines(self.kpf_object, logger=self.logger)
+                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='LFC', logger=self.logger)
+                            exit_code = 1
+                        elif name == 'Etalon':
+                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='Etalon', logger=self.logger)
                             exit_code = 1
                         else: 
-                            self.logger.info("Observation type {} != 'LFC'.  LFC line diagnostics not computed.".format(name))
+                            self.logger.info("Observation type {} != 'LFC' or 'Etalon'.  LFC line diagnostics not computed.".format(name))
                     else: 
-                        self.logger.info("Green/Red not in L1 file. LFC line diagnostics not computed.")
+                        self.logger.info("Green/Red not in L1 file. LFC/Etalon line diagnostics not computed.")
 
                 except Exception as e:
-                    self.logger.error(f"Measuring LFC line diagnostics failed: {e}\n{traceback.format_exc()}")
+                    self.logger.error(f"Measuring LFC/Etalon line diagnostics failed: {e}\n{traceback.format_exc()}")
 
 
         elif 'L2' in self.data_level_str:

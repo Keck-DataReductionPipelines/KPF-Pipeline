@@ -187,7 +187,8 @@ class AnalyzeL1:
         This method uses the find_peaks algorithm to measure the number of 
         emission lines above an intensity threshold. Additionally, it checks
         that each order has at least one peak in each of the 
-        `divisions_per_order` subregions.
+        `divisions_per_order` subregions.  This method is usually applied to 
+        LFC or Etalon spectra.
     
         Args:
             chip (str):               CCD name ('green' or 'red')
