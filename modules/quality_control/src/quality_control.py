@@ -691,6 +691,19 @@ class QCDefinitions:
         self.db_columns[name28] = None
         self.fits_keyword_fail_value[name28] = 0
 
+        name29 = 'L1_Etalon_lines'
+        self.names.append(name29)
+        self.kpf_data_levels[name29] = ['L1']
+        self.descriptions[name29] = 'Check number and distribution of Etalon lines/order'
+        self.data_types[name29] = 'int'
+        self.spectrum_types[name29] = ['Etalon', ]
+        self.master_types[name29] = []
+        self.required_data_products[name29] = [] # no required data products
+        self.fits_keywords[name29] = 'ETALINES'
+        self.fits_comments[name29] = 'QC: Number and dist of Etalon lines sufficient'
+        self.db_columns[name29] = None
+        self.fits_keyword_fail_value[name29] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -2330,7 +2343,7 @@ class QCL1(QC):
 
     def L1_LFC_lines(self, intensity_thresh=40**2, min_lines=100, divisions_per_order=8, debug=False):
         """
-        Checks the quality of LFCs frames by examining the number and distribution 
+        Checks the quality of LFC spectra by examining the number and distribution 
         of emissions lines per chip/order/orderlet.  It checks that each order 
         has at least min_lines with amplitude intensity_thresh.  It also checks 
         that there is at least one line of that amplitude in 8 (set by 
@@ -2353,10 +2366,8 @@ class QCL1(QC):
         try:
             L1 = self.kpf_object
             myL1 = AnalyzeL1(L1, logger=self.logger)
-            myL1.measure_L1_snr()
             data_products = get_data_products_L1(L1)
 
-            
             # Compute good orders
             if 'Green' in data_products:
                 SCI_g_fl, CAL_g_fl, SKY_g_fl = myL1.measure_good_comb_orders(chip='green', 
@@ -2395,7 +2406,143 @@ class QCL1(QC):
                 if myL1.L1.header['PRIMARY']['SKY-OBJ'] == 'LFCFiber':
                     use_SKY = True
 
-            # Check various combinations of SCI/CAL/SKY and Green/Red 
+            # Check line quality for various combinations of SCI/CAL/SKY and Green/Red 
+            QC_pass = True
+            if 'Green' in data_products:
+                if use_SCI:
+                    if None in SCI_g_fl:
+                        QC_pass = False
+                        if debug:   
+                            self.logger.debug('Green SCI orders: False')
+                    else:
+                        QC_pass = QC_pass & (SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])
+                        if debug:   
+                            self.logger.debug('Green SCI orders: ' + str((SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])))
+                if use_CAL:
+                    if None in CAL_g_fl:
+                        QC_pass = False
+                        if debug:   
+                            self.logger.debug('Green CAL orders: False')
+                    else:
+                        QC_pass = QC_pass & (CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])
+                        if debug:   
+                            self.logger.debug('Green CAL orders: ' + str((CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])))
+                if use_SKY:
+                    if None in SKY_g_fl:
+                        QC_pass = False
+                        if debug:   
+                            self.logger.debug('Green SKY orders: False')
+                    else:
+                        QC_pass = QC_pass & (SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])
+                        if debug:   
+                            self.logger.debug('Green SKY orders: ' + str((SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])))
+            if 'Red' in data_products:
+                if use_SCI:
+                    if None in SCI_r_fl:
+                        QC_pass = False
+                        if debug:   
+                            self.logger.debug('Red SCI orders: False')
+                    else:
+                        QC_pass = QC_pass & (SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])  
+                        if debug:   
+                            self.logger.debug('Red SCI orders: ' + str((SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])))
+                if use_CAL:
+                    if None in CAL_r_fl:
+                        QC_pass = False
+                        if debug:   
+                            self.logger.debug('Red CAL orders: False')
+                    else:
+                        QC_pass = QC_pass & (CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])
+                        if debug:   
+                            self.logger.debug('Red CAL orders: ' + str((CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])))
+                if use_SKY:
+                    if None in SKY_r_fl:
+                        QC_pass = False
+                        if debug:   
+                            self.logger.debug('Red SKY orders: False')
+                    else:
+                        QC_pass = QC_pass & (SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1]) 
+                        if debug:   
+                            self.logger.debug('Red SKY orders: ' + str((SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1])))
+            if (not 'Green' in data_products) and (not 'Red' in data_products):
+                QC_pass = False
+            if (not use_CAL) and (not use_SCI) and (not use_SKY):
+                QC_pass = False
+                
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_Etalon_lines(self, intensity_thresh=40**2, min_lines=100, divisions_per_order=4, debug=False):
+        """
+        Checks the quality of Etalon spectra by examining the number and distribution 
+        of emissions lines per chip/order/orderlet.  It checks that each order 
+        has at least min_lines with amplitude intensity_thresh.  It also checks 
+        that there is at least one line of that amplitude in 8 (set by 
+        divisions_per_order) equal-spaced regions per order.
+        This method is very similar to L1_LFC_lines.
+
+        Args:
+            intensity_thresh (float): minimum line amplitude to be considered good
+            min_lines (int):          minimum number of lines in a spectral 
+                                      order for it to be considered good
+            divisions_per_order (int): number of contiguous subregions each order 
+                                       must have at least one peak in
+            debug: if True, log debugging statements
+
+        Returns:
+            QC_pass (bool): True if each order and orderlet for the 
+            green and red CCDs are pass quality checks related to the 
+            intensity, number, and distribution of emissions per order.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+
+            # Compute good orders
+            if 'Green' in data_products:
+                SCI_g_fl, CAL_g_fl, SKY_g_fl = myL1.measure_good_comb_orders(chip='green', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+            if 'Red' in data_products:
+                SCI_r_fl, CAL_r_fl, SKY_r_fl = myL1.measure_good_comb_orders(chip='red', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+            
+            # Special cases for (order 34 CAL on the Green CCD) and 
+            #                   (order  0 SKY on the Red   CCD), which are not fully extracted.
+            if CAL_g_fl[1] !=  None:
+                if CAL_g_fl[1] == 33:
+                    CAL_g_fl[1] = 34
+            if SKY_r_fl[0] !=  None:
+                if SKY_r_fl[0] == 1:
+                    SKY_r_fl[0] = 0
+
+            # usable orders are copied from modules/wavelength_cal/confits/LFC_KPF_{green,red}.cfg
+            # a future version of this code would use GetCalibrations for this
+            usable_orders_g = [2, 34]
+            usable_orders_r = [0, 31]
+            
+            # Determine which fibers are illuminated by the Etalon
+            use_CAL, use_SCI, use_SKY = False, False, False
+            if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['CAL-OBJ'] == 'EtalonFiber':
+                    use_CAL = True
+            if 'SCI-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['SCI-OBJ'] == 'EtalonFiber':
+                    use_SCI = True
+            if 'SKY-OBJ' in myL1.L1.header['PRIMARY']:
+                if myL1.L1.header['PRIMARY']['SKY-OBJ'] == 'EtalonFiber':
+                    use_SKY = True
+
+            # Check line quality for various combinations of SCI/CAL/SKY and Green/Red 
             QC_pass = True
             if 'Green' in data_products:
                 if use_SCI:

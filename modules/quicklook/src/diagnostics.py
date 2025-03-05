@@ -894,7 +894,7 @@ def add_headers_L1_cal_line_quality(L1, intensity_thresh=40**2, min_lines=100,
                     L1.header['PRIMARY'][f'{prefix}LGK1'] = (SKY_g_fl[1], f'Max Green SKY order with good {name} lines')
 
             except Exception as e:
-                logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
+                logger.error(f"Problem with green L1 {name} line measurements: {e}\n{traceback.format_exc()}")
 
         if chip == 'red':
             try:

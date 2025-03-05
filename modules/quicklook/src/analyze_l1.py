@@ -255,7 +255,7 @@ class AnalyzeL1:
                     # Check if at least one peak is within [start, end)
                     if np.any((peaks >= start) & (peaks < end)):
                         num_regions_with_peaks += 1
-                
+                                
                 # If all subregions contained at least one peak,
                 # we keep the actual count of peaks; otherwise 0.
                 if num_regions_with_peaks == divisions_per_order:
