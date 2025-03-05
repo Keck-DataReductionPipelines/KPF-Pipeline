@@ -425,18 +425,30 @@ FRS2M852  0.9000                                                                
 FRS2U852  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852  0.9000                                                                   median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
-LFCLGS0   0                                                                        Minimum order with good LFC lines on SCI orders of Green CCD
-LFCLGS1   34                                                                       Maximum order with good LFC lines on SCI orders of Green CCD
-LFCLGC0   0                                                                        Minimum order with good LFC lines on CAL orders of Green CCD
-LFCLGC1   34                                                                       Maximum order with good LFC lines on CAL orders of Green CCD
-LFCLGK0   0                                                                        Minimum order with good LFC lines on SKY orders of Green CCD
-LFCLGK1   34                                                                       Maximum order with good LFC lines on SKY orders of Green CCD
-LFCLRS0   0                                                                        Minimum order with good LFC lines on SCI orders of Red CCD
-LFCLRS1   31                                                                       Maximum order with good LFC lines on SCI orders of Red CCD
-LFCLRC0   0                                                                        Minimum order with good LFC lines on CAL orders of Red CCD
-LFCLRC1   31                                                                       Maximum order with good LFC lines on CAL orders of Red CCD
-LFCLRK0   0                                                                        Minimum order with good LFC lines on SKY orders of Red CCD
-LFCLRK1   31                                                                       Maximum order with good LFC lines on SKY orders of Red CCD
+LFCLGS0   0                                                                        Min SCI Green order with good LFC lines
+LFCLGS1   34                                                                       Max SCI Green order with good LFC lines
+LFCLGC0   0                                                                        Min CAL Green order with good LFC lines
+LFCLGC1   34                                                                       Max CAL Green order with good LFC lines
+LFCLGK0   0                                                                        Min SKY Green order with good LFC lines
+LFCLGK1   34                                                                       Max SKY Green order with good LFC lines
+LFCLRS0   0                                                                        Min SCI Red order with good LFC lines
+LFCLRS1   31                                                                       Max SCI Red order with good LFC lines
+LFCLRC0   0                                                                        Min CAL Red order with good LFC lines
+LFCLRC1   31                                                                       Max CAL Red order with good LFC lines
+LFCLRK0   0                                                                        Min SKY Red order with good LFC lines
+LFCLRK1   31                                                                       Max SKY Red order with good LFC lines
+ETALGS0   0                                                                        Min SCI Green order with good Etalon lines
+ETALGS1   34                                                                       Max SCI Green order with good Etalon lines
+ETALGC0   0                                                                        Min CAL Green order with good Etalon lines
+ETALGC1   34                                                                       Max CAL Green order with good Etalon lines
+ETALGK0   0                                                                        Min SKY Green order with good Etalon lines
+ETALGK1   34                                                                       Max SKY Green order with good Etalon lines
+ETALRS0   0                                                                        Min SCI Red order with good Etalon lines
+ETALRS1   31                                                                       Max SCI Red order with good Etalon lines
+ETALRC0   0                                                                        Min CAL Red order with good Etalon lines
+ETALRC1   31                                                                       Max CAL Red order with good Etalon lines
+ETALRK0   0                                                                        Min SKY Red order with good Etalon lines
+ETALRK1   31                                                                       Max SKY Red order with good Etalon lines
 AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
 AGEWLS2   0.1419343333333333                                                       Approx age of WLSFILE2 compared to this file (days)
 ========  =======================================================================  =========

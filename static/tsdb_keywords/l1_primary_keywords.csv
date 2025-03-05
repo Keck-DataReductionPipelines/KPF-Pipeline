@@ -58,18 +58,30 @@ FRS2M852|float|median(SKY/SCI2) flux ratio near 852 nm|None
 FRS2U852|float|uncertainty on FRS2M852|None
 FRC2M852|float|median(CAL/SCI2) flux ratio near 852 nm|None
 FRC2U852|float|uncertainty on FRC2M852|None
-LFCLGS0|float|Minimum Green order with good LFC lines on SCI|None
-LFCLGS1|float|Maximum Green order with good LFC lines on SCI|None
-LFCLGC0|float|Minimum Green order with good LFC lines on CAL|None
-LFCLGC1|float|Maximum Green order with good LFC lines on CAL|None
-LFCLGK0|float|Minimum Green order with good LFC lines on SKY|None
-LFCLGK1|float|Maximum Green order with good LFC lines on SKY|None
-LFCLRS0|float|Minimum Red order with good LFC lines on SCI|None
-LFCLRS1|float|Maximum Red order with good LFC lines on SCI|None
-LFCLRC0|float|Minimum Red order with good LFC lines on CAL|None
-LFCLRC1|float|Maximum Red order with good LFC lines on CAL|None
-LFCLRK0|float|Minimum Red order with good LFC lines on SKY|None
-LFCLRK1|float|Maximum Red order with good LFC lines on SKY|None
+LFCLGS0|float|Min Green SCI order with good LFC lines|None
+LFCLGS1|float|Max Green SCI order with good LFC lines|None
+LFCLGC0|float|Min Green CAL order with good LFC lines|None
+LFCLGC1|float|Max Green CAL order with good LFC lines|None
+LFCLGK0|float|Min Green SKY order with good LFC lines|None
+LFCLGK1|float|Max Green SKY order with good LFC lines|None
+LFCLRS0|float|Min Red SCI order with good LFC lines|None
+LFCLRS1|float|Max Red SCI order with good LFC lines|None
+LFCLRC0|float|Min Red CAL order with good LFC lines|None
+LFCLRC1|float|Max Red CAL order with good LFC lines|None
+LFCLRK0|float|Min Red SKY order with good LFC lines|None
+LFCLRK1|float|Max Red SKY order with good LFC lines|None
+ETALGS0|float|Min Green SCI order with good LFC lines|None
+ETALGS1|float|Max Green SCI order with good LFC lines|None
+ETALGC0|float|Min Green CAL order with good LFC lines|None
+ETALGC1|float|Max Green CAL order with good LFC lines|None
+ETALGK0|float|Min Green SKY order with good LFC lines|None
+ETALGK1|float|Max Green SKY order with good LFC lines|None
+ETALRS0|float|Min Red SCI order with good LFC lines|None
+ETALRS1|float|Max Red SCI order with good LFC lines|None
+ETALRC0|float|Min Red CAL order with good LFC lines|None
+ETALRC1|float|Max Red CAL order with good LFC lines|None
+ETALRK0|float|Min Red SKY order with good LFC lines|None
+ETALRK1|float|Max Red SKY order with good LFC lines|None
 WLSFILE|string|first wavelength interpolation reference|None
 WLSFILE2|string|second wavelength interpolation reference|None
 MONOTWLS|bool|QC: L1 wavelength solution is monotonic|None
