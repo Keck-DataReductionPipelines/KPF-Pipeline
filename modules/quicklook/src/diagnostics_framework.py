@@ -217,7 +217,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                             self.kpf_object = diagnostics.add_headers_L1_LFC_lines(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
-                            self.logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
+                            self.logger.info("Observation type {} != 'LFC'.  LFC line diagnostics not computed.".format(name))
                     else: 
                         self.logger.info("Green/Red not in L1 file. LFC line diagnostics not computed.")
 

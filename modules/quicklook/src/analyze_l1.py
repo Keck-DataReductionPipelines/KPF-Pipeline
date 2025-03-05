@@ -17,6 +17,7 @@ from modules.calibration_lookup.src.alg import GetCalibrations
 from kpfpipe.models.level1 import KPF1
 from scipy.interpolate import interp1d
 from scipy.interpolate import make_interp_spline
+from scipy.signal import find_peaks
 
 
 class AnalyzeL1:
@@ -235,7 +236,7 @@ class AnalyzeL1:
                 flux = np.array(self.L1[chip.upper() + '_' + oo_str].data, dtype='d')[o, :].flatten()
                 
                 # Find peaks above intensity_thresh
-                peaks, properties = scipy.signal.find_peaks(flux, height=intensity_thresh, prominence=intensity_thresh)
+                peaks, properties = find_peaks(flux, height=intensity_thresh, prominence=intensity_thresh)
     
                 # Now we check if each of the divisions_per_order subregions 
                 # has at least one peak

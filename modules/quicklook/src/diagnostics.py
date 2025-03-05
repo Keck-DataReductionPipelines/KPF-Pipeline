@@ -450,6 +450,9 @@ def add_headers_masters_age_L1(L1, logger=None, verbose=False):
             if verbose:
                 logger.info(f'{wlsfile} age compared to this file (days): {age_wls_file}')
             
+            if age_wls_file == None:
+                age_wls_file = -99
+
             # Write WLS age to primary header
             L1.header['PRIMARY'][new_keyword] = (age_wls_file, f'{wlsfile} age compared to this file (days)')
 
@@ -811,6 +814,11 @@ def add_headers_L1_LFC_lines(L1, intensity_thresh=40**2, min_lines=100, division
     if logger == None:
         logger = DummyLogger()
 
+    # Use the AnalyzeL1 class 
+    myL1 = AnalyzeL1(L1, logger=logger)
+    myL1.measure_orderlet_flux_ratios()
+
+
     data_products = get_data_products_L1(L1)
     chips = []
     if 'Green' in data_products: chips.append('green')
@@ -834,9 +842,6 @@ def add_headers_L1_LFC_lines(L1, intensity_thresh=40**2, min_lines=100, division
         print('Not a valid L1.')
         return L1
         
-    # Use the AnalyzeL1 class to compute flux ratios between orderlets
-    myL1 = AnalyzeL1(L1, logger=logger)
-    myL1.measure_orderlet_flux_ratios()
     for chip in chips:
         if chip == 'green':
             try:

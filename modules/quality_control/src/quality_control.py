@@ -276,10 +276,6 @@ def check_all_QC_keywords_present(kpf_object, logger=None):
     if data_level == 'L2':
         data_levels = data_levels = ['L0', '2D', 'L1', 'L2']
 
-# To do:
-#   * write a method to check that all QC keywords defined below are in the
-#     appropriate .csv files for the TSDB.
-
 #####################################################################
 
 class QCDefinitions:
@@ -574,7 +570,7 @@ class QCDefinitions:
         self.master_types[name19] = ['LFC', ]
         self.required_data_products[name19] = [] # no required data products
         self.fits_keywords[name19] = 'LFCSAT'
-        self.fits_comments[name19] = 'LFC is not saturated'
+        self.fits_comments[name19] = 'QC: LFC not saturated'
         self.db_columns[name19] = None
         self.fits_keyword_fail_value[name19] = 0
 
@@ -832,7 +828,7 @@ class QC:
 
     def add_qc_keyword_to_header(self, qc_name, value, debug=False):
 
-        if str(type(value)) == "<class 'bool'>":
+        if (str(type(value)) == "<class 'bool'>") or (str(type(value)) == "<class 'numpy.bool'>"):
             if value == True:
                 value = 1
             else:
@@ -2328,7 +2324,7 @@ class QCL1(QC):
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False
-
+            
         return QC_pass
 
 
@@ -2346,7 +2342,7 @@ class QCL1(QC):
                                       order for it to be considered good
             divisions_per_order (int): number of contiguous subregions each order 
                                        must have at least one peak in
-            debug: if True, print debugging statements
+            debug: if True, log debugging statements
 
         Returns:
             QC_pass (bool): True if each order and orderlet for the 
@@ -2406,57 +2402,57 @@ class QCL1(QC):
                     if None in SCI_g_fl:
                         QC_pass = False
                         if debug:   
-                            print('Green SCI orders: False')
+                            self.logger.debug('Green SCI orders: False')
                     else:
                         QC_pass = QC_pass & (SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])
                         if debug:   
-                            print('Green SCI orders: ' + str((SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])))
+                            self.logger.debug('Green SCI orders: ' + str((SCI_g_fl[0] <= usable_orders_g[0]) & (SCI_g_fl[1] >= usable_orders_g[1])))
                 if use_CAL:
                     if None in CAL_g_fl:
                         QC_pass = False
                         if debug:   
-                            print('Green CAL orders: False')
+                            self.logger.debug('Green CAL orders: False')
                     else:
                         QC_pass = QC_pass & (CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])
                         if debug:   
-                            print('Green CAL orders: ' + str((CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])))
+                            self.logger.debug('Green CAL orders: ' + str((CAL_g_fl[0] <= usable_orders_g[0]) & (CAL_g_fl[1] >= usable_orders_g[1])))
                 if use_SKY:
                     if None in SKY_g_fl:
                         QC_pass = False
                         if debug:   
-                            print('Green SKY orders: False')
+                            self.logger.debug('Green SKY orders: False')
                     else:
                         QC_pass = QC_pass & (SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])
                         if debug:   
-                            print('Green SKY orders: ' + str((SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])))
+                            self.logger.debug('Green SKY orders: ' + str((SKY_g_fl[0] <= usable_orders_g[0]) & (SKY_g_fl[1] >= usable_orders_g[1])))
             if 'Red' in data_products:
                 if use_SCI:
                     if None in SCI_r_fl:
                         QC_pass = False
                         if debug:   
-                            print('Red SCI orders: False')
+                            self.logger.debug('Red SCI orders: False')
                     else:
                         QC_pass = QC_pass & (SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])  
                         if debug:   
-                            print('Red SCI orders: ' + str((SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])))
+                            self.logger.debug('Red SCI orders: ' + str((SCI_r_fl[0] <= usable_orders_r[0]) & (SCI_r_fl[1] >= usable_orders_r[1])))
                 if use_CAL:
                     if None in CAL_r_fl:
                         QC_pass = False
                         if debug:   
-                            print('Red CAL orders: False')
+                            self.logger.debug('Red CAL orders: False')
                     else:
                         QC_pass = QC_pass & (CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])
                         if debug:   
-                            print('Red CAL orders: ' + str((CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])))
+                            self.logger.debug('Red CAL orders: ' + str((CAL_r_fl[0] <= usable_orders_r[0]) & (CAL_r_fl[1] >= usable_orders_r[1])))
                 if use_SKY:
                     if None in SKY_r_fl:
                         QC_pass = False
                         if debug:   
-                            print('Red SKY orders: False')
+                            self.logger.debug('Red SKY orders: False')
                     else:
                         QC_pass = QC_pass & (SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1]) 
                         if debug:   
-                            print('Red SKY orders: ' + str((SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1])))
+                            self.logger.debug('Red SKY orders: ' + str((SKY_r_fl[0] <= usable_orders_r[0]) & (SKY_r_fl[1] >= usable_orders_r[1])))
             if (not 'Green' in data_products) and (not 'Red' in data_products):
                 QC_pass = False
             if (not use_CAL) and (not use_SCI) and (not use_SKY):
