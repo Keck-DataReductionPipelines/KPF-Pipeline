@@ -170,7 +170,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
             
-            # Order Flux Ratios
+            # L1 Order Flux Ratios
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_L1_order_flux_ratios'):
                 try:
@@ -187,7 +187,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
 
-            # Orderlet Flux Ratios
+            # L1 Orderlet Flux Ratios
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_L1_orderlet_flux_ratios'):
                 try:
@@ -203,6 +203,31 @@ class DiagnosticsFramework(KPF0_Primitive):
                         self.logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
                 except Exception as e:
                     self.logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
+
+            # L1 LFC and first/last spectral orders with good lines
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L1_cal_line_quality'):
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                        name = primary_header.get_name()
+                        if name == 'LFC':
+                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='LFC', logger=self.logger)
+                            exit_code = 1
+                        elif name == 'Etalon':
+                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='Etalon', logger=self.logger)
+                            exit_code = 1
+                        else: 
+                            self.logger.info("Observation type {} != 'LFC' or 'Etalon'.  LFC line diagnostics not computed.".format(name))
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. LFC/Etalon line diagnostics not computed.")
+
+                except Exception as e:
+                    self.logger.error(f"Measuring LFC/Etalon line diagnostics failed: {e}\n{traceback.format_exc()}")
+
 
         elif 'L2' in self.data_level_str:
             # L2 - Barycentric correction

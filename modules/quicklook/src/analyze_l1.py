@@ -1,6 +1,7 @@
 import time
 import copy
 import traceback
+import scipy.signal
 import numpy as np
 import matplotlib.pyplot as plt
 from math import sin, cos, pi
@@ -16,6 +17,7 @@ from modules.calibration_lookup.src.alg import GetCalibrations
 from kpfpipe.models.level1 import KPF1
 from scipy.interpolate import interp1d
 from scipy.interpolate import make_interp_spline
+from scipy.signal import find_peaks
 
 
 class AnalyzeL1:
@@ -159,7 +161,13 @@ class AnalyzeL1:
             if verbose:
                 self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
 
-            age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+            if type(wls_filename_datetime) == type(date_obs_datetime):
+                age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+            else:
+                self.logger.info("Error comparing datetimes: ")
+                self.logger.info("wls_filename_datetime = " + str(wls_filename_datetime))
+                self.logger.info("date_obs_datetime = " + str(date_obs_datetime))
+                age_wls_file = None
 
             if verbose:
                 self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
@@ -169,6 +177,130 @@ class AnalyzeL1:
         except Exception as e:
             self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
             return None
+
+
+    def measure_good_comb_orders(self, chip='green', 
+                                       intensity_thresh=40**2, 
+                                       min_lines=100, 
+                                       divisions_per_order=8):
+        """
+        This method uses the find_peaks algorithm to measure the number of 
+        emission lines above an intensity threshold. Additionally, it checks
+        that each order has at least one peak in each of the 
+        `divisions_per_order` subregions.  This method is usually applied to 
+        LFC or Etalon spectra.
+    
+        Args:
+            chip (str):               CCD name ('green' or 'red')
+            intensity_thresh (float): minimum line amplitude to be considered good
+            min_lines (int):          minimum number of lines in a spectral 
+                                      order for it to be considered good
+            divisions_per_order (int): number of contiguous subregions each order 
+                                       must have at least one peak in
+    
+        Returns:
+            SCI_fl, CAL_fl, SKY_fl where, e.g., SCI_fl = [first_good_order, last_good_order]
+        """
+        
+        chip = chip.lower()
+        data = np.array(self.L1[chip.upper() + '_CAL_WAVE'].data, dtype='d')
+        orderlets = ['SCI_FLUX1', 'SCI_FLUX2', 'SCI_FLUX3', 'CAL_FLUX', 'SKY_FLUX']
+        
+        norder = data.shape[0]
+        norderlet = len(orderlets)
+        # lines[o, oo] will hold the final "count" for each (order, orderlet)
+        lines = np.zeros((norder, norderlet), dtype=int)
+    
+        def find_first_last_true(arr):
+            """
+            Find the first and last elements of each column that are True.
+            The last element is determined first.
+            The first element is then determined by scanning from the last 
+            good element downward.
+            """
+            first_true = np.full(arr.shape[1], None)  
+            last_true  = np.full(arr.shape[1], None)
+            for col in range(arr.shape[1]):  # Iterate over each column
+                true_indices = np.where(arr[:, col])[0]  # Indices of True values
+                if true_indices.size > 0:
+                    last_true[col]  = true_indices[-1]
+                    first_true[col] = last_true[col]
+                    i = last_true[col]
+                    while i >= 0 and arr[i, col]:
+                        first_true[col] = i
+                        i -= 1           
+            return first_true, last_true
+    
+        for oo, oo_str in enumerate(orderlets):
+            for o in range(norder):
+                # Extract flux for this order / orderlet
+                flux = np.array(self.L1[chip.upper() + '_' + oo_str].data, dtype='d')[o, :].flatten()
+                
+                # Find peaks above intensity_thresh
+                peaks, properties = find_peaks(flux, height=intensity_thresh, prominence=intensity_thresh)
+    
+                # Now we check if each of the divisions_per_order subregions 
+                # has at least one peak
+                flux_len = len(flux)
+                region_size = flux_len // divisions_per_order
+                
+                # Track how many regions actually have >= 1 peak
+                num_regions_with_peaks = 0
+                
+                for d in range(divisions_per_order):
+                    start = d * region_size
+                    # Make sure we capture any 'leftover' indices in the final region
+                    end = (d+1) * region_size if d < divisions_per_order - 1 else flux_len
+                    
+                    # Check if at least one peak is within [start, end)
+                    if np.any((peaks >= start) & (peaks < end)):
+                        num_regions_with_peaks += 1
+                                
+                # If all subregions contained at least one peak,
+                # we keep the actual count of peaks; otherwise 0.
+                if num_regions_with_peaks == divisions_per_order:
+                    lines[o, oo] = len(peaks)
+                else:
+                    lines[o, oo] = 0
+    
+        # Determine which orders are 'good' (i.e., above min_lines)
+        lines_above_threshold = lines > min_lines
+    
+        # Find the first and last "good" orders in each of the orderlet columns
+        first_indices, last_indices = find_first_last_true(lines_above_threshold)
+    
+        # SCI Fluxes combine the first three columns
+        if None in first_indices[0:3]:
+            SCI_f = None
+        else:
+            SCI_f = max(first_indices[0], first_indices[1], first_indices[2])
+        if None in last_indices[0:3]:
+            SCI_l = None
+        else:
+            SCI_l = min(last_indices[0], last_indices[1], last_indices[2])
+        SCI_fl = [SCI_f, SCI_l]
+        # CAL Flux is the 4th column
+        if first_indices[3] == None:
+            CAL_f = None
+        else:
+            CAL_f = first_indices[3]
+        if last_indices[3] == None:
+            CAL_l = None
+        else:
+            CAL_l = last_indices[3]
+        CAL_fl = [CAL_f, CAL_l]
+        # SKY Flux is the 5th column
+        if first_indices[4] == None:
+            SKY_f = None
+        else:
+            SKY_f = first_indices[4]
+        if last_indices[4] == None:
+            SKY_l = None
+        else:
+            SKY_l = last_indices[4]
+        SKY_fl = [SKY_f, SKY_l]
+    
+        return (SCI_fl, CAL_fl, SKY_fl)
 
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):

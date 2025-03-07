@@ -283,17 +283,6 @@ GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-ban
 GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
 MOONSEP   55.0                                        Separation between Moon and target star (deg)
 SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
-SKYSCIMS  0.0000123                                   SKY/SCI flux ratio in main spectrometer scaled from EM data. 
-EMSCCT48  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-870 nm
-EMSCCT45  100000000.1234                              cumulative EM counts [ADU] in SCI in 445-551 nm
-EMSCCT56  100000000.1234                              cumulative EM counts [ADU] in SCI in 551-658 nm
-EMSCCT67  100000000.1234                              cumulative EM counts [ADU] in SCI in 658-764 nm
-EMSCCT78  100000000.1234                              cumulative EM counts [ADU] in SCI in 764-870 nm
-EMSKCT48  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-870 nm
-EMSKCT45  100000000.1234                              cumulative EM counts [ADU] in SKY in 445-551 nm
-EMSKCT56  100000000.1234                              cumulative EM counts [ADU] in SKY in 551-658 nm
-EMSKCT67  100000000.1234                              cumulative EM counts [ADU] in SKY in 658-764 nm
-EMSKCT78  100000000.1234                              cumulative EM counts [ADU] in SKY in 764-870 nm
 MEDGRN1   3.9642348e+07                               Median for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
 P16GRN1   3.9340188e+07                               16th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
 P84GRN1   3.9340188e+07                               84th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
@@ -365,6 +354,8 @@ LFCSAT    1                                                                     
 OLDWLS    1                                                                        QC: 1 = WLSFILE within 2 days of this obs
 OLDWLS2   1                                                                        QC: 1 = WLSFILE2 within 2 days of this obs
 FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
+LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders/orderlets available
+ETALINES  1                                                                        QC: 1 = Number and distribution of Etalon lines above threshold ampltidue is sufficient for all orders/orderlets available
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -424,6 +415,41 @@ FRS2M852  0.9000                                                                
 FRS2U852  0.0010                                                                   uncertainty on the median(SKY/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2M852  0.9000                                                                   median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
 FRC2U852  0.0010                                                                   uncertainty on the median(CAL/SCI2) flux ratio near 852 nm; on Red CCD
+SKYSCIMS  0.0000123                                                                SKY/SCI flux ratio in main spectrometer scaled from EM data. 
+EMSCCT48  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 445-870 nm
+EMSCCT45  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 445-551 nm
+EMSCCT56  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 551-658 nm
+EMSCCT67  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 658-764 nm
+EMSCCT78  100000000.1234                                                           cumulative EM counts [ADU] in SCI in 764-870 nm
+EMSKCT48  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 445-870 nm
+EMSKCT45  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 445-551 nm
+EMSKCT56  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 551-658 nm
+EMSKCT67  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 658-764 nm
+EMSKCT78  100000000.1234                                                           cumulative EM counts [ADU] in SKY in 764-870 nm
+LFCLGS0   0                                                                        Min SCI Green order with good LFC lines
+LFCLGS1   34                                                                       Max SCI Green order with good LFC lines
+LFCLGC0   0                                                                        Min CAL Green order with good LFC lines
+LFCLGC1   34                                                                       Max CAL Green order with good LFC lines
+LFCLGK0   0                                                                        Min SKY Green order with good LFC lines
+LFCLGK1   34                                                                       Max SKY Green order with good LFC lines
+LFCLRS0   0                                                                        Min SCI Red order with good LFC lines
+LFCLRS1   31                                                                       Max SCI Red order with good LFC lines
+LFCLRC0   0                                                                        Min CAL Red order with good LFC lines
+LFCLRC1   31                                                                       Max CAL Red order with good LFC lines
+LFCLRK0   0                                                                        Min SKY Red order with good LFC lines
+LFCLRK1   31                                                                       Max SKY Red order with good LFC lines
+ETALGS0   0                                                                        Min SCI Green order with good Etalon lines
+ETALGS1   34                                                                       Max SCI Green order with good Etalon lines
+ETALGC0   0                                                                        Min CAL Green order with good Etalon lines
+ETALGC1   34                                                                       Max CAL Green order with good Etalon lines
+ETALGK0   0                                                                        Min SKY Green order with good Etalon lines
+ETALGK1   34                                                                       Max SKY Green order with good Etalon lines
+ETALRS0   0                                                                        Min SCI Red order with good Etalon lines
+ETALRS1   31                                                                       Max SCI Red order with good Etalon lines
+ETALRC0   0                                                                        Min CAL Red order with good Etalon lines
+ETALRC1   31                                                                       Max CAL Red order with good Etalon lines
+ETALRK0   0                                                                        Min SKY Red order with good Etalon lines
+ETALRK1   31                                                                       Max SKY Red order with good Etalon lines
 AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
 AGEWLS2   0.1419343333333333                                                       Approx age of WLSFILE2 compared to this file (days)
 ========  =======================================================================  =========
