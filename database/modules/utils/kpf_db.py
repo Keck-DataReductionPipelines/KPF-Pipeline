@@ -4,6 +4,7 @@ import re
 import hashlib
 import pandas as pd
 import numpy as np
+import time
 from astropy.time import Time
 
 from kpfpipe.models.level1 import KPF1
@@ -70,11 +71,20 @@ class KPFDB:
         dbserver = os.getenv('DBSERVER')
 
         # Connect to database
+        db_fail = True
+        n_attempts = 3
+        for i in range(n_attempts):
+            try:
+                self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
+                db_fail = False
+                break
+            except:
+                print("Could not connect to database, retrying...")
+                db_fail = True
+                time.sleep(10)
 
-        try:
-            self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
-        except:
-            print("Could not connect to database...")
+        if db_fail:
+            print(f"Could not connect to database after {n_attempts} attempts...")
             self.exit_code = 64
             return
 
