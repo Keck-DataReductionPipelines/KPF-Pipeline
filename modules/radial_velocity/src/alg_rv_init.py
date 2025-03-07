@@ -224,6 +224,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 return self.ret_status(h_key + not_key_defined)
             else:
                 h_val = self.pheader[h_key]
+                self.logger.debug("Loading header value: %s = %s", h_key, h_val)
                 if s_key == self.RA:
                     val = Angle(h_val + "hours").deg
                 elif s_key == self.DEC:
@@ -231,7 +232,10 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 elif s_key == self.EPOCH:
                     val = self.check_epoch(float(h_val), self.pheader)
                 else:
-                    val = float(h_val)
+                    try:
+                        val = float(h_val)
+                    except ValueError:
+                        val = 0.0
                 self.rv_config[s_key] = val
 
         if self.pheader[self.KEY_SCI_OBJ] != 'Target':

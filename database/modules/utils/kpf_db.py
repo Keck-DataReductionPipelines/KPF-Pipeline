@@ -14,7 +14,7 @@ DEFAULT_CFG_PATH = 'database/modules/utils/kpf_db.cfg'
 
 # Common methods.
 
-def md5(fname):
+def md5(fname, log=None):
     """
     Returns checksum = 68 if it fails to compute the MD5 checksum.
     """
@@ -27,7 +27,10 @@ def md5(fname):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except:
-        print("*** Error: Failed to compute checksum =",fname,"; quitting...")
+        if log is None:
+            print("*** Error: Failed to compute checksum =",fname,"; quitting...")
+        else:
+            log.error(f"Failed to compute checksum = {fname}; quitting...")
         return 68
 
 
@@ -71,6 +74,7 @@ class KPFDB:
         dbserver = os.getenv('DBSERVER')
 
         # Connect to database
+        self.log.info(f"Connecting to masters database {dbname} on {dbserver}...")
         db_fail = True
         n_attempts = 3
         for i in range(n_attempts):
@@ -79,12 +83,12 @@ class KPFDB:
                 db_fail = False
                 break
             except:
-                print("Could not connect to database, retrying...")
+                self.log.warning("Could not connect to database, retrying...")
                 db_fail = True
                 time.sleep(10)
 
         if db_fail:
-            print(f"Could not connect to database after {n_attempts} attempts...")
+            self.log.warning(f"Could not connect to database after {n_attempts} attempts...")
             self.exit_code = 64
             return
 
@@ -95,18 +99,18 @@ class KPFDB:
         # Select database version.
 
         q1 = 'SELECT version();'
-        print('q1 = {}'.format(q1))
+        self.log.debug('q1 = {}'.format(q1))
         self.cur.execute(q1)
         db_version = self.cur.fetchone()
-        print('PostgreSQL database version = {}'.format(db_version))
+        self.log.debug('PostgreSQL database version = {}'.format(db_version))
 
         # Check database current_user.
 
         q2 = 'SELECT current_user;'
-        print('q2 = {}'.format(q2))
+        self.log.debug('q2 = {}'.format(q2))
         self.cur.execute(q2)
         for record in self.cur:
-            print('record = {}'.format(record))
+            self.log.debug('record = {}'.format(record))
 
     def query_to_pandas(self, query):
         try:
@@ -284,9 +288,9 @@ ORDER BY startdate;"""
 
         # Query database for all cal_types.
 
-        print('----> cal_file_level = {}'.format(cal_file_level))
-        print('----> contentbitmask = {}'.format(contentbitmask))
-        print('----> cal_type_pair = {}'.format(cal_type_pair))
+        self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
+        self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
+        self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
 
         levelstr = str(cal_file_level)
         cal_type = cal_type_pair[0]
@@ -304,7 +308,7 @@ ORDER BY startdate;"""
         pattern = re.compile("|".join(rep.keys()))
         query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-        print('query = {}'.format(query))
+        self.log.debug('query = {}'.format(query))
 
 
         # Execute query.
@@ -313,7 +317,7 @@ ORDER BY startdate;"""
             self.cur.execute(query)
 
         except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error executing query ({}); skipping...'.format(query))
+            self.log.error('*** Error executing query ({}); skipping...'.format(query))
             self.exit_code = 67
             return
 
@@ -329,9 +333,9 @@ ORDER BY startdate;"""
             checksum = record[5]
             infobits = record[6]
 
-            print('cId = {}'.format(cId))
-            print('filename = {}'.format(filename))
-            print('checksum = {}'.format(checksum))
+            self.log.debug('cId = {}'.format(cId))
+            self.log.info('filename = {}'.format(filename))
+            self.log.debug('checksum = {}'.format(checksum))
 
             self.verify_checksum(filename, checksum)
 
@@ -344,31 +348,31 @@ ORDER BY startdate;"""
     def verify_checksum(self, filename, checksum):
         # See if file exists.
         isExist = os.path.exists(filename)
-        print('File existence = {}'.format(isExist))
+        self.log.info('File existence = {}'.format(isExist))
 
         if isExist is True:
-            print("File exists...")
+            self.log.debug("File exists...")
         else:
-            print("*** Error: File does not exist; quitting...")
+            self.log.error("*** Error: File does not exist; quitting...")
             self.exit_code = 65
             return
 
 
         # Compute checksum and compare with database value.
 
-        cksum = md5(filename)
-        print('cksum = {}'.format(cksum))
+        cksum = md5(filename, log=self.log)
+        self.log.debug('cksum = {}'.format(cksum))
 
         if  cksum == 68:
             self.exit_code = 68
             return
 
         if cksum == checksum:
-            print("File checksum is correct ({})...".format(filename))
+            self.log.debug("File checksum is correct ({})...".format(filename))
             self.filename = filename
             self.exit_code = 0
         else:
-            print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+            self.log.error("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
             self.exit_code = 66
             return
 
@@ -382,12 +386,12 @@ ORDER BY startdate;"""
         try:
             self.cur.close()
         except (Exception, psycopg2.DatabaseError) as error:
-            print(error)
+            self.log.error(error)
             self.exit_code = 2
         finally:
             if self.conn is not None:
                 self.conn.close()
-                print('Database connection closed.')
+                self.log.info('Database connection closed.')
 
 
     def get_nearest_master_file_before(self,obsdatetime,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
@@ -431,9 +435,9 @@ ORDER BY startdate;"""
 
         # Query database for all cal_types.
 
-        print('----> cal_file_level = {}'.format(cal_file_level))
-        print('----> contentbitmask = {}'.format(contentbitmask))
-        print('----> cal_type_pair = {}'.format(cal_type_pair))
+        self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
+        self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
+        self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
 
         levelstr = str(cal_file_level)
         cal_type = cal_type_pair[0]
@@ -451,7 +455,7 @@ ORDER BY startdate;"""
         pattern = re.compile("|".join(rep.keys()))
         query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-        print('query = {}'.format(query))
+        self.log.debug('query = {}'.format(query))
 
 
         # Execute query.
@@ -460,7 +464,7 @@ ORDER BY startdate;"""
             self.cur.execute(query)
 
         except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error executing query ({}); skipping...'.format(query))
+            self.log.error('*** Error executing query ({}); skipping...'.format(query))
             self.exit_code = 67
             return
 
@@ -476,20 +480,20 @@ ORDER BY startdate;"""
             checksum = record[5]
             infobits = record[6]
 
-            print('cId = {}'.format(cId))
-            print('filename = {}'.format(filename))
-            print('checksum = {}'.format(checksum))
+            self.log.debug('cId = {}'.format(cId))
+            self.log.debug('filename = {}'.format(filename))
+            self.log.debug('checksum = {}'.format(checksum))
 
 
             # See if file exists.
 
             isExist = os.path.exists(filename)
-            print('File existence = {}'.format(isExist))
+            self.log.info('File existence = {}'.format(isExist))
 
             if isExist is True:
-                print("File exists...")
+                self.log.debug("File exists...")
             else:
-                print("*** Error: File does not exist; quitting...")
+                self.log.error("*** Error: File does not exist; quitting...")
                 self.exit_code = 65
                 return
 
@@ -497,14 +501,14 @@ ORDER BY startdate;"""
             # Compute checksum and compare with database value.
 
             cksum = md5(filename)
-            print('cksum = {}'.format(cksum))
+            self.log.debug('cksum = {}'.format(cksum))
 
             if  cksum == 68:
                 self.exit_code = 68
                 return
 
             if cksum == checksum:
-                print("File checksum is correct ({})...".format(filename))
+                self.log.debug("File checksum is correct ({})...".format(filename))
                 self.cId = cId
                 self.db_level = db_level
                 self.db_cal_type = db_cal_type
@@ -513,7 +517,7 @@ ORDER BY startdate;"""
                 self.filename = filename
                 self.exit_code = 0
             else:
-                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+                self.log.error("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
                 self.exit_code = 66
                 return
 
@@ -559,9 +563,9 @@ ORDER BY startdate;"""
 
         # Query database for all cal_types.
 
-        print('----> cal_file_level = {}'.format(cal_file_level))
-        print('----> contentbitmask = {}'.format(contentbitmask))
-        print('----> cal_type_pair = {}'.format(cal_type_pair))
+        self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
+        self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
+        self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
 
         levelstr = str(cal_file_level)
         cal_type = cal_type_pair[0]
@@ -579,7 +583,7 @@ ORDER BY startdate;"""
         pattern = re.compile("|".join(rep.keys()))
         query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-        print('query = {}'.format(query))
+        self.log.debug('query = {}'.format(query))
 
 
         # Execute query.
@@ -588,7 +592,7 @@ ORDER BY startdate;"""
             self.cur.execute(query)
 
         except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error executing query ({}); skipping...'.format(query))
+            self.log.error('*** Error executing query ({}); skipping...'.format(query))
             self.exit_code = 67
             return
 
@@ -604,35 +608,35 @@ ORDER BY startdate;"""
             checksum = record[5]
             infobits = record[6]
 
-            print('cId = {}'.format(cId))
-            print('filename = {}'.format(filename))
-            print('checksum = {}'.format(checksum))
+            self.log.debug('cId = {}'.format(cId))
+            self.log.info('filename = {}'.format(filename))
+            self.log.debug('checksum = {}'.format(checksum))
 
 
             # See if file exists.
 
             isExist = os.path.exists(filename)
-            print('File existence = {}'.format(isExist))
+            self.log.info('File existence = {}'.format(isExist))
 
             if isExist is True:
-                print("File exists...")
+                self.log.debug("File exists...")
             else:
-                print("*** Error: File does not exist; quitting...")
+                self.log.error("*** Error: File does not exist; quitting...")
                 self.exit_code = 65
                 return
 
 
             # Compute checksum and compare with database value.
 
-            cksum = md5(filename)
-            print('cksum = {}'.format(cksum))
+            cksum = md5(filename, log=self.log)
+            self.log.debug('cksum = {}'.format(cksum))
 
             if  cksum == 68:
                 self.exit_code = 68
                 return
 
             if cksum == checksum:
-                print("File checksum is correct ({})...".format(filename))
+                self.log.debug("File checksum is correct ({})...".format(filename))
                 self.cId = cId
                 self.db_level = db_level
                 self.db_cal_type = db_cal_type
@@ -641,6 +645,6 @@ ORDER BY startdate;"""
                 self.filename = filename
                 self.exit_code = 0
             else:
-                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+                self.log.error("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
                 self.exit_code = 66
                 return
