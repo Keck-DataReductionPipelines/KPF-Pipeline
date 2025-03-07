@@ -234,7 +234,7 @@ class RadialVelocityAlgInit(RadialVelocityBase):
                 else:
                     try:
                         val = float(h_val)
-                    except ValueError:
+                    except TypeError:
                         val = 0.0
                 self.rv_config[s_key] = val
 
