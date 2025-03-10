@@ -114,7 +114,7 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasterscmd_l1';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_l1.cfg';
 
