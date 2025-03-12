@@ -94,7 +94,7 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasters_wls_auto';                  # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/wls_auto.recipe';
 my $config = '/code/KPF-Pipeline/configs/wls_auto.cfg';
 my $sbxdir = "${sandbox}/masters/$procdate";
