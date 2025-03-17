@@ -43,17 +43,6 @@ GDRSEEJZ|float|Seeing in J+Z-band from Moffat func fit|arcsec
 GDRSEEV|float|Scaled seeing in V-band from J+Z-band|arcsec
 MOONSEP|float|Separation between Moon and target star|deg
 SUNALT|float|Altitude of Sun; negative = below horizon|deg
-SKYSCIMS|float|SKY/SCI flux ratio in main spect. scaled from EM data|None
-EMSCCT48|float|cumulative EM counts [ADU] in SCI in 445-870 nm|counts
-EMSCCT45|float|cumulative EM counts [ADU] in SCI in 445-551 nm|counts
-EMSCCT56|float|cumulative EM counts [ADU] in SCI in 551-658 nm|counts
-EMSCCT67|float|cumulative EM counts [ADU] in SCI in 658-764 nm|counts
-EMSCCT78|float|cumulative EM counts [ADU] in SCI in 764-870 nm|counts
-EMSKCT48|float|cumulative EM counts [ADU] in SKY in 445-870 nm|counts
-EMSKCT45|float|cumulative EM counts [ADU] in SKY in 445-551 nm|counts
-EMSKCT56|float|cumulative EM counts [ADU] in SKY in 551-658 nm|counts
-EMSKCT67|float|cumulative EM counts [ADU] in SKY in 658-764 nm|counts
-EMSKCT78|float|cumulative EM counts [ADU] in SKY in 764-870 nm|counts
 KPFERA|string|The era during which the observation was made, e.g. '2.0'|None
 NOTJUNK|bool|Not in the list of junk files check|None
 DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
