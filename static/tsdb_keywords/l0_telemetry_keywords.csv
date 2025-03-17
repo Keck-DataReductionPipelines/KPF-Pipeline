@@ -17,7 +17,7 @@ kpfmet.CAL_BENCH_OCT_MOT|float|Cal bench octagon motor temp|C
 kpfmet.CAL_BENCH_TRANS_STG_MOT|float|Cal bench trans stage motor temp|C
 kpfmet.CAL_RACK_TOP|float|Cal rack top temp|C
 kpfmet.CHAMBER_EXT_BOTTOM|float|Chamber exterior Bottom temp (sensor B)|C
-kpfmet.CHAMBER_EXT_TOP|float|Chamber exterior Top temp (sensor C1)
+kpfmet.CHAMBER_EXT_TOP|float|Chamber exterior Top temp (sensor C1)|C
 kpfmet.CRYOSTAT_G1|float|Within cryostat green temp (sensor D3)|C
 kpfmet.CRYOSTAT_G2|float|Within cryostat green temp (sensor D3)|C
 kpfmet.CRYOSTAT_G3|float|Within cryostat green temp (sensor D4)|C
