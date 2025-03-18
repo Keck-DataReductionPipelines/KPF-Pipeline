@@ -822,13 +822,13 @@ class RadialVelocity(KPF1_Primitive):
         rvh = l2.header['RV']
         rvg = rvh.get('CCD1RV', None)
 
-        if self.ins.lower() != 'kpf' or rvg == None:
+        if self.ins.lower() != 'kpf' or rvg is None:
             return
         if np.ndim(l2['GREEN_CCF_RW']) != np.ndim(l2['RED_CCF_RW']):
             # RED chip not ready yet
             return
 
-        # calculate accross science fibers
+        # calculate across science fibers
         green_idx = l2['GREEN_CCF_RW'].shape[1]
         df = l2['RV']
         rvr = rvh['CCD2RV']
@@ -838,14 +838,13 @@ class RadialVelocity(KPF1_Primitive):
         
         if rvh['CCD1ERV'] > 0 and rvh['CCD2ERV'] > 0:
             final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
-            final_rv_err = 1/np.sqrt(1/rvh['CCD1ERV']**2 + 1/rvh['CCD2ERV']**2)
+            final_rv_err = 1 / np.sqrt(1 / rvh['CCD1ERV']**2 + 1 / rvh['CCD2ERV']**2)
         else:
             final_rv = 0
             final_rv_err = 0
 
         header['CCFRV'] = (final_rv, 'RV combined across sci fibers and chips (km/s)')
         header['CCFERV'] = (final_rv_err, 'Uncertainty on CCFRV (km/s)')
-
 
         # calculate for cal fiber
         if 'CAL RV' not in df.columns:
@@ -864,13 +863,21 @@ class RadialVelocity(KPF1_Primitive):
 
         if rvh['CCD1ERVC'] > 0 and rvh['CCD2ERVC'] > 0:
             final_rv = (rvg * np.nansum(weights_green) / weights_all_ords) + (rvr * np.nansum(weights_red) / weights_all_ords)
-            final_rv_err = 1/np.sqrt(1/rvh['CCD1ERVC']**2 + 1/rvh['CCD2ERVC']**2)
+            final_rv_err = 1 / np.sqrt(1 / rvh['CCD1ERVC']**2 + 1 / rvh['CCD2ERVC']**2)
         else:
             final_rv = 0
             final_rv_err = 0
         
         header['CCFRVC'] = (final_rv, 'Cal fiber RV combined across both chips (km/s)')
         header['CCFERVC'] = (final_rv_err, 'Uncertainty on CCFRVC (km/s)')
+
+        # calculate weighted mean of CCFBJD
+        ccfbjd_green = df['CCFBJD'].values[0:green_idx]
+        ccfbjd_red = df['CCFBJD'].values[green_idx+1:]
+        ccfbjd_all = np.concatenate((ccfbjd_green, ccfbjd_red))
+        weights_all = np.concatenate((weights_green, weights_red))
+        weighted_mean_ccfbjd = np.average(ccfbjd_all, weights=weights_all)
+        header['CCFBJD'] = (weighted_mean_ccfbjd, 'Weighted mean of CCFBJD')
 
 
     @staticmethod

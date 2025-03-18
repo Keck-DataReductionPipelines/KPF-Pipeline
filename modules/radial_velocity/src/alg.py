@@ -20,59 +20,60 @@ FIT_G = fitting.LevMarLSQFitter()
 
 
 class RadialVelocityAlg(RadialVelocityBase):
-    """Radial velocity calculation using cross correlation method.
+    """Radial velocity calculation using cross-correlation method.
 
-    This module defines class 'RadialVelocityAlg' and methods to perform radial velocity calculation by using
-    cross correlation to convert level 1 data to level 2 data.
+    This module defines the class 'RadialVelocityAlg' and methods to perform radial velocity calculation by using
+    cross-correlation to convert level 1 data to level 2 data.
 
     Args:
         spectrum_data (numpy.ndarray): 2D data containing reduced 1D Data for all orders from optimal extraction.
         header (fits.header.Header): Header of HDU associated with `spectrum_data`.
-        init_rv (dict): A dict instance, created by ``RadialVelocityAlgInit``, containing the init values
+        init_rv (dict): A dict instance, created by ``RadialVelocityAlgInit``, containing the initial values
             based on the settings in the configuration file for radial velocity computation.
         wave_cal (numpy.ndarray): Wavelength calibration for each order of `spectrum_data`.
         config (configparser.ConfigParser): Config context.
         logger (logging.Logger): Instance of logging.Logger.
-        ccf_engine (string): CCF engine to use, 'c' or 'python'. Defaults to None,
-        reweighting_method (string): reweighting method, ccf_max or ccf_mean, of ccf_steps. Defaults to None.
+        ccf_engine (string): CCF engine to use, 'c' or 'python'. Defaults to None.
+        reweighting_method (string): Reweighting method, ccf_max or ccf_mean, or ccf_steps. Defaults to None.
         segment_limits (pandas.DataFrame): Table containing segment list containing segment index, start wavelength,
             and end wavelength. Defaults to None.
         order_limits (pandas.DataFrame): Table containing order index and the left and right limits of the
             order. Defaults to None.
-        bary_corr_table (pd.ndarray): table from L1 BARY_CORR extension. Defaults to None.
-        start_bary_index (int): starting index in BARY_CORR table.
+        bary_corr_table (pd.ndarray): Table from L1 BARY_CORR extension. Defaults to None.
+        start_bary_index (int): Starting index in BARY_CORR table.
 
     Attributes:
         spectrum_data (numpy.ndarray): From parameter `spectrum_data`.
         wave_cal (numpy.ndarray): From parameter `wave_cal`.
         header (fits.header.Header): From parameter `header`.
-        rv_config (dict): A dict instance, created by ``RadialVelocityAlgInit``,  containing the values defined in
+        rv_config (dict): A dict instance, created by ``RadialVelocityAlgInit``, containing the values defined in
             radial velocity related configuration.
-        init_data (dict): A dict instance, created by ``RadialVelocityAlgInit``,  containing the values defined in and
+        init_data (dict): A dict instance, created by ``RadialVelocityAlgInit``, containing the values defined in and
             derived from radial velocity related configuration.
-        velocity_loop (numpy.ndarray): Velocity steps for cross correlation computation.
+        velocity_loop (numpy.ndarray): Velocity steps for cross-correlation computation.
         velocity_steps (int): Total number in `velocity_loop`.
         mask_line (dict): Mask line information created by ``RadialVelocityMaskLine``.
-        obj_jd (float): Observation time of Julian Date format.
+        obj_jd (float): Observation time in Julian Date format.
         start_order (int): First order to be processed.
         end_order (int): Last order to be processed.
         spectrum_order (int): Total spectrum order to be processed.
-        start_x_pos (int): First position on x axis to be processed.
-        end_x_pos (int): Last position on x axis to be processed.
+        start_x_pos (int): First position on x-axis to be processed.
+        end_x_pos (int): Last position on x-axis to be processed.
         spectro (str): Name of instrument or spectrograph.
-        reweighting_ccf_method (str): Method of reweighting ccf orders. Method of `ratio` or `ccf` is to scale ccf
-            of an order based on a number from a ratio table or the mean of the ratio of a template ccf and current
-            ccf of the same order.
-        bary_corr_table (pd.ndarray): table from L1 BARY_CORR table.
-        start_bary_index (int): starting index in BARY_CORR table.
-        orderlet (str): name of the orderlet associated with `spactrum_data`.
-        vel_span_pixel (float): velocity span per pixel (km/sec)
+        reweighting_ccf_method (str): Method of reweighting CCF orders. Method of `ratio` or `ccf` is to scale CCF
+            of an order based on a number from a ratio table or the mean of the ratio of a template CCF and current
+            CCF of the same order.
+        bary_corr_table (pd.ndarray): Table from L1 BARY_CORR table.
+        start_bary_index (int): Starting index in BARY_CORR table.
+        orderlet (str): Name of the orderlet associated with `spectrum_data`.
+        vel_span_pixel (float): Velocity span per pixel (km/sec).
+
     Raises:
         AttributeError: The ``Raises`` section is a list of all exceptions that are relevant to the interface.
-        TypeError: If there is type error for `spectrum_data`.
-        TypeEoor: If there is type error for `header`.
-        TypeError: If there is type error for `wave_cal`.
-        Exception: If there is init error for radial velocity calculation.
+        TypeError: If there is a type error for `spectrum_data`.
+        TypeError: If there is a type error for `header`.
+        TypeError: If there is a type error for `wave_cal`.
+        Exception: If there is an init error for radial velocity calculation.
     """
 
     ROWS_FOR_ANALYSIS = 3
@@ -530,8 +531,7 @@ class RadialVelocityAlg(RadialVelocityBase):
                                 The number means the order relative to the first segment if it is greater than or equal
                                 to 0, otherwise it means the order relative to the last one.
             end_seg (int, optional): Last segment of the data to be processed. Defaults to None.
-                                The number has the same meaning as that of `start_segment`.
-
+                                The number has the same meaning as that of `spectrum_x`.
 
         Returns:
             numpy.ndarray: 2D array containing the cross correlation result of all orders at each velocity step.
