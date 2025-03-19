@@ -5,10 +5,10 @@ CCFRVC|float|Average of CCD1RVC and CCD2RVC using weights from RV table|km/s
 CCFERVC|float|Error on CCFRVC|km/s
 CCFBCV|float|Weighted average (over orders) of barycentric RVs|km/s
 CCFBJD|float|Weighted average (over orders) of BJD times|days
-BJDSTD|float|Weighted stddev (over orders) of BJD times|m/s    
-BJDRNG|float|Range(BJD) for non-zero-weight spectral orders|m/s    
-BCVSTD|float|Weighted stddev (over orders) of BCV|sec
-BCVRNG|float|Range(BCV) for non-zero-weight spectral orders|sec
+BJDSTD|float|Weighted stddev (over orders) of BJD times|sec    
+BJDRNG|float|Range(BJD) for non-zero-weight spectral orders|sec    
+BCVSTD|float|Weighted stddev (over orders) of BCV|m/s
+BCVRNG|float|Range(BCV) for non-zero-weight spectral orders|m/s
 DATAPRL2|bool|QC: L2 data present|None
 TIMCHKL2|bool|QC: Consistent times in L2 file|None
 
