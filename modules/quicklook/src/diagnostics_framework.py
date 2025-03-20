@@ -228,7 +228,6 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring LFC/Etalon line diagnostics failed: {e}\n{traceback.format_exc()}")
 
-
         elif 'L2' in self.data_level_str:
             # L2 - Barycentric correction
             if (self.diagnostics_name == 'all') or \

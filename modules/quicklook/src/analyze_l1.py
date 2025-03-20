@@ -127,6 +127,18 @@ class AnalyzeL1:
         self.ObsID = primary_header.get_obsid()
 
 
+    def add_dispersion_arrays(self, smooth=False):
+        '''
+        Computes the dispersion (dwavlength/dpixel) for all of the WAVE 
+        extensions in self.L1 and adds DISP extensions to to self.L1.
+
+        Arguments:
+            smooth - if True, then the dispersion is smoothed (not implemented)
+    
+        Returns:
+            None
+        '''
+
     def measure_WLS_age(self, kwd='WLSFILE', verbose=False):
         '''
         Computes the number of days between the observation and the
